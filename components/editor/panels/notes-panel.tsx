@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { ChevronDown, LoaderCircle, Mic, Pause, Play, Square, Trash2, X } from "lucide-react"
+import { ChevronDown, LoaderCircle, Mic, Pause, Play, Square, Trash2 } from "lucide-react"
 import { buildAiAnnotationCopy } from "@/lib/editor/footnote-extension"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
@@ -51,7 +51,6 @@ type NotesPanelProps = {
   onUpdateHighlight?: (anchorText: string, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => boolean
   onConvertHighlight?: (anchorText: string, type: AnnotationType, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => boolean
   onNavigate: (annotation: AnnotationPanelEntry) => boolean
-  onClose: () => void
 }
 
 function AutoTextarea({
@@ -341,7 +340,6 @@ export function NotesPanel({
   onUpdateHighlight,
   onConvertHighlight,
   onNavigate,
-  onClose,
 }: NotesPanelProps) {
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [activeFilter, setActiveFilter] = useState<PanelEntryType | "all">("all")
@@ -406,19 +404,9 @@ export function NotesPanel({
       data-testid="editor-panel-notes"
       className="EditorPanelNotes od-scroll h-full w-full overflow-y-auto overflow-x-hidden bg-transparent"
     >
-      <div className="flex h-[46px] items-center justify-between border-b-[0.5px] border-border px-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Notes</p>
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
-          aria-label="Close notes panel"
-        >
-          <X className="h-[12px] w-[12px]" strokeWidth={1.5} />
-        </button>
-      </div>
-
-      <div className="flex h-[calc(100%-46px)] flex-col">
+      {/* No header of its own: the tab strip above carries the name and the
+          close button for all four surfaces (owner review). */}
+      <div className="flex h-full flex-col">
         {/* Filter tabs */}
         {filterTabs.length > 2 && (
           <div className="flex flex-wrap gap-1 border-b-[0.5px] border-border px-3 py-2">

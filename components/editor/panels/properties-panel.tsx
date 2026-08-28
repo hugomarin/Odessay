@@ -7,10 +7,8 @@ import {
   ExternalLink,
   FileText,
   FileType,
-  X,
 } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import type { EditorSpellcheckPreference } from "@/lib/editor/spellcheck"
 import type { TextMetrics } from "@/lib/editor/text-metrics"
 import type { WritingLifecycle, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { buildWebWritingActionUrl, openExternalUrl, type WebWritingAction } from "@/lib/runtime/external-link"
@@ -31,6 +29,13 @@ import { WritingSharesSection } from "./writing-shares-section"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
 
 type PropertiesPanelProps = {
+  /**
+   * Which of its two tabs to render. Sharing and Export moved behind "share"
+   * (owner review), but they read the same link, share and export state this
+   * component already owns — splitting them into a component of their own would
+   * have meant lifting all of it into the shell for no gain.
+   */
+  tab: "properties" | "share"
   writingId: string | null
   lifecycle: WritingLifecycle
   status: WritingStatus
@@ -39,16 +44,12 @@ type PropertiesPanelProps = {
   metrics: TextMetrics
   /** Canonical path of the document, when the runtime has one. */
   canonicalPath?: string | null
-  spellcheckPreference: EditorSpellcheckPreference
-  spellcheckLanguage: string
   onStatusChange: (next: WritingStatus) => void
   onArtifactTypeChange: (next: ArtifactType) => void
   onVisibilityChange: (next: WritingVisibility) => void
-  onSpellcheckPreferenceChange: (next: EditorSpellcheckPreference) => void
   onExportMarkdown: () => Promise<boolean | void> | boolean | void
   onExportPdf: () => Promise<boolean | void> | boolean | void
   onExportDocx: () => Promise<boolean | void> | boolean | void
-  onClose: () => void
 }
 
 type ExportFormat = "markdown" | "pdf" | "docx"
@@ -119,6 +120,7 @@ function MetricRow({ label, value }: { label: string; value: string }) {
 }
 
 export function PropertiesPanel({
+  tab,
   writingId,
   lifecycle,
   status,
@@ -126,16 +128,12 @@ export function PropertiesPanel({
   visibility,
   metrics,
   canonicalPath = null,
-  spellcheckPreference,
-  spellcheckLanguage,
   onExportMarkdown,
   onExportPdf,
   onExportDocx,
   onStatusChange,
   onArtifactTypeChange,
   onVisibilityChange,
-  onSpellcheckPreferenceChange,
-  onClose,
 }: PropertiesPanelProps) {
   const [shareLink, setShareLink] = useState<PreviewLinkState>(DEFAULT_PREVIEW_LINK_STATE)
   const [isLoadingShareLink, setIsLoadingShareLink] = useState(false)
@@ -155,7 +153,6 @@ export function PropertiesPanel({
   const isDesktop = isTauriRuntime()
 
   const hasRemoteWriting = Boolean(writingId) && lifecycle === "server-confirmed"
-  const spellcheckEnabled = spellcheckPreference !== "off"
   const remoteFeatureMessage =
     lifecycle === "syncing"
       ? "Sharing, collections, PDF, and Word unlock once sync finishes."
@@ -338,19 +335,9 @@ export function PropertiesPanel({
       data-testid="editor-panel-properties"
       className="EditorPanelProperties od-scroll h-full w-full overflow-y-auto overflow-x-hidden bg-transparent"
     >
-      <div className="flex h-[46px] items-center justify-between border-b-[0.5px] border-border px-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Properties</p>
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
-          aria-label="Close properties panel"
-        >
-          <X className="h-[12px] w-[12px]" strokeWidth={1.5} />
-        </button>
-      </div>
-
       <div className="space-y-5 p-4">
+        {tab === "properties" ? (
+          <>
         <section className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Status</p>
           <WritingStatusPicker
@@ -370,6 +357,34 @@ export function PropertiesPanel({
 
         {hasRemoteWriting && writingId ? <WritingCollectionsSection writingId={writingId} /> : null}
 
+
+        {canonicalPath ? (
+          <section className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Path</p>
+            <p
+              data-testid="editor-properties-path"
+              title={canonicalPath}
+              className="truncate rounded-[8px] border-[0.5px] border-border bg-bg px-3 py-2 font-mono text-[11px] text-ink-3"
+              dir="rtl"
+            >
+              {canonicalPath}
+            </p>
+          </section>
+        ) : null}
+
+        <section className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Info</p>
+          <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
+            <MetricRow label="Words" value={metrics.words.toLocaleString()} />
+            <MetricRow label="Characters" value={metrics.characters.toLocaleString()} />
+            <MetricRow label="Sentences" value={metrics.sentences.toLocaleString()} />
+            <MetricRow label="Reading time" value={`${metrics.readingTimeMinutes} min`} />
+            <MetricRow label="Pages" value={metrics.pages.toFixed(1)} />
+          </div>
+        </section>
+          </>
+        ) : (
+          <>
         <section className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Sharing</p>
           <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
@@ -485,62 +500,8 @@ export function PropertiesPanel({
           {exportFeedback ? <p className="text-[11px] text-ink-3">{exportFeedback}</p> : null}
           {exportError ? <p className="text-[11px] text-[hsl(0,72%,45%)]">{exportError}</p> : null}
         </section>
-
-        <section className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Spellcheck</p>
-          <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
-            <div className="flex items-center justify-between gap-3 border-b-[0.5px] border-border px-3 py-[10px]">
-              <span className="text-[12px] font-medium text-ink-2">Enable</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={spellcheckEnabled}
-                aria-label="Enable spellcheck"
-                onClick={() => onSpellcheckPreferenceChange(spellcheckEnabled ? "off" : "system")}
-                className={cn(
-                  "relative h-[18px] w-8 shrink-0 rounded-[9px] border-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
-                  spellcheckEnabled ? "bg-ink" : "bg-border",
-                )}
-              >
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "pointer-events-none absolute left-[2px] top-[2px] h-[14px] w-[14px] rounded-full bg-white transition-transform",
-                    spellcheckEnabled ? "translate-x-[14px]" : "translate-x-0",
-                  )}
-                />
-              </button>
-            </div>
-            <p className="px-3 pb-[10px] pt-0 text-[11px] leading-[1.5] text-ink-4">
-              Language hint: <span className="font-semibold text-ink-3">{spellcheckLanguage}</span>. Safari uses macOS Keyboard settings; Chrome and Edge use browser dictionaries.
-            </p>
-          </div>
-        </section>
-
-        {canonicalPath ? (
-          <section className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Path</p>
-            <p
-              data-testid="editor-properties-path"
-              title={canonicalPath}
-              className="truncate rounded-[8px] border-[0.5px] border-border bg-bg px-3 py-2 font-mono text-[11px] text-ink-3"
-              dir="rtl"
-            >
-              {canonicalPath}
-            </p>
-          </section>
-        ) : null}
-
-        <section className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Info</p>
-          <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
-            <MetricRow label="Words" value={metrics.words.toLocaleString()} />
-            <MetricRow label="Characters" value={metrics.characters.toLocaleString()} />
-            <MetricRow label="Sentences" value={metrics.sentences.toLocaleString()} />
-            <MetricRow label="Reading time" value={`${metrics.readingTimeMinutes} min`} />
-            <MetricRow label="Pages" value={metrics.pages.toFixed(1)} />
-          </div>
-        </section>
+          </>
+        )}
       </div>
     </aside>
   )

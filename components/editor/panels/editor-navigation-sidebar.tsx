@@ -6,9 +6,10 @@ import { cn } from "@/lib/utils";
 
 /**
  * Left panel — 236px (`--size-panel-left`), transparent on layer 0, in flow so
- * the sheet is never underneath it (docs/design/layout.md §2). Its two header
- * rows follow the Studio prototype: a 46px tab row, then a 40px title row with
- * the count badge and the close button.
+ * the sheet is never underneath it (docs/design/layout.md §2). One 46px header
+ * row carries the two mode pills and the close button. The prototype's second
+ * row — title plus count badge — is gone: the pills already name the mode, so
+ * the heading framed the tree without adding anything (owner review).
  */
 
 export type EditorNavigationMode = "toc" | "workspace" | null;
@@ -16,7 +17,6 @@ export type EditorNavigationMode = "toc" | "workspace" | null;
 type Props = {
   mode: EditorNavigationMode;
   title: string;
-  count?: number;
   controls: ReactNode;
   children: ReactNode;
   onClose: () => void;
@@ -25,7 +25,6 @@ type Props = {
 export function EditorNavigationSidebar({
   mode,
   title,
-  count,
   controls,
   children,
   onClose,
@@ -41,20 +40,17 @@ export function EditorNavigationSidebar({
           : "pointer-events-none w-0 p-0 opacity-0",
       )}
     >
-      <div className="flex h-[46px] shrink-0 items-center gap-1">{controls}</div>
-
-      <div className="flex h-10 shrink-0 items-center gap-2 border-y-[0.5px] border-border pl-1 pr-0.5">
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">{title}</span>
-        {typeof count === "number" ? (
-          <span className="inline-flex h-[19px] min-w-[19px] items-center justify-center rounded-[10px] bg-muted-hover px-[7px] text-[11px] font-medium text-ink-3">
-            {count}
-          </span>
-        ) : null}
+      {/* One header row: the two mode pills, then the close button pushed to the
+          far edge. The old title row is gone — with a pill already reading
+          "Workspace", a heading repeating it framed the tree without naming
+          anything the pills did not (owner review, this pass). */}
+      <div className="flex h-[46px] shrink-0 items-center gap-1">
+        {controls}
         <button
           type="button"
           onClick={onClose}
           aria-label={`Close ${title}`}
-          className="inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted-hover hover:text-ink"
+          className="ml-auto inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted-hover hover:text-ink"
         >
           <X className="h-[15px] w-[15px]" strokeWidth={1.5} />
         </button>

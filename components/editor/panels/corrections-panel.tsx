@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { BookPlus, Loader2, RefreshCw, X } from "lucide-react";
+import { BookPlus, Loader2, RefreshCw, SpellCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PublicationSuggestion } from "@/lib/local-db/schema";
 import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service";
@@ -45,7 +45,6 @@ type CorrectionsPanelProps = {
   onRetryFailed?: () => void;
   onCancel?: () => void;
   onShowCorrectionsChange: (show: boolean) => void;
-  onClose: () => void;
 };
 
 export function CorrectionsPanel({
@@ -65,7 +64,6 @@ export function CorrectionsPanel({
   onRetryFailed,
   onCancel,
   onShowCorrectionsChange,
-  onClose,
 }: CorrectionsPanelProps) {
   const visibleSuggestions = useMemo(
     () => getVisibleCorrectionSuggestions(suggestions, markdown),
@@ -88,7 +86,6 @@ export function CorrectionsPanel({
   }, [visibleSuggestions]);
 
   const actionableSuggestions = visibleSuggestions.filter((suggestion) => suggestion.status === "pending");
-  const hasPending = visibleSuggestions.length > 0;
   const runState = analysisStatus?.runState ?? "idle";
   const progress = analysisStatus?.progress ?? { completedBlocks: 0, totalBlocks: 0 };
   const isRunning = runState === "running";
@@ -106,10 +103,10 @@ export function CorrectionsPanel({
       case "failed":
         return "Try again";
       case "cancelled":
-        return "Analyze writing and spelling";
+        return "Analyze now";
       case "idle":
       default:
-        return "Analyze writing and spelling";
+        return "Analyze now";
     }
   })();
 
@@ -120,27 +117,12 @@ export function CorrectionsPanel({
       data-testid="editor-panel-corrections"
       className="EditorPanelCorrections od-scroll h-full w-full overflow-y-auto overflow-x-hidden bg-transparent"
     >
-      <div className="flex h-[46px] items-center justify-between border-b-[0.5px] border-border px-4">
-        <div className="flex items-center gap-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Corrections</p>
-          {hasPending ? (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[hsl(22,55%,92%)] px-1.5 text-[10px] font-medium text-cursor">
-              {visibleSuggestions.length}
-            </span>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
-          aria-label="Close corrections panel"
-        >
-          <X className="h-[12px] w-[12px]" strokeWidth={1.5} />
-        </button>
-      </div>
-
+      {/* Stacked, not side by side. The button carries a label as long as the
+          heading, and with `whitespace-nowrap` in a 276px column it took the
+          whole width and squeezed the text to about four characters a line
+          (owner review). */}
       <div className="space-y-3 border-b-[0.5px] border-border px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="space-y-2">
           <div className="min-w-0">
             <p className="text-[12px] font-medium text-ink">
               Analyze writing and spelling
@@ -156,17 +138,21 @@ export function CorrectionsPanel({
             aria-busy={isRunning}
             aria-describedby="corrections-analysis-status"
             className={cn(
-              "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[6px] border-[0.5px] border-border px-2.5 text-[11px] font-medium transition-colors",
+              "inline-flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-[6px] border-[0.5px] px-2.5 text-[11px] font-medium transition-opacity",
               isRunning
-                ? "text-ink-3 hover:bg-bg hover:text-ink"
-                : "text-ink-3 hover:bg-bg hover:text-ink",
+                ? "border-border text-ink-3 hover:bg-bg hover:text-ink"
+                : "border-ink bg-ink text-bg hover:opacity-90",
             )}
           >
             {isRunning ? (
               <X className="h-3 w-3" strokeWidth={1.7} />
             ) : canRetry ? (
               <RefreshCw className="h-3 w-3" strokeWidth={1.7} />
-            ) : null}
+            ) : (
+              /* The glyph the titlebar button used to carry — it reads better
+                 on the action itself than as a lone icon (owner review). */
+              <SpellCheck className="h-[13px] w-[13px]" strokeWidth={1.6} />
+            )}
             <span>{isRunning ? "Cancel" : analysisButtonLabel}</span>
           </button>
         </div>

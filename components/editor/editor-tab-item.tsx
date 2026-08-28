@@ -54,7 +54,7 @@ export function EditorTabItem({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
       className={cn(
-        "group relative flex h-[34px] w-[200px] min-w-[96px] shrink select-none items-center gap-[9px] overflow-hidden rounded-lg px-3 text-left font-sans transition-[background-color,color] duration-150 ease-out",
+        "group relative flex h-[36px] w-[200px] min-w-[96px] shrink select-none items-center gap-[9px] overflow-hidden rounded-lg px-3 text-left font-sans transition-[background-color,color] duration-150 ease-out",
         active
           ? "bg-sb text-ink shadow-[0_1px_2px_rgba(35,24,15,0.06)]"
           : "bg-transparent text-ink-4 hover:bg-muted-hover/70",

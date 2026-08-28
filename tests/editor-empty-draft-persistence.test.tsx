@@ -254,6 +254,7 @@ vi.mock("@/lib/editor/correction-trigger-plugin", () => ({
 vi.mock("@/lib/editor/suggestion-engine", () => ({
   applyPublicationSuggestionGroup: () => {},
   deriveSuggestionContexts: () => [],
+  getVisibleCorrectionSuggestions: () => [],
   hashPublicationSource: () => "",
   invalidateBlockSuggestions: () => [],
   replaceBlockSuggestions: () => [],

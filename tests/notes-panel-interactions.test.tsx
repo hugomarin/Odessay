@@ -41,7 +41,6 @@ const renderPanel = ({
         onDeleteAnnotation={vi.fn(() => true)}
         onDeleteHighlight={onDeleteHighlight}
         onNavigate={onNavigate}
-        onClose={vi.fn()}
       />,
     )
   })

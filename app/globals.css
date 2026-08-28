@@ -10,7 +10,7 @@
 
 :root {
   /* Odessay tokens */
-  --bg: 36 12% 92%;              /* #EDEBE8 — base surface, darker than the sheet for contrast */
+  --bg: 40 11.1% 94.7%;          /* #F3F2F0 — base surface, lighter than the sheet's hairlines */
   --sb: 0 0% 100%;
   --muted: 38 8% 93%;
   --muted-h: 38 8% 90%;
@@ -27,7 +27,7 @@
   --line-softer: 36 14% 93%;           /* #F0EEEB — hairline between form rows      */
   --surface-selected: 34.3 41.2% 96.7%;/* #FAF7F3 — warm selected / summary rows    */
   --surface-row-hover: 30 25% 98.4%;   /* #FCFBFA — table row hover                 */
-  --surface-menu-hover: 40 9.7% 94.7%; /* #F2F1EF — dropdown item hover             */
+  --surface-menu-hover: 36 12% 92%;    /* #EDEBE8 — dropdown item hover             */
   /* Option rows — the add-workspace origin step and the three empty states
      offer the same two choices, so they share one surface. `bg-surface-option`
      was already reached for by ODE-435 with no token behind it; this defines it
