@@ -35,6 +35,13 @@
       "observed_duration_ms": 12040
     }
   ],
+  "timeline_observation": {
+    "recording": "Timeline Recording 2",
+    "duration_ms": 15000,
+    "non_empty": true,
+    "events_visible": ["desk — localhost"],
+    "export_control_enabled": false
+  },
   "telemetry_observations": {
     "console_metric_events_observed": 35,
     "schema_version": 1,
@@ -51,7 +58,7 @@
   },
   "limitations": [
     "The WebKit Network Export control remained disabled, so no raw HAR was produced.",
-    "The WebKit Timeline recording remained empty/non-exportable, so no formal packaged-DMG trace was produced.",
+    "The WebKit Timeline recording was non-empty (0–15 seconds) but its Export control remained disabled, so no formal packaged-DMG trace file was produced.",
     "These observations do not replace product-owner acceptance."
   ]
 }
