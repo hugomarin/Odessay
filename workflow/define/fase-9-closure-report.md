@@ -17,7 +17,7 @@ automated source/unit evidence from proof that requires the exact packaged DMG:
 | Issue | ODE-372 |
 | Branch | `codex/ode-372-document-catalog-dod` |
 | Build version | `0.7.1` (`package.json` / `tauri.conf.json`); exact release DMG validated |
-| Commits | `2e956bb8`, `dcd97712`, `9fdde409` (ODE-372 runtime/evidence commits) |
+| Commits | `2e956bb8`, `dcd97712`, `9fdde409`, `427f3b03` (ODE-372 runtime/evidence commits) |
 | Pull request | [#412](https://github.com/hugomarin/Odessay/pull/412) — OPEN |
 | Artifact | [`dist/releases/ArtifactStudio-0.7.1-aarch64.dmg`](/Users/hugomarin/Documents/App/Odessay/dist/releases/ArtifactStudio-0.7.1-aarch64.dmg), generated 2026-08-27 10:32:07 -0600 from the runtime commits above; SHA-256 `d7a642a1d324b254baaca64ae8f4b1de1c4a3ec728963b4143adfe9380435cdd` |
 | Runtime evidence | [`artifacts/perf/ode-372-dmg-runtime-metrics.json`](../../artifacts/perf/ode-372-dmg-runtime-metrics.json) — sanitized exact-DMG navigation, network and telemetry observations; raw HAR/Timeline export unavailable in WebKit Inspector |
