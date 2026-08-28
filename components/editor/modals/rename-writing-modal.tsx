@@ -56,12 +56,12 @@ export function RenameWritingModal({
       })
 
       if (result.error || !result.data) {
-        throw new Error(result.error?.message ?? "Could not suggest a title.")
+        throw new Error(result.error?.message ?? "Could not suggest a name.")
       }
 
       setSuggestedTitle(result.data.title)
     } catch (error) {
-      setSuggestionError(error instanceof Error ? error.message : "Could not suggest a title.")
+      setSuggestionError(error instanceof Error ? error.message : "Could not suggest a name.")
     } finally {
       setIsSuggesting(false)
     }
@@ -87,7 +87,7 @@ export function RenameWritingModal({
             Cancel
           </Button>
           <Button type="button" onClick={submit}>
-            Save title
+            Save name
           </Button>
         </>
       }
@@ -99,6 +99,10 @@ export function RenameWritingModal({
           submit()
         }}
       >
+        {/* `autoFocus` means this field is always focused when the modal opens,
+            so the default 2px near-black halo is the only state anyone ever
+            sees it in. The lighter 1px ring is the same one the table property
+            selector already uses (owner review). */}
         <Input
           autoFocus
           aria-label="Artifact name"
@@ -106,7 +110,7 @@ export function RenameWritingModal({
           onChange={(event) => setNextTitle(event.target.value)}
           placeholder="Untitled writing"
           maxLength={160}
-          className="h-11 text-[15px]"
+          className="h-11 text-[15px] focus-visible:ring-1 focus-visible:ring-ink-3 focus-visible:ring-offset-0"
         />
 
           <div className="rounded-[10px] border-[0.5px] border-border bg-bg p-3">
@@ -115,8 +119,8 @@ export function RenameWritingModal({
                 <p className="text-[12px] font-medium text-ink-2">AI suggestion</p>
                 <p className="mt-1 text-[11px] leading-4 text-ink-4">
                   {canSuggestTitle
-                    ? "Ask AI for one title suggestion, then accept only if it fits."
-                    : "Write a little more before asking AI for a title."}
+                    ? "Ask AI for one name suggestion, then accept only if it fits."
+                    : "Write a little more before asking AI for a name."}
                 </p>
               </div>
               <Button
@@ -161,7 +165,7 @@ export function RenameWritingModal({
           </div>
 
         <button type="submit" className="sr-only">
-          Save title
+          Save name
         </button>
       </form>
     </FormModal>

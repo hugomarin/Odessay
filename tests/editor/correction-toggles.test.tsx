@@ -26,11 +26,11 @@ describe("CorrectionsPanel analysis trigger", () => {
         onRemoveLearnedWord: () => {},
         onAnalyze,
         onShowCorrectionsChange,
-        onClose: () => {},
       }),
     )
 
     expect(html).toContain("Analyze writing and spelling")
+    expect(html).toContain("Analyze now")
     expect(html).toContain("Show corrections")
   })
 
@@ -51,7 +51,6 @@ describe("CorrectionsPanel analysis trigger", () => {
         onRemoveLearnedWord: () => {},
         onAnalyze: () => {},
         onShowCorrectionsChange: () => {},
-        onClose: () => {},
       }),
     )
 
@@ -78,7 +77,6 @@ describe("CorrectionsPanel analysis trigger", () => {
         onAnalyze: () => {},
         onRetryFailed: () => {},
         onShowCorrectionsChange: () => {},
-        onClose: () => {},
       }),
     )
 
@@ -105,7 +103,6 @@ describe("CorrectionsPanel analysis trigger", () => {
         onAnalyze: () => {},
         onRetryFailed: () => {},
         onShowCorrectionsChange: () => {},
-        onClose: () => {},
       }),
     )
 
@@ -147,7 +144,6 @@ describe("CorrectionsPanel analysis trigger", () => {
         onRemoveLearnedWord: () => {},
         onAnalyze: () => {},
         onShowCorrectionsChange: () => {},
-        onClose: () => {},
       }),
     )
 

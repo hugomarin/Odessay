@@ -180,7 +180,7 @@ export function EditorTabs({
       const rect = state.tabElement.getBoundingClientRect();
       const ghost = document.createElement("div");
       ghost.className =
-        "fixed z-[100] flex h-[34px] items-center overflow-hidden rounded-lg bg-sb px-3 text-ink shadow-[0_1px_2px_rgba(35,24,15,0.06),0_10px_30px_rgba(35,24,15,0.05)]";
+        "fixed z-[100] flex h-[36px] items-center overflow-hidden rounded-lg bg-sb px-3 text-ink shadow-[0_1px_2px_rgba(35,24,15,0.06),0_10px_30px_rgba(35,24,15,0.05)]";
       ghost.style.width = `${rect.width}px`;
       ghost.style.left = `${rect.left}px`;
       ghost.style.top = `${rect.top}px`;

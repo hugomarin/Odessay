@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlignLeft, Scan, SpellCheck } from "lucide-react"
+import { AlignLeft, Scan } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { EditorTabs } from "@/components/editor/editor-tabs"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -14,14 +14,14 @@ import type { WritingStatus } from "@/lib/writings/status"
 /**
  * Studio titlebar — 46px, edge to edge, a sibling of the whole middle band
  * (docs/design/layout.md §2). It carries the tab strip and the window-level
- * actions only: focus mode, the properties panel and corrections. The format
- * toolbar belongs to the sheet's header row, not here.
+ * actions only: focus mode and the right panel. Grammar lost its own button
+ * here once it became a tab of that panel — the shortcut still opens it
+ * (owner review). The format toolbar belongs to the sheet's header row.
  */
 
 type EditorTopbarProps = {
   isFocusMode: boolean
-  activePanel: "notes" | "properties" | "publication" | null
-  isPublicationModeEnabled: boolean
+  activePanel: "notes" | "properties" | "grammar" | "share" | null
   tabs: LocalEditorSessionTab[]
   /** Editorial state per tab id, drawn as each tab's glyph. */
   tabStatuses?: Record<string, WritingStatus | null>
@@ -32,7 +32,7 @@ type EditorTopbarProps = {
   onReorderTab: (tabId: string, targetTabId: string) => void
   onNewTab: () => void
   onToggleFocusMode: () => void
-  onTogglePanel: (panel: "notes" | "properties" | "publication") => void
+  onTogglePanel: (panel: "notes" | "properties" | "grammar") => void
   isTabBarVisible?: boolean
 }
 
@@ -44,7 +44,6 @@ const TITLEBAR_BUTTON_ACTIVE_CLASS = "bg-surface-selected text-ink"
 export function EditorTopbar({
   isFocusMode,
   activePanel,
-  isPublicationModeEnabled,
   tabs,
   tabStatuses,
   activeTabId,
@@ -85,6 +84,18 @@ export function EditorTopbar({
                 // sit at window coordinates, while this bar starts after the
                 // sidebar. Reserve whatever of that strip overlaps the tabs.
                 paddingLeft: "max(16px, calc(126px - var(--app-shell-left-offset, 0px)))",
+                /*
+                 * Centring the tabs in this 46px box puts them at 23, but macOS
+                 * clamps `trafficLightPosition` and draws the 12px lights at
+                 * ~20 — centre 26 — which is what the rail toggle is measured
+                 * against (components/navigation/sidebar.tsx). 6px of top
+                 * padding leaves a 40px content box whose centre is 6 + 20 = 26,
+                 * so tabs, lights and toggle share one axis. The row's own
+                 * height is untouched, so nothing below it moves.
+                 * Re-measure on the DMG before changing it: `tauri dev` and the
+                 * browser do not clamp, so neither shows this.
+                 */
+                paddingTop: "6px",
               }
             : undefined
         }
@@ -118,25 +129,6 @@ export function EditorTopbar({
               aria-pressed={isFocusMode}
             >
               <Scan className="h-[18px] w-[18px]" strokeWidth={1.5} />
-            </button>
-          </ActionTooltip>
-
-          <ActionTooltip
-            label="Corrections"
-            shortcut={getEditorShortcutLabel("corrections")}
-            side="bottom"
-          >
-            <button
-              type="button"
-              onClick={() => onTogglePanel("publication")}
-              className={cn(
-                TITLEBAR_BUTTON_CLASS,
-                (isPublicationModeEnabled || activePanel === "publication") && TITLEBAR_BUTTON_ACTIVE_CLASS,
-              )}
-              aria-label="Corrections"
-              aria-pressed={isPublicationModeEnabled || activePanel === "publication"}
-            >
-              <SpellCheck className="h-[18px] w-[18px]" strokeWidth={1.5} />
             </button>
           </ActionTooltip>
 

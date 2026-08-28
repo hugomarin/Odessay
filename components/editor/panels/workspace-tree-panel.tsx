@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { WorkspaceTree } from "@/components/workspace/workspace-tree";
 import {
   loadContextualWorkspace,
@@ -54,7 +54,8 @@ export function WorkspaceTreePanel({
 }: {
   activeWritingId: string | null;
   onOpenDocument: (id: string) => Promise<void>;
-  onCountChange: (count?: number) => void;
+  /** No caller renders the total since the panel's title row went away. */
+  onCountChange?: (count?: number) => void;
 }) {
   const [outcome, setOutcome] = useState<ContextualWorkspaceOutcome | null>(
     null,
@@ -81,7 +82,7 @@ export function WorkspaceTreePanel({
       // count at all: rendering `0` next to its name reads as "this Workspace
       // is empty", which is the exact confusion the unavailable state exists to
       // prevent.
-      onCountChange(
+      onCountChange?.(
         next.kind === "workspace" && next.workspace.status === "ready"
           ? next.workspace.documents.length
           : undefined,
@@ -160,7 +161,7 @@ export function WorkspaceTreePanel({
       setOutcome(null);
       setLoading(false);
       setError(null);
-      onCountChange();
+      onCountChange?.();
       return;
     }
     setLoading(true);
@@ -179,7 +180,7 @@ export function WorkspaceTreePanel({
             : "No se pudo cargar el Workspace",
         );
         setLoading(false);
-        onCountChange();
+        onCountChange?.();
       });
   }, [activeWritingId, applyOutcome, onCountChange, retryToken]);
 
@@ -267,14 +268,10 @@ export function WorkspaceTreePanel({
           {openError}
         </p>
       ) : null}
-      <button
-        type="button"
-        className="flex h-8 w-full items-center gap-1.5 rounded-[6px] px-2 text-left text-[12px] text-ink-3 transition-colors hover:bg-muted hover:text-ink"
-        aria-label="Todos los workspaces"
-      >
-        <ChevronLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
-        <span>Todos los workspaces</span>
-      </button>
+      {/* The tree opens on the workspace root, the way Desk does. The "all
+          workspaces" row that used to sit above it went nowhere — it was never
+          wired to a handler — and it pushed the home row out of first place
+          (owner review). */}
       <WorkspaceTree
         aria-label={`${workspace.name} documents`}
         mode="studio"

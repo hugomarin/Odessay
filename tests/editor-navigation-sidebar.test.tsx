@@ -30,7 +30,6 @@ describe("EditorNavigationSidebar", () => {
         <EditorNavigationSidebar
           mode="toc"
           title="Contents"
-          count={3}
           controls={
             <NavigationModeButton active label="TOC" onClick={vi.fn()}>
               T
@@ -50,8 +49,13 @@ describe("EditorNavigationSidebar", () => {
     expect(aside?.className).toContain("overflow-hidden");
     expect(aside?.className).toContain("bg-transparent");
     expect(aside?.className).not.toContain("rounded");
-    expect(container.textContent).toContain("Contents");
-    expect(container.textContent).toContain("3");
+    // One header row now: the mode pills and the close button. The title row
+    // with its count badge is gone, so the mode name reaches assistive tech
+    // through the close button instead of a visible heading.
+    expect(container.textContent).toContain("TOC");
+    expect(
+      container.querySelector('button[aria-label="Close Contents"]'),
+    ).not.toBeNull();
 
     act(() =>
       root.render(

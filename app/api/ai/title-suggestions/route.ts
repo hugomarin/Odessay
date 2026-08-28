@@ -117,7 +117,7 @@ export async function POST(request: Request) {
     }), request);
   } catch (error) {
     console.error("[title-suggestions]", error);
-    return withCorsHeaders(jsonError(502, "AI_REQUEST_FAILED", "Could not suggest a title right now."), request);
+    return withCorsHeaders(jsonError(502, "AI_REQUEST_FAILED", "Could not suggest a name right now."), request);
   }
 }
 
