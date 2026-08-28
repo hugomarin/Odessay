@@ -4,9 +4,8 @@
 
 **FAIL — the automated source/test and bundle evidence plus a sanitized
 exact-DMG runtime capture are assembled, but the phase cannot be marked closed
-from this branch yet.** The remaining formal trace/HAR and owner/manual rows
-are kept as `PENDING`; no product-owner acceptance is claimed before those rows
-pass.
+from this branch yet.** The product owner authorized the formal HAR/Timeline
+export limitation; the remaining manual rows are still kept as `PENDING`.
 
 This report is the closure artifact for ODE-372. It deliberately distinguishes
 automated source/unit evidence from proof that requires the exact packaged DMG:
@@ -20,7 +19,7 @@ automated source/unit evidence from proof that requires the exact packaged DMG:
 | Commits | `2e956bb8`, `dcd97712`, `9fdde409`, `427f3b03` (ODE-372 runtime/evidence commits) |
 | Pull request | [#412](https://github.com/hugomarin/Odessay/pull/412) — OPEN |
 | Artifact | [`dist/releases/ArtifactStudio-0.7.1-aarch64.dmg`](/Users/hugomarin/Documents/App/Odessay/dist/releases/ArtifactStudio-0.7.1-aarch64.dmg), generated 2026-08-27 10:32:07 -0600 from the runtime commits above; SHA-256 `d7a642a1d324b254baaca64ae8f4b1de1c4a3ec728963b4143adfe9380435cdd` |
-| Runtime evidence | [`artifacts/perf/ode-372-dmg-runtime-metrics.json`](../../artifacts/perf/ode-372-dmg-runtime-metrics.json) — sanitized exact-DMG navigation, network and telemetry observations; raw HAR/Timeline export unavailable in WebKit Inspector |
+| Runtime evidence | [`artifacts/perf/ode-372-dmg-runtime-metrics.json`](../../artifacts/perf/ode-372-dmg-runtime-metrics.json) — sanitized exact-DMG navigation, network and telemetry observations; raw HAR/Timeline export unavailable in WebKit Inspector and limitation authorized by product owner |
 | Product owner | Acceptance pending; no acceptance comment has been emitted |
 
 ## Traceability matrix
@@ -70,7 +69,7 @@ current review object is PR #412 above.
 | B7.2 | Corrupt/unobservable watcher inputs become stale/retryable, not mass minting | reconciler/recovery tests | ODE-372 · PR pending · 0.7.1 exact HEAD pending · unit output | PASS |
 | B7.3 | Bulk scan/migration/hydration/watcher emit one logical update | integration, reconciler and migration tests | ODE-372 · PR pending · 0.7.1 exact HEAD pending · unit output | PASS |
 | B7.4 | Structured events exclude content/tokens/full paths from remote telemetry | `tests/sync-metrics.test.ts` plus [`ode-372-dmg-runtime-metrics.json`](../../artifacts/perf/ode-372-dmg-runtime-metrics.json); filtered exact-DMG console output exposed only schema/runtime/queue/type and aggregate counters | ODE-372 · PR #412 OPEN · 0.7.1 · exact DMG SHA-256 above · telemetry metrics | PASS |
-| B7.5 | Startup, fan-out and catalog-query budgets pass on packaged release | [`ode-372-dmg-runtime-metrics.json`](../../artifacts/perf/ode-372-dmg-runtime-metrics.json) records exact-DMG observations: navigation 252/252/253 ms; network sessions 1.09 s and 12.04 s. Formal HAR and non-empty Timeline trace were not exportable from WebKit Inspector, so budget acceptance remains pending | ODE-372 · PR #412 OPEN · 0.7.1 · exact DMG SHA-256 above · sanitized runtime metrics; formal trace/HAR pending | PENDING |
+| B7.5 | Startup, fan-out and catalog-query budgets pass on packaged release | [`ode-372-dmg-runtime-metrics.json`](../../artifacts/perf/ode-372-dmg-runtime-metrics.json) records exact-DMG observations: navigation 252/252/253 ms; network sessions 1.09 s and 12.04 s. Formal HAR/Timeline export was unavailable and is explicitly authorized as a limitation by the product owner; no unmeasured budget is claimed as PASS | ODE-372 · PR #412 OPEN · 0.7.1 · exact DMG SHA-256 above · sanitized runtime metrics; export limitation authorized | PENDING |
 | B8.1 | Every DoD bullet maps to automated/manual/owner evidence | This report plus executable `FASE9_CLOSURE_MATRIX` | ODE-372 · PR pending · 0.7.1 exact HEAD pending · closure report/Vitest output | PASS |
 | B8.2 | DMG Finder rename/move preserves UUID without duplicates | Reproducible recording on exact DMG with Desk open | ODE-372 · PR pending · 0.7.1 exact HEAD pending · DMG recording pending | PENDING |
 | B8.3 | DMG outside-root open confirmation yields same UUID/state in Desk/Workspace | Reproducible recording/screenshots on exact DMG | ODE-372 · PR pending · 0.7.1 exact HEAD pending · DMG screenshots/recording pending | PENDING |
@@ -119,8 +118,9 @@ can attach evidence to the PR:
 3. Offline open/save/restart, then online convergence.
 4. cloud-only materialization and conflict/ambiguous handling.
 5. Formal exact-current DMG startup/TTI, interaction latency, waterfall and
-   sanitized HAR/Timeline artifacts. The available exact-DMG observations are
-   recorded in `artifacts/perf/ode-372-dmg-runtime-metrics.json`.
+   sanitized HAR/Timeline artifacts. The product owner authorized the export
+   limitation; available exact-DMG observations are recorded in
+   `artifacts/perf/ode-372-dmg-runtime-metrics.json`.
 7. Product-owner acceptance after every blocking row is `PASS`.
 
 ### Parallel test gate note

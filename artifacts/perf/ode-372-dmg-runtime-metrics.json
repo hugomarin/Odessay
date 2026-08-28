@@ -12,6 +12,11 @@
     "raw_har_exported": false,
     "raw_timeline_exported": false
   },
+  "owner_authorization": {
+    "status": "accepted_limitation",
+    "scope": "formal HAR and Timeline file export",
+    "decision": "Product owner authorized accepting that WebKit Inspector does not export these files; runtime observations remain the evidence."
+  },
   "navigation": {
     "dom_interactive_ms": 252,
     "dom_content_loaded_ms": 252,
