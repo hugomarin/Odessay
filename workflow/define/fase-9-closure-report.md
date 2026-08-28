@@ -46,7 +46,7 @@ current review object is PR #412 above.
 | B2.5 | Rename/move/save and out-of-scope/unobservable roots preserve identity | reconciler and workspace service tests | ODE-372 · PR pending · 0.7.1 exact HEAD pending · unit output | PASS |
 | B2.6 | Outside-root open confirms and initially scopes only selected file | `tests/services/open-document-desktop.test.ts` | ODE-372 · PR pending · 0.7.1 exact HEAD pending · unit output | PASS |
 | B3.1 | ID/path opening converges to UUID before editor hydration | `tests/services/open-document-desktop.test.ts`; retry tests | ODE-372 · PR pending · 0.7.1 exact HEAD pending · unit output | PASS |
-| B3.2 | Desk, Workspace, Search, Recent, sidebar and Open Document share catalog/application ports | integration test; `tests/fase9-document-catalog-invariants.test.ts`; Search now uses `loadSearchWritings` | ODE-372 · PR pending · 0.7.1 exact HEAD pending · source/Vitest output | PASS |
+| B3.2 | Desk, Workspace, Search, Recent, sidebar and Open Document share catalog/application ports | integration test; `tests/fase9-document-catalog-invariants.test.ts`; Search uses `loadSearchWritings`, but exact-DMG validation found no results for known local or cloud-only titles; desktop account-scoped catalog query needs correction | ODE-372 · PR #412 OPEN · 0.7.1 · exact DMG SHA-256 above · manual regression | PENDING |
 | B3.3 | Same file through different entries is UUID-stable and idempotent | opener and catalog contract tests | ODE-372 · PR pending · 0.7.1 exact HEAD pending · unit output | PASS |
 | B3.4 | cloud-only materializes before edit; listing/hydration alone does not materialize | opener tests | ODE-372 · PR pending · 0.7.1 exact HEAD pending · unit output | PASS |
 | B3.5 | Conflict/ambiguous/orphaned/NOT_FOUND outcomes never create drafts | opener and retry tests | ODE-372 · PR pending · 0.7.1 exact HEAD pending · unit output | PASS |
@@ -121,6 +121,8 @@ can attach evidence to the PR:
    sanitized HAR/Timeline artifacts. The product owner authorized the export
    limitation; available exact-DMG observations are recorded in
    `artifacts/perf/ode-372-dmg-runtime-metrics.json`.
+6. Fix and retest desktop Search results; add the missing `DialogTitle` for
+   the Search dialog accessibility warning.
 7. Product-owner acceptance after every blocking row is `PASS`.
 
 ### Parallel test gate note
