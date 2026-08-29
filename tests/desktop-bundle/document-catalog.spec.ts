@@ -46,6 +46,8 @@ describe("desktop bundle — unified document catalog", () => {
     expect(desk).toContain("loadCatalogRecords")
     expect(workspace).toContain("loadCatalogRecords")
     expect(search).toContain("loadSearchWritings")
+    expect(search).toContain("DialogDescription")
+    expect(search).toContain("DialogTitle")
     expect(search).not.toContain("@/lib/local-db")
   })
 

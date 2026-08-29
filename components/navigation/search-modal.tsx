@@ -7,6 +7,8 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
+  DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useRecentWritings, type RecentWritingItem } from "@/hooks/useRecentWritings"
@@ -262,6 +264,10 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
           "max-w-[560px] top-[100px] -translate-x-1/2 -translate-y-0"
         )}
       >
+        <DialogTitle className="sr-only">Search artifacts</DialogTitle>
+        <DialogDescription className="sr-only">
+          Search artifacts by title or content.
+        </DialogDescription>
         <div className="relative flex items-center gap-3 px-4 py-3">
           <Search className="h-[18px] w-[18px] shrink-0 text-ink-4" strokeWidth={1.5} />
           <Input

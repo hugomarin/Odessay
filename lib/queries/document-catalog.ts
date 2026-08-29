@@ -4,6 +4,7 @@ import type {
   DocumentCatalogRecord,
 } from "@/lib/services/contracts/document-catalog"
 import { getDocumentCatalog } from "@/lib/services/document-catalog-factory"
+import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import {
   deriveDocumentStateFromCatalogRecord,
   type CatalogStateSignals,
@@ -100,10 +101,23 @@ export function buildCatalogRows(
 
 /** Load the base record set. Local records return without waiting on the cloud. */
 export async function loadCatalogRecords(
-  query?: DocumentCatalogQuery,
+  query: DocumentCatalogQuery = {},
 ): Promise<DocumentCatalogRecord[]> {
   const catalog = await getDocumentCatalog()
-  return catalog.list(query)
+  if (!isDesktopRuntime() || query.cloudAccountId !== undefined) {
+    return catalog.list(query)
+  }
+
+  // Desktop SQLite is shared across local files and cloud accounts. Local
+  // documents remain visible without a session, while cloud-only rows must be
+  // scoped to the active account. Resolve that capability here so every
+  // application query (Desk, Search, Recent and Workspace) observes the same
+  // catalog boundary instead of relying on each caller to remember it.
+  const { desktopAuthService } = await import("@/lib/services/desktop-auth-service")
+  const session = await desktopAuthService.getSession()
+  const cloudAccountId = session.data?.user?.id ?? null
+
+  return catalog.list({ ...query, cloudAccountId })
 }
 
 /**

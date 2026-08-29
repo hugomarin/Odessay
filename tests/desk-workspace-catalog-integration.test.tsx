@@ -343,7 +343,31 @@ describe("Desk consumes the DocumentCatalog", () => {
         body_text: "Searchable catalog excerpt",
       }),
     ])
-    expect(catalog.instance.list).toHaveBeenCalledWith({ limit: 10_000 })
+    expect(catalog.instance.list).toHaveBeenCalledWith({ cloudAccountId: null, limit: 10_000 })
+  })
+
+  it("scopes desktop Search to the authenticated cloud account", async () => {
+    authSession.userId = "account-1"
+    catalog.state.records = [
+      makeRecord({
+        id: "cloud-search",
+        title: "Cloud Search Result",
+        localPresent: false,
+        cloudPresent: true,
+        cloudAccountId: "account-1",
+        syncStatus: "synced",
+      }),
+    ]
+
+    const results = await loadSearchWritings()
+
+    expect(catalog.instance.list).toHaveBeenCalledWith({ cloudAccountId: "account-1", limit: 10_000 })
+    expect(results).toEqual([
+      expect.objectContaining({
+        id: "cloud-search",
+        title: "Cloud Search Result",
+      }),
+    ])
   })
 
   it("includes cloud-only rows for the authenticated desktop account", async () => {
