@@ -119,18 +119,19 @@ const ROW_PROPS = {
 describe("header", () => {
   beforeEach(() => render(<DeskHeader />))
 
-  it("sets the title at 40/500 with the prototype's tracking", () => {
+  it("sets the title at 36/500 with the prototype's tracking", () => {
     const heading = container.querySelector("h1")
     expect(heading?.textContent).toBe("Desk")
-    expect(heading?.className).toContain("text-[40px]")
+    expect(heading?.className).toContain("text-[36px]")
     expect(heading?.className).toContain("font-medium")
     expect(heading?.className).toContain("tracking-[-0.02em]")
   })
 
-  it("pads 12px 16px 16px, as the prototype does", () => {
+  it("keeps the 12px top / 16px trailing / 16px bottom header rhythm", () => {
     const header = container.querySelector('[data-testid="desk-header"]')
     expect(header?.className).toContain("pt-3")
-    expect(header?.className).toContain("px-4")
+    expect(header?.className).toContain("pl-[var(--app-shell-content-gutter,16px)]")
+    expect(header?.className).toContain("pr-4")
     expect(header?.className).toContain("pb-4")
   })
 
@@ -147,11 +148,14 @@ describe("filter bar", () => {
   it("keeps one row of 38px controls", () => {
     render(<DeskFilterBar {...FILTER_BAR_PROPS} />)
     for (const testId of ["desk-filter-trigger", "desk-group-trigger", "desk-sort-trigger"]) {
-      expect(container.querySelector(`[data-testid="${testId}"]`)?.className).toContain("h-[38px]")
+      const control = container.querySelector(`[data-testid="${testId}"]`)
+      expect(control?.className).toContain("h-[38px]")
+      expect(control?.className).toContain("text-[14px]")
+      expect(control?.className).toContain("font-medium")
+      expect(control?.className).toContain("[&>svg]:text-ink-3")
     }
-    expect(container.querySelector('[data-testid="desk-filter-search"]')?.parentElement?.className).toContain(
-      "h-[38px]",
-    )
+    expect(container.querySelector('[data-testid="desk-filter-search"]')?.parentElement?.className).toContain("h-[38px]")
+    expect(container.querySelector('[data-testid="desk-filter-search"]')?.className).toContain("text-[14px]")
   })
 
   it("carries the prototype's placeholder", () => {
@@ -207,7 +211,7 @@ describe("artifact row", () => {
     expect(excerpt?.parentElement?.className).toContain("max-w-[88ch]")
   })
 
-  it("exposes edit and preview as real buttons, so neither is hover-only", () => {
+  it("keeps edit and preview keyboard-accessible while revealing them on row intent", () => {
     const onRenameWriting = vi.fn()
     const onPreviewWriting = vi.fn()
     renderRow(
@@ -224,7 +228,10 @@ describe("artifact row", () => {
     for (const button of [rename, preview]) {
       expect(button.tagName).toBe("BUTTON")
       expect(button.hasAttribute("tabindex")).toBe(false)
-      expect(button.className).not.toContain("opacity-0")
+      expect(button.className).toContain("opacity-0")
+      expect(button.className).toContain("group-hover/desk-row:opacity-100")
+      expect(button.className).toContain("group-focus-within/desk-row:opacity-100")
+      expect(button.className).toContain("focus-visible:opacity-100")
     }
 
     act(() => preview.click())

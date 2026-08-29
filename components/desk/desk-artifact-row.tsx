@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils"
  * `docs/design/migration-plan.md` §4 the prototype is the authority.
  *
  * The control cluster is hidden below 1240px, which is where the prototype drops
- * it; the row keeps its title block and its inline actions at every width.
+ * it; the row keeps its title block and reveals inline actions on row intent.
  */
 
 export const DESK_ROW_CONTROL_WIDTH = "w-[160px]"
@@ -115,7 +115,7 @@ export function DeskArtifactRow({
           : undefined
       }
       className={cn(
-        "group flex items-start gap-4 border-b-[0.5px] border-line-softer px-[26px] py-[14px] transition-colors",
+        "group/desk-row flex items-start gap-4 border-b-[0.5px] border-line-softer px-[26px] py-[14px] transition-colors",
         "hover:bg-surface-row-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-3",
         navigable && "cursor-pointer",
         selected && "bg-surface-selected",
@@ -280,9 +280,8 @@ export function DeskArtifactRow({
 }
 
 /**
- * A row action. The prototype de-emphasises these by colour rather than by
- * opacity and brings them to full ink on hover — which, unlike a hover-only
- * reveal, leaves them reachable by keyboard at every moment.
+ * A row action. The row keeps these controls quiet until the user hovers or
+ * focuses the writing, while the focus-within state keeps keyboard access clear.
  */
 function RowIconButton({
   label,
@@ -298,7 +297,7 @@ function RowIconButton({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="inline-flex h-[26px] w-[26px] flex-shrink-0 items-center justify-center rounded-[6px] text-ink-5 transition-colors hover:bg-surface-menu-hover hover:text-ink focus-visible:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+      className="pointer-events-none inline-flex h-[26px] w-[26px] flex-shrink-0 items-center justify-center rounded-[6px] text-ink-5 opacity-0 transition-[opacity,background-color,color] hover:bg-surface-menu-hover hover:text-ink focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3 group-hover/desk-row:pointer-events-auto group-hover/desk-row:opacity-100 group-focus-within/desk-row:pointer-events-auto group-focus-within/desk-row:opacity-100"
     >
       {children}
     </button>

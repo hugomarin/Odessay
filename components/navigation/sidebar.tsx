@@ -134,7 +134,7 @@ const RAIL_FORCED_COLLAPSE_QUERY = "(max-width: 899px)"
 
 /**
  * The rail item, read from the prototypes' `railRow`: 40px tall at radius 9,
- * `padding: 0`, `gap: 10`, 14px label.
+ * `padding: 0`, `gap: 10`, 14px medium-weight label.
  *
  * The icon does not live behind padding — it sits in a **fixed 40px column**
  * (`railIconWrap`). That is the mechanism behind "the icon never changes X
@@ -142,19 +142,22 @@ const RAIL_FORCED_COLLAPSE_QUERY = "(max-width: 899px)"
  * that column, and expanding only adds room for the label to its right.
  */
 const SIDEBAR_ITEM_BASE_CLASS =
-  "flex h-10 min-h-10 w-full items-center gap-2.5 rounded-[9px] p-0 text-left text-[16px]"
+  "flex h-10 min-h-10 w-full items-center gap-2.5 rounded-[9px] p-0 text-left text-[14px] font-medium"
 const SIDEBAR_ICON_WRAP_CLASS =
   "flex h-10 w-10 min-w-10 flex-shrink-0 items-center justify-center"
 const SIDEBAR_ITEM_TRANSITION_CLASS = "transition-colors duration-[180ms] ease-layout"
 /**
  * The label clips horizontally to stay on one line, so its line box has to be
- * tall enough to contain descenders. The prototypes write `font: 400 14px/1`,
- * and a 14px line box over 14px text cuts the tail off a "g" — the row is 40px
- * and centres its content, so nothing is gained by squeezing the line box.
+ * tall enough to contain descenders. A 14px line box over 14px text cuts the
+ * tail off a "g" — the row is 40px and centres its content, so nothing is
+ * gained by squeezing the line box.
  */
 const SIDEBAR_LABEL_TRANSITION_CLASS =
   "flex-shrink-0 overflow-hidden whitespace-nowrap leading-[1.45] transition-opacity duration-200 ease-out"
-const SIDEBAR_ICON_CLASS = "h-[21px] w-[21px] shrink-0"
+// Neutral rail icons use the same mid-gray as the rest of the product chrome.
+// Active navigation overrides this with `text-ink` at the icon itself, so the
+// selected destination keeps the strongest contrast without darkening every row.
+const SIDEBAR_ICON_CLASS = "h-[18px] w-[18px] shrink-0 text-ink-3"
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect
 
 const isEditableTarget = (target: EventTarget | null) => {
@@ -230,7 +233,12 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
     return isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED
   }, [isCollapsed])
   const shellLeftOffset = sidebarWidth
-  const shellStyle = { "--app-shell-left-offset": `${shellLeftOffset}px` } as CSSProperties
+  const shellStyle = {
+    "--app-shell-left-offset": `${shellLeftOffset}px`,
+    // Keep the expanded rail breathable, but let collapsed views sit close to
+    // their content just like the editor's 0.5 spacing step.
+    "--app-shell-content-gutter": `${isCollapsed ? 2 : 16}px`,
+  } as CSSProperties
 
   const userDisplayName = user.displayName ?? user.email?.split("@")[0] ?? "Writer"
   const userUsername = user.username ?? "profile"
@@ -560,17 +568,20 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                       className={cn(
                         SIDEBAR_ITEM_BASE_CLASS,
                         SIDEBAR_ITEM_TRANSITION_CLASS,
-                        // The prototypes make the active state the darker of the
-                        // two and the only one at weight 500; the repo had the
-                        // two surfaces the other way round.
+                        // Keep the active state darker while the shared base class
+                        // gives every rail label the slightly heavier requested
+                        // weight.
                         isActive
                           ? "bg-muted-hover font-medium text-ink"
-                          : "font-normal text-ink-2 hover:bg-muted hover:text-ink",
+                          : "text-ink-2 hover:bg-muted hover:text-ink",
                       )}
                       aria-label={item.label}
                     >
                       <span className={SIDEBAR_ICON_WRAP_CLASS}>
-                        <item.icon className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
+                        <item.icon
+                          className={cn(SIDEBAR_ICON_CLASS, isActive && "text-ink")}
+                          strokeWidth={1.5}
+                        />
                       </span>
                       <span
                         className={cn(
@@ -606,9 +617,9 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                           href={`/workspace?slug=${encodeURIComponent(workspace.slug)}`}
                           data-testid="sidebar-workspace-folder"
                           title={workspace.name}
-                          className="flex h-8 flex-shrink-0 items-center gap-[9px] rounded-[8px] px-2.5 text-[15px] font-normal leading-[1.45] text-ink-4 transition-colors duration-[180ms] hover:bg-muted hover:text-ink"
+                          className="flex h-8 flex-shrink-0 items-center gap-[9px] rounded-[8px] px-2.5 text-[13px] font-medium leading-[1.45] text-ink-4 transition-colors duration-[180ms] hover:bg-muted hover:text-ink"
                         >
-                          <Folder className="h-[17px] w-[17px] flex-shrink-0" strokeWidth={1.5} />
+                          <Folder className="h-[15px] w-[15px] flex-shrink-0" strokeWidth={1.5} />
                           <span className="truncate">{workspace.name}</span>
                         </Link>
                       ))}

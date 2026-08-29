@@ -115,7 +115,7 @@ export function EditorSheetHeader({
               type="button"
               onClick={onRename}
               aria-label="Rename artifact"
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-ink-5 transition-colors duration-150 ease-out hover:bg-surface-menu-hover hover:text-ink"
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-colors duration-150 ease-out hover:bg-surface-menu-hover hover:text-ink"
             >
               <Pencil className="h-[14px] w-[14px]" strokeWidth={1.5} />
             </button>

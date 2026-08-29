@@ -112,6 +112,11 @@ export const FrontmatterNode = Node.create({
       dom.contentEditable = "false"
       dom.setAttribute("aria-label", "Document front matter")
 
+      const label = document.createElement("div")
+      label.className = "odessay-frontmatter-label"
+      label.textContent = "Frontmatter"
+      dom.appendChild(label)
+
       const rows = readRows(String(node.attrs.raw ?? ""))
       if (rows.length === 0) {
         const raw = document.createElement("pre")

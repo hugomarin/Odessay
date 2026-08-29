@@ -4,13 +4,18 @@ import type { ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
 
+/** Leading/trailing page gutter, with a compact 2px leading edge for the collapsed rail. */
+export const APP_SHELL_CONTENT_GUTTER_CLASS =
+  "pl-[var(--app-shell-content-gutter,16px)] pr-4"
+
 /**
  * The header every view wears, so the title lands on the same pixel whatever
  * page you are on.
  *
- * Geometry from Desk, which is the reference: padding `12px 16px 16px`, the
- * 40px title and its 14px subtitle baseline-aligned 16px apart, the actions
- * flush right and bottom-aligned with the title.
+ * Geometry from Desk, which is the reference: 12px top / 16px trailing / 16px
+ * bottom padding, with a 2px leading gutter while the app rail is collapsed.
+ * The 36px title and its 14px subtitle are baseline-aligned 16px apart; the
+ * actions stay flush right and bottom-aligned with the title.
  *
  * **The subtitle line is where a breadcrumb goes too.** Detail views used to
  * stack their back-link above the title, which pushed the title down and made
@@ -41,12 +46,16 @@ export function ViewHeader({
       data-section={sectionId}
       data-testid={testId}
       data-tauri-drag-region
-      className={cn("flex flex-shrink-0 items-end gap-5 px-4 pb-4 pt-3", className)}
+      className={cn(
+        "flex flex-shrink-0 items-end gap-5 pb-4 pt-3",
+        APP_SHELL_CONTENT_GUTTER_CLASS,
+        className,
+      )}
     >
       <div className="flex min-w-0 flex-1 items-baseline gap-4">
         <h1
           data-tauri-drag-region
-          className="flex-shrink-0 text-[40px] font-medium leading-none tracking-[-0.02em] text-ink"
+          className="flex-shrink-0 text-[36px] font-medium leading-none tracking-[-0.02em] text-ink"
         >
           {title}
         </h1>

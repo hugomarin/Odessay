@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { getMarkRange, type JSONContent } from "@tiptap/core"
 import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents"
 import { generateHTML } from "@tiptap/html"
@@ -145,6 +145,7 @@ import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor
 import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
 import { saveBinaryArtifact } from "@/lib/utils/download"
+import { cn } from "@/lib/utils"
 import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
 import { logCorrectionEvent } from "@/lib/observability/corrections-log"
 import {
@@ -520,11 +521,6 @@ export function EditorShell({
   const imageViewerScrollRef = useRef<{ top: number; left: number } | null>(null)
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [canonicalPath, setCanonicalPath] = useState<string | null>(null)
-  const [focusModeCompensation, setFocusModeCompensation] = useState<{
-    top: number
-    left: number
-    right: number
-  } | null>(null)
   const [isTopbarVisible, setIsTopbarVisible] = useState(true)
   const [isTabBarVisible, setIsTabBarVisible] = useState(true)
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false)
@@ -553,10 +549,44 @@ export function EditorShell({
     hydrationGenerationOwnerRef.current = createHydrationGenerationOwner()
   }
   const currentCanonicalPathRef = useRef<string | null>(null)
-  const editorBandRef = useRef<HTMLDivElement | null>(null)
-  // Widths of the chrome that focus mode hides, sampled while it is visible so
-  // the band can hold the sheet in place once it is gone.
-  const chromeWidthsRef = useRef({ top: 0, left: 0, right: 0 })
+  const focusModeRestorationRef = useRef<{
+    activePanel: EditorPanel
+    isFindReplaceOpen: boolean
+  } | null>(null)
+
+  const enterFocusMode = useCallback(() => {
+    if (isFocusMode) {
+      return
+    }
+
+    focusModeRestorationRef.current = { activePanel, isFindReplaceOpen }
+
+    setActivePanel(null)
+    setIsFindReplaceOpen(false)
+    setIsFocusMode(true)
+  }, [activePanel, isFindReplaceOpen, isFocusMode])
+
+  const exitFocusMode = useCallback(() => {
+    if (!isFocusMode) {
+      return
+    }
+
+    const stateToRestore = focusModeRestorationRef.current
+    focusModeRestorationRef.current = null
+    if (stateToRestore) {
+      setActivePanel(stateToRestore.activePanel)
+      setIsFindReplaceOpen(stateToRestore.isFindReplaceOpen)
+    }
+    setIsFocusMode(false)
+  }, [isFocusMode])
+
+  const toggleFocusMode = useCallback(() => {
+    if (isFocusMode) {
+      exitFocusMode()
+    } else {
+      enterFocusMode()
+    }
+  }, [enterFocusMode, exitFocusMode, isFocusMode])
   const navigatedToDraftRef = useRef(false)
   const identityEnsuredRef = useRef(false)
   const desktopWebHandoffAppliedRef = useRef(false)
@@ -1864,15 +1894,10 @@ export function EditorShell({
   useEffect(() => {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
 
-    if (isFocusMode) {
-      setActivePanel(null)
-      setIsFindReplaceOpen(false)
-    }
-
     return () => {
       document.body.classList.remove("od-editor-focus-mode")
     }
-  }, [activePanel, isFocusMode])
+  }, [isFocusMode])
 
   useEffect(() => {
     return () => {
@@ -1899,39 +1924,6 @@ export function EditorShell({
   useEffect(() => {
     setSidebarMode("collapsed")
   }, [])
-
-  // Focus mode hides the rail and the panels. The sheet must not move a pixel
-  // when they go, so the band keeps sampling how much room they take while they
-  // are visible and pads itself by exactly that much once they are gone.
-  useLayoutEffect(() => {
-    if (isFocusMode) {
-      return
-    }
-
-    const band = editorBandRef.current
-    const sheet = band?.querySelector<HTMLElement>('[data-testid="editor-sheet"]')
-
-    if (!band || !sheet) {
-      return
-    }
-
-    const bandRect = band.getBoundingClientRect()
-    const sheetRect = sheet.getBoundingClientRect()
-    const railWidth = document.getElementById("sidebar")?.getBoundingClientRect().width ?? 0
-    const sectionTop = band.closest("section")?.getBoundingClientRect().top ?? 0
-
-    chromeWidthsRef.current = {
-      // The titlebar above the band goes with focus mode too, so the band pads
-      // its top by the same amount and the sheet keeps its y.
-      top: Math.max(0, Math.round(bandRect.top - sectionTop)),
-      left: Math.max(0, Math.round(railWidth + (sheetRect.left - bandRect.left))),
-      right: Math.max(0, Math.round(bandRect.right - sheetRect.right)),
-    }
-  })
-
-  useLayoutEffect(() => {
-    setFocusModeCompensation(isFocusMode ? chromeWidthsRef.current : null)
-  }, [isFocusMode])
 
   useEffect(() => {
     if (!editor) {
@@ -2928,7 +2920,7 @@ export function EditorShell({
             openFindReplacePanel({ focusReplace: true })
             return true
           case "focusMode":
-            setIsFocusMode((currentState) => !currentState)
+            toggleFocusMode()
             return true
           case "shortcutHelp":
             setIsShortcutHelpOpen(true)
@@ -3416,6 +3408,7 @@ export function EditorShell({
       persistEditorSnapshot,
       queueMarkdownSelectionRestore,
       router,
+      toggleFocusMode,
     ],
   )
 
@@ -6018,7 +6011,7 @@ export function EditorShell({
           closeActivePanel()
         } else if (intent === "exit-focus") {
           event.preventDefault()
-          setIsFocusMode(false)
+          exitFocusMode()
         }
 
         return
@@ -6056,6 +6049,7 @@ export function EditorShell({
     pendingRichSelection,
     renameModalOpen,
     tableModalOpen,
+    exitFocusMode,
   ])
 
   // The editor is a fixed-height frame, not a scrolling page: the topbar is
@@ -6064,7 +6058,12 @@ export function EditorShell({
   // the shell's <main> and let it scroll, dragging the absolutely positioned
   // navigation sidebar out of view above the frame.
   return (
-    <section id="editor" data-page="editor" className="h-screen overflow-hidden bg-bg">
+    <section
+      id="editor"
+      data-page="editor"
+      data-focus-mode={isFocusMode ? "true" : "false"}
+      className="h-screen overflow-hidden bg-bg"
+    >
       <div className="EditorLayout hidden h-full min-h-0 flex-col md:flex">
         {!isFocusMode && isTopbarVisible ? (
           <EditorTopbar
@@ -6078,7 +6077,7 @@ export function EditorShell({
             onRenameTab={handleRenameWorkspaceTab}
             onReorderTab={handleReorderWorkspaceTab}
             onNewTab={handleCreateWorkspaceTab}
-            onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
+            onToggleFocusMode={toggleFocusMode}
             onTogglePanel={(panel) => {
               setActivePanel((current) => (current === panel ? null : panel))
             }}
@@ -6114,18 +6113,11 @@ export function EditorShell({
         ) : null}
 
         <div
-          ref={editorBandRef}
           data-testid="editor-band"
-          style={
-            focusModeCompensation
-              ? {
-                  paddingTop: `${focusModeCompensation.top}px`,
-                  paddingLeft: `${focusModeCompensation.left}px`,
-                  paddingRight: `${focusModeCompensation.right}px`,
-                }
-              : undefined
-          }
-          className="EditorBand flex min-h-0 flex-1 gap-2.5 pb-2.5 pr-2.5 pt-1.5"
+          className={cn(
+            "EditorBand flex min-h-0 flex-1",
+            isFocusMode ? "gap-0 px-0 pb-0 pt-[46px]" : "gap-2.5 pb-2.5 pr-2.5 pt-1.5",
+          )}
         >
           <div className="relative flex min-w-0 flex-1 flex-col gap-1.5">
             {isDesktopRuntime() && hydrationProgress.active ? (
@@ -6176,7 +6168,7 @@ export function EditorShell({
                     <div className="h-3 w-2/3 rounded bg-foreground/5" />
                   </div>
                 ) : null}
-                <div className="relative flex min-h-0 flex-1 gap-2.5">
+                <div className="relative flex min-h-0 flex-1 gap-0.5">
                   {!isFocusMode ? (
                     <Suspense fallback={null}>
                       <TableOfContentsPanel
@@ -6193,7 +6185,10 @@ export function EditorShell({
 
                   <div
                     data-testid="editor-sheet"
-                    className="EditorSheet relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-sb shadow-float"
+                    className={cn(
+                      "EditorSheet relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sb",
+                      isFocusMode ? "rounded-none shadow-none" : "rounded-[10px] shadow-float",
+                    )}
                   >
                     <EditorSheetHeader
                       editor={editor}

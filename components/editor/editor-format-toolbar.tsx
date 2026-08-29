@@ -146,12 +146,12 @@ const isActionActive = (
 ) => (isToolbarTrackedAction(action) ? actionState[action] : false)
 
 const TOOLBAR_BUTTON_CLASS =
-  "inline-flex h-[30px] w-[30px] items-center justify-center rounded-md text-ink-2 transition-colors duration-150 ease-out hover:bg-surface-menu-hover hover:text-ink"
+  "inline-flex h-[30px] w-[30px] items-center justify-center rounded-md text-ink-3 transition-colors duration-150 ease-out hover:bg-surface-menu-hover hover:text-ink"
 
-const TOOLBAR_BUTTON_ACTIVE_CLASS = "bg-surface-menu-hover text-ink"
+const TOOLBAR_BUTTON_ACTIVE_CLASS = "bg-surface-menu-hover text-ink [&>svg]:text-ink"
 
 const TOOLBAR_TRIGGER_CLASS =
-  "inline-flex h-[30px] items-center gap-[5px] rounded-md px-[9px] text-[13px] text-ink-2 transition-colors duration-150 ease-out hover:bg-surface-menu-hover hover:text-ink"
+  "inline-flex h-[30px] items-center gap-[5px] rounded-md px-[9px] text-[13px] text-ink-2 transition-colors duration-150 ease-out hover:bg-surface-menu-hover hover:text-ink [&>svg]:text-ink-3"
 
 const MENU_CONTENT_CLASS = "w-[214px]"
 

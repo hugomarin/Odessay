@@ -862,7 +862,7 @@ export default function DeskPage() {
           */}
           <div
             data-testid="desk-sheet"
-            className="relative mx-4 mb-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-sb shadow-float"
+            className="relative mb-4 ml-[var(--app-shell-content-gutter,16px)] mr-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-sb shadow-float"
           >
             <DeskArtifactList
               groups={filteredSummary.groups}
@@ -996,10 +996,10 @@ export default function DeskPage() {
       ) : (
         <>
           <DeskHeader />
-          <div className="flex flex-shrink-0 flex-wrap items-center gap-[14px] px-4 pb-3">
+          <div className="flex flex-shrink-0 flex-wrap items-center gap-[14px] pl-[var(--app-shell-content-gutter,16px)] pr-4 pb-3">
             <DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />
           </div>
-          <div className="relative mx-4 mb-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-sb shadow-float">
+          <div className="relative mb-4 ml-[var(--app-shell-content-gutter,16px)] mr-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-sb shadow-float">
             <div className="od-scroll min-h-0 flex-1 overflow-y-auto">
               <SharedWithMeList items={sharedItems} isLoading={isSharedLoading} error={sharedError} />
             </div>

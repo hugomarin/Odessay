@@ -96,7 +96,11 @@ import {
   type ArtifactType,
 } from "@/lib/writings/artifact-type";
 import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer";
-import { ViewHeader, VIEW_HEADER_ACTION_CLASS } from "@/components/navigation/view-header";
+import {
+  APP_SHELL_CONTENT_GUTTER_CLASS,
+  ViewHeader,
+  VIEW_HEADER_ACTION_CLASS,
+} from "@/components/navigation/view-header";
 import { useWritingSelection } from "@/hooks/useWritingSelection";
 import { useDeskFilters } from "@/hooks/useDeskFilters";
 import {
@@ -1076,7 +1080,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
 
   if (isLoading || !workspace) {
     return (
-      <div className="flex min-h-full flex-col bg-bg">
+      <div className="flex h-screen min-h-0 flex-col bg-bg">
         <ViewTitlebarSpacer />
         <div className="border-b-[0.5px] border-border px-10 py-7">
           <div className="h-8 w-48 animate-pulse rounded-[10px] bg-muted" />
@@ -1095,7 +1099,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
 
   if (workspace.status === "missing") {
     return (
-      <div className="flex min-h-full flex-col bg-bg">
+      <div className="flex h-screen min-h-0 flex-col bg-bg">
         <ViewTitlebarSpacer />
         <div className="border-b-[0.5px] border-border px-10 py-7">
           <Link
@@ -1242,9 +1246,9 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
 
   return (
     <DocumentStateTooltipProvider>
-      <div className="flex min-h-full flex-col bg-bg">
+      <div className="flex h-screen min-h-0 flex-col bg-bg">
         <ViewTitlebarSpacer />
-        <div className="grid flex-1 grid-cols-[236px_1fr]">
+        <div className="grid min-h-0 flex-1 grid-cols-[236px_1fr]">
           {/* Tree column */}
           <div className="flex min-h-0 flex-col border-r-[0.5px] border-line-soft bg-transparent">
             <div className="flex h-8 items-center border-b-[0.5px] border-line-soft px-3">
@@ -1393,7 +1397,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               onClearFilters={clearFilters}
             />
 
-            <div className="flex-1 overflow-y-auto px-4 pb-4">
+            <div className={`od-scroll min-h-0 flex-1 overflow-y-auto ${APP_SHELL_CONTENT_GUTTER_CLASS} pb-4`}>
               {errorMessage ? (
                 <div className="mb-6 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 text-sm text-ink-3">
                   {errorMessage}

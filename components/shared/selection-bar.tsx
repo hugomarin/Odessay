@@ -198,61 +198,63 @@ export function SelectionBar({
       aria-label="Selection actions"
       aria-busy={busy || undefined}
       data-testid={testId}
+      data-selection-bar="true"
       data-placement={placement}
       className={cn(
-        "left-1/2 bottom-[26px] z-40 flex h-14 -translate-x-1/2 animate-bar-in items-center gap-2.5",
-        "whitespace-nowrap rounded-bar bg-ink pl-[22px] pr-3.5 shadow-selection-bar",
+        "pointer-events-none inset-x-0 bottom-[26px] z-40 flex h-14 items-center justify-center",
         placement === "fixed" ? "fixed" : "absolute",
       )}
     >
-      <span className="text-[14px] font-medium text-bg">{countLabel(selectedCount)}</span>
+      <div className="pointer-events-auto flex h-14 origin-center animate-bar-in items-center gap-2.5 whitespace-nowrap rounded-bar bg-ink pl-[22px] pr-3.5 shadow-selection-bar">
+        <span className="text-[14px] font-medium text-bg">{countLabel(selectedCount)}</span>
 
-      {onSelectAll && canSelectAll ? (
+        {onSelectAll && canSelectAll ? (
+          <button
+            type="button"
+            onClick={onSelectAll}
+            className="px-[2px] text-[14px] font-normal text-bg/55 transition-colors hover:text-bg"
+          >
+            Select all
+          </button>
+        ) : null}
         <button
           type="button"
-          onClick={onSelectAll}
+          onClick={onDeselectAll}
           className="px-[2px] text-[14px] font-normal text-bg/55 transition-colors hover:text-bg"
         >
-          Select all
+          Deselect
         </button>
-      ) : null}
-      <button
-        type="button"
-        onClick={onDeselectAll}
-        className="px-[2px] text-[14px] font-normal text-bg/55 transition-colors hover:text-bg"
-      >
-        Deselect
-      </button>
 
-      <span aria-hidden className="mx-1 h-[26px] w-px bg-bg/[.14]" />
+        <span aria-hidden className="mx-1 h-[26px] w-px bg-bg/[.14]" />
 
-      {actions.map((action) => {
-        const chip = (
-          <button
-            key={action.id}
-            type="button"
-            disabled={busy}
-            data-testid={`selection-bar-action-${action.id}`}
-            onClick={action.onSelect ? () => void runAction(action) : undefined}
-            className={cn(
-              CHIP_CLASS,
-              action.destructive
-                ? "bg-cursor/30 text-danger-chip-fg hover:bg-cursor/[.42]"
-                : "bg-bg/10 hover:bg-bg/[.16]",
-            )}
-          >
-            {action.icon}
-            {action.label}
-            {action.trailingIcon}
-          </button>
-        )
+        {actions.map((action) => {
+          const chip = (
+            <button
+              key={action.id}
+              type="button"
+              disabled={busy}
+              data-testid={`selection-bar-action-${action.id}`}
+              onClick={action.onSelect ? () => void runAction(action) : undefined}
+              className={cn(
+                CHIP_CLASS,
+                action.destructive
+                  ? "bg-cursor/30 text-danger-chip-fg hover:bg-cursor/[.42]"
+                  : "bg-bg/10 hover:bg-bg/[.16]",
+              )}
+            >
+              {action.icon}
+              {action.label}
+              {action.trailingIcon}
+            </button>
+          )
 
-        return (
-          <React.Fragment key={action.id}>
-            {action.render ? action.render(chip) : chip}
-          </React.Fragment>
-        )
-      })}
+          return (
+            <React.Fragment key={action.id}>
+              {action.render ? action.render(chip) : chip}
+            </React.Fragment>
+          )
+        })}
+      </div>
     </div>
   )
 }

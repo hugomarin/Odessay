@@ -103,7 +103,7 @@ export function ArtifactWritingAction({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="ArtifactWritingAction inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-[background-color,color] duration-150 hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-ink-4"
+      className="ArtifactWritingAction pointer-events-none inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-ink-4"
       data-section="artifact-writing-action"
       aria-label={label}
       title={disabled ? label : undefined}

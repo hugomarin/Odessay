@@ -48,7 +48,11 @@ import type { WorkspaceSummary } from "@/lib/workspace/types";
 import { buildWorkspaceHref } from "@/lib/workspace/workspace-route";
 import { cn } from "@/lib/utils";
 import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer";
-import { ViewHeader, VIEW_HEADER_ACTION_CLASS } from "@/components/navigation/view-header";
+import {
+  APP_SHELL_CONTENT_GUTTER_CLASS,
+  ViewHeader,
+  VIEW_HEADER_ACTION_CLASS,
+} from "@/components/navigation/view-header";
 
 function formatUpdatedAt(timestamp: number | null) {
   if (!timestamp) return "Recently added";
@@ -246,7 +250,7 @@ export function WorkspaceIndex() {
   };
 
   return (
-    <div className="flex min-h-full flex-col bg-bg">
+    <div className="flex h-screen min-h-0 flex-col bg-bg">
       <ViewTitlebarSpacer />
       <ViewHeader
         sectionId="workspace-header"
@@ -267,7 +271,7 @@ export function WorkspaceIndex() {
       />
 
       <WorkspaceFilterBar
-        className="px-4 pb-3"
+        className={`${APP_SHELL_CONTENT_GUTTER_CLASS} pb-3`}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         sortBy={sortBy}
@@ -276,7 +280,7 @@ export function WorkspaceIndex() {
         onViewChange={handleLayoutChange}
       />
 
-      <div className="flex-1 px-4 pb-4">
+      <div className={`od-scroll min-h-0 flex-1 overflow-y-auto ${APP_SHELL_CONTENT_GUTTER_CLASS} pb-4`}>
         {errorMessage ? (
           <div className="mb-6 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 text-sm text-ink-3">
             {errorMessage}

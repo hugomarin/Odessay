@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { EditorTabItem } from "@/components/editor/editor-tab-item";
@@ -60,6 +60,7 @@ export function EditorTabs({
     ghost: null,
     scrollInterval: null,
   });
+  const cleanupDragRef = useRef<((options?: { resetReactState?: boolean }) => void) | null>(null);
 
   const findTabIdFromPoint = (clientX: number, clientY: number): string | null => {
     const elements = document.elementsFromPoint(clientX, clientY);
@@ -106,7 +107,7 @@ export function EditorTabs({
     }
   };
 
-  const cleanupDrag = () => {
+  const cleanupDrag = ({ resetReactState = true }: { resetReactState?: boolean } = {}) => {
     const state = dragStateRef.current;
     if (state.tabElement && state.pointerId !== null) {
       try {
@@ -119,6 +120,7 @@ export function EditorTabs({
       state.ghost.remove();
     }
     stopAutoScroll();
+    document.documentElement.classList.remove("od-editor-tab-dragging");
     dragStateRef.current = {
       pointerId: null,
       tabId: null,
@@ -131,20 +133,55 @@ export function EditorTabs({
       ghost: null,
       scrollInterval: null,
     };
-    setDraggedTabId(null);
-    setDragTargetTabId(null);
+    if (resetReactState) {
+      setDraggedTabId(null);
+      setDragTargetTabId(null);
+    }
   };
+  cleanupDragRef.current = cleanupDrag;
+
+  useEffect(() => {
+    // A route change can unmount this component before WebKit delivers the
+    // final pointer event. Remove any ghost left by that interrupted gesture
+    // before this strip is ever painted again.
+    document.querySelectorAll<HTMLElement>("[data-editor-tab-ghost]").forEach((ghost) => ghost.remove());
+    document.documentElement.classList.remove("od-editor-tab-dragging");
+
+    const handleWindowLoss = () => cleanupDragRef.current?.();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        handleWindowLoss();
+      }
+    };
+
+    window.addEventListener("blur", handleWindowLoss);
+    window.addEventListener("pagehide", handleWindowLoss);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("blur", handleWindowLoss);
+      window.removeEventListener("pagehide", handleWindowLoss);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      cleanupDragRef.current?.({ resetReactState: false });
+    };
+  }, []);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>, tabId: string) => {
+    if (event.button !== 0) {
+      return;
+    }
+
     const target = event.target;
     if (target instanceof HTMLElement && target.closest("[data-tab-action='true']")) {
       return;
     }
 
-    // Do NOT call event.preventDefault() here: in WKWebView (Tauri desktop),
-    // canceling pointerdown suppresses the compatibility click event, which
-    // would kill tab selection. Text selection is already blocked by the
-    // `select-none` class on the tab, so preventDefault is unnecessary.
+    // This is a custom pointer gesture, not a native link click. Cancel the
+    // browser default immediately and finish selection from pointerup below;
+    // otherwise WKWebView can start selecting the editor document while the
+    // tab is being dragged.
+    event.preventDefault();
+    event.stopPropagation();
     const element = event.currentTarget;
     element.setPointerCapture(event.pointerId);
 
@@ -177,8 +214,14 @@ export function EditorTabs({
         return;
       }
 
+      event.preventDefault();
+      event.stopPropagation();
+      window.getSelection()?.removeAllRanges();
+      document.documentElement.classList.add("od-editor-tab-dragging");
+
       const rect = state.tabElement.getBoundingClientRect();
       const ghost = document.createElement("div");
+      ghost.dataset.editorTabGhost = "true";
       ghost.className =
         "fixed z-[100] flex h-[36px] items-center overflow-hidden rounded-lg bg-sb px-3 text-ink shadow-[0_1px_2px_rgba(35,24,15,0.06),0_10px_30px_rgba(35,24,15,0.05)]";
       ghost.style.width = `${rect.width}px`;
@@ -201,6 +244,7 @@ export function EditorTabs({
     }
 
     if (state.ghost) {
+      event.preventDefault();
       state.ghost.style.left = `${event.clientX - state.offsetX}px`;
       state.ghost.style.top = `${event.clientY - state.offsetY}px`;
     }
@@ -220,6 +264,9 @@ export function EditorTabs({
     if (state.pointerId === null) {
       return;
     }
+
+    event.preventDefault();
+    event.stopPropagation();
 
     const wasDragging = state.dragging;
     const tabId = state.tabId;
@@ -249,6 +296,7 @@ export function EditorTabs({
     // The empty parts of the strip drag the desktop window: with an overlay
     // title bar this row is all the window has left to grab. Inert on web.
     <div
+      data-editor-tab-strip
       data-tauri-drag-region
       className="od-drag-region flex h-full min-w-0 flex-1 items-center overflow-hidden bg-transparent"
     >

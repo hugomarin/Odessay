@@ -51,7 +51,11 @@ function groupSharedItems(items: SharedWritingListItem[]) {
   }))
 }
 
-export function SharedWithMeList({ items, isLoading = false, error = null }: SharedWithMeListProps) {
+export function SharedWithMeList({
+  items,
+  isLoading = false,
+  error = null,
+}: SharedWithMeListProps) {
   const router = useRouter()
   const groupedItems = groupSharedItems(items)
   const canOpen = true
@@ -66,7 +70,7 @@ export function SharedWithMeList({ items, isLoading = false, error = null }: Sha
       data-page="desk-shared-list"
       data-section="desk-shared-list"
       data-testid="desk-shared-list"
-      className="DeskSharedList overflow-y-auto"
+      className="DeskSharedList od-scroll overflow-y-auto"
     >
       {isLoading ? (
         <div className="p-9">
