@@ -239,6 +239,8 @@ mockeado, más tests de contrato del derivador de estado.
 
 - [tests/desk-workspace-catalog-integration.test.tsx](tests/desk-workspace-catalog-integration.test.tsx)
 - [tests/document-state.test.ts](tests/document-state.test.ts)
+- [tests/playwright/document-catalog.e2e.ts](tests/playwright/document-catalog.e2e.ts)
+- [tests/desktop-bundle/document-catalog.spec.ts](tests/desktop-bundle/document-catalog.spec.ts)
 
 Qué cubren:
 
@@ -260,6 +262,20 @@ Qué cubren:
 Clasificación:
 
 - `usable as-is` para regresiones del consumo de catálogo en Desk/Workspace.
+- `usable as-is` para el smoke web de estados accesibles, Desk keyboard reachability
+  y el límite Workspace web→desktop mediante
+  `/perf/workspace-boundary-harness`: `tests/playwright/document-catalog.e2e.ts`.
+- `usable as-is` para validar el wiring estático del bundle Tauri, comandos de
+  catálogo y la selección de adapter: `tests/desktop-bundle/document-catalog.spec.ts`.
+
+Boundary note:
+
+- Search también consume el catálogo mediante `loadSearchWritings` en
+  `lib/queries/desk-catalog-source.ts`; el componente no importa `localDB`.
+- La suite Playwright no pretende falsificar el runtime Tauri: no afirma watcher,
+  Finder, offline/restart, materialización o paridad real de Workspace. Esos
+  casos siguen siendo pruebas manuales reproducibles sobre el DMG exacto y están
+  listados en `workflow/define/fase-9-closure-report.md`.
 
 Evidencia que NO corre en esta suite (paso de hardware/app viva):
 

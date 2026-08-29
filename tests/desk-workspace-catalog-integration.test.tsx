@@ -17,6 +17,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import type { LocalWriting } from "@/lib/local-db/schema"
+import { loadSearchWritings } from "@/lib/queries/desk-catalog-source"
 import { changeWritingStatus } from "@/lib/queries/writing-mutations"
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -326,6 +327,49 @@ afterEach(() => {
 })
 
 describe("Desk consumes the DocumentCatalog", () => {
+  it("loads Search results from the catalog and excludes local-only stragglers", async () => {
+    catalog.state.records = [
+      makeRecord({ id: "catalog-search", title: "Catalog Search", excerpt: "Searchable catalog excerpt" }),
+      makeRecord({ id: "deleted-search", title: "Deleted Search", deletedAt: "2026-07-18T00:00:00.000Z" }),
+    ]
+    storage.writings = [makeWriting({ id: "straggler-search", title: "Local Straggler", body_text: "legacy" })]
+
+    const results = await loadSearchWritings()
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        id: "catalog-search",
+        title: "Catalog Search",
+        body_text: "Searchable catalog excerpt",
+      }),
+    ])
+    expect(catalog.instance.list).toHaveBeenCalledWith({ cloudAccountId: null, limit: 10_000 })
+  })
+
+  it("scopes desktop Search to the authenticated cloud account", async () => {
+    authSession.userId = "account-1"
+    catalog.state.records = [
+      makeRecord({
+        id: "cloud-search",
+        title: "Cloud Search Result",
+        localPresent: false,
+        cloudPresent: true,
+        cloudAccountId: "account-1",
+        syncStatus: "synced",
+      }),
+    ]
+
+    const results = await loadSearchWritings()
+
+    expect(catalog.instance.list).toHaveBeenCalledWith({ cloudAccountId: "account-1", limit: 10_000 })
+    expect(results).toEqual([
+      expect.objectContaining({
+        id: "cloud-search",
+        title: "Cloud Search Result",
+      }),
+    ])
+  })
+
   it("includes cloud-only rows for the authenticated desktop account", async () => {
     authSession.userId = "account-1"
     catalog.state.records = [

@@ -314,6 +314,11 @@
       "description": "Reporte de cierre de Fase 7 — Capacidades Remotas y Paridad Web/Desktop: evidencia cross-runtime, harnesses, tests y deuda explícita que validan el hito de Fase 7."
     },
     {
+      "path": "workflow/define/fase-9-closure-report.md",
+      "type": "ops",
+      "description": "Reporte de cierre de Fase 9 para ODE-372: matriz trazable de cada bullet del DoD, evidencia automatizada, gates técnicos y handoff explícito para pruebas manuales en DMG y aceptación del dueño."
+    },
+    {
       "path": "workflow/define/validacion-fase-4.md",
       "type": "ops",
       "description": "Checklist operativo de validación de Fase 4: separa flujos bloqueantes y condicionales, clasifica qué validar manualmente, qué automatizar con Playwright, qué casos mixtos requieren provider/dispositivo real, y matriz de validación servicio-contrato. Incluye §Matriz de validación servicio-contrato que mapea cada servicio a su contrato operativo canónico."

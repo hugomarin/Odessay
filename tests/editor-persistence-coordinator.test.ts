@@ -50,6 +50,66 @@ function response(data: WritingRecord) {
 }
 
 describe("editor persistence coordinator", () => {
+  it("coalesces rapid local writes inside the configured quiet window", async () => {
+    vi.useFakeTimers()
+
+    try {
+      const saveWriting = vi.fn(async (input: { writing: WritingRecord }) => response(input.writing))
+      const states: string[] = []
+      const coordinator = createPersistenceCoordinator(
+        {
+          runtime: "desktop",
+          persistenceDebounceMs: 120,
+          documentService: { saveWriting },
+          createWritingId: () => "unused",
+          now: () => "2026-08-27T00:00:02.000Z",
+        },
+        { onStateChange: ({ state }) => states.push(state) },
+      )
+
+      const first = coordinator.persist(snapshot({ bodyText: "first" }))
+      const latest = coordinator.persist(snapshot({ bodyText: "latest" }))
+
+      expect(saveWriting).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(119)
+      expect(saveWriting).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(1)
+      await expect(first).resolves.toBe(true)
+      await expect(latest).resolves.toBe(true)
+
+      expect(saveWriting).toHaveBeenCalledTimes(1)
+      expect(saveWriting.mock.calls[0]?.[0].writing.content.plainText).toBe("latest")
+      expect(states).toEqual(["persisting_local", "queued_remote"])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("flushes a pending desktop snapshot before document cancellation", async () => {
+    vi.useFakeTimers()
+
+    try {
+      const saveWriting = vi.fn(async (input: { writing: WritingRecord }) => response(input.writing))
+      const coordinator = createPersistenceCoordinator({
+        runtime: "desktop",
+        persistenceDebounceMs: 120,
+        documentService: { saveWriting },
+        createWritingId: () => "unused",
+        now: () => "2026-08-27T00:00:02.000Z",
+      })
+
+      const result = coordinator.persist(snapshot({ bodyText: "last offline edit" }))
+      coordinator.cancel()
+
+      expect(saveWriting).toHaveBeenCalledTimes(1)
+      expect(saveWriting.mock.calls[0]?.[0].writing.content.plainText).toBe("last offline edit")
+      await expect(result).resolves.toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("keeps one local write in flight and persists only the latest queued snapshot", async () => {
     const deferred: { resolve: (() => void) | null } = { resolve: null }
     const saveWriting = vi.fn((input: { writing: WritingRecord }) => {

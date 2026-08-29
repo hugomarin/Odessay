@@ -13,6 +13,9 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        // Restore user-granted filesystem scopes before the document watcher
+        // starts; otherwise macOS asks again after every app restart.
+        .plugin(tauri_plugin_persisted_scope::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -264,6 +267,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::document::open_file,
+            commands::document::allow_watch_path,
             commands::document::create_file,
             commands::document::write_file,
             commands::document::write_binary_file,

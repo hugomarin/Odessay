@@ -70,6 +70,13 @@ export type PersistenceCommitEvent = {
 export type PersistenceCoordinatorDeps = {
   runtime: "desktop" | "web"
   documentService: Pick<DocumentService, "saveWriting">
+  /**
+   * Optional quiet window before starting a local persistence operation. The
+   * editor remains fully interactive during this window; desktop uses it to
+   * avoid running the filesystem → manifest → SQLite pipeline once per
+   * animation frame while the author is typing.
+   */
+  persistenceDebounceMs?: number
   createDesktopDraft?: (options: {
     writingId?: string | null
     title?: string | null
@@ -149,6 +156,10 @@ export function createPersistenceCoordinator(
   let queued: PersistenceRequest | null = null
   let disposed = false
   let activeRecord: WritingRecord | null = null
+  let scheduledRequest: PersistenceRequest | null = null
+  let scheduledTimer: ReturnType<typeof setTimeout> | null = null
+  let scheduledResolvers: Array<(result: boolean) => void> = []
+  const persistenceDebounceMs = Math.max(0, deps.persistenceDebounceMs ?? 0)
   const nowMs = deps.nowMs ?? Date.now
 
   const isCurrent = (request: PersistenceRequest) => !disposed && request.generation === generation
@@ -339,9 +350,24 @@ export function createPersistenceCoordinator(
     }
   }
 
+  const resolveScheduled = (result: boolean) => {
+    const resolvers = scheduledResolvers
+    scheduledResolvers = []
+    resolvers.forEach((resolve) => resolve(result))
+  }
+
+  const clearScheduled = (result = false) => {
+    if (scheduledTimer !== null) {
+      clearTimeout(scheduledTimer)
+      scheduledTimer = null
+    }
+    scheduledRequest = null
+    resolveScheduled(result)
+  }
+
   const start = (request: PersistenceRequest): Promise<boolean> => {
     inFlight = true
-    return persistNow(request).finally(() => {
+    const run = persistNow(request).finally(() => {
       inFlight = false
       if (disposed) return
 
@@ -370,9 +396,67 @@ export function createPersistenceCoordinator(
             : next
         : next
       if (continuation && isCurrent(continuation)) {
-        void start(continuation)
+        if (persistenceDebounceMs > 0) {
+          scheduledRequest = continuation
+          scheduledTimer = setTimeout(() => {
+            scheduledTimer = null
+            const next = scheduledRequest
+            scheduledRequest = null
+            if (!next) {
+              resolveScheduled(false)
+              return
+            }
+            void start(next).then(resolveScheduled)
+          }, persistenceDebounceMs)
+        } else {
+          void start(continuation)
+        }
       }
     })
+    return run
+  }
+
+  const schedule = (request: PersistenceRequest): Promise<boolean> => {
+    if (persistenceDebounceMs <= 0) {
+      return start(request)
+    }
+
+    scheduledRequest = request
+    if (scheduledTimer !== null) {
+      clearTimeout(scheduledTimer)
+    }
+    scheduledTimer = setTimeout(() => {
+      scheduledTimer = null
+      const next = scheduledRequest
+      scheduledRequest = null
+      if (!next) {
+        resolveScheduled(false)
+        return
+      }
+      void start(next).then(resolveScheduled)
+    }, persistenceDebounceMs)
+
+    return new Promise((resolve) => {
+      scheduledResolvers.push(resolve)
+    })
+  }
+
+  const flushScheduled = (): Promise<boolean> => {
+    if (scheduledTimer !== null) {
+      clearTimeout(scheduledTimer)
+      scheduledTimer = null
+    }
+
+    const next = scheduledRequest
+    scheduledRequest = null
+    if (!next) {
+      resolveScheduled(true)
+      return Promise.resolve(true)
+    }
+
+    const run = start(next)
+    void run.then(resolveScheduled)
+    return run
   }
 
   return {
@@ -383,10 +467,15 @@ export function createPersistenceCoordinator(
       // identity differs, invalidate the previous document's completion
       // before accepting the new request.
       if (snapshot.writingId !== activeDocumentId) {
+        // A tab switch or first materialization can race this state update. The
+        // canonical `.md` for the previous document must still be written; the
+        // generation change only suppresses its UI completion callbacks.
+        void flushScheduled()
         activeDocumentId = snapshot.writingId
         activeRecord = null
         generation += 1
         queued = null
+        clearScheduled()
       }
 
       const request = { snapshot, overrides, generation }
@@ -396,26 +485,31 @@ export function createPersistenceCoordinator(
         return Promise.resolve(true)
       }
 
-      return start(request)
+      return schedule(request)
     },
 
     activateDocument(writingId) {
       if (disposed || writingId === activeDocumentId) return
+      void flushScheduled()
       activeDocumentId = writingId
       activeRecord = null
       generation += 1
       queued = null
+      clearScheduled()
     },
 
     cancel() {
       if (disposed) return
+      void flushScheduled()
       generation += 1
       activeRecord = null
       queued = null
+      clearScheduled()
     },
 
     dispose() {
       if (disposed) return
+      void flushScheduled()
       disposed = true
       generation += 1
       activeRecord = null
