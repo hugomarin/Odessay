@@ -317,17 +317,25 @@
   }
 
   .odessay-editor-content .odessay-frontmatter {
-    background: hsl(var(--muted) / 0.55);
-    border: 0.5px solid hsl(var(--border));
-    border-radius: 8px;
+    background: hsl(var(--surface-option));
+    border: 0.5px solid hsl(var(--line-soft));
+    border-radius: 10px;
     color: hsl(var(--ink-2));
     font-family: var(--od-font-ui);
     font-size: 13px;
-    line-height: 1.5;
-    margin: 0 0 1.5em;
+    line-height: 1.55;
+    margin: 0 0 1.75em;
     max-width: 100%;
     overflow: auto;
-    padding: 12px 14px;
+    padding: 13px 15px 15px;
+  }
+
+  .odessay-editor-content .odessay-frontmatter-label {
+    color: hsl(var(--ink-4));
+    font: 500 10px/1.2 "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.08em;
+    margin: 0 0 10px;
+    text-transform: uppercase;
   }
 
   .odessay-editor-content .odessay-frontmatter-list {
@@ -340,7 +348,7 @@
     color: hsl(var(--ink-3));
     font-weight: 600;
     overflow-wrap: anywhere;
-    padding-right: 18px;
+    padding-right: 20px;
   }
 
   .odessay-editor-content .odessay-frontmatter-list dd {
@@ -1092,6 +1100,15 @@
     box-shadow: none;
   }
 
+  /* Tab reordering is a pointer gesture. The lock is scoped to the short drag
+     window so the editor can never turn a tab reorder into document selection. */
+  html.od-editor-tab-dragging,
+  html.od-editor-tab-dragging body,
+  html.od-editor-tab-dragging body * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+  }
+
   .prose-odessay ::selection {
     background: hsl(var(--ink) / 0.12);
     color: hsl(var(--ink));
@@ -1228,17 +1245,17 @@
   }
 }
 
-/* Entrance of the floating selection bar. It carries the centering translate
-   itself because the bar is centred with `left:50% / translateX(-50%)` and an
-   animation that dropped the X translate would slide it off-centre. */
+/* Entrance of the floating selection bar. Positioning belongs to the full-width
+   flex wrapper; only the visible chip group is animated, so its transition can
+   never change the horizontal anchor. */
 @keyframes odBarIn {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(14px);
+    transform: translateY(8px) scale(0.96);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -1825,7 +1842,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .od-splash-group,
-  .od-auth-card {
+  .od-auth-card,
+  [data-selection-bar] .animate-bar-in {
     animation: none;
   }
 

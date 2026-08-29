@@ -5,6 +5,7 @@ import { ArrowUpDown, Check, ChevronDown, Filter, Folder, Group, Search } from "
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
+import { APP_SHELL_CONTENT_GUTTER_CLASS } from "@/components/navigation/view-header"
 import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
@@ -78,8 +79,10 @@ const SORT_OPTIONS: { value: DeskSortBy; label: string }[] = [
 function toolButtonClass(active: boolean): string {
   return cn(
     "inline-flex h-[38px] flex-shrink-0 items-center gap-[7px] whitespace-nowrap rounded-[9px]",
-    "border-[0.5px] px-[13px] text-[16px] text-ink-2 transition-colors",
-    active ? "border-ink-5 bg-surface-menu-hover" : "border-border bg-sb hover:bg-surface-menu-hover",
+    "border-[0.5px] px-[13px] text-[14px] font-medium text-ink-2 transition-colors [&>svg]:text-ink-3",
+    active
+      ? "border-ink-5 bg-surface-menu-hover [&>svg]:text-ink"
+      : "border-border bg-sb hover:bg-surface-menu-hover",
   )
 }
 
@@ -109,19 +112,22 @@ export function DeskFilterBar(props: DeskFilterBarProps) {
       id="desk-filter-bar"
       data-section="desk-filter-bar"
       data-testid="desk-filter-bar"
-      className="DeskFilterBar flex flex-shrink-0 flex-wrap items-center gap-[14px] px-4 pb-3"
+      className={cn(
+        "DeskFilterBar flex flex-shrink-0 flex-wrap items-center gap-[14px] pb-3",
+        APP_SHELL_CONTENT_GUTTER_CLASS,
+      )}
     >
       {props.leading}
 
       <span className="flex h-[38px] min-w-[160px] flex-1 items-center gap-[9px] rounded-[9px] border-[0.5px] border-border bg-sb px-3">
-        <Search className="h-[15px] w-[15px] flex-shrink-0 text-ink-5" strokeWidth={1.5} />
+        <Search className="h-[14px] w-[14px] flex-shrink-0 text-ink-4" strokeWidth={1.5} />
         <input
           value={props.searchQuery}
           onChange={(event) => props.onSearchChange(event.target.value)}
           placeholder="Filter by name…"
           aria-label="Filter by name"
           data-testid="desk-filter-search"
-          className="min-w-0 flex-1 border-0 bg-transparent text-[16px] text-ink outline-none placeholder:text-ink-5"
+          className="min-w-0 flex-1 border-0 bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-5"
         />
       </span>
 
@@ -133,9 +139,9 @@ export function DeskFilterBar(props: DeskFilterBarProps) {
               data-testid="desk-filter-trigger"
               className={toolButtonClass(filterOpen || props.activeFilterCount > 0)}
             >
-              <Filter className="h-[15px] w-[15px]" strokeWidth={1.5} />
+              <Filter className="h-[14px] w-[14px]" strokeWidth={1.5} />
               {filterLabel}
-              <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <ChevronDown className="h-[13px] w-[13px]" strokeWidth={1.5} />
             </button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-[246px] p-0">
@@ -258,9 +264,9 @@ export function DeskFilterBar(props: DeskFilterBarProps) {
               data-testid="desk-group-trigger"
               className={toolButtonClass(groupOpen || props.groupBy !== "none")}
             >
-              <Group className="h-[15px] w-[15px]" strokeWidth={1.5} />
+              <Group className="h-[14px] w-[14px]" strokeWidth={1.5} />
               {groupLabel}
-              <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <ChevronDown className="h-[13px] w-[13px]" strokeWidth={1.5} />
             </button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-[200px] p-[5px]">
@@ -282,9 +288,9 @@ export function DeskFilterBar(props: DeskFilterBarProps) {
         <Popover open={sortOpen} onOpenChange={setSortOpen}>
           <PopoverTrigger asChild>
             <button type="button" data-testid="desk-sort-trigger" className={toolButtonClass(sortOpen)}>
-              <ArrowUpDown className="h-[15px] w-[15px]" strokeWidth={1.5} />
+              <ArrowUpDown className="h-[14px] w-[14px]" strokeWidth={1.5} />
               Sort: {sortLabel}
-              <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <ChevronDown className="h-[13px] w-[13px]" strokeWidth={1.5} />
             </button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-[220px] p-[5px]">

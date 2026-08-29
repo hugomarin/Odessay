@@ -7,10 +7,10 @@ import { SettingsSectionHeader } from "@/components/settings/settings-section-he
  *
  * The 52px rail is the app rail from `app/(app)/layout.tsx`; this owns the two
  * columns to its right. Geometry read from the render of
- * `Artifact Studio Settings.dc.html`: a 10px gutter between nav and sheet, the
- * nav padded 6px either side, and the sheet a white card at radius 10 over the
- * shell background, holding its own scroller so the section header stays put
- * while the section scrolls under it.
+ * `Artifact Studio Settings.dc.html`: a compact 2px gutter between nav and
+ * sheet, the nav padded 6px either side, and the sheet a white card at radius
+ * 10 over the shell background, holding its own scroller so the section header
+ * stays put while the section scrolls under it.
  *
  * It lives here rather than inline in the route layout so the `/evidence` pages
  * can screenshot the real shell for the fidelity gate instead of a lookalike.
@@ -24,7 +24,7 @@ export function SettingsShell({
   section?: string
 }) {
   return (
-    <div className="flex min-h-0 flex-1 gap-2.5 pb-2.5 pr-2.5">
+    <div className="flex min-h-0 flex-1 gap-0.5 pb-2.5 pr-2.5">
       <nav
         id="settings-shell-nav"
         data-section="settings-shell-nav"

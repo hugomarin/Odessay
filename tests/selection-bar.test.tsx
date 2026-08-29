@@ -89,14 +89,17 @@ describe("geometry — the prototype is the authority", () => {
     ["radius 14", "rounded-bar"],
     ["ink background", "bg-ink"],
     ["26px off the bottom edge", "bottom-[26px]"],
-    ["centred", "left-1/2"],
-    ["centred by translation", "-translate-x-1/2"],
+    ["centred by a full-width wrapper", "inset-x-0"],
+    ["centred by flex alignment", "justify-center"],
     ["the two-layer prototype shadow", "shadow-selection-bar"],
     ["22px of leading padding", "pl-[22px]"],
     ["14px of trailing padding", "pr-3.5"],
     ["10px gaps", "gap-2.5"],
   ])("keeps %s", (_label, className) => {
-    expect(bar()?.className).toContain(className)
+    const selectionBar = bar()
+    expect(`${selectionBar?.className} ${selectionBar?.querySelector(".animate-bar-in")?.className}`).toContain(
+      className,
+    )
   })
 
   it("is pinned to the viewport by default and to the sheet on request", () => {
@@ -107,6 +110,11 @@ describe("geometry — the prototype is the authority", () => {
     )
     expect(bar()?.className).toContain("absolute")
     expect(bar()?.className).not.toContain("fixed")
+  })
+
+  it("keeps positioning separate from the animated chip group", () => {
+    expect(bar()?.className).toContain("pointer-events-none")
+    expect(bar()?.querySelector(".animate-bar-in")?.className).toContain("pointer-events-auto")
   })
 })
 

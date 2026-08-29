@@ -37,7 +37,7 @@ type EditorTopbarProps = {
 }
 
 const TITLEBAR_BUTTON_CLASS =
-  "inline-flex h-8 w-8 items-center justify-center rounded-[7px] text-ink-2 transition-colors duration-150 ease-out hover:bg-muted-hover hover:text-ink"
+  "inline-flex h-8 w-8 items-center justify-center rounded-[7px] text-ink-3 transition-colors duration-150 ease-out hover:bg-muted-hover hover:text-ink"
 
 const TITLEBAR_BUTTON_ACTIVE_CLASS = "bg-surface-selected text-ink"
 

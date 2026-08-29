@@ -49,7 +49,11 @@ import { downloadBlob } from "@/lib/utils/download"
 import { getWorkspaceAssignmentService } from "@/lib/services/workspace-service"
 import { getDocumentService } from "@/lib/services/document-service-factory"
 import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer"
-import { ViewHeader, VIEW_HEADER_ACTION_CLASS } from "@/components/navigation/view-header"
+import {
+  APP_SHELL_CONTENT_GUTTER_CLASS,
+  ViewHeader,
+  VIEW_HEADER_ACTION_CLASS,
+} from "@/components/navigation/view-header"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import {
   buildWorkspaceNameLookup,
@@ -557,7 +561,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
           }
         />
 
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
+        <div className={`flex-1 overflow-y-auto ${APP_SHELL_CONTENT_GUTTER_CLASS} pb-4`}>
           <div className="mx-auto grid w-full max-w-[1040px] grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2">
             <Link
               href={buildCollectionHref(UNCATEGORIZED_COLLECTION_ID)}
@@ -669,7 +673,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-4 pb-10">
+      <div className={`flex-1 overflow-y-auto ${APP_SHELL_CONTENT_GUTTER_CLASS} pb-10`}>
         <div className="w-full">
           {!isUncategorizedView && !activeCollection ? (
             <p className="font-lora text-[18px] italic text-ink-3">Collection not found.</p>

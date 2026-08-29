@@ -53,6 +53,7 @@ export function EditorTabItem({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
+      onContextMenu={(event) => event.preventDefault()}
       className={cn(
         "group relative flex h-[36px] w-[200px] min-w-[96px] shrink select-none items-center gap-[9px] overflow-hidden rounded-lg px-3 text-left font-sans transition-[background-color,color] duration-150 ease-out",
         active

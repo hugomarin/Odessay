@@ -112,6 +112,9 @@ describe("ArtifactWritingCell", () => {
 
     expect(action?.disabled).toBe(true);
     expect(action?.title).toBe("Preview writing (coming soon)");
+    expect(action?.className).toContain("opacity-0");
+    expect(action?.className).toContain("group-hover:opacity-100");
+    expect(action?.className).toContain("focus-visible:opacity-100");
     act(() => action?.click());
     expect(onAction).not.toHaveBeenCalled();
   });

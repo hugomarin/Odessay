@@ -24,7 +24,7 @@ const read = (path: string) =>
 describe("editor frame height contract", () => {
   it("locks the editor section to the frame instead of the viewport minimum", () => {
     const source = read("components/editor/editor-shell.tsx")
-    const section = source.match(/<section id="editor"[^>]*className="([^"]+)"/)
+    const section = source.match(/<section[\s\S]*?id="editor"[\s\S]*?className="([^"]+)"/)
     const layout = source.match(/className="(EditorLayout[^"]+)"/)
 
     expect(section?.[1]).toBeDefined()

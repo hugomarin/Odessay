@@ -44,6 +44,21 @@ describe("studio shell contract", () => {
     expect(toolbar).toContain('action: "italic", icon: Italic, strokeWidth: 2')
     expect(toolbar).toContain('action: "inlineCode", icon: Code2, strokeWidth: 1.75')
     expect(toolbar).toContain("h-[30px] w-[30px]")
+    expect(toolbar).toContain("text-ink-3")
+    expect(toolbar).toContain("[&>svg]:text-ink")
+  })
+
+  it("uses gray neutral icons and dark active icons across the editor chrome", () => {
+    const topbar = read("components/editor/editor-topbar.tsx")
+    const header = read("components/editor/editor-sheet-header.tsx")
+    const statusBar = read("components/editor/status-bar.tsx")
+
+    expect(topbar).toContain("text-ink-3 transition-colors")
+    expect(topbar).toContain("TITLEBAR_BUTTON_ACTIVE_CLASS = \"bg-surface-selected text-ink\"")
+    expect(header).toContain("HEADER_GHOST_BUTTON_CLASS =")
+    expect(header).toContain("text-ink-3 transition-colors")
+    expect(statusBar).toContain("text-ink-4")
+    expect(statusBar).toContain("isNotesPanelOpen ? \"bg-surface-selected text-ink\"")
   })
 
   it("gives the tab strip a fixed height that scrolling never shrinks", () => {
@@ -58,6 +73,27 @@ describe("studio shell contract", () => {
     expect(tabs).not.toContain("availableWidth")
   })
 
+  it("cancels interrupted tab drags without leaving a ghost behind", () => {
+    const tabs = read("components/editor/editor-tabs.tsx")
+    const css = read("app/globals.css")
+
+    expect(tabs).toContain("event.preventDefault()")
+    expect(tabs).toContain('data-editor-tab-ghost')
+    expect(tabs).toContain('window.addEventListener("pagehide"')
+    expect(tabs).toContain('document.querySelectorAll<HTMLElement>("[data-editor-tab-ghost]")')
+    expect(css).toContain("html.od-editor-tab-dragging")
+  })
+
+  it("presents foreign frontmatter as a quiet, labeled metadata card", () => {
+    const node = read("lib/editor/frontmatter-node.ts")
+    const css = read("app/globals.css")
+
+    expect(node).toContain('label.className = "odessay-frontmatter-label"')
+    expect(node).toContain('label.textContent = "Frontmatter"')
+    expect(css).toContain(".odessay-editor-content .odessay-frontmatter-label")
+    expect(css).toContain('"Roboto Mono", ui-monospace')
+  })
+
   it("keeps the sheet at 720 with the padding that clears the AI bar", () => {
     const css = read("app/globals.css")
 
@@ -66,15 +102,16 @@ describe("studio shell contract", () => {
     expect(css).toContain("padding: 48px 24px 140px")
   })
 
-  it("holds the sheet in place when focus mode takes the chrome away", () => {
+  it("makes focus mode full-bleed while reserving the native titlebar", () => {
     const shell = read("components/editor/editor-shell.tsx")
 
-    // The band samples the chrome it will lose and pads itself by that much,
-    // so entering focus mode cannot move — or re-wrap — a single line.
-    expect(shell).toContain("chromeWidthsRef")
-    expect(shell).toContain("focusModeCompensation")
-    expect(shell).toContain("paddingLeft: `${focusModeCompensation.left}px`")
-    expect(shell).toContain("paddingTop: `${focusModeCompensation.top}px`")
+    // The editor uses the viewport edge-to-edge in focus mode. Only the
+    // overlay titlebar's 46px safe area remains above the sheet.
+    expect(shell).toContain("focusModeRestorationRef")
+    expect(shell).toContain("setActivePanel(null)")
+    expect(shell).toContain("setIsFindReplaceOpen(false)")
+    expect(shell).toContain('isFocusMode ? "gap-0 px-0 pb-0 pt-[46px]"')
+    expect(shell).toContain('isFocusMode ? "rounded-none shadow-none" : "rounded-[10px] shadow-float"')
   })
 
   it("opens with both side panels closed and one way back in", () => {

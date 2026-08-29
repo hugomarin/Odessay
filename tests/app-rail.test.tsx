@@ -124,6 +124,22 @@ describe("geometry", () => {
     expect(rail().style.width).toBe("52px")
   })
 
+  it("publishes a compact content gutter only while the rail is collapsed", () => {
+    renderRail("collapsed")
+    expect(
+      container.querySelector<HTMLElement>("#app-shell")?.style.getPropertyValue(
+        "--app-shell-content-gutter",
+      ),
+    ).toBe("2px")
+
+    renderRail("expanded")
+    expect(
+      container.querySelector<HTMLElement>("#app-shell")?.style.getPropertyValue(
+        "--app-shell-content-gutter",
+      ),
+    ).toBe("16px")
+  })
+
   it("sits on layer 0 — no background and no border of its own", () => {
     renderRail("expanded")
     expect(rail().className).toContain("bg-transparent")
@@ -131,7 +147,7 @@ describe("geometry", () => {
     expect(rail().className).not.toContain("border-r")
   })
 
-  it("gives every item a 40px box at radius 9 with 19px icons", () => {
+  it("gives every item a 40px box at radius 9 with 18px icons", () => {
     renderRail("expanded")
     for (const section of [
       "sidebar-nav-studio",
@@ -142,7 +158,9 @@ describe("geometry", () => {
       const item = navLink(section)
       expect(item.className).toContain("h-10")
       expect(item.className).toContain("rounded-[9px]")
-      expect(item.querySelector("svg")?.getAttribute("class")).toContain("h-[21px]")
+      expect(item.className).toContain("text-[14px]")
+      expect(item.className).toContain("font-medium")
+      expect(item.querySelector("svg")?.getAttribute("class")).toContain("h-[18px]")
     }
   })
 
@@ -383,6 +401,13 @@ describe("iconography and chrome", () => {
     expect(iconClass("sidebar-nav-studio")).toContain("lucide-lamp-desk")
     expect(iconClass("sidebar-nav-desk")).toContain("lucide-layout-grid")
     expect(iconClass("sidebar-nav-workspace")).toContain("lucide-folder-tree")
+  })
+
+  it("keeps neutral rail icons gray and the active destination dark", () => {
+    renderRail("expanded")
+
+    expect(navLink("sidebar-nav-studio").querySelector("svg")?.getAttribute("class")).toContain("text-ink-3")
+    expect(navLink("sidebar-nav-desk").querySelector("svg")?.getAttribute("class")).toContain("text-ink")
   })
 })
 
