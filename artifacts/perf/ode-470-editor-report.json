@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-08-29T23:34:39.416Z",
+  "generated_at_utc": "2026-08-29T23:34:53.014Z",
   "trace_path": "artifacts/perf/ode-470-editor-trace.json.gz",
   "budgets_path": "workflow/perf-budgets.json",
   "budget_version": "2026-03-25",

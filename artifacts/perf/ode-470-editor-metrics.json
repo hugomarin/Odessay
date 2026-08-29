@@ -1,6 +1,6 @@
 {
   "source_trace": "artifacts/perf/ode-470-editor-trace.json.gz",
-  "generated_at_utc": "2026-08-29T23:34:39.414Z",
+  "generated_at_utc": "2026-08-29T23:34:53.011Z",
   "units": {
     "durations": "milliseconds",
     "long_task_threshold_ms": 50
