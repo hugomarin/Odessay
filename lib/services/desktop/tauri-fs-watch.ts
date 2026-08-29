@@ -38,6 +38,13 @@ export async function watchFsPaths(
     return async () => {}
   }
 
+  // The native dialog grants a temporary filesystem scope, but that scope is
+  // cleared on restart. BindingRoots are durable user consent; rehydrate each
+  // root before starting its watcher so external folders remain observable.
+  for (const path of paths) {
+    await invoke<void>("allow_watch_path", { path })
+  }
+
   const channel = new Channel<TauriWatchEvent>()
   channel.onmessage = onEvent
 

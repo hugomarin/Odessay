@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
+use tauri::AppHandle;
+use tauri_plugin_fs::FsExt;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -17,6 +19,25 @@ pub struct FileMetadata {
 #[tauri::command]
 pub fn open_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| format!("open_file: {e}"))
+}
+
+/// Grant the native fs watcher access to a user-confirmed BindingRoot.
+///
+/// The dialog's temporary filesystem scope is cleared on restart. BindingRoots
+/// are durable user consent, so the desktop adapter must rehydrate that scope
+/// before asking `tauri-plugin-fs` to watch an external folder.
+#[tauri::command]
+pub fn allow_watch_path(app: AppHandle, path: String) -> Result<(), String> {
+    let root = Path::new(&path)
+        .canonicalize()
+        .map_err(|e| format!("allow_watch_path canonicalize: {e}"))?;
+    let scope = app.fs_scope();
+    if scope.is_allowed(&root) {
+        return Ok(());
+    }
+    scope
+        .allow_directory(root, true)
+        .map_err(|e| format!("allow_watch_path scope: {e}"))
 }
 
 /// Create a new empty .md file in `dir/filename`. Creates parent dirs if missing.

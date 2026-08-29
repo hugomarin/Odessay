@@ -120,6 +120,12 @@ export async function loadCatalogRecords(
   return catalog.list({ ...query, cloudAccountId })
 }
 
+/** Read one catalog record, including detached local documents. */
+export async function getCatalogRecord(id: string): Promise<DocumentCatalogRecord | null> {
+  const catalog = await getDocumentCatalog()
+  return catalog.getById(id)
+}
+
 /**
  * Subscribe to catalog change bursts. The returned unsubscribe is safe to call
  * even before the async catalog resolves. Used so a watcher-discovered file

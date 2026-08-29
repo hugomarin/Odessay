@@ -343,6 +343,12 @@ const TableOfContentsPanel = lazy(() =>
 )
 
 const MARKDOWN_SAVE_DEBOUNCE_MS = 800
+// Desktop persistence performs several ordered local commits (the `.md`, its
+// binding manifest, and SQLite). Keep that pipeline off the keystroke cadence:
+// TipTap remains immediate, while a short quiet window coalesces rapid typing
+// into one durable local snapshot. Cloud sync already has its own longer
+// trailing debounce after this local commit.
+const DESKTOP_PERSISTENCE_DEBOUNCE_MS = 150
 
 const AUTO_TITLE_MAX_CHARS = 48
 const UNTITLED_WRITING_TITLE = "Untitled writing"
@@ -618,6 +624,7 @@ export function EditorShell({
     () => createPersistenceCoordinator(
       {
         runtime: isDesktopRuntime() ? "desktop" : "web",
+        persistenceDebounceMs: isDesktopRuntime() ? DESKTOP_PERSISTENCE_DEBOUNCE_MS : 0,
         documentService: {
           saveWriting: async (input) => (await getDocumentService()).saveWriting(input),
         },
@@ -1792,47 +1799,60 @@ export function EditorShell({
 
     let cancelled = false
 
-    const syncCurrentWritingState = async () => {
-      const localWriting = await localDB.writings.get(currentWritingId)
-      if (cancelled || !localWriting) {
-        return
-      }
+    let unsubscribeCatalog: (() => void) | null = null
 
-      const nextCanonicalPath = localWriting.canonical_path ?? null
-      const previousCanonicalPath = currentCanonicalPathRef.current
+    // Desktop presence and bindings live in SQLite's DocumentCatalog. The
+    // legacy IndexedDB change bus does not receive watcher detach events, so
+    // listening only to it leaves an externally removed file looking "Saved".
+    void import("@/lib/queries/document-catalog")
+      .then(({ getCatalogRecord, subscribeToCatalog }) => {
+        if (cancelled) return
 
-      if (localWriting.sync_status === "deleted" || localWriting.deleted_at) {
-        currentCanonicalPathRef.current = nextCanonicalPath
-        setCanonicalPath(nextCanonicalPath)
-        setExternalFileNotice({ kind: "deleted", path: nextCanonicalPath })
-        setSyncStatus("saved-local")
-        return
-      }
+        const syncCurrentWritingState = async () => {
+          const catalogRecord = await getCatalogRecord(currentWritingId)
+          if (cancelled || !catalogRecord) return
 
-      if (
-        previousCanonicalPath &&
-        nextCanonicalPath &&
-        previousCanonicalPath !== nextCanonicalPath
-      ) {
-        currentCanonicalPathRef.current = nextCanonicalPath
-        setCanonicalPath(nextCanonicalPath)
-        setExternalFileNotice({ kind: "moved", path: nextCanonicalPath })
-        return
-      }
+          const nextCanonicalPath = catalogRecord.binding?.canonicalPath ?? null
+          const previousCanonicalPath = currentCanonicalPathRef.current
 
-      currentCanonicalPathRef.current = nextCanonicalPath
-      setCanonicalPath(nextCanonicalPath)
-      setExternalFileNotice(null)
-    }
+          if (!catalogRecord.localPresent && previousCanonicalPath) {
+            currentCanonicalPathRef.current = null
+            setCanonicalPath(null)
+            setExternalFileNotice({ kind: "deleted", path: previousCanonicalPath })
+            return
+          }
 
-    void syncCurrentWritingState()
-    const unsubscribe = subscribeToLocalDBChanges(() => {
-      void syncCurrentWritingState()
-    })
+          if (
+            previousCanonicalPath &&
+            nextCanonicalPath &&
+            previousCanonicalPath !== nextCanonicalPath
+          ) {
+            currentCanonicalPathRef.current = nextCanonicalPath
+            setCanonicalPath(nextCanonicalPath)
+            setExternalFileNotice({ kind: "moved", path: nextCanonicalPath })
+            return
+          }
+
+          currentCanonicalPathRef.current = nextCanonicalPath
+          setCanonicalPath(nextCanonicalPath)
+          setExternalFileNotice(null)
+        }
+
+        void syncCurrentWritingState()
+        unsubscribeCatalog = subscribeToCatalog((change) => {
+          if (change.documentIds.includes(currentWritingId)) {
+            void syncCurrentWritingState()
+          }
+        })
+      })
+      .catch(() => {
+        // A catalog read failure leaves the editor content open; the next
+        // catalog event or document activation retries the state projection.
+      })
 
     return () => {
       cancelled = true
-      unsubscribe()
+      unsubscribeCatalog?.()
       // Reset the canonical-path tracker when the watched writing changes.
       // Otherwise the next writing's first sync sees the previous writing's path
       // as the "previous" value and flashes a false "file moved" notice.

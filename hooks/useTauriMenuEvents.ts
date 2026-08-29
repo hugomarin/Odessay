@@ -88,6 +88,7 @@ export function useTauriMenuEvents({
       subscribeMenuAction("open-file", async () => {
         const selected = await open({
           multiple: false,
+          fileAccessMode: "scoped",
           filters: [{ name: "Markdown", extensions: ["md"] }],
         })
         if (!selected) return
