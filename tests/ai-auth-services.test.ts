@@ -46,7 +46,7 @@ describe("webAIService", () => {
     )
 
     const result = await webAIService.suggestTitle({
-      currentTitle: "Untitled writing",
+      currentTitle: "Untitled artifact",
       bodyText: "A short body with enough content to ask for help.",
     })
 

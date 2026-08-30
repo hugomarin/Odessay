@@ -37,7 +37,7 @@ describe("ArtifactTable responsive row contract", () => {
           columns={[
             {
               id: "title",
-              label: "Writing",
+              label: "Artifact",
               render: (row) => <span>{row.title}</span>,
             },
             {

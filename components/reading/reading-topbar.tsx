@@ -137,7 +137,7 @@ export function ReadingTopbar({
                 data-testid="write-response-btn"
               >
                 <Edit3 strokeWidth={1.5} className="h-[12px] w-[12px]" />
-                Responder
+                Respond
               </Link>
             ) : null}
           </div>

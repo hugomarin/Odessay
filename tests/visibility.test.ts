@@ -81,7 +81,7 @@ describe("local store — visibility field", () => {
     expect(stored?.visibility).toBe("private");
   });
 
-  it("stores shared writing correctly", async () => {
+  it("stores shared artifact correctly", async () => {
     const writing = makeWriting({ visibility: "shared" });
     await localDB.writings.save(writing);
     const stored = await localDB.writings.get(writing.id);

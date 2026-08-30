@@ -174,15 +174,15 @@ describe("WorkspaceTreePanel", () => {
     loadContextualWorkspace.mockResolvedValue(
       found([activeDocument], {
         status: "missing",
-        missingReason: "La carpeta ya no existe en disco.",
+        missingReason: "The folder no longer exists on disk.",
       }),
     );
 
     render(ACTIVE_ID);
     await settle();
 
-    expect(container.textContent).toContain("Aplyca no está disponible.");
-    expect(container.textContent).toContain("La carpeta ya no existe en disco.");
+    expect(container.textContent).toContain("Aplyca is unavailable.");
+    expect(container.textContent).toContain("The folder no longer exists on disk.");
     expect(container.querySelector('[role="tree"]')).toBeNull();
   });
 
@@ -231,7 +231,7 @@ describe("WorkspaceTreePanel", () => {
 
     expect(container.textContent).toContain("only available in the desktop app");
     expect(container.textContent).not.toContain(
-      "no pertenece a un Workspace",
+      "does not belong to a workspace",
     );
   });
 

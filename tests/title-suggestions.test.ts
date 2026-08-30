@@ -23,11 +23,11 @@ describe("title suggestions", () => {
 
   it("builds a bounded title suggestion prompt", () => {
     const prompt = buildTitleSuggestionUserPrompt({
-      currentTitle: "Untitled writing",
+      currentTitle: "Untitled artifact",
       bodyText: "A ".repeat(7000),
     });
 
-    expect(prompt).toContain("Current title: Untitled writing");
+    expect(prompt).toContain("Current title: Untitled artifact");
     expect(prompt.length).toBeLessThan(6200);
   });
 

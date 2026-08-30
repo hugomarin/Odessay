@@ -6,7 +6,7 @@ const now = new Date("2026-03-19T15:30:00.000Z")
 
 const createWriting = (partial: Partial<LocalWriting> & Pick<LocalWriting, "id">): LocalWriting => ({
   id: partial.id,
-  title: partial.title ?? "Untitled writing",
+  title: partial.title ?? "Untitled artifact",
   body_json: partial.body_json ?? { type: "doc" },
   canonical_path: partial.canonical_path,
   body_text: partial.body_text ?? "Default body",

@@ -2354,11 +2354,11 @@ function WorkspaceActionDialog({
                   ? "Artifact Studio will stop watching this workspace. No tracked artifacts will be affected."
                   : `This workspace has ${action.total} tracked document${action.total === 1 ? "" : "s"}.${
                       action.cloud > 0
-                        ? ` ${action.cloud} synced document${action.cloud === 1 ? "" : "s"} will be archived in the cloud.`
+                        ? ` ${action.cloud} synced artifact${action.cloud === 1 ? "" : "s"} will be archived in the cloud.`
                         : ""
                     }${
                       action.total > action.cloud
-                        ? ` ${action.total - action.cloud} local-only document${action.total - action.cloud === 1 ? "" : "s"} will be hidden from the workspace.`
+                        ? ` ${action.total - action.cloud} local-only artifact${action.total - action.cloud === 1 ? "" : "s"} will be hidden from the workspace.`
                         : ""
                     } The local folder, .md files, and .odessay index stay untouched.`}
               </DialogDescription>

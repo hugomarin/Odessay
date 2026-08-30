@@ -177,7 +177,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
             <div key={collection.id} className="flex items-center gap-3">
               <span className="text-[13px] text-ink-2 sm:text-[14px]">{collection.name}</span>
               <span className="h-1 w-1 rounded-full bg-ink-4" />
-              <span className="text-[12px] text-ink-4 sm:text-[13px]">{visibleCount} writings</span>
+              <span className="text-[12px] text-ink-4 sm:text-[13px]">{visibleCount} artifacts</span>
             </div>
           )
         })}
@@ -243,7 +243,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
                         <DropdownMenuItem asChild className="m-1 cursor-pointer rounded-lg text-[13px] text-ink-2 focus:bg-muted">
                             <Link href={buildWritingRouteHref("/write", writing)}>
                               <PenSquare className="mr-2 h-4 w-4" strokeWidth={1.5} />
-                              Editar
+                              Edit
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem
@@ -255,7 +255,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
                             }}
                           >
                             <Trash2 className="mr-2 h-4 w-4" strokeWidth={1.5} />
-                            Eliminar
+                            Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

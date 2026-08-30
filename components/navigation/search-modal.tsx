@@ -169,7 +169,7 @@ function EmptyState({ query }: { query: string }) {
   return (
     <div className="flex flex-col items-center gap-2 py-10 text-center">
       <p className="font-lora italic text-[15px] text-ink-3 max-w-[280px] leading-relaxed">
-        No writings match &ldquo;{query}&rdquo;
+        No artifacts match &ldquo;{query}&rdquo;
       </p>
     </div>
   )

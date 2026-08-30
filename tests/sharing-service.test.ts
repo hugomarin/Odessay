@@ -131,7 +131,7 @@ describe("web sharing service", () => {
     })
   })
 
-  it("loads incoming shared writings through the stable shared list payload", async () => {
+  it("loads incoming shared artifacts through the stable shared list payload", async () => {
     const fetchMock = vi.fn(async () =>
       new Response(
         JSON.stringify({

@@ -26,7 +26,7 @@ describe("studioSessionStore", () => {
   it("maps editor tabs into session-only Studio artifacts", async () => {
     syncStudioSessionFromEditorTabs([
       createTab({ id: "writing-1", writing_id: "writing-1", title: "First draft" }),
-      createTab({ id: "draft", writing_id: null, title: "Untitled writing" }),
+      createTab({ id: "draft", writing_id: null, title: "Untitled artifact" }),
     ], "writing-1")
 
     expect(getStudioSessionState()).toEqual({
@@ -41,7 +41,7 @@ describe("studioSessionStore", () => {
         expect.objectContaining({
           id: "draft",
           writingId: null,
-          title: "Untitled writing",
+          title: "Untitled artifact",
           href: "/write?new=1",
         }),
       ],

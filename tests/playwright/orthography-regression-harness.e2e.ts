@@ -151,7 +151,7 @@ test("manual analysis exposes a recoverable provider failure", async ({ page }) 
 
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible()
   await expect(page.locator("#corrections-analysis-status")).toContainText(
-    "We couldn’t analyze this document",
+    "We couldn’t analyze this artifact",
   )
   await captureOutcome(page, "manual-analysis-partial-error")
 })

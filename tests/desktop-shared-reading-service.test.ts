@@ -67,7 +67,7 @@ describe("desktop shared reading service", () => {
     })
   })
 
-  it("loads a shared writing and builds desktop prev/next hrefs", async () => {
+  it("loads a shared artifact and builds desktop prev/next hrefs", async () => {
     rpcMock.mockResolvedValue({
       data: [
         {
@@ -117,7 +117,7 @@ describe("desktop shared reading service", () => {
     })
   })
 
-  it("copies the shared writing into the chosen workspace folder as a new local draft", async () => {
+  it("copies the shared artifact into the chosen workspace folder as a new local draft", async () => {
     rpcMock.mockResolvedValue({
       data: [
         {

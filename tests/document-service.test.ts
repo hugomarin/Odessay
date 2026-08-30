@@ -418,7 +418,7 @@ describe("webDocumentService", () => {
     it("maps a stale server restore to a non-retryable conflict", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
         data: null,
-        error: { code: "VERSION_CONFLICT", message: "This archived writing changed." },
+        error: { code: "VERSION_CONFLICT", message: "This archived artifact changed." },
       }), { status: 409, headers: { "Content-Type": "application/json" } })))
 
       const result = await webDocumentService.restoreWriting({ writingId: "writing-1", version: 4, updatedAt: "2026-07-29T20:30:02.000Z" })

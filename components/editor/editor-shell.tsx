@@ -6094,7 +6094,7 @@ export function EditorShell({
               </span>
             ) : externalFileNotice.kind === "relocate-failed" ? (
               <span>
-                This document couldn&apos;t be moved to the chosen folder. Nothing was written there;
+                This artifact couldn&apos;t be moved to the chosen folder. Nothing was written there;
                 Artifact Studio keeps working on the original
                 {externalFileNotice.path ? (
                   <span className="ml-1 font-medium text-ink">{externalFileNotice.path}</span>

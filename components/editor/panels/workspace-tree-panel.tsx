@@ -258,7 +258,7 @@ export function WorkspaceTreePanel({
   if (workspace.status === "missing")
     return (
       <p className="px-2 py-4 text-[11px] leading-relaxed text-ink-3">
-        {workspace.name} no está disponible. {workspace.missingReason}
+        {workspace.name} is unavailable. {workspace.missingReason}
       </p>
     );
   return (

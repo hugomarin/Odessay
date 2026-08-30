@@ -5,11 +5,11 @@ test.describe("Archived artifacts settings", () => {
     await page.goto("/evidence/settings-archived?state=empty")
 
     await expect(page.getByRole("link", { name: "Archived artifacts" })).toHaveAttribute("href", "/settings/archived")
-    await expect(page.getByText("No archived writings")).toBeVisible()
-    await expect(page.getByText("Soft-deleted writings will appear here.")).toBeVisible()
+    await expect(page.getByText("Nothing here")).toBeVisible()
+    await expect(page.getByText("No archived artifact matches that filter.")).toBeVisible()
   })
 
-  test("downloads and restores an archived writing", async ({ page }) => {
+  test("downloads and restores an archived artifact", async ({ page }) => {
     await page.goto("/evidence/settings-archived")
     const row = page.getByTestId("archived-writing-archive-1")
 

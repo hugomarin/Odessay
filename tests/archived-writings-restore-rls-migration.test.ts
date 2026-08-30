@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
-describe("archived writing restore RLS", () => {
+describe("archived artifact restore RLS", () => {
   const sql = readFileSync(
     "supabase/migrations/20260729030000_allow_owner_restore_archived_writings.sql",
     "utf8",

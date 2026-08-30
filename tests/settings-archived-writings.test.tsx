@@ -25,7 +25,7 @@ function row(index: number): WritingSummary {
   return {
     id: `writing-${index}`,
     authorId: "author-1",
-    title: `Archived writing ${index}`,
+    title: `Archived artifact ${index}`,
     excerpt: null,
     slug: null,
     status: "draft",
@@ -54,7 +54,7 @@ function service(overrides: Partial<ArchiveService> = {}): ArchiveService {
     restoreWriting: vi.fn().mockResolvedValue({ data: null, error: null }),
     permanentlyDeleteWriting: vi.fn().mockResolvedValue({ data: undefined, error: null }),
     downloadWriting: vi.fn().mockResolvedValue({
-      data: { writingId: "writing-1", format: "markdown", fileName: "Archived writing 1.md", mimeType: "text/markdown", bytes: new Uint8Array([35, 32, 79, 110, 101]) },
+      data: { writingId: "writing-1", format: "markdown", fileName: "Archived artifact 1.md", mimeType: "text/markdown", bytes: new Uint8Array([35, 32, 79, 110, 101]) },
       error: null,
     }),
     ...overrides,
@@ -109,7 +109,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe("Archived writings settings", () => {
+describe("Archived artifacts settings", () => {
   it("shows only the final settings navigation", () => {
     act(() => root.render(<SettingsNav />))
     expect(Array.from(container.querySelectorAll("a"), (link) => link.textContent)).toEqual(["Account", "Artifact types", "Status", "Archived artifacts"])
@@ -242,7 +242,7 @@ describe("Archived writings settings", () => {
 
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!
-      setter.call(search, "writing 2")
+      setter.call(search, "artifact 2")
       search.dispatchEvent(new Event("input", { bubbles: true }))
     })
 
@@ -258,7 +258,7 @@ describe("Archived writings settings", () => {
     await click(button("Next", container))
     await settle()
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 25 }))
-    expect(container.textContent).toContain("Archived writing 30")
+    expect(container.textContent).toContain("Archived artifact 30")
     await click(button("Previous", container))
     await settle()
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }))

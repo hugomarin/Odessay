@@ -52,7 +52,7 @@ export function CollectionItem({
           <div className="min-w-0">
             <p className="truncate text-[13px] font-medium text-ink">{collection.name}</p>
             <p className="mt-1 text-[11px] text-ink-4">
-              {writings.length} writings
+              {writings.length} artifacts
               {" · "}
               {collection.visibility === "public" ? "Visible in public author space" : "Private"}
             </p>
