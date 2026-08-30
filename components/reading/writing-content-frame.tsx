@@ -27,7 +27,7 @@ export function WritingContentFrame({
       {children ? <div className="WritingContentFrameHeader">{children}</div> : null}
 
       {showTitle ? (
-        <h1 className="mb-6 font-lora text-[24px] font-medium leading-[1.2] tracking-[-0.01em] text-ink sm:mb-8 sm:text-[30px]">
+        <h1 className="odessay-writing-title mb-6 text-[24px] font-medium leading-[1.2] tracking-[-0.01em] text-ink sm:mb-8 sm:text-[30px]">
           {title ?? "Untitled"}
         </h1>
       ) : null}

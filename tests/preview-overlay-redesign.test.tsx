@@ -202,10 +202,10 @@ describe("the overlay's shell", () => {
 })
 
 describe("the left sheet", () => {
-  it("sets the title in Lora 500/28 under its overline", () => {
+  it("sets the title in the global writing style at 500/28 under its overline", () => {
     renderOverlay()
     const title = container.querySelector('[data-testid="preview-title"]')
-    expect(title?.className).toContain("font-lora")
+    expect(title?.className).toContain("odessay-writing-title")
     expect(title?.className).toContain("text-[28px]")
     expect(title?.className).toContain("font-medium")
     expect(container.querySelector('[data-testid="preview-sheet-header"]')?.textContent).toContain("Title")

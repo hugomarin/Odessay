@@ -39,6 +39,18 @@ Resuelto en ODE-425. El paquete Artifact Studio y `globals.css` daban dos respue
 8. Tablas con `th` small-caps y metadata en `--od-font-meta`.
 9. Preservar overflow interno de tablas grandes (`tableWrapper` + `width: max-content`).
 
+## Preferencia global de estilo
+
+El tamaño, ritmo vertical y pesos permanecen canónicos. Solo cambia la familia tipográfica del contenido mediante una preferencia local por dispositivo:
+
+| Valor | Nombre | Cuerpo | Headings / título / blockquote |
+|---|---|---|---|
+| `quine` | Quine · Contemporary | `--od-font-ui` | `--od-font-ui` |
+| `kant` | Kant · Balanced | `--od-font-ui` | `--od-font-prose` |
+| `descartes` | Descartes · Classic | `--od-font-prose` | `--od-font-prose` |
+
+`kant` es el fallback. La selección vive en settings locales, no en metadata documental. Las cuatro superficies del contrato leen los tokens `--od-writing-body-font`, `--od-writing-heading-font` y `--od-writing-quote-font`; ninguna vista decide la familia por separado. Código, tablas funcionales, captions y metadata conservan sus fuentes semánticas.
+
 ### Tabla de escala tipográfica (canónica)
 
 | step | Elemento | Tamaño | px aprox |
@@ -76,7 +88,7 @@ Resuelto en ODE-425. El paquete Artifact Studio y `globals.css` daban dos respue
 .odessay-editor-content,
 .prose-odessay {
   color: hsl(var(--ink-2));
-  font-family: var(--od-font-ui);
+  font-family: var(--od-writing-body-font);
   font-size: 17px;
   font-weight: 400;
   line-height: 1.9;
@@ -89,7 +101,7 @@ Resuelto en ODE-425. El paquete Artifact Studio y `globals.css` daban dos respue
 .prose-odessay h2,
 .prose-odessay h3 {
   color: hsl(var(--ink));
-  font-family: var(--od-font-prose);
+  font-family: var(--od-writing-heading-font);
   font-weight: 500;
 }
 
@@ -199,7 +211,7 @@ Resuelto en ODE-425. El paquete Artifact Studio y `globals.css` daban dos respue
 .prose-odessay blockquote {
   border-left: 1.5px solid hsl(var(--cursor));
   color: hsl(var(--ink-3));
-  font-family: var(--od-font-prose);
+  font-family: var(--od-writing-quote-font);
   font-size: 1.35em;
   font-style: italic;
   font-weight: 400;
