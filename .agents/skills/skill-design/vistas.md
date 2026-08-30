@@ -287,9 +287,9 @@ Reading scroll (flex: 1) | Margin panel (0px → 296px, animado 300ms ease-layou
 author block: avatar 38px + nombre 14px + fecha 12px
               border-bottom 0.5px antes del texto
 
-título:    Lora 30px, font-weight 500, letter-spacing -0.01em
-body:      DM Sans 17px, line-height 1.9   (delta 3 — valor único cross-mode)
-blockquote: border-left 2px ink-3, Lora italic 18px, padding-left 1.4em
+título:    fuente de heading del estilo global, 30px, font-weight 500, letter-spacing -0.01em
+body:      fuente de body del estilo global, 17px, line-height 1.9
+blockquote: border-left 2px ink-3, fuente de quote del estilo global, italic 18px, padding-left 1.4em
 ```
 
 ### Contrato textual compartido (`write`/`preview`/`shared`/`public`)
@@ -537,7 +537,7 @@ Al escribir en el editor con el panel abierto: re-busca con debounce 150ms.
 Notes:      248px, writings de footnotes
 AI Editor:  280px, observaciones del AI — ver odessay-ai-editor.md
 Pulir:      280px — opciones + análisis AI + resultados
-Properties: 248px — Status, Visibility, Collections, correspondence card, Info
+Properties: 248px — Status, Artifact Type, Style global, Collections, Path, Info
 ```
 
 ### Panel Pulir (280px)

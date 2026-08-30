@@ -671,7 +671,7 @@ export function WritingPreviewModal({
                     }
                   }}
                   data-testid="preview-title"
-                  className="w-full bg-transparent font-lora text-[28px] font-medium leading-[1.25] tracking-[-0.015em] text-ink outline-none placeholder:text-ink-4 focus-visible:ring-0"
+                  className="odessay-writing-title w-full bg-transparent text-[28px] font-medium leading-[1.25] tracking-[-0.015em] text-ink outline-none placeholder:text-ink-4 focus-visible:ring-0"
                   placeholder="Untitled artifact"
                   aria-label="Artifact title"
                 />

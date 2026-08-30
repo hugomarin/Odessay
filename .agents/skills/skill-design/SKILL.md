@@ -231,6 +231,18 @@ Valores del paquete Artifact Studio, verificados contra los prototipos `.dc.html
 
 **Regla:** Lora para lo epistolar (contenido que el usuario escribe y lee). DM Sans para todo lo funcional (UI, labels, metadatos). Roboto Mono solo para rutas y counts. Geist solo para el wordmark.
 
+### Preferencia global de estilo del artifact
+
+La combinación tipográfica del contenido puede cambiar mediante una preferencia local global, sin alterar el artifact ni su Markdown:
+
+| Estilo | Descriptor | Cuerpo | Títulos y citas |
+|---|---|---|---|
+| Quine | Contemporary | DM Sans | DM Sans |
+| Kant | Balanced | DM Sans | Lora |
+| Descartes | Classic | Lora | Lora |
+
+`Kant` es el default y conserva el contrato histórico. La preferencia afecta solo al contenido y a su título; la UI, metadata y código conservan sus fuentes semánticas. Editor, preview, shared y public consumen los mismos tokens `--od-writing-body-font`, `--od-writing-heading-font` y `--od-writing-quote-font`.
+
 ---
 
 ## Sombras

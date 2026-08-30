@@ -364,6 +364,8 @@ El editor tiene tres capas visuales que coexisten:
 
 El título del writing en la topbar es editable. Al hacer click abre un dropdown con un campo de texto. Enter confirma, Escape cancela. Refleja el mismo título que el `<textarea>` del área de escritura — son el mismo campo sincronizado.
 
+La familia tipográfica del contenido sigue la preferencia global de estilo (`Quine`, `Kant`, `Descartes`). Cambiarla no reinicializa TipTap ni altera el documento; solo actualiza los tokens CSS compartidos con las superficies de lectura.
+
 ### Properties panel
 
 Se abre desde el icono de equalizer en la topbar. Ancho 248px, transición suave de width. Contiene:
@@ -371,7 +373,10 @@ Se abre desde el icono de equalizer en la topbar. Ancho 248px, transición suave
 - Visibilidad: Private (v1 obligatorio) + opciones futuras (Shared/Public) detrás de feature flag
 - Compartir para testing: generación de link privado para evaluación cerrada (sin flujo completo de sharing de Fase 2)
 - Colección: pills con las colecciones existentes
+- Style: preferencia global local (`Quine · Contemporary`, `Kant · Balanced`, `Descartes · Classic`), recordada por dispositivo y aplicada a todos los artifacts
 - Info: fecha creación, última modificación, palabras, caracteres, oraciones, tiempo de lectura, páginas estimadas, respuestas
+
+`Style` es apariencia de la aplicación, no una propiedad documental: no se escribe en Markdown, manifest, SQLite documental ni metadata cloud.
 
 ### Notes panel (sidebar derecho)
 

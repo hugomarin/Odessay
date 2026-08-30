@@ -23,6 +23,7 @@ import { copyTextWithFallback } from "@/lib/utils/clipboard"
 import { cn } from "@/lib/utils"
 import { WritingStatusPicker } from "@/components/writings/writing-status-picker"
 import { ArtifactTypeSelector } from "@/components/ui/artifact-type-selector"
+import { WritingStyleSelector } from "@/components/ui/writing-style-selector"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { WritingCollectionsSection } from "./writing-collections-section"
 import { WritingSharesSection } from "./writing-shares-section"
@@ -353,6 +354,12 @@ export function PropertiesPanel({
             value={artifactType}
             onChange={onArtifactTypeChange}
           />
+        </section>
+
+        <section className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Style</p>
+          <WritingStyleSelector />
+          <p className="text-[10px] leading-[1.4] text-ink-4">Applied to all artifacts on this device.</p>
         </section>
 
         {hasRemoteWriting && writingId ? <WritingCollectionsSection writingId={writingId} /> : null}

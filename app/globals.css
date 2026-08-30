@@ -83,6 +83,27 @@
   --od-font-prose: var(--font-lora), Georgia, serif;
   --od-font-ui:    var(--font-dm-sans), system-ui, sans-serif;
   --od-font-meta:  var(--font-dm-sans), system-ui, sans-serif;
+  --od-writing-body-font: var(--od-font-ui);
+  --od-writing-heading-font: var(--od-font-prose);
+  --od-writing-quote-font: var(--od-font-prose);
+}
+
+:root[data-writing-style="quine"] {
+  --od-writing-body-font: var(--od-font-ui);
+  --od-writing-heading-font: var(--od-font-ui);
+  --od-writing-quote-font: var(--od-font-ui);
+}
+
+:root[data-writing-style="kant"] {
+  --od-writing-body-font: var(--od-font-ui);
+  --od-writing-heading-font: var(--od-font-prose);
+  --od-writing-quote-font: var(--od-font-prose);
+}
+
+:root[data-writing-style="descartes"] {
+  --od-writing-body-font: var(--od-font-prose);
+  --od-writing-heading-font: var(--od-font-prose);
+  --od-writing-quote-font: var(--od-font-prose);
 }
 
 @theme {
@@ -310,10 +331,14 @@
   .odessay-editor-content,
   .prose-odessay {
     color: hsl(var(--ink-2));
-    font-family: var(--od-font-ui);
+    font-family: var(--od-writing-body-font);
     font-size: 17px;
     font-weight: 400;
     line-height: 1.9;
+  }
+
+  .odessay-writing-title {
+    font-family: var(--od-writing-heading-font);
   }
 
   .odessay-editor-content .odessay-frontmatter {
@@ -418,7 +443,7 @@
   .prose-odessay h2,
   .prose-odessay h3 {
     color: hsl(var(--ink));
-    font-family: var(--od-font-prose);
+    font-family: var(--od-writing-heading-font);
     font-weight: 500;
   }
 
@@ -547,7 +572,7 @@
   .prose-odessay blockquote {
     border-left: 1.5px solid hsl(var(--cursor));
     color: hsl(var(--ink-3));
-    font-family: var(--od-font-prose);
+    font-family: var(--od-writing-quote-font);
     font-size: 1.35em;
     font-style: italic;
     font-weight: 400;
