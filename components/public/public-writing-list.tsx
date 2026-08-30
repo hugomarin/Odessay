@@ -83,7 +83,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
     const target = items.find((writing) => writing.id === writingId)
     if (!target) return
 
-    const confirmed = window.confirm("Are you sure you want to delete this writing?")
+    const confirmed = window.confirm("Are you sure you want to delete this artifact?")
     if (!confirmed) return
 
     setIsDeletingId(writingId)
@@ -104,7 +104,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
     setIsDeletingId(null)
 
     if (!response.ok) {
-      window.alert("Could not delete this writing right now.")
+      window.alert("Could not delete this artifact right now.")
       return
     }
 
@@ -234,7 +234,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-ink-3 hover:text-ink"
-                            aria-label="Writing actions"
+                            aria-label="Artifact actions"
                           >
                             <MoreHorizontal className="h-4 w-4" strokeWidth={1.5} />
                           </Button>

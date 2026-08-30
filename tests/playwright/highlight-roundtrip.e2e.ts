@@ -45,7 +45,7 @@ test("standalone highlight can be navigated to and deleted persistently from Not
   await page.getByTestId("editor-writing-area").evaluate((element) => {
     element.scrollTop = 0
   })
-  await notesPanel.getByRole("button", { name: "Go to annotation in document" }).click({ force: true })
+  await notesPanel.getByRole("button", { name: "Go to annotation in artifact" }).click({ force: true })
 
   const topbarBox = await page.getByTestId("editor-topbar").boundingBox()
   const statusbarBox = await page.getByTestId("editor-statusbar").boundingBox()

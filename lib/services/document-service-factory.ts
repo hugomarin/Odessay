@@ -499,8 +499,8 @@ class DesktopDocumentService implements DocumentService {
   async restoreWriting(input: RestoreWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
       const current = await this.runtime.catalog.getById(input.writingId)
-      if (!current?.deletedAt) return err("NOT_FOUND", `Archived writing ${input.writingId} not found`)
-      if (current.version !== input.version) return err("CONFLICT", `Archived writing ${input.writingId} changed before it could be restored`)
+      if (!current?.deletedAt) return err("NOT_FOUND", `Archived artifact ${input.writingId} not found`)
+      if (current.version !== input.version) return err("CONFLICT", `Archived artifact ${input.writingId} changed before it could be restored`)
       const mutationId = crypto.randomUUID()
       const mutationCreatedAt = Date.now()
       const mutationPayload = JSON.stringify({
@@ -561,7 +561,7 @@ class DesktopDocumentService implements DocumentService {
   async permanentlyDeleteWriting(input: PermanentlyDeleteWritingInput): Promise<ServiceResponse<void>> {
     try {
       const current = await this.runtime.catalog.getById(input.writingId)
-      if (!current?.deletedAt) return err("NOT_FOUND", `Archived writing ${input.writingId} not found`)
+      if (!current?.deletedAt) return err("NOT_FOUND", `Archived artifact ${input.writingId} not found`)
       const mutationId = crypto.randomUUID()
       await this.runtime.catalog.commitDualWrite({
         document: {

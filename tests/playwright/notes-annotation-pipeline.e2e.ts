@@ -51,7 +51,7 @@ test("Notes keeps one annotation pipeline across Markdown and Rich modes", async
   await expect(markdown).toHaveValue(/\[@p1\|ann-ai: AI updated in Markdown\]/)
 
   const footnoteCard = notesPanel.getByText("“Footnote anchor”", { exact: true }).locator("..")
-  await footnoteCard.getByRole("button", { name: "Go to annotation in document" }).click({ force: true })
+  await footnoteCard.getByRole("button", { name: "Go to annotation in artifact" }).click({ force: true })
   const selection = await markdown.evaluate((element) => {
     const field = element as HTMLTextAreaElement
     return field.value.slice(field.selectionStart, field.selectionEnd)

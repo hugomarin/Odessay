@@ -20,7 +20,7 @@ export function DeskHeader() {
       sectionId="desk-header"
       testId="desk-header"
       title="Desk"
-      subtitle="Writing activity, shared drafts, and collection context."
+      subtitle="Artifact activity, shared drafts, and collection context."
       actions={
         <Link href="/write?new=1" data-testid="desk-new-artifact" className={VIEW_HEADER_ACTION_CLASS}>
           <Plus className="h-[17px] w-[17px]" strokeWidth={1.5} />

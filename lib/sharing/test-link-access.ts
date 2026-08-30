@@ -319,7 +319,7 @@ export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<T
     state: "ok",
     writing: {
       id: writing.id,
-      title: writing.title?.trim() || "Untitled writing",
+      title: writing.title?.trim() || "Untitled artifact",
       bodyJson: writing.body_json as JSONContent | null,
       bodyText: writing.body_text ?? "",
       bodyHtml: renderedBody.bodyHtml,

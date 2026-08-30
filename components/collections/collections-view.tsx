@@ -80,10 +80,10 @@ const buildDateLabel = (updatedAt: Date, now: Date) => {
   }
 
   if (now.getTime() - updatedAt.getTime() < WEEK_IN_MS) {
-    return new Intl.DateTimeFormat("es-MX", { weekday: "short" }).format(updatedAt)
+    return new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(updatedAt)
   }
 
-  return new Intl.DateTimeFormat("es-MX", { month: "short", day: "numeric" }).format(updatedAt)
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(updatedAt)
 }
 
 const buildStatusState = (status: LocalWriting["status"]) => {
@@ -386,8 +386,8 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       if (!writing || writing.sync_status === "deleted") {
         return
       }
-      const trimmedTitle = nextTitle.trim() || "Untitled writing"
-      if ((writing.title?.trim() || "Untitled writing") === trimmedTitle) {
+      const trimmedTitle = nextTitle.trim() || "Untitled artifact"
+      if ((writing.title?.trim() || "Untitled artifact") === trimmedTitle) {
         return
       }
       if (isDesktopRuntime()) {
@@ -496,7 +496,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
 
     setRenameWritingTarget({
       id: writing.id,
-      title: writing.title?.trim() || "Untitled writing",
+      title: writing.title?.trim() || "Untitled artifact",
       bodyText: writing.body_text,
     })
   }, [])
@@ -512,8 +512,8 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         return
       }
 
-      const trimmedTitle = nextTitle.trim() || "Untitled writing"
-      if ((writing.title?.trim() || "Untitled writing") === trimmedTitle) {
+      const trimmedTitle = nextTitle.trim() || "Untitled artifact"
+      if ((writing.title?.trim() || "Untitled artifact") === trimmedTitle) {
         return
       }
 
@@ -548,7 +548,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
           sectionId="collections-header"
           testId="collections-header"
           title="Collections"
-          subtitle="Organize writings by theme, project, and context."
+          subtitle="Organize artifacts by theme, project, and context."
           actions={
             <button
               type="button"
@@ -637,7 +637,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
             <Link href="/collections" className="transition-colors hover:text-ink-2">
               Collections
             </Link>
-            <span>{isUncategorizedView ? " · Writings without a category." : " · Curated category for related writings."}</span>
+            <span>{isUncategorizedView ? " · Artifacts without a category." : " · Curated category for related artifacts."}</span>
           </>
         }
         actions={
@@ -654,7 +654,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
               <button
                 type="button"
                 onClick={() => {
-                  if (!window.confirm(`Delete "${activeCollection.name}"? Writings will remain available in Desk.`)) {
+                  if (!window.confirm(`Delete "${activeCollection.name}"? Artifacts will remain available in Desk.`)) {
                     return
                   }
 
@@ -678,7 +678,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
           {!isUncategorizedView && !activeCollection ? (
             <p className="font-lora text-[18px] italic text-ink-3">Collection not found.</p>
           ) : detailItems.length === 0 ? (
-            <p className="font-lora text-[18px] italic text-ink-3">No writings here yet.</p>
+            <p className="font-lora text-[18px] italic text-ink-3">No artifacts here yet.</p>
           ) : (
             <>
               {hasSelection && (
@@ -774,7 +774,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
 
       <RenameWritingModal
         open={renameWritingTarget !== null}
-        title={renameWritingTarget?.title ?? "Untitled writing"}
+        title={renameWritingTarget?.title ?? "Untitled artifact"}
         bodyText={renameWritingTarget?.bodyText ?? ""}
         writingId={renameWritingTarget?.id}
         onOpenChange={(open) => {

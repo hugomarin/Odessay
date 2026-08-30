@@ -57,7 +57,7 @@ export const buildTitleSuggestionUserPrompt = ({
   const source = bodyText.trim().replace(/\s+/g, " ").slice(0, MAX_TITLE_SOURCE_CHARS);
 
   return [
-    `Current title: ${currentTitle.trim() || "Untitled writing"}`,
+    `Current title: ${currentTitle.trim() || "Untitled artifact"}`,
     "",
     "Writing content:",
     source,

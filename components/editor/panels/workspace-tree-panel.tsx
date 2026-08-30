@@ -127,7 +127,7 @@ export function WorkspaceTreePanel({
       setError(
         reason instanceof Error
           ? reason.message
-          : "No se pudo cargar el Workspace",
+          : "Could not load the workspace",
       );
     }
   }, [applyOutcome]);
@@ -177,7 +177,7 @@ export function WorkspaceTreePanel({
         setError(
           reason instanceof Error
             ? reason.message
-            : "No se pudo cargar el Workspace",
+            : "Could not load the workspace",
         );
         setLoading(false);
         onCountChange?.();
@@ -212,7 +212,7 @@ export function WorkspaceTreePanel({
       setOpenError(
         reason instanceof Error
           ? reason.message
-          : "No se pudo abrir el writing",
+          : "Could not open the artifact",
       );
     }
   };
@@ -241,7 +241,7 @@ export function WorkspaceTreePanel({
         No hay un writing activo.
       </p>
     );
-  // Web cannot read the filesystem, so it cannot know whether this writing
+  // Web cannot read the filesystem, so it cannot know whether this artifact
   // belongs to a Workspace. Saying it does not would be a claim we cannot make.
   if (outcome?.kind === "unsupported-runtime")
     return (

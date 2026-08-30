@@ -26,9 +26,9 @@ const getImportErrorMessage = (errorCode?: string, fallback = "Could not create 
     case "PREVIEW_REVOKED":
       return "This preview link is no longer available."
     case "FORBIDDEN":
-      return "You do not have access to this shared writing anymore."
+      return "You do not have access to this shared artifact anymore."
     case "NOT_FOUND":
-      return "This shared writing is no longer available."
+      return "This shared artifact is no longer available."
     default:
       return fallback
   }
@@ -109,7 +109,7 @@ export function AddToMyWritingsButton({
         }
         data-testid="add-to-my-writings-btn"
       >
-        {isSubmitting ? "Adding..." : "Add to my writings"}
+        {isSubmitting ? "Adding..." : "Add to my artifacts"}
       </button>
       {error ? (
         <p className={errorClassName} data-testid="add-to-my-writings-error">

@@ -226,7 +226,7 @@ export function createDesktopSharingService(): DesktopSharingService {
           body: JSON.stringify({ shared_with_id: input.sharedWithUserId }),
           expectedStatus: 201,
         },
-        "Could not share this writing right now.",
+        "Could not share this artifact right now.",
       )
       if (!response.error) {
         recipientPreviewCache.clear()

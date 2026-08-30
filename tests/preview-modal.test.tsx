@@ -150,7 +150,7 @@ describe("WritingPreviewModal", () => {
 
     expect(positions.every((position) => position >= 0)).toBe(true)
     expect(positions).toEqual([...positions].sort((a, b) => a - b))
-    expect(content).toContain("Open full writing")
+    expect(content).toContain("Open full artifact")
     expect(content).toContain("Publish on web")
     expect(content).toContain("Preview link")
     expect(content).toContain("Generate link")

@@ -16,7 +16,7 @@ import { EditorShell } from "@/components/editor/editor-shell"
  * query, and on a soft (client) navigation to /write?id=X the App Router hands
  * back the stale prerendered searchParams (empty) instead of the new query. The
  * result is writingId=undefined, so opening a writing from the sidebar/desk/
- * search silently spawns a blank "Untitled writing" draft instead of loading
+ * search silently spawns a blank "Untitled artifact" draft instead of loading
  * the target. This only reproduces in the packaged build, never in `tauri dev`
  * (which runs the Next dev server, where useSearchParams is reactive).
  *

@@ -352,7 +352,7 @@ export function ArchivedWritingsList({ service: suppliedService }: { service?: A
                       <span className="text-[12px] leading-[1.4] text-ink-5">
                         {busyAction
                           ? actionLabel[busyAction]
-                          : `Archived ${row.deletedAt ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(row.deletedAt)) : "recently"}`}
+                          : `Archived ${row.deletedAt ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(row.deletedAt)) : "recently"}`}
                       </span>
                       {rowError ? (
                         <span role="alert" className="mt-1 flex items-center gap-2 text-[12px] text-destructive">

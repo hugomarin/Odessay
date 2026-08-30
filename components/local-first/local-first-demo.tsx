@@ -14,7 +14,7 @@ const createDemoWriting = (): LocalWriting => {
 
   return {
     id,
-    title: "Untitled writing",
+    title: "Untitled artifact",
     body_json: {
       type: "doc",
       content: [
@@ -110,7 +110,7 @@ export function LocalFirstDemo() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-lora text-[15px] text-foreground">
-                    {writing.title ?? "Untitled writing"}
+                    {writing.title ?? "Untitled artifact"}
                   </span>
                   <span className="text-xs text-[hsl(var(--ink-4))]">{writing.sync_status}</span>
                 </div>
@@ -120,7 +120,7 @@ export function LocalFirstDemo() {
           </ul>
 
           {writings.length === 0 ? (
-            <p className="text-sm text-[hsl(var(--ink-4))]">No local writings yet.</p>
+            <p className="text-sm text-[hsl(var(--ink-4))]">No local artifacts yet.</p>
           ) : null}
         </div>
       </div>

@@ -68,7 +68,7 @@ export function TableOfContentsPanel({
             Sin secciones todavía.
           </p>
         ) : (
-          <nav aria-label="Document sections">
+          <nav aria-label="Artifact sections">
             <ul className="space-y-px">
               {items.map((item) => {
                 const active = item.id === visibleActiveId;

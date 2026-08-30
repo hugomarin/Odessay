@@ -117,7 +117,7 @@ const buildExcerpt = (bodyText: string) => {
 
 const buildWritingTitle = (title: string | null | undefined) => {
   const trimmed = title?.trim();
-  return trimmed?.length ? trimmed : "Untitled writing";
+  return trimmed?.length ? trimmed : "Untitled artifact";
 };
 
 export const buildCollectionOptions = (collections: LocalCollection[]): CollectionOption[] =>

@@ -173,7 +173,7 @@ export function ReadingTopbar({
               onClick={() => resolvedPrevHref && router.push(resolvedPrevHref)}
               disabled={!resolvedPrevHref}
               className="flex items-center gap-1 rounded-[7px] px-2 py-1 text-[11px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2 disabled:pointer-events-none disabled:opacity-30 sm:px-2.5 sm:py-1.5 sm:text-[12px]"
-              aria-label="Previous writing"
+              aria-label="Previous artifact"
             >
               <ChevronLeft strokeWidth={1.5} className="h-[11px] w-[11px] sm:h-[12px] sm:w-[12px]" />
               Previous
@@ -187,7 +187,7 @@ export function ReadingTopbar({
               onClick={() => resolvedNextHref && router.push(resolvedNextHref)}
               disabled={!resolvedNextHref}
               className="flex items-center gap-1 rounded-[7px] px-2 py-1 text-[11px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2 disabled:pointer-events-none disabled:opacity-30 sm:px-2.5 sm:py-1.5 sm:text-[12px]"
-              aria-label="Next writing"
+              aria-label="Next artifact"
             >
               Next
               <ChevronRight strokeWidth={1.5} className="h-[11px] w-[11px] sm:h-[12px] sm:w-[12px]" />

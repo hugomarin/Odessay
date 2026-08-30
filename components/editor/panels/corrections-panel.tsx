@@ -198,14 +198,14 @@ export function CorrectionsPanel({
             >
               Show corrections
             </label>
-            <p className="text-[11px] text-ink-4">Shows inline marks within the document.</p>
+            <p className="text-[11px] text-ink-4">Shows inline marks within the artifact.</p>
           </div>
           <button
             id="corrections-visible-switch"
             type="button"
             role="switch"
             aria-checked={showCorrections}
-            aria-label="Show corrections in the document"
+            aria-label="Show corrections in the artifact"
             onClick={() => onShowCorrectionsChange(!showCorrections)}
             className={cn(
               "relative h-[18px] w-8 shrink-0 rounded-[9px] border-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",

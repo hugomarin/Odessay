@@ -63,7 +63,7 @@ describe("NotesPanel interactions", () => {
     renderPanel({ annotationId: "annotation-1", type: "ai", onNavigate })
 
     const button = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Go to annotation in document"]',
+      'button[aria-label="Go to annotation in artifact"]',
     )
     act(() => button?.click())
 

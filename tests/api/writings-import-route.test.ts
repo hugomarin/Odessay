@@ -97,7 +97,7 @@ describe("POST /api/writings/import", () => {
     })
   })
 
-  it("returns 403 when the caller is not allowed to copy a shared writing", async () => {
+  it("returns 403 when the caller is not allowed to copy a shared artifact", async () => {
     getCurrentUserFromRequestMock.mockResolvedValue({ userId: "user-1" })
 
     const shareMaybeSingleMock = vi.fn().mockResolvedValue({ data: null, error: null })
@@ -144,7 +144,7 @@ describe("POST /api/writings/import", () => {
     expect(body).toEqual({
       error: {
         code: "FORBIDDEN",
-        message: "You do not have access to this shared writing.",
+        message: "You do not have access to this shared artifact.",
       },
     })
   })

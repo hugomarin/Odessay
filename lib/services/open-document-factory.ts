@@ -97,9 +97,9 @@ export async function openDocumentByIdWithRetry(
 export function describeOpenOutcome(result: OpenDocumentResult): string {
   switch (result.status) {
     case "ambiguous":
-      return "This file matches more than one document. Pick which one to open."
+      return "This file matches more than one artifact. Pick which one to open."
     case "conflict":
-      return "This document has local and cloud changes that conflict. Resolve them before editing."
+      return "This artifact has local and cloud changes that conflict. Resolve them before editing."
     case "orphaned":
       return "This document is no longer available on disk or in the cloud."
     case "failed":

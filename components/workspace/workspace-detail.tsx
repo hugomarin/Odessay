@@ -596,7 +596,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       if (!writing) return;
       setRenameTarget({
         id: writing.id,
-        title: writing.title?.trim() || "Untitled writing",
+        title: writing.title?.trim() || "Untitled artifact",
         bodyText: writing.body_text,
       });
     },
@@ -746,7 +746,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     () => [
       {
         id: "title",
-        label: "Writing",
+        label: "Artifact",
         className: "min-w-0 pl-2 pr-5",
         render: (file) => {
           const document = documentJoin.get(file.path);
@@ -805,7 +805,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                         }
                         align="start"
                         title="Collections"
-                        description="Choose labels for this writing."
+                        description="Choose labels for this artifact."
                         onToggleCollection={(collectionId) =>
                           void handleCollectionToggle(file, collectionId)
                         }
@@ -1495,7 +1495,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
 
         <RenameWritingModal
           open={renameTarget !== null}
-          title={renameTarget?.title ?? "Untitled writing"}
+          title={renameTarget?.title ?? "Untitled artifact"}
           bodyText={renameTarget?.bodyText ?? ""}
           writingId={renameTarget?.id}
           onOpenChange={(open) => {

@@ -430,8 +430,8 @@ export function NotesPanel({
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {ordered.length === 0 ? (
             <div className="px-1 py-6 flex flex-col gap-1">
-              <p className="text-[12px] text-ink-3">No hay notas.</p>
-              <p className="text-[11px] text-ink-4">Selecciona texto en el documento para agregar una.</p>
+              <p className="text-[12px] text-ink-3">No notes yet.</p>
+              <p className="text-[11px] text-ink-4">Select text in the artifact to add one.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -541,7 +541,7 @@ export function NotesPanel({
                             }
                             className="mt-0.5 font-sans text-[11px] text-ink-4 hover:text-ink transition-colors"
                           >
-                            {isExpanded ? "ver menos" : "ver más"}
+                            {isExpanded ? "Show less" : "Show more"}
                           </button>
                         )}
                       </div>
@@ -605,7 +605,7 @@ export function NotesPanel({
                             setActionErrorKey(didNavigate ? null : key)
                           }}
                           className="flex h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink group-hover:opacity-100"
-                          aria-label="Go to annotation in document"
+                          aria-label="Go to annotation in artifact"
                           title="Ir al texto"
                         >
                           <span className="text-[11px] leading-none">↗</span>

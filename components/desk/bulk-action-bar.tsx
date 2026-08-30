@@ -122,7 +122,7 @@ export function BulkActionBar({
           selectedIds={[]}
           align="end"
           title="Add to collection"
-          description="Add selected writings to a collection."
+          description="Add selected artifacts to a collection."
           onToggleCollection={onAddToCollection}
           onCreateCollection={onCreateCollection}
           trigger={chip}

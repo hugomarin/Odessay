@@ -187,9 +187,9 @@ describe("buildDeskActivitySummary", () => {
       "pending",
     ])
     expect(summary.heroDrafts.map((draft) => draft.createdLabel)).toEqual([
-      "Created 9 mar",
-      "Created 9 mar",
-      "Created 9 mar",
+      "Created Mar 9",
+      "Created Mar 9",
+      "Created Mar 9",
     ])
     expect(summary.heroDrafts.map((draft) => draft.workspaceName)).toEqual([null, null, null])
   })

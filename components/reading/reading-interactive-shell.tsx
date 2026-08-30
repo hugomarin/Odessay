@@ -106,7 +106,7 @@ async function apiAnnotateWriting(
       | null
     error: { message: string } | null
   } = await res.json()
-  if (!res.ok || json.error) throw new Error(json.error?.message ?? "Failed to annotate writing")
+  if (!res.ok || json.error) throw new Error(json.error?.message ?? "Failed to annotate artifact")
   if (!json.data) throw new Error("No data returned")
   return {
     margins: json.data.margins,

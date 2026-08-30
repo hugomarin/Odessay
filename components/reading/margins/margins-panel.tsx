@@ -132,7 +132,7 @@ export function MarginsPanel({
                 ) : null}
               </div>
               <SheetDescription className="sr-only">
-                Review and annotate passages in this writing.
+                Review and annotate passages in this artifact.
               </SheetDescription>
             </SheetHeader>
             {renderFilters()}

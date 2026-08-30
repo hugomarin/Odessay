@@ -58,7 +58,7 @@ export function createArtifactColumns(
   return columns.map((id): ArtifactTableColumn<ArtifactTableItem> => {
     switch (id) {
       case "title":
-        return { id, label: "Writing", className: "w-full", render: renderTitle }
+        return { id, label: "Artifact", className: "w-full", render: renderTitle }
       case "workspace":
         return {
           id,

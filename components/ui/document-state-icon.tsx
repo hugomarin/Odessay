@@ -24,7 +24,7 @@ export function DocumentStateIcon({
       <TooltipTrigger asChild>
         <span
           role="status"
-          aria-label={`Document state: ${copy.label}`}
+          aria-label={`Artifact state: ${copy.label}`}
           className={cn(
             "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full",
             copy.className,

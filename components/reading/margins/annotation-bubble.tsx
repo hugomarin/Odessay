@@ -30,7 +30,7 @@ type AnnotationBubbleProps = {
   onCancel: () => void
 }
 
-const AI_QUICK_CHIPS = ["eliminar", "modificar", "expandir", "valida esto", "simplifica", "mantén tono"]
+const AI_QUICK_CHIPS = ["delete", "modify", "expand", "validate this", "simplify", "keep tone"]
 
 const IMPLICIT_SESSION_KEY = "annotation-bubble:open"
 

@@ -12,7 +12,7 @@ function fixture(index: number): WritingSummary {
   return {
     id: `archive-${index}`,
     authorId: "evidence-author",
-    title: index === 1 ? "Novel notes" : index === 2 ? "Research fragments" : `Archived writing ${index}`,
+    title: index === 1 ? "Novel notes" : index === 2 ? "Research fragments" : `Archived artifact ${index}`,
     excerpt: null,
     slug: null,
     status: "draft",
@@ -50,7 +50,7 @@ export function SettingsArchivedEvidenceClient() {
     },
     async restoreWriting(input) {
       const target = rowsRef.current.find((row) => row.id === input.writingId)
-      if (!target) return { data: null, error: { code: "NOT_FOUND", message: "Archived writing not found", retryable: false } }
+      if (!target) return { data: null, error: { code: "NOT_FOUND", message: "Archived artifact not found", retryable: false } }
       rowsRef.current = rowsRef.current.filter((row) => row.id !== input.writingId)
       refresh()
       return { data: restored(target, input.updatedAt), error: null }
@@ -62,7 +62,7 @@ export function SettingsArchivedEvidenceClient() {
     },
     async downloadWriting(input) {
       const target = rowsRef.current.find((row) => row.id === input.writingId)
-      if (!target) return { data: null, error: { code: "NOT_FOUND", message: "Archived writing not found", retryable: false } }
+      if (!target) return { data: null, error: { code: "NOT_FOUND", message: "Archived artifact not found", retryable: false } }
       return {
         data: {
           writingId: target.id,

@@ -16,7 +16,7 @@ test("first desktop paste creates exactly one durable identity", async ({ page }
   await page.goto("/perf/write-new-harness")
 
   await expect(page.getByTestId("editor-empty-state")).toBeVisible()
-  await page.getByTestId("editor-empty-state").getByRole("button", { name: "New writing" }).click()
+  await page.getByTestId("editor-empty-state").getByRole("button", { name: "New Artifact" }).click()
   await expect(page.getByTestId("editor-topbar")).toBeVisible()
   await expect(page.getByTestId("editor-writing-area")).toBeVisible()
 

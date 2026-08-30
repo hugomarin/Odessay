@@ -88,7 +88,7 @@ export class DesktopAssetService implements AssetService {
   /**
    * Pre-flight (ODE-404): verify the parent writing row exists in the cloud
    * before uploading. If it is absent, flush the sync queue once (the queued
-   * mutation for this writing rides along) and re-check. The result is an
+   * mutation for this artifact rides along) and re-check. The result is an
    * actionable, retryable error instead of a raw FK violation.
    */
   private async writingExistsInCloud(

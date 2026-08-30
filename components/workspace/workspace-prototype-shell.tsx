@@ -1201,7 +1201,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       }
       setRenameTarget({
         id: writing.id,
-        title: writing.title?.trim() || "Untitled writing",
+        title: writing.title?.trim() || "Untitled artifact",
         bodyText: writing.body_text,
       });
     },
@@ -1414,7 +1414,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     () => [
       {
         id: "title",
-        label: "Writing",
+        label: "Artifact",
         className: "min-w-0 pl-2 pr-5",
         render: (file) => {
           const document = documentJoin.get(file.path);
@@ -1477,7 +1477,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                         }
                         align="start"
                         title="Collections"
-                        description="Choose labels for this writing."
+                        description="Choose labels for this artifact."
                         onToggleCollection={(collectionId) =>
                           void handleCollectionToggle(file, collectionId)
                         }
@@ -2094,7 +2094,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
 
         <RenameWritingModal
           open={renameTarget !== null}
-          title={renameTarget?.title ?? "Untitled writing"}
+          title={renameTarget?.title ?? "Untitled artifact"}
           bodyText={renameTarget?.bodyText ?? ""}
           writingId={renameTarget?.id}
           onOpenChange={(open) => {
@@ -2351,7 +2351,7 @@ function WorkspaceActionDialog({
               </DialogTitle>
               <DialogDescription className="text-[16px] leading-7 text-ink-3">
                 {action.total === 0
-                  ? "Artifact Studio will stop watching this workspace. No tracked documents will be affected."
+                  ? "Artifact Studio will stop watching this workspace. No tracked artifacts will be affected."
                   : `This workspace has ${action.total} tracked document${action.total === 1 ? "" : "s"}.${
                       action.cloud > 0
                         ? ` ${action.cloud} synced document${action.cloud === 1 ? "" : "s"} will be archived in the cloud.`

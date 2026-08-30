@@ -19,8 +19,8 @@ test("reading view stays usable on mobile", async ({ page }) => {
   expect(mobileLineHeight).toBeGreaterThan(28.5)
   expect(mobileLineHeight).toBeLessThan(29.5)
 
-  await expect(page.getByLabel("Previous writing")).toBeHidden()
-  await expect(page.getByLabel("Next writing")).toBeHidden()
+  await expect(page.getByLabel("Previous artifact")).toBeHidden()
+  await expect(page.getByLabel("Next artifact")).toBeHidden()
 
   const shellWidth = await page.getByTestId("reading-body-shell").evaluate((element) => element.getBoundingClientRect().width)
   expect(shellWidth).toBeGreaterThan(360)
@@ -72,8 +72,8 @@ test("reading view remains stable on desktop", async ({ page }) => {
   await page.goto("/perf/reading-harness")
 
   await expect(page.getByTestId("reading-chrome")).toBeVisible()
-  await expect(page.getByLabel("Previous writing")).toBeHidden()
-  await expect(page.getByLabel("Next writing")).toBeHidden()
+  await expect(page.getByLabel("Previous artifact")).toBeHidden()
+  await expect(page.getByLabel("Next artifact")).toBeHidden()
 
   const title = page.locator("#reading-text h1")
   await expect(title).toHaveCSS("font-size", "30px")

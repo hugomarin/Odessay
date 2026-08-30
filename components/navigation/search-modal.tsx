@@ -154,7 +154,7 @@ function ResultsSection({ results, onSelect }: { results: SearchResult[]; onSele
           className="flex w-full flex-col gap-0.5 rounded-md px-3 py-[8px] text-left transition-colors hover:bg-muted-hover"
         >
           <span className="min-w-0 truncate font-sans text-[13px] text-ink">
-            {result.writing.title?.trim() || "Untitled writing"}
+            {result.writing.title?.trim() || "Untitled artifact"}
           </span>
           <span className="line-clamp-1 font-sans text-[12px] text-ink-4">
             {result.snippet}
@@ -274,7 +274,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
             ref={inputRef}
             value={query}
             onChange={(e) => handleQueryChange(e.target.value)}
-            placeholder="Search writings…"
+            placeholder="Search artifacts…"
             className="h-9 border-0 bg-transparent px-0 text-[15px] text-ink shadow-none placeholder:text-ink-4 focus-visible:ring-0 focus-visible:ring-offset-0"
           />
           <DialogClose className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-[6px] text-ink-4 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-bg">

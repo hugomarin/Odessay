@@ -38,7 +38,7 @@ const jsonError = (status: number, code: string, message: string) =>
     { status },
   )
 
-const buildCopyTitle = (title: string | null) => `Copy of ${title?.trim() || "Untitled writing"}`
+const buildCopyTitle = (title: string | null) => `Copy of ${title?.trim() || "Untitled artifact"}`
 
 const createEmptyDocument = (): JSONContent => ({
   type: "doc",
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
     }
 
     if (!writing) {
-      return jsonError(404, "NOT_FOUND", "Shared writing not found.")
+      return jsonError(404, "NOT_FOUND", "Shared artifact not found.")
     }
 
     if (writing.author_id !== userId) {
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
       }
 
       if (!shareRow) {
-        return jsonError(403, "FORBIDDEN", "You do not have access to this shared writing.")
+        return jsonError(403, "FORBIDDEN", "You do not have access to this shared artifact.")
       }
     }
 

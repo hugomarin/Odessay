@@ -26,7 +26,7 @@ import { normalizeArtifactType, type ArtifactType } from "@/lib/writings/artifac
  * coupling leaks into presentation components.
  */
 
-const UNTITLED_TITLE = "Untitled writing"
+const UNTITLED_TITLE = "Untitled artifact"
 
 export type CatalogRowViewModel = {
   id: string

@@ -17,7 +17,7 @@ export function EditorEmptyState({ onNewWriting }: EditorEmptyStateProps) {
       <p className="max-w-[280px] font-lora italic text-[15px] leading-relaxed text-ink-3">
         No writings open.
       </p>
-      <Button onClick={onNewWriting}>New writing</Button>
+      <Button onClick={onNewWriting}>New Artifact</Button>
     </div>
   )
 }

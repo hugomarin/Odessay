@@ -313,7 +313,7 @@ export const EDITOR_SHORTCUT_HELP_SECTIONS: ShortcutHelpSection[] = [
       { action: "search", availability: "both", description: "Search" },
       { action: "nextTab", availability: "desktop", description: "Next tab" },
       { action: "prevTab", availability: "desktop", description: "Previous tab" },
-      { action: "newWriting", availability: "desktop", description: "New writing tab" },
+      { action: "newWriting", availability: "desktop", description: "New artifact tab" },
     ],
   },
   {

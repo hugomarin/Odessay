@@ -265,7 +265,7 @@ export function PropertiesPanel({
   const handleOpenWebAction = useCallback(
     async (action: WebWritingAction) => {
       if (!writingId) {
-        setExternalLinkError("This writing needs an id before it can open on web.")
+        setExternalLinkError("This artifact needs an id before it can open on web.")
         return
       }
 
