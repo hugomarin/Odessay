@@ -2,7 +2,7 @@ import { expect, type Locator, type Page } from "@playwright/test"
 
 export async function openEditorHarness(page: Page) {
   await page.goto("/perf/editor-harness")
-  const emptyState = page.getByText("No writings open.")
+  const emptyState = page.getByText("No artifacts open.")
   if (await emptyState.isVisible().catch(() => false)) {
     await page.getByRole("button", { name: "New Artifact" }).last().click()
   }

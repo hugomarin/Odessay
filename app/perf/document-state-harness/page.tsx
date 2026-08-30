@@ -22,7 +22,7 @@ export default function DocumentStateHarnessPage() {
         >
           <div className="mb-5 flex items-center justify-between border-b-[0.5px] border-border pb-4">
             <h1 className="font-lora text-[22px] font-medium text-ink">
-              Document state badges
+              Artifact state badges
             </h1>
             <WritingStatusBadge status="draft" variant="compact" />
           </div>

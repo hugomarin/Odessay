@@ -110,7 +110,7 @@ export function CollectionAssignmentMenu({
                 })
               ) : (
                 <div className="rounded-[8px] border-[0.5px] border-dashed border-border px-3 py-3 text-[12px] text-ink-4">
-                  Create your first collection to start labeling writings.
+                  Create your first collection to start labeling artifacts.
                 </div>
               )}
             </div>

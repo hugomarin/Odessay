@@ -219,7 +219,7 @@ export function WorkspaceTreePanel({
 
   if (loading)
     return (
-      <p className="px-2 py-4 text-[11px] text-ink-4">Cargando Workspace…</p>
+      <p className="px-2 py-4 text-[11px] text-ink-4">Loading workspace…</p>
     );
   if (error)
     return (
@@ -231,14 +231,14 @@ export function WorkspaceTreePanel({
           className="mt-2 flex items-center gap-1 text-ink"
         >
           <RefreshCw className="h-3 w-3" strokeWidth={1.5} />
-          Reintentar
+          Retry
         </button>
       </div>
     );
   if (!activeWritingId)
     return (
       <p className="px-2 py-4 font-lora text-[12px] italic text-ink-4">
-        No hay un writing activo.
+        No active artifact.
       </p>
     );
   // Web cannot read the filesystem, so it cannot know whether this artifact
@@ -246,13 +246,13 @@ export function WorkspaceTreePanel({
   if (outcome?.kind === "unsupported-runtime")
     return (
       <p className="px-2 py-4 font-lora text-[12px] italic leading-relaxed text-ink-4">
-        El Workspace de un writing solo está disponible en la app de escritorio.
+        An artifact’s workspace is only available in the desktop app.
       </p>
     );
   if (!workspace)
     return (
       <p className="px-2 py-4 font-lora text-[12px] italic leading-relaxed text-ink-4">
-        Este writing no pertenece a un Workspace.
+        This artifact does not belong to a workspace.
       </p>
     );
   if (workspace.status === "missing")

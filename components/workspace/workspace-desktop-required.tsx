@@ -30,12 +30,12 @@ export function WorkspaceDesktopRequired() {
           Workspaces live on the desktop app
         </h1>
         <p className="text-[14px] leading-relaxed text-ink-4">
-          Workspaces connect your documents to folders on your computer, so they
-          need filesystem access that the browser can’t provide. Open Odessay for
-          Mac to organize documents by folder and manage watched roots.
+          Workspaces connect your artifacts to folders on your computer, so they
+          need filesystem access that the browser can’t provide. Open Artifact
+          Studio for Mac to organize artifacts by folder and manage watched roots.
         </p>
         <p className="text-[13px] text-ink-4">
-          Your documents are still here — find and open them from the{" "}
+          Your artifacts are still here — find and open them from the{" "}
           <Link href="/desk" className="text-cursor underline-offset-2 hover:underline">
             Desk
           </Link>

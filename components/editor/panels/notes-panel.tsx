@@ -606,7 +606,7 @@ export function NotesPanel({
                           }}
                           className="flex h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink group-hover:opacity-100"
                           aria-label="Go to annotation in artifact"
-                          title="Ir al texto"
+                          title="Go to annotation"
                         >
                           <span className="text-[11px] leading-none">↗</span>
                         </button>
@@ -657,24 +657,24 @@ export function NotesPanel({
           )}
         </div>
 
-        {/* Copiar para AI */}
+        {/* Copy for AI */}
         {aiAnnotations.length > 0 && (
           <div className="shrink-0 border-t-[0.5px] border-border px-4 py-3">
             <p className="font-sans text-[11px] uppercase tracking-[0.07em] text-ink-4">
-              Copiar para AI
+              Copy for AI
             </p>
             <div className="mt-2 flex gap-2">
               <button
                 onClick={copyAnnotations}
                 className="rounded-[8px] bg-muted px-3 py-1.5 font-sans text-[12px] text-ink-2"
               >
-                Anotaciones
+                Annotations
               </button>
               <button
                 onClick={copyFullText}
                 className="rounded-[8px] bg-ink px-3 py-1.5 font-sans text-[12px] text-bg"
               >
-                Texto completo
+                Full text
               </button>
             </div>
           </div>

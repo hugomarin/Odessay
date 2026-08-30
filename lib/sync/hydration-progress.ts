@@ -18,7 +18,7 @@ let state: HydrationProgressState = {
   userId: null,
   total: 0,
   completed: 0,
-  message: "Syncing your writings…",
+  message: "Syncing your artifacts…",
   error: null,
 }
 
@@ -62,7 +62,7 @@ export function beginHydrationProgress(userId: string, total: number) {
     userId,
     total,
     completed: 0,
-    message: total > 0 ? `Syncing your writings… 0/${total}` : "Syncing your writings…",
+    message: total > 0 ? `Syncing your artifacts… 0/${total}` : "Syncing your artifacts…",
     error: null,
   })
 }
@@ -76,7 +76,7 @@ export function updateHydrationProgress(completed: number, total: number) {
     ...state,
     total,
     completed,
-    message: total > 0 ? `Syncing your writings… ${completed}/${total}` : "Syncing your writings…",
+    message: total > 0 ? `Syncing your artifacts… ${completed}/${total}` : "Syncing your artifacts…",
   })
 }
 
@@ -108,7 +108,7 @@ export function resetHydrationProgress() {
     userId: null,
     total: 0,
     completed: 0,
-    message: "Syncing your writings…",
+    message: "Syncing your artifacts…",
     error: null,
   })
 }

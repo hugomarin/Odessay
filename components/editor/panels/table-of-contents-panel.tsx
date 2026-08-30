@@ -65,7 +65,7 @@ export function TableOfContentsPanel({
       {mode === "toc" ? (
         items.length === 0 ? (
           <p className="px-2 py-3 font-lora text-[12px] italic text-ink-4">
-            Sin secciones todavía.
+            No sections yet.
           </p>
         ) : (
           <nav aria-label="Artifact sections">

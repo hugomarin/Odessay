@@ -22,7 +22,7 @@ export function MobileWriteNotice({ showDeskLink = true }: MobileWriteNoticeProp
         </Link>
 
         <p className="mt-8 font-lora text-[24px] italic leading-[1.3] tracking-[-0.01em] text-ink-3">
-          La escritura en Artifact Studio está pensada para pantalla grande. Abre Artifact Studio en tu computadora para escribir.
+          Writing in Artifact Studio is built for a large screen. Open Artifact Studio on your computer to write.
         </p>
 
         {showDeskLink ? (
@@ -31,7 +31,7 @@ export function MobileWriteNotice({ showDeskLink = true }: MobileWriteNoticeProp
               href="/desk"
               className="inline-flex h-9 items-center justify-center rounded-[8px] bg-ink px-4 text-[13px] font-medium text-bg transition-opacity hover:opacity-90"
             >
-              Ir al desk
+              Go to desk
             </Link>
           </div>
         ) : null}

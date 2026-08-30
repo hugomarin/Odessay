@@ -139,7 +139,7 @@ export function CollectionItem({
         <div className="border-t-[0.5px] border-border">
           {writings.length === 0 ? (
             <p className="px-10 py-5 text-[13px] text-ink-4">
-              No writings in this collection yet.
+              No artifacts in this collection yet.
             </p>
           ) : (
             <div className="divide-y divide-border/70">

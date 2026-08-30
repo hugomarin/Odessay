@@ -25,7 +25,7 @@ export async function openWorkspaceFileInEditor(
       let result = await openDocumentByPath(file.path)
       if (result.status === "needs-binding-root-confirmation") {
         const accept = window.confirm(
-          `Register “${result.parentDir}” so Odessay can keep this file’s identity across moves and renames?`,
+          `Register “${result.parentDir}” so Artifact Studio can keep this file’s identity across moves and renames?`,
         )
         if (!accept) return
         result = await openDocumentByPath(file.path, {

@@ -474,7 +474,7 @@ export function WorkspaceIndex() {
                   Rename workspace
                 </DialogTitle>
                 <DialogDescription className="text-[16px] leading-7 text-ink-3">
-                  Update the workspace label in Odessay. This does not rename
+                  Update the workspace label in Artifact Studio. This does not rename
                   the local folder.
                 </DialogDescription>
               </DialogHeader>
@@ -519,7 +519,7 @@ export function WorkspaceIndex() {
                 </DialogTitle>
                 <DialogDescription className="text-[16px] leading-7 text-ink-3">
                   Disconnecting keeps all local files untouched. The folder will
-                  stop syncing with Odessay.
+                  stop syncing with Artifact Studio.
                 </DialogDescription>
               </DialogHeader>
               <div className="mt-6 rounded-[14px] border-[0.5px] border-border bg-bg px-4 py-3 text-sm text-ink-3">

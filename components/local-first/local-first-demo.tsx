@@ -75,8 +75,8 @@ export function LocalFirstDemo() {
             Local-first storage
           </h2>
           <p className="max-w-2xl text-sm leading-6 text-[hsl(var(--ink-3))]">
-            Este botón crea un writing local en IndexedDB y lo encola para sync remoto sin bloquear
-            la UI.
+            This button creates a local artifact in IndexedDB and queues it for remote sync without
+            blocking the UI.
           </p>
         </div>
 
@@ -100,7 +100,7 @@ export function LocalFirstDemo() {
 
         <div className="space-y-3 border-t-[0.5px] border-border pt-4">
           <p className="text-xs uppercase tracking-[0.07em] text-[hsl(var(--ink-4))]">
-            IndexedDB writings
+            IndexedDB artifacts
           </p>
           <ul className="space-y-2">
             {writings.map((writing) => (

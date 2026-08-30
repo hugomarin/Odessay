@@ -322,7 +322,7 @@ export function DesignGridOverlay() {
               </div>
               <div>
                 <p className="font-lora text-[15px] text-ink">Design grid</p>
-                <p className="font-sans text-[11px] text-ink-4">Pulsa `G` para mostrar u ocultar</p>
+                <p className="font-sans text-[11px] text-ink-4">Press `G` to show or hide</p>
               </div>
             </div>
 

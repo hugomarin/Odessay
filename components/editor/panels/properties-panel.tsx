@@ -400,7 +400,7 @@ export function PropertiesPanel({
                 <div>
                   <p className="text-[12px] font-medium text-ink-2">Web publishing</p>
                   <p className="mt-0.5 text-[11px] leading-[1.45] text-ink-4">
-                    The document stays saved locally. Publishing and link sharing continue on web.
+                    The artifact stays saved locally. Publishing and link sharing continue on web.
                   </p>
                 </div>
                 {!hasRemoteWriting ? (
@@ -500,7 +500,7 @@ export function PropertiesPanel({
               />
               <div className="my-1 h-px bg-border" />
               <p className="px-[10px] pb-1 pt-1.5 text-[10px] leading-[1.4] text-ink-4">
-                Markdown is local. PDF and Word require a saved writing.
+                Markdown is local. PDF and Word require a saved artifact.
               </p>
             </PopoverContent>
           </Popover>

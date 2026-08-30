@@ -128,7 +128,7 @@ export function CorrectionsPanel({
               Analyze writing and spelling
             </p>
             <p className="text-[11px] text-ink-4">
-              Review this document for spelling, grammar, and punctuation.
+              Review this artifact for spelling, grammar, and punctuation.
             </p>
           </div>
           <button
@@ -185,7 +185,7 @@ export function CorrectionsPanel({
 
           {runState === "failed" ? (
             <p className="text-[11px] text-ink-4">
-              We couldn’t analyze this document. Check your connection and try again.
+              We couldn’t analyze this artifact. Check your connection and try again.
             </p>
           ) : null}
         </div>
@@ -337,7 +337,7 @@ export function CorrectionsPanel({
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Learned words</p>
             <p className="text-[11px] text-ink-4">
-              Saved across your documents.
+              Saved across your artifacts.
             </p>
           </div>
           {learnedWords.length > 0 ? (

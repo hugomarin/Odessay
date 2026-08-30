@@ -154,7 +154,7 @@ describe("WorkspaceTreePanel", () => {
     render(null);
     await settle();
 
-    expect(container.textContent).toContain("No hay un writing activo.");
+    expect(container.textContent).toContain("No active artifact.");
     expect(loadContextualWorkspace).not.toHaveBeenCalled();
   });
 
@@ -165,7 +165,7 @@ describe("WorkspaceTreePanel", () => {
     await settle();
 
     expect(container.textContent).toContain(
-      "Este writing no pertenece a un Workspace.",
+      "This artifact does not belong to a workspace.",
     );
     expect(container.querySelector('[role="tree"]')).toBeNull();
   });
@@ -214,7 +214,7 @@ describe("WorkspaceTreePanel", () => {
     loadContextualWorkspace.mockResolvedValue(found([activeDocument]));
     const retry = Array.from(
       container.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("Reintentar"));
+    ).find((button) => button.textContent?.includes("Retry"));
     await act(async () => {
       retry?.click();
     });
@@ -229,7 +229,7 @@ describe("WorkspaceTreePanel", () => {
     render(ACTIVE_ID);
     await settle();
 
-    expect(container.textContent).toContain("solo está disponible en la app");
+    expect(container.textContent).toContain("only available in the desktop app");
     expect(container.textContent).not.toContain(
       "no pertenece a un Workspace",
     );
@@ -308,7 +308,7 @@ describe("WorkspaceTreePanel", () => {
     }
     // The tree stayed on screen the whole time: no loading state, no remount.
     expect(container.querySelector('[role="tree"]')).not.toBeNull();
-    expect(container.textContent).not.toContain("Cargando Workspace");
+    expect(container.textContent).not.toContain("Loading workspace");
   });
 
   it("keeps folders the author collapsed across a tree rebuild", async () => {

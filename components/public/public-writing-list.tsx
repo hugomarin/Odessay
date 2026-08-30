@@ -131,7 +131,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
                   : "text-ink-3 hover:text-ink-2"
               }`}
             >
-              Todo mi contenido
+              All my content
             </button>
             <button
               type="button"
@@ -142,7 +142,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
                   : "text-ink-3 hover:text-ink-2"
               }`}
             >
-              Como me ven
+              As others see me
             </button>
           </div>
         </div>
@@ -191,7 +191,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
       >
         {displayedWritings.length === 0 ? (
           <p className="py-12 text-center font-lora text-[15px] italic text-ink-3">
-            Nada aquí todavía.
+            Nothing here yet.
           </p>
         ) : (
           displayedWritings.map((writing) => {

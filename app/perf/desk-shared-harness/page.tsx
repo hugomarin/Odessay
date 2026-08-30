@@ -12,7 +12,7 @@ export default function DeskSharedHarnessPage() {
               aria-pressed="false"
               className="rounded-md px-3 py-1.5 text-[13px] font-medium text-ink-3 transition-colors"
             >
-              My writings
+              My artifacts
             </button>
             <button
               type="button"

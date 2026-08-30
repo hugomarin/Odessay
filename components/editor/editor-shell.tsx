@@ -5757,7 +5757,7 @@ export function EditorShell({
         let result = await openDocumentByPath(_path)
         if (result.status === "needs-binding-root-confirmation") {
           const accept = window.confirm(
-            `Register “${result.parentDir}” so Odessay can keep this file’s identity across moves and renames?`,
+            `Register “${result.parentDir}” so Artifact Studio can keep this file’s identity across moves and renames?`,
           )
           if (!accept) return
           result = await openDocumentByPath(_path, { confirmRegisterRoot: true })
@@ -6127,7 +6127,7 @@ export function EditorShell({
                     Desktop Sync
                   </p>
                   <h2 className="mt-3 font-lora text-[26px] leading-[1.25] text-ink">
-                    Syncing your writings…
+                    Syncing your artifacts…
                   </h2>
                   <p className="mt-2 text-[13px] leading-[1.6] text-ink-4">
                     {hydrationProgress.total > 0
