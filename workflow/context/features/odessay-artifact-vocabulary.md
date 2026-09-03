@@ -65,14 +65,60 @@ Decisión del dueño, 2026-08-30, vinculante para todo el paquete:
 El vocabulario es **local-first en desktop**: existe y es editable sin sesión
 iniciada, con los 6 tipos y 7 estados base como default offline — invariante
 de `workflow/agents.md` ("auth habilita capacidades cloud, no existencia
-local"). `[ODE-472]` deja el adapter desktop (`DesktopSettingsService`) en un
-estado `UNAVAILABLE` explícito para las cuatro operaciones de vocabulario —
-deliberadamente, no un stub silencioso que devolviera los items base sin
-error: un stub silencioso ocultaría que `[ODE-473]` todavía no existe.
+local"). `[ODE-472]` dejó el adapter desktop (`DesktopSettingsService`) en un
+estado `UNAVAILABLE` explícito para las cuatro operaciones de vocabulario;
+`[ODE-473]` lo implementa.
 
-`[ODE-473]` implementa la persistencia real en `desktop_settings_v1` y la
-reconciliación al iniciar sesión. *(Esta sección se completa con la regla de
-merge exacta cuando `[ODE-473]` aterriza — no inventarla aquí de antemano.)*
+**Persistencia local.** `DesktopSettingsService` guarda los items
+personalizados y cualquier item base editado en `desktop_settings_v1` bajo la
+clave `vocabularyItems` (JSON, vía `tauri-plugin-store`), junto a
+`workspaces` y `bindingRoots` — sin store durable nuevo. Un item base sin fila
+propia se sintetiza en memoria desde `lib/vocabulary/base-items.ts` con
+`updatedAt` en epoch (`1970-01-01T00:00:00.000Z`), el mismo convenio que usa
+el adapter web (`ODE-472`) para un item base no materializado — eso es lo que
+permite que la regla de merge trate "nunca tocado en ningún lado" como
+"idéntico" sin round trip a la base de datos.
+
+**Borrar con reescritura en desktop.** Borrar un item personalizado consulta
+el catálogo SQLite (`tauriCatalogList`), filtra los documentos cuyo
+`status_cache` / `artifact_type_cache` coincide con el `key` borrado, y
+reescribe cada uno al valor base más su mutación de sync (`mutationKind:
+"metadata"`) **en una sola transacción SQLite** vía
+`tauriCatalogBulkDualWrite` — el catálogo y el encolado de la mutación
+comparten la misma transacción de Rust (`apply_dual_write`), así que no
+pueden desincronizarse entre sí. El envío real a la nube ocurre después, en
+el drenado en background que ya existe (`desktopCatalogSyncService`). Nunca
+toca el `.md`: el `key` solo vive en el caché del catálogo y en la fila de la
+nube.
+
+**Regla de merge (`lib/vocabulary/merge.ts`).** Unión por `(kind, key)`,
+función pura:
+
+- Mismo `(kind, key)` en ambos lados: gana el que tiene `updatedAt` mayor; el
+  perdedor se sobrescribe con el ganador en su lado. `updatedAt` igual
+  (incluido el epoch de dos items base nunca tocados) → no hay escritura.
+- Solo en local → se sube a la nube. Solo en la nube → se baja a local.
+- Los items base nunca se duplican: comparten `key` en ambos lados, así que
+  siempre caen en la rama "mismo key".
+- Dos items personalizados con el mismo nombre visible pero `key` distinto
+  nunca se fusionan — la unión es por `key`, nunca por `name`.
+- Idempotente: si el estado ya convergió (local y nube tienen el mismo
+  `updatedAt` por item), una segunda corrida no produce escrituras.
+
+**Orquestación (`lib/services/desktop/vocabulary-reconciler.ts`).** Se
+dispara al iniciar sesión desde `SyncBootstrap`
+(`components/sync/sync-bootstrap.tsx`), como parte del mismo
+`hydrateFromRemote` que ya hidrata writings y collections. Lee ambos lados,
+corre el merge, aplica `localWrites` a `desktop_settings_v1` en una sola
+escritura (`applyVocabularyMergeLocally`) y `cloudWrites` a
+`vocabulary_items` en un solo upsert por lote (`upsertVocabularyItemRows`,
+reexportado desde `lib/vocabulary/server.ts` porque ese módulo solo depende
+de un `SupabaseClient` genérico, no de Next.js). Si la lectura de la nube
+falla, no toca nada local y reporta `pending` — se reintenta en la próxima
+sesión con sesión iniciada. Si una edición del usuario ocurre mientras se
+reconcilia, esa edición gana: el reconciler toma una foto del estado local al
+empezar y, si detecta que cambió justo antes de escribir, reintenta una vez
+contra el estado nuevo; una segunda colisión aborta dejando lo local intacto.
 
 ## `disabledStatuses` (deprecado)
 
@@ -103,8 +149,8 @@ para que un rollback no pierda la preferencia de nadie.
 
 | Issue | Qué entrega | Estado |
 |---|---|---|
-| `ODE-472` | Schema, contrato de servicio, adapter web | en curso |
-| `ODE-473` | Persistencia desktop + reconciliación al iniciar sesión | pendiente |
+| `ODE-472` | Schema, contrato de servicio, adapter web | hecho |
+| `ODE-473` | Persistencia desktop + reconciliación al iniciar sesión | en curso |
 | `ODE-474` | Catálogo único de cliente; fin de la coerción silenciosa | pendiente |
 | `ODE-475` | Settings › Artifact types / Status conectados | pendiente |
 | `ODE-476` | Repintado de los 22 consumidores | pendiente |
