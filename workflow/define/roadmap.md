@@ -585,6 +585,7 @@ Artifact Studio tiene una identidad visual única y verificable en todas sus sup
 - existen exactamente cinco patrones de overlay y ninguna superficie inventa un sexto;
 - Desk, Studio, Workspace, Add workspace, Settings, Auth y los estados vacíos cumplen su spec y su checklist;
 - la UI dice **artifact**, en inglés, y la marca es una sola geometría en app icon, favicon y `src-tauri/icons/*`;
+- los tipos y estados son vocabulario del usuario, no listas cerradas en el código: se crean, se editan, se ocultan, se propagan sin recargar, sobreviven al reinicio en web y desktop, y ningún componente tiene una versión local del catálogo;
 - la landing existe en `app/(marketing)` y argumenta el problema antes que la solución;
 - ninguna ruta de app paga por la capa de marketing —ni una fuente, ni un token, ni un píxel.
 
@@ -597,6 +598,7 @@ Artifact Studio tiene una identidad visual única y verificable en todas sus sup
 - rediseño vista por vista: Auth/Splash, Desk, preview de artifact, Workspace índice y detalle, Add workspace, Settings, Studio y los tres estados vacíos;
 - barrido de vocabulario a "artifact" en copy;
 - Settings › Workflows, precedido de un design pass que responda sus preguntas abiertas;
+- conversión de artifact types y writing statuses en vocabularios configurables por el usuario: un modelo de persistencia y un servicio compartidos, un solo catálogo en el cliente, y Settings encendido;
 - capa de marketing completa: tokens scoped, primitivas, once secciones, gráficos y cutover de la home.
 
 **Temas que no son objetivo de esta fase**
@@ -618,7 +620,8 @@ Artifact Studio tiene una identidad visual única y verificable en todas sus sup
 7. **M6 — Studio:** shell, tabs, paneles, status bar; después barra AI, sugerencias y palabras aprendidas.
 8. **M7 — cierre de producto:** estados vacíos, barrido de vocabulario, design pass de Workflows y su implementación.
 9. **M8 — marketing:** tokens scoped y grupo de rutas, primitivas, secciones estáticas, gráficos y cutover de la home.
-10. **M9 — gate:** matriz de evidencia del DoD y aceptación explícita del dueño.
+10. **M10 — vocabulario configurable:** esquema y servicio (`ODE-472`), persistencia y reconciliación desktop (`ODE-473`), catálogo único en el cliente (`ODE-474`), Settings encendido (`ODE-475`), consumidores repintados (`ODE-476`) y matriz de evidencia cross-runtime (`ODE-477`). Corre en paralelo a M8; `ODE-474` es `critical-path` de todo lo visible del bloque.
+11. **M9 — gate:** matriz de evidencia del DoD y aceptación explícita del dueño.
 
 Fase 10 corre en paralelo al cierre de Fase 9: `ODE-372` sigue siendo el gate DoD de esa fase y no se absorbe aquí.
 

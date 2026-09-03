@@ -78,6 +78,20 @@ Referencias:
 - El copy de las superficies destructivas (Disconnect, Delete account) declara explícitamente que los archivos locales quedan intactos.
 - Studio se interviene en presentación: `editor-shell.tsx` es punto de integración, no reescritura, y las pruebas existentes del editor siguen verdes.
 
+## 6-bis) Los tipos y estados son vocabulario del usuario, no listas cerradas
+
+Este bloque financia lo que §6 ya afirmaba —*"los colores de tipo y estado provienen siempre de la configuración del usuario"*— y que hasta `ODE-472`..`ODE-477` no tenía dónde persistir. `ODE-432` entregó la superficie de Settings apagada a propósito y lo declaró en el código; este bloque la enciende.
+
+- El usuario crea, renombra, recolorea y reicona tipos de artifact y estados de escritura desde Settings, y esos cambios existen en un solo modelo de persistencia y un solo servicio, compartidos por web y desktop.
+- Los tipos base y el estado `Draft` conservan sus protecciones: se pueden editar, no borrar; `Draft` además no se puede ocultar.
+- Ocultar un estado lo saca de menús y filtros y **no** modifica ningún artifact existente. Borrar un item personalizado sí reescribe al valor base (`General` / `Draft`) los artifacts que lo usaban, siempre tras una confirmación que nombra cuántos son — decisión del dueño, 2026-08-30.
+- El vocabulario es local-first en desktop: existe sin sesión iniciada, con los tipos y estados actuales como default sin conexión, y se reconcilia con la nube al autenticar según una regla escrita y determinista.
+- Ningún componente conserva una versión local del catálogo. `lib/writings/status-color.ts` y `lib/writings/artifact-type-color.ts` dejan de existir y no queda ningún `switch` sobre valores de vocabulario en `components/`; se verifica por grep en REVIEW, igual que los tokens prohibidos.
+- Un valor que ya no está en el catálogo se **preserva**, nunca se coerciona en silencio: la coerción actual de `normalizeWritingStatus` y `normalizeArtifactType` a `draft`/`general` desaparece.
+- Un cambio de nombre, icono o color repinta Desk, Studio, Workspace, filtros, badges y preview sin recargar, y sobrevive al reinicio y a la rehidratación.
+- Ninguna de estas operaciones escribe metadata en el frontmatter ni altera el contenido de un `.md`, demostrado por comparación de hash del archivo antes y después.
+- La asistencia AI del modal ("Recommend to me", "Improve with AI") queda fuera del alcance de la fase y permanece deshabilitada con su razón visible — decisión del dueño, 2026-08-30.
+
 ## 7) El vocabulario y la marca son uno solo
 
 - Toda la UI dice **artifact**, en inglés, en producto y en landing. No quedan restos de "writing"/"document" en copy visible al usuario; los nombres de archivo y símbolos se migran en un pase mecánico separado y declarado.
