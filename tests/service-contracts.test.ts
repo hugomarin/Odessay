@@ -53,7 +53,13 @@ import {
   type SettingsService,
   type UpdateUserSettingsInput,
   type UserSettings,
+  type VocabularyDeleteResult,
 } from "@/lib/services/contracts/settings-service"
+import type {
+  CreateVocabularyItemInput,
+  UpdateVocabularyItemInput,
+  VocabularyItem,
+} from "@/lib/vocabulary/types"
 import {
   SHARING_SERVICE_CONTRACT,
   type PreviewLinkState,
@@ -103,7 +109,7 @@ const contractFiles = [
   "lib/services/contracts/settings-service.ts",
 ]
 
-const allowedImports = new Set(["./service-types", "@/lib/writings/status"])
+const allowedImports = new Set(["./service-types", "@/lib/writings/status", "@/lib/vocabulary/types"])
 
 describe("service contracts", () => {
   it("covers every phase-4 service boundary with descriptors, invariants, and hotspots", () => {
@@ -282,6 +288,18 @@ describe("service contracts", () => {
     >()
     expectTypeOf<SettingsService["updateUserSettings"]>().toEqualTypeOf<
       (input: UpdateUserSettingsInput) => Promise<ServiceResponse<UserSettings>>
+    >()
+    expectTypeOf<SettingsService["listVocabulary"]>().toEqualTypeOf<
+      () => Promise<ServiceResponse<VocabularyItem[]>>
+    >()
+    expectTypeOf<SettingsService["createVocabularyItem"]>().toEqualTypeOf<
+      (input: CreateVocabularyItemInput) => Promise<ServiceResponse<VocabularyItem>>
+    >()
+    expectTypeOf<SettingsService["updateVocabularyItem"]>().toEqualTypeOf<
+      (id: string, input: UpdateVocabularyItemInput) => Promise<ServiceResponse<VocabularyItem>>
+    >()
+    expectTypeOf<SettingsService["deleteVocabularyItem"]>().toEqualTypeOf<
+      (id: string) => Promise<ServiceResponse<VocabularyDeleteResult>>
     >()
   })
 })

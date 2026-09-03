@@ -1,4 +1,9 @@
 import type { WritingStatus } from "@/lib/writings/status"
+import type {
+  CreateVocabularyItemInput,
+  UpdateVocabularyItemInput,
+  VocabularyItem,
+} from "@/lib/vocabulary/types"
 import {
   PHASE_4_REQUIRED_DOCS,
   SERVICE_RESPONSE_ENVELOPE,
@@ -7,16 +12,30 @@ import {
 } from "./service-types"
 
 export type UserSettings = {
+  /** @deprecated derived from `vocabulary` (hidden status items) — ODE-472. Kept so existing consumers keep compiling while [ODE-474]/[ODE-475] migrate off it. */
   disabledStatuses: WritingStatus[]
+  vocabulary: VocabularyItem[]
 }
 
 export type UpdateUserSettingsInput = {
   disabledStatuses?: WritingStatus[]
 }
 
+export type VocabularyDeleteResult = {
+  /** Number of writings rewritten to the base value (`general` / `draft`). */
+  rewrittenCount: number
+}
+
 export interface SettingsService {
   getUserSettings(): Promise<ServiceResponse<UserSettings>>
   updateUserSettings(input: UpdateUserSettingsInput): Promise<ServiceResponse<UserSettings>>
+  listVocabulary(): Promise<ServiceResponse<VocabularyItem[]>>
+  createVocabularyItem(input: CreateVocabularyItemInput): Promise<ServiceResponse<VocabularyItem>>
+  updateVocabularyItem(
+    id: string,
+    input: UpdateVocabularyItemInput,
+  ): Promise<ServiceResponse<VocabularyItem>>
+  deleteVocabularyItem(id: string): Promise<ServiceResponse<VocabularyDeleteResult>>
 }
 
 export const SETTINGS_SERVICE_CONTRACT = {
@@ -52,6 +71,38 @@ export const SETTINGS_SERVICE_CONTRACT = {
       summary: "Update normalized user settings for the active account.",
       input: ["optional disabledStatuses"],
       output: ["UserSettings"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "DB_ERROR", "UNAVAILABLE"],
+    },
+    {
+      name: "listVocabulary",
+      kind: "query",
+      summary: "List the user's artifact type and status vocabulary, base items included, seeded lazily.",
+      input: ["none"],
+      output: ["VocabularyItem[]"],
+      errorCodes: ["UNAUTHORIZED", "DB_ERROR", "UNAVAILABLE"],
+    },
+    {
+      name: "createVocabularyItem",
+      kind: "command",
+      summary: "Create a custom type or status item.",
+      input: ["CreateVocabularyItemInput"],
+      output: ["VocabularyItem"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "DB_ERROR", "UNAVAILABLE"],
+    },
+    {
+      name: "updateVocabularyItem",
+      kind: "command",
+      summary: "Update name/description/icon/color/hidden of a vocabulary item. Base items may be renamed and restyled but never deleted; draft cannot be hidden.",
+      input: ["id", "UpdateVocabularyItemInput"],
+      output: ["VocabularyItem"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "DB_ERROR", "UNAVAILABLE"],
+    },
+    {
+      name: "deleteVocabularyItem",
+      kind: "command",
+      summary: "Delete a custom vocabulary item, rewriting affected writings to the base value in the same transaction.",
+      input: ["id"],
+      output: ["VocabularyDeleteResult"],
       errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "DB_ERROR", "UNAVAILABLE"],
     },
   ],

@@ -57,6 +57,10 @@ const allowedImports = new Set([
   "@/lib/sync/desktop-catalog-sync-service",
   "@/lib/workspace/types",
   "@/lib/workspace/assignment",
+  // ODE-472 — vocabulary types are shared-core (no runtime deps); the desktop
+  // adapter's four vocabulary methods are explicit UNAVAILABLE stubs until
+  // ODE-473 implements desktop persistence.
+  "@/lib/vocabulary/types",
   "@/lib/local-db",
   "@/lib/desktop/document-naming",
   "@/lib/editor/document-serialization",

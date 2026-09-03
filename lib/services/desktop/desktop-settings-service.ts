@@ -2,7 +2,13 @@ import type {
   SettingsService,
   UpdateUserSettingsInput,
   UserSettings,
+  VocabularyDeleteResult,
 } from "@/lib/services/contracts/settings-service"
+import type {
+  CreateVocabularyItemInput,
+  UpdateVocabularyItemInput,
+  VocabularyItem,
+} from "@/lib/vocabulary/types"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import {
   tauriSettingsDelete,
@@ -81,12 +87,13 @@ export class DesktopSettingsService implements SettingsService {
   }
 
   private async readStore(): Promise<DesktopSettings> {
+    const empty: DesktopSettings = { disabledStatuses: [], vocabulary: [] }
     try {
       const raw = await tauriSettingsRead(this.configDir, SETTINGS_KEY)
-      if (raw === null) return { disabledStatuses: [] }
-      return (raw as DesktopSettings) ?? { disabledStatuses: [] }
+      if (raw === null) return empty
+      return { ...empty, ...(raw as DesktopSettings) }
     } catch {
-      return { disabledStatuses: [] }
+      return empty
     }
   }
 
@@ -99,7 +106,11 @@ export class DesktopSettingsService implements SettingsService {
   async getUserSettings(): Promise<ServiceResponse<UserSettings>> {
     try {
       const store = await this.readStore()
-      return ok({ disabledStatuses: store.disabledStatuses ?? [] })
+      // Vocabulary is not yet persisted on desktop — [ODE-473] implements it.
+      // Empty here (not base items) is correct: this is the SettingsService
+      // contract, and the client-side catalog ([ODE-474]) is what falls back
+      // to base items on an UNAVAILABLE listVocabulary() below.
+      return ok({ disabledStatuses: store.disabledStatuses ?? [], vocabulary: [] })
     } catch (e) {
       return err("UNAVAILABLE", e instanceof Error ? e.message : "Failed to read settings")
     }
@@ -114,10 +125,34 @@ export class DesktopSettingsService implements SettingsService {
         store.disabledStatuses = input.disabledStatuses
       }
       await this.writeStore(store)
-      return ok({ disabledStatuses: store.disabledStatuses ?? [] })
+      return ok({ disabledStatuses: store.disabledStatuses ?? [], vocabulary: [] })
     } catch (e) {
       return err("UNAVAILABLE", e instanceof Error ? e.message : "Failed to write settings")
     }
+  }
+
+  // ─── Vocabulary (stub — implemented by [ODE-473]) ─────────────────────────
+  // Deliberately UNAVAILABLE, not a silent empty-list success: a silent stub
+  // would make [ODE-473] look unnecessary in web QA and would show desktop a
+  // vocabulary it cannot actually save.
+
+  async listVocabulary(): Promise<ServiceResponse<VocabularyItem[]>> {
+    return err("UNAVAILABLE", "Desktop vocabulary persistence is not implemented yet (ODE-473).")
+  }
+
+  async createVocabularyItem(_input: CreateVocabularyItemInput): Promise<ServiceResponse<VocabularyItem>> {
+    return err("UNAVAILABLE", "Desktop vocabulary persistence is not implemented yet (ODE-473).")
+  }
+
+  async updateVocabularyItem(
+    _id: string,
+    _input: UpdateVocabularyItemInput,
+  ): Promise<ServiceResponse<VocabularyItem>> {
+    return err("UNAVAILABLE", "Desktop vocabulary persistence is not implemented yet (ODE-473).")
+  }
+
+  async deleteVocabularyItem(_id: string): Promise<ServiceResponse<VocabularyDeleteResult>> {
+    return err("UNAVAILABLE", "Desktop vocabulary persistence is not implemented yet (ODE-473).")
   }
 
   // ─── Desktop-specific settings ─────────────────────────────────────────────

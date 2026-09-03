@@ -30,16 +30,36 @@ describe("DesktopSettingsService", () => {
   it("getUserSettings returns default settings when store is empty", async () => {
     const result = await service.getUserSettings()
     expect(result.error).toBeNull()
-    expect(result.data).toEqual({ disabledStatuses: [] })
+    expect(result.data).toEqual({ disabledStatuses: [], vocabulary: [] })
   })
 
   it("updateUserSettings persists disabledStatuses", async () => {
     const update = await service.updateUserSettings({ disabledStatuses: ["archived"] })
     expect(update.error).toBeNull()
-    expect(update.data).toEqual({ disabledStatuses: ["archived"] })
+    expect(update.data).toEqual({ disabledStatuses: ["archived"], vocabulary: [] })
 
     const read = await service.getUserSettings()
-    expect(read.data).toEqual({ disabledStatuses: ["archived"] })
+    expect(read.data).toEqual({ disabledStatuses: ["archived"], vocabulary: [] })
+  })
+
+  it("vocabulary operations are explicitly UNAVAILABLE (ODE-473 implements desktop persistence)", async () => {
+    const list = await service.listVocabulary()
+    expect(list.data).toBeNull()
+    expect(list.error?.code).toBe("UNAVAILABLE")
+
+    const create = await service.createVocabularyItem({
+      kind: "type",
+      name: "Research",
+      icon: "compass",
+      color: "#5B5BD6",
+    })
+    expect(create.error?.code).toBe("UNAVAILABLE")
+
+    const update = await service.updateVocabularyItem("some-id", { name: "Renamed" })
+    expect(update.error?.code).toBe("UNAVAILABLE")
+
+    const del = await service.deleteVocabularyItem("some-id")
+    expect(del.error?.code).toBe("UNAVAILABLE")
   })
 
   it("getDesktopSettings returns full settings object", async () => {
@@ -71,6 +91,6 @@ describe("DesktopSettingsService", () => {
     expect(clear.error).toBeNull()
 
     const result = await service.getDesktopSettings()
-    expect(result.data).toEqual({ disabledStatuses: [] })
+    expect(result.data).toEqual({ disabledStatuses: [], vocabulary: [] })
   })
 })

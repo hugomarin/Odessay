@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
 import type { WritingStatus } from "@/lib/writings/status"
 import type { UserSettings } from "@/lib/user/settings"
+import type { VocabularyItem } from "@/lib/vocabulary/types"
 import { isTauriRuntime } from "@/lib/runtime/detect"
 
 type UserSettingsContextValue = {
@@ -15,6 +16,7 @@ type UserSettingsContextValue = {
 
 const DEFAULT_SETTINGS: UserSettings = {
   disabledStatuses: [],
+  vocabulary: [],
 }
 
 const UserSettingsContext = createContext<UserSettingsContextValue>({
@@ -50,7 +52,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
     try {
       const response = await fetch("/api/user/settings", { method: "GET" })
       const payload = (await response.json()) as {
-        data: { disabledStatuses: WritingStatus[] } | null
+        data: { disabledStatuses: WritingStatus[]; vocabulary: VocabularyItem[] } | null
         error: { code: string; message: string } | null
       }
 
@@ -58,7 +60,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
         throw new Error(payload.error?.message ?? "Failed to load settings.")
       }
 
-      setSettings({ disabledStatuses: payload.data.disabledStatuses })
+      setSettings({ disabledStatuses: payload.data.disabledStatuses, vocabulary: payload.data.vocabulary })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load settings.")
     } finally {
@@ -68,7 +70,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
 
   const update = useCallback(async (updates: { disabledStatuses: WritingStatus[] }) => {
     if (isTauriRuntime()) {
-      setSettings({ disabledStatuses: updates.disabledStatuses })
+      setSettings((prev) => ({ ...prev, disabledStatuses: updates.disabledStatuses }))
       return
     }
 
@@ -83,7 +85,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
       })
 
       const payload = (await response.json()) as {
-        data: { disabledStatuses: WritingStatus[] } | null
+        data: { disabledStatuses: WritingStatus[]; vocabulary: VocabularyItem[] } | null
         error: { code: string; message: string } | null
       }
 
@@ -91,7 +93,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
         throw new Error(payload.error?.message ?? "Failed to save settings.")
       }
 
-      setSettings({ disabledStatuses: payload.data.disabledStatuses })
+      setSettings({ disabledStatuses: payload.data.disabledStatuses, vocabulary: payload.data.vocabulary })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings.")
       throw err
