@@ -3,7 +3,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
 import type { WritingStatus } from "@/lib/writings/status"
 import type { UserSettings } from "@/lib/user/settings"
-import type { VocabularyItem } from "@/lib/vocabulary/types"
 import { isTauriRuntime } from "@/lib/runtime/detect"
 
 type UserSettingsContextValue = {
@@ -31,28 +30,47 @@ export function useUserSettingsContext() {
   return useContext(UserSettingsContext)
 }
 
+async function getDesktopSettingsService() {
+  const [{ appConfigDir }, { DesktopSettingsService }] = await Promise.all([
+    import("@tauri-apps/api/path"),
+    import("@/lib/services/desktop/desktop-settings-service"),
+  ])
+  return new DesktopSettingsService(await appConfigDir())
+}
+
 export function UserSettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    // Desktop runtime stays local-first: the cloud settings endpoint lives behind the
-    // web auth gate. Keep defaults until a native SettingsService lands (ODE-218+).
-    if (isTauriRuntime()) {
-      setSettings(DEFAULT_SETTINGS)
-      setIsLoading(false)
-      setError(null)
-      return
-    }
-
     setIsLoading(true)
     setError(null)
+
+    // ODE-473: desktop is local-first and reads its own SettingsService adapter
+    // (desktop_settings_v1) rather than the cloud-gated web route — vocabulary
+    // and disabledStatuses exist without a signed-in session.
+    if (isTauriRuntime()) {
+      try {
+        const service = await getDesktopSettingsService()
+        const result = await service.getUserSettings()
+        if (result.error) {
+          throw new Error(result.error.message)
+        }
+        setSettings(result.data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load settings.")
+        setSettings(DEFAULT_SETTINGS)
+      } finally {
+        setIsLoading(false)
+      }
+      return
+    }
 
     try {
       const response = await fetch("/api/user/settings", { method: "GET" })
       const payload = (await response.json()) as {
-        data: { disabledStatuses: WritingStatus[]; vocabulary: VocabularyItem[] } | null
+        data: UserSettings | null
         error: { code: string; message: string } | null
       }
 
@@ -60,7 +78,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
         throw new Error(payload.error?.message ?? "Failed to load settings.")
       }
 
-      setSettings({ disabledStatuses: payload.data.disabledStatuses, vocabulary: payload.data.vocabulary })
+      setSettings(payload.data)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load settings.")
     } finally {
@@ -69,13 +87,25 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
   }, [])
 
   const update = useCallback(async (updates: { disabledStatuses: WritingStatus[] }) => {
-    if (isTauriRuntime()) {
-      setSettings((prev) => ({ ...prev, disabledStatuses: updates.disabledStatuses }))
-      return
-    }
-
     setIsLoading(true)
     setError(null)
+
+    if (isTauriRuntime()) {
+      try {
+        const service = await getDesktopSettingsService()
+        const result = await service.updateUserSettings(updates)
+        if (result.error) {
+          throw new Error(result.error.message)
+        }
+        setSettings(result.data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to save settings.")
+        throw err
+      } finally {
+        setIsLoading(false)
+      }
+      return
+    }
 
     try {
       const response = await fetch("/api/user/settings", {
@@ -85,7 +115,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
       })
 
       const payload = (await response.json()) as {
-        data: { disabledStatuses: WritingStatus[]; vocabulary: VocabularyItem[] } | null
+        data: UserSettings | null
         error: { code: string; message: string } | null
       }
 
@@ -93,7 +123,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
         throw new Error(payload.error?.message ?? "Failed to save settings.")
       }
 
-      setSettings({ disabledStatuses: payload.data.disabledStatuses, vocabulary: payload.data.vocabulary })
+      setSettings(payload.data)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings.")
       throw err
