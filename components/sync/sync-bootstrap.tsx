@@ -20,6 +20,18 @@ export function SyncBootstrap() {
       try {
         await syncService.hydrateWritings();
         await syncService.hydrateCollections();
+        if (desktop) {
+          // ODE-473: local/cloud vocabulary merge on sign-in. Best-effort —
+          // a failure here never blocks writings hydration or leaves the
+          // local vocabulary in a worse state; it just retries next session.
+          const { reconcileVocabularyOnSignIn } = await import(
+            "@/lib/services/desktop/vocabulary-reconciler"
+          );
+          const outcome = await reconcileVocabularyOnSignIn(userId);
+          if (outcome.status === "pending") {
+            console.warn("[sync:bootstrap] vocabulary reconciliation pending", outcome.reason);
+          }
+        }
         lastHydratedUserIdRef.current = userId;
         return true;
       } catch (error) {
