@@ -273,4 +273,78 @@ describe("editor persistence coordinator", () => {
     expect(committed).not.toHaveBeenCalled()
     expect(states).toEqual(["persisting_local"])
   })
+
+  // ODE-478 case 1: an edit typed while a save is already in flight used to be
+  // discarded outright if the author switched documents before that save
+  // finished — `queued` was nulled on the switch, and even when it survived,
+  // the drained continuation was filtered by the generation it could never
+  // match again. Both of those were the actual bug; this reproduces the
+  // realistic shape (a save that takes real time to complete, not an instant
+  // mock) so the regression can't hide behind a synchronous save the way it
+  // did in the pre-fix suite.
+  it("still writes a queued edit to disk after switching documents mid-save", async () => {
+    const savedBodies: string[] = []
+    const deferred: { resolve: (() => void) | null } = { resolve: null }
+    const saveWriting = vi.fn((input: { writing: WritingRecord }) => {
+      savedBodies.push(input.writing.content.plainText)
+      if (savedBodies.length === 1) {
+        return new Promise<{ data: WritingRecord; error: null }>((resolve) => {
+          deferred.resolve = () => resolve(response(baseRecord("writing-1")))
+        })
+      }
+      return Promise.resolve(response(baseRecord("writing-1")))
+    })
+
+    const coordinator = createPersistenceCoordinator(
+      {
+        runtime: "desktop",
+        documentService: { saveWriting },
+        createWritingId: () => "unused",
+        now: () => "2026-08-27T00:00:02.000Z",
+      },
+      {},
+    )
+
+    // First edit starts saving and stalls mid-flight, like a real fs write.
+    const firstSave = coordinator.persist(snapshot({ writingId: "writing-1", bodyText: "primero" }))
+    // A second edit to the same document arrives while that save is in flight.
+    void coordinator.persist(snapshot({ writingId: "writing-1", bodyText: "segundo" }))
+    // The author switches to a different document before the first save resolves.
+    coordinator.activateDocument("writing-2")
+
+    deferred.resolve?.()
+    await firstSave
+
+    await vi.waitFor(() => expect(savedBodies).toEqual(["primero", "segundo"]))
+  })
+
+  it("does not let a stale mid-flight save corrupt the document switched to", async () => {
+    const deferred: { resolve: (() => void) | null } = { resolve: null }
+    const saveWriting = vi.fn(() => new Promise<{ data: WritingRecord; error: null }>((resolve) => {
+      deferred.resolve = () => resolve(response(baseRecord("writing-1", 5)))
+    }))
+    const committedIds: string[] = []
+
+    const coordinator = createPersistenceCoordinator(
+      {
+        runtime: "desktop",
+        documentService: { saveWriting },
+        createWritingId: () => "unused",
+        now: () => "2026-08-27T00:00:02.000Z",
+      },
+      { onCommitted: ({ record }) => committedIds.push(record.id) },
+    )
+
+    const firstSave = coordinator.persist(snapshot({ writingId: "writing-1", bodyText: "old doc" }))
+    coordinator.activateDocument("writing-2")
+    void coordinator.persist(snapshot({ writingId: "writing-2", bodyText: "new doc", version: 1 }))
+
+    deferred.resolve?.()
+    await firstSave
+
+    // The stale completion for writing-1 must never fire onCommitted (it
+    // would otherwise overwrite the now-active writing-2's displayed
+    // version/createdAt with writing-1's).
+    expect(committedIds).not.toContain("writing-1")
+  })
 })

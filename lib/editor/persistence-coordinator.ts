@@ -42,6 +42,8 @@ export type PersistenceSnapshot = {
   lifecycle: WritingLifecycle
   /** Stable UUID candidate used while a desktop draft is still ephemeral. */
   draftWritingId?: string | null
+  /** Session tab that owns this snapshot while it is being persisted. */
+  sourceTabId?: string | null
 }
 
 export type PersistenceStateEvent = {
@@ -65,6 +67,14 @@ export type PersistenceCommitEvent = {
   record: WritingRecord
   created: boolean
   diagnostics: PersistenceDiagnostics
+  /**
+   * False when the document/generation this request was writing for is no
+   * longer the active one (the author switched away before the write
+   * finished). The write still happened — `current` only tells a listener
+   * whether it's safe to reflect this record in the active editor's UI, or
+   * whether it must be reconciled into background state only (ODE-478).
+   */
+  current: boolean
 }
 
 export type PersistenceCoordinatorDeps = {
@@ -102,6 +112,7 @@ export type PersistenceCoordinatorEvents = {
   onMaterialized?: (event: PersistenceCommitEvent) => void
   onIdentityCreated?: (writingId: string) => void
   onCommitted?: (event: PersistenceCommitEvent) => void
+  onBackgroundCommitted?: (event: PersistenceCommitEvent) => void
   onError?: (event: PersistenceStateEvent & { operation: "draft-materialization" | "save" | "schedule" }) => void
 }
 
@@ -110,12 +121,28 @@ export type PersistenceCoordinator = {
   activateDocument(writingId: string | null): void
   cancel(): void
   dispose(): void
+  hasPending(target?: PersistenceSettleTarget): boolean
+  /**
+   * Resolves once nothing is in flight, debounced or queued — flushing a
+   * pending debounce immediately rather than waiting out its timer. For a
+   * caller that needs to know a write has actually landed before proceeding
+   * (e.g. closing a tab must not race an unsaved edit, ODE-478 case 5).
+   */
+  settle(target?: PersistenceSettleTarget): Promise<boolean>
+}
+
+export type PersistenceSettleTarget = {
+  writingId: string | null
+  draftWritingId?: string | null
+  sourceTabId?: string | null
 }
 
 type PersistenceRequest = {
   snapshot: PersistenceSnapshot
   overrides?: PersistenceSnapshotOverrides
   generation: number
+  key: string
+  waiters: Array<(result: boolean) => void>
 }
 
 function unexpected(error: unknown): ServiceError {
@@ -143,8 +170,8 @@ function errorFromResponse(response: ServiceResponse<unknown>): ServiceError | n
 
 /**
  * Coordinates editor persistence without coupling the editor to a runtime
- * adapter. It deliberately has one in-flight request and retains only the
- * latest request that arrived while that request was running.
+ * adapter. It deliberately has one in-flight request and retains the latest
+ * request for every document/tab that arrived while writes were running.
  */
 export function createPersistenceCoordinator(
   deps: PersistenceCoordinatorDeps,
@@ -153,16 +180,135 @@ export function createPersistenceCoordinator(
   let activeDocumentId: string | null = null
   let generation = 0
   let inFlight = false
-  let queued: PersistenceRequest | null = null
   let disposed = false
-  let activeRecord: WritingRecord | null = null
-  let scheduledRequest: PersistenceRequest | null = null
+  let inFlightRequest: PersistenceRequest | null = null
+  /** The in-flight `start()` call's promise, if any. */
+  let currentRun: Promise<boolean> | null = null
+  /** One latest request per document/tab identity, preserving background tabs. */
+  const pendingRequests = new Map<string, PersistenceRequest>()
+  let scheduledKey: string | null = null
   let scheduledTimer: ReturnType<typeof setTimeout> | null = null
-  let scheduledResolvers: Array<(result: boolean) => void> = []
   const persistenceDebounceMs = Math.max(0, deps.persistenceDebounceMs ?? 0)
   const nowMs = deps.nowMs ?? Date.now
+  const materializedDrafts = new Map<string, WritingRecord>()
 
   const isCurrent = (request: PersistenceRequest) => !disposed && request.generation === generation
+
+  const getRequestKey = (snapshot: PersistenceSnapshot) =>
+    snapshot.writingId ?? snapshot.draftWritingId ?? snapshot.sourceTabId ?? "unidentified-document"
+
+  const normalizeSnapshot = (snapshot: PersistenceSnapshot): PersistenceSnapshot => {
+    if (snapshot.writingId || !snapshot.draftWritingId) {
+      return snapshot
+    }
+
+    const materialized = materializedDrafts.get(snapshot.draftWritingId)
+    if (!materialized) {
+      return snapshot
+    }
+
+    return {
+      ...snapshot,
+      writingId: materialized.id,
+      createdAt: snapshot.createdAt ?? materialized.createdAt,
+      version: Math.max(snapshot.version, materialized.version),
+    }
+  }
+
+  const matchesTarget = (request: PersistenceRequest, target?: PersistenceSettleTarget) => {
+    if (!target) return true
+    if (target.sourceTabId && request.snapshot.sourceTabId === target.sourceTabId) return true
+    if (target.writingId && request.snapshot.writingId === target.writingId) return true
+    if (
+      target.writingId === null &&
+      target.draftWritingId &&
+      materializedDrafts.get(target.draftWritingId)?.id === request.snapshot.writingId
+    ) {
+      return true
+    }
+    if (
+      target.writingId === null &&
+      target.draftWritingId &&
+      request.snapshot.writingId === null &&
+      request.snapshot.draftWritingId === target.draftWritingId
+    ) {
+      return true
+    }
+    return false
+  }
+
+  const rebindMaterializedDraftRequests = (draftWritingId: string, record: WritingRecord) => {
+    const rebinding = Array.from(pendingRequests.entries()).filter(
+      ([, request]) => request.snapshot.writingId === null && request.snapshot.draftWritingId === draftWritingId,
+    )
+
+    rebinding.forEach(([pendingKey, request]) => {
+      const nextSnapshot = {
+        ...request.snapshot,
+        writingId: record.id,
+        createdAt: request.snapshot.createdAt ?? record.createdAt,
+        version: Math.max(request.snapshot.version, record.version),
+        sourceTabId: record.id,
+      }
+      const nextKey = getRequestKey(nextSnapshot)
+      const existing = pendingRequests.get(nextKey)
+
+      pendingRequests.delete(pendingKey)
+      if (existing && existing !== request) {
+        existing.snapshot = nextSnapshot
+        existing.overrides = request.overrides
+        existing.generation = request.generation
+        existing.waiters.push(...request.waiters)
+        return
+      }
+
+      request.snapshot = nextSnapshot
+      request.key = nextKey
+      pendingRequests.set(nextKey, request)
+    })
+  }
+
+  const resolveRequest = (request: PersistenceRequest, result: boolean) => {
+    const waiters = request.waiters
+    request.waiters = []
+    waiters.forEach((resolve) => resolve(result))
+  }
+
+  const advancePendingVersions = (record: WritingRecord) => {
+    pendingRequests.forEach((request) => {
+      const snapshot = request.snapshot
+      const materializedId = snapshot.writingId ??
+        (snapshot.draftWritingId ? materializedDrafts.get(snapshot.draftWritingId)?.id : null)
+      if (materializedId !== record.id) {
+        return
+      }
+
+      request.snapshot = {
+        ...request.snapshot,
+        createdAt: snapshot.createdAt ?? record.createdAt,
+        version: Math.max(snapshot.version, record.version),
+      }
+    })
+  }
+
+  const findPendingEntry = (snapshot: PersistenceSnapshot, key: string) => {
+    const direct = pendingRequests.get(key)
+    if (direct) {
+      return { key, request: direct }
+    }
+
+    if (!snapshot.writingId) {
+      return null
+    }
+
+    for (const [pendingKey, request] of pendingRequests) {
+      if (normalizeSnapshot(request.snapshot).writingId === snapshot.writingId) {
+        return { key: pendingKey, request }
+      }
+    }
+
+    return null
+  }
 
   const emit = (
     state: PersistenceState,
@@ -207,13 +353,22 @@ export function createPersistenceCoordinator(
   }
 
   const persistNow = async (request: PersistenceRequest): Promise<boolean> => {
+    request.snapshot = normalizeSnapshot(request.snapshot)
+    request.key = getRequestKey(request.snapshot)
     const { snapshot, overrides } = request
-    if (!isCurrent(request)) return false
+    // A document switch (generation bump) must never stop this write from
+    // reaching disk — it only means the UI-facing callbacks below get scoped
+    // to `current` instead of firing unconditionally (ODE-478 case 1).
     const startedAt = nowMs()
 
     if (!snapshot.writingId && deps.runtime === "desktop") {
-      // Desktop drafts are not durable until they contain real content.
-      if (snapshot.bodyText.trim() === "") {
+      // Desktop drafts are not durable until they carry either real content
+      // or an explicit name. An empty "Untitled" with nothing typed into it
+      // stays ephemeral — but naming a still-blank draft is just as
+      // deliberate a signal as the first keystroke, and must materialize the
+      // same way, not silently no-op (ODE-478 case 3).
+      const hasExplicitTitle = Boolean(overrides?.title?.trim())
+      if (snapshot.bodyText.trim() === "" && !hasExplicitTitle) {
         return true
       }
 
@@ -241,7 +396,6 @@ export function createPersistenceCoordinator(
           initialBodyJson: snapshot.bodyJson,
           initialBodyText: snapshot.bodyText,
         })
-        if (!isCurrent(request)) return false
 
         const error = errorFromResponse(result)
         if (error || !result.data) {
@@ -249,22 +403,35 @@ export function createPersistenceCoordinator(
         }
 
         const materialized = result.data
-        activeDocumentId = materialized.id
-        activeRecord = materialized
+        if (snapshot.draftWritingId) {
+          materializedDrafts.set(snapshot.draftWritingId, materialized)
+          rebindMaterializedDraftRequests(snapshot.draftWritingId, materialized)
+        }
+        const current = isCurrent(request)
+        // Only a still-current request may reassign the coordinator's own
+        // notion of "the active document" — otherwise this background write
+        // would silently steal the identity the author already switched to.
+        if (current) {
+          activeDocumentId = materialized.id
+        }
         const diagnostics: PersistenceDiagnostics = {
           operation: "draft-materialization",
           durationMs: Math.max(0, nowMs() - startedAt),
           payloadBytes: snapshot.bodyText.length,
         }
-        const commit = { snapshot, record: materialized, created: true, diagnostics }
+        const commit = { snapshot, record: materialized, created: true, diagnostics, current }
+        // Fires unconditionally: a file was just written for this snapshot
+        // and something must own reconciling it into the tab/session store,
+        // even when the author is no longer looking at it (ODE-478 case 4 —
+        // the alternative is an orphaned file no tab ever points to).
         events.onMaterialized?.(commit)
-        await scheduleAfterCommit(request, materialized.id)
-        if (!isCurrent(request)) return false
-        events.onCommitted?.(commit)
-        emit("queued_remote", request, materialized.id, materialized, undefined, true, diagnostics)
+        if (current) {
+          await scheduleAfterCommit(request, materialized.id)
+          events.onCommitted?.(commit)
+          emit("queued_remote", request, materialized.id, materialized, undefined, true, diagnostics)
+        }
         return true
       } catch (error) {
-        if (!isCurrent(request)) return false
         const serviceError = unexpected(error)
         emit("failed", request, null, undefined, serviceError)
         events.onError?.({
@@ -283,8 +450,10 @@ export function createPersistenceCoordinator(
     let writingId = snapshot.writingId
     if (!writingId) {
       writingId = deps.createWritingId()
-      activeDocumentId = writingId
-      if (isCurrent(request)) events.onIdentityCreated?.(writingId)
+      if (isCurrent(request)) {
+        activeDocumentId = writingId
+        events.onIdentityCreated?.(writingId)
+      }
     }
 
     const nowIso = deps.now()
@@ -315,28 +484,33 @@ export function createPersistenceCoordinator(
 
     try {
       const result = await deps.documentService.saveWriting({ writing: record })
-      if (!isCurrent(request)) return false
-
       const error = errorFromResponse(result)
       if (error || !result.data) {
         throw error ?? new Error("Failed to save writing")
       }
 
       const savedRecord = result.data
-      activeRecord = savedRecord
+      const current = isCurrent(request)
+      advancePendingVersions(savedRecord)
       const diagnostics: PersistenceDiagnostics = {
         operation: "save",
         durationMs: Math.max(0, nowMs() - startedAt),
         payloadBytes: snapshot.bodyText.length,
       }
-      const commit = { snapshot, record: savedRecord, created: snapshot.writingId === null, diagnostics }
-      await scheduleAfterCommit(request, savedRecord.id)
-      if (!isCurrent(request)) return false
-      events.onCommitted?.(commit)
-      emit("queued_remote", request, savedRecord.id, savedRecord, undefined, false, diagnostics)
+      const commit = { snapshot, record: savedRecord, created: snapshot.writingId === null, diagnostics, current }
+      if (current) {
+        await scheduleAfterCommit(request, savedRecord.id)
+      }
+      if (current) {
+        events.onCommitted?.(commit)
+      } else {
+        events.onBackgroundCommitted?.(commit)
+      }
+      if (current) {
+        emit("queued_remote", request, savedRecord.id, savedRecord, undefined, false, diagnostics)
+      }
       return true
     } catch (error) {
-      if (!isCurrent(request)) return false
       const serviceError = unexpected(error)
       emit("failed", request, writingId, undefined, serviceError)
       events.onError?.({
@@ -350,161 +524,266 @@ export function createPersistenceCoordinator(
     }
   }
 
-  const resolveScheduled = (result: boolean) => {
-    const resolvers = scheduledResolvers
-    scheduledResolvers = []
-    resolvers.forEach((resolve) => resolve(result))
-  }
-
-  const clearScheduled = (result = false) => {
+  const armSchedule = (key: string) => {
     if (scheduledTimer !== null) {
       clearTimeout(scheduledTimer)
-      scheduledTimer = null
     }
-    scheduledRequest = null
-    resolveScheduled(result)
+
+    scheduledKey = key
+    if (disposed || persistenceDebounceMs <= 0) {
+      scheduledKey = null
+      const request = pendingRequests.get(key)
+      if (request) {
+        pendingRequests.delete(key)
+        void start(request)
+      }
+      return
+    }
+
+    scheduledTimer = setTimeout(() => {
+      scheduledTimer = null
+      scheduledKey = null
+      const request = pendingRequests.get(key)
+      if (!request) {
+        pump()
+        return
+      }
+      pendingRequests.delete(key)
+      void start(request)
+    }, persistenceDebounceMs)
+  }
+
+  const pump = () => {
+    if (inFlight || scheduledKey !== null) {
+      return
+    }
+
+    const next = pendingRequests.entries().next()
+    if (next.done) {
+      return
+    }
+
+    const [key, request] = next.value
+    if (persistenceDebounceMs > 0 && !disposed) {
+      armSchedule(key)
+      return
+    }
+
+    pendingRequests.delete(key)
+    void start(request)
   }
 
   const start = (request: PersistenceRequest): Promise<boolean> => {
     inFlight = true
-    const run = persistNow(request).finally(() => {
-      inFlight = false
-      if (disposed) return
-
-      const next = queued
-      queued = null
-      const continuation = next && activeDocumentId
-        ? next.snapshot.writingId === null
-          ? {
-              ...next,
-              snapshot: {
-                ...next.snapshot,
-                writingId: activeDocumentId,
-                createdAt: activeRecord?.createdAt ?? next.snapshot.createdAt,
-                version: activeRecord?.version ?? next.snapshot.version,
-              },
-            }
-          : activeRecord
-            ? {
-                ...next,
-                snapshot: {
-                  ...next.snapshot,
-                  createdAt: activeRecord.createdAt,
-                  version: activeRecord.version,
-                },
-              }
-            : next
-        : next
-      if (continuation && isCurrent(continuation)) {
-        if (persistenceDebounceMs > 0) {
-          scheduledRequest = continuation
-          scheduledTimer = setTimeout(() => {
-            scheduledTimer = null
-            const next = scheduledRequest
-            scheduledRequest = null
-            if (!next) {
-              resolveScheduled(false)
-              return
-            }
-            void start(next).then(resolveScheduled)
-          }, persistenceDebounceMs)
-        } else {
-          void start(continuation)
-        }
-      }
-    })
+    inFlightRequest = request
+    const run = persistNow(request)
+      .catch((error) => {
+        const serviceError = unexpected(error)
+        emit("failed", request, request.snapshot.writingId, undefined, serviceError)
+        events.onError?.({
+          state: "failed",
+          snapshot: request.snapshot,
+          writingId: request.snapshot.writingId,
+          error: serviceError,
+          operation: request.snapshot.writingId ? "save" : "draft-materialization",
+        })
+        return false
+      })
+      .then((result) => {
+        // `start()` returns the durable result for internal callers such as
+        // `settle()`. Public `persist()` callers retain the historical
+        // generation-scoped result: a write completed after cancellation is
+        // durable, but no longer belongs to the active editor generation.
+        resolveRequest(request, result && isCurrent(request))
+        return result
+      })
+      .finally(() => {
+        inFlight = false
+        inFlightRequest = null
+        currentRun = null
+        pump()
+      })
+    currentRun = run
     return run
   }
 
-  const schedule = (request: PersistenceRequest): Promise<boolean> => {
-    if (persistenceDebounceMs <= 0) {
-      return start(request)
+  const flushScheduled = (targetKey?: string): Promise<boolean> => {
+    if (inFlight && currentRun) {
+      return currentRun
     }
 
-    scheduledRequest = request
-    if (scheduledTimer !== null) {
-      clearTimeout(scheduledTimer)
-    }
-    scheduledTimer = setTimeout(() => {
-      scheduledTimer = null
-      const next = scheduledRequest
-      scheduledRequest = null
-      if (!next) {
-        resolveScheduled(false)
-        return
-      }
-      void start(next).then(resolveScheduled)
-    }, persistenceDebounceMs)
-
-    return new Promise((resolve) => {
-      scheduledResolvers.push(resolve)
-    })
-  }
-
-  const flushScheduled = (): Promise<boolean> => {
-    if (scheduledTimer !== null) {
-      clearTimeout(scheduledTimer)
-      scheduledTimer = null
-    }
-
-    const next = scheduledRequest
-    scheduledRequest = null
-    if (!next) {
-      resolveScheduled(true)
+    const key = targetKey ?? scheduledKey
+    if (!key) {
       return Promise.resolve(true)
     }
 
-    const run = start(next)
-    void run.then(resolveScheduled)
-    return run
+    if (scheduledTimer !== null) {
+      clearTimeout(scheduledTimer)
+      scheduledTimer = null
+    }
+    scheduledKey = null
+
+    const request = pendingRequests.get(key)
+    if (!request) {
+      pump()
+      return Promise.resolve(true)
+    }
+
+    pendingRequests.delete(key)
+    return start(request)
+  }
+
+  const hasPendingFor = (target?: PersistenceSettleTarget) => {
+    if (!target) {
+      return inFlight || scheduledKey !== null || pendingRequests.size > 0
+    }
+
+    return Boolean(
+      (inFlightRequest && matchesTarget(inFlightRequest, target)) ||
+      Array.from(pendingRequests.values()).some((request) => matchesTarget(request, target)),
+    )
+  }
+
+  const findPending = (target: PersistenceSettleTarget) => {
+    for (const [key, request] of pendingRequests) {
+      if (matchesTarget(request, target)) {
+        return { key, request }
+      }
+    }
+
+    return null
+  }
+
+  const flushPending = (target: PersistenceSettleTarget): Promise<boolean> => {
+    if (inFlight && currentRun) {
+      return currentRun
+    }
+
+    const pending = findPending(target)
+    if (!pending) {
+      pump()
+      return Promise.resolve(true)
+    }
+
+    if (scheduledTimer !== null) {
+      clearTimeout(scheduledTimer)
+      scheduledTimer = null
+    }
+    scheduledKey = null
+    pendingRequests.delete(pending.key)
+    return start(pending.request)
+  }
+
+  const settle = async (target?: PersistenceSettleTarget): Promise<boolean> => {
+    let succeeded = true
+    while (hasPendingFor(target)) {
+      if (target && !inFlight) {
+        const result = await flushPending(target)
+        succeeded = succeeded && result
+        continue
+      }
+
+      if (!target && scheduledKey !== null && !inFlight) {
+        const result = await flushScheduled()
+        succeeded = succeeded && result
+        continue
+      }
+
+      if (inFlight && currentRun) {
+        const request = inFlightRequest
+        const result = await currentRun
+        if (!target || (request && matchesTarget(request, target))) {
+          succeeded = succeeded && result
+        }
+        continue
+      }
+
+      pump()
+      if (!inFlight && scheduledKey === null && pendingRequests.size === 0) {
+        break
+      }
+    }
+
+    return succeeded
   }
 
   return {
     persist(snapshot, overrides) {
       if (disposed) return Promise.resolve(false)
 
+      const normalizedSnapshot = normalizeSnapshot(snapshot)
+
       // A snapshot is the caller's explicit document identity. If that
       // identity differs, invalidate the previous document's completion
       // before accepting the new request.
-      if (snapshot.writingId !== activeDocumentId) {
+      if (normalizedSnapshot.writingId !== activeDocumentId) {
         // A tab switch or first materialization can race this state update. The
         // canonical `.md` for the previous document must still be written; the
         // generation change only suppresses its UI completion callbacks.
         void flushScheduled()
-        activeDocumentId = snapshot.writingId
-        activeRecord = null
+        activeDocumentId = normalizedSnapshot.writingId
         generation += 1
-        queued = null
-        clearScheduled()
       }
 
-      const request = { snapshot, overrides, generation }
+      const key = getRequestKey(normalizedSnapshot)
+
       if (inFlight) {
-        queued = request
-        events.onStateChange?.({ state: "dirty", snapshot, writingId: snapshot.writingId })
+        const pending = findPendingEntry(normalizedSnapshot, key)
+        if (pending) {
+          pending.request.snapshot = normalizedSnapshot
+          pending.request.overrides = overrides
+          pending.request.generation = generation
+        } else {
+          pendingRequests.set(key, {
+            snapshot: normalizedSnapshot,
+            overrides,
+            generation,
+            key,
+            waiters: [],
+          })
+        }
+
+        events.onStateChange?.({ state: "dirty", snapshot: normalizedSnapshot, writingId: normalizedSnapshot.writingId })
         return Promise.resolve(true)
       }
 
-      return schedule(request)
+      return new Promise((resolve) => {
+        const pending = findPendingEntry(normalizedSnapshot, key)
+        if (pending) {
+          pending.request.snapshot = normalizedSnapshot
+          pending.request.overrides = overrides
+          pending.request.generation = generation
+          pending.request.waiters.push(resolve)
+        } else {
+          pendingRequests.set(key, {
+            snapshot: normalizedSnapshot,
+            overrides,
+            generation,
+            key,
+            waiters: [resolve],
+          })
+        }
+
+        if (scheduledKey === key) {
+          armSchedule(key)
+          return
+        }
+
+        pump()
+      })
     },
 
     activateDocument(writingId) {
       if (disposed || writingId === activeDocumentId) return
       void flushScheduled()
       activeDocumentId = writingId
-      activeRecord = null
       generation += 1
-      queued = null
-      clearScheduled()
     },
 
     cancel() {
       if (disposed) return
       void flushScheduled()
       generation += 1
-      activeRecord = null
-      queued = null
-      clearScheduled()
     },
 
     dispose() {
@@ -512,8 +791,9 @@ export function createPersistenceCoordinator(
       void flushScheduled()
       disposed = true
       generation += 1
-      activeRecord = null
-      queued = null
     },
+
+    hasPending: hasPendingFor,
+    settle,
   }
 }

@@ -502,19 +502,19 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   }, [])
 
   const saveWritingTitle = useCallback(
-    async (nextTitle: string) => {
+    async (nextTitle: string): Promise<boolean> => {
       if (!renameWritingTarget) {
-        return
+        return false
       }
 
       const writing = await getWritingForEdit(renameWritingTarget.id)
       if (!writing || writing.sync_status === "deleted") {
-        return
+        return false
       }
 
       const trimmedTitle = nextTitle.trim() || "Untitled artifact"
       if ((writing.title?.trim() || "Untitled artifact") === trimmedTitle) {
-        return
+        return true
       }
 
       if (isDesktopRuntime()) {
@@ -523,9 +523,9 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
           title: trimmedTitle,
           updatedAt: new Date().toISOString(),
         })
-        if (result.error) return
+        if (result.error) return false
         await loadLocalState()
-        return
+        return true
       }
 
       await enqueueWritingUpsert({
@@ -536,6 +536,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         local_updated_at: Date.now(),
       })
       await loadLocalState()
+      return true
     },
     [loadLocalState, renameWritingTarget],
   )
@@ -782,9 +783,12 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
             setRenameWritingTarget(null)
           }
         }}
-        onConfirm={(nextTitle) => {
-          void saveWritingTitle(nextTitle)
-          setRenameWritingTarget(null)
+        onConfirm={async (nextTitle) => {
+          const succeeded = await saveWritingTitle(nextTitle)
+          if (succeeded) {
+            setRenameWritingTarget(null)
+          }
+          return succeeded
         }}
       />
 

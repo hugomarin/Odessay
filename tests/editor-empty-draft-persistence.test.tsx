@@ -74,6 +74,10 @@ const mocks = vi.hoisted(() => ({
     error: null,
     data: input.writing,
   })),
+  renameWriting: vi.fn(async (input: { writingId: string; title: string }) => ({
+    error: null as { code: string; message: string } | null,
+    data: { ...desktopDraftRecord, id: input.writingId, title: input.title },
+  })),
   openWriting: vi.fn(async () => ({ error: null, data: desktopDraftRecord })),
   openDocumentById: vi.fn(async (_id?: string) => ({ status: "opened", documentId: "restored-writing", record: null })),
 }))
@@ -88,6 +92,11 @@ const editorState = vi.hoisted(() => ({
 const topbarState = vi.hoisted(() => ({
   onCloseTab: null as ((tabId: string) => void) | null,
   onNewTab: null as (() => void) | null,
+  onRenameTab: null as ((tabId: string) => void) | null,
+}))
+
+const renameModalState = vi.hoisted(() => ({
+  onConfirm: null as ((title: string) => Promise<boolean>) | null,
 }))
 
 const noopCommand = vi.hoisted(() => vi.fn(() => true))
@@ -192,6 +201,7 @@ vi.mock("@/lib/services/document-service-factory", () => ({
   getDocumentService: vi.fn(async () => ({
     saveWriting: mocks.saveWriting,
     openWriting: mocks.openWriting,
+    renameWriting: mocks.renameWriting,
   })),
   createDesktopDraft: mocks.createDesktopDraft,
   importDesktopWritingFile: vi.fn(),
@@ -342,9 +352,14 @@ vi.mock("@/lib/editor/footnote-node", () => ({
 }))
 
 vi.mock("@/components/editor/editor-topbar", () => ({
-  EditorTopbar: (props: { onCloseTab?: (tabId: string) => void; onNewTab?: () => void }) => {
+  EditorTopbar: (props: {
+    onCloseTab?: (tabId: string) => void
+    onNewTab?: () => void
+    onRenameTab?: (tabId: string) => void
+  }) => {
     topbarState.onCloseTab = props.onCloseTab ?? null
     topbarState.onNewTab = props.onNewTab ?? null
+    topbarState.onRenameTab = props.onRenameTab ?? null
     return null
   },
 }))
@@ -362,7 +377,12 @@ vi.mock("@/components/editor/modals/insert-footnote-modal", () => ({
 vi.mock("@/components/editor/modals/insert-image-modal", () => ({ InsertImageModal: () => null }))
 vi.mock("@/components/editor/modals/insert-link-modal", () => ({ InsertLinkModal: () => null }))
 vi.mock("@/components/editor/modals/insert-table-modal", () => ({ InsertTableModal: () => null }))
-vi.mock("@/components/editor/modals/rename-writing-modal", () => ({ RenameWritingModal: () => null }))
+vi.mock("@/components/editor/modals/rename-writing-modal", () => ({
+  RenameWritingModal: (props: { open: boolean; onConfirm: (title: string) => Promise<boolean> }) => {
+    renameModalState.onConfirm = props.open ? props.onConfirm : null
+    return null
+  },
+}))
 vi.mock("@/components/editor/panels/notes-panel", () => ({ NotesPanel: () => null }))
 vi.mock("@/components/editor/panels/properties-panel", () => ({ PropertiesPanel: () => null }))
 vi.mock("@/components/editor/panels/corrections-panel", () => ({ CorrectionsPanel: () => null }))
@@ -397,6 +417,8 @@ beforeEach(async () => {
   resetEditorSessionStoreForTests()
   topbarState.onCloseTab = null
   topbarState.onNewTab = null
+  topbarState.onRenameTab = null
+  renameModalState.onConfirm = null
   setContentCommand.mockClear()
   mocks.createDesktopDraft.mockReset()
   mocks.createDesktopDraft.mockImplementation(async () => {
@@ -412,6 +434,7 @@ beforeEach(async () => {
   mocks.syncEnqueue.mockClear()
   mocks.cloudWrite.mockClear()
   mocks.saveWriting.mockClear()
+  mocks.renameWriting.mockClear()
   mocks.openWriting.mockClear()
   mocks.openDocumentById.mockClear()
   window.confirm = vi.fn(() => true)
@@ -1047,5 +1070,79 @@ describe("ODE-464 — hydration generation owner: deferred stale work", () => {
       expect.objectContaining({ writingId: "doc-a" }),
     )
     expect(getEditorSessionState().session.tabs.some((tab) => tab.writing_id === "doc-b")).toBe(true)
+  })
+})
+
+function blankDraftOnlySession() {
+  return {
+    id: "workspace",
+    active_tab_id: "draft",
+    tabs: [{
+      id: "draft",
+      writing_id: null,
+      slug: null,
+      title: "Untitled",
+      save_state: "saved-local",
+      has_pending_sync: false,
+      last_touched_at: 1,
+      view_state: null,
+    }],
+    recent_writings: [],
+    updated_at: 1,
+  }
+}
+
+describe("ODE-478 case 3 — naming a still-blank draft", () => {
+  it("materializes the draft through the normal write path when confirmed with a name and no content", async () => {
+    persistedSession.value = blankDraftOnlySession()
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(getEditorSessionState().session.active_tab_id).toBe("draft"))
+
+    const draftTabId = getEditorSessionState().session.active_tab_id!
+
+    // The user's very first action: open rename on the still-empty draft.
+    await act(async () => { topbarState.onRenameTab?.(draftTabId) })
+    await vi.waitFor(() => expect(renameModalState.onConfirm).not.toBeNull())
+
+    let succeeded: boolean | undefined
+    await act(async () => {
+      succeeded = await renameModalState.onConfirm?.("Nombre que yo quería")
+    })
+
+    expect(succeeded).toBe(true)
+    expect(mocks.createDesktopDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Nombre que yo quería", initialBodyText: "" }),
+    )
+    expect(mocks.filesystemWrite).toHaveBeenCalledTimes(1)
+    expect(getEditorSessionState().session.tabs.some((tab) => tab.writing_id === "desktop-draft-1")).toBe(true)
+  })
+
+  it("reports failure to the modal instead of closing as if it worked", async () => {
+    persistedSession.value = blankDraftOnlySession()
+    mocks.createDesktopDraft.mockReset()
+    mocks.createDesktopDraft.mockImplementation(async () => ({
+      error: { code: "DB_ERROR", message: "disk full" },
+      data: null,
+    }))
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(getEditorSessionState().session.active_tab_id).toBe("draft"))
+
+    const draftTabId = getEditorSessionState().session.active_tab_id!
+    await act(async () => { topbarState.onRenameTab?.(draftTabId) })
+    await vi.waitFor(() => expect(renameModalState.onConfirm).not.toBeNull())
+
+    let succeeded: boolean | undefined
+    await act(async () => {
+      succeeded = await renameModalState.onConfirm?.("Nombre que yo quería")
+    })
+
+    expect(succeeded).toBe(false)
+    // Still "Untitled": the failed attempt must not silently claim the tab
+    // was renamed, and the tab must still be the ephemeral draft.
+    expect(getEditorSessionState().session.tabs.some((tab) => tab.writing_id === null)).toBe(true)
   })
 })

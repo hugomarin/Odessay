@@ -14,7 +14,7 @@ type RenameWritingModalProps = {
   bodyText?: string
   writingId?: string
   onOpenChange: (open: boolean) => void
-  onConfirm: (title: string) => void
+  onConfirm: (title: string) => Promise<boolean>
 }
 
 export function RenameWritingModal({
@@ -29,6 +29,8 @@ export function RenameWritingModal({
   const [suggestedTitle, setSuggestedTitle] = useState<string | null>(null)
   const [suggestionError, setSuggestionError] = useState<string | null>(null)
   const [isSuggesting, setIsSuggesting] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const canSuggestTitle = hasEnoughTitleSuggestionContent(bodyText)
 
   useEffect(() => {
@@ -37,6 +39,8 @@ export function RenameWritingModal({
       setSuggestedTitle(null)
       setSuggestionError(null)
       setIsSuggesting(false)
+      setIsSubmitting(false)
+      setSubmitError(null)
     }
   }, [open, title])
 
@@ -67,8 +71,18 @@ export function RenameWritingModal({
     }
   }
 
-  const submit = () => {
-    onConfirm(nextTitle.trim() || "Untitled artifact")
+  const submit = async () => {
+    setIsSubmitting(true)
+    setSubmitError(null)
+    // The modal must reflect what actually happened, not close as if it
+    // always succeeds — a silent no-op here is exactly how a blank draft's
+    // name used to vanish without a trace (ODE-478 case 3).
+    const succeeded = await onConfirm(nextTitle.trim() || "Untitled artifact")
+    setIsSubmitting(false)
+    if (!succeeded) {
+      setSubmitError("Could not save this name. Try again.")
+      return
+    }
     onOpenChange(false)
   }
 
@@ -86,8 +100,8 @@ export function RenameWritingModal({
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" onClick={submit}>
-            Save name
+          <Button type="button" onClick={submit} disabled={isSubmitting}>
+            {isSubmitting ? "Saving…" : "Save name"}
           </Button>
         </>
       }
@@ -112,6 +126,8 @@ export function RenameWritingModal({
           maxLength={160}
           className="h-11 text-[15px] focus-visible:ring-1 focus-visible:ring-ink-3 focus-visible:ring-offset-0"
         />
+
+        {submitError ? <p className="text-[12px] text-destructive">{submitError}</p> : null}
 
           <div className="rounded-[10px] border-[0.5px] border-border bg-bg p-3">
             <div className="flex items-start justify-between gap-3">

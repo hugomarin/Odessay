@@ -1232,13 +1232,16 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   );
 
   const handleRenameConfirm = useCallback(
-    async (nextTitle: string) => {
+    async (nextTitle: string): Promise<boolean> => {
       if (!renameTarget) {
-        return;
+        return false;
       }
-      await renameWriting(renameTarget.id, nextTitle);
+      const succeeded = await renameWriting(renameTarget.id, nextTitle);
       await loadWorkspace();
-      setRenameTarget(null);
+      if (succeeded) {
+        setRenameTarget(null);
+      }
+      return succeeded;
     },
     [renameTarget, loadWorkspace],
   );
@@ -2102,10 +2105,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               setRenameTarget(null);
             }
           }}
-          onConfirm={(nextTitle) => {
-            void handleRenameConfirm(nextTitle);
-            setRenameTarget(null);
-          }}
+          onConfirm={handleRenameConfirm}
         />
 
         <DeleteWritingDialog

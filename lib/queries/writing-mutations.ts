@@ -67,15 +67,15 @@ export async function changeWritingArtifactType(
   if (result.error) throw new Error(result.error.message);
 }
 
-export async function renameWriting(writingId: string, title: string) {
+export async function renameWriting(writingId: string, title: string): Promise<boolean> {
   const writing = await getWritingForEdit(writingId);
   if (!writing || writing.sync_status === "deleted") {
-    return;
+    return false;
   }
 
   const trimmedTitle = title.trim() || UNTITLED_DOCUMENT_NAME;
   if ((writing.title?.trim() || UNTITLED_DOCUMENT_NAME) === trimmedTitle) {
-    return;
+    return true;
   }
 
   const timestamp = nowIso();
@@ -88,10 +88,7 @@ export async function renameWriting(writingId: string, title: string) {
       title: trimmedTitle,
       updatedAt: timestamp,
     });
-    if (result.error) {
-      return;
-    }
-    return;
+    return !result.error;
   }
 
   const next: LocalWriting = {
@@ -104,6 +101,7 @@ export async function renameWriting(writingId: string, title: string) {
   };
 
   await enqueueWritingUpsert(next);
+  return true;
 }
 
 export async function deleteWriting(writingId: string) {

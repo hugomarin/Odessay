@@ -698,14 +698,15 @@ export default function DeskPage() {
   )
 
   const saveWritingTitle = useCallback(
-    async (nextTitle: string) => {
+    async (nextTitle: string): Promise<boolean> => {
       if (!renameTarget) {
-        return
+        return false
       }
 
-      await renameWriting(renameTarget.id, nextTitle)
+      const succeeded = await renameWriting(renameTarget.id, nextTitle)
       await loadDeskActivity()
       void loadRecipientPreviewsAsync()
+      return succeeded
     },
     [renameTarget, loadDeskActivity, loadRecipientPreviewsAsync],
   )
@@ -952,9 +953,12 @@ export default function DeskPage() {
                 setRenameTarget(null)
               }
             }}
-            onConfirm={(nextTitle) => {
-              void saveWritingTitle(nextTitle)
-              setRenameTarget(null)
+            onConfirm={async (nextTitle) => {
+              const succeeded = await saveWritingTitle(nextTitle)
+              if (succeeded) {
+                setRenameTarget(null)
+              }
+              return succeeded
             }}
           />
 

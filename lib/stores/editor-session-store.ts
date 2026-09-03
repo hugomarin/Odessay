@@ -54,6 +54,12 @@ type SaveViewStateInput = {
   viewState: Partial<LocalEditorTabViewState>;
 };
 
+type UpdateTabSaveStateInput = {
+  tabId: string;
+  saveState: EditorTabSaveState;
+  hasPendingSync: boolean;
+};
+
 const DEFAULT_STATE: EditorSessionState = {
   loaded: false,
   loading: false,
@@ -265,6 +271,72 @@ export function openWritingTab({
   return opened;
 }
 
+/**
+ * Reconciles a draft materialization that completed after the author already
+ * switched away from it (ODE-478 case 4). Unlike `openWritingTab`, this never
+ * steals focus and never touches any other draft tab: it renames the one
+ * tab whose `writing_id` is still `null` in place, in its current array
+ * position, and only moves `active_tab_id` if that tab already was active.
+ * A completed write must always end up owned by a tab — silently dropping
+ * this reconciliation is how an orphaned file with no tab reference happens.
+ */
+export function reconcileMaterializedDraftTab({
+  writingId,
+  draftTabId,
+  title,
+  saveState = "saved-local",
+  hasPendingSync = false,
+}: {
+  writingId: string;
+  draftTabId: string;
+  title?: string | null;
+  saveState?: EditorTabSaveState;
+  hasPendingSync?: boolean;
+}) {
+  setSessionState((current) => {
+    if (findTabIndexByWritingId(current.tabs, writingId) >= 0) {
+      return current;
+    }
+
+    const draftIndex = current.tabs.findIndex((tab) => tab.id === draftTabId && tab.writing_id === null);
+    if (draftIndex < 0) {
+      const materializedTab = createEditorSessionTab({
+        id: writingId,
+        writingId,
+        title,
+        saveState,
+        hasPendingSync,
+      });
+
+      return {
+        ...current,
+        active_tab_id: current.active_tab_id ?? materializedTab.id,
+        tabs: [...current.tabs, materializedTab],
+        recent_writings: touchRecentFromTab(current.recent_writings, materializedTab),
+      };
+    }
+
+    const draftTab = current.tabs[draftIndex]!;
+    const nextTab: LocalEditorSessionTab = {
+      ...draftTab,
+      id: writingId,
+      writing_id: writingId,
+      title: title?.trim() || draftTab.title,
+      save_state: saveState,
+      has_pending_sync: hasPendingSync,
+      last_touched_at: Date.now(),
+    };
+    const nextTabs = current.tabs.map((tab, index) => (index === draftIndex ? nextTab : tab));
+
+    return {
+      ...current,
+      active_tab_id: current.active_tab_id === draftTab.id ? nextTab.id : current.active_tab_id,
+      tabs: nextTabs,
+      recent_writings: touchRecentFromTab(current.recent_writings, nextTab),
+    };
+  });
+}
+
 export function focusTab(tabId: string) {
   setSessionState((current) => {
     if (current.active_tab_id === tabId) {
@@ -350,6 +422,28 @@ export function publishTabState({
       active_tab_id: targetTabId,
       tabs: nextTabs,
       recent_writings: touchRecentFromTab(current.recent_writings, baseTab),
+    };
+  });
+}
+
+export function updateTabSaveState({ tabId, saveState, hasPendingSync }: UpdateTabSaveStateInput) {
+  setSessionState((current) => {
+    const tab = current.tabs.find((item) => item.id === tabId);
+    if (!tab || (tab.save_state === saveState && tab.has_pending_sync === hasPendingSync)) {
+      return current;
+    }
+
+    return {
+      ...current,
+      tabs: current.tabs.map((item) =>
+        item.id === tabId
+          ? {
+              ...item,
+              save_state: saveState,
+              has_pending_sync: hasPendingSync,
+            }
+          : item,
+      ),
     };
   });
 }

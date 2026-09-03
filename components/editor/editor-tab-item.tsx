@@ -1,6 +1,6 @@
 "use client"
 
-import { Pencil, X } from "lucide-react";
+import { Loader2, Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
 import type { WritingStatus } from "@/lib/writings/status";
@@ -142,7 +142,13 @@ export function EditorTabItem({
         <Pencil className="h-[13px] w-[13px]" strokeWidth={1.5} />
       </button>
 
-      {tab.save_state === "error" ? (
+      {tab.save_state === "saving" ? (
+        <Loader2
+          aria-hidden="true"
+          className="pointer-events-none absolute right-1.5 top-1/2 h-[10px] w-[10px] -translate-y-1/2 animate-spin text-ink-4"
+          strokeWidth={2}
+        />
+      ) : tab.save_state === "error" ? (
         <span
           aria-hidden="true"
           className="pointer-events-none absolute right-1.5 top-1/2 h-[6px] w-[6px] -translate-y-1/2 rounded-full bg-destructive"

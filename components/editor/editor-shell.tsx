@@ -208,6 +208,7 @@ import { resolveHydrationOutcome } from "@/lib/editor/hydration-coordinator"
 import { createHydrationGenerationOwner, type HydrationGeneration } from "@/lib/editor/hydration-generation"
 import {
   createPersistenceCoordinator,
+  type PersistenceCommitEvent,
   type PersistenceSnapshotOverrides,
   type PersistenceStateEvent,
 } from "@/lib/editor/persistence-coordinator"
@@ -220,9 +221,11 @@ import {
   openDraftTab,
   openWritingTab,
   publishTabState,
+  reconcileMaterializedDraftTab,
   reconcileUnavailableWritingTab,
   reorderTab,
   saveTabViewState,
+  updateTabSaveState,
   useEditorSessionStore,
 } from "@/lib/stores/editor-session-store"
 import { setSidebarMode, toggleSidebarMode } from "@/lib/stores/ui-shell-store"
@@ -544,6 +547,7 @@ export function EditorShell({
   const markdownSaveTimeoutRef = useRef<number | null>(null)
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
+  const activeEditorTabIdRef = useRef<string | null>(editorSession.active_tab_id)
   const hydrationGenerationOwnerRef = useRef<ReturnType<typeof createHydrationGenerationOwner> | null>(null)
   if (hydrationGenerationOwnerRef.current === null) {
     hydrationGenerationOwnerRef.current = createHydrationGenerationOwner()
@@ -595,6 +599,10 @@ export function EditorShell({
   const createWorkspaceTabRef = useRef<((options?: { skipConfirm?: boolean }) => Promise<void>) | null>(null)
   const isCreatingWorkspaceTabRef = useRef(false)
   const ephemeralDraftWritingIdRef = useRef<string | null>(null)
+  // Last body captured when leaving the still-blank draft (ODE-478 case 4).
+  // Keyed by ephemeralDraftWritingIdRef so a later, different draft never
+  // accidentally restores an older one's leftover content.
+  const draftContentSnapshotRef = useRef<{ draftId: string; bodyJson: Record<string, unknown> } | null>(null)
   const selectAdjacentTabRef = useRef<((direction: number) => void) | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
@@ -651,19 +659,67 @@ export function EditorShell({
   const editorInstanceRef = useRef<Editor | null>(null)
 
   const persistenceCoordinator = useMemo(
-    () => createPersistenceCoordinator(
-      {
-        runtime: isDesktopRuntime() ? "desktop" : "web",
-        persistenceDebounceMs: isDesktopRuntime() ? DESKTOP_PERSISTENCE_DEBOUNCE_MS : 0,
-        documentService: {
-          saveWriting: async (input) => (await getDocumentService()).saveWriting(input),
+    () => {
+      const applyCommittedTabState = ({ record, snapshot }: PersistenceCommitEvent) => {
+        const sourceTabId = snapshot.sourceTabId ?? record.id
+        const isSourceTabActive = activeEditorTabIdRef.current === sourceTabId
+        const lifecycle = record.lifecycle ?? snapshot.lifecycle
+        const saveState = mapLocalSyncStatusToSaveState(
+          "pending",
+          lifecycle,
+          typeof navigator === "undefined" ? true : navigator.onLine,
+        )
+
+        if (!isSourceTabActive) {
+          updateTabSaveState({
+            tabId: sourceTabId,
+            saveState,
+            hasPendingSync: lifecycle !== "local-only",
+          })
+        }
+
+        // A stale completion can still belong to the tab the author has
+        // returned to. Only update the active editor when its identity
+        // matches; never let another document overwrite these refs.
+        if (isSourceTabActive && currentWritingIdRef.current === record.id) {
+          versionRef.current = record.version
+          setVersion(record.version)
+          createdAtRef.current = record.createdAt
+          setCreatedAt(record.createdAt)
+        }
+      }
+
+      return createPersistenceCoordinator(
+        {
+          runtime: isDesktopRuntime() ? "desktop" : "web",
+          persistenceDebounceMs: isDesktopRuntime() ? DESKTOP_PERSISTENCE_DEBOUNCE_MS : 0,
+          documentService: {
+            saveWriting: async (input) => (await getDocumentService()).saveWriting(input),
+          },
+          createDesktopDraft: (options) => createDesktopDraftFn(options),
+          createWritingId,
+          now: () => new Date().toISOString(),
         },
-        createDesktopDraft: (options) => createDesktopDraftFn(options),
-        createWritingId,
-        now: () => new Date().toISOString(),
-      },
-      {
+        {
         onStateChange: (event: PersistenceStateEvent) => {
+          const sourceTabId = event.snapshot.sourceTabId ?? (event.writingId ?? null)
+          const isSourceTabActive = sourceTabId
+            ? activeEditorTabIdRef.current === sourceTabId ||
+              Boolean(event.writingId && currentWritingIdRef.current === event.writingId)
+            : event.writingId === currentWritingIdRef.current
+
+          if (sourceTabId && !isSourceTabActive) {
+            if (event.state === "persisting_local" || event.state === "dirty") {
+              updateTabSaveState({ tabId: sourceTabId, saveState: "saving", hasPendingSync: true })
+            } else if (event.state === "failed") {
+              updateTabSaveState({ tabId: sourceTabId, saveState: "error", hasPendingSync: true })
+            }
+          }
+
+          if (!isSourceTabActive) {
+            return
+          }
+
           if (event.state === "persisting_local" || event.state === "dirty") {
             setSyncStatus("saving")
             return
@@ -686,8 +742,35 @@ export function EditorShell({
             )
           }
         },
-        onMaterialized: ({ record }) => {
+        onMaterialized: ({ record, snapshot }) => {
           const materializedTitle = record.title?.trim() || DESKTOP_UNTITLED_WRITING_TITLE
+          const sourceTabId = snapshot.sourceTabId ?? EDITOR_DRAFT_TAB_ID
+          const isSourceDraftActive =
+            currentWritingIdRef.current === null &&
+            activeEditorTabIdRef.current === sourceTabId &&
+            ephemeralDraftWritingIdRef.current === snapshot.draftWritingId
+
+          // Reconcile the exact source tab even when this completion is stale;
+          // a generation only describes UI ownership, never document identity.
+          reconcileMaterializedDraftTab({
+            writingId: record.id,
+            draftTabId: sourceTabId,
+            title: materializedTitle,
+            saveState: "saved-local",
+            hasPendingSync: false,
+          })
+
+          if (ephemeralDraftWritingIdRef.current === snapshot.draftWritingId) {
+            ephemeralDraftWritingIdRef.current = null
+            draftContentSnapshotRef.current = null
+          }
+
+          if (!isSourceDraftActive) {
+            // The author is looking at another document (or this completion
+            // belongs to an older draft instance). Reconciliation above keeps
+            // the file owned without stealing focus or editor state.
+            return
+          }
 
           currentWritingIdRef.current = record.id
           ephemeralDraftWritingIdRef.current = null
@@ -712,14 +795,6 @@ export function EditorShell({
           setLifecycle("local-only")
           lifecycleRef.current = "local-only"
           navigatedToDraftRef.current = true
-
-          openWritingTab({
-            writingId: record.id,
-            title: materializedTitle,
-            saveState: "saved-local",
-            hasPendingSync: false,
-            replaceDraft: true,
-          })
         },
         onIdentityCreated: (writingId) => {
           const nextWritingSession = createNewWritingSessionState(writingId)
@@ -736,13 +811,23 @@ export function EditorShell({
             }
           }
         },
-        onCommitted: ({ record }) => {
-          versionRef.current = record.version
-          setVersion(record.version)
-          createdAtRef.current = record.createdAt
-          setCreatedAt(record.createdAt)
-        },
+        onCommitted: applyCommittedTabState,
+        onBackgroundCommitted: applyCommittedTabState,
         onError: (event) => {
+          if (event.operation !== "schedule") {
+            const sourceTabId = event.snapshot.sourceTabId ?? (event.writingId ?? null)
+            if (sourceTabId) {
+              updateTabSaveState({ tabId: sourceTabId, saveState: "error", hasPendingSync: true })
+            }
+
+            const isSourceTabActive = sourceTabId
+              ? activeEditorTabIdRef.current === sourceTabId
+              : event.writingId === currentWritingIdRef.current
+            if (isSourceTabActive) {
+              setSyncStatus("error")
+            }
+          }
+
           console.error(
             event.operation === "draft-materialization"
               ? "[editor:save] desktop draft materialization failed"
@@ -755,8 +840,9 @@ export function EditorShell({
             },
           )
         },
-      },
-    ),
+        },
+      )
+    },
     [createDesktopDraftFn],
   )
 
@@ -1182,6 +1268,7 @@ export function EditorShell({
           visibility: visibilityRef.current,
           lifecycle: activeId ? lifecycleRef.current : "local-only",
           draftWritingId: ephemeralDraftWritingIdRef.current,
+          sourceTabId: activeEditorTabIdRef.current ?? (activeId ?? EDITOR_DRAFT_TAB_ID),
         },
         overrides,
       )
@@ -1360,6 +1447,19 @@ export function EditorShell({
   // can read the current block graph even when callbacks outlive a render.
   useEffect(() => {
     editorInstanceRef.current = editor ?? null
+  }, [editor])
+
+  // Captures the still-blank draft's live content right before leaving it, so
+  // the "no active document" effect can restore it on return instead of
+  // wiping it (ODE-478 case 4). No-op when the outgoing tab isn't the draft.
+  const snapshotOutgoingDraftContent = useCallback(() => {
+    if (currentWritingIdRef.current || !editor || !ephemeralDraftWritingIdRef.current) {
+      return
+    }
+    draftContentSnapshotRef.current = {
+      draftId: ephemeralDraftWritingIdRef.current,
+      bodyJson: editor.getJSON() as Record<string, unknown>,
+    }
   }, [editor])
 
   useEffect(() => {
@@ -1622,6 +1722,10 @@ export function EditorShell({
   useEffect(() => {
     currentWritingIdRef.current = currentWritingId
   }, [currentWritingId])
+
+  useEffect(() => {
+    activeEditorTabIdRef.current = editorSession.active_tab_id
+  }, [editorSession.active_tab_id])
 
   useEffect(() => {
     setImageViewerSource(null)
@@ -1932,9 +2036,20 @@ export function EditorShell({
 
     if (!currentWritingId) {
       // No tab is open — clear stale content so the editor never shows a previous
-      // writing after the last tab is closed.
+      // writing after the last tab is closed. `currentWritingId` is also null
+      // while sitting on the still-blank draft, so before wiping, restore
+      // whatever that draft held the last time it was left (captured by
+      // handleSelectWorkspaceTab/handleCloseWorkspaceTab) instead of
+      // discarding it — otherwise switching away and back erases in-progress
+      // text that was never given a chance to save (ODE-478 case 4).
+      const restorable =
+        ephemeralDraftWritingIdRef.current &&
+        draftContentSnapshotRef.current?.draftId === ephemeralDraftWritingIdRef.current
+          ? draftContentSnapshotRef.current
+          : null
+
       isApplyingContentRef.current = true
-      editor.commands.setContent(EMPTY_EDITOR_JSON)
+      editor.commands.setContent(restorable?.bodyJson ?? EMPTY_EDITOR_JSON)
       isApplyingContentRef.current = false
       updateDerivedEditorState(editor)
       setWritingStatus("draft")
@@ -1942,7 +2057,6 @@ export function EditorShell({
       setWritingVisibility("private")
       setTitle(UNTITLED_WRITING_TITLE)
       setHasExplicitTitle(false)
-      setBodyText("")
       setVersion(1)
       setCreatedAt(null)
       setWritingSlug(null)
@@ -5324,7 +5438,15 @@ export function EditorShell({
         return
       }
 
+      // A queued rich-mode update still holds the OLD tab's editor instance.
+      // Flushing it here — before currentWritingIdRef changes below — makes
+      // sure that content lands on the document it was actually typed into,
+      // not on whatever tab we're about to switch to (ODE-478 case 2).
+      flushQueuedRichModeUpdate()
+      snapshotOutgoingDraftContent()
+
       persistCurrentWorkspaceViewState()
+      activeEditorTabIdRef.current = tabId
       focusTab(tabId)
       navigatedToDraftRef.current = false
 
@@ -5341,33 +5463,52 @@ export function EditorShell({
       setHydrationWritingId(null)
       replaceEditorHistory("/write")
     },
-    [editorSession.tabs, persistCurrentWorkspaceViewState],
+    [editorSession.tabs, flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, snapshotOutgoingDraftContent],
   )
 
   const handleCloseWorkspaceTab = useCallback(
-    (tabId: string) => {
+    async (tabId: string) => {
       const targetTab = editorSession.tabs.find((tab) => tab.id === tabId)
       if (!targetTab) {
         return
       }
 
-      if (targetTab.has_pending_sync) {
-        const confirmed = window.confirm("This artifact still has unsynced changes. Close it anyway?")
-        if (!confirmed) {
+      // Same reasoning as handleSelectWorkspaceTab: flush before this tab's
+      // identity can change under a still-queued update (ODE-478 case 2).
+      flushQueuedRichModeUpdate()
+      snapshotOutgoingDraftContent()
+
+      const isClosingActiveTab = activeEditorTabIdRef.current === tabId
+      const persistenceTarget = {
+        writingId: targetTab.writing_id,
+        draftWritingId: targetTab.writing_id === null ? ephemeralDraftWritingIdRef.current : null,
+        sourceTabId: tabId,
+      }
+
+      if (isClosingActiveTab) {
+        persistCurrentWorkspaceViewState()
+      }
+
+      // A close waits for this tab's local write, including a still-debounced
+      // request. It must not wait for unrelated background tabs, and the
+      // existing tab save-state affordance makes the wait visible (ODE-478
+      // case 5). There is intentionally no confirm/cancel race here: once the
+      // user asks to close, the tab closes after its write is durable.
+      if (persistenceCoordinator.hasPending(persistenceTarget)) {
+        updateTabSaveState({ tabId, saveState: "saving", hasPendingSync: true })
+        const settled = await persistenceCoordinator.settle(persistenceTarget)
+        if (!settled) {
           return
         }
       }
 
-      if (tabId === (currentWritingId ?? EDITOR_DRAFT_TAB_ID)) {
-        persistCurrentWorkspaceViewState()
-      }
-
       const nextActiveTabId = closeTab(tabId)
 
-      if (tabId !== (currentWritingId ?? EDITOR_DRAFT_TAB_ID)) {
+      if (!isClosingActiveTab) {
         return
       }
 
+      activeEditorTabIdRef.current = nextActiveTabId
       const nextTab = editorSession.tabs.find((tab) => tab.id === nextActiveTabId)
       navigatedToDraftRef.current = false
       if (nextTab?.writing_id) {
@@ -5383,7 +5524,13 @@ export function EditorShell({
       setHydrationWritingId(null)
       replaceEditorHistory("/write")
     },
-    [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState],
+    [
+      editorSession.tabs,
+      flushQueuedRichModeUpdate,
+      persistCurrentWorkspaceViewState,
+      persistenceCoordinator,
+      snapshotOutgoingDraftContent,
+    ],
   )
 
   // Renaming reads the loaded editor, so a pencil pressed on a background tab
@@ -5525,29 +5672,39 @@ export function EditorShell({
   }, [])
 
   const handleRenameWritingConfirm = useCallback(
-    async (nextTitle: string) => {
+    async (nextTitle: string): Promise<boolean> => {
       if (isDesktopRuntime()) {
         const writingId = currentWritingIdRef.current
-        if (!writingId) return
+        if (!writingId) {
+          // The draft has no file yet. Naming it is just as deliberate a
+          // signal of real intent as the first keystroke, so it must
+          // materialize through the same path typing already uses — not
+          // silently no-op (ODE-478 case 3).
+          if (!editor) return false
+          setTitle(nextTitle)
+          setHasExplicitTitle(nextTitle !== DESKTOP_UNTITLED_WRITING_TITLE)
+          return persistEditorSnapshot(editor, { title: nextTitle })
+        }
 
         const result = await (await getDocumentService()).renameWriting({
           writingId,
           title: nextTitle,
           updatedAt: new Date().toISOString(),
         })
-        if (result.error || !result.data) return
+        if (result.error || !result.data) return false
 
         setTitle(result.data.title ?? nextTitle)
         setHasExplicitTitle((result.data.title ?? nextTitle) !== UNTITLED_WRITING_TITLE)
-        return
+        return true
       }
 
       setTitle(nextTitle)
       setHasExplicitTitle(nextTitle !== UNTITLED_WRITING_TITLE)
 
       if (editor) {
-        void persistEditorSnapshot(editor, { title: nextTitle })
+        return persistEditorSnapshot(editor, { title: nextTitle })
       }
+      return true
     },
     [editor, persistEditorSnapshot],
   )
@@ -5591,6 +5748,7 @@ export function EditorShell({
       }
 
       openDraftTab()
+      activeEditorTabIdRef.current = getEditorSessionState().session.active_tab_id ?? EDITOR_DRAFT_TAB_ID
       replaceEditorHistory("/write")
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
@@ -5670,6 +5828,7 @@ export function EditorShell({
         saveState: "saved",
         hasPendingSync: false,
       })
+      activeEditorTabIdRef.current = currentWritingIdRef.current ?? nextWritingId
       // Double rAF: first waits for React to commit the new tab to the DOM,
       // second ensures the editor contenteditable is focusable.
       window.requestAnimationFrame(() => {
@@ -5698,6 +5857,7 @@ export function EditorShell({
       saveState: "saved",
       hasPendingSync: false,
     })
+    activeEditorTabIdRef.current = currentWritingIdRef.current ?? nextWritingId
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
