@@ -324,12 +324,12 @@ export function EditorTabs({
             />
           ))}
 
-          <ActionTooltip label="New writing" shortcut={getEditorShortcutLabel("newWriting")} side="bottom">
+          <ActionTooltip label="New Artifact" shortcut={getEditorShortcutLabel("newWriting")} side="bottom">
             <button
               type="button"
               onClick={onNewTab}
               className="ml-[10px] inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] text-ink-3 transition-colors duration-150 ease-out hover:bg-muted-hover hover:text-ink"
-              aria-label="New writing"
+              aria-label="New Artifact"
             >
               <Plus className="h-[17px] w-[17px]" strokeWidth={1.5} />
             </button>

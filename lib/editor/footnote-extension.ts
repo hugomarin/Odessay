@@ -45,10 +45,16 @@ type AnnotationRef = {
 }
 
 const FOOTNOTE_DEFINITION_REGEX = /^\[\^(\d+)\]:\s*(.*)$/gm
+// Both strings below are written by the app, not by the author: they are the
+// preamble the "Copy for AI" and "Full text" buttons put on the clipboard so
+// the receiving model can read the annotation notation. They never reach the
+// .md on disk — only `replaceInlineAnnotationMarkers` touches that — so they
+// sit on the product side of the vocabulary rule and are English. The
+// annotations they introduce stay in whatever language the author wrote.
 const AI_ANNOTATIONS_ONLY_PREFIX =
-  "El siguiente bloque contiene instrucciones del usuario sobre su documento. Cada linea sigue el formato: cita del pasaje relevante seguida de la instruccion entre corchetes. Tratalas como directivas del autor sobre ese fragmento especifico."
+  "The block below contains the author's instructions about their artifact. Each line follows the format: a quote of the relevant passage, then the instruction in brackets. Treat them as the author's directives about that specific fragment."
 const ANNOTATION_NOTATION_COMMENT =
-  "<!-- Anotaciones del autor embebidas en el texto. Formato: ==texto citado==[@N: instrucción] — el fragmento entre == es el pasaje al que refiere la instrucción entre corchetes. Son directivas del autor para ti; no forman parte del documento publicable. Tenlas en cuenta al procesar el texto. -->"
+  "<!-- Author annotations embedded in the text. Format: ==quoted text==[@N: instruction] — the fragment between == is the passage the bracketed instruction refers to. They are the author's directives for you; they are not part of the publishable artifact. Take them into account when processing the text. -->"
 
 const annotationTypeOrder: AnnotationType[] = ["footnote", "ai", "personal", "highlight"]
 

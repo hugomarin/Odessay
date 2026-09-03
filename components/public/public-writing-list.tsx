@@ -83,7 +83,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
     const target = items.find((writing) => writing.id === writingId)
     if (!target) return
 
-    const confirmed = window.confirm("Are you sure you want to delete this writing?")
+    const confirmed = window.confirm("Are you sure you want to delete this artifact?")
     if (!confirmed) return
 
     setIsDeletingId(writingId)
@@ -104,7 +104,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
     setIsDeletingId(null)
 
     if (!response.ok) {
-      window.alert("Could not delete this writing right now.")
+      window.alert("Could not delete this artifact right now.")
       return
     }
 
@@ -131,7 +131,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
                   : "text-ink-3 hover:text-ink-2"
               }`}
             >
-              Todo mi contenido
+              All my content
             </button>
             <button
               type="button"
@@ -142,7 +142,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
                   : "text-ink-3 hover:text-ink-2"
               }`}
             >
-              Como me ven
+              As others see me
             </button>
           </div>
         </div>
@@ -177,7 +177,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
             <div key={collection.id} className="flex items-center gap-3">
               <span className="text-[13px] text-ink-2 sm:text-[14px]">{collection.name}</span>
               <span className="h-1 w-1 rounded-full bg-ink-4" />
-              <span className="text-[12px] text-ink-4 sm:text-[13px]">{visibleCount} writings</span>
+              <span className="text-[12px] text-ink-4 sm:text-[13px]">{visibleCount} artifacts</span>
             </div>
           )
         })}
@@ -191,7 +191,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
       >
         {displayedWritings.length === 0 ? (
           <p className="py-12 text-center font-lora text-[15px] italic text-ink-3">
-            Nada aquí todavía.
+            Nothing here yet.
           </p>
         ) : (
           displayedWritings.map((writing) => {
@@ -234,7 +234,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-ink-3 hover:text-ink"
-                            aria-label="Writing actions"
+                            aria-label="Artifact actions"
                           >
                             <MoreHorizontal className="h-4 w-4" strokeWidth={1.5} />
                           </Button>
@@ -243,7 +243,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
                         <DropdownMenuItem asChild className="m-1 cursor-pointer rounded-lg text-[13px] text-ink-2 focus:bg-muted">
                             <Link href={buildWritingRouteHref("/write", writing)}>
                               <PenSquare className="mr-2 h-4 w-4" strokeWidth={1.5} />
-                              Editar
+                              Edit
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem
@@ -255,7 +255,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
                             }}
                           >
                             <Trash2 className="mr-2 h-4 w-4" strokeWidth={1.5} />
-                            Eliminar
+                            Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

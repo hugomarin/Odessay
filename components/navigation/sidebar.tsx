@@ -500,7 +500,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             data-testid="sidebar-actions"
             className="SidebarActions flex flex-col gap-0.5 px-[6px] pt-0.5"
           >
-            <ActionTooltip label="New writing" shortcut={getEditorShortcutLabel("newWriting")} side="right">
+            <ActionTooltip label="New Artifact" shortcut={getEditorShortcutLabel("newWriting")} side="right">
               <Link
                 href="/write?new=1"
                 className={cn(
@@ -508,13 +508,13 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                   SIDEBAR_ITEM_TRANSITION_CLASS,
                   "text-ink-2 hover:bg-muted hover:text-ink",
                 )}
-                aria-label="New writing"
+                aria-label="New Artifact"
               >
                 <span className={SIDEBAR_ICON_WRAP_CLASS}>
                   <Plus className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
                 </span>
                 <span className={cn(SIDEBAR_LABEL_TRANSITION_CLASS, isIconOnly ? "opacity-0" : "opacity-100")}>
-                  New writing
+                  New Artifact
                 </span>
               </Link>
             </ActionTooltip>

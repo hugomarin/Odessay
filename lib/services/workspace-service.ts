@@ -154,7 +154,7 @@ export function getWorkspaceAssignmentService(): WorkspaceAssignmentService {
  * catalog notification. Use `refreshContextualWorkspaceDocuments` for those.
  *
  * The outcome is discriminated because three different situations used to
- * collapse into `null`, and the UI rendered all of them as "this writing does
+ * collapse into `null`, and the UI rendered all of them as "this artifact does
  * not belong to a Workspace" — a claim that is simply false on web, where the
  * runtime cannot answer the question at all.
  */

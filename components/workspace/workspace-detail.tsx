@@ -596,7 +596,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       if (!writing) return;
       setRenameTarget({
         id: writing.id,
-        title: writing.title?.trim() || "Untitled writing",
+        title: writing.title?.trim() || "Untitled artifact",
         bodyText: writing.body_text,
       });
     },
@@ -746,7 +746,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     () => [
       {
         id: "title",
-        label: "Writing",
+        label: "Artifact",
         className: "min-w-0 pl-2 pr-5",
         render: (file) => {
           const document = documentJoin.get(file.path);
@@ -805,7 +805,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                         }
                         align="start"
                         title="Collections"
-                        description="Choose labels for this writing."
+                        description="Choose labels for this artifact."
                         onToggleCollection={(collectionId) =>
                           void handleCollectionToggle(file, collectionId)
                         }
@@ -1119,7 +1119,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               {workspace.name}
             </h1>
             <p className="mt-3 max-w-[58ch] text-[16px] leading-7 text-ink-3">
-              This workspace is still registered in Odessay, but its local
+              This workspace is still registered in Artifact Studio, but its local
               folder is unavailable right now.
             </p>
             <div className="mt-4 rounded-[14px] border-[0.5px] border-border bg-bg px-4 py-3 text-sm text-ink-3">
@@ -1167,7 +1167,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                     Rename workspace
                   </DialogTitle>
                   <DialogDescription className="text-[16px] leading-7 text-ink-3">
-                    Update the workspace label in Odessay. This does not rename
+                    Update the workspace label in Artifact Studio. This does not rename
                     the local folder.
                   </DialogDescription>
                 </DialogHeader>
@@ -1213,7 +1213,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                   </DialogTitle>
                   <DialogDescription className="text-[16px] leading-7 text-ink-3">
                     Disconnecting keeps all local files untouched. The folder
-                    will stop syncing with Odessay.
+                    will stop syncing with Artifact Studio.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="mt-6 rounded-[14px] border-[0.5px] border-border bg-bg px-4 py-3 text-sm text-ink-3">
@@ -1495,7 +1495,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
 
         <RenameWritingModal
           open={renameTarget !== null}
-          title={renameTarget?.title ?? "Untitled writing"}
+          title={renameTarget?.title ?? "Untitled artifact"}
           bodyText={renameTarget?.bodyText ?? ""}
           writingId={renameTarget?.id}
           onOpenChange={(open) => {
@@ -1630,7 +1630,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                     Rename workspace
                   </DialogTitle>
                   <DialogDescription className="text-[16px] leading-7 text-ink-3">
-                    Update the workspace label in Odessay. This does not rename
+                    Update the workspace label in Artifact Studio. This does not rename
                     the local folder.
                   </DialogDescription>
                 </DialogHeader>
@@ -1676,7 +1676,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                   </DialogTitle>
                   <DialogDescription className="text-[16px] leading-7 text-ink-3">
                     Disconnecting keeps all local files untouched. The folder
-                    will stop syncing with Odessay.
+                    will stop syncing with Artifact Studio.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="mt-6 rounded-[14px] border-[0.5px] border-border bg-bg px-4 py-3 text-sm text-ink-3">

@@ -12,7 +12,7 @@ export default function DeskSharedHarnessPage() {
               aria-pressed="false"
               className="rounded-md px-3 py-1.5 text-[13px] font-medium text-ink-3 transition-colors"
             >
-              My writings
+              My artifacts
             </button>
             <button
               type="button"
@@ -33,7 +33,7 @@ export default function DeskSharedHarnessPage() {
             id: "fixture-shared-writing-1",
             title: "Shared fixture letter",
             slug: "shared-fixture-letter",
-            excerpt: "A fixture writing that appears in the shared tab during Playwright runs.",
+            excerpt: "A fixture artifact that appears in the shared tab during Playwright runs.",
             updatedAt: "2026-03-31T15:00:00.000Z",
             author: {
               username: "fixture-author",

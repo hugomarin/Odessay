@@ -144,14 +144,14 @@ export function DesktopSharedCopyDialog({
       })
 
       if (result.error || !result.data) {
-        setError(result.error?.message ?? "Failed to save shared writing.")
+        setError(result.error?.message ?? "Failed to save shared artifact.")
         return
       }
 
       onOpenChange(false)
       router.push(buildWritingRouteHref("/write", { id: result.data.writingId, slug: null }))
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to save shared writing.")
+      setError(submitError instanceof Error ? submitError.message : "Failed to save shared artifact.")
     } finally {
       setIsSubmitting(false)
     }
@@ -163,7 +163,7 @@ export function DesktopSharedCopyDialog({
         <DialogHeader>
           <DialogTitle>Save to my files</DialogTitle>
           <DialogDescription>
-            Create a local editable copy of {writingTitle ? `"${writingTitle}"` : "this shared writing"}.
+            Create a local editable copy of {writingTitle ? `"${writingTitle}"` : "this shared artifact"}.
           </DialogDescription>
         </DialogHeader>
 

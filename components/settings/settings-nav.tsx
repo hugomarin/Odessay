@@ -37,7 +37,7 @@ export const SETTINGS_SECTIONS = [
     href: "/settings/status",
     label: "Status",
     icon: CircleDashed,
-    title: "Writing statuses",
+    title: "Artifact statuses",
     subtitle: "Choose which statuses appear in menus and filters, and how they look.",
   },
   {

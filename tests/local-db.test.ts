@@ -12,7 +12,7 @@ import type { LocalCorrectionBlock, LocalWriting, PublicationSuggestion, SyncMut
 
 const createWriting = (id: string, version: number): LocalWriting => ({
   id,
-  title: "Untitled writing",
+  title: "Untitled artifact",
   body_json: {
     type: "doc",
   },

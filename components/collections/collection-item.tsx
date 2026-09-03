@@ -52,7 +52,7 @@ export function CollectionItem({
           <div className="min-w-0">
             <p className="truncate text-[13px] font-medium text-ink">{collection.name}</p>
             <p className="mt-1 text-[11px] text-ink-4">
-              {writings.length} writings
+              {writings.length} artifacts
               {" · "}
               {collection.visibility === "public" ? "Visible in public author space" : "Private"}
             </p>
@@ -139,7 +139,7 @@ export function CollectionItem({
         <div className="border-t-[0.5px] border-border">
           {writings.length === 0 ? (
             <p className="px-10 py-5 text-[13px] text-ink-4">
-              No writings in this collection yet.
+              No artifacts in this collection yet.
             </p>
           ) : (
             <div className="divide-y divide-border/70">

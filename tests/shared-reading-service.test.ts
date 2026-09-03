@@ -35,7 +35,7 @@ describe("desktop shared reading asset resolution", () => {
     vi.restoreAllMocks()
   })
 
-  it("rewrites shared writing asset URLs to signed web URLs before rendering", async () => {
+  it("rewrites shared artifact asset URLs to signed web URLs before rendering", async () => {
     getUserMock.mockResolvedValue({ data: { user: { id: "user-1" } } })
     getSessionMock.mockResolvedValue({ data: { session: { access_token: "desktop-token" } } })
     rpcMock.mockResolvedValue({

@@ -25,7 +25,7 @@ test("contentless desktop lifecycle has zero durable effects", async ({ page }) 
     cloudWrites: 0,
   })
 
-  await page.getByTestId("editor-empty-state").getByRole("button", { name: "New writing" }).click()
+  await page.getByTestId("editor-empty-state").getByRole("button", { name: "New Artifact" }).click()
   await expect(page.getByTestId("editor-topbar")).toBeVisible()
   await expect(page.getByTestId("editor-writing-area")).toBeVisible()
   await expect(page.getByText("Saved locally")).toHaveCount(0)

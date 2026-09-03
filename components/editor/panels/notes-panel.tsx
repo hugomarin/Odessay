@@ -430,8 +430,8 @@ export function NotesPanel({
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {ordered.length === 0 ? (
             <div className="px-1 py-6 flex flex-col gap-1">
-              <p className="text-[12px] text-ink-3">No hay notas.</p>
-              <p className="text-[11px] text-ink-4">Selecciona texto en el documento para agregar una.</p>
+              <p className="text-[12px] text-ink-3">No notes yet.</p>
+              <p className="text-[11px] text-ink-4">Select text in the artifact to add one.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -541,7 +541,7 @@ export function NotesPanel({
                             }
                             className="mt-0.5 font-sans text-[11px] text-ink-4 hover:text-ink transition-colors"
                           >
-                            {isExpanded ? "ver menos" : "ver más"}
+                            {isExpanded ? "Show less" : "Show more"}
                           </button>
                         )}
                       </div>
@@ -605,8 +605,8 @@ export function NotesPanel({
                             setActionErrorKey(didNavigate ? null : key)
                           }}
                           className="flex h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink group-hover:opacity-100"
-                          aria-label="Go to annotation in document"
-                          title="Ir al texto"
+                          aria-label="Go to annotation in artifact"
+                          title="Go to annotation"
                         >
                           <span className="text-[11px] leading-none">↗</span>
                         </button>
@@ -657,24 +657,24 @@ export function NotesPanel({
           )}
         </div>
 
-        {/* Copiar para AI */}
+        {/* Copy for AI */}
         {aiAnnotations.length > 0 && (
           <div className="shrink-0 border-t-[0.5px] border-border px-4 py-3">
             <p className="font-sans text-[11px] uppercase tracking-[0.07em] text-ink-4">
-              Copiar para AI
+              Copy for AI
             </p>
             <div className="mt-2 flex gap-2">
               <button
                 onClick={copyAnnotations}
                 className="rounded-[8px] bg-muted px-3 py-1.5 font-sans text-[12px] text-ink-2"
               >
-                Anotaciones
+                Annotations
               </button>
               <button
                 onClick={copyFullText}
                 className="rounded-[8px] bg-ink px-3 py-1.5 font-sans text-[12px] text-bg"
               >
-                Texto completo
+                Full text
               </button>
             </div>
           </div>

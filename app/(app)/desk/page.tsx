@@ -388,14 +388,14 @@ export default function DeskPage() {
       try {
         const sharedResult = await sharingService.listIncomingShares()
         if (sharedResult.error || !sharedResult.data) {
-          throw new Error(sharedResult.error?.message ?? "Failed to load shared writings.")
+          throw new Error(sharedResult.error?.message ?? "Failed to load shared artifacts.")
         }
 
         setSharedItems(sharedResult.data)
         hasLoadedSharedRef.current = true
       } catch (error) {
         setSharedItems([])
-        setSharedError(error instanceof Error ? error.message : "Failed to load shared writings.")
+        setSharedError(error instanceof Error ? error.message : "Failed to load shared artifacts.")
       } finally {
         setIsSharedLoading(false)
       }
@@ -659,7 +659,7 @@ export default function DeskPage() {
 
     setRenameTarget({
       id: writing.id,
-      title: writing.title?.trim() || "Untitled writing",
+      title: writing.title?.trim() || "Untitled artifact",
       bodyText: writing.body_text,
     })
   }, [])
@@ -944,7 +944,7 @@ export default function DeskPage() {
 
           <RenameWritingModal
             open={renameTarget !== null}
-            title={renameTarget?.title ?? "Untitled writing"}
+            title={renameTarget?.title ?? "Untitled artifact"}
             bodyText={renameTarget?.bodyText ?? ""}
             writingId={renameTarget?.id}
             onOpenChange={(open) => {

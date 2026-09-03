@@ -688,7 +688,7 @@ export class DesktopWorkspaceService {
 
       // A file that vanished or stopped parsing between the rescan and this loop
       // is skipped, not fatal: its cloud copy stays archived and recoverable from
-      // Settings > Archived writings instead of blocking the whole re-add.
+      // Settings > Archived artifacts instead of blocking the whole re-add.
       let snapshot;
       try {
         const markdown = await tauriOpenFile(record.binding.canonicalPath);
@@ -774,7 +774,7 @@ export class DesktopWorkspaceService {
 
     if (skipped.length > 0) {
       throw new Error(
-        `Workspace added, but ${skipped.length} archived writing(s) could not be restored from the local file and remain in Settings > Archived writings: ${skipped.join(", ")}. Fix the file and choose Add workspace again to retry.`,
+        `Workspace added, but ${skipped.length} archived artifact(s) could not be restored from the local file and remain in Settings > Archived artifacts: ${skipped.join(", ")}. Fix the file and choose Add workspace again to retry.`,
       );
     }
   }

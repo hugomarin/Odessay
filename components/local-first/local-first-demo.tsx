@@ -14,7 +14,7 @@ const createDemoWriting = (): LocalWriting => {
 
   return {
     id,
-    title: "Untitled writing",
+    title: "Untitled artifact",
     body_json: {
       type: "doc",
       content: [
@@ -75,8 +75,8 @@ export function LocalFirstDemo() {
             Local-first storage
           </h2>
           <p className="max-w-2xl text-sm leading-6 text-[hsl(var(--ink-3))]">
-            Este botón crea un writing local en IndexedDB y lo encola para sync remoto sin bloquear
-            la UI.
+            This button creates a local artifact in IndexedDB and queues it for remote sync without
+            blocking the UI.
           </p>
         </div>
 
@@ -100,7 +100,7 @@ export function LocalFirstDemo() {
 
         <div className="space-y-3 border-t-[0.5px] border-border pt-4">
           <p className="text-xs uppercase tracking-[0.07em] text-[hsl(var(--ink-4))]">
-            IndexedDB writings
+            IndexedDB artifacts
           </p>
           <ul className="space-y-2">
             {writings.map((writing) => (
@@ -110,7 +110,7 @@ export function LocalFirstDemo() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-lora text-[15px] text-foreground">
-                    {writing.title ?? "Untitled writing"}
+                    {writing.title ?? "Untitled artifact"}
                   </span>
                   <span className="text-xs text-[hsl(var(--ink-4))]">{writing.sync_status}</span>
                 </div>
@@ -120,7 +120,7 @@ export function LocalFirstDemo() {
           </ul>
 
           {writings.length === 0 ? (
-            <p className="text-sm text-[hsl(var(--ink-4))]">No local writings yet.</p>
+            <p className="text-sm text-[hsl(var(--ink-4))]">No local artifacts yet.</p>
           ) : null}
         </div>
       </div>

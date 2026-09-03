@@ -27,7 +27,7 @@ export function DesktopSharedEntry() {
     if (!identifier) {
       setState({
         isLoading: false,
-        error: "Choose a shared writing from Desk to open it here.",
+        error: "Choose a shared artifact from Desk to open it here.",
         payload: null,
       })
       return
@@ -39,7 +39,7 @@ export function DesktopSharedEntry() {
       if (result.error || !result.data) {
         setState({
           isLoading: false,
-          error: result.error?.message ?? "Failed to load shared writing.",
+          error: result.error?.message ?? "Failed to load shared artifact.",
           payload: null,
         })
         return
@@ -72,7 +72,7 @@ export function DesktopSharedEntry() {
   if (state.isLoading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-bg px-6">
-        <p className="text-[14px] text-ink-4">Loading shared writing…</p>
+        <p className="text-[14px] text-ink-4">Loading shared artifact…</p>
       </main>
     )
   }
@@ -81,7 +81,7 @@ export function DesktopSharedEntry() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-bg px-6">
         <div className="max-w-[420px] text-center">
-          <p className="font-lora text-[22px] italic text-ink-3">{state.error ?? "Shared writing not found."}</p>
+          <p className="font-lora text-[22px] italic text-ink-3">{state.error ?? "Shared artifact not found."}</p>
         </div>
       </main>
     )

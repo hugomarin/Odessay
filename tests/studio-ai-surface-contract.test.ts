@@ -22,7 +22,7 @@ describe("studio AI surface contract", () => {
     expect(bubble).toContain("min-h-[74px]")
     // Six instruction chips, 32px tall, in the prototype's order.
     expect(bubble).toContain(
-      `["eliminar", "modificar", "expandir", "valida esto", "simplifica", "mantén tono"]`,
+      `["delete", "modify", "expand", "validate this", "simplify", "keep tone"]`,
     )
     expect(bubble).toContain("h-8 rounded-lg border-[0.5px] border-border bg-transparent px-[13px]")
   })

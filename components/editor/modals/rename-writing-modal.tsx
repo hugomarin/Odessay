@@ -68,7 +68,7 @@ export function RenameWritingModal({
   }
 
   const submit = () => {
-    onConfirm(nextTitle.trim() || "Untitled writing")
+    onConfirm(nextTitle.trim() || "Untitled artifact")
     onOpenChange(false)
   }
 
@@ -108,7 +108,7 @@ export function RenameWritingModal({
           aria-label="Artifact name"
           value={nextTitle}
           onChange={(event) => setNextTitle(event.target.value)}
-          placeholder="Untitled writing"
+          placeholder="Untitled artifact"
           maxLength={160}
           className="h-11 text-[15px] focus-visible:ring-1 focus-visible:ring-ink-3 focus-visible:ring-offset-0"
         />

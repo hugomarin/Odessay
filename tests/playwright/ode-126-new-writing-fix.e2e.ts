@@ -8,7 +8,7 @@ test("ODE-126: clicking + from an existing writing creates a new writing with va
   await page.goto("/desk")
   await page.waitForURL(/\/desk/, { timeout: 10000 })
   
-  // Click the "New writing" button in sidebar or desk
+  // Click the "New Artifact" button in sidebar or desk
   const newWritingButton = page.locator('a[href="/write"]').first()
   if (await newWritingButton.isVisible().catch(() => false)) {
     await newWritingButton.click()
@@ -28,7 +28,7 @@ test("ODE-126: clicking + from an existing writing creates a new writing with va
   await page.waitForTimeout(1000)
   
   // Click the + button in tabs to create another new writing
-  const plusButton = page.locator('button[aria-label="New writing"]')
+  const plusButton = page.locator('button[aria-label="New Artifact"]')
   await plusButton.click()
   
   // Wait for navigation to complete

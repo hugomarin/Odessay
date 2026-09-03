@@ -17,7 +17,7 @@ import type { LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema
 import type { ArtifactType } from "@/lib/writings/artifact-type";
 import type { WritingStatus } from "@/lib/writings/status";
 
-const UNTITLED_DOCUMENT_NAME = "Untitled writing";
+const UNTITLED_DOCUMENT_NAME = "Untitled artifact";
 
 function nowIso() {
   return new Date().toISOString();

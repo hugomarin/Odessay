@@ -34,7 +34,7 @@ const memoryEntrySchema = z.object({
 
 const requestSchema = z.object({
   writingId: z.string().trim().min(1).optional(),
-  title: z.string().trim().max(160).default("Untitled writing"),
+  title: z.string().trim().max(160).default("Untitled artifact"),
   markdown: z.string().trim().min(1),
   bodyText: z.string().default(""),
   sourceHash: z.string().trim().min(1),

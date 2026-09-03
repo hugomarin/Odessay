@@ -132,7 +132,7 @@ export function MarginsPanel({
                 ) : null}
               </div>
               <SheetDescription className="sr-only">
-                Review and annotate passages in this writing.
+                Review and annotate passages in this artifact.
               </SheetDescription>
             </SheetHeader>
             {renderFilters()}
@@ -166,20 +166,20 @@ export function MarginsPanel({
                 {aiCount > 0 ? (
                   <div className="mb-3 rounded-[10px] border-[0.5px] border-border bg-sb p-3">
                     <p className="font-sans text-[11px] uppercase tracking-[0.07em] text-ink-4">
-                      Copiar para AI
+                      Copy for AI
                     </p>
                     <div className="mt-2 flex gap-2">
                       <button
                         onClick={onCopyAiAnnotations}
                         className="rounded-[8px] bg-muted px-3 py-1.5 font-sans text-[12px] text-ink-2"
                       >
-                        Anotaciones
+                        Annotations
                       </button>
                       <button
                         onClick={onCopyAiFullText}
                         className="rounded-[8px] bg-ink px-3 py-1.5 font-sans text-[12px] text-bg"
                       >
-                        Texto completo
+                        Full text
                       </button>
                     </div>
                   </div>
@@ -275,20 +275,20 @@ export function MarginsPanel({
               {aiCount > 0 ? (
                 <div className="mb-3 rounded-[10px] border-[0.5px] border-border bg-sb p-3">
                   <p className="font-sans text-[11px] uppercase tracking-[0.07em] text-ink-4">
-                    Copiar para AI
+                    Copy for AI
                   </p>
                   <div className="mt-2 flex gap-2">
                     <button
                       onClick={onCopyAiAnnotations}
                       className="rounded-[8px] bg-muted px-3 py-1.5 font-sans text-[12px] text-ink-2"
                     >
-                      Anotaciones
+                      Annotations
                     </button>
                     <button
                       onClick={onCopyAiFullText}
                       className="rounded-[8px] bg-ink px-3 py-1.5 font-sans text-[12px] text-bg"
                     >
-                      Texto completo
+                      Full text
                     </button>
                   </div>
                 </div>

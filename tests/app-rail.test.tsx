@@ -185,8 +185,9 @@ describe("geometry", () => {
 
   it("gives the clipped label a line box tall enough for descenders", () => {
     // The prototypes write `font: 400 14px/1`, and a 14px line box over 14px
-    // text cuts the tail off the "g" in "New writing" — the label clips
-    // horizontally to stay on one line, so it must not clip vertically too.
+    // text cuts the tail off descenders — the "g" in "Settings", the "p" in
+    // "Workspace" — and the label already clips horizontally to stay on one
+    // line, so it must not clip vertically too.
     // Measured for real in the evidence capture (`clippedLabels`); asserted
     // here so the class cannot quietly go back.
     renderRail("expanded")

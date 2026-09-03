@@ -48,7 +48,7 @@ export function UncategorizedBanner({
           </div>
           <div>
             <p className="text-[13px] font-semibold text-ink-2">
-              Tienes {writings.length} writings without a collection
+              {writings.length} artifacts without a collection
             </p>
             <p className="mt-1 text-[12px] text-ink-3">
               Organize them inline. The banner disappears only when everything is classified.

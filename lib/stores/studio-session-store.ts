@@ -57,7 +57,7 @@ function toStudioArtifact(tab: LocalEditorSessionTab): StudioArtifact {
   return {
     id: tab.id,
     writingId: tab.writing_id,
-    title: tab.title?.trim() || "Untitled writing",
+    title: tab.title?.trim() || "Untitled artifact",
     href: getArtifactHref(tab),
     saveState: tab.save_state,
     hasPendingSync: tab.has_pending_sync,

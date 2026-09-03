@@ -26,7 +26,7 @@ test("Studio navigation switches between one shared Contents and Workspace sideb
   await expect(
     // The harness runs in a browser, where the runtime cannot read the
     // filesystem — it must say so instead of denying membership.
-    sidebar.getByText("solo está disponible en la app de escritorio", {
+    sidebar.getByText("only available in the desktop app", {
       exact: false,
     }),
   ).toBeVisible();
@@ -51,7 +51,7 @@ test("both sidebar modes occupy the same box inside a frame that never scrolls",
 
   await page.getByRole("button", { name: "Workspace" }).click();
   await expect(
-    page.getByText("solo está disponible en la app de escritorio", {
+    page.getByText("only available in the desktop app", {
       exact: false,
     }),
   ).toBeVisible();

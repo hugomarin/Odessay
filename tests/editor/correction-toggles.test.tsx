@@ -107,7 +107,7 @@ describe("CorrectionsPanel analysis trigger", () => {
     )
 
     expect(html).toContain("Try again")
-    expect(html).toContain("We couldn’t analyze this document")
+    expect(html).toContain("We couldn’t analyze this artifact")
   })
 
   it("shows the learn word action for spelling suggestions and lists learned words", () => {

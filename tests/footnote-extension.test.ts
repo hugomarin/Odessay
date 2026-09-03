@@ -22,9 +22,9 @@ describe("footnote extension helpers", () => {
       text,
     }))
   const annotationsOnlyPrefix =
-    "El siguiente bloque contiene instrucciones del usuario sobre su documento. Cada linea sigue el formato: cita del pasaje relevante seguida de la instruccion entre corchetes. Tratalas como directivas del autor sobre ese fragmento especifico."
+    "The block below contains the author's instructions about their artifact. Each line follows the format: a quote of the relevant passage, then the instruction in brackets. Treat them as the author's directives about that specific fragment."
   const fullTextPrefix =
-    "<!-- Anotaciones del autor embebidas en el texto. Formato: ==texto citado==[@N: instrucción] — el fragmento entre == es el pasaje al que refiere la instrucción entre corchetes. Son directivas del autor para ti; no forman parte del documento publicable. Tenlas en cuenta al procesar el texto. -->"
+    "<!-- Author annotations embedded in the text. Format: ==quoted text==[@N: instruction] — the fragment between == is the passage the bracketed instruction refers to. They are the author's directives for you; they are not part of the publishable artifact. Take them into account when processing the text. -->"
 
   it("normalizes references and keeps definitions aligned", () => {
     const markdown = "Body[^3] and more[^1]\n\n[^1]: First\n[^3]: Third"

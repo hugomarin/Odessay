@@ -62,7 +62,7 @@ test("rich mode preserves visual scroll position across workspace tab switches",
   expect(totalScroll).toBeGreaterThan(1000)
 
   // Create a new tab (opens a blank draft)
-  await page.getByRole("button", { name: "New writing" }).click()
+  await page.getByRole("button", { name: "New Artifact" }).click()
 
   // Wait for the new writing tab to become active
   await expect(page.getByLabel(/Open Untitled/)).toBeVisible()

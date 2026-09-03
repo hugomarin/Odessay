@@ -60,7 +60,7 @@ export default async function PreviewPage({ params, searchParams }: PreviewPageP
     return (
       <ErrorState
         title="Preview temporarily unavailable"
-        description="Artifact Studio could not load this writing right now. Retry in a moment."
+        description="Artifact Studio could not load this artifact right now. Retry in a moment."
       />
     )
   }

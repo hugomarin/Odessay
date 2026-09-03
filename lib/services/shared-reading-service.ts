@@ -217,7 +217,7 @@ async function loadSharedWritingById(writingId: string): Promise<ServiceResponse
   }
 
   if (!data) {
-    return err("NOT_FOUND", "Shared writing not found.")
+    return err("NOT_FOUND", "Shared artifact not found.")
   }
 
   const writing = data as DesktopSharedWritingRow
@@ -234,7 +234,7 @@ export async function loadDesktopSharedReading(
 ): Promise<ServiceResponse<DesktopSharedReadingPayload>> {
   const userId = await getDesktopSessionUserId()
   if (!userId) {
-    return err("UNAUTHORIZED", "Sign in to open shared writings.")
+    return err("UNAUTHORIZED", "Sign in to open shared artifacts.")
   }
 
   const sharedItemsResult = await listIncomingSharedItems()
@@ -246,7 +246,7 @@ export async function loadDesktopSharedReading(
   const targetIndex = sharedItems.findIndex((item) => item.id === identifier || item.slug === identifier)
 
   if (targetIndex === -1) {
-    return err("NOT_FOUND", "Shared writing not found.")
+    return err("NOT_FOUND", "Shared artifact not found.")
   }
 
   const target = sharedItems[targetIndex]
@@ -281,7 +281,7 @@ export async function copyDesktopSharedWritingToWorkspace(
 ): Promise<ServiceResponse<{ writingId: string }>> {
   const userId = await getDesktopSessionUserId()
   if (!userId) {
-    return err("UNAUTHORIZED", "Sign in to save a shared writing to your files.")
+    return err("UNAUTHORIZED", "Sign in to save a shared artifact to your files.")
   }
 
   const sharedReadingResult = await loadDesktopSharedReading(input.identifier)

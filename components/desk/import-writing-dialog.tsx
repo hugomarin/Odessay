@@ -158,7 +158,7 @@ export function ImportWritingDialog({ open, onOpenChange }: Props) {
       >
         <DialogHeader>
           <DialogTitle className={TITLE_CLS}>
-            Import a writing
+            Import an artifact
           </DialogTitle>
         </DialogHeader>
 

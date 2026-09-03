@@ -196,7 +196,7 @@ describe("desktop document service after compatibility retirement", () => {
     })
     mocks.webExport.mockResolvedValue({
       data: null,
-      error: { code: "UNAVAILABLE", message: "This document has no local copy on this machine" },
+      error: { code: "UNAVAILABLE", message: "This artifact has no local copy on this machine" },
     })
     mocks.workspaceSync.mockResolvedValue({
       rootPath: "/docs", bindingRootId: "root-1", selectedPaths: ["Letter.md"],
@@ -1091,7 +1091,7 @@ describe("desktop document service after compatibility retirement", () => {
 
       expect(result.error).toEqual({
         code: "UNAVAILABLE",
-        message: "This document has no local copy on this machine",
+        message: "This artifact has no local copy on this machine",
       })
       expect(mocks.webExport).toHaveBeenCalledWith({ writingId: id, format: "pdf" })
       expect(mocks.exportFile).not.toHaveBeenCalled()

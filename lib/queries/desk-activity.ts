@@ -177,7 +177,7 @@ const buildExcerpt = (bodyText: string) => {
 
 const buildTitle = (title: string | null | undefined) => {
   const trimmed = title?.trim()
-  return trimmed?.length ? trimmed : "Untitled writing"
+  return trimmed?.length ? trimmed : "Untitled artifact"
 }
 
 const buildDateLabel = (updatedAt: Date, now: Date) => {
@@ -191,7 +191,7 @@ const buildDateLabel = (updatedAt: Date, now: Date) => {
     return "Yesterday"
   }
 
-  return new Intl.DateTimeFormat("es-MX", {
+  return new Intl.DateTimeFormat("en-US", {
     day: "numeric",
     month: "short",
   }).format(updatedAt)

@@ -231,7 +231,7 @@ export function WritingPreviewModal({
       return
     }
 
-    const nextTitle = titleDraft.trim() || "Untitled writing"
+    const nextTitle = titleDraft.trim() || "Untitled artifact"
     const currentTitle = preview?.title ?? row.title
     if (nextTitle === currentTitle) {
       setTitleDraft(currentTitle)
@@ -589,7 +589,7 @@ export function WritingPreviewModal({
                   className="inline-flex h-[34px] items-center gap-2 whitespace-nowrap rounded-[8px] border-[0.5px] border-border bg-sb px-[13px] text-[13px] font-medium text-ink-2 transition-colors hover:border-ink-6 hover:bg-surface-row-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                 >
                   <ExternalLink className="h-[15px] w-[15px]" strokeWidth={1.5} />
-                  Open full writing
+                  Open full artifact
                 </button>
               ) : null}
 
@@ -603,7 +603,7 @@ export function WritingPreviewModal({
                   <PopoverContent align="end" className="w-[200px] p-[5px]">
                     <PreviewMenuItem
                         icon={<Trash2 className="h-[13px] w-[13px]" strokeWidth={1.5} />}
-                        label="Delete writing"
+                        label="Delete artifact"
                         destructive
                         onSelect={() => {
                           setMoreOpen(false)
@@ -800,7 +800,7 @@ export function WritingPreviewModal({
                           onToggleCollection={(collectionId) => onToggleCollection(row.id, collectionId)}
                           onCreateCollection={(name) => onCreateCollection(row.id, name)}
                           title="Add to collections"
-                          description="Choose labels for this writing."
+                          description="Choose labels for this artifact."
                           trigger={
                             <button
                               type="button"

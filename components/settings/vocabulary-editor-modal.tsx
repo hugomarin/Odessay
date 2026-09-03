@@ -92,7 +92,7 @@ export function VocabularyEditorModal({
       onOpenChange={onOpenChange}
       width={520}
       title={draft.name || (isType ? "New type" : "New status")}
-      description={isType ? "Artifact type" : "Writing status"}
+      description={isType ? "Artifact type" : "Artifact status"}
       chip={
         <span
           className="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"

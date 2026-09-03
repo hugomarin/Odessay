@@ -353,7 +353,7 @@ describe("hydrateLocalWritingsFromRemote — list response integration", () => {
     expect(stored).not.toBeNull()
     expect(stored?.title).toBe("New Writing")
     expect(stored?.status).toBe("done")
-    // New writing gets empty body defaults
+    // New artifact gets empty body defaults
     expect(stored?.body_text).toBe("")
     expect(stored?.body_json).toEqual({ type: "doc", content: [] })
 

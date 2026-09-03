@@ -24,7 +24,7 @@ type CollectionCreateDialogProps = {
 export function CollectionCreateDialog({
   open,
   title = "New collection",
-  description = "Create a label to organize writings across Desk, Collections, and the editor.",
+  description = "Create a label to organize artifacts across Desk, Collections, and the editor.",
   initialName = "",
   confirmLabel = "Create",
   pending = false,

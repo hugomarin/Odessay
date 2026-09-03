@@ -352,7 +352,7 @@ const MARKDOWN_SAVE_DEBOUNCE_MS = 800
 const DESKTOP_PERSISTENCE_DEBOUNCE_MS = 150
 
 const AUTO_TITLE_MAX_CHARS = 48
-const UNTITLED_WRITING_TITLE = "Untitled writing"
+const UNTITLED_WRITING_TITLE = "Untitled artifact"
 const DESKTOP_UNTITLED_WRITING_TITLE = UNTITLED_DOCUMENT_NAME
 
 const navigateToEditorPosition = (editor: Editor, position: number) => {
@@ -430,7 +430,7 @@ const createWritingId = () => {
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
   }
 
-  throw new Error("Unable to generate a UUID for the writing.")
+  throw new Error("Unable to generate a UUID for the artifact.")
 }
 
 // ODE-389: the harness guard latches. `replaceEditorHistory` rewrites the URL
@@ -818,7 +818,7 @@ export function EditorShell({
       return { renderUrl: resolved.data }
     }
     const documentPath = currentCanonicalPathRef.current
-    if (!documentPath) throw new Error("Save this document before loading local images")
+    if (!documentPath) throw new Error("Save this artifact before loading local images")
     const result = await service.readLocalImageAsset({ documentPath, source })
     if (result.error) throw new Error(result.error.message)
     const objectUrl = URL.createObjectURL(
@@ -5352,7 +5352,7 @@ export function EditorShell({
       }
 
       if (targetTab.has_pending_sync) {
-        const confirmed = window.confirm("This writing still has unsynced changes. Close it anyway?")
+        const confirmed = window.confirm("This artifact still has unsynced changes. Close it anyway?")
         if (!confirmed) {
           return
         }
@@ -5554,7 +5554,7 @@ export function EditorShell({
 
   const handleCreateWorkspaceTab = useCallback(async (options?: { skipConfirm?: boolean }) => {
     if (!options?.skipConfirm && editorSession.tabs.length >= 10) {
-      const confirmed = window.confirm("You already have many tabs open. Open another writing anyway?")
+      const confirmed = window.confirm("You already have many tabs open. Open another artifact anyway?")
       if (!confirmed) {
         return
       }
@@ -5757,7 +5757,7 @@ export function EditorShell({
         let result = await openDocumentByPath(_path)
         if (result.status === "needs-binding-root-confirmation") {
           const accept = window.confirm(
-            `Register “${result.parentDir}” so Odessay can keep this file’s identity across moves and renames?`,
+            `Register “${result.parentDir}” so Artifact Studio can keep this file’s identity across moves and renames?`,
           )
           if (!accept) return
           result = await openDocumentByPath(_path, { confirmRegisterRoot: true })
@@ -6094,7 +6094,7 @@ export function EditorShell({
               </span>
             ) : externalFileNotice.kind === "relocate-failed" ? (
               <span>
-                This document couldn&apos;t be moved to the chosen folder. Nothing was written there;
+                This artifact couldn&apos;t be moved to the chosen folder. Nothing was written there;
                 Artifact Studio keeps working on the original
                 {externalFileNotice.path ? (
                   <span className="ml-1 font-medium text-ink">{externalFileNotice.path}</span>
@@ -6127,11 +6127,11 @@ export function EditorShell({
                     Desktop Sync
                   </p>
                   <h2 className="mt-3 font-lora text-[26px] leading-[1.25] text-ink">
-                    Syncing your writings…
+                    Syncing your artifacts…
                   </h2>
                   <p className="mt-2 text-[13px] leading-[1.6] text-ink-4">
                     {hydrationProgress.total > 0
-                      ? `${hydrationProgress.completed} of ${hydrationProgress.total} writings ready on this device`
+                      ? `${hydrationProgress.completed} of ${hydrationProgress.total} artifacts ready on this device`
                       : "Preparing your library on this device"}
                   </p>
                   <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -6562,7 +6562,7 @@ export function EditorShell({
           aria-live="polite"
         >
           {correctionToast.message ?? (correctionToast.phase === "complete"
-            ? "Revisión completada"
+            ? "Review complete"
             : correctionToast.phase === "error"
               ? "Corrections are temporarily unavailable"
               : correctionToast.completed === 0

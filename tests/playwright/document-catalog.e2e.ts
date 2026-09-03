@@ -18,7 +18,7 @@ test.describe("Fase 9 document catalog view contract", () => {
       const badge = harness.locator(`[data-document-state="${state}"]`)
       await expect(badge).toHaveCount(1)
       await expect(badge).toHaveAttribute("role", "status")
-      await expect(badge).toHaveAttribute("aria-label", `Document state: ${label}`)
+      await expect(badge).toHaveAttribute("aria-label", `Artifact state: ${label}`)
       await expect(badge).toContainText(label)
     }
   })

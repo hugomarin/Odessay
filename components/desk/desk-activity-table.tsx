@@ -154,7 +154,7 @@ export function DeskActivityTable({
     () => [
       {
         id: "title",
-        label: "Writing",
+        label: "Artifact",
         className: "min-w-0 pl-2 pr-5",
         render: (row) => (
           <ArtifactWritingCell
@@ -196,7 +196,7 @@ export function DeskActivityTable({
                       selectedIds={collectionIdsByWritingId[row.id] ?? []}
                       align="start"
                       title="Collections"
-                      description="Choose labels for this writing."
+                      description="Choose labels for this artifact."
                       onToggleCollection={(collectionId) =>
                         void onToggleCollection(row.id, collectionId)
                       }
@@ -495,7 +495,7 @@ export function DeskActivityTable({
             }}
             getRowAriaLabel={(row) =>
               row.destinationHref
-                ? `Open writing ${row.title}`
+                ? `Open artifact ${row.title}`
                 : `${row.title} is read-only on Desk`
             }
             isRowSelected={

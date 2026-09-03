@@ -74,7 +74,7 @@ export function SharedWithMeList({
     >
       {isLoading ? (
         <div className="p-9">
-          <p className="text-[13px] text-ink-4">Loading shared writings...</p>
+          <p className="text-[13px] text-ink-4">Loading shared artifacts...</p>
         </div>
       ) : error ? (
         <div className="p-9">
@@ -111,7 +111,7 @@ export function SharedWithMeList({
                         data-testid="desk-shared-writing-item"
                         role={canOpen ? "link" : undefined}
                         tabIndex={canOpen ? 0 : undefined}
-                        aria-label={canOpen ? `Open shared writing ${item.title ?? "Untitled"}` : undefined}
+                        aria-label={canOpen ? `Open shared artifact ${item.title ?? "Untitled"}` : undefined}
                         className={cn(
                           "group border-b-[0.5px] border-border transition-colors",
                           canOpen &&

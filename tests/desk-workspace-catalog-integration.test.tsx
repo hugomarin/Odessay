@@ -436,7 +436,7 @@ describe("Desk consumes the DocumentCatalog", () => {
     // Membership is the catalog: a writing only in IndexedDB is not rendered.
     expect(text).not.toContain("Local Only Straggler")
     // State is catalog-derived: the synced record carries the Synced badge.
-    expect(container.querySelector('[aria-label="Document state: Synced"]')).not.toBeNull()
+    expect(container.querySelector('[aria-label="Artifact state: Synced"]')).not.toBeNull()
   })
 
   it("updates when a catalog change burst discovers a new document", async () => {
@@ -636,7 +636,7 @@ describe("Workspace consumes the DocumentCatalog", () => {
     expect(text).toContain("file:///root/Shared.md")
     // Same UUID, same catalog-derived state Desk renders (Synced), sourced from the
     // catalog join — not a direct IndexedDB read.
-    expect(container.querySelector('[aria-label="Document state: Synced"]')).not.toBeNull()
+    expect(container.querySelector('[aria-label="Artifact state: Synced"]')).not.toBeNull()
   })
 
   it("reflects a Workspace status mutation in Desk through the shared catalog", async () => {

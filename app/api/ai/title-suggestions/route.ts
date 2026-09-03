@@ -14,7 +14,7 @@ import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors";
 
 const requestSchema = z.object({
-  currentTitle: z.string().trim().max(160).default("Untitled writing"),
+  currentTitle: z.string().trim().max(160).default("Untitled artifact"),
   bodyText: z.string().max(50000).default(""),
 });
 

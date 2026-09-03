@@ -24,7 +24,7 @@ export interface FullOverlayProps {
   hideTitle?: boolean
   /** Chrome row content left of the title, e.g. ← → navigation. */
   chromeStart?: React.ReactNode
-  /** Chrome row content right of the title, e.g. "Open full writing". */
+  /** Chrome row content right of the title, e.g. "Open full artifact". */
   chromeEnd?: React.ReactNode
   dirty?: boolean
   discardMessage?: string

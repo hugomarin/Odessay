@@ -302,7 +302,7 @@ async function openWorkspaceFileInEditor(
       let result = await openDocumentByPath(file.path);
       if (result.status === "needs-binding-root-confirmation") {
         const accept = window.confirm(
-          `Register “${result.parentDir}” so Odessay can keep this file’s identity across moves and renames?`,
+          `Register “${result.parentDir}” so Artifact Studio can keep this file’s identity across moves and renames?`,
         );
         if (!accept) return;
         result = await openDocumentByPath(file.path, {
@@ -1201,7 +1201,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       }
       setRenameTarget({
         id: writing.id,
-        title: writing.title?.trim() || "Untitled writing",
+        title: writing.title?.trim() || "Untitled artifact",
         bodyText: writing.body_text,
       });
     },
@@ -1414,7 +1414,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     () => [
       {
         id: "title",
-        label: "Writing",
+        label: "Artifact",
         className: "min-w-0 pl-2 pr-5",
         render: (file) => {
           const document = documentJoin.get(file.path);
@@ -1477,7 +1477,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                         }
                         align="start"
                         title="Collections"
-                        description="Choose labels for this writing."
+                        description="Choose labels for this artifact."
                         onToggleCollection={(collectionId) =>
                           void handleCollectionToggle(file, collectionId)
                         }
@@ -2094,7 +2094,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
 
         <RenameWritingModal
           open={renameTarget !== null}
-          title={renameTarget?.title ?? "Untitled writing"}
+          title={renameTarget?.title ?? "Untitled artifact"}
           bodyText={renameTarget?.bodyText ?? ""}
           writingId={renameTarget?.id}
           onOpenChange={(open) => {
@@ -2351,14 +2351,14 @@ function WorkspaceActionDialog({
               </DialogTitle>
               <DialogDescription className="text-[16px] leading-7 text-ink-3">
                 {action.total === 0
-                  ? "Artifact Studio will stop watching this workspace. No tracked documents will be affected."
+                  ? "Artifact Studio will stop watching this workspace. No tracked artifacts will be affected."
                   : `This workspace has ${action.total} tracked document${action.total === 1 ? "" : "s"}.${
                       action.cloud > 0
-                        ? ` ${action.cloud} synced document${action.cloud === 1 ? "" : "s"} will be archived in the cloud.`
+                        ? ` ${action.cloud} synced artifact${action.cloud === 1 ? "" : "s"} will be archived in the cloud.`
                         : ""
                     }${
                       action.total > action.cloud
-                        ? ` ${action.total - action.cloud} local-only document${action.total - action.cloud === 1 ? "" : "s"} will be hidden from the workspace.`
+                        ? ` ${action.total - action.cloud} local-only artifact${action.total - action.cloud === 1 ? "" : "s"} will be hidden from the workspace.`
                         : ""
                     } The local folder, .md files, and .odessay index stay untouched.`}
               </DialogDescription>

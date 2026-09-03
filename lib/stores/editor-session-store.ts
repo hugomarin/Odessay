@@ -182,7 +182,7 @@ export function openDraftTab() {
           createEditorSessionTab({
             id: EDITOR_DRAFT_TAB_ID,
             writingId: null,
-            title: "Untitled writing",
+            title: "Untitled artifact",
             saveState: "saved",
           }),
         ];
@@ -307,7 +307,7 @@ export function publishTabState({
     const writingIndex = writingId ? findTabIndexByWritingId(nextTabs, writingId) : -1;
     const draftIndex = nextTabs.findIndex((tab) => isDraftTab(tab.id, tab.writing_id));
 
-    const titleValue = title?.trim() || "Untitled writing";
+    const titleValue = title?.trim() || "Untitled artifact";
     const baseTab = createEditorSessionTab({
       id: targetTabId,
       writingId,

@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const supabase = await createClient()
   const { data, error } = await supabase.from("writings").select("id,title,body_json,body_text,deleted_at").eq("id", id).eq("author_id", userId).not("deleted_at", "is", null).maybeSingle()
   if (error) return failure(500, "DB_ERROR", error.message)
-  if (!data) return failure(404, "NOT_FOUND", "Archived writing not found.")
+  if (!data) return failure(404, "NOT_FOUND", "Archived artifact not found.")
   let content = data.body_text
   try { content = serializeDocumentToMarkdown(data.body_json as Record<string, unknown>) } catch { /* plain-text recovery */ }
   const name = `${(data.title || "Untitled").replace(/[^a-z0-9 _-]/gi, "").trim() || "Untitled"}.md`
@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const supabase = await createClient()
   const archived = await supabase.from("writings").select("id,version").eq("id", id).eq("author_id", userId).not("deleted_at", "is", null).maybeSingle()
   if (archived.error) return failure(500, "DB_ERROR", archived.error.message)
-  if (!archived.data) return failure(404, "NOT_FOUND", "Archived writing not found.")
+  if (!archived.data) return failure(404, "NOT_FOUND", "Archived artifact not found.")
   if (parsed.data.action === "restore") {
     if (archived.data.version !== parsed.data.version) {
       return failure(409, "VERSION_CONFLICT", "This archived writing changed before it could be restored.")

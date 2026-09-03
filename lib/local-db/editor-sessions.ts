@@ -39,7 +39,7 @@ const DEFAULT_VIEW_STATE: LocalEditorTabViewState = {
 
 const normalizeTitle = (title?: string | null) => {
   const value = title?.trim();
-  return value && value.length > 0 ? value : "Untitled writing";
+  return value && value.length > 0 ? value : "Untitled artifact";
 };
 
 export const createEmptyEditorSession = (): LocalEditorSession => ({

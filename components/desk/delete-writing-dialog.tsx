@@ -45,7 +45,7 @@ export function DeleteWritingDialog({
               ? "This permanently deletes the cloud record. Deleting the local .md file separately only removes the local copy and keeps the cloud record."
               : displayTitle
                 ? "This action can't be undone."
-                : `Are you sure you want to delete ${count === 1 ? "this writing" : `these ${count} writings`}? This action cannot be undone.`}
+                : `Are you sure you want to delete ${count === 1 ? "this artifact" : `these ${count} artifacts`}? This action cannot be undone.`}
           </DialogDescription>
         </DialogHeader>
 

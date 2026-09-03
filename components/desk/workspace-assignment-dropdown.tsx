@@ -34,6 +34,13 @@ import { cn } from "@/lib/utils"
  */
 
 // Centralized copy so both surfaces are guaranteed to match.
+//
+// ODE-439 vocabulary note: every product noun below reads "artifact", except
+// `returnToWritings`. "Writings" there is not the product unit — it is the
+// literal name of the on-disk default folder created by
+// `lib/services/document-service-factory.ts` (`appDataDir()/Writings`). The
+// copy names a real path, so renaming it would make the sentence false. It
+// changes when that folder is migrated, not with a copy sweep.
 export const WORKSPACE_COPY = {
   assignAffordance: "Assign workspace",
   emptyClosed: "No workspace",
