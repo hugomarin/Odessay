@@ -91,3 +91,52 @@ describe("vocabulary operations never touch the .md content store", () => {
     expect(after).not.toContain("Renamed")
   })
 })
+
+describe("desktop vocabulary operations (ODE-473) never touch the .md content store", () => {
+  let dir: string
+  let mdPath: string
+  const original = "---\ntitle: A letter\nartifact_type: general\n---\n\nDear reader,\n"
+  const mockSettingsStore = new Map<string, unknown>()
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), "odessay-vocab-desktop-test-"))
+    mdPath = join(dir, "letter.md")
+    writeFileSync(mdPath, original, "utf8")
+    mockSettingsStore.clear()
+    vi.resetModules()
+    vi.doMock("@tauri-apps/api/path", () => ({
+      join: vi.fn(async (...parts: string[]) => parts.join("/")),
+    }))
+    vi.doMock("@/lib/services/desktop/tauri-commands", () => ({
+      tauriSettingsRead: vi.fn(async (_configDir: string, key: string) => mockSettingsStore.get(key) ?? null),
+      tauriSettingsWrite: vi.fn(async (_configDir: string, key: string, value: unknown) => {
+        mockSettingsStore.set(key, value)
+      }),
+      tauriSettingsDelete: vi.fn(async (_configDir: string, key: string) => mockSettingsStore.delete(key)),
+      tauriCatalogList: vi.fn(async () => []),
+      tauriCatalogBulkDualWrite: vi.fn(async () => []),
+    }))
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+    vi.doUnmock("@tauri-apps/api/path")
+    vi.doUnmock("@/lib/services/desktop/tauri-commands")
+  })
+
+  it("leaves the .md byte-identical through create, hide and delete on the desktop adapter", async () => {
+    const { DesktopSettingsService } = await import("@/lib/services/desktop/desktop-settings-service")
+    const service = new DesktopSettingsService("/tmp/odessay-config")
+
+    const before = readFileSync(mdPath, "utf8")
+
+    const created = await service.createVocabularyItem({
+      kind: "status", name: "Blocked", icon: "flame", color: "#96532C",
+    })
+    await service.updateVocabularyItem(created.data!.id, { hidden: false, description: "Waiting on someone else." })
+    await service.deleteVocabularyItem(created.data!.id)
+
+    const after = readFileSync(mdPath, "utf8")
+    expect(after).toBe(before)
+  })
+})

@@ -57,10 +57,19 @@ const allowedImports = new Set([
   "@/lib/sync/desktop-catalog-sync-service",
   "@/lib/workspace/types",
   "@/lib/workspace/assignment",
-  // ODE-472 — vocabulary types are shared-core (no runtime deps); the desktop
-  // adapter's four vocabulary methods are explicit UNAVAILABLE stubs until
-  // ODE-473 implements desktop persistence.
+  // ODE-472/473 — vocabulary is shared-core (no runtime deps): types, the
+  // base item definitions, field validation and key slugification are the
+  // same modules the web adapter uses.
   "@/lib/vocabulary/types",
+  "@/lib/vocabulary/base-items",
+  "@/lib/vocabulary/validate",
+  "@/lib/vocabulary/key",
+  "@/lib/vocabulary/merge",
+  // `server.ts`'s name is a holdover from being written for the Next.js route
+  // handlers first; it only takes a generic SupabaseClient and has no
+  // Next.js/cookie dependency, so the desktop sign-in reconciler reuses its
+  // list/upsert functions against createDesktopClient() instead of forking them.
+  "@/lib/vocabulary/server",
   "@/lib/local-db",
   "@/lib/desktop/document-naming",
   "@/lib/editor/document-serialization",
