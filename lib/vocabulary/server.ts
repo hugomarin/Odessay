@@ -5,6 +5,7 @@ import {
   isBaseVocabularyKey,
 } from "@/lib/vocabulary/base-items"
 import { isValidVocabularyColor, isValidVocabularyIcon, validateVocabularyItemFields } from "@/lib/vocabulary/validate"
+import { slugifyVocabularyName } from "@/lib/vocabulary/key"
 import type {
   CreateVocabularyItemInput,
   UpdateVocabularyItemInput,
@@ -160,22 +161,13 @@ export async function listVocabulary(
   return ok(items)
 }
 
-function slugifyKey(name: string): string {
-  const base = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-  return base.length > 0 ? base.slice(0, 48) : "item"
-}
-
 async function nextAvailableKey(
   supabase: SupabaseServerClient,
   userId: string,
   kind: VocabularyKind,
   name: string,
 ): Promise<string | null> {
-  const base = slugifyKey(name)
+  const base = slugifyVocabularyName(name)
   for (let attempt = 0; attempt < 25; attempt += 1) {
     const candidate = attempt === 0 ? base : `${base}_${attempt + 1}`
     const { data, error } = await supabase
@@ -422,6 +414,44 @@ export async function validateVocabularyValue(
   if (!data) {
     const label = kind === "type" ? "artifact type" : "status"
     return { code: "INVALID_INPUT", message: `"${key}" is not a valid ${label} for this account.`, retryable: false }
+  }
+  return null
+}
+
+/**
+ * Upserts a batch of vocabulary rows verbatim, keyed on (user_id, kind, key)
+ * — used only by the desktop sign-in reconciler
+ * (`lib/services/desktop/vocabulary-reconciler.ts`) to push its merge
+ * winners to the cloud. Unlike `createVocabularyItem`, this preserves the
+ * given `id`/`key`/`updatedAt` exactly rather than generating a fresh key —
+ * reconciliation is converging an existing item, not creating a new one. One
+ * request for the whole batch (Performance Contract: reactive fan-out).
+ */
+export async function upsertVocabularyItemRows(
+  supabase: SupabaseServerClient,
+  userId: string,
+  items: VocabularyItem[],
+): Promise<ServiceError | null> {
+  if (items.length === 0) return null
+
+  const rows = items.map((item) => ({
+    user_id: userId,
+    kind: item.kind,
+    key: item.key,
+    name: item.name,
+    description: item.description,
+    icon: item.icon,
+    color: item.color,
+    hidden: item.hidden,
+    is_base: item.isBase,
+    is_required: item.isRequired,
+    position: item.position,
+    updated_at: item.updatedAt,
+  }))
+
+  const { error } = await supabase.from("vocabulary_items").upsert(rows, { onConflict: "user_id,kind,key" })
+  if (error) {
+    return { code: "DB_ERROR", message: error.message, retryable: true }
   }
   return null
 }
