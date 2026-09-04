@@ -20,15 +20,23 @@ import type { WritingStatus } from "@/lib/writings/status"
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const update = vi.fn().mockResolvedValue(undefined)
+const createVocabularyItem = vi.fn().mockResolvedValue(undefined)
+const updateVocabularyItem = vi.fn().mockResolvedValue(undefined)
+const deleteVocabularyItem = vi.fn().mockResolvedValue({ rewrittenCount: 0 })
+const getVocabularyUsage = vi.fn().mockResolvedValue(null)
 let disabledStatuses: WritingStatus[] = []
 
 vi.mock("@/components/settings/user-settings-provider", () => ({
   useUserSettingsContext: () => ({
-    settings: { disabledStatuses },
+    settings: { disabledStatuses, vocabulary: [] },
     isLoading: false,
     error: null,
     refresh: vi.fn(),
     update,
+    createVocabularyItem,
+    updateVocabularyItem,
+    deleteVocabularyItem,
+    getVocabularyUsage,
   }),
 }))
 
@@ -173,10 +181,13 @@ describe("Settings vocabulary", () => {
     )
     await click(byText("Edit", container))
 
-    // Requirement 7 and the issue's Notes: a disabled affordance carries its
-    // reason in `title`, never in nothing.
+    // ODE-475 requirement 8: AI assistance is out of scope for this release
+    // (owner decision, 2026-08-30) — a single reason regardless of whether
+    // there's a name/description to work from, not "not wired yet".
     const improve = byText("Improve with AI", modal() as ParentNode)
-    expect(improve?.getAttribute("title")).toBe("Add a name or a description first.")
+    expect(improve?.getAttribute("title")).toBe(
+      "AI assistance for the vocabulary editor is out of scope for this release.",
+    )
     for (const disabled of Array.from(modal()!.querySelectorAll("button[disabled]"))) {
       expect(disabled.getAttribute("title")).toBeTruthy()
     }
@@ -195,11 +206,14 @@ describe("Settings vocabulary seeds", () => {
     ])
   })
 
-  it("locks every built-in type and only the mandatory status", () => {
+  it("locks (blocks delete on) every built-in type and status, but requires only draft (ODE-475)", () => {
     expect(getArtifactTypeVocabulary().every((item) => item.locked)).toBe(true)
+    // Every base status blocks delete...
+    expect(getWritingStatusVocabulary([]).every((item) => item.locked)).toBe(true)
+    // ...but only draft is required (cannot be hidden either).
     expect(
       getWritingStatusVocabulary([])
-        .filter((item) => item.locked)
+        .filter((item) => item.required)
         .map((item) => item.id),
     ).toEqual(["draft"])
   })

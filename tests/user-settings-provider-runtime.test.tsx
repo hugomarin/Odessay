@@ -33,19 +33,21 @@ let container: HTMLDivElement
 let root: Root
 let originalFetch: typeof globalThis.fetch
 
-const renderProvider = async () => {
+const renderProvider = async (awaitCall: () => boolean) => {
   const { UserSettingsProvider } = await import(
     "@/components/settings/user-settings-provider"
   )
   await act(async () => {
     root.render(<UserSettingsProvider>{null}</UserSettingsProvider>)
   })
-  // The Tauri branch resolves settings through two chained dynamic imports
-  // (`@tauri-apps/api/path`, the desktop adapter) before calling
-  // getUserSettings(), which outlasts a single act() microtask flush.
+  // Both branches resolve settings through chained dynamic imports
+  // (getSettingsService() -> the runtime adapter module -> the actual call),
+  // which outlasts a fixed microtask flush under full-suite load — poll
+  // instead of guessing a tick count.
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await vi.waitFor(() => {
+      if (!awaitCall()) throw new Error("settings call not observed yet")
+    })
   })
 }
 
@@ -78,7 +80,7 @@ describe("UserSettingsProvider runtime split", () => {
   it("reads from DesktopSettingsService, not fetch, on Tauri runtime (ODE-473)", async () => {
     isTauriRuntimeMock.mockReturnValue(true)
 
-    await renderProvider()
+    await renderProvider(() => getUserSettingsMock.mock.calls.length > 0)
 
     expect(fetchMock).not.toHaveBeenCalled()
     expect(getUserSettingsMock).toHaveBeenCalledTimes(1)
@@ -93,7 +95,7 @@ describe("UserSettingsProvider runtime split", () => {
       }),
     )
 
-    await renderProvider()
+    await renderProvider(() => fetchMock.mock.calls.length > 0)
 
     expect(fetchMock).toHaveBeenCalledWith("/api/user/settings", { method: "GET" })
     expect(getUserSettingsMock).not.toHaveBeenCalled()

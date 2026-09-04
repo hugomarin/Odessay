@@ -140,3 +140,19 @@ describe("desktop vocabulary operations (ODE-473) never touch the .md content st
     expect(after).toBe(before)
   })
 })
+
+describe("Settings vocabulary UI (ODE-475) never touches the .md content store", () => {
+  it("no component in the Save/Delete UI path imports a filesystem module", () => {
+    const files = [
+      "components/settings/vocabulary-list.tsx",
+      "components/settings/vocabulary-editor-modal.tsx",
+      "components/settings/vocabulary-delete-dialog.tsx",
+      "components/settings/artifact-type-settings.tsx",
+      "components/settings/writing-status-settings.tsx",
+    ]
+    for (const file of files) {
+      const source = readFileSync(join(__dirname, "..", "..", file), "utf8")
+      expect(source).not.toMatch(/from ["']fs["']|from ["']node:fs["']|writeFileSync|readFileSync/)
+    }
+  })
+})
