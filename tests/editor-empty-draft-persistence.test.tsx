@@ -1312,14 +1312,44 @@ describe("ODE-478 case 3 — naming a still-blank draft", () => {
 })
 
 describe("ODE-478 follow-up — Save As on a still-ephemeral draft", () => {
-  it("refuses before opening the picker when the draft is truly blank", async () => {
+  it("still offers the native picker when the draft is truly blank — choosing a name is itself a naming signal", async () => {
     persistedSession.value = blankDraftOnlySession()
 
     await act(async () => root?.render(<EditorShell />))
     await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
     await vi.waitFor(() => expect(saveToDiskState.onGetSaveContent).not.toBeNull())
 
-    expect(saveToDiskState.onGetSaveContent?.()).toBeNull()
+    // Refusing here would stop the native Save panel from ever opening, but
+    // choosing a filename in that panel IS the deliberate naming action
+    // (same principle as the rename modal in case 3) — it must not be
+    // blocked just because the body happens to be empty.
+    expect(saveToDiskState.onGetSaveContent?.()).not.toBeNull()
+  })
+
+  it("materializes a truly blank draft using the chosen filename as its title", async () => {
+    persistedSession.value = blankDraftOnlySession()
+    mocks.relocateDesktopWriting.mockResolvedValue({ status: "relocated", path: "/chosen/My Named File.md" })
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(saveToDiskState.onSaveToDisk).not.toBeNull())
+
+    let result: string | false | undefined
+    await act(async () => {
+      result = await saveToDiskState.onSaveToDisk?.("/chosen/My Named File.md", "")
+    })
+
+    // No content, no prior explicit title — the chosen filename is the only
+    // naming signal, and it must be enough to materialize (ODE-478 follow-up).
+    expect(mocks.createDesktopDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "My Named File" }),
+    )
+    expect(mocks.relocateDesktopWriting).toHaveBeenCalledWith(
+      "desktop-draft-1",
+      "/chosen/My Named File.md",
+      "",
+    )
+    expect(result).toBe("/chosen/My Named File.md")
   })
 
   it("materializes the draft, then relocates it, when there is real content but no writingId yet", async () => {

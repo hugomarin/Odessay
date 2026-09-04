@@ -6131,15 +6131,13 @@ export function EditorShell({
     let writingId = currentWritingIdRef.current
 
     if (!writingId) {
-      // Save As on a still-ephemeral draft is just as deliberate a
-      // materialization signal as typing or naming it — it must go through
-      // the same path instead of silently doing nothing after the user has
-      // already picked a destination (ODE-478 case 3 family). A truly blank,
-      // untitled draft still has nothing to write.
-      if (!editor || (editor.isEmpty && !hasExplicitTitleRef.current)) {
-        return false
-      }
-      await persistEditorSnapshot(editor, undefined, { awaitDurability: true })
+      // Save As is itself a deliberate naming action — the filename the user
+      // just chose in the native picker is exactly as explicit a signal as
+      // renaming a draft (case 3), so it materializes a still-blank,
+      // untitled draft too instead of silently doing nothing after the user
+      // has already picked a destination (ODE-478 follow-up).
+      if (!editor) return false
+      await persistEditorSnapshot(editor, { title: filenameToTitle(path) }, { awaitDurability: true })
       writingId = currentWritingIdRef.current
       if (!writingId) return false
     }
@@ -6199,20 +6197,17 @@ export function EditorShell({
   }, [editor, markdownValue])
 
   const handleGetSaveContent = useCallback(() => {
-    // A truly blank, untitled draft has nothing to save yet — refuse before
-    // the native picker opens rather than after the user has already chosen
-    // a destination (ODE-478 follow-up; see handleSaveToDisk for the
-    // materialize-then-relocate path when there IS real content).
-    if (!currentWritingIdRef.current && (!editor || (editor.isEmpty && !hasExplicitTitleRef.current))) {
-      return null
-    }
+    // Always let the native picker open, even for a still-blank, untitled
+    // draft — Save As's whole point is choosing a name, and that filename is
+    // exactly the deliberate naming signal handleSaveToDisk needs to
+    // materialize it (ODE-478 follow-up).
     const content = getBodyMarkdown()
     if (content === null) return null
     return {
       content: `${content.trimEnd()}\n`,
       defaultName: isDesktopRuntime() ? desktopSaveFileBaseName : exportFileBaseName,
     }
-  }, [desktopSaveFileBaseName, editor, exportFileBaseName, getBodyMarkdown])
+  }, [desktopSaveFileBaseName, exportFileBaseName, getBodyMarkdown])
 
   useTauriMenuEvents({
     onOpenFile: handleMenuOpenFile,
