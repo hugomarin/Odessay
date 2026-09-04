@@ -21,6 +21,9 @@ const USER_SETTINGS_MARKER = function UserSettingsProvider() {
 const DESKTOP_APP_SHELL_MARKER = function DesktopAppShell() {
   return null
 }
+const VOCABULARY_BRIDGE_MARKER = function VocabularyCatalogBridge() {
+  return null
+}
 
 vi.mock("next/headers", () => ({
   cookies: cookiesMock,
@@ -46,6 +49,10 @@ vi.mock("@/components/settings/user-settings-provider", () => ({
   UserSettingsProvider: USER_SETTINGS_MARKER,
 }))
 
+vi.mock("@/components/vocabulary/vocabulary-provider", () => ({
+  VocabularyCatalogBridge: VOCABULARY_BRIDGE_MARKER,
+}))
+
 const buildSupabaseClient = (user: { id: string; email: string } | null) => {
   supabaseGetUserMock.mockResolvedValue({ data: { user } })
   supabaseProfileMaybeSingleMock.mockResolvedValue({
@@ -69,11 +76,19 @@ const loadLayout = async () => {
   return mod.default
 }
 
+/** `UserSettingsProvider` now also mounts `VocabularyCatalogBridge` as a sibling (ODE-474), so its children are an array, not a single element. */
+const findChildOfType = (children: ReactElement | ReactElement[], type: unknown): ReactElement => {
+  const list = Array.isArray(children) ? children : [children]
+  const found = list.find((child) => child?.type === type)
+  if (!found) throw new Error("Expected child not found among UserSettingsProvider's children")
+  return found
+}
+
 const getSidebarElement = (root: ReactElement): ReactElement => {
   expect(root.type).toBe(USER_SETTINGS_MARKER)
-  const sidebar = (root.props as { children: ReactElement }).children
-  expect(sidebar.type).toBe(SIDEBAR_MARKER)
-  return sidebar
+  const children = (root.props as { children: ReactElement | ReactElement[] }).children
+  expect(findChildOfType(children, VOCABULARY_BRIDGE_MARKER)).toBeTruthy()
+  return findChildOfType(children, SIDEBAR_MARKER)
 }
 
 describe("app/(app)/layout runtime split", () => {
@@ -134,8 +149,9 @@ describe("app/(app)/layout runtime split", () => {
 
       const element = (await AppLayout({ children: "child" })) as ReactElement
       expect(element.type).toBe(USER_SETTINGS_MARKER)
-      const shell = (element.props as { children: ReactElement }).children
-      expect(shell.type).toBe(DESKTOP_APP_SHELL_MARKER)
+      const children = (element.props as { children: ReactElement | ReactElement[] }).children
+      expect(findChildOfType(children, VOCABULARY_BRIDGE_MARKER)).toBeTruthy()
+      const shell = findChildOfType(children, DESKTOP_APP_SHELL_MARKER)
 
       expect(cookiesMock).not.toHaveBeenCalled()
       expect(createSupabaseServerMock).not.toHaveBeenCalled()
@@ -155,8 +171,9 @@ describe("app/(app)/layout runtime split", () => {
 
       const element = (await AppLayout({ children: "child" })) as ReactElement
       expect(element.type).toBe(USER_SETTINGS_MARKER)
-      const shell = (element.props as { children: ReactElement }).children
-      expect(shell.type).toBe(DESKTOP_APP_SHELL_MARKER)
+      const children = (element.props as { children: ReactElement | ReactElement[] }).children
+      expect(findChildOfType(children, VOCABULARY_BRIDGE_MARKER)).toBeTruthy()
+      const shell = findChildOfType(children, DESKTOP_APP_SHELL_MARKER)
 
       expect(cookiesMock).not.toHaveBeenCalled()
       expect(createSupabaseServerMock).not.toHaveBeenCalled()
