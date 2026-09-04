@@ -214,6 +214,35 @@ del catálogo compartido sin más cambios — resolverían el vocabulario del
 `[ODE-476]`, que ya tiene esas cuatro superficies en su propio alcance
 ("Presentation Contract").
 
+## Settings conectado (ODE-475)
+
+`VocabularyList` (`components/settings/vocabulary-list.tsx`) es el único
+punto de la superficie de Settings que habla con `SettingsService`, vía
+`useUserSettingsContext()`: `createVocabularyItem`, `updateVocabularyItem`,
+`deleteVocabularyItem`, `getVocabularyUsage`. `ArtifactTypeSettings` y
+`WritingStatusSettings` quedan como presentación pura, suscritas al catálogo
+compartido con `useVocabulary()` para repintar sin recarga en cuanto una
+edición se confirma.
+
+**Ocultar vs. borrar, corregido.** El campo `locked` de la lista (bloquea
+Delete) y el campo `required` (bloquea también el switch de ocultar) eran el
+mismo flag en la entrega de `ODE-432` — un bug que hacía a **todos** los
+estados base no-ocultables, no solo a `draft`. Ahora son independientes:
+`locked = isBase` (ningún item base se borra, personalizado o no), `required`
+solo lo lleva `draft`.
+
+**La confirmación de borrado** (`components/settings/vocabulary-delete-dialog.tsx`)
+es una capa `absolute inset-0` **dentro** del mismo `FormModal` del editor —
+el mismo patrón que `DiscardConfirm` en `components/ui/overlay-core.tsx` —,
+no un segundo modal apilado. Nombra el objeto y el valor base
+("Delete type «Research»" → reescribe a `General`), y si el conteo de uso no
+está disponible lo dice explícitamente en vez de mostrar cero.
+
+**Pie de página corregido.** Settings › Artifact types ya no afirma que el
+tipo "se escribe en el frontmatter" — nunca fue cierto y contradecía el
+invariante del propio producto. El nuevo texto dice dónde vive realmente: el
+catálogo y la nube.
+
 ## Estado del bloque
 
 | Issue | Qué entrega | Estado |
@@ -221,7 +250,7 @@ del catálogo compartido sin más cambios — resolverían el vocabulario del
 | `ODE-472` | Schema, contrato de servicio, adapter web | hecho |
 | `ODE-473` | Persistencia desktop + reconciliación al iniciar sesión | hecho |
 | `ODE-474` | Catálogo único de cliente; fin de la coerción silenciosa | hecho (parcial — ver nota) |
-| `ODE-475` | Settings › Artifact types / Status conectados | pendiente |
+| `ODE-475` | Settings › Artifact types / Status conectados | hecho |
 | `ODE-476` | Repintado de los 22 consumidores | pendiente |
 | `ODE-477` | Evidencia end-to-end del contrato completo | pendiente |
 
