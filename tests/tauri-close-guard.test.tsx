@@ -124,4 +124,28 @@ describe("useTauriCloseGuard — ODE-478 follow-up", () => {
       await Promise.resolve()
     })
   })
+
+  it("lets a retry through instead of permanently blocking close when destroy() fails (e.g. missing ACL grant)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    const onBeforeClose = vi.fn(async () => {})
+    mockWindow.destroy.mockRejectedValueOnce(new Error("destroy not allowed by ACL"))
+    await mount(onBeforeClose)
+
+    await act(async () => {
+      await mockWindow.handler?.({ preventDefault: vi.fn() })
+    })
+
+    // First attempt failed to actually close, but must not wedge the guard —
+    // a second close request has to be honored, not silently swallowed
+    // (ODE-478 follow-up: found live when the destroy permission was missing
+    // from the Tauri capabilities file).
+    mockWindow.destroy.mockResolvedValueOnce(undefined)
+    await act(async () => {
+      await mockWindow.handler?.({ preventDefault: vi.fn() })
+    })
+
+    expect(onBeforeClose).toHaveBeenCalledTimes(2)
+    expect(mockWindow.destroy).toHaveBeenCalledTimes(2)
+    errorSpy.mockRestore()
+  })
 })

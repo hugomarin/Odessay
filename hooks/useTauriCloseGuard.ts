@@ -43,8 +43,13 @@ export function useTauriCloseGuard(onBeforeClose: () => Promise<unknown>) {
           closing = true
           try {
             await onBeforeCloseRef.current()
-          } finally {
             await appWindow.destroy()
+          } catch (error) {
+            // A failed destroy() (e.g. a missing ACL grant) must not leave
+            // the window permanently unclosable — let the next attempt
+            // through instead of silently eating every close request.
+            closing = false
+            console.error("useTauriCloseGuard: failed to close after settling", error)
           }
         })
       } catch {
