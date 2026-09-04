@@ -7,8 +7,10 @@ import { Switch } from "@/components/ui/switch"
 import { VocabularyIcon } from "@/components/settings/vocabulary-icon"
 import {
   VocabularyEditorModal,
+  type VocabularyDraft,
   type VocabularyKind,
 } from "@/components/settings/vocabulary-editor-modal"
+import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { getStatusChipTint, getVocabularyTint, type VocabularyItem } from "@/lib/settings/vocabulary"
 import { cn } from "@/lib/utils"
 
@@ -25,6 +27,11 @@ import { cn } from "@/lib/utils"
  * Divergence recorded in the ODE-432 PR: the prose says radius 10 and a 44px add
  * row; the render draws 12 and 42. Per `docs/design/migration-plan.md` §4 the
  * prototype wins.
+ *
+ * ODE-475: Save/Delete are wired here through `UserSettingsProvider`'s
+ * vocabulary CRUD — this is the only place in the settings surface that talks
+ * to `SettingsService`, so `ArtifactTypeSettings`/`WritingStatusSettings`
+ * stay pure presentation.
  */
 
 export function VocabularyList({
@@ -44,16 +51,54 @@ export function VocabularyList({
   toggleBusy?: boolean
   footnote?: React.ReactNode
 }) {
+  const { createVocabularyItem, updateVocabularyItem, deleteVocabularyItem, getVocabularyUsage } =
+    useUserSettingsContext()
   const [editing, setEditing] = React.useState<VocabularyItem | null>(null)
   const [open, setOpen] = React.useState(false)
 
-  // Requirement 6: the dashed row opens the editor immediately. It opens on an
-  // empty draft rather than appending a row first, which is what keeps the
+  // Requirement 6/2: the dashed row opens the editor immediately. It opens on
+  // an empty draft rather than appending a row first, which is what keeps the
   // promise that an untitled row never appears in the list.
   const openEditor = (item: VocabularyItem | null) => {
     setEditing(item)
     setOpen(true)
   }
+
+  const handleSave = React.useCallback(
+    async (draft: VocabularyDraft) => {
+      if (editing) {
+        await updateVocabularyItem(editing.id, {
+          name: draft.name,
+          description: draft.description,
+          icon: draft.icon,
+          color: draft.color,
+        })
+        return
+      }
+      await createVocabularyItem({
+        kind,
+        name: draft.name,
+        description: draft.description,
+        icon: draft.icon,
+        color: draft.color,
+      })
+    },
+    [editing, kind, createVocabularyItem, updateVocabularyItem],
+  )
+
+  const handleDelete = React.useMemo(() => {
+    if (!editing || editing.locked) return undefined
+    return async () => deleteVocabularyItem(editing.id)
+  }, [editing, deleteVocabularyItem])
+
+  const fetchUsage = React.useMemo(() => {
+    if (!editing) return undefined
+    return async () => {
+      const usage = await getVocabularyUsage()
+      // `null` propagates as "unavailable" — requirement 7 never treats that as zero.
+      return usage ? (usage[editing.id] ?? 0) : null
+    }
+  }, [editing, getVocabularyUsage])
 
   return (
     <>
@@ -105,16 +150,18 @@ export function VocabularyList({
                   <Switch
                     variant="settings"
                     checked={item.enabled ?? true}
-                    // Requirement 5: a required status cannot be hidden.
-                    disabled={item.locked || toggleBusy}
+                    // Requirement 4: only a required status (draft) cannot be
+                    // hidden — `locked` alone would also catch every other
+                    // base status, which can be hidden like any custom one.
+                    disabled={item.required || toggleBusy}
                     onCheckedChange={(next) => onToggle(item.id, next)}
                     aria-label={`Show ${item.name} in menus`}
-                    title={item.locked ? item.lockNote : "Show in menus"}
+                    title={item.required ? item.lockNote : "Show in menus"}
                     // A required status reads as on-and-fixed, not as faded:
                     // the prototype fills its track with ink-5 at full opacity
                     // rather than dimming the ink one.
                     className={cn(
-                      item.locked && "disabled:opacity-100 data-[state=checked]:bg-ink-5",
+                      item.required && "disabled:opacity-100 data-[state=checked]:bg-ink-5",
                     )}
                   />
                 ) : null}
@@ -137,7 +184,15 @@ export function VocabularyList({
         <p className="mt-3.5 max-w-[52ch] text-[12px] leading-[1.6] text-ink-5">{footnote}</p>
       ) : null}
 
-      <VocabularyEditorModal open={open} onOpenChange={setOpen} kind={kind} item={editing} />
+      <VocabularyEditorModal
+        open={open}
+        onOpenChange={setOpen}
+        kind={kind}
+        item={editing}
+        onSave={handleSave}
+        onDelete={handleDelete}
+        fetchUsage={fetchUsage}
+      />
     </>
   )
 }
