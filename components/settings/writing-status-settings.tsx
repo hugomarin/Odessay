@@ -1,12 +1,11 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useState } from "react"
 
 import { VocabularyList } from "@/components/settings/vocabulary-list"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { useVocabulary } from "@/hooks/useVocabulary"
 import { getWritingStatusVocabulary } from "@/lib/settings/vocabulary"
-import type { WritingStatus } from "@/lib/writings/status"
 
 /**
  * Settings › Status.
@@ -24,35 +23,27 @@ import type { WritingStatus } from "@/lib/writings/status"
  * status keeps that status; it simply stops being offered in the pickers.
  */
 export default function WritingStatusSettings() {
-  const { settings, isLoading, error, update } = useUserSettingsContext()
+  const { isLoading, error, updateVocabularyItem } = useUserSettingsContext()
   // Subscribes this page to the shared catalog so it repaints the instant
   // Save/Delete resolves — requirement 1/9, without a reload.
   useVocabulary()
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
-  const items = useMemo(
-    () => getWritingStatusVocabulary(settings.disabledStatuses),
-    [settings.disabledStatuses],
-  )
+  const items = getWritingStatusVocabulary()
 
   const handleToggle = useCallback(
     (id: string, nextEnabled: boolean) => {
-      const status = id as WritingStatus
       setSaveError(null)
       setIsSaving(true)
 
-      const nextDisabled = nextEnabled
-        ? settings.disabledStatuses.filter((entry) => entry !== status)
-        : [...settings.disabledStatuses, status]
-
-      void update({ disabledStatuses: nextDisabled })
+      void updateVocabularyItem(id, { hidden: !nextEnabled })
         .catch((cause: unknown) =>
           setSaveError(cause instanceof Error ? cause.message : "Could not save that change."),
         )
         .finally(() => setIsSaving(false))
     },
-    [settings.disabledStatuses, update],
+    [updateVocabularyItem],
   )
 
   return (

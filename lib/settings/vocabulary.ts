@@ -1,5 +1,4 @@
 import { MANDATORY_WRITING_STATUSES } from "@/lib/writings/status"
-import type { WritingStatus } from "@/lib/writings/status"
 import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
 import { listVisibleVocabulary } from "@/lib/vocabulary/resolve"
 
@@ -87,7 +86,11 @@ export type VocabularyIconName =
   | (typeof WRITING_STATUS_ICON_NAMES)[number]
 
 export type VocabularyItem = {
-  /** The catalog item's stable key. */
+  /**
+   * The catalog item's resolvable id — `updateVocabularyItem`/`deleteVocabularyItem`
+   * key off this, not the human-readable `key` slug (synthetic `base:<kind>:<key>`
+   * for an unmaterialized base item, the real row UUID once it is).
+   */
   id: string
   name: string
   description: string
@@ -111,7 +114,7 @@ const REQUIRED_STATUS_LOCK_NOTE = "Draft is the default status of every new arti
 /** Reads the shared catalog (base items + whatever the user created) instead of a local seed. */
 export function getArtifactTypeVocabulary(): VocabularyItem[] {
   return listVisibleVocabulary(getVocabularyCatalogSnapshot(), "type").map((item) => ({
-    id: item.key,
+    id: item.id,
     name: item.name,
     description: item.description,
     icon: item.icon as VocabularyIconName,
@@ -122,13 +125,13 @@ export function getArtifactTypeVocabulary(): VocabularyItem[] {
 }
 
 /**
- * `disabledStatuses` stays as the input driving `enabled` — the legacy
- * `UserSettings.disabledStatuses` field ODE-475 still writes through. Name,
- * icon, color and description now come from the catalog, not a local seed.
+ * `enabled` reads straight off the catalog item's own `hidden` flag — the
+ * switch here writes it back through `updateVocabularyItem({ hidden })`, the
+ * same real vocabulary CRUD Save/Delete already use, so there's no separate
+ * `disabledStatuses` array to keep in sync. Name, icon, color and description
+ * come from the catalog too, not a local seed.
  */
-export function getWritingStatusVocabulary(disabledStatuses: readonly WritingStatus[]): VocabularyItem[] {
-  const disabled = new Set(disabledStatuses)
-
+export function getWritingStatusVocabulary(): VocabularyItem[] {
   // Settings must show every status, hidden ones included — hidden is what
   // the switch here toggles, unlike menus/filters (`listVisibleVocabulary`)
   // which should exclude them.
@@ -139,7 +142,7 @@ export function getWritingStatusVocabulary(disabledStatuses: readonly WritingSta
       const required = MANDATORY_WRITING_STATUSES.includes(item.key)
 
       return {
-        id: item.key,
+        id: item.id,
         name: item.name,
         description: item.description,
         icon: item.icon as VocabularyIconName,
@@ -149,7 +152,7 @@ export function getWritingStatusVocabulary(disabledStatuses: readonly WritingSta
         // to make every base status un-hideable, not just draft.
         locked: item.isBase,
         lockNote: required ? REQUIRED_STATUS_LOCK_NOTE : item.isBase ? BASE_STATUS_LOCK_NOTE : undefined,
-        enabled: !disabled.has(item.key),
+        enabled: !item.hidden,
         required,
       }
     })

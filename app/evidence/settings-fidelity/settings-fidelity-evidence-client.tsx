@@ -43,7 +43,7 @@ export function SettingsFidelityEvidenceClient() {
           ) : section === "status" ? (
             <VocabularyList
               kind="status"
-              items={getWritingStatusVocabulary(["canceled"])}
+              items={getWritingStatusVocabulary()}
               addLabel="New status"
               onToggle={() => {}}
               footnote="Hiding a status keeps it out of menus and filters. Artifacts already carrying it are left exactly as they are."

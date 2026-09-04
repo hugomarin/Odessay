@@ -16,6 +16,7 @@ import {
 import { ARTIFACT_TYPE_VALUES } from "@/lib/writings/artifact-type"
 import { WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import type { WritingStatus } from "@/lib/writings/status"
+import { getVocabularyCatalogSnapshot, resetVocabularyCatalogForTest, setVocabularyCatalog } from "@/lib/vocabulary/catalog"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -45,6 +46,7 @@ let root: Root
 
 beforeEach(() => {
   disabledStatuses = []
+  resetVocabularyCatalogForTest()
   container = document.createElement("div")
   document.body.appendChild(container)
   root = createRoot(container)
@@ -55,6 +57,7 @@ afterEach(() => {
   container.remove()
   document.body.innerHTML = ""
   vi.clearAllMocks()
+  resetVocabularyCatalogForTest()
 })
 
 async function render(node: React.ReactElement) {
@@ -102,19 +105,19 @@ describe("Settings vocabulary", () => {
     )
     expect(container.querySelectorAll('[role="switch"]')).toHaveLength(WRITING_STATUS_VALUES.length)
 
-    const draft = container.querySelector('[data-testid="vocabulary-item-draft"]')!
+    const draft = container.querySelector('[data-testid="vocabulary-item-base:status:draft"]')!
     expect(draft.textContent).toContain("Required")
     expect(draft.querySelector('[role="switch"]')?.hasAttribute("disabled")).toBe(true)
   })
 
-  it("hides a status by appending it to disabledStatuses and never rewrites artifacts", async () => {
+  it("hides a status through the real vocabulary CRUD and never rewrites artifacts (ODE-476)", async () => {
     await render(<WritingStatusSettings />)
-    const canceled = container.querySelector('[data-testid="vocabulary-item-canceled"]')!
+    const canceled = container.querySelector('[data-testid="vocabulary-item-base:status:canceled"]')!
     await click(canceled.querySelector('[role="switch"]'))
 
-    // Requirement 9: the only write is the user setting. No artifact mutation,
-    // no confirmation asking to move anything to Draft.
-    expect(update).toHaveBeenCalledWith({ disabledStatuses: ["canceled"] })
+    // Requirement 9: the only write is the item's own `hidden` flag. No
+    // artifact mutation, no confirmation asking to move anything to Draft.
+    expect(updateVocabularyItem).toHaveBeenCalledWith("base:status:canceled", { hidden: true })
     expect(document.body.textContent).not.toContain("Move to Draft")
   })
 
@@ -209,18 +212,21 @@ describe("Settings vocabulary seeds", () => {
   it("locks (blocks delete on) every built-in type and status, but requires only draft (ODE-475)", () => {
     expect(getArtifactTypeVocabulary().every((item) => item.locked)).toBe(true)
     // Every base status blocks delete...
-    expect(getWritingStatusVocabulary([]).every((item) => item.locked)).toBe(true)
+    expect(getWritingStatusVocabulary().every((item) => item.locked)).toBe(true)
     // ...but only draft is required (cannot be hidden either).
-    expect(
-      getWritingStatusVocabulary([])
-        .filter((item) => item.required)
-        .map((item) => item.id),
-    ).toEqual(["draft"])
+    const required = getWritingStatusVocabulary().filter((item) => item.required)
+    expect(required).toHaveLength(1)
+    expect(required[0]?.id).toBe("base:status:draft")
   })
 
-  it("reads enabled state from the persisted disabled list", () => {
-    const items = getWritingStatusVocabulary(["canceled"])
-    expect(items.find((item) => item.id === "canceled")?.enabled).toBe(false)
-    expect(items.find((item) => item.id === "done")?.enabled).toBe(true)
+  it("reads enabled state from the catalog item's own hidden flag (ODE-476)", () => {
+    const catalog = getVocabularyCatalogSnapshot()
+    setVocabularyCatalog(
+      catalog.map((item) => (item.key === "canceled" && item.kind === "status" ? { ...item, hidden: true } : item)),
+    )
+
+    const items = getWritingStatusVocabulary()
+    expect(items.find((item) => item.id === "base:status:canceled")?.enabled).toBe(false)
+    expect(items.find((item) => item.id === "base:status:done")?.enabled).toBe(true)
   })
 })
