@@ -1260,7 +1260,7 @@ export function EditorShell({
     async (
       editorInstance: Editor,
       overrides?: PersistenceSnapshotOverrides,
-      options?: { awaitDurability?: boolean },
+      options?: { awaitDurability?: boolean; forceMaterialize?: boolean },
     ) => {
       const activeId = currentWritingIdRef.current
       const baseCreatedAt = createdAtRef.current
@@ -1298,8 +1298,13 @@ export function EditorShell({
           draftWritingId,
           sourceTabId,
           // getText() misses atomic non-text content (an image, etc.) — use
-          // TipTap's own structural emptiness check instead (ODE-478 follow-up).
-          bodyIsEmpty: editorInstance.isEmpty,
+          // TipTap's own structural emptiness check instead. forceMaterialize
+          // lets a caller that's about to add non-text content (e.g. an
+          // image upload that needs a real writingId to attach to) claim
+          // non-blank a beat early, rather than waiting for content that
+          // can't land until materialization already happened (ODE-478
+          // follow-up).
+          bodyIsEmpty: options?.forceMaterialize ? false : editorInstance.isEmpty,
         },
         overrides,
       )
@@ -1503,6 +1508,23 @@ export function EditorShell({
       bodyJson: editor.getJSON() as Record<string, unknown>,
     }
   }, [editor])
+
+  // Uploading an image needs a real writingId to attach the asset to
+  // (server-side storage path + RLS), so a still-blank draft must
+  // materialize first — the same principle as naming it (case 3) or Save As.
+  // Without this, InsertImageModal's own writingId-required guard silently
+  // no-ops the whole upload with no error shown (ODE-478 follow-up).
+  const openInsertImageModal = useCallback(async () => {
+    if (!currentWritingIdRef.current) {
+      if (!editor) return
+      await persistEditorSnapshot(editor, undefined, { awaitDurability: true, forceMaterialize: true })
+      // Materialization failed (e.g. desktop draft creation errored) — opening
+      // the modal now would just reproduce the original silent no-op once the
+      // user tries to upload with still no writingId.
+      if (!currentWritingIdRef.current) return
+    }
+    setImageModalOpen(true)
+  }, [editor, persistEditorSnapshot])
 
   useEffect(() => {
     tableOfContentsItemsRef.current = tableOfContentsItems
@@ -3377,7 +3399,7 @@ export function EditorShell({
             setTableModalOpen(true)
             return
           case "image":
-            setImageModalOpen(true)
+            void openInsertImageModal()
             return
           default:
             return
@@ -3497,7 +3519,7 @@ export function EditorShell({
           setTableModalOpen(true)
           return
         case "image":
-          setImageModalOpen(true)
+          void openInsertImageModal()
           return
         case "clearStyles":
           editor.chain().focus().clearNodes().unsetAllMarks().run()
@@ -3561,6 +3583,7 @@ export function EditorShell({
       editor,
       markdownValue,
       openFindReplacePanel,
+      openInsertImageModal,
       persistEditorSnapshot,
       queueMarkdownSelectionRestore,
       router,

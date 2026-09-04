@@ -112,6 +112,14 @@ const renameModalState = vi.hoisted(() => ({
   onConfirm: null as ((title: string) => Promise<boolean>) | null,
 }))
 
+const sheetHeaderState = vi.hoisted(() => ({
+  onRunAction: null as ((action: string) => void) | null,
+}))
+
+const imageModalState = vi.hoisted(() => ({
+  writingId: null as string | null,
+}))
+
 const noopCommand = vi.hoisted(() => vi.fn(() => true))
 const setContentCommand = vi.hoisted(() => vi.fn(() => true))
 
@@ -386,6 +394,12 @@ vi.mock("@/components/editor/editor-topbar", () => ({
     return null
   },
 }))
+vi.mock("@/components/editor/editor-sheet-header", () => ({
+  EditorSheetHeader: (props: { onRunAction?: (action: string) => void }) => {
+    sheetHeaderState.onRunAction = props.onRunAction ?? null
+    return null
+  },
+}))
 vi.mock("@/components/editor/editor-content", () => ({ WritingEditorContent: () => null }))
 vi.mock("@/components/editor/editor-empty-state", () => ({ EditorEmptyState: () => null }))
 vi.mock("@/components/editor/editor-find-replace", () => ({ EditorFindReplace: () => null }))
@@ -397,7 +411,14 @@ vi.mock("@/components/reading/margins/selection-popup", () => ({ SelectionPopup:
 vi.mock("@/components/editor/modals/insert-footnote-modal", () => ({
   InsertFootnoteModal: () => null,
 }))
-vi.mock("@/components/editor/modals/insert-image-modal", () => ({ InsertImageModal: () => null }))
+vi.mock("@/components/editor/modals/insert-image-modal", () => ({
+  InsertImageModal: (props: { open: boolean; writingId: string }) => {
+    if (props.open) {
+      imageModalState.writingId = props.writingId
+    }
+    return null
+  },
+}))
 vi.mock("@/components/editor/modals/insert-link-modal", () => ({ InsertLinkModal: () => null }))
 vi.mock("@/components/editor/modals/insert-table-modal", () => ({ InsertTableModal: () => null }))
 vi.mock("@/components/editor/modals/rename-writing-modal", () => ({
@@ -476,6 +497,8 @@ beforeEach(async () => {
   mocks.relocateDesktopWriting.mockResolvedValue({ status: "failed", message: "not configured" })
   saveToDiskState.onSaveToDisk = null
   saveToDiskState.onGetSaveContent = null
+  sheetHeaderState.onRunAction = null
+  imageModalState.writingId = null
   window.confirm = vi.fn(() => true)
 
   // Provide a real DOM element for effects that attach listeners to the editor view.
@@ -1263,6 +1286,28 @@ describe("ODE-478 case 3 — naming a still-blank draft", () => {
     await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
     expect(mocks.filesystemWrite).toHaveBeenCalledTimes(1)
     expect(getEditorSessionState().session.tabs.some((tab) => tab.writing_id === "desktop-draft-1")).toBe(true)
+  })
+
+  it("materializes the draft before opening Insert Image, so the upload has a real writingId (ODE-478 follow-up)", async () => {
+    persistedSession.value = blankDraftOnlySession()
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(getEditorSessionState().session.active_tab_id).toBe("draft"))
+    await vi.waitFor(() => expect(sheetHeaderState.onRunAction).not.toBeNull())
+
+    // Triggering "Insert Image" (Insert menu / Cmd+Shift+I) on a still-blank,
+    // unmaterialized draft used to open InsertImageModal with writingId=""
+    // — its own upload guard (`if (!file || !writingId) return`) then
+    // silently no-ops the whole thing with zero feedback once the user
+    // actually picks a file and confirms.
+    await act(async () => {
+      sheetHeaderState.onRunAction?.("image")
+    })
+
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(imageModalState.writingId).toBe("desktop-draft-1"))
+    expect(imageModalState.writingId).not.toBe("")
   })
 })
 
