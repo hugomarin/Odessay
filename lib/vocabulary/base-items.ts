@@ -1,6 +1,4 @@
-import { ARTIFACT_TYPE_VALUES, type ArtifactType } from "@/lib/writings/artifact-type"
-import { MANDATORY_WRITING_STATUSES, WRITING_STATUS_VALUES, type WritingStatus } from "@/lib/writings/status"
-import { VOCABULARY_COLORS, type VocabularyIconName } from "@/lib/settings/vocabulary"
+import type { VocabularyIconName } from "@/lib/settings/vocabulary"
 import type { VocabularyKind } from "@/lib/vocabulary/types"
 
 /**
@@ -13,14 +11,29 @@ import type { VocabularyKind } from "@/lib/vocabulary/types"
  * Kept in sync by hand with the literal seed values in
  * `supabase/migrations/20260903190200_seed_vocabulary_from_disabled_statuses.sql`,
  * which cannot import TypeScript.
+ *
+ * `lib/writings/status.ts` / `lib/writings/artifact-type.ts` import the base
+ * key lists FROM here (not the other way around) — this module must have no
+ * dependency on them, since they in turn resolve labels through
+ * `lib/vocabulary/catalog.ts`, which is seeded from `BASE_VOCABULARY_ITEMS`.
+ * Importing the other direction would be circular.
  */
 
-const INK = VOCABULARY_COLORS.find((c) => c.id === "ink")!.hex
-const TERRACOTTA = VOCABULARY_COLORS.find((c) => c.id === "terracotta")!.hex
-const AMBER = VOCABULARY_COLORS.find((c) => c.id === "amber")!.hex
-const GREEN = VOCABULARY_COLORS.find((c) => c.id === "green")!.hex
-const VIOLET = VOCABULARY_COLORS.find((c) => c.id === "violet")!.hex
-const GREY = VOCABULARY_COLORS.find((c) => c.id === "grey")!.hex
+type BaseArtifactTypeKey = "general" | "agent" | "skill" | "prompt" | "template" | "status"
+type BaseWritingStatusKey = "new" | "exploring" | "draft" | "in_review" | "done" | "archived" | "canceled"
+
+/**
+ * Literal, not derived from `VOCABULARY_COLORS` in `lib/settings/vocabulary.ts`
+ * — importing that value here would be circular (`vocabulary.ts` reads the
+ * catalog through `catalog.ts`/`resolve.ts`, both seeded from this file).
+ * `tests/vocabulary/base-items.test.ts` asserts these match the palette.
+ */
+const INK = "#1E1915"
+const TERRACOTTA = "#96532C"
+const AMBER = "#C07B2A"
+const GREEN = "#2E7D4F"
+const VIOLET = "#5B5BD6"
+const GREY = "#8E837B"
 
 export type BaseVocabularyDefinition = {
   kind: VocabularyKind
@@ -33,7 +46,7 @@ export type BaseVocabularyDefinition = {
   position: number
 }
 
-const ARTIFACT_TYPE_BASE: Record<ArtifactType, Omit<BaseVocabularyDefinition, "kind" | "key" | "position">> = {
+const ARTIFACT_TYPE_BASE: Record<BaseArtifactTypeKey, Omit<BaseVocabularyDefinition, "kind" | "key" | "position">> = {
   general: {
     name: "General",
     description: "Anything that does not fit another shape. The default.",
@@ -78,7 +91,7 @@ const ARTIFACT_TYPE_BASE: Record<ArtifactType, Omit<BaseVocabularyDefinition, "k
   },
 }
 
-const WRITING_STATUS_BASE: Record<WritingStatus, Omit<BaseVocabularyDefinition, "kind" | "key" | "position">> = {
+const WRITING_STATUS_BASE: Record<BaseWritingStatusKey, Omit<BaseVocabularyDefinition, "kind" | "key" | "position">> = {
   new: {
     name: "New",
     description: "It exists but nobody has worked on it yet.",
@@ -130,11 +143,34 @@ const WRITING_STATUS_BASE: Record<WritingStatus, Omit<BaseVocabularyDefinition, 
   },
 }
 
-export const BASE_ARTIFACT_TYPE_ITEMS: BaseVocabularyDefinition[] = ARTIFACT_TYPE_VALUES.map(
+/** Base type keys, in canonical order — the authority `lib/writings/artifact-type.ts` imports its `ARTIFACT_TYPE_VALUES` from. */
+export const BASE_ARTIFACT_TYPE_KEYS = [
+  "general",
+  "agent",
+  "skill",
+  "prompt",
+  "template",
+  "status",
+] as const satisfies readonly BaseArtifactTypeKey[]
+
+/** Base status keys, in canonical order — the authority `lib/writings/status.ts` imports its `WRITING_STATUS_VALUES` from. */
+export const BASE_WRITING_STATUS_KEYS = [
+  "new",
+  "exploring",
+  "draft",
+  "in_review",
+  "done",
+  "archived",
+  "canceled",
+] as const satisfies readonly BaseWritingStatusKey[]
+
+export const BASE_MANDATORY_WRITING_STATUSES = ["draft"] as const satisfies readonly BaseWritingStatusKey[]
+
+export const BASE_ARTIFACT_TYPE_ITEMS: BaseVocabularyDefinition[] = BASE_ARTIFACT_TYPE_KEYS.map(
   (key, position) => ({ kind: "type", key, position, ...ARTIFACT_TYPE_BASE[key] }),
 )
 
-export const BASE_WRITING_STATUS_ITEMS: BaseVocabularyDefinition[] = WRITING_STATUS_VALUES.map(
+export const BASE_WRITING_STATUS_ITEMS: BaseVocabularyDefinition[] = BASE_WRITING_STATUS_KEYS.map(
   (key, position) => ({ kind: "status", key, position, ...WRITING_STATUS_BASE[key] }),
 )
 
@@ -145,14 +181,14 @@ export const BASE_VOCABULARY_ITEMS: BaseVocabularyDefinition[] = [
 
 export function isBaseVocabularyKey(kind: VocabularyKind, key: string): boolean {
   if (kind === "type") {
-    return (ARTIFACT_TYPE_VALUES as readonly string[]).includes(key)
+    return (BASE_ARTIFACT_TYPE_KEYS as readonly string[]).includes(key)
   }
-  return (WRITING_STATUS_VALUES as readonly string[]).includes(key)
+  return (BASE_WRITING_STATUS_KEYS as readonly string[]).includes(key)
 }
 
 export function isRequiredVocabularyKey(kind: VocabularyKind, key: string): boolean {
   if (kind !== "status") return false
-  return (MANDATORY_WRITING_STATUSES as readonly string[]).includes(key)
+  return (BASE_MANDATORY_WRITING_STATUSES as readonly string[]).includes(key)
 }
 
 export function getBaseVocabularyDefinition(
