@@ -243,6 +243,66 @@ tipo "se escribe en el frontmatter" — nunca fue cierto y contradecía el
 invariante del propio producto. El nuevo texto dice dónde vive realmente: el
 catálogo y la nube.
 
+## Repintado de consumidores (ODE-476)
+
+Los consumidores restantes que aún leían `WRITING_STATUS_VALUES`/
+`ARTIFACT_TYPE_VALUES` para construir listas de opciones, o un color/switch
+local, quedaron migrados a `useVocabulary()` + `listVisibleVocabulary()` /
+`getVocabularyLabel|Color|IconName`: `WritingStatusBadge` (dejó de tener su
+propia tabla Tailwind de colores por estado), `DeskFilterBar`,
+`BulkActionBar`, `DeskArtifactRow`/`DeskArtifactList`/`DeskActivityTable`,
+`WritingPreviewModal`, `WritingStatusPicker`, el panel de propiedades del
+editor, `WorkspaceDetail`/`WorkspacePrototypeShell`, las tres superficies de
+Collections, `artifact-table-columns.tsx` y `PublicWritingList`.
+
+Un grep dirigido (no lectura completa de cada archivo) encontró **tres forks
+locales no listados en el brief original**: un tercer array
+`STATUS_OPTIONS: WritingStatus[]` hardcodeado en
+`components/editor/panels/properties-panel.tsx` (además de los dos ya
+corregidos en `ODE-474`), y el ordenamiento "group by status/type" de Desk
+(`lib/queries/desk-activity.ts`'s `buildGroups()`), que seguía usando
+`WRITING_STATUS_VALUES.filter(status => groups.has(status))` en vez del
+orden del catálogo. Este segundo caso motivó el nuevo helper
+`orderGroupKeysByCatalog(catalog, kind, keys)` en `lib/vocabulary/resolve.ts`
+(ordena por `position`, incluye claves ocultas-pero-en-uso, añade al final
+cualquier clave que el catálogo ya no reconozca) — `buildDeskActivitySummary`
+ahora acepta un `catalog` opcional para que Desk repinte el orden de sus
+grupos sin recargar.
+
+**Bug real encontrado y corregido — id de vocabulario, no key.**
+`lib/settings/vocabulary.ts`'s `getWritingStatusVocabulary`/
+`getArtifactTypeVocabulary` mapeaban `VocabularyItem.id` (la forma que
+consume Settings) al `key` humano del catálogo (`"draft"`) en vez de a su
+`id` resoluble (`"base:status:draft"` para un item base sin materializar, o
+el UUID real de la fila una vez materializada). Todo lo que escribe contra
+ese id — `updateVocabularyItem`/`deleteVocabularyItem` (`resolveRow` en
+`lib/vocabulary/server.ts`, y su espejo desktop) y el conteo de uso
+(`getVocabularyUsage` indexa por `item.id`) — esperaba la forma resoluble.
+El resultado: Guardar, Borrar y el conteo de uso en la confirmación de borrado
+**nunca funcionaron para ningún tipo o estado base** (solo custom items ya
+materializados con UUID real habrían coincidido por casualidad), y el conteo
+de uso del switch "Show in menus" leía silenciosamente 0. Corregido: ambas
+funciones ahora usan `item.id`. El switch de estado, de paso, dejó de pasar
+por el array legacy `disabledStatuses` (que solo reconocía las siete keys
+base y devolvía 400 ante una custom) y ahora llama
+`updateVocabularyItem(id, { hidden })` directamente — el mismo CRUD real que
+ya usan Guardar/Borrar — leyendo `enabled` del propio flag `hidden` del item
+del catálogo en vez de un array separado a mantener sincronizado.
+
+**Gap conocido — requirement 10/12, vacuamente satisfecho.** Las cuatro
+superficies del "Presentation Contract" (`/write/[id]`, `/preview/[token]`,
+`/shared/[id]`, `/{username}/{slug}`) no renderizan ninguna etiqueta de
+estado/tipo hoy — se verificó leyendo cada archivo, no se infirió. No hay
+riesgo de fuga autor↔visitante que resolver en este issue porque no hay nada
+que mostrar; si una de esas superficies empieza a mostrar vocabulario en el
+futuro, ese trabajo deberá decidir explícitamente de qué catálogo lee
+(el gap que dejó `ODE-474` documentado arriba).
+
+**No verificado.** No se pudo abrir una sesión autenticada en el navegador
+de este entorno (ver limitación general documentada en `ODE-474`/`ODE-475`);
+el repintado se verificó por typecheck, lint y la suite completa
+(1795/1795), no visualmente contra Desk/Settings reales.
+
 ## Estado del bloque
 
 | Issue | Qué entrega | Estado |
@@ -251,7 +311,7 @@ catálogo y la nube.
 | `ODE-473` | Persistencia desktop + reconciliación al iniciar sesión | hecho |
 | `ODE-474` | Catálogo único de cliente; fin de la coerción silenciosa | hecho (parcial — ver nota) |
 | `ODE-475` | Settings › Artifact types / Status conectados | hecho |
-| `ODE-476` | Repintado de los 22 consumidores | pendiente |
+| `ODE-476` | Repintado de los consumidores + fix de id de vocabulario | hecho |
 | `ODE-477` | Evidencia end-to-end del contrato completo | pendiente |
 
 Este documento se actualiza en cada issue del bloque; no se reescribe desde
