@@ -3,6 +3,7 @@ import type {
   UpdateUserSettingsInput,
   UserSettings,
   VocabularyDeleteResult,
+  VocabularyUsage,
 } from "@/lib/services/contracts/settings-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import type {
@@ -86,5 +87,12 @@ export class WebSettingsService implements SettingsService {
       method: "DELETE",
     })
     return readEnvelope<VocabularyDeleteResult>(response)
+  }
+
+  async getVocabularyUsage(): Promise<ServiceResponse<VocabularyUsage>> {
+    const response = await fetch("/api/user/vocabulary?usage=1", { method: "GET" })
+    const result = await readEnvelope<{ items: unknown; usage: VocabularyUsage }>(response)
+    if (result.error) return { data: null, error: result.error }
+    return { data: result.data.usage, error: null }
   }
 }

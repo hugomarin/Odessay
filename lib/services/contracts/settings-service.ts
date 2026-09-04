@@ -26,6 +26,9 @@ export type VocabularyDeleteResult = {
   rewrittenCount: number
 }
 
+/** vocabulary item id -> number of writings currently carrying its key. */
+export type VocabularyUsage = Record<string, number>
+
 export interface SettingsService {
   getUserSettings(): Promise<ServiceResponse<UserSettings>>
   updateUserSettings(input: UpdateUserSettingsInput): Promise<ServiceResponse<UserSettings>>
@@ -36,6 +39,14 @@ export interface SettingsService {
     input: UpdateVocabularyItemInput,
   ): Promise<ServiceResponse<VocabularyItem>>
   deleteVocabularyItem(id: string): Promise<ServiceResponse<VocabularyDeleteResult>>
+  /**
+   * How many writings currently carry each vocabulary item's key — what the
+   * delete confirmation names before the user commits (ODE-475 requirement 6).
+   * A failure here must be surfaced as unavailable, never silently as zero
+   * (requirement 7): showing "0 artifacts" when the count could not be taken
+   * would induce exactly the careless delete the confirmation exists to stop.
+   */
+  getVocabularyUsage(): Promise<ServiceResponse<VocabularyUsage>>
 }
 
 export const SETTINGS_SERVICE_CONTRACT = {
@@ -104,6 +115,14 @@ export const SETTINGS_SERVICE_CONTRACT = {
       input: ["id"],
       output: ["VocabularyDeleteResult"],
       errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "DB_ERROR", "UNAVAILABLE"],
+    },
+    {
+      name: "getVocabularyUsage",
+      kind: "query",
+      summary: "Count of writings currently carrying each vocabulary item's key — feeds the delete confirmation.",
+      input: ["none"],
+      output: ["VocabularyUsage"],
+      errorCodes: ["UNAUTHORIZED", "DB_ERROR", "UNAVAILABLE"],
     },
   ],
   hotspots: [

@@ -3,6 +3,7 @@ import type {
   UpdateUserSettingsInput,
   UserSettings,
   VocabularyDeleteResult,
+  VocabularyUsage,
 } from "@/lib/services/contracts/settings-service"
 import type {
   CreateVocabularyItemInput,
@@ -367,6 +368,32 @@ export class DesktopSettingsService implements SettingsService {
       return ok({ rewrittenCount })
     } catch (e) {
       return err("UNAVAILABLE", e instanceof Error ? e.message : "Failed to delete vocabulary item")
+    }
+  }
+
+  /** How many SQLite-cataloged documents currently carry each vocabulary item's key. */
+  async getVocabularyUsage(): Promise<ServiceResponse<VocabularyUsage>> {
+    try {
+      const items = this.mergeWithBaseItems((await this.readStore()).vocabularyItems ?? [])
+      const { join } = await import("@tauri-apps/api/path")
+      const dbPath = await join(this.configDir, CATALOG_DB_FILE)
+      const rows = await tauriCatalogList(dbPath, { includeDeleted: false, localOnly: false, cloudAccountId: null, limit: 100000 })
+
+      const typeCounts = new Map<string, number>()
+      const statusCounts = new Map<string, number>()
+      for (const row of rows) {
+        if (row.artifactType) typeCounts.set(row.artifactType, (typeCounts.get(row.artifactType) ?? 0) + 1)
+        if (row.status) statusCounts.set(row.status, (statusCounts.get(row.status) ?? 0) + 1)
+      }
+
+      const usage: VocabularyUsage = {}
+      for (const item of items) {
+        const counts = item.kind === "type" ? typeCounts : statusCounts
+        usage[item.id] = counts.get(item.key) ?? 0
+      }
+      return ok(usage)
+    } catch (e) {
+      return err("UNAVAILABLE", e instanceof Error ? e.message : "Failed to count vocabulary usage")
     }
   }
 
