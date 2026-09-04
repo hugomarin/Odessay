@@ -187,6 +187,13 @@ export type LocalEditorSessionTab = {
   has_pending_sync: boolean;
   last_touched_at: number;
   view_state?: LocalEditorTabViewState | null;
+  /**
+   * The ephemeral draft identity currently occupying this tab slot while
+   * `writing_id` is still null. Lets background draft-materialization
+   * reconciliation tell "this is still the same unmaterialized draft" apart
+   * from "a different draft has since reused this tab id" (ODE-478 follow-up).
+   */
+  draft_writing_id?: string | null;
 };
 
 export type LocalEditorRecentWriting = {

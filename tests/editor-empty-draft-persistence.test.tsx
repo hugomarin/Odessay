@@ -26,6 +26,7 @@ const persistedSession = vi.hoisted(() => ({ value: null as Record<string, unkno
 
 type TestWriting = {
   id: string
+  title: string
   content: { plainText: string }
 }
 
@@ -1144,5 +1145,69 @@ describe("ODE-478 case 3 — naming a still-blank draft", () => {
     // Still "Untitled": the failed attempt must not silently claim the tab
     // was renamed, and the tab must still be the ephemeral draft.
     expect(getEditorSessionState().session.tabs.some((tab) => tab.writing_id === null)).toBe(true)
+  })
+
+  it("waits for the durable write before reporting success, even when an autosave was already in flight (ODE-478 follow-up)", async () => {
+    persistedSession.value = blankDraftOnlySession()
+    const deferred: { resolve: (() => void) | null } = { resolve: null }
+    mocks.createDesktopDraft.mockReset()
+    mocks.createDesktopDraft.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          deferred.resolve = () => {
+            mocks.filesystemWrite()
+            resolve({ error: null, data: desktopDraftRecord })
+          }
+        }),
+    )
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(getEditorSessionState().session.active_tab_id).toBe("draft"))
+
+    // Real content triggers the first materialization, left deliberately
+    // in flight (deferred) to simulate an autosave already underway.
+    await act(async () => {
+      simulateEditorInput("contenido real")
+    })
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+
+    // Rename while that write is still in flight — persist()'s "already
+    // inFlight" branch resolves optimistically (true) without waiting for
+    // the merged request to actually land, which the rename flow must not
+    // trust as its success signal.
+    const draftTabId = getEditorSessionState().session.active_tab_id!
+    await act(async () => {
+      topbarState.onRenameTab?.(draftTabId)
+    })
+    await vi.waitFor(() => expect(renameModalState.onConfirm).not.toBeNull())
+
+    let renamePromise: Promise<boolean> | undefined
+    let settledEarly = false
+    await act(async () => {
+      renamePromise = renameModalState.onConfirm?.("Título mientras se guarda")
+      renamePromise?.then(() => {
+        settledEarly = true
+      })
+    })
+
+    // Give pending microtasks a chance to run without ever letting the
+    // underlying write land — an implementation trusting the optimistic
+    // `persist()` result would already have resolved by now.
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(settledEarly).toBe(false)
+    expect(mocks.filesystemWrite).not.toHaveBeenCalled()
+
+    // Only once the original write actually lands may the rename resolve.
+    await act(async () => {
+      deferred.resolve?.()
+    })
+    const succeeded = await renamePromise
+    expect(succeeded).toBe(true)
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalled())
+    expect(mocks.saveWriting.mock.calls.at(-1)?.[0].writing.title).toBe("Título mientras se guarda")
   })
 })

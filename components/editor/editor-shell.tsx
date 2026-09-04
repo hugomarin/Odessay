@@ -201,6 +201,7 @@ import {
 } from "@/lib/services/open-document-factory"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
+import { useTauriCloseGuard } from "@/hooks/useTauriCloseGuard"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import type { EditorHydrationRecord } from "@/lib/editor/document-hydration"
@@ -603,6 +604,12 @@ export function EditorShell({
   // Keyed by ephemeralDraftWritingIdRef so a later, different draft never
   // accidentally restores an older one's leftover content.
   const draftContentSnapshotRef = useRef<{ draftId: string; bodyJson: Record<string, unknown> } | null>(null)
+  // Remembers what an ephemeral draft id materialized into, so a caller that
+  // captured that draft id before an await (e.g. handleCloseWorkspaceTab
+  // resolving which tab to close after settling) can still find the tab even
+  // after reconcileMaterializedDraftTab has renamed it out from under the
+  // original id (ODE-478 follow-up).
+  const materializedDraftIdsRef = useRef<Map<string, string>>(new Map())
   const selectAdjacentTabRef = useRef<((direction: number) => void) | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
@@ -662,7 +669,13 @@ export function EditorShell({
     () => {
       const applyCommittedTabState = ({ record, snapshot }: PersistenceCommitEvent) => {
         const sourceTabId = snapshot.sourceTabId ?? record.id
-        const isSourceTabActive = activeEditorTabIdRef.current === sourceTabId
+        // Same OR-fallback as onStateChange below: right after a draft
+        // materializes, currentWritingIdRef updates synchronously but
+        // activeEditorTabIdRef only catches up on a later render, so a
+        // commit landing in that window must still recognize the genuinely
+        // active document (ODE-478 follow-up).
+        const isSourceTabActive =
+          activeEditorTabIdRef.current === sourceTabId || currentWritingIdRef.current === record.id
         const lifecycle = record.lifecycle ?? snapshot.lifecycle
         const saveState = mapLocalSyncStatusToSaveState(
           "pending",
@@ -750,11 +763,19 @@ export function EditorShell({
             activeEditorTabIdRef.current === sourceTabId &&
             ephemeralDraftWritingIdRef.current === snapshot.draftWritingId
 
+          if (snapshot.draftWritingId) {
+            materializedDraftIdsRef.current.set(snapshot.draftWritingId, record.id)
+          }
+
           // Reconcile the exact source tab even when this completion is stale;
           // a generation only describes UI ownership, never document identity.
+          // draftWritingId lets the store tell this draft's own tab apart from
+          // a different draft session that has since reused the same tab id
+          // (ODE-478 follow-up).
           reconcileMaterializedDraftTab({
             writingId: record.id,
             draftTabId: sourceTabId,
+            draftWritingId: snapshot.draftWritingId,
             title: materializedTitle,
             saveState: "saved-local",
             hasPendingSync: false,
@@ -1236,7 +1257,11 @@ export function EditorShell({
   }, [])
 
   const persistEditorSnapshot = useCallback(
-    async (editorInstance: Editor, overrides?: PersistenceSnapshotOverrides) => {
+    async (
+      editorInstance: Editor,
+      overrides?: PersistenceSnapshotOverrides,
+      options?: { awaitDurability?: boolean },
+    ) => {
       const activeId = currentWritingIdRef.current
       const baseCreatedAt = createdAtRef.current
       const nextBodyText = editorInstance.getText()
@@ -1255,7 +1280,10 @@ export function EditorShell({
         ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
       }
 
-      return persistenceCoordinator.persist(
+      const draftWritingId = ephemeralDraftWritingIdRef.current
+      const sourceTabId = activeEditorTabIdRef.current ?? (activeId ?? EDITOR_DRAFT_TAB_ID)
+
+      const result = await persistenceCoordinator.persist(
         {
           writingId: activeId,
           createdAt: baseCreatedAt,
@@ -1267,11 +1295,22 @@ export function EditorShell({
           artifactType: artifactTypeRef.current,
           visibility: visibilityRef.current,
           lifecycle: activeId ? lifecycleRef.current : "local-only",
-          draftWritingId: ephemeralDraftWritingIdRef.current,
-          sourceTabId: activeEditorTabIdRef.current ?? (activeId ?? EDITOR_DRAFT_TAB_ID),
+          draftWritingId,
+          sourceTabId,
         },
         overrides,
       )
+
+      if (!options?.awaitDurability || !result) {
+        return result
+      }
+
+      // persist() can resolve `true` optimistically when merged into an
+      // already-in-flight write, without waiting for that write to actually
+      // land — fine for fire-and-forget autosave, but a caller reporting
+      // success back to the user (e.g. a rename confirmation) needs the real
+      // outcome (ODE-478 follow-up).
+      return persistenceCoordinator.settle({ writingId: activeId, draftWritingId, sourceTabId })
     },
     [persistenceCoordinator],
   )
@@ -1796,7 +1835,7 @@ export function EditorShell({
     }
 
     navigatedToDraftRef.current = true
-    openDraftTab()
+    openDraftTab(ephemeralDraftWritingIdRef.current)
   }, [createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
   // Eagerly create a stable local identity for blank /write so the first
@@ -5502,14 +5541,30 @@ export function EditorShell({
         }
       }
 
-      const nextActiveTabId = closeTab(tabId)
+      // The await above can let this very tab's own materialization complete
+      // and rename it (draft id -> real writing id) via
+      // reconcileMaterializedDraftTab, so the `tabId` captured before the
+      // await can now point at nothing. Re-resolve it against live state
+      // before closing: materializedDraftIdsRef records what the draft id
+      // became, since the tab's own draft_writing_id is cleared once it's no
+      // longer a draft (ODE-478 follow-up).
+      const tabsAfterSettle = getEditorSessionState().session.tabs
+      const resolvedTabId = tabsAfterSettle.some((tab) => tab.id === tabId)
+        ? tabId
+        : (persistenceTarget.draftWritingId
+            ? materializedDraftIdsRef.current.get(persistenceTarget.draftWritingId)
+            : undefined) ?? tabId
+
+      const nextActiveTabId = closeTab(resolvedTabId)
 
       if (!isClosingActiveTab) {
         return
       }
 
       activeEditorTabIdRef.current = nextActiveTabId
-      const nextTab = editorSession.tabs.find((tab) => tab.id === nextActiveTabId)
+      // Read fresh rather than the closed-over `editorSession.tabs`, which can
+      // be stale after the same await (ODE-478 follow-up).
+      const nextTab = getEditorSessionState().session.tabs.find((tab) => tab.id === nextActiveTabId)
       navigatedToDraftRef.current = false
       if (nextTab?.writing_id) {
         currentWritingIdRef.current = nextTab.writing_id
@@ -5683,7 +5738,7 @@ export function EditorShell({
           if (!editor) return false
           setTitle(nextTitle)
           setHasExplicitTitle(nextTitle !== DESKTOP_UNTITLED_WRITING_TITLE)
-          return persistEditorSnapshot(editor, { title: nextTitle })
+          return persistEditorSnapshot(editor, { title: nextTitle }, { awaitDurability: true })
         }
 
         const result = await (await getDocumentService()).renameWriting({
@@ -5702,7 +5757,7 @@ export function EditorShell({
       setHasExplicitTitle(nextTitle !== UNTITLED_WRITING_TITLE)
 
       if (editor) {
-        return persistEditorSnapshot(editor, { title: nextTitle })
+        return persistEditorSnapshot(editor, { title: nextTitle }, { awaitDurability: true })
       }
       return true
     },
@@ -5720,6 +5775,15 @@ export function EditorShell({
     // Desktop: drafts remain ephemeral until the user enters real content.
     // Just open/focus a draft tab; never persist a contentless writing here.
     if (isDesktopRuntime()) {
+      // Flush/snapshot before detaching (same reasoning as
+      // handleSelectWorkspaceTab/handleCloseWorkspaceTab): a still-queued rAF
+      // rich-mode update or unmaterialized draft content must not be
+      // discarded just because the user hit New Tab before the next
+      // frame/save landed (ODE-478 follow-up — this handler never got the
+      // original case 2/4 fix).
+      flushQueuedRichModeUpdate()
+      snapshotOutgoingDraftContent()
+
       persistCurrentWorkspaceViewState()
 
       // Detach the previous document before the draft tab can receive focus.
@@ -5734,12 +5798,6 @@ export function EditorShell({
       ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
       navigatedToDraftRef.current = false
 
-      if (richUpdateRafRef.current !== null) {
-        window.cancelAnimationFrame(richUpdateRafRef.current)
-        richUpdateRafRef.current = null
-        richUpdateEditorRef.current = null
-      }
-
       if (editor) {
         isApplyingContentRef.current = true
         editor.commands.setContent(EMPTY_EDITOR_JSON)
@@ -5747,7 +5805,7 @@ export function EditorShell({
         updateDerivedEditorState(editor)
       }
 
-      openDraftTab()
+      openDraftTab(ephemeralDraftWritingIdRef.current)
       activeEditorTabIdRef.current = getEditorSessionState().session.active_tab_id ?? EDITOR_DRAFT_TAB_ID
       replaceEditorHistory("/write")
       window.requestAnimationFrame(() => {
@@ -5864,10 +5922,27 @@ export function EditorShell({
         editorEl?.focus()
       })
     })
-  }, [currentWritingId, editor, editorSession.tabs, persistenceCoordinator, persistCurrentWorkspaceViewState, updateDerivedEditorState])
+  }, [
+    currentWritingId,
+    editor,
+    editorSession.tabs,
+    flushQueuedRichModeUpdate,
+    persistenceCoordinator,
+    persistCurrentWorkspaceViewState,
+    snapshotOutgoingDraftContent,
+    updateDerivedEditorState,
+  ])
   createWorkspaceTabRef.current = handleCreateWorkspaceTab
 
   const handleOpenWorkspaceDocument = useCallback(async (documentId: string) => {
+    // Same reasoning as handleSelectWorkspaceTab/handleCloseWorkspaceTab/
+    // handleCreateWorkspaceTab: this also detaches from whatever document is
+    // currently active, so a still-queued edit or unmaterialized draft must
+    // not be discarded just because the user opened a different document via
+    // search/recents instead of the tab bar (ODE-478 follow-up).
+    flushQueuedRichModeUpdate()
+    snapshotOutgoingDraftContent()
+
     const outcome = await openDocumentById(documentId)
     if (outcome.status !== "opened" && outcome.status !== "conflict") {
       throw new Error(describeOpenOutcome(outcome))
@@ -5877,7 +5952,7 @@ export function EditorShell({
     setCurrentWritingId(documentId)
     setHydrationWritingId(documentId)
     openWritingTab({ writingId: documentId, slug: outcome.record.slug, title: openedTitle, saveState: "saved-local", hasPendingSync: false })
-  }, [])
+  }, [flushQueuedRichModeUpdate, snapshotOutgoingDraftContent])
 
   selectAdjacentTabRef.current = (direction) => {
     const tabs = editorSession.tabs
@@ -5906,6 +5981,12 @@ export function EditorShell({
 
   const handleMenuOpenFile = useCallback(
     async (_path: string, content: string) => {
+      // Same reasoning as the other document-switching handlers: the OS
+      // "Open File" menu also detaches from whatever is currently active
+      // (ODE-478 follow-up).
+      flushQueuedRichModeUpdate()
+      snapshotOutgoingDraftContent()
+
       persistCurrentWorkspaceViewState()
 
       // Unified opener (ODE-375 M3): desktop Open Document converges path → UUID
@@ -6012,7 +6093,7 @@ export function EditorShell({
         router.push(`/write/${nextWritingId}`)
       }
     },
-    [persistCurrentWorkspaceViewState, router],
+    [flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, router, snapshotOutgoingDraftContent],
   )
 
   const handleMenuNewFile = useCallback(() => {
@@ -6093,6 +6174,15 @@ export function EditorShell({
     onSaveToDisk: handleSaveToDisk,
     documentKey: currentWritingId,
   })
+
+  // ODE-478 case 5 covered the explicit tab-close button; the window itself
+  // had no equivalent guard, so quitting the app or closing the window mid
+  // save abandoned it the same way (ODE-478 follow-up).
+  const settleBeforeClose = useCallback(async () => {
+    flushQueuedRichModeUpdate()
+    await persistenceCoordinator.settle()
+  }, [flushQueuedRichModeUpdate, persistenceCoordinator])
+  useTauriCloseGuard(settleBeforeClose)
 
   // Picks up a file opened via Cmd+O from outside Write (see useGlobalOpenFileMenu).
   useEffect(() => {

@@ -9,6 +9,7 @@ import {
   openDraftTab,
   openWritingTab,
   publishTabState,
+  reconcileMaterializedDraftTab,
   reconcileUnavailableWritingTab,
   reorderTab,
   resetEditorSessionStoreForTests,
@@ -199,6 +200,70 @@ describe("editorSessionStore", () => {
 
     expect(changed).toBe(false);
     expect(getEditorSessionState().session.updated_at).toBe(updatedAt);
+  });
+
+  describe("reconcileMaterializedDraftTab — ODE-478 follow-up", () => {
+    it("renames the still-current draft tab in place when it belongs to this materialization", async () => {
+      await initializeEditorSessionStore();
+      openDraftTab("draft-a");
+
+      reconcileMaterializedDraftTab({
+        writingId: "writing-a",
+        draftTabId: EDITOR_DRAFT_TAB_ID,
+        draftWritingId: "draft-a",
+        title: "First real title",
+      });
+
+      const session = getEditorSessionState().session;
+      expect(session.tabs).toHaveLength(1);
+      expect(session.tabs[0]).toMatchObject({ id: "writing-a", writing_id: "writing-a", title: "First real title" });
+      expect(session.active_tab_id).toBe("writing-a");
+    });
+
+    it("does not hijack a newer draft session that reused the same tab id", async () => {
+      await initializeEditorSessionStore();
+      // Draft A occupies the singleton draft tab slot...
+      openDraftTab("draft-a");
+      // ...then gets abandoned by "New Tab", which reuses the same slot for
+      // a fresh draft B before A's materialization has resolved.
+      openDraftTab("draft-b");
+
+      // A's background write finally lands.
+      reconcileMaterializedDraftTab({
+        writingId: "writing-a",
+        draftTabId: EDITOR_DRAFT_TAB_ID,
+        draftWritingId: "draft-a",
+        title: "Draft A's title",
+      });
+
+      const session = getEditorSessionState().session;
+      // The visible draft tab must still be B, untouched and still blank —
+      // not renamed to A's identity.
+      const draftTab = session.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID);
+      expect(draftTab).toMatchObject({ id: EDITOR_DRAFT_TAB_ID, writing_id: null, draft_writing_id: "draft-b" });
+      expect(session.active_tab_id).toBe(EDITOR_DRAFT_TAB_ID);
+
+      // A's write must still be owned by *some* tab — never orphaned.
+      const materializedTab = session.tabs.find((tab) => tab.writing_id === "writing-a");
+      expect(materializedTab).toBeDefined();
+      expect(materializedTab?.id).not.toBe(EDITOR_DRAFT_TAB_ID);
+    });
+
+    it("treats a tab with no draft_writing_id (older session) as compatible", async () => {
+      await initializeEditorSessionStore();
+      openDraftTab();
+
+      reconcileMaterializedDraftTab({
+        writingId: "writing-legacy",
+        draftTabId: EDITOR_DRAFT_TAB_ID,
+        draftWritingId: "draft-new",
+        title: "Legacy tab",
+      });
+
+      const session = getEditorSessionState().session;
+      expect(session.tabs).toHaveLength(1);
+      expect(session.tabs[0]).toMatchObject({ id: "writing-legacy", writing_id: "writing-legacy" });
+    });
   });
 
   describe("reconcileUnavailableWritingTab", () => {

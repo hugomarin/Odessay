@@ -190,6 +190,13 @@ export function createPersistenceCoordinator(
   let scheduledTimer: ReturnType<typeof setTimeout> | null = null
   const persistenceDebounceMs = Math.max(0, deps.persistenceDebounceMs ?? 0)
   const nowMs = deps.nowMs ?? Date.now
+  // Bounded so a long session that materializes many blank drafts doesn't
+  // hold every one of their full WritingRecords (rich text included) alive
+  // for the coordinator's whole lifetime (ODE-478 follow-up). Entries beyond
+  // the cap are evicted oldest-first; a rebind for an evicted id simply
+  // falls back to whatever writingId the request already carries, same as
+  // before this map existed.
+  const MATERIALIZED_DRAFTS_CACHE_LIMIT = 20
   const materializedDrafts = new Map<string, WritingRecord>()
 
   const isCurrent = (request: PersistenceRequest) => !disposed && request.generation === generation
@@ -406,6 +413,11 @@ export function createPersistenceCoordinator(
         if (snapshot.draftWritingId) {
           materializedDrafts.set(snapshot.draftWritingId, materialized)
           rebindMaterializedDraftRequests(snapshot.draftWritingId, materialized)
+          while (materializedDrafts.size > MATERIALIZED_DRAFTS_CACHE_LIMIT) {
+            const oldestKey = materializedDrafts.keys().next().value
+            if (oldestKey === undefined) break
+            materializedDrafts.delete(oldestKey)
+          }
         }
         const current = isCurrent(request)
         // Only a still-current request may reassign the coordinator's own
@@ -744,6 +756,10 @@ export function createPersistenceCoordinator(
         }
 
         events.onStateChange?.({ state: "dirty", snapshot: normalizedSnapshot, writingId: normalizedSnapshot.writingId })
+        // Deliberately optimistic: autosave callers fire-and-forget this
+        // result and must not block on it. A caller that needs to know the
+        // write actually landed (e.g. rename) should await settle() for the
+        // same target afterward instead of relying on this return value.
         return Promise.resolve(true)
       }
 

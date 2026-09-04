@@ -74,16 +74,23 @@ export function RenameWritingModal({
   const submit = async () => {
     setIsSubmitting(true)
     setSubmitError(null)
-    // The modal must reflect what actually happened, not close as if it
-    // always succeeds — a silent no-op here is exactly how a blank draft's
-    // name used to vanish without a trace (ODE-478 case 3).
-    const succeeded = await onConfirm(nextTitle.trim() || "Untitled artifact")
-    setIsSubmitting(false)
-    if (!succeeded) {
-      setSubmitError("Could not save this name. Try again.")
-      return
+    try {
+      // The modal must reflect what actually happened, not close as if it
+      // always succeeds — a silent no-op here is exactly how a blank draft's
+      // name used to vanish without a trace (ODE-478 case 3).
+      const succeeded = await onConfirm(nextTitle.trim() || "Untitled artifact")
+      if (!succeeded) {
+        setSubmitError("Could not save this name. Try again.")
+        return
+      }
+      onOpenChange(false)
+    } catch (error) {
+      // A rejection (not just a resolved `false`) must not strand the modal
+      // showing "Saving…" forever with no way out but Cancel (ODE-478 follow-up).
+      setSubmitError(error instanceof Error ? error.message : "Could not save this name. Try again.")
+    } finally {
+      setIsSubmitting(false)
     }
-    onOpenChange(false)
   }
 
   return (
