@@ -85,3 +85,30 @@ export function listVisibleVocabulary(catalog: readonly VocabularyItem[], kind: 
     .filter((item) => item.kind === kind && !item.hidden)
     .sort((a, b) => a.position - b.position)
 }
+
+/**
+ * Orders a set of "group by status/type" keys the same way Desk/Workspace
+ * order their groups — catalog `position` first (requirement 9), including
+ * hidden items (a group-by must still show a group for an artifact that
+ * carries a now-hidden status — requirement 5), then any key that isn't in
+ * the catalog at all (an unknown/deleted value — requirement 6) appended at
+ * the end in a stable, deterministic order.
+ */
+export function orderGroupKeysByCatalog(
+  catalog: readonly VocabularyItem[],
+  kind: VocabularyKind,
+  keys: Iterable<string>,
+): string[] {
+  const present = new Set(keys)
+  const byKey = new Map(
+    catalog.filter((item) => item.kind === kind).map((item) => [item.key, item] as const),
+  )
+  const known = catalog
+    .filter((item) => item.kind === kind && present.has(item.key))
+    .sort((a, b) => a.position - b.position)
+    .map((item) => item.key)
+  const unknown = Array.from(present)
+    .filter((key) => !byKey.has(key))
+    .sort()
+  return [...known, ...unknown]
+}

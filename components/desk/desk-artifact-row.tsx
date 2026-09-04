@@ -25,7 +25,7 @@ import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon"
 import { WorkspaceAssignmentDropdown } from "@/components/desk/workspace-assignment-dropdown"
 import type { DeskActivityRow } from "@/lib/queries/desk-activity"
 import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment"
-import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
+import { getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 import { getWritingStatusLabel, type WritingStatus } from "@/lib/writings/status"
 import { cn } from "@/lib/utils"
 
@@ -54,6 +54,7 @@ export type DeskArtifactRowProps = {
   onToggleSelection?: (id: string) => void
   onActivate?: (row: DeskActivityRow) => void
   enabledStatuses: WritingStatus[]
+  enabledArtifactTypes: ArtifactType[]
   onStatusChange?: (writingId: string, status: WritingStatus) => Promise<void> | void
   onArtifactTypeChange?: (writingId: string, artifactType: ArtifactType) => Promise<void> | void
   workspaceOptions: WorkspaceAssignmentOption[]
@@ -78,6 +79,7 @@ export function DeskArtifactRow({
   onToggleSelection,
   onActivate,
   enabledStatuses,
+  enabledArtifactTypes,
   onStatusChange,
   onArtifactTypeChange,
   workspaceOptions,
@@ -215,7 +217,7 @@ export function DeskArtifactRow({
             label={getArtifactTypeLabel(artifactType)}
             ariaLabel={`Change artifact type for ${row.title}`}
             leading={<ArtifactTypeIcon artifactType={artifactType} />}
-            items={ARTIFACT_TYPE_VALUES.map((type) => ({
+            items={enabledArtifactTypes.map((type) => ({
               key: type,
               label: getArtifactTypeLabel(type),
               leading: <ArtifactTypeIcon artifactType={type} />,

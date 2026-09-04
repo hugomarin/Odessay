@@ -15,6 +15,7 @@ import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-ba
 import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge"
 import type { DeskActivityRow } from "@/lib/queries/desk-activity"
 import { WRITING_STATUS_VALUES } from "@/lib/writings/status"
+import { ARTIFACT_TYPE_VALUES } from "@/lib/writings/artifact-type"
 import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
 import { getVocabularyColor } from "@/lib/vocabulary/resolve"
 import { VOCABULARY_COLORS } from "@/lib/settings/vocabulary"
@@ -114,6 +115,7 @@ const FILTER_BAR_PROPS = {
 const ROW_PROPS = {
   selected: false,
   enabledStatuses: [...WRITING_STATUS_VALUES],
+  enabledArtifactTypes: [...ARTIFACT_TYPE_VALUES],
   workspaceOptions: [],
   workspaceAvailable: false,
 }

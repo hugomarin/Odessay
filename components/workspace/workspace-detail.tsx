@@ -23,7 +23,6 @@ import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal";
 import { WritingPreviewModal } from "@/components/desk/writing-preview-modal";
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu";
-import { useUserSettingsContext } from "@/components/settings/user-settings-provider";
 import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge";
 import { ArtifactTable } from "@/components/shared/artifact-table";
 import { ArtifactRowSelection } from "@/components/shared/artifact-row-selection";
@@ -85,16 +84,16 @@ import type {
 import type { LocalWritingCollection } from "@/lib/local-db/schema";
 import { buildWritingRouteHref } from "@/lib/writings/writing-route";
 import {
-  WRITING_STATUS_VALUES,
   getWritingStatusLabel,
   normalizeWritingStatus,
   type WritingStatus,
 } from "@/lib/writings/status";
 import {
-  ARTIFACT_TYPE_VALUES,
   getArtifactTypeLabel,
   type ArtifactType,
 } from "@/lib/writings/artifact-type";
+import { useVocabulary } from "@/hooks/useVocabulary";
+import { listVisibleVocabulary, orderGroupKeysByCatalog } from "@/lib/vocabulary/resolve";
 import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer";
 import {
   APP_SHELL_CONTENT_GUTTER_CLASS,
@@ -234,7 +233,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     Record<string, string[]>
   >({});
   const hasLoadedWorkspaceRef = useRef(false);
-  const { settings } = useUserSettingsContext();
+  const catalog = useVocabulary();
   const {
     selectedIds,
     toggleSelection,
@@ -435,7 +434,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         rows.push(file);
         groups.set(status, rows);
       }
-      return WRITING_STATUS_VALUES.filter((status) => groups.has(status)).map(
+      return orderGroupKeysByCatalog(catalog, "status", groups.keys()).map(
         (status) => ({
           label: getWritingStatusLabel(status),
           items: groups.get(status) ?? [],
@@ -452,7 +451,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         rows.push(file);
         groups.set(artifactType, rows);
       }
-      return ARTIFACT_TYPE_VALUES.filter((type) => groups.has(type)).map(
+      return orderGroupKeysByCatalog(catalog, "type", groups.keys()).map(
         (type) => ({
           label: getArtifactTypeLabel(type),
           items: groups.get(type) ?? [],
@@ -517,6 +516,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     documentJoin,
     collectionIdsByWritingId,
     collectionOptions,
+    catalog,
   ]);
 
   const getRowKey = useCallback(
@@ -738,11 +738,12 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   );
 
   const enabledStatuses = useMemo(
-    () =>
-      WRITING_STATUS_VALUES.filter(
-        (status) => !settings.disabledStatuses.includes(status),
-      ),
-    [settings.disabledStatuses],
+    () => listVisibleVocabulary(catalog, "status").map((item) => item.key),
+    [catalog],
+  );
+  const enabledArtifactTypes = useMemo(
+    () => listVisibleVocabulary(catalog, "type").map((item) => item.key),
+    [catalog],
   );
 
   const fileColumns = useMemo<ArtifactTableColumn<WorkspaceFile>[]>(
@@ -920,7 +921,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 contentClassName="w-[248px]"
               >
                 {hasDocument &&
-                  ARTIFACT_TYPE_VALUES.map((artifactType) => (
+                  enabledArtifactTypes.map((artifactType) => (
                     <DropdownMenuItem
                       key={artifactType}
                       className="h-11 cursor-pointer items-center justify-between rounded-[10px] px-3 text-[14px]"
@@ -1009,6 +1010,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       collectionOptions,
       documentJoin,
       enabledStatuses,
+      enabledArtifactTypes,
       handleArtifactTypeChange,
       handleCollectionToggle,
       handleCreateCollection,

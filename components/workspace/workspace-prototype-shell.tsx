@@ -36,7 +36,6 @@ import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal";
 import { WritingPreviewModal } from "@/components/desk/writing-preview-modal";
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu";
-import { useUserSettingsContext } from "@/components/settings/user-settings-provider";
 import { FolderTreePicker } from "@/components/workspace/folder-tree-picker";
 import { LibraryControlsBar } from "@/components/library/library-controls-bar";
 import { useWorkspaceTableFilters } from "@/hooks/useWorkspaceTableFilters";
@@ -56,16 +55,16 @@ import { TablePropertySelector } from "@/components/ui/table-property-selector";
 import { ArtifactTypeIcon } from "@/components/desk/desk-activity-table";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
 import {
-  WRITING_STATUS_VALUES,
   getWritingStatusLabel,
   normalizeWritingStatus,
   type WritingStatus,
 } from "@/lib/writings/status";
 import {
-  ARTIFACT_TYPE_VALUES,
   getArtifactTypeLabel,
   type ArtifactType,
 } from "@/lib/writings/artifact-type";
+import { useVocabulary } from "@/hooks/useVocabulary";
+import { listVisibleVocabulary } from "@/lib/vocabulary/resolve";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -990,7 +989,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     Record<string, string[]>
   >({});
   const hasLoadedWorkspaceRef = useRef(false);
-  const { settings } = useUserSettingsContext();
+  const catalog = useVocabulary();
   const {
     selectedIds,
     toggleSelection,
@@ -1366,11 +1365,12 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   );
 
   const enabledStatuses = useMemo(
-    () =>
-      WRITING_STATUS_VALUES.filter(
-        (status) => !settings.disabledStatuses.includes(status),
-      ),
-    [settings.disabledStatuses],
+    () => listVisibleVocabulary(catalog, "status").map((item) => item.key),
+    [catalog],
+  );
+  const enabledArtifactTypes = useMemo(
+    () => listVisibleVocabulary(catalog, "type").map((item) => item.key),
+    [catalog],
   );
 
   useEffect(() => {
@@ -1596,7 +1596,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 contentClassName="w-[248px]"
               >
                 {hasDocument &&
-                  ARTIFACT_TYPE_VALUES.map((artifactType) => (
+                  enabledArtifactTypes.map((artifactType) => (
                     <DropdownMenuItem
                       key={artifactType}
                       className="h-11 cursor-pointer items-center justify-between rounded-[10px] px-3 text-[14px]"
@@ -1707,6 +1707,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       collectionOptions,
       documentJoin,
       enabledStatuses,
+      enabledArtifactTypes,
       handleArtifactTypeChange,
       handleCollectionToggle,
       handleCreateCollection,

@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input"
 import { APP_SHELL_CONTENT_GUTTER_CLASS } from "@/components/navigation/view-header"
 import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
-import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
+import { useVocabulary } from "@/hooks/useVocabulary"
+import { listVisibleVocabulary } from "@/lib/vocabulary/resolve"
 import type { CollectionOption } from "@/lib/collections/collections"
 import { UNCATEGORIZED_COLLECTION_ID } from "@/lib/collections/collections"
 import {
@@ -18,8 +19,8 @@ import {
   type DeskSortBy,
 } from "@/lib/queries/desk-activity"
 import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment"
-import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
-import { getWritingStatusLabel, WRITING_STATUS_VALUES, type WritingStatus } from "@/lib/writings/status"
+import { getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
+import { getWritingStatusLabel, type WritingStatus } from "@/lib/writings/status"
 import { cn } from "@/lib/utils"
 
 /**
@@ -90,15 +91,19 @@ export function DeskFilterBar(props: DeskFilterBarProps) {
   const [filterOpen, setFilterOpen] = useState(false)
   const [groupOpen, setGroupOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
-  const { settings } = useUserSettingsContext()
+  const catalog = useVocabulary()
 
   const collections = useMemo(
     () => [...props.collectionOptions, { id: UNCATEGORIZED_COLLECTION_ID, name: "Uncategorized" }],
     [props.collectionOptions],
   )
-  const enabledStatuses = WRITING_STATUS_VALUES.filter(
-    (status) => !settings.disabledStatuses.includes(status),
-  )
+  // ODE-476: the user's full catalog (custom items included), in position
+  // order, hidden ones excluded — requirements 4/8/9. A status/type this
+  // artifact already carries but that's now hidden still renders via
+  // WritingStatusIcon/ArtifactTypeIcon elsewhere (requirement 5/6); it just
+  // isn't offered here as a filter option.
+  const visibleStatuses = listVisibleVocabulary(catalog, "status").map((item) => item.key)
+  const visibleArtifactTypes = listVisibleVocabulary(catalog, "type").map((item) => item.key)
 
   const sortLabel = SORT_OPTIONS.find((option) => option.value === props.sortBy)?.label ?? "Newest first"
   const groupLabel =
@@ -147,7 +152,7 @@ export function DeskFilterBar(props: DeskFilterBarProps) {
           <PopoverContent align="start" className="w-[246px] p-0">
             <div className="od-scroll max-h-[384px] overflow-y-auto p-[5px]">
               <FacetSection label="Status">
-                {enabledStatuses.map((status) => (
+                {visibleStatuses.map((status) => (
                   <FacetOption
                     key={status}
                     selected={props.selectedStatuses.includes(status)}
@@ -160,7 +165,7 @@ export function DeskFilterBar(props: DeskFilterBarProps) {
               </FacetSection>
 
               <FacetSection label="Artifact type">
-                {ARTIFACT_TYPE_VALUES.map((type) => (
+                {visibleArtifactTypes.map((type) => (
                   <FacetOption
                     key={type}
                     selected={props.selectedArtifactTypes.includes(type)}

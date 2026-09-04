@@ -30,14 +30,15 @@ import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { useWritingPreviewCache, type CachedWritingPreview } from "@/hooks/useWritingPreviewCache"
 import type { CollectionOption } from "@/lib/collections/collections"
 import type { DeskActivityRow } from "@/lib/queries/desk-activity"
-import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
+import { getWritingStatusLabel, type WritingStatus } from "@/lib/writings/status"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
 import { DocumentStateIcon } from "@/components/ui/document-state-icon"
 import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge"
 import { TablePropertySelector } from "@/components/ui/table-property-selector"
-import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
+import { getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 import { ArtifactTypeGlyph } from "@/components/desk/artifact-type-icon"
-import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
+import { useVocabulary } from "@/hooks/useVocabulary"
+import { listVisibleVocabulary } from "@/lib/vocabulary/resolve"
 import { createSharingService } from "@/lib/services/sharing-service-factory"
 import {
   DEFAULT_PREVIEW_LINK_STATE,
@@ -179,9 +180,10 @@ export function WritingPreviewModal({
   const [exportingFormat, setExportingFormat] = useState<"markdown" | PreviewExportFormat | null>(null)
   const loadIdRef = useRef(0)
   const titleDraftRef = useRef("")
-  const { settings } = useUserSettingsContext()
+  const catalog = useVocabulary()
   const sharingService = useMemo(() => createSharingService(), [])
-  const enabledStatuses = WRITING_STATUS_VALUES.filter((s) => !settings.disabledStatuses.includes(s))
+  const enabledStatuses = listVisibleVocabulary(catalog, "status").map((item) => item.key) as WritingStatus[]
+  const enabledArtifactTypes = listVisibleVocabulary(catalog, "type").map((item) => item.key) as ArtifactType[]
   const titleEditingRef = useRef(false)
   const titleWritingIdRef = useRef<string | null>(null)
 
@@ -761,7 +763,7 @@ export function WritingPreviewModal({
                   <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-5">Artifact Type</p>
                   {row ? (
                     <TablePropertySelector ariaLabel={`Change artifact type for ${row.title}`} icon={<ArtifactTypeGlyph artifactType={row.artifactType ?? "general"} className="h-[13px] w-[13px] shrink-0 text-ink-3" />} label={getArtifactTypeLabel(row.artifactType ?? "general")} variant="preview" contentClassName="w-[248px]">
-                      {ARTIFACT_TYPE_VALUES.map((artifactType) => <PreviewMenuItem key={artifactType} icon={<ArtifactTypeGlyph artifactType={artifactType} className="h-[13px] w-[13px] shrink-0 text-ink-3" />} label={getArtifactTypeLabel(artifactType)} onSelect={() => void onArtifactTypeChange?.(row.id, artifactType)} />)}
+                      {enabledArtifactTypes.map((artifactType) => <PreviewMenuItem key={artifactType} icon={<ArtifactTypeGlyph artifactType={artifactType} className="h-[13px] w-[13px] shrink-0 text-ink-3" />} label={getArtifactTypeLabel(artifactType)} onSelect={() => void onArtifactTypeChange?.(row.id, artifactType)} />)}
                     </TablePropertySelector>
                   ) : null}
                 </section>

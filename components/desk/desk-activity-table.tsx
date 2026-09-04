@@ -24,10 +24,9 @@ import type {
   DeskActivityRow,
 } from "@/lib/queries/desk-activity";
 import type { WritingStatus } from "@/lib/writings/status";
-import {
-  getWritingStatusLabel,
-  WRITING_STATUS_VALUES,
-} from "@/lib/writings/status";
+import { getWritingStatusLabel } from "@/lib/writings/status";
+import { useVocabulary } from "@/hooks/useVocabulary";
+import { listVisibleVocabulary } from "@/lib/vocabulary/resolve";
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
 import { WorkspaceAssignmentDropdown } from "@/components/desk/workspace-assignment-dropdown";
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu";
@@ -43,9 +42,7 @@ import type { ArtifactTableColumn } from "@/components/shared/artifact-table-typ
 import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
 import { TablePropertySelector } from "@/components/ui/table-property-selector";
-import { useUserSettingsContext } from "@/components/settings/user-settings-provider";
 import {
-  ARTIFACT_TYPE_VALUES,
   getArtifactTypeLabel,
   type ArtifactType,
 } from "@/lib/writings/artifact-type";
@@ -124,7 +121,7 @@ export function DeskActivityTable({
 }: DeskActivityTableProps) {
   const router = useRouter();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const { settings } = useUserSettingsContext();
+  const catalog = useVocabulary();
   const selectionEnabled = Boolean(onToggleSelection);
 
   const renderSelection = (row: DeskActivityRow) => {
@@ -139,11 +136,12 @@ export function DeskActivityTable({
   };
 
   const enabledStatuses = useMemo(
-    () =>
-      WRITING_STATUS_VALUES.filter(
-        (status) => !settings.disabledStatuses.includes(status),
-      ),
-    [settings.disabledStatuses],
+    () => listVisibleVocabulary(catalog, "status").map((item) => item.key),
+    [catalog],
+  );
+  const enabledArtifactTypes = useMemo(
+    () => listVisibleVocabulary(catalog, "type").map((item) => item.key),
+    [catalog],
   );
   const tableGroups = useMemo(
     () => groups.map((group) => ({ label: group.label, items: group.rows })),
@@ -288,7 +286,7 @@ export function DeskActivityTable({
               contentClassName="w-[248px]"
               onClick={stopRowNavigation}
             >
-              {ARTIFACT_TYPE_VALUES.map((artifactType) => (
+              {enabledArtifactTypes.map((artifactType) => (
                 <DropdownMenuItem
                   key={artifactType}
                   className="h-11 cursor-pointer items-center justify-between rounded-[10px] px-3 text-[14px]"
@@ -421,6 +419,7 @@ export function DeskActivityTable({
     ],
     [
       enabledStatuses,
+      enabledArtifactTypes,
       onCopyMarkdown,
       onDownloadMarkdown,
       onPreviewWriting,

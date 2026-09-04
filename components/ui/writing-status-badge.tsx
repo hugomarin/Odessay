@@ -1,6 +1,9 @@
 "use client"
 
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
+import { useVocabulary } from "@/hooks/useVocabulary"
+import { getStatusChipTint } from "@/lib/settings/vocabulary"
+import { getVocabularyColor } from "@/lib/vocabulary/resolve"
 import { getWritingStatusLabel, normalizeWritingStatus, type WritingStatus } from "@/lib/writings/status"
 import { cn } from "@/lib/utils"
 
@@ -13,32 +16,25 @@ type WritingStatusBadgeProps = {
 }
 
 /**
- * Canonical surface (background + text) styles for each writing status.
- * Shared so badges, status dropdowns and pills stay visually identical
- * across Desk, Workspace, Preview and any future surface.
+ * ODE-476: background and text derive from the catalog color through the one
+ * tint formula the app uses everywhere (`getStatusChipTint`) — no per-status
+ * Tailwind table. Requirement 3: the tint rule is the same rule everywhere,
+ * not a second lookup table per component.
  */
-export const WRITING_STATUS_SURFACE_STYLES: Record<WritingStatus, string> = {
-  new: "bg-[hsl(220,40%,94%)] text-[hsl(220,45%,42%)]",
-  exploring: "bg-[hsl(35,50%,92%)] text-[hsl(35,50%,32%)]",
-  draft: "bg-muted text-ink-4",
-  in_review: "bg-[hsl(260,35%,94%)] text-[hsl(260,40%,40%)]",
-  done: "bg-[hsl(140,30%,91%)] text-[hsl(140,40%,30%)]",
-  archived: "bg-[hsl(210,10%,92%)] text-[hsl(210,10%,40%)]",
-  canceled: "bg-[hsl(0,30%,94%)] text-[hsl(0,35%,42%)]",
-}
-
 export function WritingStatusBadge({ status, variant = "full", className }: WritingStatusBadgeProps) {
+  const catalog = useVocabulary()
   const normalized = normalizeWritingStatus(status)
   const label = getWritingStatusLabel(normalized)
+  const color = getVocabularyColor(catalog, "status", normalized)
   const isCompact = variant === "compact"
 
   return (
     <span
       role="status"
       aria-label={`Status: ${label}`}
+      style={{ background: getStatusChipTint(color), color }}
       className={cn(
         "inline-flex items-center gap-[5px] rounded-[6px] border-[0.5px] border-transparent font-sans font-medium",
-        WRITING_STATUS_SURFACE_STYLES[normalized],
         isCompact ? "px-[6px] py-[2px] text-[10px]" : "px-2 py-0.5 text-[11px]",
         className,
       )}
