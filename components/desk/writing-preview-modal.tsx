@@ -4,19 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeft,
   ArrowRight,
-  Bot,
   ChevronDown,
-  Circle,
   Download,
   ExternalLink,
   FileText,
   FileType,
-  LayoutTemplate,
-  MessageSquareText,
   MoreHorizontal,
   Tag,
   Trash2,
-  Wrench,
   X,
 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
@@ -41,6 +36,7 @@ import { DocumentStateIcon } from "@/components/ui/document-state-icon"
 import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge"
 import { TablePropertySelector } from "@/components/ui/table-property-selector"
 import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
+import { ArtifactTypeGlyph } from "@/components/desk/artifact-type-icon"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { createSharingService } from "@/lib/services/sharing-service-factory"
 import {
@@ -764,8 +760,8 @@ export function WritingPreviewModal({
                 <section className="flex flex-col gap-2">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-5">Artifact Type</p>
                   {row ? (
-                    <TablePropertySelector ariaLabel={`Change artifact type for ${row.title}`} icon={<PreviewArtifactTypeIcon artifactType={row.artifactType ?? "general"} />} label={getArtifactTypeLabel(row.artifactType ?? "general")} variant="preview" contentClassName="w-[248px]">
-                      {ARTIFACT_TYPE_VALUES.map((artifactType) => <PreviewMenuItem key={artifactType} icon={<PreviewArtifactTypeIcon artifactType={artifactType} />} label={getArtifactTypeLabel(artifactType)} onSelect={() => void onArtifactTypeChange?.(row.id, artifactType)} />)}
+                    <TablePropertySelector ariaLabel={`Change artifact type for ${row.title}`} icon={<ArtifactTypeGlyph artifactType={row.artifactType ?? "general"} className="h-[13px] w-[13px] shrink-0 text-ink-3" />} label={getArtifactTypeLabel(row.artifactType ?? "general")} variant="preview" contentClassName="w-[248px]">
+                      {ARTIFACT_TYPE_VALUES.map((artifactType) => <PreviewMenuItem key={artifactType} icon={<ArtifactTypeGlyph artifactType={artifactType} className="h-[13px] w-[13px] shrink-0 text-ink-3" />} label={getArtifactTypeLabel(artifactType)} onSelect={() => void onArtifactTypeChange?.(row.id, artifactType)} />)}
                     </TablePropertySelector>
                   ) : null}
                 </section>
@@ -992,7 +988,3 @@ function PropertiesDropdownTrigger({
   )
 }
 
-function PreviewArtifactTypeIcon({ artifactType }: { artifactType: ArtifactType }) {
-  const Icon = { agent: Bot, skill: Wrench, prompt: MessageSquareText, template: LayoutTemplate, status: FileText, general: Circle }[artifactType]
-  return <Icon className="h-[13px] w-[13px] shrink-0 text-ink-3" strokeWidth={1.5} />
-}

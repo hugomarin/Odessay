@@ -1,21 +1,19 @@
-import { MANDATORY_WRITING_STATUSES, WRITING_STATUS_VALUES, getWritingStatusLabel } from "@/lib/writings/status"
+import { MANDATORY_WRITING_STATUSES } from "@/lib/writings/status"
 import type { WritingStatus } from "@/lib/writings/status"
-import { getWritingStatusColor } from "@/lib/writings/status-color"
-import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel } from "@/lib/writings/artifact-type"
-import type { ArtifactType } from "@/lib/writings/artifact-type"
+import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
+import { listVisibleVocabulary } from "@/lib/vocabulary/resolve"
 
 /**
  * The vocabulary Settings renders — artifact types and writing statuses as one
  * shape, because `docs/design/views/settings.md` makes them "the same component
  * with a different item shape".
  *
- * **Scope note (ODE-432).** This module describes the vocabulary; it does not
- * own it. The catalogue itself is still the two closed unions in
- * `lib/writings/artifact-type.ts` and `lib/writings/status.ts`, and the only
- * durable user setting is `profiles.disabled_statuses`. Editing a name, icon or
- * colour — and creating an item at all — has nowhere to persist today, so
- * ODE-432 ships the surface and leaves the wiring to its successor. Anything
- * here that looks like user data is a seed read from the prototype, not a store.
+ * **ODE-474.** This module used to own a seed of appearance data (icon, color,
+ * description per built-in type/status) because nothing else did. That data
+ * is now the user's — it lives in the shared vocabulary catalog
+ * (`lib/vocabulary/catalog.ts`, fed by `SettingsService`). This module keeps
+ * only what stays universal regardless of any one user's vocabulary: the
+ * closed icon sets and the six-color palette Settings' editor picks from.
  */
 
 export type VocabularyColor = {
@@ -89,7 +87,7 @@ export type VocabularyIconName =
   | (typeof WRITING_STATUS_ICON_NAMES)[number]
 
 export type VocabularyItem = {
-  /** The union member this row describes. */
+  /** The catalog item's stable key. */
   id: string
   name: string
   description: string
@@ -106,112 +104,51 @@ export type VocabularyItem = {
   required?: boolean
 }
 
-/**
- * Appearance for the six types the repo actually has.
- *
- * Divergence recorded in the ODE-432 PR: the prototype seeds `Note` and
- * `Transcripción`, the repo's union carries `template` and `status`. ODE-432
- * changes presentation, not the catalogue (requirement 11), so the repo's six
- * win and the prototype's icon/colour assignments carry over for the four names
- * both agree on. `template` and `status` get the palette entries the prototype
- * left unused; their copy is flagged as an open question for the design owner.
- */
-const ARTIFACT_TYPE_APPEARANCE: Record<ArtifactType, { icon: VocabularyIconName; color: string; description: string }> = {
-  general: {
-    icon: "file-text",
-    color: "#1E1915",
-    description: "Anything that does not fit another shape. The default.",
-  },
-  agent: {
-    icon: "bot",
-    color: "#5B5BD6",
-    description: "Instructions for an agent: role, limits and exit criteria.",
-  },
-  skill: {
-    icon: "wrench",
-    color: "#96532C",
-    description: "A reusable procedure an agent can follow step by step.",
-  },
-  prompt: {
-    icon: "message-square",
-    color: "#C07B2A",
-    description: "A prompt you mean to reuse and version.",
-  },
-  template: {
-    icon: "layout-template",
-    color: "#2E7D4F",
-    description: "A starting shape you copy into new artifacts.",
-  },
-  status: {
-    icon: "list-checks",
-    color: "#8E837B",
-    description: "A running account of where something stands.",
-  },
-}
-
 const TYPE_LOCK_NOTE = "Base type: you can change its icon, color and description, not delete it."
+const STATUS_LOCK_NOTE = "Draft is the default status of every new artifact."
 
+/** Reads the shared catalog (base items + whatever the user created) instead of a local seed. */
 export function getArtifactTypeVocabulary(): VocabularyItem[] {
-  return ARTIFACT_TYPE_VALUES.map((type) => ({
-    id: type,
-    name: getArtifactTypeLabel(type),
-    ...ARTIFACT_TYPE_APPEARANCE[type],
-    // Every type in the union is built in — the repo has no user-created ones.
-    locked: true,
-    lockNote: TYPE_LOCK_NOTE,
+  return listVisibleVocabulary(getVocabularyCatalogSnapshot(), "type").map((item) => ({
+    id: item.key,
+    name: item.name,
+    description: item.description,
+    icon: item.icon as VocabularyIconName,
+    color: item.color,
+    locked: item.isBase,
+    lockNote: item.isBase ? TYPE_LOCK_NOTE : undefined,
   }))
 }
 
 /**
- * Status copy, translated from the prototype's seed. `canceled` is left without
- * a description there, so it renders the same "No description" fallback the
- * prototype does rather than inventing one.
- */
-const WRITING_STATUS_DESCRIPTION: Record<WritingStatus, string> = {
-  new: "It exists but nobody has worked on it yet.",
-  exploring: "Trying ideas out: it can still change shape completely.",
-  draft: "It has a shape and can be read end to end.",
-  in_review: "Waiting on other eyes before closing it.",
-  done: "Finished. Touched again only if the context changes.",
-  archived: "Out of circulation, but kept.",
-  canceled: "",
-}
-
-const STATUS_ICON: Record<WritingStatus, VocabularyIconName> = {
-  new: "circle-dot",
-  exploring: "circle-dashed",
-  draft: "circle-dashed",
-  in_review: "eye",
-  done: "circle-check",
-  archived: "archive",
-  canceled: "circle-x",
-}
-
-const STATUS_LOCK_NOTE = "Draft is the default status of every new artifact."
-
-/**
- * Colours come from `lib/writings/status-color.ts`, the one place a status
- * colour is resolved — Settings reads it, it does not fork it. That map returns
- * CSS custom properties, which is what the chip needs anyway.
+ * `disabledStatuses` stays as the input driving `enabled` — the legacy
+ * `UserSettings.disabledStatuses` field ODE-475 still writes through. Name,
+ * icon, color and description now come from the catalog, not a local seed.
  */
 export function getWritingStatusVocabulary(disabledStatuses: readonly WritingStatus[]): VocabularyItem[] {
   const disabled = new Set(disabledStatuses)
 
-  return WRITING_STATUS_VALUES.map((status) => {
-    const required = MANDATORY_WRITING_STATUSES.includes(status)
+  // Settings must show every status, hidden ones included — hidden is what
+  // the switch here toggles, unlike menus/filters (`listVisibleVocabulary`)
+  // which should exclude them.
+  return getVocabularyCatalogSnapshot()
+    .filter((item) => item.kind === "status")
+    .sort((a, b) => a.position - b.position)
+    .map((item) => {
+      const required = MANDATORY_WRITING_STATUSES.includes(item.key)
 
-    return {
-      id: status,
-      name: getWritingStatusLabel(status),
-      description: WRITING_STATUS_DESCRIPTION[status],
-      icon: STATUS_ICON[status],
-      color: getWritingStatusColor(status),
-      locked: required,
-      lockNote: required ? STATUS_LOCK_NOTE : undefined,
-      enabled: !disabled.has(status),
-      required,
-    }
-  })
+      return {
+        id: item.key,
+        name: item.name,
+        description: item.description,
+        icon: item.icon as VocabularyIconName,
+        color: item.color,
+        locked: required,
+        lockNote: required ? STATUS_LOCK_NOTE : undefined,
+        enabled: !disabled.has(item.key),
+        required,
+      }
+    })
 }
 
 /**

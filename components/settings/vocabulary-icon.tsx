@@ -61,11 +61,13 @@ export function VocabularyIcon({
   name,
   size = 17,
   className,
+  style,
 }: {
   name: VocabularyIconName
   size?: number
   className?: string
+  style?: React.CSSProperties
 }) {
   const Glyph = ICONS[name]
-  return <Glyph className={className} style={{ width: size, height: size }} strokeWidth={1.5} />
+  return <Glyph className={className} style={{ width: size, height: size, ...style }} strokeWidth={1.5} />
 }
