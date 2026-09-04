@@ -109,7 +109,12 @@ const contractFiles = [
   "lib/services/contracts/settings-service.ts",
 ]
 
-const allowedImports = new Set(["./service-types", "@/lib/writings/status", "@/lib/vocabulary/types"])
+const allowedImports = new Set([
+  "./service-types",
+  "@/lib/writings/status",
+  "@/lib/writings/artifact-type",
+  "@/lib/vocabulary/types",
+])
 
 describe("service contracts", () => {
   it("covers every phase-4 service boundary with descriptors, invariants, and hotspots", () => {

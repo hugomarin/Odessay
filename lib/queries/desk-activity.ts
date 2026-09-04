@@ -6,6 +6,7 @@ import {
   getWritingStatusLabel,
   normalizeWritingStatus,
   WRITING_STATUS_VALUES,
+  type WritingStatus,
 } from "@/lib/writings/status"
 import { deriveDocumentStateForLocalWriting, type DocumentState } from "@/lib/writings/document-state"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
@@ -16,7 +17,8 @@ import {
 
 export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "received"
 
-export type DeskStatusTone = "new" | "exploring" | "draft" | "in_review" | "done" | "archived" | "canceled"
+/** ODE-474: no longer a locally-declared closed union — alias of the opened `WritingStatus`. */
+export type DeskStatusTone = WritingStatus
 
 export type DeskGroupBy = "none" | "status" | "artifact" | "collection" | "created-date"
 
