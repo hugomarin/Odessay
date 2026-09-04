@@ -44,6 +44,14 @@ export type PersistenceSnapshot = {
   draftWritingId?: string | null
   /** Session tab that owns this snapshot while it is being persisted. */
   sourceTabId?: string | null
+  /**
+   * Whether the body has zero real content — text OR structural (e.g. an
+   * embedded image, table, or other atomic node with no extractable text).
+   * Falls back to bodyText-only emptiness when omitted. Needed because an
+   * image-only document has `bodyText === ""` but is not actually blank
+   * (ODE-478 follow-up).
+   */
+  bodyIsEmpty?: boolean
 }
 
 export type PersistenceStateEvent = {
@@ -375,7 +383,11 @@ export function createPersistenceCoordinator(
       // deliberate a signal as the first keystroke, and must materialize the
       // same way, not silently no-op (ODE-478 case 3).
       const hasExplicitTitle = Boolean(overrides?.title?.trim())
-      if (snapshot.bodyText.trim() === "" && !hasExplicitTitle) {
+      // bodyText alone misses atomic non-text content (an image, table, etc.
+      // has no extractable text but is real content) — trust the caller's
+      // richer signal when it provides one (ODE-478 follow-up).
+      const isBodyBlank = snapshot.bodyIsEmpty ?? snapshot.bodyText.trim() === ""
+      if (isBodyBlank && !hasExplicitTitle) {
         return true
       }
 

@@ -1297,6 +1297,9 @@ export function EditorShell({
           lifecycle: activeId ? lifecycleRef.current : "local-only",
           draftWritingId,
           sourceTabId,
+          // getText() misses atomic non-text content (an image, etc.) — use
+          // TipTap's own structural emptiness check instead (ODE-478 follow-up).
+          bodyIsEmpty: editorInstance.isEmpty,
         },
         overrides,
       )
@@ -6101,8 +6104,23 @@ export function EditorShell({
   }, [handleCreateWorkspaceTab])
 
   const handleSaveToDisk = useCallback(async (path: string, content: string): Promise<string | false> => {
-    const writingId = currentWritingIdRef.current
-    if (!writingId || !isDesktopRuntime()) return false
+    if (!isDesktopRuntime()) return false
+    let writingId = currentWritingIdRef.current
+
+    if (!writingId) {
+      // Save As on a still-ephemeral draft is just as deliberate a
+      // materialization signal as typing or naming it — it must go through
+      // the same path instead of silently doing nothing after the user has
+      // already picked a destination (ODE-478 case 3 family). A truly blank,
+      // untitled draft still has nothing to write.
+      if (!editor || (editor.isEmpty && !hasExplicitTitleRef.current)) {
+        return false
+      }
+      await persistEditorSnapshot(editor, undefined, { awaitDurability: true })
+      writingId = currentWritingIdRef.current
+      if (!writingId) return false
+    }
+
     const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
     // Conscious physical MOVE (ODE-402): content commits to the current
     // canonical file and the rename transports it — no copy is ever written at
@@ -6122,7 +6140,7 @@ export function EditorShell({
     setCanonicalPath(result.path)
     setExternalFileNotice(null)
     return result.path
-  }, [])
+  }, [editor, persistEditorSnapshot])
 
   useTauriEditorMenuEvents(handleRunAction)
 
@@ -6158,13 +6176,20 @@ export function EditorShell({
   }, [editor, markdownValue])
 
   const handleGetSaveContent = useCallback(() => {
+    // A truly blank, untitled draft has nothing to save yet — refuse before
+    // the native picker opens rather than after the user has already chosen
+    // a destination (ODE-478 follow-up; see handleSaveToDisk for the
+    // materialize-then-relocate path when there IS real content).
+    if (!currentWritingIdRef.current && (!editor || (editor.isEmpty && !hasExplicitTitleRef.current))) {
+      return null
+    }
     const content = getBodyMarkdown()
     if (content === null) return null
     return {
       content: `${content.trimEnd()}\n`,
       defaultName: isDesktopRuntime() ? desktopSaveFileBaseName : exportFileBaseName,
     }
-  }, [desktopSaveFileBaseName, exportFileBaseName, getBodyMarkdown])
+  }, [desktopSaveFileBaseName, editor, exportFileBaseName, getBodyMarkdown])
 
   useTauriMenuEvents({
     onOpenFile: handleMenuOpenFile,

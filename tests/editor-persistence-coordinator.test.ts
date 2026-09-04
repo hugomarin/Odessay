@@ -236,6 +236,51 @@ describe("editor persistence coordinator", () => {
     expect(createDesktopDraft).not.toHaveBeenCalled()
   })
 
+  it("materializes an image-only draft even though it has no extractable text (ODE-478 follow-up)", async () => {
+    const createDesktopDraft = vi.fn(async (input: { writingId?: string | null }) =>
+      response(baseRecord(`materialized-${input.writingId}`, 1)),
+    )
+    const coordinator = createPersistenceCoordinator({
+      runtime: "desktop",
+      documentService: { saveWriting: vi.fn() },
+      createDesktopDraft,
+      createWritingId: () => "unused",
+      now: () => "2026-08-27T00:00:02.000Z",
+    })
+
+    // getText() on a doc containing only an image node is "" — but the
+    // caller's own emptiness check (TipTap's editor.isEmpty) correctly says
+    // this is NOT blank, since an image is a real atomic node.
+    await coordinator.persist(
+      snapshot({
+        writingId: null,
+        bodyText: "",
+        bodyJson: { type: "doc", content: [{ type: "image", attrs: { src: "file:///photo.png" } }] },
+        bodyIsEmpty: false,
+        draftWritingId: "draft-with-image",
+      }),
+    )
+
+    expect(createDesktopDraft).toHaveBeenCalledTimes(1)
+  })
+
+  it("still treats a doc with no text and no bodyIsEmpty signal as blank (fallback preserved)", async () => {
+    const createDesktopDraft = vi.fn()
+    const coordinator = createPersistenceCoordinator({
+      runtime: "desktop",
+      documentService: { saveWriting: vi.fn() },
+      createDesktopDraft,
+      createWritingId: () => "unused",
+      now: () => "2026-08-27T00:00:02.000Z",
+    })
+
+    // No bodyIsEmpty provided at all — falls back to the bodyText-only check,
+    // same as before this fix, for callers that don't track richer content.
+    await coordinator.persist(snapshot({ writingId: null, bodyText: "" }))
+
+    expect(createDesktopDraft).not.toHaveBeenCalled()
+  })
+
   it("schedules only after a successful local commit when the adapter owns scheduling", async () => {
     const order: string[] = []
     const saveWriting = vi.fn(async (input: { writing: WritingRecord }) => {
