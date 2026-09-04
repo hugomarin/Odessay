@@ -104,8 +104,9 @@ export type VocabularyItem = {
   required?: boolean
 }
 
-const TYPE_LOCK_NOTE = "Base type: you can change its icon, color and description, not delete it."
-const STATUS_LOCK_NOTE = "Draft is the default status of every new artifact."
+const TYPE_LOCK_NOTE = "Base type: you can change its name, icon, color and description, not delete it."
+const BASE_STATUS_LOCK_NOTE = "Base status: you can change its name, icon, color and description, not delete it."
+const REQUIRED_STATUS_LOCK_NOTE = "Draft is the default status of every new artifact. It cannot be hidden or deleted."
 
 /** Reads the shared catalog (base items + whatever the user created) instead of a local seed. */
 export function getArtifactTypeVocabulary(): VocabularyItem[] {
@@ -143,8 +144,11 @@ export function getWritingStatusVocabulary(disabledStatuses: readonly WritingSta
         description: item.description,
         icon: item.icon as VocabularyIconName,
         color: item.color,
-        locked: required,
-        lockNote: required ? STATUS_LOCK_NOTE : undefined,
+        // `locked` blocks delete only (any base item, required or not) — the
+        // switch is gated by `required` alone, below. Conflating the two used
+        // to make every base status un-hideable, not just draft.
+        locked: item.isBase,
+        lockNote: required ? REQUIRED_STATUS_LOCK_NOTE : item.isBase ? BASE_STATUS_LOCK_NOTE : undefined,
         enabled: !disabled.has(item.key),
         required,
       }

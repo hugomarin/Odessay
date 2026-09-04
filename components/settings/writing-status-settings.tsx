@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react"
 
 import { VocabularyList } from "@/components/settings/vocabulary-list"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
+import { useVocabulary } from "@/hooks/useVocabulary"
 import { getWritingStatusVocabulary } from "@/lib/settings/vocabulary"
 import type { WritingStatus } from "@/lib/writings/status"
 
@@ -24,6 +25,9 @@ import type { WritingStatus } from "@/lib/writings/status"
  */
 export default function WritingStatusSettings() {
   const { settings, isLoading, error, update } = useUserSettingsContext()
+  // Subscribes this page to the shared catalog so it repaints the instant
+  // Save/Delete resolves — requirement 1/9, without a reload.
+  useVocabulary()
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
