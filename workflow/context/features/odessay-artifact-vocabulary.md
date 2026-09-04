@@ -145,13 +145,82 @@ para que un rollback no pierda la preferencia de nadie.
   por `SettingsService` (`lib/services/contracts/settings-service.ts`) y su
   envelope `ServiceResponse`.
 
+## Catálogo único de cliente (ODE-474)
+
+`lib/vocabulary/catalog.ts` es un singleton a nivel de módulo (no un React
+context): guarda el snapshot actual del vocabulario resuelto y expone
+`getVocabularyCatalogSnapshot()` (lectura síncrona) y
+`subscribeVocabularyCatalog()` (para `useSyncExternalStore`). Esto permite dos
+cosas a la vez: que los helpers síncronos existentes
+(`getWritingStatusLabel`, `getWritingStatusOrder`, etc.) sigan leyendo "el
+vocabulario actual" sin volverse `async`, y que `useVocabulary()` repinte
+reactivamente sin recargar. `VocabularyCatalogBridge`
+(`components/vocabulary/vocabulary-provider.tsx`, montado en
+`app/(app)/layout.tsx` dentro de `UserSettingsProvider`) es el único
+escritor: reenvía `settings.vocabulary` (ya obtenido por
+`UserSettingsProvider`) al singleton — cero fetches adicionales por sesión.
+
+`lib/vocabulary/resolve.ts` es el único lugar que resuelve `(kind, key)`
+contra un catálogo. Un valor fuera del catálogo (`isUnknown: true`) se pinta
+con su `key` crudo como nombre, el gris neutro de la paleta como color, e
+icono `null` (el llamador cae a un icono genérico, normalmente `circle`) —
+nunca vacío ni "undefined".
+
+`lib/writings/status-color.ts` y `lib/writings/artifact-type-color.ts`
+(los mapas `WritingStatus/ArtifactType → var(--token)`) fueron eliminados.
+Sus dos consumidores (`DeskStatusDot`, `ArtifactTypeIcon`) y los tres
+`switch` sobre valores de vocabulario que quedaban en `components/`
+(`WritingStatusIcon`, el dropdown de `ArtifactTypeSelector`, el menú de tipo
+de `WritingPreviewModal`) ahora resuelven icono y color vía
+`useVocabulary()` + `lib/vocabulary/resolve.ts`, renderizando a través del
+registro de iconos ya existente (`components/settings/vocabulary-icon.tsx`).
+
+**Divergencia visual registrada:** el punto de estado de Desk y el icono de
+tipo antes resolvían tokens CSS reactivos al tema (`hsl(var(--ink-4))`,
+etc.); ahora resuelven el hex literal del vocabulario del usuario, según la
+arquitectura que `ODE-472` ya fijó (los colores son dato del usuario, no
+tokens — `docs/design/system-app.md` §1). La paridad de píxel en modo oscuro
+para esos dos glyphs específicos no se verificó manualmente contra una
+sesión real en este cambio.
+
+**`WritingStatus`/`ArtifactType` abiertos.** Dejaron de ser uniones cerradas
+(`type WritingStatus = string`); `WRITING_STATUS_VALUES`/`ARTIFACT_TYPE_VALUES`
+siguen existiendo como los defaults base, ahora reexportados desde
+`lib/vocabulary/base-items.ts` (que se convirtió en la única fuente de las
+listas de keys base, para no crear un ciclo de imports con `status.ts` /
+`artifact-type.ts`, que ahora dependen del catálogo). Abrir el tipo hizo que
+el typechecker encontrara **dos versiones locales adicionales** no listadas
+en el brief original: `lib/services/contracts/document-service.ts` declaraba
+su propio `ArtifactType` cerrado, y `lib/queries/desk-activity.ts` tenía
+`DeskStatusTone` como una tercera unión cerrada duplicada de `WritingStatus`.
+Ambas quedaron unificadas (reexportan/alían el tipo abierto) en este mismo
+issue.
+
+**Gap conocido — `isOpenWritingStatus()` (requirement 11).** El modelo de
+`vocabulary_items` (`ODE-472`) no tiene una propiedad "abierto/cerrado" que
+un estado personalizado pueda declarar. `isOpenWritingStatus()` sigue leyendo
+la misma lista literal de siempre (`done`/`archived`/`canceled`) en vez de
+una propiedad del catálogo; un estado personalizado se trata como abierto
+por default. Esto es un `Context Gap` documentado contra `ODE-472`, no una
+lista hardcodeada nueva — resolverlo bien requiere un cambio de schema en
+`vocabulary_items` fuera del alcance de este issue.
+
+**Gap conocido — superficies públicas (requirement 12).** `ODE-474` no tocó
+`components/public/public-writing-list.tsx` ni las rutas `/shared/[id]`,
+`/preview/[token]`, `/{username}/{slug}`. Como el catálogo es hoy un
+singleton atado a la sesión del visor, esas superficies — si empiezan a leer
+del catálogo compartido sin más cambios — resolverían el vocabulario del
+**visor**, no el del autor, violando el requirement 12. Esto queda para
+`[ODE-476]`, que ya tiene esas cuatro superficies en su propio alcance
+("Presentation Contract").
+
 ## Estado del bloque
 
 | Issue | Qué entrega | Estado |
 |---|---|---|
 | `ODE-472` | Schema, contrato de servicio, adapter web | hecho |
-| `ODE-473` | Persistencia desktop + reconciliación al iniciar sesión | en curso |
-| `ODE-474` | Catálogo único de cliente; fin de la coerción silenciosa | pendiente |
+| `ODE-473` | Persistencia desktop + reconciliación al iniciar sesión | hecho |
+| `ODE-474` | Catálogo único de cliente; fin de la coerción silenciosa | hecho (parcial — ver nota) |
 | `ODE-475` | Settings › Artifact types / Status conectados | pendiente |
 | `ODE-476` | Repintado de los 22 consumidores | pendiente |
 | `ODE-477` | Evidencia end-to-end del contrato completo | pendiente |
