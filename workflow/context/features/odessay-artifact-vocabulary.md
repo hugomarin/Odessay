@@ -62,7 +62,8 @@ Decisión del dueño, 2026-08-30, vinculante para todo el paquete:
 
 ## Precedencia local/nube (desktop)
 
-El vocabulario es **local-first en desktop**: existe y es editable sin sesión
+Decisión del dueño, 2026-08-30, vinculante para todo el paquete: el
+vocabulario es **local-first en desktop**: existe y es editable sin sesión
 iniciada, con los 6 tipos y 7 estados base como default offline — invariante
 de `workflow/agents.md` ("auth habilita capacidades cloud, no existencia
 local"). `[ODE-472]` dejó el adapter desktop (`DesktopSettingsService`) en un
@@ -243,6 +244,12 @@ tipo "se escribe en el frontmatter" — nunca fue cierto y contradecía el
 invariante del propio producto. El nuevo texto dice dónde vive realmente: el
 catálogo y la nube.
 
+**Asistencia AI, fuera de alcance.** Decisión del dueño, 2026-08-30,
+vinculante para todo el paquete: los botones "Recommend to me" e "Improve
+with AI" del editor de vocabulario permanecen deshabilitados, con su razón
+visible en el propio control — no es un `TODO` implícito, es alcance
+explícitamente cerrado para este bloque.
+
 ## Repintado de consumidores (ODE-476)
 
 Los consumidores restantes que aún leían `WRITING_STATUS_VALUES`/
@@ -303,6 +310,41 @@ de este entorno (ver limitación general documentada en `ODE-474`/`ODE-475`);
 el repintado se verificó por typecheck, lint y la suite completa
 (1795/1795), no visualmente contra Desk/Settings reales.
 
+## Evidencia end-to-end (ODE-477)
+
+`tests/vocabulary/end-to-end-contract.test.ts` (nuevo) corre, como un solo
+guion contra el mismo cliente Supabase simulado, exactamente la secuencia
+que pide el brief — crear tipo, renombrarlo, recolorearlo, ocultar un
+estado, borrarlo — y prueba tres cosas que ningún issue individual puede
+probar solo: el `.md` queda byte-idéntico y el frontmatter no gana ninguna
+clave (requirement 1); ocultar nunca toca la tabla de writings mientras que
+el conteo de reescritura de borrar coincide exactamente con el conteo de uso
+que la confirmación mostró — ni más, ni menos (requirement 5); y un valor
+que el catálogo ya no reconoce sobrevive un ciclo abrir/editar/guardar
+(requirement 6). El grep del requirement 4 (cero versiones locales del
+catálogo, cero `switch` de vocabulario en `components/`) queda en
+`artifacts/ode-477/requirement-4-grep.md`, limpio.
+
+**Matriz de evidencia** en `artifacts/ode-477/evidence-matrix.md`: enlaza
+cada afirmación del contrato del dueño (§6-bis de `dod-fase-10.md`) a su
+prueba. Automatizado y en verde: no-escritura en frontmatter, ocultar≠borrar
+con conteos que coinciden, preservación de valores desconocidos, grep de
+versiones locales. **No producido en este entorno** (sin sesión autenticada
+en el navegador ni build de escritorio firmado disponibles — mismo límite
+documentado en `ODE-474`/`ODE-475`/`ODE-476`): persistencia a través de
+reinicio/rehidratación, la matriz de paridad web/desktop ejecutada en vivo
+(se argumenta paridad estática por contrato compartido + suites espejadas,
+no por una sesión lado a lado), las capturas de aceptación por superficie a
+1440/1100/768, y la captura del Performance Contract
+(`capture-editor-trace.mjs`, `ops:network:gate`). El archivo de evidencia
+detalla los pasos exactos que le faltan a un humano con sesión real.
+
+Las tres decisiones del dueño que este bloque necesitaba por escrito quedan
+fechadas en este documento: ocultar≠borrar (§"Ocultar ≠ borrar",
+2026-08-30), vocabulario local-first en desktop (§"Precedencia local/nube",
+2026-08-30), asistencia AI fuera de alcance (§"Settings conectado",
+2026-08-30).
+
 ## Estado del bloque
 
 | Issue | Qué entrega | Estado |
@@ -312,7 +354,7 @@ el repintado se verificó por typecheck, lint y la suite completa
 | `ODE-474` | Catálogo único de cliente; fin de la coerción silenciosa | hecho (parcial — ver nota) |
 | `ODE-475` | Settings › Artifact types / Status conectados | hecho |
 | `ODE-476` | Repintado de los consumidores + fix de id de vocabulario | hecho |
-| `ODE-477` | Evidencia end-to-end del contrato completo | pendiente |
+| `ODE-477` | Evidencia end-to-end del contrato completo | hecho (parcial — ver evidence-matrix.md) |
 
 Este documento se actualiza en cada issue del bloque; no se reescribe desde
 cero.
