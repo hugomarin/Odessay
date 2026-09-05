@@ -39,6 +39,7 @@ const allowedImports = new Set([
   "@/lib/services/contracts/settings-service",
   "@/lib/services/contracts/sharing-service",
   "@/lib/services/contracts/service-types",
+  "@/lib/services/contracts/workspace-agent",
   "@/lib/services/desktop/tauri-commands",
   "@/lib/services/desktop/tauri-fs-watch",
   "@/lib/services/desktop/desktop-settings-service",
