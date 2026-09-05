@@ -3,6 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
 import type { WritingStatus } from "@/lib/writings/status"
 import type { UserSettings } from "@/lib/user/settings"
+import type { SettingsService, VocabularyUsage } from "@/lib/services/contracts/settings-service"
+import type { CreateVocabularyItemInput, UpdateVocabularyItemInput, VocabularyItem } from "@/lib/vocabulary/types"
 import { isTauriRuntime } from "@/lib/runtime/detect"
 
 type UserSettingsContextValue = {
@@ -11,10 +13,20 @@ type UserSettingsContextValue = {
   error: string | null
   refresh: () => Promise<void>
   update: (updates: { disabledStatuses: WritingStatus[] }) => Promise<void>
+  createVocabularyItem: (input: CreateVocabularyItemInput) => Promise<VocabularyItem>
+  updateVocabularyItem: (id: string, input: UpdateVocabularyItemInput) => Promise<VocabularyItem>
+  deleteVocabularyItem: (id: string) => Promise<{ rewrittenCount: number }>
+  /** `null` means the count could not be taken — never treat that as zero (requirement 7). */
+  getVocabularyUsage: () => Promise<VocabularyUsage | null>
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
   disabledStatuses: [],
+  vocabulary: [],
+}
+
+const noop = async () => {
+  throw new Error("UserSettingsProvider is not mounted")
 }
 
 const UserSettingsContext = createContext<UserSettingsContextValue>({
@@ -22,11 +34,33 @@ const UserSettingsContext = createContext<UserSettingsContextValue>({
   isLoading: true,
   error: null,
   refresh: async () => {},
-  update: async () => {},
+  update: noop,
+  createVocabularyItem: noop,
+  updateVocabularyItem: noop,
+  deleteVocabularyItem: noop,
+  getVocabularyUsage: async () => null,
 })
 
 export function useUserSettingsContext() {
   return useContext(UserSettingsContext)
+}
+
+/**
+ * Resolves the SettingsService adapter for the current runtime — the one
+ * place `UserSettingsProvider` branches on `isTauriRuntime()`, so every
+ * settings/vocabulary operation below reads the same way regardless of
+ * runtime (ODE-475 requirement 13).
+ */
+async function getSettingsService(): Promise<SettingsService> {
+  if (isTauriRuntime()) {
+    const [{ appConfigDir }, { DesktopSettingsService }] = await Promise.all([
+      import("@tauri-apps/api/path"),
+      import("@/lib/services/desktop/desktop-settings-service"),
+    ])
+    return new DesktopSettingsService(await appConfigDir())
+  }
+  const { WebSettingsService } = await import("@/lib/services/web/web-settings-service")
+  return new WebSettingsService()
 }
 
 export function UserSettingsProvider({ children }: { children: React.ReactNode }) {
@@ -35,69 +69,88 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    // Desktop runtime stays local-first: the cloud settings endpoint lives behind the
-    // web auth gate. Keep defaults until a native SettingsService lands (ODE-218+).
-    if (isTauriRuntime()) {
-      setSettings(DEFAULT_SETTINGS)
-      setIsLoading(false)
-      setError(null)
-      return
-    }
-
     setIsLoading(true)
     setError(null)
-
     try {
-      const response = await fetch("/api/user/settings", { method: "GET" })
-      const payload = (await response.json()) as {
-        data: { disabledStatuses: WritingStatus[] } | null
-        error: { code: string; message: string } | null
+      const service = await getSettingsService()
+      const result = await service.getUserSettings()
+      if (result.error) {
+        throw new Error(result.error.message)
       }
-
-      if (!response.ok || !payload.data) {
-        throw new Error(payload.error?.message ?? "Failed to load settings.")
-      }
-
-      setSettings({ disabledStatuses: payload.data.disabledStatuses })
+      setSettings(result.data)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load settings.")
+      // Never fall back to an empty vocabulary — that would read as "you lost
+      // your configuration". Base items only, per the failure mode.
+      setSettings((prev) => (prev.vocabulary.length > 0 ? prev : DEFAULT_SETTINGS))
     } finally {
       setIsLoading(false)
     }
   }, [])
 
   const update = useCallback(async (updates: { disabledStatuses: WritingStatus[] }) => {
-    if (isTauriRuntime()) {
-      setSettings({ disabledStatuses: updates.disabledStatuses })
-      return
-    }
-
     setIsLoading(true)
     setError(null)
-
     try {
-      const response = await fetch("/api/user/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ disabled_statuses: updates.disabledStatuses }),
-      })
-
-      const payload = (await response.json()) as {
-        data: { disabledStatuses: WritingStatus[] } | null
-        error: { code: string; message: string } | null
+      const service = await getSettingsService()
+      const result = await service.updateUserSettings(updates)
+      if (result.error) {
+        throw new Error(result.error.message)
       }
-
-      if (!response.ok || !payload.data) {
-        throw new Error(payload.error?.message ?? "Failed to save settings.")
-      }
-
-      setSettings({ disabledStatuses: payload.data.disabledStatuses })
+      setSettings(result.data)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings.")
       throw err
     } finally {
       setIsLoading(false)
     }
+  }, [])
+
+  const createVocabularyItem = useCallback(async (input: CreateVocabularyItemInput) => {
+    const service = await getSettingsService()
+    const result = await service.createVocabularyItem(input)
+    if (result.error) {
+      throw new Error(result.error.message)
+    }
+    const created = result.data
+    setSettings((prev) => ({ ...prev, vocabulary: [...prev.vocabulary, created] }))
+    return created
+  }, [])
+
+  const updateVocabularyItem = useCallback(async (id: string, input: UpdateVocabularyItemInput) => {
+    const service = await getSettingsService()
+    const result = await service.updateVocabularyItem(id, input)
+    if (result.error) {
+      throw new Error(result.error.message)
+    }
+    const updated = result.data
+    setSettings((prev) => ({
+      ...prev,
+      vocabulary: prev.vocabulary.some((item) => item.id === id)
+        ? prev.vocabulary.map((item) => (item.id === id ? updated : item))
+        : [...prev.vocabulary, updated],
+    }))
+    return updated
+  }, [])
+
+  const deleteVocabularyItem = useCallback(async (id: string) => {
+    const service = await getSettingsService()
+    const result = await service.deleteVocabularyItem(id)
+    if (result.error) {
+      throw new Error(result.error.message)
+    }
+    setSettings((prev) => ({
+      ...prev,
+      vocabulary: prev.vocabulary.filter((item) => item.id !== id),
+    }))
+    return result.data
+  }, [])
+
+  const getVocabularyUsage = useCallback(async () => {
+    const service = await getSettingsService()
+    const result = await service.getVocabularyUsage()
+    // Unavailable, not zero — requirement 7. The caller decides how to word it.
+    return result.error ? null : result.data
   }, [])
 
   useEffect(() => {
@@ -117,7 +170,19 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
   }, [refresh])
 
   return (
-    <UserSettingsContext.Provider value={{ settings, isLoading, error, refresh, update }}>
+    <UserSettingsContext.Provider
+      value={{
+        settings,
+        isLoading,
+        error,
+        refresh,
+        update,
+        createVocabularyItem,
+        updateVocabularyItem,
+        deleteVocabularyItem,
+        getVocabularyUsage,
+      }}
+    >
       {children}
     </UserSettingsContext.Provider>
   )

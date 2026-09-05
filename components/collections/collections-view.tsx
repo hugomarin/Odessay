@@ -40,6 +40,7 @@ import type { DeskActivityGroup, DeskActivityRow, DeskStatusTone } from "@/lib/q
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { getSyncService } from "@/lib/sync"
 import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status"
+import { useVocabulary } from "@/hooks/useVocabulary"
 import type { WritingStatus } from "@/lib/writings/status"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
@@ -92,6 +93,11 @@ const buildStatusState = (status: LocalWriting["status"]) => {
 }
 
 export function CollectionsView({ initialExpandedCollectionId = null }: CollectionsViewProps) {
+  // Subscribes to the shared catalog so status/type labels repaint without a
+  // reload when the vocabulary changes elsewhere (ODE-476 requirement 9) —
+  // getWritingStatusLabel() below already reads it live, this just makes the
+  // component re-render when it changes.
+  useVocabulary()
   const router = useRouter()
   const [writings, setWritings] = useState<LocalWriting[]>([])
   const [collections, setCollections] = useState<LocalCollection[]>([])

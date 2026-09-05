@@ -92,6 +92,18 @@ Este bloque financia lo que §6 ya afirmaba —*"los colores de tipo y estado pr
 - Ninguna de estas operaciones escribe metadata en el frontmatter ni altera el contenido de un `.md`, demostrado por comparación de hash del archivo antes y después.
 - La asistencia AI del modal ("Recommend to me", "Improve with AI") queda fuera del alcance de la fase y permanece deshabilitada con su razón visible — decisión del dueño, 2026-08-30.
 
+**Trazabilidad (`ODE-477`).** Cada afirmación de este bloque queda enlazada
+a su prueba (test automatizado, prueba manual reproducible, o pendiente de
+aceptación del dueño) en `artifacts/ode-477/evidence-matrix.md`. Resumen: las
+afirmaciones de no-escritura en frontmatter, ocultar-vs-borrar, y
+preservación de valores desconocidos están probadas por test automatizado;
+la paridad web/desktop está probada por contrato compartido + tests
+espejados pero no por una sesión en vivo lado a lado; la persistencia a
+través de reinicio/rehidratación y las capturas de aceptación por superficie
+**no** se produjeron en el entorno de este agente (sin sesión autenticada ni
+build de escritorio disponible) y quedan pendientes de una pasada humana —
+ver el propio archivo de evidencia para el detalle y los pasos que faltan.
+
 ## 7) El vocabulario y la marca son uno solo
 
 - Toda la UI dice **artifact**, en inglés, en producto y en landing. No quedan restos de "writing"/"document" en copy visible al usuario; los nombres de archivo y símbolos se migran en un pase mecánico separado y declarado.

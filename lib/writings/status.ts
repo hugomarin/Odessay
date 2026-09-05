@@ -1,54 +1,57 @@
-export const WRITING_STATUS_VALUES = [
-  "new",
-  "exploring",
-  "draft",
-  "in_review",
-  "done",
-  "archived",
-  "canceled",
-] as const
+import { BASE_MANDATORY_WRITING_STATUSES, BASE_WRITING_STATUS_KEYS } from "@/lib/vocabulary/base-items"
+import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
+import { getVocabularyLabel, getVocabularyPosition } from "@/lib/vocabulary/resolve"
 
-export type WritingStatus = (typeof WRITING_STATUS_VALUES)[number]
+/** The base statuses — the default vocabulary a user starts with (`lib/vocabulary/base-items.ts`), not a closed set anymore. */
+export const WRITING_STATUS_VALUES = BASE_WRITING_STATUS_KEYS
+
+/**
+ * Opened per ODE-474 requirement 7 — a user can create a custom status, so
+ * this is no longer a closed union. `WRITING_STATUS_VALUES` above stays as
+ * the base defaults for seeding/iteration, not as the type's domain.
+ */
+export type WritingStatus = string
 export type LegacyWritingStatus = WritingStatus | "finished"
 
-export const MANDATORY_WRITING_STATUSES: WritingStatus[] = ["draft"]
+export const MANDATORY_WRITING_STATUSES: WritingStatus[] = [...BASE_MANDATORY_WRITING_STATUSES]
 
-const WRITING_STATUS_SET = new Set<string>(WRITING_STATUS_VALUES)
-
+/**
+ * Preserves an unrecognized value instead of coercing it to "draft"
+ * (requirement 5 — the coercion was silent data loss for a custom status).
+ * Only fills in a genuinely absent value; a known-but-foreign value is not
+ * "unknown input to reject", it's a custom vocabulary key to keep.
+ */
 export const normalizeWritingStatus = (value: string | null | undefined): WritingStatus => {
   if (value === "finished") {
     return "done"
   }
-
-  return WRITING_STATUS_SET.has(value ?? "") ? (value as WritingStatus) : "draft"
-}
-
-export const getWritingStatusLabel = (status: LegacyWritingStatus): string => {
-  switch (normalizeWritingStatus(status)) {
-    case "new":
-      return "New"
-    case "exploring":
-      return "Exploring"
-    case "in_review":
-      return "In Review"
-    case "done":
-      return "Done"
-    case "archived":
-      return "Archived"
-    case "canceled":
-      return "Canceled"
-    default:
-      return "Draft"
+  if (value === null || value === undefined || value === "") {
+    return "draft"
   }
+  return value
 }
+
+export const getWritingStatusLabel = (status: LegacyWritingStatus): string =>
+  getVocabularyLabel(getVocabularyCatalogSnapshot(), "status", normalizeWritingStatus(status))
+
+/**
+ * Context Gap against [ODE-472] (documented in the ODE-474 PR): the
+ * vocabulary model has no "open/terminal" property a custom status could
+ * set, so this still reads the same base literal list it always has instead
+ * of a catalog property. A custom status is treated as open (not terminal)
+ * by default. Do not extend this list for new base behavior — resolving it
+ * properly needs a schema change to `vocabulary_items`, which is out of this
+ * issue's scope.
+ */
+const CLOSED_BASE_STATUSES = new Set(["done", "archived", "canceled"])
 
 export const isOpenWritingStatus = (status: LegacyWritingStatus): boolean => {
   const normalized = normalizeWritingStatus(status)
-  return normalized !== "done" && normalized !== "archived" && normalized !== "canceled"
+  return !CLOSED_BASE_STATUSES.has(normalized)
 }
 
 export const getWritingStatusOrder = (status: WritingStatus): number =>
-  WRITING_STATUS_VALUES.indexOf(status)
+  getVocabularyPosition(getVocabularyCatalogSnapshot(), "status", status)
 
 export const sortWritingStatuses = (statuses: WritingStatus[]): WritingStatus[] =>
   [...statuses].sort((a, b) => getWritingStatusOrder(a) - getWritingStatusOrder(b))

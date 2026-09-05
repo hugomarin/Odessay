@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { getWritingStatusLabel, isOpenWritingStatus, type WritingStatus } from "@/lib/writings/status"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
+import { useVocabulary } from "@/hooks/useVocabulary"
 
 type PublicCollectionListItem = {
   id: string
@@ -67,6 +68,11 @@ function capitalize(value: string): string {
 }
 
 export function PublicWritingList({ username, isOwner, writings, collections }: PublicWritingListProps) {
+  // The status label only ever renders when isOwner (see below) — a visitor
+  // never sees it, so there's no author/visitor catalog leak to resolve here
+  // (requirement 12). Subscribed anyway so the owner's own view repaints on
+  // a vocabulary change without a reload (requirement 9).
+  useVocabulary()
   const router = useRouter()
   const [viewMode, setViewMode] = useState<ViewMode>(isOwner ? "all" : "public")
   const [items, setItems] = useState<PublicWritingListItem[]>(writings)

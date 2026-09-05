@@ -1,4 +1,5 @@
 import type { WritingStatus } from "@/lib/writings/status"
+import type { ArtifactType } from "@/lib/writings/artifact-type"
 import {
   PHASE_4_REQUIRED_DOCS,
   SERVICE_RESPONSE_ENVELOPE,
@@ -11,7 +12,8 @@ export type WritingLifecycle = "local-only" | "syncing" | "server-confirmed"
 /** Runtime-neutral local sync state — canonical source; local-db/schema re-exports this. */
 export type WritingSyncStatus = "synced" | "pending" | "failed" | "deleted"
 export type CollectionVisibility = "private" | "public"
-export type ArtifactType = "general" | "agent" | "skill" | "prompt" | "template" | "status"
+/** ODE-474: no longer a locally-declared closed union — re-exports the opened `lib/writings/artifact-type.ts` type so this contract can't drift from it. */
+export type { ArtifactType }
 export type DocumentCanonicalSource = "pending-document-contract" | "markdown" | "rich-text"
 export type RichDocumentState = Record<string, unknown>
 

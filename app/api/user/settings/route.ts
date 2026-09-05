@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server"
-import type { PostgrestError } from "@supabase/supabase-js"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
-import { parseDisabledStatuses } from "@/lib/user/settings"
 import { WRITING_STATUS_VALUES } from "@/lib/writings/status"
+import { deriveDisabledStatuses, listVocabulary, setDisabledStatuses } from "@/lib/vocabulary/server"
 
 const settingsPatchSchema = z.object({
   disabled_statuses: z.array(z.enum(WRITING_STATUS_VALUES)).optional(),
@@ -15,14 +14,6 @@ const settingsPatchSchema = z.object({
 }, {
   message: "draft cannot be disabled",
 })
-
-const isMissingDisabledStatusesColumn = (error: PostgrestError | null) => {
-  if (!error) {
-    return false
-  }
-
-  return error.message.includes("disabled_statuses")
-}
 
 export async function GET() {
   const supabase = await createClient()
@@ -37,30 +28,19 @@ export async function GET() {
     )
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("disabled_statuses")
-    .eq("id", user.id)
-    .single()
-
-  if (isMissingDisabledStatusesColumn(error)) {
-    return NextResponse.json(
-      { data: { disabledStatuses: [] }, error: null },
-      { status: 200 },
-    )
+  const result = await listVocabulary(supabase, user.id)
+  if (result.error) {
+    return NextResponse.json({ data: null, error: result.error }, { status: 500 })
   }
-
-  if (error) {
-    return NextResponse.json(
-      { data: null, error: { code: "DB_ERROR", message: error.message } },
-      { status: 500 },
-    )
-  }
-
-  const disabledStatuses = parseDisabledStatuses(data?.disabled_statuses)
 
   return NextResponse.json(
-    { data: { disabledStatuses }, error: null },
+    {
+      data: {
+        disabledStatuses: deriveDisabledStatuses(result.data),
+        vocabulary: result.data,
+      },
+      error: null,
+    },
     { status: 200 },
   )
 }
@@ -88,50 +68,27 @@ export async function PATCH(request: Request) {
     )
   }
 
-  const updates: Record<string, unknown> = {}
-
-  if (parsed.data.disabled_statuses !== undefined) {
-    updates.disabled_statuses = parsed.data.disabled_statuses
-  }
-
-  if (Object.keys(updates).length === 0) {
+  if (parsed.data.disabled_statuses === undefined) {
     return NextResponse.json(
       { data: null, error: { code: "INVALID_INPUT", message: "No fields to update." } },
       { status: 400 },
     )
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .update(updates)
-    .eq("id", user.id)
-    .select("disabled_statuses")
-    .single()
-
-  if (isMissingDisabledStatusesColumn(error)) {
-    return NextResponse.json(
-      {
-        data: null,
-        error: {
-          code: "SCHEMA_OUTDATED",
-          message: "profiles.disabled_statuses column is not available in this database yet.",
-        },
-      },
-      { status: 503 },
-    )
+  const result = await setDisabledStatuses(supabase, user.id, parsed.data.disabled_statuses)
+  if (result.error) {
+    const status = result.error.code === "INVALID_INPUT" ? 400 : 500
+    return NextResponse.json({ data: null, error: result.error }, { status })
   }
-
-  if (error) {
-    return NextResponse.json(
-      { data: null, error: { code: "DB_ERROR", message: error.message } },
-      { status: 500 },
-    )
-  }
-
-  const disabledStatuses = parseDisabledStatuses(data?.disabled_statuses)
 
   return NextResponse.json(
-    { data: { disabledStatuses }, error: null },
+    {
+      data: {
+        disabledStatuses: deriveDisabledStatuses(result.data),
+        vocabulary: result.data,
+      },
+      error: null,
+    },
     { status: 200 },
   )
 }

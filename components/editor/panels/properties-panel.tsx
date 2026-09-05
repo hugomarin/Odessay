@@ -24,7 +24,8 @@ import { cn } from "@/lib/utils"
 import { WritingStatusPicker } from "@/components/writings/writing-status-picker"
 import { ArtifactTypeSelector } from "@/components/ui/artifact-type-selector"
 import { WritingStyleSelector } from "@/components/ui/writing-style-selector"
-import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
+import { useVocabulary } from "@/hooks/useVocabulary"
+import { listVisibleVocabulary } from "@/lib/vocabulary/resolve"
 import { WritingCollectionsSection } from "./writing-collections-section"
 import { WritingSharesSection } from "./writing-shares-section"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
@@ -54,8 +55,6 @@ type PropertiesPanelProps = {
 }
 
 type ExportFormat = "markdown" | "pdf" | "docx"
-
-const STATUS_OPTIONS: WritingStatus[] = ["new", "exploring", "draft", "in_review", "done", "archived", "canceled"]
 
 function DropdownTrigger({
   open,
@@ -148,9 +147,12 @@ export function PropertiesPanel({
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingDocx, setIsExportingDocx] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
-  const { settings } = useUserSettingsContext()
+  const catalog = useVocabulary()
   const sharingService = useMemo(() => createSharingService(), [])
-  const enabledStatuses = STATUS_OPTIONS.filter((s) => !settings.disabledStatuses.includes(s))
+  const enabledStatuses = useMemo(
+    () => listVisibleVocabulary(catalog, "status").map((item) => item.key),
+    [catalog],
+  )
   const isDesktop = isTauriRuntime()
 
   const hasRemoteWriting = Boolean(writingId) && lifecycle === "server-confirmed"

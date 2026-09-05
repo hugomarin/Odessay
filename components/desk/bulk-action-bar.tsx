@@ -6,11 +6,12 @@ import { CollectionAssignmentMenu } from "@/components/collections/collection-as
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { SelectionBar, type SelectionBarAction } from "@/components/shared/selection-bar"
 import type { CollectionOption } from "@/lib/collections/collections"
-import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
-import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
+import { getWritingStatusLabel, type WritingStatus } from "@/lib/writings/status"
+import { getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
 import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon"
-import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
+import { useVocabulary } from "@/hooks/useVocabulary"
+import { listVisibleVocabulary } from "@/lib/vocabulary/resolve"
 
 /**
  * The Desk's configuration of the shared selection bar.
@@ -56,8 +57,9 @@ export function BulkActionBar({
 }: BulkActionBarProps) {
   const [statusOpen, setStatusOpen] = useState(false)
   const [artifactOpen, setArtifactOpen] = useState(false)
-  const { settings } = useUserSettingsContext()
-  const enabledStatuses = WRITING_STATUS_VALUES.filter((s) => !settings.disabledStatuses.includes(s))
+  const catalog = useVocabulary()
+  const visibleStatuses = listVisibleVocabulary(catalog, "status").map((item) => item.key)
+  const visibleArtifactTypes = listVisibleVocabulary(catalog, "type").map((item) => item.key)
 
   const actions: SelectionBarAction[] = [
     {
@@ -68,7 +70,7 @@ export function BulkActionBar({
         <Popover open={statusOpen} onOpenChange={setStatusOpen}>
           <PopoverTrigger asChild>{chip}</PopoverTrigger>
           <PopoverContent align="end" className="w-[180px] p-[5px]">
-            {enabledStatuses.map((status) => (
+            {visibleStatuses.map((status) => (
               <button
                 key={status}
                 type="button"
@@ -94,7 +96,7 @@ export function BulkActionBar({
         <Popover open={artifactOpen} onOpenChange={setArtifactOpen}>
           <PopoverTrigger asChild>{chip}</PopoverTrigger>
           <PopoverContent align="end" className="w-[180px] p-[5px]">
-            {ARTIFACT_TYPE_VALUES.map((artifactType) => (
+            {visibleArtifactTypes.map((artifactType) => (
               <button
                 key={artifactType}
                 type="button"

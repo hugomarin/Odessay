@@ -21,11 +21,14 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DocumentStateIcon } from "@/components/ui/document-state-icon"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
+import { VocabularyChip } from "@/components/ui/vocabulary-chip"
 import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon"
 import { WorkspaceAssignmentDropdown } from "@/components/desk/workspace-assignment-dropdown"
+import { useVocabulary } from "@/hooks/useVocabulary"
+import { getVocabularyColor } from "@/lib/vocabulary/resolve"
 import type { DeskActivityRow } from "@/lib/queries/desk-activity"
 import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment"
-import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
+import { getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 import { getWritingStatusLabel, type WritingStatus } from "@/lib/writings/status"
 import { cn } from "@/lib/utils"
 
@@ -54,6 +57,7 @@ export type DeskArtifactRowProps = {
   onToggleSelection?: (id: string) => void
   onActivate?: (row: DeskActivityRow) => void
   enabledStatuses: WritingStatus[]
+  enabledArtifactTypes: ArtifactType[]
   onStatusChange?: (writingId: string, status: WritingStatus) => Promise<void> | void
   onArtifactTypeChange?: (writingId: string, artifactType: ArtifactType) => Promise<void> | void
   workspaceOptions: WorkspaceAssignmentOption[]
@@ -78,6 +82,7 @@ export function DeskArtifactRow({
   onToggleSelection,
   onActivate,
   enabledStatuses,
+  enabledArtifactTypes,
   onStatusChange,
   onArtifactTypeChange,
   workspaceOptions,
@@ -95,6 +100,7 @@ export function DeskArtifactRow({
 }: DeskArtifactRowProps) {
   const artifactType = row.artifactType ?? "general"
   const navigable = Boolean(onActivate && row.destinationHref)
+  const catalog = useVocabulary()
 
   return (
     <div
@@ -199,11 +205,19 @@ export function DeskArtifactRow({
           <RowTrigger
             label={row.stateLabel}
             ariaLabel={`Change status for ${row.title}`}
-            leading={<WritingStatusIcon status={row.stateTone} className="h-[15px] w-[15px]" />}
+            leading={
+              <VocabularyChip color={getVocabularyColor(catalog, "status", row.stateTone)} size={20}>
+                <WritingStatusIcon status={row.stateTone} className="h-[12px] w-[12px]" />
+              </VocabularyChip>
+            }
             items={enabledStatuses.map((status) => ({
               key: status,
               label: getWritingStatusLabel(status),
-              leading: <WritingStatusIcon status={status} className="h-[15px] w-[15px]" />,
+              leading: (
+                <VocabularyChip color={getVocabularyColor(catalog, "status", status)} size={20}>
+                  <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
+                </VocabularyChip>
+              ),
               selected: row.stateTone === status,
               onSelect: () => void onStatusChange?.(row.id, status),
             }))}
@@ -214,11 +228,19 @@ export function DeskArtifactRow({
           <RowTrigger
             label={getArtifactTypeLabel(artifactType)}
             ariaLabel={`Change artifact type for ${row.title}`}
-            leading={<ArtifactTypeIcon artifactType={artifactType} />}
-            items={ARTIFACT_TYPE_VALUES.map((type) => ({
+            leading={
+              <VocabularyChip color={getVocabularyColor(catalog, "type", artifactType)} size={20}>
+                <ArtifactTypeIcon artifactType={artifactType} className="h-[12px] w-[12px]" />
+              </VocabularyChip>
+            }
+            items={enabledArtifactTypes.map((type) => ({
               key: type,
               label: getArtifactTypeLabel(type),
-              leading: <ArtifactTypeIcon artifactType={type} />,
+              leading: (
+                <VocabularyChip color={getVocabularyColor(catalog, "type", type)} size={20}>
+                  <ArtifactTypeIcon artifactType={type} className="h-[12px] w-[12px]" />
+                </VocabularyChip>
+              ),
               selected: artifactType === type,
               onSelect: () => void onArtifactTypeChange?.(row.id, type),
             }))}
@@ -322,7 +344,7 @@ function RowTrigger({
         <button
           type="button"
           aria-label={ariaLabel}
-          className="flex h-[38px] w-full items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-sb px-[11px] text-[13px] text-ink-2 transition-colors hover:border-ink-6 hover:bg-surface-row-hover data-[state=open]:border-ink-5 data-[state=open]:bg-surface-row-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+          className="flex h-[38px] w-full items-center gap-2 rounded-[8px] bg-sb px-[11px] text-[13px] text-ink-2 transition-colors hover:bg-surface-row-hover data-[state=open]:bg-surface-row-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
         >
           <span className="flex flex-shrink-0 items-center text-ink-3">{leading}</span>
           <span className="flex-1 truncate text-left">{label}</span>

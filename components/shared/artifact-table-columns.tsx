@@ -9,13 +9,21 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 import { WritingStatusBadge } from "@/components/ui/writing-status-badge"
-import { getArtifactTypeLabel } from "@/lib/writings/artifact-type"
+import { useVocabulary } from "@/hooks/useVocabulary"
+import { getVocabularyLabel } from "@/lib/vocabulary/resolve"
+import type { ArtifactType } from "@/lib/writings/artifact-type"
 import type {
   ArtifactAction,
   ArtifactColumnId,
   ArtifactTableColumn,
   ArtifactTableItem,
 } from "@/components/shared/artifact-table-types"
+
+/** `createArtifactColumns` is a plain factory, not a component — this is the one cell that needs the catalog, so it subscribes on its own rather than relying on some ancestor to. */
+function ArtifactTypeLabel({ artifactType }: { artifactType: ArtifactType }) {
+  const catalog = useVocabulary()
+  return <>{getVocabularyLabel(catalog, "type", artifactType)}</>
+}
 
 const ACTION_CONFIG: Record<ArtifactAction, { label: string; icon: typeof ExternalLink }> = {
   open: { label: "Open", icon: ExternalLink },
@@ -75,7 +83,7 @@ export function createArtifactColumns(
           render: (item) =>
             item.artifactType ? (
               <span className="inline-flex items-center rounded-[6px] bg-muted px-2 py-0.5 text-[11px] font-medium text-ink-3">
-                {getArtifactTypeLabel(item.artifactType)}
+                <ArtifactTypeLabel artifactType={item.artifactType} />
               </span>
             ) : null,
         }
