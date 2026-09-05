@@ -168,10 +168,19 @@ export function initializeEditorSessionStore() {
   return loadPromise;
 }
 
-export function openDraftTab() {
+export function openDraftTab(draftWritingId?: string | null) {
   setSessionState((current) => {
     const existingDraft = current.tabs.find((tab) => isDraftTab(tab.id, tab.writing_id));
-    if (existingDraft && current.active_tab_id === existingDraft.id) {
+    // The tab id/active-ness can be unchanged while the ephemeral draft
+    // session behind it has moved on (e.g. New Tab reusing this slot while
+    // it was already active) — the draft_writing_id discriminator must still
+    // update in that case, or a later background materialization can't tell
+    // this is no longer the same draft (ODE-478 follow-up).
+    if (
+      existingDraft &&
+      current.active_tab_id === existingDraft.id &&
+      (draftWritingId === undefined || existingDraft.draft_writing_id === draftWritingId)
+    ) {
       return current;
     }
     const nextTabs = existingDraft
@@ -179,6 +188,7 @@ export function openDraftTab() {
           tab.id === existingDraft.id
             ? {
                 ...tab,
+                draft_writing_id: draftWritingId === undefined ? tab.draft_writing_id : draftWritingId,
                 last_touched_at: Date.now(),
               }
             : tab,
@@ -190,6 +200,7 @@ export function openDraftTab() {
             writingId: null,
             title: "Untitled artifact",
             saveState: "saved",
+            draftWritingId,
           }),
         ];
 
@@ -283,12 +294,23 @@ export function openWritingTab({
 export function reconcileMaterializedDraftTab({
   writingId,
   draftTabId,
+  draftWritingId,
   title,
   saveState = "saved-local",
   hasPendingSync = false,
 }: {
   writingId: string;
   draftTabId: string;
+  /**
+   * The specific ephemeral draft identity this materialization belongs to.
+   * A tab id like "draft" is reused across unrelated draft sessions, so
+   * without this the reconciliation below could rename whatever draft the
+   * author has since started typing into instead of the one that actually
+   * finished writing (ODE-478 follow-up). Omit only for callers that can't
+   * know it; a tab with no draft_writing_id of its own is treated as
+   * compatible either way (older sessions predating this field).
+   */
+  draftWritingId?: string | null;
   title?: string | null;
   saveState?: EditorTabSaveState;
   hasPendingSync?: boolean;
@@ -298,8 +320,16 @@ export function reconcileMaterializedDraftTab({
       return current;
     }
 
-    const draftIndex = current.tabs.findIndex((tab) => tab.id === draftTabId && tab.writing_id === null);
+    const draftIndex = current.tabs.findIndex(
+      (tab) =>
+        tab.id === draftTabId &&
+        tab.writing_id === null &&
+        (draftWritingId == null || tab.draft_writing_id == null || tab.draft_writing_id === draftWritingId),
+    );
     if (draftIndex < 0) {
+      // Either no tab ever claimed this slot, or a different draft session
+      // has since taken it over — either way this write still needs a tab of
+      // its own rather than being silently orphaned (ODE-478 case 4).
       const materializedTab = createEditorSessionTab({
         id: writingId,
         writingId,
@@ -321,6 +351,7 @@ export function reconcileMaterializedDraftTab({
       ...draftTab,
       id: writingId,
       writing_id: writingId,
+      draft_writing_id: null,
       title: title?.trim() || draftTab.title,
       save_state: saveState,
       has_pending_sync: hasPendingSync,

@@ -175,6 +175,52 @@ describe("editor persistence coordinator", () => {
     expect(saveWriting.mock.calls[0]?.[0].writing.version).toBe(2)
   })
 
+  it("evicts old materialized-draft mappings once the cache limit is exceeded (ODE-478 follow-up)", async () => {
+    const materializedById = new Map<string, WritingRecord>()
+    const createDesktopDraft = vi.fn((input: { writingId?: string | null }) => {
+      const id = `materialized-${input.writingId}`
+      const record = baseRecord(id, 1)
+      materializedById.set(id, record)
+      return Promise.resolve(response(record))
+    })
+    const saveWriting = vi.fn(async (input: { writing: WritingRecord }) => response(input.writing))
+    const coordinator = createPersistenceCoordinator({
+      runtime: "desktop",
+      documentService: { saveWriting },
+      createDesktopDraft,
+      createWritingId: () => "unused",
+      now: () => "2026-08-27T00:00:02.000Z",
+    })
+
+    // Materialize 21 distinct drafts sequentially — one past the 20-entry cap.
+    for (let i = 0; i < 21; i += 1) {
+      const draftWritingId = `draft-${i}`
+      void coordinator.persist(snapshot({ writingId: null, bodyText: `body ${i}`, draftWritingId }))
+      await vi.waitFor(() => expect(createDesktopDraft).toHaveBeenCalledTimes(i + 1))
+    }
+
+    createDesktopDraft.mockClear()
+    saveWriting.mockClear()
+
+    // The oldest draft's mapping was evicted: a later reference to it (e.g. a
+    // stray still-queued request from a long-gone component instance) can no
+    // longer resolve to its real id, so the coordinator treats it as an
+    // unresolved draft and re-attempts materialization rather than corrupting
+    // an unrelated document.
+    void coordinator.persist(snapshot({ writingId: null, bodyText: "stale reference", draftWritingId: "draft-0" }))
+    await vi.waitFor(() => expect(createDesktopDraft).toHaveBeenCalledTimes(1))
+    expect(saveWriting).not.toHaveBeenCalled()
+
+    createDesktopDraft.mockClear()
+
+    // The most recently materialized draft is still cached: a later
+    // reference resolves straight to its real id and saves normally.
+    void coordinator.persist(snapshot({ writingId: null, bodyText: "still cached", draftWritingId: "draft-20" }))
+    await vi.waitFor(() => expect(saveWriting).toHaveBeenCalledTimes(1))
+    expect(createDesktopDraft).not.toHaveBeenCalled()
+    expect(saveWriting.mock.calls[0]?.[0].writing.id).toBe("materialized-draft-20")
+  })
+
   it("does not create a contentless desktop draft", async () => {
     const createDesktopDraft = vi.fn()
     const coordinator = createPersistenceCoordinator({
@@ -186,6 +232,51 @@ describe("editor persistence coordinator", () => {
     })
 
     await coordinator.persist(snapshot({ writingId: null, bodyText: "   " }))
+
+    expect(createDesktopDraft).not.toHaveBeenCalled()
+  })
+
+  it("materializes an image-only draft even though it has no extractable text (ODE-478 follow-up)", async () => {
+    const createDesktopDraft = vi.fn(async (input: { writingId?: string | null }) =>
+      response(baseRecord(`materialized-${input.writingId}`, 1)),
+    )
+    const coordinator = createPersistenceCoordinator({
+      runtime: "desktop",
+      documentService: { saveWriting: vi.fn() },
+      createDesktopDraft,
+      createWritingId: () => "unused",
+      now: () => "2026-08-27T00:00:02.000Z",
+    })
+
+    // getText() on a doc containing only an image node is "" — but the
+    // caller's own emptiness check (TipTap's editor.isEmpty) correctly says
+    // this is NOT blank, since an image is a real atomic node.
+    await coordinator.persist(
+      snapshot({
+        writingId: null,
+        bodyText: "",
+        bodyJson: { type: "doc", content: [{ type: "image", attrs: { src: "file:///photo.png" } }] },
+        bodyIsEmpty: false,
+        draftWritingId: "draft-with-image",
+      }),
+    )
+
+    expect(createDesktopDraft).toHaveBeenCalledTimes(1)
+  })
+
+  it("still treats a doc with no text and no bodyIsEmpty signal as blank (fallback preserved)", async () => {
+    const createDesktopDraft = vi.fn()
+    const coordinator = createPersistenceCoordinator({
+      runtime: "desktop",
+      documentService: { saveWriting: vi.fn() },
+      createDesktopDraft,
+      createWritingId: () => "unused",
+      now: () => "2026-08-27T00:00:02.000Z",
+    })
+
+    // No bodyIsEmpty provided at all — falls back to the bodyText-only check,
+    // same as before this fix, for callers that don't track richer content.
+    await coordinator.persist(snapshot({ writingId: null, bodyText: "" }))
 
     expect(createDesktopDraft).not.toHaveBeenCalled()
   })

@@ -26,6 +26,7 @@ const persistedSession = vi.hoisted(() => ({ value: null as Record<string, unkno
 
 type TestWriting = {
   id: string
+  title: string
   content: { plainText: string }
 }
 
@@ -80,6 +81,18 @@ const mocks = vi.hoisted(() => ({
   })),
   openWriting: vi.fn(async () => ({ error: null, data: desktopDraftRecord })),
   openDocumentById: vi.fn(async (_id?: string) => ({ status: "opened", documentId: "restored-writing", record: null })),
+  relocateDesktopWriting: vi.fn<
+    (
+      writingId: string,
+      path: string,
+      content: string,
+    ) => Promise<{ status: "relocated"; path: string } | { status: "failed"; message: string } | { status: "unsupported" }>
+  >(async () => ({ status: "failed", message: "not configured" })),
+}))
+
+const saveToDiskState = vi.hoisted(() => ({
+  onSaveToDisk: null as ((path: string, content: string) => Promise<string | false>) | null,
+  onGetSaveContent: null as (() => { content: string; defaultName: string } | null) | null,
 }))
 
 const editorState = vi.hoisted(() => ({
@@ -97,6 +110,14 @@ const topbarState = vi.hoisted(() => ({
 
 const renameModalState = vi.hoisted(() => ({
   onConfirm: null as ((title: string) => Promise<boolean>) | null,
+}))
+
+const sheetHeaderState = vi.hoisted(() => ({
+  onRunAction: null as ((action: string) => void) | null,
+}))
+
+const imageModalState = vi.hoisted(() => ({
+  writingId: null as string | null,
 }))
 
 const noopCommand = vi.hoisted(() => vi.fn(() => true))
@@ -205,7 +226,17 @@ vi.mock("@/lib/services/document-service-factory", () => ({
   })),
   createDesktopDraft: mocks.createDesktopDraft,
   importDesktopWritingFile: vi.fn(),
-  relocateDesktopWriting: vi.fn(),
+  relocateDesktopWriting: mocks.relocateDesktopWriting,
+}))
+
+vi.mock("@/hooks/useTauriMenuEvents", () => ({
+  useTauriMenuEvents: (props: {
+    onSaveToDisk?: (path: string, content: string) => Promise<string | false>
+    onGetSaveContent?: () => { content: string; defaultName: string } | null
+  }) => {
+    saveToDiskState.onSaveToDisk = props.onSaveToDisk ?? null
+    saveToDiskState.onGetSaveContent = props.onGetSaveContent ?? null
+  },
 }))
 
 vi.mock("@/lib/services/open-document-factory", () => ({
@@ -363,6 +394,12 @@ vi.mock("@/components/editor/editor-topbar", () => ({
     return null
   },
 }))
+vi.mock("@/components/editor/editor-sheet-header", () => ({
+  EditorSheetHeader: (props: { onRunAction?: (action: string) => void }) => {
+    sheetHeaderState.onRunAction = props.onRunAction ?? null
+    return null
+  },
+}))
 vi.mock("@/components/editor/editor-content", () => ({ WritingEditorContent: () => null }))
 vi.mock("@/components/editor/editor-empty-state", () => ({ EditorEmptyState: () => null }))
 vi.mock("@/components/editor/editor-find-replace", () => ({ EditorFindReplace: () => null }))
@@ -374,7 +411,14 @@ vi.mock("@/components/reading/margins/selection-popup", () => ({ SelectionPopup:
 vi.mock("@/components/editor/modals/insert-footnote-modal", () => ({
   InsertFootnoteModal: () => null,
 }))
-vi.mock("@/components/editor/modals/insert-image-modal", () => ({ InsertImageModal: () => null }))
+vi.mock("@/components/editor/modals/insert-image-modal", () => ({
+  InsertImageModal: (props: { open: boolean; writingId: string }) => {
+    if (props.open) {
+      imageModalState.writingId = props.writingId
+    }
+    return null
+  },
+}))
 vi.mock("@/components/editor/modals/insert-link-modal", () => ({ InsertLinkModal: () => null }))
 vi.mock("@/components/editor/modals/insert-table-modal", () => ({ InsertTableModal: () => null }))
 vi.mock("@/components/editor/modals/rename-writing-modal", () => ({
@@ -409,6 +453,18 @@ function simulateEditorInput(text: string) {
   }
 }
 
+// An image node has no extractable text — getText() stays "" — but TipTap's
+// own structural isEmpty correctly reports false once an atomic node like an
+// image is present (ODE-478 follow-up).
+function simulateImageInsert() {
+  editorState.text = ""
+  editorState.json = { type: "doc", content: [{ type: "image", attrs: { src: "file:///photo.png" } }] }
+  editorState.isEmpty = false
+  if (editorState.capturedOnUpdate) {
+    editorState.capturedOnUpdate({ editor: editorStub })
+  }
+}
+
 beforeEach(async () => {
   runtime.isDesktop = true
   unifiedOpenState.enabled = false
@@ -437,6 +493,12 @@ beforeEach(async () => {
   mocks.renameWriting.mockClear()
   mocks.openWriting.mockClear()
   mocks.openDocumentById.mockClear()
+  mocks.relocateDesktopWriting.mockReset()
+  mocks.relocateDesktopWriting.mockResolvedValue({ status: "failed", message: "not configured" })
+  saveToDiskState.onSaveToDisk = null
+  saveToDiskState.onGetSaveContent = null
+  sheetHeaderState.onRunAction = null
+  imageModalState.writingId = null
   window.confirm = vi.fn(() => true)
 
   // Provide a real DOM element for effects that attach listeners to the editor view.
@@ -1144,5 +1206,180 @@ describe("ODE-478 case 3 — naming a still-blank draft", () => {
     // Still "Untitled": the failed attempt must not silently claim the tab
     // was renamed, and the tab must still be the ephemeral draft.
     expect(getEditorSessionState().session.tabs.some((tab) => tab.writing_id === null)).toBe(true)
+  })
+
+  it("waits for the durable write before reporting success, even when an autosave was already in flight (ODE-478 follow-up)", async () => {
+    persistedSession.value = blankDraftOnlySession()
+    const deferred: { resolve: (() => void) | null } = { resolve: null }
+    mocks.createDesktopDraft.mockReset()
+    mocks.createDesktopDraft.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          deferred.resolve = () => {
+            mocks.filesystemWrite()
+            resolve({ error: null, data: desktopDraftRecord })
+          }
+        }),
+    )
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(getEditorSessionState().session.active_tab_id).toBe("draft"))
+
+    // Real content triggers the first materialization, left deliberately
+    // in flight (deferred) to simulate an autosave already underway.
+    await act(async () => {
+      simulateEditorInput("contenido real")
+    })
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+
+    // Rename while that write is still in flight — persist()'s "already
+    // inFlight" branch resolves optimistically (true) without waiting for
+    // the merged request to actually land, which the rename flow must not
+    // trust as its success signal.
+    const draftTabId = getEditorSessionState().session.active_tab_id!
+    await act(async () => {
+      topbarState.onRenameTab?.(draftTabId)
+    })
+    await vi.waitFor(() => expect(renameModalState.onConfirm).not.toBeNull())
+
+    let renamePromise: Promise<boolean> | undefined
+    let settledEarly = false
+    await act(async () => {
+      renamePromise = renameModalState.onConfirm?.("Título mientras se guarda")
+      renamePromise?.then(() => {
+        settledEarly = true
+      })
+    })
+
+    // Give pending microtasks a chance to run without ever letting the
+    // underlying write land — an implementation trusting the optimistic
+    // `persist()` result would already have resolved by now.
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(settledEarly).toBe(false)
+    expect(mocks.filesystemWrite).not.toHaveBeenCalled()
+
+    // Only once the original write actually lands may the rename resolve.
+    await act(async () => {
+      deferred.resolve?.()
+    })
+    const succeeded = await renamePromise
+    expect(succeeded).toBe(true)
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalled())
+    expect(mocks.saveWriting.mock.calls.at(-1)?.[0].writing.title).toBe("Título mientras se guarda")
+  })
+
+  it("materializes when the first thing added is an image, not text (ODE-478 follow-up)", async () => {
+    persistedSession.value = blankDraftOnlySession()
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(getEditorSessionState().session.active_tab_id).toBe("draft"))
+
+    await act(async () => {
+      simulateImageInsert()
+    })
+
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    expect(mocks.filesystemWrite).toHaveBeenCalledTimes(1)
+    expect(getEditorSessionState().session.tabs.some((tab) => tab.writing_id === "desktop-draft-1")).toBe(true)
+  })
+
+  it("materializes the draft before opening Insert Image, so the upload has a real writingId (ODE-478 follow-up)", async () => {
+    persistedSession.value = blankDraftOnlySession()
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(getEditorSessionState().session.active_tab_id).toBe("draft"))
+    await vi.waitFor(() => expect(sheetHeaderState.onRunAction).not.toBeNull())
+
+    // Triggering "Insert Image" (Insert menu / Cmd+Shift+I) on a still-blank,
+    // unmaterialized draft used to open InsertImageModal with writingId=""
+    // — its own upload guard (`if (!file || !writingId) return`) then
+    // silently no-ops the whole thing with zero feedback once the user
+    // actually picks a file and confirms.
+    await act(async () => {
+      sheetHeaderState.onRunAction?.("image")
+    })
+
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(imageModalState.writingId).toBe("desktop-draft-1"))
+    expect(imageModalState.writingId).not.toBe("")
+  })
+})
+
+describe("ODE-478 follow-up — Save As on a still-ephemeral draft", () => {
+  it("still offers the native picker when the draft is truly blank — choosing a name is itself a naming signal", async () => {
+    persistedSession.value = blankDraftOnlySession()
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(saveToDiskState.onGetSaveContent).not.toBeNull())
+
+    // Refusing here would stop the native Save panel from ever opening, but
+    // choosing a filename in that panel IS the deliberate naming action
+    // (same principle as the rename modal in case 3) — it must not be
+    // blocked just because the body happens to be empty.
+    expect(saveToDiskState.onGetSaveContent?.()).not.toBeNull()
+  })
+
+  it("materializes a truly blank draft using the chosen filename as its title", async () => {
+    persistedSession.value = blankDraftOnlySession()
+    mocks.relocateDesktopWriting.mockResolvedValue({ status: "relocated", path: "/chosen/My Named File.md" })
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(saveToDiskState.onSaveToDisk).not.toBeNull())
+
+    let result: string | false | undefined
+    await act(async () => {
+      result = await saveToDiskState.onSaveToDisk?.("/chosen/My Named File.md", "")
+    })
+
+    // No content, no prior explicit title — the chosen filename is the only
+    // naming signal, and it must be enough to materialize (ODE-478 follow-up).
+    expect(mocks.createDesktopDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "My Named File" }),
+    )
+    expect(mocks.relocateDesktopWriting).toHaveBeenCalledWith(
+      "desktop-draft-1",
+      "/chosen/My Named File.md",
+      "",
+    )
+    expect(result).toBe("/chosen/My Named File.md")
+  })
+
+  it("materializes the draft, then relocates it, when there is real content but no writingId yet", async () => {
+    persistedSession.value = blankDraftOnlySession()
+    mocks.relocateDesktopWriting.mockResolvedValue({ status: "relocated", path: "/chosen/My Note.md" })
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(saveToDiskState.onSaveToDisk).not.toBeNull())
+
+    await act(async () => {
+      simulateEditorInput("contenido real antes de guardar")
+    })
+
+    // A picker payload is now offered instead of refusing.
+    expect(saveToDiskState.onGetSaveContent?.()).not.toBeNull()
+
+    let result: string | false | undefined
+    await act(async () => {
+      result = await saveToDiskState.onSaveToDisk?.("/chosen/My Note.md", "contenido real antes de guardar")
+    })
+
+    // The still-ephemeral draft must materialize (Save As is just as
+    // deliberate a signal as typing or naming it) before the relocate call.
+    expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1)
+    expect(mocks.relocateDesktopWriting).toHaveBeenCalledWith(
+      "desktop-draft-1",
+      "/chosen/My Note.md",
+      "contenido real antes de guardar",
+    )
+    expect(result).toBe("/chosen/My Note.md")
   })
 })

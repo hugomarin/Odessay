@@ -147,16 +147,20 @@ export function EditorTabItem({
         <Pencil className="h-[13px] w-[13px]" strokeWidth={1.5} />
       </button>
 
+      {/* Steps aside on hover for the same reason the left-side status glyph
+          does (see above): the rename button occupies this same corner once
+          the pointer arrives, and without this the spinner/dot sits on top
+          of the pencil icon instead of yielding to it. */}
       {tab.save_state === "saving" ? (
         <Loader2
           aria-hidden="true"
-          className="pointer-events-none absolute right-1.5 top-1/2 h-[10px] w-[10px] -translate-y-1/2 animate-spin text-ink-4"
+          className="pointer-events-none absolute right-1.5 top-1/2 h-[10px] w-[10px] -translate-y-1/2 animate-spin text-ink-4 opacity-100 transition-opacity duration-100 ease-out group-hover:opacity-0"
           strokeWidth={2}
         />
       ) : tab.save_state === "error" ? (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute right-1.5 top-1/2 h-[6px] w-[6px] -translate-y-1/2 rounded-full bg-destructive"
+          className="pointer-events-none absolute right-1.5 top-1/2 h-[6px] w-[6px] -translate-y-1/2 rounded-full bg-destructive opacity-100 transition-opacity duration-100 ease-out group-hover:opacity-0"
         />
       ) : null}
     </div>

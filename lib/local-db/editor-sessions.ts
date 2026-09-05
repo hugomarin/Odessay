@@ -21,6 +21,7 @@ export type EditorSessionTabInput = {
   hasPendingSync?: boolean;
   lastTouchedAt?: number;
   viewState?: Partial<LocalEditorTabViewState> | null;
+  draftWritingId?: string | null;
 };
 
 const DEFAULT_VIEW_STATE: LocalEditorTabViewState = {
@@ -59,6 +60,7 @@ export const createEditorSessionTab = ({
   hasPendingSync = false,
   lastTouchedAt = Date.now(),
   viewState,
+  draftWritingId = null,
 }: EditorSessionTabInput): LocalEditorSessionTab => ({
   id,
   writing_id: writingId,
@@ -67,6 +69,7 @@ export const createEditorSessionTab = ({
   save_state: saveState,
   has_pending_sync: hasPendingSync,
   last_touched_at: lastTouchedAt,
+  draft_writing_id: draftWritingId,
   view_state: viewState
     ? {
         ...DEFAULT_VIEW_STATE,

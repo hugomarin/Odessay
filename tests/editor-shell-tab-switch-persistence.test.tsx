@@ -596,6 +596,36 @@ describe("ODE-478 case 4 — leaving and returning to a still-materializing draf
   })
 })
 
+describe("ODE-478 follow-up — New Tab must not discard a queued edit", () => {
+  it("flushes the queued rich-mode update against the outgoing draft before opening a new one", async () => {
+    persistedSession.value = {
+      id: "workspace",
+      active_tab_id: "draft",
+      tabs: [
+        { id: "draft", writing_id: null, slug: null, title: "Untitled", save_state: "saved-local", has_pending_sync: false, last_touched_at: 1, view_state: null },
+      ],
+      recent_writings: [],
+      updated_at: 1,
+    }
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+
+    // Type, then immediately hit New Tab in the same tick — no await boundary
+    // in between — so the RAF scheduled by that keystroke is still pending
+    // when the handler detaches from this draft.
+    await act(async () => {
+      simulateEditorInput("nota antes de abrir otra pestaña")
+      topbarState.onNewTab?.()
+    })
+
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalled())
+    expect(mocks.createDesktopDraft.mock.calls[0]?.[0]?.initialBodyText).toBe(
+      "nota antes de abrir otra pestaña",
+    )
+  })
+})
+
 describe("ODE-478 case 5 — closing a tab waits for its pending save", () => {
   it("keeps the tab open and showing a saving indicator until the write lands, then closes it", async () => {
     persistedSession.value = {
@@ -657,5 +687,177 @@ describe("ODE-478 case 5 — closing a tab waits for its pending save", () => {
       expect(getEditorSessionState().session.tabs.some((t) => t.id === "doc-a")).toBe(false)
     })
     expect(mocks.saveWriting.mock.calls[0][0].writing.content.plainText).toBe("Edited, then closed mid-save")
+  })
+})
+
+describe("ODE-478 follow-up — closing a tab whose own materialization completes mid-close", () => {
+  it("closes the tab under its new identity instead of silently surviving under the stale draft id", async () => {
+    persistedSession.value = {
+      id: "workspace",
+      active_tab_id: "draft",
+      tabs: [
+        { id: "draft", writing_id: null, slug: null, title: "Untitled", save_state: "saved-local", has_pending_sync: false, last_touched_at: 1, view_state: null },
+      ],
+      recent_writings: [],
+      updated_at: 1,
+    }
+
+    const deferred: { resolve: (() => void) | null } = { resolve: null }
+    mocks.createDesktopDraft.mockReset()
+    mocks.createDesktopDraft.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          deferred.resolve = () => {
+            mocks.filesystemWrite()
+            mocks.manifestWrite()
+            mocks.catalogWrite()
+            mocks.syncEnqueue()
+            resolve({ error: null, data: desktopDraftRecord })
+          }
+        }),
+    )
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+
+    await act(async () => {
+      simulateEditorInput("cerrar esta pestaña mientras se materializa")
+    })
+
+    let closePromise: Promise<void> | undefined
+    await act(async () => {
+      closePromise = topbarState.onCloseTab?.("draft") as Promise<void> | undefined
+    })
+
+    // Closing forces the debounced write through immediately (settle bypasses
+    // the debounce), so materialization is already underway.
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+
+    // The write lands and reconcileMaterializedDraftTab renames "draft" to
+    // the real id *before* the close call resumes past its await.
+    await act(async () => {
+      deferred.resolve?.()
+      await closePromise
+    })
+
+    await vi.waitFor(() => {
+      expect(getEditorSessionState().session.tabs.some((t) => t.id === "desktop-draft-1")).toBe(false)
+    })
+    // Not just gone from the store — never left an untouched, still-open tab
+    // sitting under either id.
+    expect(getEditorSessionState().session.tabs.some((t) => t.id === "draft")).toBe(false)
+  })
+})
+
+describe("ODE-478 follow-up — closing one tab while a different tab's draft materializes mid-close", () => {
+  it("opens the renamed background tab, not a stale/blank fallback", async () => {
+    persistedSession.value = {
+      id: "workspace",
+      active_tab_id: "draft",
+      tabs: [
+        { id: "draft", writing_id: null, slug: null, title: "Untitled", save_state: "saved-local", has_pending_sync: false, last_touched_at: 2, view_state: null },
+        { id: "doc-a", writing_id: "doc-a", slug: null, title: "Doc A", save_state: "saved", has_pending_sync: false, last_touched_at: 1, view_state: null },
+      ],
+      recent_writings: [],
+      updated_at: 1,
+    }
+    mocks.openWriting.mockImplementation(((id?: string) => Promise.resolve({
+      error: null,
+      data: {
+        ...desktopDraftRecord,
+        id: id ?? "unknown",
+        title: id === "doc-a" ? "Doc A" : "Untitled",
+        content: { ...desktopDraftRecord.content, plainText: id === "doc-a" ? "Doc A body" : "" },
+      },
+    })) as never)
+
+    const draftDeferred: { resolve: (() => void) | null } = { resolve: null }
+    mocks.createDesktopDraft.mockReset()
+    mocks.createDesktopDraft.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          draftDeferred.resolve = () => {
+            mocks.filesystemWrite()
+            mocks.manifestWrite()
+            mocks.catalogWrite()
+            mocks.syncEnqueue()
+            resolve({ error: null, data: desktopDraftRecord })
+          }
+        }),
+    )
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(getEditorSessionState().session.active_tab_id).toBe("draft"))
+
+    // Start the draft's materialization, then leave it before it resolves.
+    await act(async () => {
+      simulateEditorInput("nota en segundo plano")
+    })
+    await act(async () => {
+      topbarState.onSelectTab?.("doc-a")
+    })
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.openWriting).toHaveBeenCalledWith("doc-a"))
+
+    // Now edit and close doc-a — its own settle() must not depend on the
+    // background draft, but the background draft is free to materialize
+    // (and rename its tab) *during* doc-a's close wait.
+    const docADeferred: { resolve: (() => void) | null } = { resolve: null }
+    mocks.saveWriting.mockImplementation(
+      (input: { writing: TestWriting }) =>
+        new Promise((resolve) => {
+          docADeferred.resolve = () => resolve({ error: null, data: input.writing })
+        }),
+    )
+    await act(async () => {
+      simulateEditorInput("Doc A editado justo antes de cerrar")
+    })
+
+    // The coordinator serializes on a single in-flight write, so doc-a's own
+    // close settles behind the still-in-flight draft materialization first —
+    // that in-flight write resolving (renaming the background tab) is
+    // exactly the race under test, before doc-a's own save even starts.
+    let closePromise: Promise<void> | undefined
+    await act(async () => {
+      closePromise = topbarState.onCloseTab?.("doc-a") as Promise<void> | undefined
+    })
+    expect(mocks.saveWriting).not.toHaveBeenCalled()
+
+    // The background draft's write lands and renames its tab while doc-a's
+    // close is still waiting.
+    await act(async () => {
+      draftDeferred.resolve?.()
+    })
+    await vi.waitFor(() => {
+      expect(getEditorSessionState().session.tabs.some((t) => t.id === "desktop-draft-1")).toBe(true)
+    })
+
+    // Only now does doc-a's own save actually start.
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalled())
+
+    // A stale post-close lookup falls through to the "no active document"
+    // branch, which the session-restore effect then has to correct on a
+    // later render — logging this exact line. Watch for that extra,
+    // avoidable round-trip instead of only the eventual (self-healed) end
+    // state, since that end state is reachable either way.
+    const restoreLogSpy = vi.spyOn(console, "info")
+    restoreLogSpy.mockClear()
+
+    // Now let doc-a's own save land, completing the close.
+    await act(async () => {
+      docADeferred.resolve?.()
+      await closePromise
+    })
+
+    // The only remaining tab is the renamed background draft, and it must be
+    // the one the editor actually opens — not a null/blank fallback caused by
+    // looking the id up in a stale, pre-rename snapshot of the tab list.
+    await vi.waitFor(() => expect(mocks.openWriting).toHaveBeenCalledWith("desktop-draft-1"))
+    expect(getEditorSessionState().session.tabs.map((t) => t.id)).toEqual(["desktop-draft-1"])
+    expect(
+      restoreLogSpy.mock.calls.some((call) => String(call[0]).includes("[editor:session-restore] restorable")),
+    ).toBe(false)
+    restoreLogSpy.mockRestore()
   })
 })
