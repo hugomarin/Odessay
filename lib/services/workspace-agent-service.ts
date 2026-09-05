@@ -4,6 +4,7 @@ import {
   detectBrokenDocumentReferences,
   detectDocumentContradictions,
   findArchiveCandidates,
+  replaceBrokenDocumentReference,
   replaceContradictionFragment,
   suggestArtifactClassification,
   type ArchiveCandidate,
@@ -40,9 +41,41 @@ function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "")
 }
 
+function canonicalizeLexicalPath(path: string): string {
+  const normalized = normalizePath(path)
+  const drive = normalized.match(/^[A-Za-z]:/)?.[0] ?? ""
+  const remainder = drive ? normalized.slice(drive.length) : normalized
+  const absolute = remainder.startsWith("/")
+  const parts: string[] = []
+
+  for (const part of remainder.split("/")) {
+    if (!part || part === ".") continue
+    if (part === "..") {
+      const previous = parts.at(-1)
+      if (previous && previous !== "..") parts.pop()
+      else if (!absolute) parts.push("..")
+      continue
+    }
+    parts.push(part)
+  }
+
+  const prefix = drive ? `${drive}${absolute ? "/" : ""}` : absolute ? "/" : ""
+  return `${prefix}${parts.join("/")}` || prefix || "."
+}
+
+function hasInternalWorkspaceComponent(path: string): boolean {
+  return canonicalizeLexicalPath(path)
+    .split("/")
+    .some((component) => component.toLocaleLowerCase() === ".odessay")
+}
+
 function isInsideRoot(path: string | null | undefined, rootPath: string): boolean {
   if (!path) return false
-  return normalizePath(path).startsWith(`${normalizePath(rootPath)}/`)
+  const candidate = canonicalizeLexicalPath(path)
+  const root = canonicalizeLexicalPath(rootPath)
+  if (hasInternalWorkspaceComponent(candidate) || hasInternalWorkspaceComponent(root)) return false
+  if (candidate === root) return false
+  return root === "/" ? candidate.startsWith("/") : candidate.startsWith(`${root}/`)
 }
 
 function workflowPath(rootPath: string): string {
@@ -65,6 +98,11 @@ type WorkspaceAgentContext = {
   collections: CollectionSummary[]
   existingWorkflow: DocumentCatalogRecord | null
   workflowMarkdown: string | null
+}
+
+export type BrokenReferenceFixApprovals = {
+  read: WorkspaceAgentApproval
+  edit: WorkspaceAgentApproval
 }
 
 async function loadContext(rootPath: string): Promise<ServiceResponse<WorkspaceAgentContext>> {
@@ -104,28 +142,37 @@ async function loadContext(rootPath: string): Promise<ServiceResponse<WorkspaceA
 }
 
 export type WorkspaceAgentService = {
-  getContext(readApproval?: WorkspaceAgentApproval): Promise<ServiceResponse<WorkspaceAgentContext>>
+  getContext(): Promise<ServiceResponse<WorkspaceAgentContext>>
   proposeWorkflow(readApproval?: WorkspaceAgentApproval): Promise<ServiceResponse<WorkflowDraftProposal>>
   applyWorkflow(
     proposal: WorkflowDraftProposal,
     approval: WorkspaceAgentApproval,
   ): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
-  findBrokenReferences(readApproval?: WorkspaceAgentApproval): Promise<ServiceResponse<BrokenReferenceProposal[]>>
+  findBrokenReferences(workflowReadApproval?: WorkspaceAgentApproval): Promise<ServiceResponse<BrokenReferenceProposal[]>>
+  applyBrokenReference(
+    proposal: BrokenReferenceProposal,
+    replacementReference: string,
+    approvals: BrokenReferenceFixApprovals,
+  ): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
   findContradictions(
     documentIds: string[],
     readApprovals: Readonly<Record<string, WorkspaceAgentApproval>>,
+    workflowReadApproval?: WorkspaceAgentApproval,
   ): Promise<ServiceResponse<ContradictionProposal[]>>
   resolveContradiction(
     proposal: ContradictionProposal,
     resolution: ContradictionResolution,
     approvals?: { read: WorkspaceAgentApproval; edit: WorkspaceAgentApproval },
   ): Promise<ServiceResponse<ContradictionResolutionResult>>
-  suggestClassification(documentId: string, readApproval?: WorkspaceAgentApproval): Promise<ServiceResponse<ClassificationProposal>>
+  suggestClassification(documentId: string, workflowReadApproval?: WorkspaceAgentApproval): Promise<ServiceResponse<ClassificationProposal>>
   applyClassification(
     proposal: ClassificationProposal,
     approval: WorkspaceAgentApproval,
   ): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
-  findArchiveCandidates(options?: { now?: number; staleAfterDays?: number; duplicateThreshold?: number }, readApproval?: WorkspaceAgentApproval): Promise<ServiceResponse<ArchiveCandidate[]>>
+  findArchiveCandidates(
+    options?: { now?: number; staleAfterDays?: number; duplicateThreshold?: number },
+    workflowReadApproval?: WorkspaceAgentApproval,
+  ): Promise<ServiceResponse<ArchiveCandidate[]>>
   applyArchiveCandidate(
     candidate: ArchiveCandidate,
     approval: WorkspaceAgentApproval,
@@ -144,19 +191,32 @@ export async function createWorkspaceAgentService(
   workspaceRootPath: string,
   tools: WorkspaceAgentToolsService,
 ): Promise<WorkspaceAgentService> {
-  const getContext = async (readApproval?: WorkspaceAgentApproval): Promise<ServiceResponse<WorkspaceAgentContext>> => {
-    const context = await loadContext(workspaceRootPath)
-    if (context.error || !context.data || !context.data.existingWorkflow || !readApproval) return context
+  const getContext = async (): Promise<ServiceResponse<WorkspaceAgentContext>> => loadContext(workspaceRootPath)
+
+  const withWorkflowMarkdown = async (
+    context: ServiceResponse<WorkspaceAgentContext>,
+    readApproval?: WorkspaceAgentApproval,
+  ): Promise<ServiceResponse<WorkspaceAgentContext>> => {
+    if (context.error || !context.data || !context.data.existingWorkflow) return context
+    if (!readApproval) {
+      return error("FORBIDDEN", "Reading an existing workflow.md requires a workflow-specific read approval.")
+    }
     const read = await tools.read({ documentId: context.data.existingWorkflow.id, approval: readApproval })
-    if (read.error || !read.data) return error("NOT_FOUND", read.error?.message ?? "workflow.md could not be loaded.")
+    if (read.error || !read.data) {
+      return error(read.error?.code ?? "NOT_FOUND", read.error?.message ?? "workflow.md could not be loaded.")
+    }
     return ok<WorkspaceAgentContext>({ ...context.data, workflowMarkdown: read.data.document.markdown })
   }
+
+  const getContextWithWorkflow = async (
+    workflowReadApproval?: WorkspaceAgentApproval,
+  ): Promise<ServiceResponse<WorkspaceAgentContext>> => withWorkflowMarkdown(await getContext(), workflowReadApproval)
 
   return {
     tools,
     getContext,
     async proposeWorkflow(readApproval) {
-      const context = await getContext(readApproval)
+      const context = await withWorkflowMarkdown(await getContext(), readApproval)
       if (context.error || !context.data) return context as ServiceResponse<WorkflowDraftProposal>
       return ok(buildWorkflowDraft({
         rootPath: context.data.rootPath,
@@ -173,12 +233,33 @@ export async function createWorkspaceAgentService(
         : { canonicalPath: proposal.canonicalPath }
       return tools.write({ target, markdown: proposal.markdown, approval })
     },
-    async findBrokenReferences(readApproval) {
-      const context = await getContext(readApproval)
+    async findBrokenReferences(workflowReadApproval) {
+      const context = await getContextWithWorkflow(workflowReadApproval)
       if (context.error || !context.data) return context as ServiceResponse<BrokenReferenceProposal[]>
       return ok(detectBrokenDocumentReferences(context.data.documents))
     },
-    async findContradictions(documentIds, readApprovals) {
+    async applyBrokenReference(proposal, replacementReference, approvals) {
+      if (!approvals) return error("FORBIDDEN", "Applying a broken reference requires read and edit approvals for the source document.")
+      const read = await tools.read({ documentId: proposal.sourceDocumentId, approval: approvals.read })
+      if (read.error || !read.data) {
+        return error(
+          read.error?.code ?? "NOT_FOUND",
+          read.error?.message ?? `Document ${proposal.sourceDocumentId} could not be read.`,
+        )
+      }
+      const markdown = replaceBrokenDocumentReference(read.data.document.markdown, proposal, replacementReference)
+      if (markdown === null) {
+        return error("CONFLICT", `The reference in ${proposal.sourceTitle} changed since this fix was proposed.`)
+      }
+      const mutation = await tools.edit({
+        documentId: proposal.sourceDocumentId,
+        markdown,
+        approval: approvals.edit,
+      })
+      if (mutation.error || !mutation.data) return mutation
+      return ok(mutation.data)
+    },
+    async findContradictions(documentIds, readApprovals, workflowReadApproval) {
       const uniqueDocumentIds = [...new Set(documentIds.filter(Boolean))]
       if (uniqueDocumentIds.length < 2) {
         return error("INVALID_INPUT", "At least two documents are required to compare contradictions.")
@@ -189,6 +270,9 @@ export async function createWorkspaceAgentService(
           return error("FORBIDDEN", `Reading document ${documentId} requires an explicit approval.`)
         }
       }
+
+      const context = await getContextWithWorkflow(workflowReadApproval)
+      if (context.error || !context.data) return context as ServiceResponse<ContradictionProposal[]>
 
       const documents: WorkspaceAgentContentSnapshot[] = []
       for (const documentId of uniqueDocumentIds) {
@@ -230,8 +314,8 @@ export async function createWorkspaceAgentService(
         mutation: mutation.data,
       })
     },
-    async suggestClassification(documentId, readApproval) {
-      const context = await getContext(readApproval)
+    async suggestClassification(documentId, workflowReadApproval) {
+      const context = await getContextWithWorkflow(workflowReadApproval)
       if (context.error || !context.data) return context as ServiceResponse<ClassificationProposal>
       const document = context.data.documents.find((record) => record.id === documentId)
       if (!document) return error("NOT_FOUND", `Document ${documentId} was not found in the workspace.`)
@@ -244,8 +328,8 @@ export async function createWorkspaceAgentService(
       if (Object.keys(metadata).length === 0) return error("INVALID_INPUT", "The classification proposal contains no vocabulary value to apply.")
       return tools.edit({ documentId: proposal.documentId, metadata, approval })
     },
-    async findArchiveCandidates(options, readApproval) {
-      const context = await getContext(readApproval)
+    async findArchiveCandidates(options, workflowReadApproval) {
+      const context = await getContextWithWorkflow(workflowReadApproval)
       if (context.error || !context.data) return context as ServiceResponse<ArchiveCandidate[]>
       const vocabulary = getVocabularyCatalogSnapshot()
       const classificationByDocument = new Map(

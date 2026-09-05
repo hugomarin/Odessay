@@ -30,6 +30,11 @@ export type DesktopWorkspaceSnapshot = {
   files: DesktopWorkspaceFile[]
 }
 
+export type DesktopWorkspaceAgentPathValidation = {
+  canonicalRoot: string
+  canonicalPath: string
+}
+
 export type DesktopWorkspaceTouchResult =
   | { status: "updated"; rootPath: string; bindingRootId: string; file: DesktopWorkspaceFile }
   | { status: "needsReconcile"; reason: string }
@@ -155,6 +160,18 @@ export async function tauriReadLocalImageAsset(
 
 export async function tauriWorkspaceCreate(parentPath: string, name: string): Promise<string> {
   return invoke<string>("workspace_create", { parentPath, name })
+}
+
+export async function tauriValidateWorkspaceAgentPath(
+  rootPath: string,
+  candidatePath: string,
+  allowMissing = false,
+): Promise<DesktopWorkspaceAgentPathValidation> {
+  return invoke<DesktopWorkspaceAgentPathValidation>("workspace_agent_validate_path", {
+    rootPath,
+    candidatePath,
+    allowMissing,
+  })
 }
 
 export async function tauriWorkspaceInspect(rootPath: string): Promise<DesktopWorkspaceSnapshot> {

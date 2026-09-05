@@ -5,6 +5,7 @@ import {
   relocateDesktopWriting,
 } from "@/lib/services/document-service-factory"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
+import { tauriValidateWorkspaceAgentPath } from "@/lib/services/desktop/tauri-commands"
 import {
   createDesktopWorkspaceAgentToolsService,
   type DesktopWorkspaceAgentToolsService,
@@ -27,6 +28,7 @@ export async function getWorkspaceAgentToolsService(
       documentService,
       importDocument: importDesktopWritingFile,
       relocateDocument: relocateDesktopWriting,
+      validatePath: tauriValidateWorkspaceAgentPath,
     }),
     error: null,
   }

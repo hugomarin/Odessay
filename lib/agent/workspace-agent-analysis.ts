@@ -45,6 +45,7 @@ export type BrokenReferenceProposal = {
   referenceKind: "path" | "slug"
   candidateDocumentId: string | null
   candidateTitle: string | null
+  suggestedReference: string | null
   evidence: EvidenceCitation[]
 }
 
@@ -116,6 +117,10 @@ function documentPath(record: DocumentCatalogRecord): string | null {
 
 function documentLabel(record: DocumentCatalogRecord): string {
   return record.title?.trim() || basename(documentPath(record) ?? record.id)
+}
+
+function documentReference(record: DocumentCatalogRecord, kind: "path" | "slug"): string | null {
+  return kind === "slug" ? record.slug : documentPath(record)
 }
 
 function tokenize(value: string | null | undefined): Set<string> {
@@ -267,6 +272,7 @@ export function detectBrokenDocumentReferences(records: DocumentCatalogRecord[])
         referenceKind: reference.kind,
         candidateDocumentId: candidate?.id ?? null,
         candidateTitle: candidate ? documentLabel(candidate) : null,
+        suggestedReference: candidate ? documentReference(candidate, reference.kind) : null,
         evidence: [
           { kind: "document", sourceId: source.id, label: documentLabel(source), detail: "catalog excerpt contains this reference" },
           ...(candidate ? [{ kind: "similarity" as const, sourceId: candidate.id, label: documentLabel(candidate), detail: `nearest catalog match (${Math.round((nearest?.score ?? 0) * 100)}%)` }] : []),
@@ -275,6 +281,59 @@ export function detectBrokenDocumentReferences(records: DocumentCatalogRecord[])
     }
   }
   return proposals
+}
+
+type ReferenceRange = { start: number; end: number }
+
+function referenceRange(markdown: string, proposal: BrokenReferenceProposal): ReferenceRange | null {
+  const expected = proposal.reference.toLocaleLowerCase()
+  if (proposal.referenceKind === "slug") {
+    const slugPattern = /(?:^|\s)#([a-z0-9][a-z0-9_-]{2,})\b/gi
+    for (const match of markdown.matchAll(slugPattern)) {
+      if (match[1]?.toLocaleLowerCase() !== expected) continue
+      const hashIndex = match[0].lastIndexOf("#")
+      if (hashIndex < 0 || match.index === undefined) continue
+      const start = match.index + hashIndex + 1
+      return { start, end: start + (match[1]?.length ?? 0) }
+    }
+    return null
+  }
+
+  const candidates = [
+    {
+      pattern: /\[[^\]]+\]\(([^)#]+)(?:#[^)]*)?\)/g,
+      valueOffset: (match: string) => match.indexOf("](") + 2,
+    },
+    {
+      pattern: /\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g,
+      valueOffset: () => 2,
+    },
+  ]
+  for (const candidate of candidates) {
+    for (const match of markdown.matchAll(candidate.pattern)) {
+      const raw = match[1]
+      if (!raw || normalizePath(raw.trim()).toLocaleLowerCase() !== normalizePath(expected).toLocaleLowerCase()) continue
+      const rawOffset = candidate.valueOffset(match[0])
+      const trimmed = raw.trim()
+      const valueOffset = raw.indexOf(trimmed)
+      if (rawOffset < 0 || valueOffset < 0 || match.index === undefined) continue
+      const start = match.index + rawOffset + valueOffset
+      return { start, end: start + trimmed.length }
+    }
+  }
+  return null
+}
+
+export function replaceBrokenDocumentReference(
+  markdown: string,
+  proposal: BrokenReferenceProposal,
+  replacement: string,
+): string | null {
+  const nextReference = replacement.trim()
+  if (!nextReference || /[\r\n]/.test(nextReference)) return null
+  const range = referenceRange(markdown, proposal)
+  if (!range) return null
+  return `${markdown.slice(0, range.start)}${nextReference}${markdown.slice(range.end)}`
 }
 
 function chooseVocabularyItem(
@@ -544,8 +603,25 @@ export function replaceContradictionFragment(
   replacement: string,
 ): string | null {
   if (fragment.start < 0 || fragment.end <= fragment.start || fragment.end > markdown.length) return null
-  if (markdown.slice(fragment.start, fragment.end) !== fragment.text) return null
-  return `${markdown.slice(0, fragment.start)}${replacement}${markdown.slice(fragment.end)}`
+
+  let start = fragment.start
+  if (markdown.slice(start, fragment.end) !== fragment.text) {
+    const matches: number[] = []
+    let candidate = markdown.indexOf(fragment.text)
+    while (candidate >= 0) {
+      matches.push(candidate)
+      candidate = markdown.indexOf(fragment.text, candidate + fragment.text.length)
+    }
+    if (matches.length === 0) return null
+
+    const distances = matches.map((match) => Math.abs(match - fragment.start))
+    const nearestDistance = Math.min(...distances)
+    const nearest = matches.filter((_, index) => distances[index] === nearestDistance)
+    if (nearest.length !== 1) return null
+    start = nearest[0]
+  }
+
+  return `${markdown.slice(0, start)}${replacement}${markdown.slice(start + fragment.text.length)}`
 }
 
 export function isWorkflowFilePath(path: string): boolean {
