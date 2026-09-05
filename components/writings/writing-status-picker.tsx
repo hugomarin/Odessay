@@ -6,8 +6,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { WritingStatus } from "@/lib/writings/status"
 import { getWritingStatusLabel } from "@/lib/writings/status"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
+import { VocabularyChip } from "@/components/ui/vocabulary-chip"
 import { useVocabulary } from "@/hooks/useVocabulary"
-import { listVisibleVocabulary } from "@/lib/vocabulary/resolve"
+import { getVocabularyColor, listVisibleVocabulary } from "@/lib/vocabulary/resolve"
 import { cn } from "@/lib/utils"
 
 type WritingStatusPickerProps = {
@@ -29,6 +30,7 @@ function StatusPickerItem({
   selected: boolean
   onSelect: () => void
 }) {
+  const catalog = useVocabulary()
   return (
     <button
       type="button"
@@ -38,9 +40,9 @@ function StatusPickerItem({
         selected && "font-medium text-ink",
       )}
     >
-      <span className={cn("flex shrink-0 items-center text-ink-4", selected && "text-ink-2")}>
-        <WritingStatusIcon status={status} />
-      </span>
+      <VocabularyChip color={getVocabularyColor(catalog, "status", status)} size={20}>
+        <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
+      </VocabularyChip>
       <span>{getWritingStatusLabel(status)}</span>
       {selected ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-ink" /> : null}
     </button>
@@ -70,9 +72,9 @@ export function WritingStatusPicker({
               className,
             )}
           >
-            <span className="flex shrink-0 items-center text-ink-3">
-              <WritingStatusIcon status={value} />
-            </span>
+            <VocabularyChip color={getVocabularyColor(catalog, "status", value)} size={20}>
+              <WritingStatusIcon status={value} className="h-[12px] w-[12px]" />
+            </VocabularyChip>
             <span className="flex-1 text-left">{getWritingStatusLabel(value)}</span>
             <ChevronDown className="h-3 w-3 shrink-0 text-ink-4" strokeWidth={1.5} />
           </button>

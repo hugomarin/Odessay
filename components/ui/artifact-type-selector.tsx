@@ -2,9 +2,10 @@
 
 import { ChevronDown } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ArtifactTypeGlyph } from "@/components/desk/artifact-type-icon"
+import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon"
+import { VocabularyChip } from "@/components/ui/vocabulary-chip"
 import { useVocabulary } from "@/hooks/useVocabulary"
-import { listVisibleVocabulary } from "@/lib/vocabulary/resolve"
+import { getVocabularyColor, listVisibleVocabulary } from "@/lib/vocabulary/resolve"
 import { getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 import { cn } from "@/lib/utils"
 
@@ -23,6 +24,7 @@ function ArtifactTypeItem({
   selected: boolean
   onSelect: () => void
 }) {
+  const catalog = useVocabulary()
   return (
     <button
       type="button"
@@ -32,9 +34,9 @@ function ArtifactTypeItem({
         selected && "font-medium text-ink",
       )}
     >
-      <span className={cn("flex shrink-0 items-center text-ink-4", selected && "text-ink-2")}>
-        <ArtifactTypeGlyph artifactType={artifactType} />
-      </span>
+      <VocabularyChip color={getVocabularyColor(catalog, "type", artifactType)} size={20}>
+        <ArtifactTypeIcon artifactType={artifactType} className="h-[12px] w-[12px]" />
+      </VocabularyChip>
       <span>{getArtifactTypeLabel(artifactType)}</span>
       {selected ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-ink" /> : null}
     </button>
@@ -52,9 +54,9 @@ export function ArtifactTypeSelector({ value, onChange, align = "start" }: Artif
           type="button"
           className="flex h-8 w-full items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted"
         >
-          <span className="flex shrink-0 items-center text-ink-3">
-            <ArtifactTypeGlyph artifactType={value} />
-          </span>
+          <VocabularyChip color={getVocabularyColor(catalog, "type", value)} size={20}>
+            <ArtifactTypeIcon artifactType={value} className="h-[12px] w-[12px]" />
+          </VocabularyChip>
           <span className="flex-1 text-left">{getArtifactTypeLabel(value)}</span>
           <ChevronDown className="h-3 w-3 shrink-0 text-ink-4" strokeWidth={1.5} />
         </button>

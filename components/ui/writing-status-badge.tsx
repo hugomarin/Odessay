@@ -1,8 +1,8 @@
 "use client"
 
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
+import { VocabularyChip } from "@/components/ui/vocabulary-chip"
 import { useVocabulary } from "@/hooks/useVocabulary"
-import { getStatusChipTint } from "@/lib/settings/vocabulary"
 import { getVocabularyColor } from "@/lib/vocabulary/resolve"
 import { getWritingStatusLabel, normalizeWritingStatus, type WritingStatus } from "@/lib/writings/status"
 import { cn } from "@/lib/utils"
@@ -16,10 +16,11 @@ type WritingStatusBadgeProps = {
 }
 
 /**
- * ODE-476: background and text derive from the catalog color through the one
- * tint formula the app uses everywhere (`getStatusChipTint`) — no per-status
- * Tailwind table. Requirement 3: the tint rule is the same rule everywhere,
- * not a second lookup table per component.
+ * ODE-476/icon punch pass: the "punch" chip — icon in its own tinted circle
+ * (`VocabularyChip`, same component every other surface uses) — replaces the
+ * tinted pill this used to be. The label stays plain text next to it, same
+ * as the tab/row/table treatment elsewhere, instead of sharing a colored
+ * background with the icon.
  */
 export function WritingStatusBadge({ status, variant = "full", className }: WritingStatusBadgeProps) {
   const catalog = useVocabulary()
@@ -32,17 +33,18 @@ export function WritingStatusBadge({ status, variant = "full", className }: Writ
     <span
       role="status"
       aria-label={`Status: ${label}`}
-      style={{ background: getStatusChipTint(color), color }}
       className={cn(
-        "inline-flex items-center gap-[5px] rounded-[6px] border-[0.5px] border-transparent font-sans font-medium",
-        isCompact ? "px-[6px] py-[2px] text-[10px]" : "px-2 py-0.5 text-[11px]",
+        "inline-flex items-center gap-[6px] font-sans font-medium text-ink-2",
+        isCompact ? "text-[10px]" : "text-[11px]",
         className,
       )}
     >
-      <WritingStatusIcon
-        status={normalized}
-        className={isCompact ? "h-[10px] w-[10px]" : "h-[11px] w-[11px]"}
-      />
+      <VocabularyChip color={color} size={isCompact ? 16 : 18}>
+        <WritingStatusIcon
+          status={normalized}
+          className={isCompact ? "h-[9px] w-[9px]" : "h-[10px] w-[10px]"}
+        />
+      </VocabularyChip>
       {label}
     </span>
   )

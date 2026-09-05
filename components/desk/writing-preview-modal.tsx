@@ -38,7 +38,8 @@ import { TablePropertySelector } from "@/components/ui/table-property-selector"
 import { getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 import { ArtifactTypeGlyph } from "@/components/desk/artifact-type-icon"
 import { useVocabulary } from "@/hooks/useVocabulary"
-import { listVisibleVocabulary } from "@/lib/vocabulary/resolve"
+import { getVocabularyColor, listVisibleVocabulary } from "@/lib/vocabulary/resolve"
+import { VocabularyChip } from "@/components/ui/vocabulary-chip"
 import { createSharingService } from "@/lib/services/sharing-service-factory"
 import {
   DEFAULT_PREVIEW_LINK_STATE,
@@ -740,7 +741,11 @@ export function WritingPreviewModal({
                   {row ? (
                     <TablePropertySelector
                       ariaLabel={`Change status for ${row.title}`}
-                      icon={<WritingStatusIcon status={row.stateTone} />}
+                      icon={
+                        <VocabularyChip color={getVocabularyColor(catalog, "status", row.stateTone)} size={20}>
+                          <WritingStatusIcon status={row.stateTone} className="h-[12px] w-[12px]" />
+                        </VocabularyChip>
+                      }
                       label={row.stateLabel}
                       variant="preview"
                       contentClassName="w-[248px]"
@@ -748,7 +753,11 @@ export function WritingPreviewModal({
                         {enabledStatuses.map((status) => (
                           <PreviewMenuItem
                             key={status}
-                            icon={<WritingStatusIcon status={status} />}
+                            icon={
+                              <VocabularyChip color={getVocabularyColor(catalog, "status", status)} size={20}>
+                                <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
+                              </VocabularyChip>
+                            }
                             label={getWritingStatusLabel(status)}
                             onSelect={() => {
                               void onStatusChange?.(row.id, status)
@@ -762,8 +771,29 @@ export function WritingPreviewModal({
                 <section className="flex flex-col gap-2">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-5">Artifact Type</p>
                   {row ? (
-                    <TablePropertySelector ariaLabel={`Change artifact type for ${row.title}`} icon={<ArtifactTypeGlyph artifactType={row.artifactType ?? "general"} className="h-[13px] w-[13px] shrink-0 text-ink-3" />} label={getArtifactTypeLabel(row.artifactType ?? "general")} variant="preview" contentClassName="w-[248px]">
-                      {enabledArtifactTypes.map((artifactType) => <PreviewMenuItem key={artifactType} icon={<ArtifactTypeGlyph artifactType={artifactType} className="h-[13px] w-[13px] shrink-0 text-ink-3" />} label={getArtifactTypeLabel(artifactType)} onSelect={() => void onArtifactTypeChange?.(row.id, artifactType)} />)}
+                    <TablePropertySelector
+                      ariaLabel={`Change artifact type for ${row.title}`}
+                      icon={
+                        <VocabularyChip color={getVocabularyColor(catalog, "type", row.artifactType ?? "general")} size={20}>
+                          <ArtifactTypeGlyph artifactType={row.artifactType ?? "general"} className="h-[12px] w-[12px] shrink-0" />
+                        </VocabularyChip>
+                      }
+                      label={getArtifactTypeLabel(row.artifactType ?? "general")}
+                      variant="preview"
+                      contentClassName="w-[248px]"
+                    >
+                      {enabledArtifactTypes.map((artifactType) => (
+                        <PreviewMenuItem
+                          key={artifactType}
+                          icon={
+                            <VocabularyChip color={getVocabularyColor(catalog, "type", artifactType)} size={20}>
+                              <ArtifactTypeGlyph artifactType={artifactType} className="h-[12px] w-[12px] shrink-0" />
+                            </VocabularyChip>
+                          }
+                          label={getArtifactTypeLabel(artifactType)}
+                          onSelect={() => void onArtifactTypeChange?.(row.id, artifactType)}
+                        />
+                      ))}
                     </TablePropertySelector>
                   ) : null}
                 </section>

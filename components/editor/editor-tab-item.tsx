@@ -3,6 +3,9 @@
 import { Loader2, Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
+import { VocabularyChip } from "@/components/ui/vocabulary-chip";
+import { useVocabulary } from "@/hooks/useVocabulary";
+import { getVocabularyColor } from "@/lib/vocabulary/resolve";
 import type { WritingStatus } from "@/lib/writings/status";
 import type { LocalEditorSessionTab } from "@/lib/local-db/schema";
 import type { PointerEventHandler } from "react";
@@ -45,6 +48,9 @@ export function EditorTabItem({
   onPointerUp,
   onPointerCancel,
 }: EditorTabItemProps) {
+  const catalog = useVocabulary()
+  const statusColor = getVocabularyColor(catalog, "status", status ?? "draft")
+
   return (
     <div
       data-editor-tab-id={tab.id}
@@ -81,15 +87,14 @@ export function EditorTabItem({
       {/* The state glyph steps aside on hover so the close affordance can take
           its place — on every tab, not just the active one, or the two icons
           would stack on top of each other. */}
-      <span
+      <VocabularyChip
+        color={statusColor}
+        size={22}
+        className="pointer-events-none relative z-10 opacity-100 transition-opacity duration-100 ease-out group-hover:opacity-0"
         aria-hidden="true"
-        className={cn(
-          "pointer-events-none relative z-10 flex shrink-0 items-center opacity-100 transition-opacity duration-100 ease-out group-hover:opacity-0",
-          active ? "text-ink" : "text-ink-5",
-        )}
       >
-        <WritingStatusIcon status={status ?? "draft"} className="h-[16px] w-[16px]" />
-      </span>
+        <WritingStatusIcon status={status ?? "draft"} className="h-[13px] w-[13px]" />
+      </VocabularyChip>
 
       {/* The close affordance replaces the glyph on hover, as in the prototype,
           so the tab keeps its 200px measure whatever the pointer is doing. */}

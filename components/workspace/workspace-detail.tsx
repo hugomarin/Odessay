@@ -93,7 +93,8 @@ import {
   type ArtifactType,
 } from "@/lib/writings/artifact-type";
 import { useVocabulary } from "@/hooks/useVocabulary";
-import { listVisibleVocabulary, orderGroupKeysByCatalog } from "@/lib/vocabulary/resolve";
+import { getVocabularyColor, listVisibleVocabulary, orderGroupKeysByCatalog } from "@/lib/vocabulary/resolve";
+import { VocabularyChip } from "@/components/ui/vocabulary-chip";
 import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer";
 import {
   APP_SHELL_CONTENT_GUTTER_CLASS,
@@ -869,7 +870,11 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 readOnly={!hasDocument}
                 className="min-w-[128px]"
                 ariaLabel={`Change status for ${file.name}`}
-                icon={<WritingStatusIcon status={status} />}
+                icon={
+                  <VocabularyChip color={getVocabularyColor(catalog, "status", status)} size={20}>
+                    <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
+                  </VocabularyChip>
+                }
                 label={getWritingStatusLabel(status)}
                 contentClassName="w-[248px]"
               >
@@ -884,7 +889,9 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                       }}
                     >
                       <span className="flex items-center gap-2">
-                        <WritingStatusIcon status={status} />
+                        <VocabularyChip color={getVocabularyColor(catalog, "status", status)} size={20}>
+                          <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
+                        </VocabularyChip>
                         {getWritingStatusLabel(status)}
                       </span>
                       {normalizeWritingStatus(document?.status ?? "draft") ===
@@ -913,10 +920,15 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
           return (
             <div onClick={(event) => event.stopPropagation()}>
               <TablePropertySelector
+                variant="preview"
                 readOnly={!hasDocument}
                 className="min-w-[140px]"
                 ariaLabel={`Change artifact type for ${file.name}`}
-                icon={<ArtifactTypeIcon artifactType={artifactType} />}
+                icon={
+                  <VocabularyChip color={getVocabularyColor(catalog, "type", artifactType)} size={20}>
+                    <ArtifactTypeIcon artifactType={artifactType} className="h-[12px] w-[12px]" />
+                  </VocabularyChip>
+                }
                 label={getArtifactTypeLabel(artifactType)}
                 contentClassName="w-[248px]"
               >
@@ -931,7 +943,9 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                       }}
                     >
                       <span className="flex items-center gap-3">
-                        <ArtifactTypeIcon artifactType={artifactType} />
+                        <VocabularyChip color={getVocabularyColor(catalog, "type", artifactType)} size={20}>
+                          <ArtifactTypeIcon artifactType={artifactType} className="h-[12px] w-[12px]" />
+                        </VocabularyChip>
                         {getArtifactTypeLabel(artifactType)}
                       </span>
                       {(document?.artifactType ?? "general") ===
@@ -1019,6 +1033,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       openInEditor,
       openRenameWriting,
       openWritingPreview,
+      catalog,
     ],
   );
 

@@ -26,7 +26,8 @@ import type {
 import type { WritingStatus } from "@/lib/writings/status";
 import { getWritingStatusLabel } from "@/lib/writings/status";
 import { useVocabulary } from "@/hooks/useVocabulary";
-import { listVisibleVocabulary } from "@/lib/vocabulary/resolve";
+import { getVocabularyColor, listVisibleVocabulary } from "@/lib/vocabulary/resolve";
+import { VocabularyChip } from "@/components/ui/vocabulary-chip";
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
 import { WorkspaceAssignmentDropdown } from "@/components/desk/workspace-assignment-dropdown";
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu";
@@ -236,7 +237,11 @@ export function DeskActivityTable({
             <TablePropertySelector
               variant="preview"
               ariaLabel={`Change status for ${row.title}`}
-              icon={<WritingStatusIcon status={row.stateTone} />}
+              icon={
+                <VocabularyChip color={getVocabularyColor(catalog, "status", row.stateTone)} size={20}>
+                  <WritingStatusIcon status={row.stateTone} className="h-[12px] w-[12px]" />
+                </VocabularyChip>
+              }
               label={row.stateLabel}
               className="min-w-[128px]"
               contentClassName="w-[248px]"
@@ -252,7 +257,9 @@ export function DeskActivityTable({
                   }}
                 >
                   <span className="flex items-center gap-2">
-                    <WritingStatusIcon status={status} />
+                    <VocabularyChip color={getVocabularyColor(catalog, "status", status)} size={20}>
+                      <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
+                    </VocabularyChip>
                     {getWritingStatusLabel(status)}
                   </span>
                   {row.stateTone === status ? (
@@ -277,9 +284,15 @@ export function DeskActivityTable({
             <TablePropertySelector
               ariaLabel={`Change artifact type for ${row.title}`}
               icon={
-                <ArtifactTypeIcon
-                  artifactType={row.artifactType ?? "general"}
-                />
+                <VocabularyChip
+                  color={getVocabularyColor(catalog, "type", row.artifactType ?? "general")}
+                  size={20}
+                >
+                  <ArtifactTypeIcon
+                    artifactType={row.artifactType ?? "general"}
+                    className="h-[12px] w-[12px]"
+                  />
+                </VocabularyChip>
               }
               label={getArtifactTypeLabel(row.artifactType ?? "general")}
               className="min-w-[140px]"
@@ -296,7 +309,9 @@ export function DeskActivityTable({
                   }}
                 >
                   <span className="flex items-center gap-3">
-                    <ArtifactTypeIcon artifactType={artifactType} />
+                    <VocabularyChip color={getVocabularyColor(catalog, "type", artifactType)} size={20}>
+                      <ArtifactTypeIcon artifactType={artifactType} className="h-[12px] w-[12px]" />
+                    </VocabularyChip>
                     {getArtifactTypeLabel(artifactType)}
                   </span>
                   {(row.artifactType ?? "general") === artifactType ? (
@@ -438,6 +453,7 @@ export function DeskActivityTable({
       collectionIdsByWritingId,
       onToggleCollection,
       onCreateCollection,
+      catalog,
     ],
   );
 

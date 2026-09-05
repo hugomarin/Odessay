@@ -64,7 +64,8 @@ import {
   type ArtifactType,
 } from "@/lib/writings/artifact-type";
 import { useVocabulary } from "@/hooks/useVocabulary";
-import { listVisibleVocabulary } from "@/lib/vocabulary/resolve";
+import { getVocabularyColor, listVisibleVocabulary } from "@/lib/vocabulary/resolve";
+import { VocabularyChip } from "@/components/ui/vocabulary-chip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -1542,7 +1543,11 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 readOnly={!hasDocument}
                 className="min-w-[128px]"
                 ariaLabel={`Change status for ${file.name}`}
-                icon={<WritingStatusIcon status={status} />}
+                icon={
+                  <VocabularyChip color={getVocabularyColor(catalog, "status", status)} size={20}>
+                    <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
+                  </VocabularyChip>
+                }
                 label={getWritingStatusLabel(status)}
                 contentClassName="w-[248px]"
               >
@@ -1557,7 +1562,9 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                       }}
                     >
                       <span className="flex items-center gap-2">
-                        <WritingStatusIcon status={status} />
+                        <VocabularyChip color={getVocabularyColor(catalog, "status", status)} size={20}>
+                          <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
+                        </VocabularyChip>
                         {getWritingStatusLabel(status)}
                       </span>
                       {normalizeWritingStatus(
@@ -1588,10 +1595,15 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
           return (
             <div onClick={(event) => event.stopPropagation()}>
               <TablePropertySelector
+                variant="preview"
                 readOnly={!hasDocument}
                 className="min-w-[140px]"
                 ariaLabel={`Change artifact type for ${file.name}`}
-                icon={<ArtifactTypeIcon artifactType={artifactType} />}
+                icon={
+                  <VocabularyChip color={getVocabularyColor(catalog, "type", artifactType)} size={20}>
+                    <ArtifactTypeIcon artifactType={artifactType} className="h-[12px] w-[12px]" />
+                  </VocabularyChip>
+                }
                 label={getArtifactTypeLabel(artifactType)}
                 contentClassName="w-[248px]"
               >
@@ -1606,7 +1618,9 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                       }}
                     >
                       <span className="flex items-center gap-3">
-                        <ArtifactTypeIcon artifactType={artifactType} />
+                        <VocabularyChip color={getVocabularyColor(catalog, "type", artifactType)} size={20}>
+                          <ArtifactTypeIcon artifactType={artifactType} className="h-[12px] w-[12px]" />
+                        </VocabularyChip>
                         {getArtifactTypeLabel(artifactType)}
                       </span>
                       {(document?.artifactType ?? "general") ===
@@ -1717,6 +1731,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       openRenameWriting,
       openWritingPreview,
       workspace?.name,
+      catalog,
     ],
   );
 
