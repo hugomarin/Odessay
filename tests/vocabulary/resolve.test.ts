@@ -36,7 +36,7 @@ describe("resolveVocabularyItem", () => {
     // The raw key is the label — never blank, never "undefined".
     expect(resolved.name).toBe("some-deleted-custom-status")
     expect(resolved.icon).toBeNull()
-    // Neutral color is one of the six admissible palette hexes (Grey).
+    // Neutral color is one of the admissible palette hexes (Grey).
     expect(VOCABULARY_COLORS.some((c) => c.hex === resolved.color)).toBe(true)
   })
 

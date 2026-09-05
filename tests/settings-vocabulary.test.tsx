@@ -133,7 +133,7 @@ describe("Settings vocabulary", () => {
     expect(container.querySelectorAll('[data-testid^="vocabulary-item-"]')).toHaveLength(before)
   })
 
-  it("offers exactly twelve type icons and six colors", async () => {
+  it("offers exactly thirty-two type icons and twelve colors", async () => {
     await render(<ArtifactTypeSettings />)
     await click(byText("Edit", container))
 
@@ -141,12 +141,12 @@ describe("Settings vocabulary", () => {
     expect(grids[0].querySelectorAll('[role="radio"]')).toHaveLength(
       ARTIFACT_TYPE_ICON_NAMES.length,
     )
-    expect(ARTIFACT_TYPE_ICON_NAMES).toHaveLength(12)
+    expect(ARTIFACT_TYPE_ICON_NAMES).toHaveLength(32)
     expect(grids[1].querySelectorAll('[role="radio"]')).toHaveLength(VOCABULARY_COLORS.length)
-    expect(VOCABULARY_COLORS).toHaveLength(6)
+    expect(VOCABULARY_COLORS).toHaveLength(12)
   })
 
-  it("offers exactly eight status icons", async () => {
+  it("offers exactly twenty-six status icons", async () => {
     await render(<WritingStatusSettings />)
     await click(byText("Edit", container))
 
@@ -154,7 +154,7 @@ describe("Settings vocabulary", () => {
     expect(grids[0].querySelectorAll('[role="radio"]')).toHaveLength(
       WRITING_STATUS_ICON_NAMES.length,
     )
-    expect(WRITING_STATUS_ICON_NAMES).toHaveLength(8)
+    expect(WRITING_STATUS_ICON_NAMES).toHaveLength(26)
   })
 
   it("shows the lock note instead of a delete action on a built-in item", async () => {
@@ -198,7 +198,7 @@ describe("Settings vocabulary", () => {
 })
 
 describe("Settings vocabulary seeds", () => {
-  it("keeps the palette in the order the prototype declares", () => {
+  it("keeps the palette in the order the prototype declares, brighter additions after", () => {
     expect(VOCABULARY_COLORS.map((color) => color.name)).toEqual([
       "Ink",
       "Terracotta",
@@ -206,6 +206,12 @@ describe("Settings vocabulary seeds", () => {
       "Green",
       "Violet",
       "Grey",
+      "Red",
+      "Pink",
+      "Blue",
+      "Lime",
+      "Orange",
+      "Yellow",
     ])
   })
 

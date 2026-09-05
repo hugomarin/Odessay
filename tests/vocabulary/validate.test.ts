@@ -17,13 +17,18 @@ describe("isValidVocabularyIcon", () => {
   })
 
   it("rejects an icon outside both closed sets", () => {
-    expect(isValidVocabularyIcon("type", "rocket")).toBe(false)
+    expect(isValidVocabularyIcon("type", "nonexistent-icon")).toBe(false)
+    expect(isValidVocabularyIcon("status", "nonexistent-icon")).toBe(false)
+  })
+
+  it("rocket is a type icon, not a status icon", () => {
+    expect(isValidVocabularyIcon("type", "rocket")).toBe(true)
     expect(isValidVocabularyIcon("status", "rocket")).toBe(false)
   })
 })
 
 describe("isValidVocabularyColor", () => {
-  it("accepts one of the six admissible hex colors, case-insensitively", () => {
+  it("accepts one of the admissible hex colors, case-insensitively", () => {
     expect(isValidVocabularyColor("#5B5BD6")).toBe(true)
     expect(isValidVocabularyColor("#5b5bd6")).toBe(true)
   })
@@ -55,7 +60,7 @@ describe("validateVocabularyItemFields", () => {
     expect(errors.some((e) => e.field === "icon")).toBe(true)
   })
 
-  it("rejects a color outside the six admissible colors", () => {
+  it("rejects a color outside the admissible colors", () => {
     const errors = validateVocabularyItemFields("type", { color: "#123456" })
     expect(errors.some((e) => e.field === "color")).toBe(true)
   })

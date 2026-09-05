@@ -264,7 +264,7 @@ describe("status colour (ODE-474)", () => {
       const color = getVocabularyColor(catalog, "status", status)
       expect(color).toMatch(/^#[0-9A-Fa-f]{6}$/)
       // A user's vocabulary colour, not a design token: it must be one of
-      // the six admissible palette hexes, not an arbitrary/legacy value.
+      // the admissible palette hexes, not an arbitrary/legacy value.
       expect(VOCABULARY_COLORS.some((c) => c.hex.toLowerCase() === color.toLowerCase())).toBe(true)
     }
   })

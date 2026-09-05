@@ -65,7 +65,7 @@ export function validateVocabularyItemFields(
   }
 
   if (fields.color !== undefined && !isValidVocabularyColor(fields.color)) {
-    errors.push({ field: "color", message: `"${fields.color}" is not one of the six admissible colors.` })
+    errors.push({ field: "color", message: `"${fields.color}" is not one of the admissible colors.` })
   }
 
   return errors

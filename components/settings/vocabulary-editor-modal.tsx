@@ -266,10 +266,11 @@ export function VocabularyEditorModal({
               aria-checked={selected}
               aria-label={name}
               onClick={() => patch({ icon: name })}
+              style={selected ? { color: draft.color } : undefined}
               className={cn(
                 "inline-flex h-[38px] w-[38px] items-center justify-center rounded-[9px] border-[0.5px] transition-colors hover:border-ink-5",
                 selected
-                  ? "border-ink bg-surface-menu-hover text-ink"
+                  ? "border-ink bg-surface-menu-hover"
                   : "border-border bg-sb text-ink-4",
               )}
             >

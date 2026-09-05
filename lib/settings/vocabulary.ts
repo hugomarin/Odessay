@@ -44,6 +44,14 @@ export const VOCABULARY_COLORS: readonly VocabularyColor[] = [
   { id: "green", name: "Green", hex: "#2E7D4F", tint: "#E4F0E7" },
   { id: "violet", name: "Violet", hex: "#5B5BD6", tint: "#E7E7FA" },
   { id: "grey", name: "Grey", hex: "#8E837B", tint: "#EFEDEA" },
+  // Brighter additions (user request, 2026-09-05) — same six muted tones
+  // above stay put, these sit alongside them for more punch.
+  { id: "red", name: "Red", hex: "#E5484D", tint: "#FCE9EA" },
+  { id: "pink", name: "Pink", hex: "#E93D82", tint: "#FCE8F0" },
+  { id: "blue", name: "Blue", hex: "#0090FF", tint: "#E0F2FF" },
+  { id: "lime", name: "Lime", hex: "#AAD500", tint: "#F5FAE0" },
+  { id: "orange", name: "Orange", hex: "#FF8C1A", tint: "#FFF1E4" },
+  { id: "yellow", name: "Yellow", hex: "#F5D90A", tint: "#FEFAE2" },
 ] as const
 
 const TINT_BY_HEX = new Map(VOCABULARY_COLORS.map((color) => [color.hex.toLowerCase(), color.tint]))
@@ -53,7 +61,11 @@ export function getVocabularyTint(hex: string): string {
   return TINT_BY_HEX.get(hex.toLowerCase()) ?? "#EFEDEA"
 }
 
-/** Exactly the twelve the prototype's `TYPE_ICONS` declares — requirement 7. */
+/**
+ * The prototype's `TYPE_ICONS` declares the first twelve — requirement 7.
+ * Extended with 20 more (user request, 2026-09-05) for more variety when
+ * naming a custom artifact type.
+ */
 export const ARTIFACT_TYPE_ICON_NAMES = [
   "file-text",
   "bot",
@@ -67,9 +79,33 @@ export const ARTIFACT_TYPE_ICON_NAMES = [
   "quote",
   "list-checks",
   "mic",
+  "code",
+  "image",
+  "video",
+  "link",
+  "calendar",
+  "map",
+  "clipboard",
+  "lightbulb",
+  "rocket",
+  "puzzle",
+  "shield",
+  "users",
+  "briefcase",
+  "graduation-cap",
+  "music",
+  "camera",
+  "terminal",
+  "database",
+  "pen-tool",
+  "folder",
 ] as const
 
-/** Exactly the eight the prototype's `STATUS_ICONS` declares — requirement 7. */
+/**
+ * The prototype's `STATUS_ICONS` declares the first eight — requirement 7.
+ * Extended with 18 more (user request, 2026-09-05) for more variety when
+ * naming a custom writing status.
+ */
 export const WRITING_STATUS_ICON_NAMES = [
   "circle-dot",
   "circle-dashed",
@@ -79,6 +115,24 @@ export const WRITING_STATUS_ICON_NAMES = [
   "archive",
   "circle-x",
   "flame",
+  "clock",
+  "alert-triangle",
+  "hourglass",
+  "thumbs-up",
+  "star",
+  "bookmark",
+  "lock",
+  "unlock",
+  "zap",
+  "send",
+  "inbox",
+  "shield-check",
+  "flag",
+  "trending-up",
+  "rotate-cw",
+  "pin",
+  "ban",
+  "pause",
 ] as const
 
 export type VocabularyIconName =
