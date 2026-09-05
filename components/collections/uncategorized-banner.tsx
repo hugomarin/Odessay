@@ -5,6 +5,7 @@ import { Check, ChevronDown, FolderPlus, Sparkles } from "lucide-react"
 import type { LocalCollection, LocalWriting } from "@/lib/local-db/schema"
 import { cn } from "@/lib/utils"
 import { getWritingStatusLabel } from "@/lib/writings/status"
+import { useVocabulary } from "@/hooks/useVocabulary"
 
 type UncategorizedBannerProps = {
   writings: LocalWriting[]
@@ -23,6 +24,7 @@ export function UncategorizedBanner({
   onAssign,
   onCreateCollection,
 }: UncategorizedBannerProps) {
+  useVocabulary() // repaint status labels on catalog change — ODE-476 requirement 9
   const [open, setOpen] = useState(true)
   const [newCollectionName, setNewCollectionName] = useState("")
   const selectedCount = selectedIds.length

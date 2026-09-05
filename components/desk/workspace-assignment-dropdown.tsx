@@ -107,7 +107,7 @@ export function WorkspaceAssignmentDropdown({
       <button
         type="button"
         aria-label={`Manage workspace for ${title}`}
-        className="flex h-[38px] w-full items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-sb px-[11px] text-[13px] text-ink-2 transition-colors hover:border-ink-6 hover:bg-surface-row-hover data-[state=open]:border-ink-5 data-[state=open]:bg-surface-row-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+        className="flex h-[38px] w-full items-center gap-2 rounded-[8px] bg-sb px-[11px] text-[13px] text-ink-2 transition-colors hover:bg-surface-row-hover data-[state=open]:bg-surface-row-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
       >
         <TriggerIcon className="h-[14px] w-[14px] flex-shrink-0 text-ink-3" strokeWidth={1.5} />
         <span className="flex-1 truncate text-left">{triggerLabel}</span>

@@ -24,10 +24,10 @@ import type {
   DeskActivityRow,
 } from "@/lib/queries/desk-activity";
 import type { WritingStatus } from "@/lib/writings/status";
-import {
-  getWritingStatusLabel,
-  WRITING_STATUS_VALUES,
-} from "@/lib/writings/status";
+import { getWritingStatusLabel } from "@/lib/writings/status";
+import { useVocabulary } from "@/hooks/useVocabulary";
+import { getVocabularyColor, listVisibleVocabulary } from "@/lib/vocabulary/resolve";
+import { VocabularyChip } from "@/components/ui/vocabulary-chip";
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
 import { WorkspaceAssignmentDropdown } from "@/components/desk/workspace-assignment-dropdown";
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu";
@@ -43,9 +43,7 @@ import type { ArtifactTableColumn } from "@/components/shared/artifact-table-typ
 import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
 import { TablePropertySelector } from "@/components/ui/table-property-selector";
-import { useUserSettingsContext } from "@/components/settings/user-settings-provider";
 import {
-  ARTIFACT_TYPE_VALUES,
   getArtifactTypeLabel,
   type ArtifactType,
 } from "@/lib/writings/artifact-type";
@@ -124,7 +122,7 @@ export function DeskActivityTable({
 }: DeskActivityTableProps) {
   const router = useRouter();
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const { settings } = useUserSettingsContext();
+  const catalog = useVocabulary();
   const selectionEnabled = Boolean(onToggleSelection);
 
   const renderSelection = (row: DeskActivityRow) => {
@@ -139,11 +137,12 @@ export function DeskActivityTable({
   };
 
   const enabledStatuses = useMemo(
-    () =>
-      WRITING_STATUS_VALUES.filter(
-        (status) => !settings.disabledStatuses.includes(status),
-      ),
-    [settings.disabledStatuses],
+    () => listVisibleVocabulary(catalog, "status").map((item) => item.key),
+    [catalog],
+  );
+  const enabledArtifactTypes = useMemo(
+    () => listVisibleVocabulary(catalog, "type").map((item) => item.key),
+    [catalog],
   );
   const tableGroups = useMemo(
     () => groups.map((group) => ({ label: group.label, items: group.rows })),
@@ -238,7 +237,11 @@ export function DeskActivityTable({
             <TablePropertySelector
               variant="preview"
               ariaLabel={`Change status for ${row.title}`}
-              icon={<WritingStatusIcon status={row.stateTone} />}
+              icon={
+                <VocabularyChip color={getVocabularyColor(catalog, "status", row.stateTone)} size={20}>
+                  <WritingStatusIcon status={row.stateTone} className="h-[12px] w-[12px]" />
+                </VocabularyChip>
+              }
               label={row.stateLabel}
               className="min-w-[128px]"
               contentClassName="w-[248px]"
@@ -254,7 +257,9 @@ export function DeskActivityTable({
                   }}
                 >
                   <span className="flex items-center gap-2">
-                    <WritingStatusIcon status={status} />
+                    <VocabularyChip color={getVocabularyColor(catalog, "status", status)} size={20}>
+                      <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
+                    </VocabularyChip>
                     {getWritingStatusLabel(status)}
                   </span>
                   {row.stateTone === status ? (
@@ -279,16 +284,22 @@ export function DeskActivityTable({
             <TablePropertySelector
               ariaLabel={`Change artifact type for ${row.title}`}
               icon={
-                <ArtifactTypeIcon
-                  artifactType={row.artifactType ?? "general"}
-                />
+                <VocabularyChip
+                  color={getVocabularyColor(catalog, "type", row.artifactType ?? "general")}
+                  size={20}
+                >
+                  <ArtifactTypeIcon
+                    artifactType={row.artifactType ?? "general"}
+                    className="h-[12px] w-[12px]"
+                  />
+                </VocabularyChip>
               }
               label={getArtifactTypeLabel(row.artifactType ?? "general")}
               className="min-w-[140px]"
               contentClassName="w-[248px]"
               onClick={stopRowNavigation}
             >
-              {ARTIFACT_TYPE_VALUES.map((artifactType) => (
+              {enabledArtifactTypes.map((artifactType) => (
                 <DropdownMenuItem
                   key={artifactType}
                   className="h-11 cursor-pointer items-center justify-between rounded-[10px] px-3 text-[14px]"
@@ -298,7 +309,9 @@ export function DeskActivityTable({
                   }}
                 >
                   <span className="flex items-center gap-3">
-                    <ArtifactTypeIcon artifactType={artifactType} />
+                    <VocabularyChip color={getVocabularyColor(catalog, "type", artifactType)} size={20}>
+                      <ArtifactTypeIcon artifactType={artifactType} className="h-[12px] w-[12px]" />
+                    </VocabularyChip>
                     {getArtifactTypeLabel(artifactType)}
                   </span>
                   {(row.artifactType ?? "general") === artifactType ? (
@@ -421,6 +434,7 @@ export function DeskActivityTable({
     ],
     [
       enabledStatuses,
+      enabledArtifactTypes,
       onCopyMarkdown,
       onDownloadMarkdown,
       onPreviewWriting,
@@ -439,6 +453,7 @@ export function DeskActivityTable({
       collectionIdsByWritingId,
       onToggleCollection,
       onCreateCollection,
+      catalog,
     ],
   );
 

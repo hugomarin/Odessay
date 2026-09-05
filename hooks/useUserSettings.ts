@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import type { WritingStatus } from "@/lib/writings/status"
 import type { UserSettings } from "@/lib/user/settings"
+import type { VocabularyItem } from "@/lib/vocabulary/types"
 
 type UserSettingsState = {
   settings: UserSettings
@@ -12,12 +13,15 @@ type UserSettingsState = {
 
 const DEFAULT_SETTINGS: UserSettings = {
   disabledStatuses: [],
+  vocabulary: [],
 }
+
+type SettingsPayload = { disabledStatuses: WritingStatus[]; vocabulary: VocabularyItem[] }
 
 async function fetchSettings(): Promise<UserSettings> {
   const response = await fetch("/api/user/settings", { method: "GET" })
   const payload = (await response.json()) as {
-    data: { disabledStatuses: WritingStatus[] } | null
+    data: SettingsPayload | null
     error: { code: string; message: string } | null
   }
 
@@ -27,6 +31,7 @@ async function fetchSettings(): Promise<UserSettings> {
 
   return {
     disabledStatuses: payload.data.disabledStatuses,
+    vocabulary: payload.data.vocabulary,
   }
 }
 
@@ -40,7 +45,7 @@ async function patchSettings(updates: Partial<UserSettings>): Promise<UserSettin
   })
 
   const payload = (await response.json()) as {
-    data: { disabledStatuses: WritingStatus[] } | null
+    data: SettingsPayload | null
     error: { code: string; message: string } | null
   }
 
@@ -50,6 +55,7 @@ async function patchSettings(updates: Partial<UserSettings>): Promise<UserSettin
 
   return {
     disabledStatuses: payload.data.disabledStatuses,
+    vocabulary: payload.data.vocabulary,
   }
 }
 

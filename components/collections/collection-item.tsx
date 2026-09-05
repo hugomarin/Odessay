@@ -7,6 +7,7 @@ import type { LocalCollection } from "@/lib/local-db/schema"
 import type { CollectionWritingItem } from "@/lib/collections/collections"
 import { cn } from "@/lib/utils"
 import { getWritingStatusLabel } from "@/lib/writings/status"
+import { useVocabulary } from "@/hooks/useVocabulary"
 
 type CollectionItemProps = {
   collection: LocalCollection
@@ -29,6 +30,7 @@ export function CollectionItem({
   onSave,
   onDelete,
 }: CollectionItemProps) {
+  useVocabulary() // repaint status labels on catalog change — ODE-476 requirement 9
   const [isEditing, setIsEditing] = useState(false)
   const [name, setName] = useState(collection.name)
   const [description, setDescription] = useState(collection.description ?? "")

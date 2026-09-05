@@ -5,12 +5,13 @@ import { useMemo, useState } from "react"
 import { DeskArtifactRow } from "@/components/desk/desk-artifact-row"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge"
-import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
+import { useVocabulary } from "@/hooks/useVocabulary"
+import { listVisibleVocabulary } from "@/lib/vocabulary/resolve"
 import { SELECTION_BAR_SHEET_ATTR } from "@/components/shared/selection-bar"
 import type { DeskActivityGroup, DeskActivityRow } from "@/lib/queries/desk-activity"
 import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
-import { WRITING_STATUS_VALUES, type WritingStatus } from "@/lib/writings/status"
+import type { WritingStatus } from "@/lib/writings/status"
 
 /**
  * The Desk's scrolling list: group labels and artifact rows inside the sheet.
@@ -70,13 +71,17 @@ export function DeskArtifactList({
   onDeleteRequest,
   absoluteDates,
 }: DeskArtifactListProps) {
-  const { settings } = useUserSettingsContext()
+  const catalog = useVocabulary()
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
 
   const enabledStatuses = useMemo(
-    () => WRITING_STATUS_VALUES.filter((status) => !settings.disabledStatuses.includes(status)),
-    [settings.disabledStatuses],
+    () => listVisibleVocabulary(catalog, "status").map((item) => item.key),
+    [catalog],
+  )
+  const enabledArtifactTypes = useMemo(
+    () => listVisibleVocabulary(catalog, "type").map((item) => item.key),
+    [catalog],
   )
 
   const clearRowError = (id: string) =>
@@ -153,6 +158,7 @@ export function DeskArtifactList({
                       onToggleSelection={onToggleSelection}
                       onActivate={onActivate}
                       enabledStatuses={enabledStatuses}
+                      enabledArtifactTypes={enabledArtifactTypes}
                       onStatusChange={(writingId, status) =>
                         runRowMutation(writingId, "Couldn't change the status. Try again.", () =>
                           Promise.resolve(onStatusChange?.(writingId, status)).then(() => undefined),

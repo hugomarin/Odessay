@@ -1,6 +1,9 @@
 "use client"
 
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
+import { VocabularyChip } from "@/components/ui/vocabulary-chip"
+import { useVocabulary } from "@/hooks/useVocabulary"
+import { getVocabularyColor } from "@/lib/vocabulary/resolve"
 import { getWritingStatusLabel, normalizeWritingStatus, type WritingStatus } from "@/lib/writings/status"
 import { cn } from "@/lib/utils"
 
@@ -13,23 +16,17 @@ type WritingStatusBadgeProps = {
 }
 
 /**
- * Canonical surface (background + text) styles for each writing status.
- * Shared so badges, status dropdowns and pills stay visually identical
- * across Desk, Workspace, Preview and any future surface.
+ * ODE-476/icon punch pass: the "punch" chip — icon in its own tinted circle
+ * (`VocabularyChip`, same component every other surface uses) — replaces the
+ * tinted pill this used to be. The label stays plain text next to it, same
+ * as the tab/row/table treatment elsewhere, instead of sharing a colored
+ * background with the icon.
  */
-export const WRITING_STATUS_SURFACE_STYLES: Record<WritingStatus, string> = {
-  new: "bg-[hsl(220,40%,94%)] text-[hsl(220,45%,42%)]",
-  exploring: "bg-[hsl(35,50%,92%)] text-[hsl(35,50%,32%)]",
-  draft: "bg-muted text-ink-4",
-  in_review: "bg-[hsl(260,35%,94%)] text-[hsl(260,40%,40%)]",
-  done: "bg-[hsl(140,30%,91%)] text-[hsl(140,40%,30%)]",
-  archived: "bg-[hsl(210,10%,92%)] text-[hsl(210,10%,40%)]",
-  canceled: "bg-[hsl(0,30%,94%)] text-[hsl(0,35%,42%)]",
-}
-
 export function WritingStatusBadge({ status, variant = "full", className }: WritingStatusBadgeProps) {
+  const catalog = useVocabulary()
   const normalized = normalizeWritingStatus(status)
   const label = getWritingStatusLabel(normalized)
+  const color = getVocabularyColor(catalog, "status", normalized)
   const isCompact = variant === "compact"
 
   return (
@@ -37,16 +34,17 @@ export function WritingStatusBadge({ status, variant = "full", className }: Writ
       role="status"
       aria-label={`Status: ${label}`}
       className={cn(
-        "inline-flex items-center gap-[5px] rounded-[6px] border-[0.5px] border-transparent font-sans font-medium",
-        WRITING_STATUS_SURFACE_STYLES[normalized],
-        isCompact ? "px-[6px] py-[2px] text-[10px]" : "px-2 py-0.5 text-[11px]",
+        "inline-flex items-center gap-[6px] font-sans font-medium text-ink-2",
+        isCompact ? "text-[10px]" : "text-[11px]",
         className,
       )}
     >
-      <WritingStatusIcon
-        status={normalized}
-        className={isCompact ? "h-[10px] w-[10px]" : "h-[11px] w-[11px]"}
-      />
+      <VocabularyChip color={color} size={isCompact ? 16 : 18}>
+        <WritingStatusIcon
+          status={normalized}
+          className={isCompact ? "h-[9px] w-[9px]" : "h-[10px] w-[10px]"}
+        />
+      </VocabularyChip>
       {label}
     </span>
   )

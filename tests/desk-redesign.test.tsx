@@ -13,9 +13,12 @@ import { DeskArtifactRow } from "@/components/desk/desk-artifact-row"
 import { DeskHeader } from "@/components/desk/desk-header"
 import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar"
 import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge"
-import { getWritingStatusColor } from "@/lib/writings/status-color"
 import type { DeskActivityRow } from "@/lib/queries/desk-activity"
 import { WRITING_STATUS_VALUES } from "@/lib/writings/status"
+import { ARTIFACT_TYPE_VALUES } from "@/lib/writings/artifact-type"
+import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
+import { getVocabularyColor } from "@/lib/vocabulary/resolve"
+import { VOCABULARY_COLORS } from "@/lib/settings/vocabulary"
 
 /**
  * ODE-430 — the redesigned Desk.
@@ -112,6 +115,7 @@ const FILTER_BAR_PROPS = {
 const ROW_PROPS = {
   selected: false,
   enabledStatuses: [...WRITING_STATUS_VALUES],
+  enabledArtifactTypes: [...ARTIFACT_TYPE_VALUES],
   workspaceOptions: [],
   workspaceAvailable: false,
 }
@@ -253,26 +257,30 @@ describe("artifact row", () => {
   })
 })
 
-describe("status colour", () => {
-  it("resolves every status through one map", () => {
+describe("status colour (ODE-474)", () => {
+  it("resolves every base status through the shared vocabulary catalog", () => {
+    const catalog = getVocabularyCatalogSnapshot()
     for (const status of WRITING_STATUS_VALUES) {
-      expect(getWritingStatusColor(status)).toMatch(/var\(--/)
+      const color = getVocabularyColor(catalog, "status", status)
+      expect(color).toMatch(/^#[0-9A-Fa-f]{6}$/)
+      // A user's vocabulary colour, not a design token: it must be one of
+      // the admissible palette hexes, not an arbitrary/legacy value.
+      expect(VOCABULARY_COLORS.some((c) => c.hex.toLowerCase() === color.toLowerCase())).toBe(true)
     }
-  })
-
-  it("uses the tokens the prototype's palette already has, never a literal hex", () => {
-    const source = readFileSync(resolve(__dirname, "../lib/writings/status-color.ts"), "utf8")
-    const declarations = source.slice(source.indexOf("STATUS_COLOR_VAR"))
-    expect(declarations).not.toMatch(/:\s*"#[0-9A-Fa-f]{3,8}"/)
   })
 
   it.each([
     ["components/desk/desk-artifact-row.tsx"],
     ["components/desk/filter-bar.tsx"],
-    ["components/desk/desk-status-dot.tsx"],
-  ])("%s writes no status hex of its own", (file) => {
+  ])("%s resolves status colour through the shared catalog, not a local map", (file) => {
     const source = readFileSync(resolve(__dirname, "..", file), "utf8")
-    expect(source).not.toMatch(/#(8E837B|5B5BD6|C07B2A|96532C|2E7D4F|B5ADA5)/i)
+    expect(source).not.toMatch(/writings\/status-color/)
+  })
+
+  it("desk-status-dot.tsx resolves through lib/vocabulary/resolve.ts, not a local map", () => {
+    const source = readFileSync(resolve(__dirname, "../components/desk/desk-status-dot.tsx"), "utf8")
+    expect(source).toMatch(/vocabulary\/resolve/)
+    expect(source).not.toMatch(/writings\/status-color/)
   })
 })
 

@@ -1,7 +1,7 @@
-import { Bot, File, FileChartColumn, LayoutTemplate, MessageSquareText, Wrench } from "lucide-react"
-
+import { VocabularyIcon } from "@/components/settings/vocabulary-icon"
+import { useVocabulary } from "@/hooks/useVocabulary"
+import { getVocabularyColor, getVocabularyIconName } from "@/lib/vocabulary/resolve"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
-import { getArtifactTypeColor } from "@/lib/writings/artifact-type-color"
 
 /**
  * The glyph for an artifact type.
@@ -11,22 +11,37 @@ import { getArtifactTypeColor } from "@/lib/writings/artifact-type-color"
  * dragged that module's whole dependency tree — dialogs, the shared table, the
  * collection menus — into every one of them, and put the row and the table in an
  * import cycle.
+ *
+ * Icon and colour resolve from the shared vocabulary catalog (ODE-474) — no
+ * per-component type→icon table. An unrecognized type falls back to the
+ * neutral "circle" glyph, which is in the closed icon set.
  */
 export function ArtifactTypeIcon({ artifactType, className }: { artifactType: ArtifactType; className?: string }) {
-  const Icon = {
-    agent: Bot,
-    skill: Wrench,
-    prompt: MessageSquareText,
-    template: LayoutTemplate,
-    status: FileChartColumn,
-    general: File,
-  }[artifactType]
+  const catalog = useVocabulary()
 
   return (
-    <Icon
-      className={className ?? "h-[13px] w-[13px] shrink-0"}
-      strokeWidth={1.5}
-      style={{ color: getArtifactTypeColor(artifactType) }}
+    <VocabularyIcon
+      name={getVocabularyIconName(catalog, "type", artifactType) ?? "circle"}
+      size={13}
+      className={className ?? "shrink-0"}
+      style={{ color: getVocabularyColor(catalog, "type", artifactType) }}
+    />
+  )
+}
+
+/**
+ * The neutral-color variant: some surfaces (the type selector dropdown, the
+ * preview modal's type menu) deliberately keep every glyph the same ink
+ * shade — coloring six-plus menu options individually read as noisy there.
+ * Color is left to the wrapping element's `text-*` class via `currentColor`.
+ */
+export function ArtifactTypeGlyph({ artifactType, className }: { artifactType: ArtifactType; className?: string }) {
+  const catalog = useVocabulary()
+  return (
+    <VocabularyIcon
+      name={getVocabularyIconName(catalog, "type", artifactType) ?? "circle"}
+      size={13}
+      className={className}
     />
   )
 }

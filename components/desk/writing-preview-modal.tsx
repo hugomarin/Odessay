@@ -4,19 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeft,
   ArrowRight,
-  Bot,
   ChevronDown,
-  Circle,
   Download,
   ExternalLink,
   FileText,
   FileType,
-  LayoutTemplate,
-  MessageSquareText,
   MoreHorizontal,
   Tag,
   Trash2,
-  Wrench,
   X,
 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
@@ -35,13 +30,16 @@ import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { useWritingPreviewCache, type CachedWritingPreview } from "@/hooks/useWritingPreviewCache"
 import type { CollectionOption } from "@/lib/collections/collections"
 import type { DeskActivityRow } from "@/lib/queries/desk-activity"
-import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
+import { getWritingStatusLabel, type WritingStatus } from "@/lib/writings/status"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
 import { DocumentStateIcon } from "@/components/ui/document-state-icon"
 import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge"
 import { TablePropertySelector } from "@/components/ui/table-property-selector"
-import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
-import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
+import { getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
+import { ArtifactTypeGlyph } from "@/components/desk/artifact-type-icon"
+import { useVocabulary } from "@/hooks/useVocabulary"
+import { getVocabularyColor, listVisibleVocabulary } from "@/lib/vocabulary/resolve"
+import { VocabularyChip } from "@/components/ui/vocabulary-chip"
 import { createSharingService } from "@/lib/services/sharing-service-factory"
 import {
   DEFAULT_PREVIEW_LINK_STATE,
@@ -183,9 +181,10 @@ export function WritingPreviewModal({
   const [exportingFormat, setExportingFormat] = useState<"markdown" | PreviewExportFormat | null>(null)
   const loadIdRef = useRef(0)
   const titleDraftRef = useRef("")
-  const { settings } = useUserSettingsContext()
+  const catalog = useVocabulary()
   const sharingService = useMemo(() => createSharingService(), [])
-  const enabledStatuses = WRITING_STATUS_VALUES.filter((s) => !settings.disabledStatuses.includes(s))
+  const enabledStatuses = listVisibleVocabulary(catalog, "status").map((item) => item.key) as WritingStatus[]
+  const enabledArtifactTypes = listVisibleVocabulary(catalog, "type").map((item) => item.key) as ArtifactType[]
   const titleEditingRef = useRef(false)
   const titleWritingIdRef = useRef<string | null>(null)
 
@@ -742,7 +741,11 @@ export function WritingPreviewModal({
                   {row ? (
                     <TablePropertySelector
                       ariaLabel={`Change status for ${row.title}`}
-                      icon={<WritingStatusIcon status={row.stateTone} />}
+                      icon={
+                        <VocabularyChip color={getVocabularyColor(catalog, "status", row.stateTone)} size={20}>
+                          <WritingStatusIcon status={row.stateTone} className="h-[12px] w-[12px]" />
+                        </VocabularyChip>
+                      }
                       label={row.stateLabel}
                       variant="preview"
                       contentClassName="w-[248px]"
@@ -750,7 +753,11 @@ export function WritingPreviewModal({
                         {enabledStatuses.map((status) => (
                           <PreviewMenuItem
                             key={status}
-                            icon={<WritingStatusIcon status={status} />}
+                            icon={
+                              <VocabularyChip color={getVocabularyColor(catalog, "status", status)} size={20}>
+                                <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
+                              </VocabularyChip>
+                            }
                             label={getWritingStatusLabel(status)}
                             onSelect={() => {
                               void onStatusChange?.(row.id, status)
@@ -764,8 +771,29 @@ export function WritingPreviewModal({
                 <section className="flex flex-col gap-2">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-5">Artifact Type</p>
                   {row ? (
-                    <TablePropertySelector ariaLabel={`Change artifact type for ${row.title}`} icon={<PreviewArtifactTypeIcon artifactType={row.artifactType ?? "general"} />} label={getArtifactTypeLabel(row.artifactType ?? "general")} variant="preview" contentClassName="w-[248px]">
-                      {ARTIFACT_TYPE_VALUES.map((artifactType) => <PreviewMenuItem key={artifactType} icon={<PreviewArtifactTypeIcon artifactType={artifactType} />} label={getArtifactTypeLabel(artifactType)} onSelect={() => void onArtifactTypeChange?.(row.id, artifactType)} />)}
+                    <TablePropertySelector
+                      ariaLabel={`Change artifact type for ${row.title}`}
+                      icon={
+                        <VocabularyChip color={getVocabularyColor(catalog, "type", row.artifactType ?? "general")} size={20}>
+                          <ArtifactTypeGlyph artifactType={row.artifactType ?? "general"} className="h-[12px] w-[12px] shrink-0" />
+                        </VocabularyChip>
+                      }
+                      label={getArtifactTypeLabel(row.artifactType ?? "general")}
+                      variant="preview"
+                      contentClassName="w-[248px]"
+                    >
+                      {enabledArtifactTypes.map((artifactType) => (
+                        <PreviewMenuItem
+                          key={artifactType}
+                          icon={
+                            <VocabularyChip color={getVocabularyColor(catalog, "type", artifactType)} size={20}>
+                              <ArtifactTypeGlyph artifactType={artifactType} className="h-[12px] w-[12px] shrink-0" />
+                            </VocabularyChip>
+                          }
+                          label={getArtifactTypeLabel(artifactType)}
+                          onSelect={() => void onArtifactTypeChange?.(row.id, artifactType)}
+                        />
+                      ))}
                     </TablePropertySelector>
                   ) : null}
                 </section>
@@ -992,7 +1020,3 @@ function PropertiesDropdownTrigger({
   )
 }
 
-function PreviewArtifactTypeIcon({ artifactType }: { artifactType: ArtifactType }) {
-  const Icon = { agent: Bot, skill: Wrench, prompt: MessageSquareText, template: LayoutTemplate, status: FileText, general: Circle }[artifactType]
-  return <Icon className="h-[13px] w-[13px] shrink-0 text-ink-3" strokeWidth={1.5} />
-}

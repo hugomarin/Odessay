@@ -16,19 +16,28 @@ import {
 import { ARTIFACT_TYPE_VALUES } from "@/lib/writings/artifact-type"
 import { WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import type { WritingStatus } from "@/lib/writings/status"
+import { getVocabularyCatalogSnapshot, resetVocabularyCatalogForTest, setVocabularyCatalog } from "@/lib/vocabulary/catalog"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const update = vi.fn().mockResolvedValue(undefined)
+const createVocabularyItem = vi.fn().mockResolvedValue(undefined)
+const updateVocabularyItem = vi.fn().mockResolvedValue(undefined)
+const deleteVocabularyItem = vi.fn().mockResolvedValue({ rewrittenCount: 0 })
+const getVocabularyUsage = vi.fn().mockResolvedValue(null)
 let disabledStatuses: WritingStatus[] = []
 
 vi.mock("@/components/settings/user-settings-provider", () => ({
   useUserSettingsContext: () => ({
-    settings: { disabledStatuses },
+    settings: { disabledStatuses, vocabulary: [] },
     isLoading: false,
     error: null,
     refresh: vi.fn(),
     update,
+    createVocabularyItem,
+    updateVocabularyItem,
+    deleteVocabularyItem,
+    getVocabularyUsage,
   }),
 }))
 
@@ -37,6 +46,7 @@ let root: Root
 
 beforeEach(() => {
   disabledStatuses = []
+  resetVocabularyCatalogForTest()
   container = document.createElement("div")
   document.body.appendChild(container)
   root = createRoot(container)
@@ -47,6 +57,7 @@ afterEach(() => {
   container.remove()
   document.body.innerHTML = ""
   vi.clearAllMocks()
+  resetVocabularyCatalogForTest()
 })
 
 async function render(node: React.ReactElement) {
@@ -94,19 +105,19 @@ describe("Settings vocabulary", () => {
     )
     expect(container.querySelectorAll('[role="switch"]')).toHaveLength(WRITING_STATUS_VALUES.length)
 
-    const draft = container.querySelector('[data-testid="vocabulary-item-draft"]')!
+    const draft = container.querySelector('[data-testid="vocabulary-item-base:status:draft"]')!
     expect(draft.textContent).toContain("Required")
     expect(draft.querySelector('[role="switch"]')?.hasAttribute("disabled")).toBe(true)
   })
 
-  it("hides a status by appending it to disabledStatuses and never rewrites artifacts", async () => {
+  it("hides a status through the real vocabulary CRUD and never rewrites artifacts (ODE-476)", async () => {
     await render(<WritingStatusSettings />)
-    const canceled = container.querySelector('[data-testid="vocabulary-item-canceled"]')!
+    const canceled = container.querySelector('[data-testid="vocabulary-item-base:status:canceled"]')!
     await click(canceled.querySelector('[role="switch"]'))
 
-    // Requirement 9: the only write is the user setting. No artifact mutation,
-    // no confirmation asking to move anything to Draft.
-    expect(update).toHaveBeenCalledWith({ disabledStatuses: ["canceled"] })
+    // Requirement 9: the only write is the item's own `hidden` flag. No
+    // artifact mutation, no confirmation asking to move anything to Draft.
+    expect(updateVocabularyItem).toHaveBeenCalledWith("base:status:canceled", { hidden: true })
     expect(document.body.textContent).not.toContain("Move to Draft")
   })
 
@@ -122,7 +133,7 @@ describe("Settings vocabulary", () => {
     expect(container.querySelectorAll('[data-testid^="vocabulary-item-"]')).toHaveLength(before)
   })
 
-  it("offers exactly twelve type icons and six colors", async () => {
+  it("offers exactly thirty-two type icons and twelve colors", async () => {
     await render(<ArtifactTypeSettings />)
     await click(byText("Edit", container))
 
@@ -130,12 +141,12 @@ describe("Settings vocabulary", () => {
     expect(grids[0].querySelectorAll('[role="radio"]')).toHaveLength(
       ARTIFACT_TYPE_ICON_NAMES.length,
     )
-    expect(ARTIFACT_TYPE_ICON_NAMES).toHaveLength(12)
+    expect(ARTIFACT_TYPE_ICON_NAMES).toHaveLength(32)
     expect(grids[1].querySelectorAll('[role="radio"]')).toHaveLength(VOCABULARY_COLORS.length)
-    expect(VOCABULARY_COLORS).toHaveLength(6)
+    expect(VOCABULARY_COLORS).toHaveLength(12)
   })
 
-  it("offers exactly eight status icons", async () => {
+  it("offers exactly twenty-six status icons", async () => {
     await render(<WritingStatusSettings />)
     await click(byText("Edit", container))
 
@@ -143,7 +154,7 @@ describe("Settings vocabulary", () => {
     expect(grids[0].querySelectorAll('[role="radio"]')).toHaveLength(
       WRITING_STATUS_ICON_NAMES.length,
     )
-    expect(WRITING_STATUS_ICON_NAMES).toHaveLength(8)
+    expect(WRITING_STATUS_ICON_NAMES).toHaveLength(26)
   })
 
   it("shows the lock note instead of a delete action on a built-in item", async () => {
@@ -173,10 +184,13 @@ describe("Settings vocabulary", () => {
     )
     await click(byText("Edit", container))
 
-    // Requirement 7 and the issue's Notes: a disabled affordance carries its
-    // reason in `title`, never in nothing.
+    // ODE-475 requirement 8: AI assistance is out of scope for this release
+    // (owner decision, 2026-08-30) — a single reason regardless of whether
+    // there's a name/description to work from, not "not wired yet".
     const improve = byText("Improve with AI", modal() as ParentNode)
-    expect(improve?.getAttribute("title")).toBe("Add a name or a description first.")
+    expect(improve?.getAttribute("title")).toBe(
+      "AI assistance for the vocabulary editor is out of scope for this release.",
+    )
     for (const disabled of Array.from(modal()!.querySelectorAll("button[disabled]"))) {
       expect(disabled.getAttribute("title")).toBeTruthy()
     }
@@ -184,7 +198,7 @@ describe("Settings vocabulary", () => {
 })
 
 describe("Settings vocabulary seeds", () => {
-  it("keeps the palette in the order the prototype declares", () => {
+  it("keeps the palette in the order the prototype declares, brighter additions after", () => {
     expect(VOCABULARY_COLORS.map((color) => color.name)).toEqual([
       "Ink",
       "Terracotta",
@@ -192,21 +206,33 @@ describe("Settings vocabulary seeds", () => {
       "Green",
       "Violet",
       "Grey",
+      "Red",
+      "Pink",
+      "Blue",
+      "Lime",
+      "Orange",
+      "Yellow",
     ])
   })
 
-  it("locks every built-in type and only the mandatory status", () => {
+  it("locks (blocks delete on) every built-in type and status, but requires only draft (ODE-475)", () => {
     expect(getArtifactTypeVocabulary().every((item) => item.locked)).toBe(true)
-    expect(
-      getWritingStatusVocabulary([])
-        .filter((item) => item.locked)
-        .map((item) => item.id),
-    ).toEqual(["draft"])
+    // Every base status blocks delete...
+    expect(getWritingStatusVocabulary().every((item) => item.locked)).toBe(true)
+    // ...but only draft is required (cannot be hidden either).
+    const required = getWritingStatusVocabulary().filter((item) => item.required)
+    expect(required).toHaveLength(1)
+    expect(required[0]?.id).toBe("base:status:draft")
   })
 
-  it("reads enabled state from the persisted disabled list", () => {
-    const items = getWritingStatusVocabulary(["canceled"])
-    expect(items.find((item) => item.id === "canceled")?.enabled).toBe(false)
-    expect(items.find((item) => item.id === "done")?.enabled).toBe(true)
+  it("reads enabled state from the catalog item's own hidden flag (ODE-476)", () => {
+    const catalog = getVocabularyCatalogSnapshot()
+    setVocabularyCatalog(
+      catalog.map((item) => (item.key === "canceled" && item.kind === "status" ? { ...item, hidden: true } : item)),
+    )
+
+    const items = getWritingStatusVocabulary()
+    expect(items.find((item) => item.id === "base:status:canceled")?.enabled).toBe(false)
+    expect(items.find((item) => item.id === "base:status:done")?.enabled).toBe(true)
   })
 })

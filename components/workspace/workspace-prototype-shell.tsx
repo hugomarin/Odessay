@@ -36,7 +36,6 @@ import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal";
 import { WritingPreviewModal } from "@/components/desk/writing-preview-modal";
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu";
-import { useUserSettingsContext } from "@/components/settings/user-settings-provider";
 import { FolderTreePicker } from "@/components/workspace/folder-tree-picker";
 import { LibraryControlsBar } from "@/components/library/library-controls-bar";
 import { useWorkspaceTableFilters } from "@/hooks/useWorkspaceTableFilters";
@@ -56,16 +55,17 @@ import { TablePropertySelector } from "@/components/ui/table-property-selector";
 import { ArtifactTypeIcon } from "@/components/desk/desk-activity-table";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
 import {
-  WRITING_STATUS_VALUES,
   getWritingStatusLabel,
   normalizeWritingStatus,
   type WritingStatus,
 } from "@/lib/writings/status";
 import {
-  ARTIFACT_TYPE_VALUES,
   getArtifactTypeLabel,
   type ArtifactType,
 } from "@/lib/writings/artifact-type";
+import { useVocabulary } from "@/hooks/useVocabulary";
+import { getVocabularyColor, listVisibleVocabulary } from "@/lib/vocabulary/resolve";
+import { VocabularyChip } from "@/components/ui/vocabulary-chip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -990,7 +990,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     Record<string, string[]>
   >({});
   const hasLoadedWorkspaceRef = useRef(false);
-  const { settings } = useUserSettingsContext();
+  const catalog = useVocabulary();
   const {
     selectedIds,
     toggleSelection,
@@ -1366,11 +1366,12 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   );
 
   const enabledStatuses = useMemo(
-    () =>
-      WRITING_STATUS_VALUES.filter(
-        (status) => !settings.disabledStatuses.includes(status),
-      ),
-    [settings.disabledStatuses],
+    () => listVisibleVocabulary(catalog, "status").map((item) => item.key),
+    [catalog],
+  );
+  const enabledArtifactTypes = useMemo(
+    () => listVisibleVocabulary(catalog, "type").map((item) => item.key),
+    [catalog],
   );
 
   useEffect(() => {
@@ -1542,7 +1543,11 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 readOnly={!hasDocument}
                 className="min-w-[128px]"
                 ariaLabel={`Change status for ${file.name}`}
-                icon={<WritingStatusIcon status={status} />}
+                icon={
+                  <VocabularyChip color={getVocabularyColor(catalog, "status", status)} size={20}>
+                    <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
+                  </VocabularyChip>
+                }
                 label={getWritingStatusLabel(status)}
                 contentClassName="w-[248px]"
               >
@@ -1557,7 +1562,9 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                       }}
                     >
                       <span className="flex items-center gap-2">
-                        <WritingStatusIcon status={status} />
+                        <VocabularyChip color={getVocabularyColor(catalog, "status", status)} size={20}>
+                          <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
+                        </VocabularyChip>
                         {getWritingStatusLabel(status)}
                       </span>
                       {normalizeWritingStatus(
@@ -1588,15 +1595,20 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
           return (
             <div onClick={(event) => event.stopPropagation()}>
               <TablePropertySelector
+                variant="preview"
                 readOnly={!hasDocument}
                 className="min-w-[140px]"
                 ariaLabel={`Change artifact type for ${file.name}`}
-                icon={<ArtifactTypeIcon artifactType={artifactType} />}
+                icon={
+                  <VocabularyChip color={getVocabularyColor(catalog, "type", artifactType)} size={20}>
+                    <ArtifactTypeIcon artifactType={artifactType} className="h-[12px] w-[12px]" />
+                  </VocabularyChip>
+                }
                 label={getArtifactTypeLabel(artifactType)}
                 contentClassName="w-[248px]"
               >
                 {hasDocument &&
-                  ARTIFACT_TYPE_VALUES.map((artifactType) => (
+                  enabledArtifactTypes.map((artifactType) => (
                     <DropdownMenuItem
                       key={artifactType}
                       className="h-11 cursor-pointer items-center justify-between rounded-[10px] px-3 text-[14px]"
@@ -1606,7 +1618,9 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                       }}
                     >
                       <span className="flex items-center gap-3">
-                        <ArtifactTypeIcon artifactType={artifactType} />
+                        <VocabularyChip color={getVocabularyColor(catalog, "type", artifactType)} size={20}>
+                          <ArtifactTypeIcon artifactType={artifactType} className="h-[12px] w-[12px]" />
+                        </VocabularyChip>
                         {getArtifactTypeLabel(artifactType)}
                       </span>
                       {(document?.artifactType ?? "general") ===
@@ -1707,6 +1721,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       collectionOptions,
       documentJoin,
       enabledStatuses,
+      enabledArtifactTypes,
       handleArtifactTypeChange,
       handleCollectionToggle,
       handleCreateCollection,
@@ -1716,6 +1731,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       openRenameWriting,
       openWritingPreview,
       workspace?.name,
+      catalog,
     ],
   );
 

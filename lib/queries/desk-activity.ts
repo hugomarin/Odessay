@@ -1,11 +1,11 @@
 import type { LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
 import { UNCATEGORIZED_COLLECTION_ID } from "@/lib/collections/collections"
 import type { CollectionOption } from "@/lib/collections/collections"
-import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, normalizeArtifactType, type ArtifactType } from "@/lib/writings/artifact-type"
+import { getArtifactTypeLabel, normalizeArtifactType, type ArtifactType } from "@/lib/writings/artifact-type"
 import {
   getWritingStatusLabel,
   normalizeWritingStatus,
-  WRITING_STATUS_VALUES,
+  type WritingStatus,
 } from "@/lib/writings/status"
 import { deriveDocumentStateForLocalWriting, type DocumentState } from "@/lib/writings/document-state"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
@@ -13,10 +13,14 @@ import {
   inferWorkspaceSlugFromPath,
   type WorkspaceAssignmentOption,
 } from "@/lib/workspace/assignment"
+import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
+import { orderGroupKeysByCatalog } from "@/lib/vocabulary/resolve"
+import type { VocabularyItem } from "@/lib/vocabulary/types"
 
 export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "received"
 
-export type DeskStatusTone = "new" | "exploring" | "draft" | "in_review" | "done" | "archived" | "canceled"
+/** ODE-474: no longer a locally-declared closed union — alias of the opened `WritingStatus`. */
+export type DeskStatusTone = WritingStatus
 
 export type DeskGroupBy = "none" | "status" | "artifact" | "collection" | "created-date"
 
@@ -112,6 +116,13 @@ type BuildDeskActivityOptions = {
    * shows for that UUID.
    */
   documentStateById?: Record<string, DocumentState>
+  /**
+   * Live vocabulary catalog (ODE-476) — governs status/artifact group order.
+   * Callers that already subscribe via `useVocabulary()` should pass it through
+   * so group order stays in sync with rename/reorder; falls back to the module
+   * singleton snapshot for callers (e.g. tests) that don't track it themselves.
+   */
+  catalog?: readonly VocabularyItem[]
 }
 
 type WritingMeta = {
@@ -519,6 +530,7 @@ const buildGroups = (
   now: Date,
   groupBy: DeskGroupBy = "created-date",
   collectionOptions: CollectionOption[] = [],
+  catalog: readonly VocabularyItem[] = getVocabularyCatalogSnapshot(),
 ): DeskActivityGroup[] => {
   if (groupBy === "none") {
     return [
@@ -538,9 +550,9 @@ const buildGroups = (
       groups.set(normalized, rows)
     }
 
-    return WRITING_STATUS_VALUES.filter((status) => groups.has(status)).map((status) => ({
-      label: getWritingStatusLabel(status),
-      rows: groups.get(status) ?? [],
+    return orderGroupKeysByCatalog(catalog, "status", groups.keys()).map((status) => ({
+      label: getWritingStatusLabel(status as WritingStatus),
+      rows: groups.get(status as DeskStatusTone) ?? [],
     }))
   }
 
@@ -552,9 +564,9 @@ const buildGroups = (
       groups.set(writing.artifactType, rows)
     }
 
-    return ARTIFACT_TYPE_VALUES.filter((artifactType) => groups.has(artifactType)).map((artifactType) => ({
-      label: getArtifactTypeLabel(artifactType),
-      rows: groups.get(artifactType) ?? [],
+    return orderGroupKeysByCatalog(catalog, "type", groups.keys()).map((artifactType) => ({
+      label: getArtifactTypeLabel(artifactType as ArtifactType),
+      rows: groups.get(artifactType as ArtifactType) ?? [],
     }))
   }
 
@@ -665,7 +677,13 @@ export const buildDeskActivitySummary = (
 
   return {
     heroDrafts: buildRecentWritings(allWritings, now),
-    groups: buildGroups(sortMetas(filtered, effectiveSortBy), now, effectiveGroupBy, options.collectionOptions),
+    groups: buildGroups(
+      sortMetas(filtered, effectiveSortBy),
+      now,
+      effectiveGroupBy,
+      options.collectionOptions,
+      options.catalog ?? getVocabularyCatalogSnapshot(),
+    ),
     counts: buildCounts(allWritings),
     total: filtered.length,
   }

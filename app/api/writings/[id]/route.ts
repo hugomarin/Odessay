@@ -3,17 +3,23 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 import { syncMarginsFromBodyJson } from "@/lib/margins/margins";
-import { ARTIFACT_TYPE_VALUES } from "@/lib/writings/artifact-type";
-import { normalizeWritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status";
+import { normalizeWritingStatus } from "@/lib/writings/status";
+import { validateVocabularyValue } from "@/lib/vocabulary/server";
 
+// ODE-472: status/artifact_type are no longer closed unions at the DB layer —
+// a custom vocabulary value must pass shape validation here and membership
+// validation below (validateVocabularyValue), not the old six/seven-value
+// zod enum. `normalizeWritingStatus` below still coerces anything it does not
+// recognize to "draft" — fixing that coercion for custom values is [ODE-474],
+// shipped in the same window as this issue per the brief's own dependency note.
 const writingPayloadSchema = z.object({
   title: z.string().nullable().optional(),
   body_json: z.record(z.string(), z.unknown()),
   body_text: z.string(),
   content_hash: z.string().regex(/^blake3:[0-9a-f]{64}$/).nullable().optional(),
   slug: z.string().nullable().optional(),
-  status: z.enum([...WRITING_STATUS_VALUES, "finished"]).default("draft"),
-  artifact_type: z.enum(ARTIFACT_TYPE_VALUES).default("general"),
+  status: z.string().min(1).max(64).default("draft"),
+  artifact_type: z.string().min(1).max(64).default("general"),
   visibility: z.enum(["private", "shared", "public"]).default("private"),
   parent_id: z.string().uuid().nullable().optional(),
   correspondence_id: z.string().uuid().nullable().optional(),
@@ -85,6 +91,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   if (!parsed.success) {
     return jsonError(400, "INVALID_INPUT", parsed.error.message);
+  }
+
+  const artifactTypeError = await validateVocabularyValue(supabase, userId, "type", parsed.data.artifact_type);
+  if (artifactTypeError) {
+    return jsonError(400, artifactTypeError.code, artifactTypeError.message);
+  }
+  const statusError = await validateVocabularyValue(supabase, userId, "status", parsed.data.status);
+  if (statusError) {
+    return jsonError(400, statusError.code, statusError.message);
   }
 
   const { id } = await context.params;

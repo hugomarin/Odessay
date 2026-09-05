@@ -34,11 +34,11 @@ type TablePropertySelectorProps = {
 
 /** Chrome shared by the interactive trigger and the read-only label so they match exactly. */
 const TRIGGER_CHROME =
-  "items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-3 text-[13px] font-medium text-ink-2"
+  "items-center justify-between gap-2 rounded-[8px] bg-bg px-3 text-[13px] font-medium text-ink-2"
 
 /** The preview column's field button, read from the Desk prototype. */
 const PREVIEW_CHROME =
-  "items-center justify-between gap-[9px] rounded-[8px] border-[0.5px] border-border bg-sb px-[11px] text-[13px] font-normal text-ink-2"
+  "items-center justify-between gap-[9px] rounded-[8px] bg-sb px-[11px] text-[13px] font-normal text-ink-2"
 
 /**
  * Shared table property control for status, artifact type, and workspace.
@@ -86,7 +86,7 @@ export function TablePropertySelector({
           className={cn(
             chrome,
             variant === "preview"
-              ? "transition-colors hover:border-ink-6 hover:bg-surface-row-hover data-[state=open]:border-ink-5 data-[state=open]:bg-surface-row-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+              ? "transition-colors hover:bg-surface-row-hover data-[state=open]:bg-surface-row-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
               : "transition-colors hover:bg-muted data-[state=open]:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
             sizing,
             className,

@@ -614,6 +614,13 @@
       "path": ".agents/skills/skill-design-landing/design.md",
       "type": "design-reference",
       "description": "Spec de la landing sección por sección: tesis, once secciones, mapa del problema, encuadre de capturas, reglas de copy y responsive."
+    },
+    {
+      "path": "workflow/context/features/odessay-artifact-vocabulary.md",
+      "type": "feature",
+      "scope": "vocabulary-web-and-desktop",
+      "state": "in-progress-ode-472-477",
+      "description": "Modelo del vocabulario configurable de tipos y estados (ODE-472-477): esquema vocabulary_items, ocultar vs borrar, precedencia local-first en desktop, deprecacion de profiles.disabled_statuses."
     }
   ],
   "structure": {

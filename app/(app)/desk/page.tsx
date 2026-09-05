@@ -16,6 +16,7 @@ import { SharedWithMeList } from "@/components/desk/shared-with-me-list"
 import { WritingPreviewModal } from "@/components/desk/writing-preview-modal"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import { useDeskFilters } from "@/hooks/useDeskFilters"
+import { useVocabulary } from "@/hooks/useVocabulary"
 import { useWritingSelection } from "@/hooks/useWritingSelection"
 import { BulkActionBar } from "@/components/desk/bulk-action-bar"
 import { buildCollectionOptions } from "@/lib/collections/collections"
@@ -136,6 +137,7 @@ export default function DeskPage() {
   const hasLoadedSharedRef = useRef(false)
   const sharingService = useMemo(() => createSharingService(), [])
   const router = useRouter()
+  const vocabularyCatalog = useVocabulary()
 
   recipientPreviewsRef.current = recipientPreviewsByWritingId
 
@@ -280,11 +282,12 @@ export default function DeskPage() {
         workspaceNamesBySlug: workspaceNamesRef.current,
         workspaceOptions: workspaceOptionsRef.current,
         documentStateById,
+        catalog: vocabularyCatalog,
       }),
     )
     setCollections(nextCollections)
     setWritingCollections(nextAssignments)
-  }, [groupBy, sortBy])
+  }, [groupBy, sortBy, vocabularyCatalog])
 
   const refreshWorkspaceAssignments = useCallback(async () => {
     const service = getWorkspaceAssignmentService()
@@ -565,6 +568,7 @@ export default function DeskPage() {
       workspaceNamesBySlug,
       workspaceOptions,
       documentStateById: documentStateByIdRef.current,
+      catalog: vocabularyCatalog,
       clientFilter: {
         searchQuery,
         selectedCollectionIds,
@@ -597,6 +601,7 @@ export default function DeskPage() {
     workspaceAssignments,
     workspaceNamesBySlug,
     workspaceOptions,
+    vocabularyCatalog,
   ])
 
   const visibleWritingIds = useMemo(() => {
