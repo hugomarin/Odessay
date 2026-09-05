@@ -34,7 +34,11 @@ jobs:
 
           MERGE_SHA="$(git rev-parse HEAD)"
           MERGE_BASE_SHA="$(git merge-base "${MERGE_SHA}" "${PR_BASE_SHA}")"
-          ISSUE_IDS="$(printf '%s' "${PR_TITLE}" | grep -oE 'ODE-[0-9]+' | sort -u | paste -sd, -)"
+          # `grep -oE` exits 1 when the title has no ODE-XXX (e.g. a pure
+          # docs/process PR) — under `set -e` that silently kills this step
+          # with no visible error. `|| true` keeps ISSUE_IDS legitimately
+          # empty instead of crashing the whole gate.
+          ISSUE_IDS="$(printf '%s' "${PR_TITLE}" | grep -oE 'ODE-[0-9]+' | sort -u | paste -sd, - || true)"
           git cat-file -e "${PR_BASE_SHA}^{commit}"
           git cat-file -e "${PR_HEAD_SHA}^{commit}"
           git cat-file -e "${MERGE_SHA}^{commit}"
