@@ -478,6 +478,14 @@
 
       .code-group .tab-row { padding-top: 6px; }
 
+      .code-block-shell { overflow: hidden; border: 0.5px solid var(--border); border-radius: 8px; background: var(--code-bg); }
+
+      .code-block-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; background: hsl(30 15% 17%); color: hsl(38 10% 64%); font-family: var(--font-mono); font-size: 10px; }
+
+      .code-block-language { color: var(--code-ink); }
+
+      .code-block-settings { color: hsl(38 10% 64%); }
+
       .mermaid-layout { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 14px; }
 
       .mermaid-preview { min-height: 210px; position: relative; padding: 18px; overflow: hidden; border: 0.5px solid var(--border); border-radius: 8px; background: hsl(38 12% 99%); }
@@ -1047,8 +1055,8 @@
           tag: "```code",
           source: fence + "json\n{\n  \"resultType\": \"complete\"\n}\n" + fence,
           properties: [["syntax", "Fenced block with an optional language."], ["render", "Opaque monospace block."], ["content", "Never reinterpret inner Markdown marks."]],
-          insertion: ["Choose Text → Code from the editor toolbar.", "Edit the code as literal content.", "Language selection and Mermaid preview are configuration follow-ups."],
-          render(source) { const block = parseFences(source)[0] || { language: "json", code: '{\n  "resultType": "complete"\n}' }; return '<div class="markdown-preview"><pre><code>' + esc(block.code) + '</code></pre></div>'; },
+          insertion: ["Choose Text → Code from the editor toolbar; the trigger becomes Code when active.", "Choose the language in the block settings.", "Edit the code as literal content; Mermaid can opt into diagram preview."],
+          render(source) { const block = parseFences(source)[0] || { language: "json", code: '{\n  "resultType": "complete"\n}' }; return '<div class="markdown-preview"><div class="code-block-shell"><div class="code-block-head"><span class="code-block-language">' + esc(block.language) + '</span><span class="code-block-settings">Code settings · preview</span></div><pre><code>' + esc(block.code) + '</code></pre></div></div>'; },
         },
         table: {
           label: "Table",
@@ -1107,7 +1115,7 @@
           tone: "proposed",
           surface: "Selection popup",
           entry: "Select text → AI (rename to Annotate)",
-          shortcut: "—",
+          shortcut: "Not assigned · bubble primary",
           overlay: "Floating annotation composer",
           configuration: "Yes · comment + type",
           selection: "Selected text required",
@@ -1118,7 +1126,7 @@
           tone: "current",
           surface: "Selection popup",
           entry: "Select text → Highlight",
-          shortcut: "⇧⌘U",
+          shortcut: "⌘⇧H",
           overlay: "None · color popover later",
           configuration: "No · default color",
           selection: "Selected text required",
@@ -1129,7 +1137,7 @@
           tone: "proposed",
           surface: "Insert menu",
           entry: "Insert → Tip",
-          shortcut: "—",
+          shortcut: "Not assigned · candidate",
           overlay: "None in v1",
           configuration: "No · one visual variant",
           selection: "Cursor between blocks",
@@ -1140,7 +1148,7 @@
           tone: "proposed",
           surface: "Insert menu",
           entry: "Insert → Card",
-          shortcut: "—",
+          shortcut: "Not assigned · candidate",
           overlay: "Card form modal",
           configuration: "Yes · title + icon + href",
           selection: "Cursor or whole block selection",
@@ -1151,7 +1159,7 @@
           tone: "proposed",
           surface: "Insert menu",
           entry: "Insert → Card group",
-          shortcut: "—",
+          shortcut: "Not assigned · candidate",
           overlay: "Group setup modal + Card modal",
           configuration: "Yes · columns + cards",
           selection: "Cursor between blocks",
@@ -1162,7 +1170,7 @@
           tone: "proposed",
           surface: "Insert menu",
           entry: "Insert → Steps",
-          shortcut: "—",
+          shortcut: "Not assigned · candidate",
           overlay: "Inline step controls",
           configuration: "Light · no modal",
           selection: "Cursor between blocks",
@@ -1173,7 +1181,7 @@
           tone: "proposed",
           surface: "Insert menu",
           entry: "Insert → Code group",
-          shortcut: "—",
+          shortcut: "Not assigned · candidate",
           overlay: "Code group setup modal",
           configuration: "Yes · tabs + languages",
           selection: "Cursor between blocks",
@@ -1184,7 +1192,7 @@
           tone: "proposed",
           surface: "Text dropdown",
           entry: "Text → Code → Mermaid",
-          shortcut: "⇧⌘J for Code",
+          shortcut: "⌘⇧E for Code",
           overlay: "Code-block inspector / popover",
           configuration: "Yes · language + view",
           selection: "Cursor in a block",
@@ -1195,7 +1203,7 @@
           tone: "current",
           surface: "Text dropdown",
           entry: "Text → Normal",
-          shortcut: "⌘⌥0",
+          shortcut: "⌘0",
           overlay: "None",
           configuration: "No",
           selection: "Cursor in a block",
@@ -1228,7 +1236,7 @@
           tone: "current",
           surface: "Text dropdown",
           entry: "Text → Heading 1",
-          shortcut: "⌘⌥1",
+          shortcut: "⌘1",
           overlay: "None",
           configuration: "No",
           selection: "Cursor in a block",
@@ -1239,7 +1247,7 @@
           tone: "current",
           surface: "Text dropdown",
           entry: "Text → Heading 2",
-          shortcut: "⌘⌥2",
+          shortcut: "⌘2",
           overlay: "None",
           configuration: "No",
           selection: "Cursor in a block",
@@ -1250,7 +1258,7 @@
           tone: "current",
           surface: "Text dropdown",
           entry: "Text → Heading 3",
-          shortcut: "⌘⌥3",
+          shortcut: "⌘3",
           overlay: "None",
           configuration: "No",
           selection: "Cursor in a block",
@@ -1272,7 +1280,7 @@
           tone: "current",
           surface: "Lists dropdown",
           entry: "Lists → • List",
-          shortcut: "⌘⇧8",
+          shortcut: "⌘L",
           overlay: "None",
           configuration: "No",
           selection: "Cursor in a block",
@@ -1283,7 +1291,7 @@
           tone: "current",
           surface: "Lists dropdown",
           entry: "Lists → # List",
-          shortcut: "⌘⇧7",
+          shortcut: "⌘⇧L",
           overlay: "None",
           configuration: "No",
           selection: "Cursor in a block",
@@ -1294,7 +1302,7 @@
           tone: "current",
           surface: "Insert dropdown",
           entry: "Insert → Link",
-          shortcut: "⌘K",
+          shortcut: "⌘⇧K",
           overlay: "Link form modal",
           configuration: "Yes · text + URL",
           selection: "Selection preferred",
@@ -1305,7 +1313,7 @@
           tone: "current",
           surface: "Format toolbar",
           entry: "Select text → Inline code",
-          shortcut: "⌘J",
+          shortcut: "⌘E",
           overlay: "None",
           configuration: "No",
           selection: "Selection or typing state",
@@ -1316,29 +1324,29 @@
           tone: "current",
           surface: "Format toolbar",
           entry: "Select text → Strike",
-          shortcut: "⌥⌘U",
+          shortcut: "⌘⇧X",
           overlay: "None",
           configuration: "No",
           selection: "Selection or typing state",
           note: "Direct inline mark; serialized as ~~strike~~ in Markdown.",
         },
         codeBlock: {
-          status: "Current",
-          tone: "current",
-          surface: "Text dropdown",
+          status: "Current · config proposal",
+          tone: "gap",
+          surface: "Code dropdown",
           entry: "Text → Code",
-          shortcut: "⇧⌘J",
-          overlay: "None",
-          configuration: "No · language follow-up",
+          shortcut: "⌘⇧E",
+          overlay: "Code-block settings popover",
+          configuration: "Yes · language / type",
           selection: "Cursor in a block",
-          note: "Creates an opaque fenced code block. Language selection is not exposed in the current toolbar; Mermaid configuration is a proposed extension.",
+          note: "The current toolbar creates an opaque block. The proposed next step is a block-level language selector, with the active trigger labelled Code.",
         },
         table: {
           status: "Current",
           tone: "current",
           surface: "Insert dropdown",
           entry: "Insert → Table",
-          shortcut: "—",
+          shortcut: "⌘T",
           overlay: "Table grid modal",
           configuration: "Yes · rows + columns",
           selection: "Cursor between blocks",
@@ -1349,7 +1357,7 @@
           tone: "current",
           surface: "Insert dropdown",
           entry: "Insert → Image",
-          shortcut: "—",
+          shortcut: "⌘⇧I",
           overlay: "Image form modal",
           configuration: "Yes · source + alt",
           selection: "Cursor between blocks",
@@ -1358,9 +1366,9 @@
         footnote: {
           status: "Current",
           tone: "current",
-          surface: "Notes action",
-          entry: "Notes → Add note",
-          shortcut: "⌃⌘K",
+          surface: "Selection popup / Notes",
+          entry: "Select text → Footnote or Notes → Add note",
+          shortcut: "⌘⇧A · Notes: ⌘⇧N",
           overlay: "Footnote form modal + Notes panel",
           configuration: "Yes · note text",
           selection: "Cursor or selected text",
@@ -1371,7 +1379,7 @@
           tone: "gap",
           surface: "Markdown / command",
           entry: "Type --- on its own line",
-          shortcut: "—",
+          shortcut: "⌘⇧-",
           overlay: "None",
           configuration: "No",
           selection: "Cursor between blocks",
@@ -1470,6 +1478,19 @@
           configTitle: "Configure Code group",
           configDescription: "Tabs carry labels and languages; their inner code is never interpreted as component markup.",
           configHint: "Writes fence metadata, not code content.",
+          selectionAvailable: true,
+        },
+        codeBlock: {
+          scope: "Native block + settings",
+          defaultMode: "insert",
+          insert: "Text/Code → Code creates an opaque fenced block and exposes its language in the block settings.",
+          selection: "Select an existing code block → change its language or convert it to Mermaid.",
+          body: "Edit literal code in the block; inner Markdown and component tags are not interpreted.",
+          properties: "language · code type · optional preview mode",
+          configure: "Configure code block",
+          configTitle: "Configure code block",
+          configDescription: "Language is block metadata. It changes the code label and optional renderer, not the code body.",
+          configHint: "Writes the fence info string, not the code content.",
           selectionAvailable: true,
         },
         mermaid: {
@@ -1631,6 +1652,8 @@
               { key: "title", label: "First tab title", kind: "text", value: firstFence.title || firstFence.language, help: "Tab label only; code remains opaque." },
               { key: "language", label: "First tab language", kind: "text", value: firstFence.language, help: "Fence metadata; it does not parse the code body." },
             ];
+          case "codeBlock":
+            return [{ key: "language", label: "Language / type", kind: "select", value: firstFence.language, options: ["text", "json", "javascript", "typescript", "python", "bash", "mermaid"], help: "Fence metadata that selects the code label or renderer." }];
           case "mermaid":
             return [
               { key: "view", label: "Preview mode", kind: "select", value: state.presentation.mermaid?.view || "split", options: ["code", "diagram", "split"], help: "Presentation preference; the fenced source remains canonical." },
@@ -1717,6 +1740,9 @@
           source = updateFirstCardAttribute(source, "icon", values.icon);
           source = updateFirstCardAttribute(source, "accent", values.accent);
           source = updateFirstCardAttribute(source, "href", values.href);
+        } else if (key === "codeBlock") {
+          const currentFence = parseFences(source)[0] || { title: "" };
+          source = updateFirstFence(source, values.language, currentFence.title);
         } else if (key === "codeGroup") {
           source = updateFirstFence(source, values.language, values.title);
         } else if (key === "mermaid") {
