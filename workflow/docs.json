@@ -577,6 +577,20 @@
       "description": "CSS listo para pegar del rediseño: tokens de color, tamaño y sombra de la capa de producto, bloque scoped [data-layer=marketing] y keyframes. Fuente de los tokens — se fusiona en app/globals.css en ODE-425 (producto) y ODE-440 (marketing), nunca se anexa entero."
     },
     {
+      "path": "docs/design/document-components-playground.md",
+      "type": "design-reference",
+      "scope": "exploracion-de-componentes-documentales",
+      "state": "editable-design-exploration",
+      "description": "Laboratorio editable para alinear sintaxis, atributos, render e inserción de highlight, annotation, Tip, Card, CardGroup, Steps, CodeGroup y bloques Mermaid. No es todavía el contrato de producción del parser."
+    },
+    {
+      "path": "prototypes/document-components-playground.html",
+      "type": "design-reference",
+      "scope": "exploracion-de-componentes-documentales",
+      "state": "editable-visual-prototype",
+      "description": "Playground HTML standalone con editor de source, preview renderizado, inspector de atributos y notas de decisión locales para los componentes documentales."
+    },
+    {
       "path": "docs/design/reference/",
       "type": "design-reference",
       "description": "Prototipos .dc.html aprobados del rediseño Artifact Studio y sus dependencias de render. AUTORIDAD VISUAL de Fase 10: se leen valores de ellos, nunca se copian sus nodos. Ver docs/design/reference/README.md."
