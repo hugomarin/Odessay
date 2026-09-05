@@ -63,6 +63,7 @@ type AgentMessage = {
   id: string
   role: "user" | "agent"
   text: string
+  attachments?: WorkspaceAgentContextAttachment[]
 }
 
 function createApproval(action: WorkspaceAgentAction, resource: string): WorkspaceAgentApproval {
@@ -154,6 +155,7 @@ export function WorkspaceAgentPanel({
   const [results, setResults] = useState<AgentResult[]>([])
   const [workflowProposal, setWorkflowProposal] = useState<WorkflowDraftProposal | null>(null)
   const [brokenReferences, setBrokenReferences] = useState<BrokenReferenceProposal[]>([])
+  const [brokenReferenceReplacements, setBrokenReferenceReplacements] = useState<Record<string, string>>({})
   const [classificationProposal, setClassificationProposal] = useState<ClassificationProposal | null>(null)
   const [archiveCandidates, setArchiveCandidates] = useState<ArchiveCandidate[]>([])
   const [contradictions, setContradictions] = useState<ContradictionProposal[]>([])
@@ -228,6 +230,18 @@ export function WorkspaceAgentPanel({
     }
   }, [])
 
+  const getWorkflowReadApproval = useCallback(async (): Promise<WorkspaceAgentApproval | null | undefined> => {
+    if (!service) return null
+    const context = await service.getContext()
+    if (context.error || !context.data) {
+      setFeedback(context.error?.message ?? "Workspace context could not be loaded.")
+      return null
+    }
+    return context.data.existingWorkflow
+      ? createApproval("read", context.data.existingWorkflow.id)
+      : undefined
+  }, [service])
+
   const runWorkflow = useCallback(() => runAction("workflow", async () => {
     if (!service) return
     const context = await service.getContext()
@@ -249,14 +263,17 @@ export function WorkspaceAgentPanel({
 
   const runBrokenReferences = useCallback(() => runAction("broken-links", async () => {
     if (!service) return
-    const response = await service.findBrokenReferences()
+    const workflowReadApproval = await getWorkflowReadApproval()
+    if (workflowReadApproval === null) return
+    const response = await service.findBrokenReferences(workflowReadApproval)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "Broken references could not be checked.")
       return
     }
     setBrokenReferences(response.data)
+    setBrokenReferenceReplacements({})
     recordResult(resultFromBrokenReferences(response.data))
-  }), [recordResult, runAction, service])
+  }), [getWorkflowReadApproval, recordResult, runAction, service])
 
   const runClassification = useCallback(() => runAction("classification", async () => {
     if (!service) return
@@ -265,25 +282,29 @@ export function WorkspaceAgentPanel({
       setFeedback("Attach an artifact or open a document before asking for a vocabulary fit.")
       return
     }
-    const response = await service.suggestClassification(documentId, createApproval("read", documentId))
+    const workflowReadApproval = await getWorkflowReadApproval()
+    if (workflowReadApproval === null) return
+    const response = await service.suggestClassification(documentId, workflowReadApproval)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "Classification could not be suggested.")
       return
     }
     setClassificationProposal(response.data)
     recordResult(resultFromClassification(response.data))
-  }), [documentIds, recordResult, runAction, service])
+  }), [documentIds, getWorkflowReadApproval, recordResult, runAction, service])
 
   const runArchiveCandidates = useCallback(() => runAction("archive", async () => {
     if (!service) return
-    const response = await service.findArchiveCandidates()
+    const workflowReadApproval = await getWorkflowReadApproval()
+    if (workflowReadApproval === null) return
+    const response = await service.findArchiveCandidates(undefined, workflowReadApproval)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "Archive candidates could not be checked.")
       return
     }
     setArchiveCandidates(response.data)
     recordResult(resultFromArchiveCandidates(response.data))
-  }), [recordResult, runAction, service])
+  }), [getWorkflowReadApproval, recordResult, runAction, service])
 
   const runContradictions = useCallback(() => runAction("contradictions", async () => {
     if (!service || documentIds.length < 2) {
@@ -291,7 +312,9 @@ export function WorkspaceAgentPanel({
       return
     }
     const readApprovals = Object.fromEntries(documentIds.map((documentId) => [documentId, createApproval("read", documentId)]))
-    const response = await service.findContradictions(documentIds, readApprovals)
+    const workflowReadApproval = await getWorkflowReadApproval()
+    if (workflowReadApproval === null) return
+    const response = await service.findContradictions(documentIds, readApprovals, workflowReadApproval)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "Contradictions could not be compared.")
       return
@@ -300,7 +323,7 @@ export function WorkspaceAgentPanel({
     setReviewIndex(0)
     setIsReviewExpanded(response.data.length > 0)
     setFeedback(response.data.length === 0 ? "No contradictions were found in the selected artifacts." : `${response.data.length} contradiction(s) added to the review queue.`)
-  }), [documentIds, runAction, service])
+  }), [documentIds, getWorkflowReadApproval, runAction, service])
 
   const applyWorkflow = useCallback(() => runAction("apply-workflow", async () => {
     if (!service || !workflowProposal) return
@@ -337,6 +360,33 @@ export function WorkspaceAgentPanel({
     setFeedback(`${candidate.title} was marked with the suggested vocabulary status.`)
   }), [archiveCandidates, runAction, service])
 
+  const applyBrokenReference = useCallback((proposal: BrokenReferenceProposal) => runAction("apply-broken-link", async () => {
+    if (!service) return
+    const key = `${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
+    const replacement = (brokenReferenceReplacements[key] ?? proposal.suggestedReference ?? "").trim()
+    if (!replacement) {
+      setFeedback("Enter a replacement reference before approving this fix.")
+      return
+    }
+    const response = await service.applyBrokenReference(proposal, replacement, {
+      read: createApproval("read", proposal.sourceDocumentId),
+      edit: createApproval("edit", proposal.sourceDocumentId),
+    })
+    if (response.error || !response.data) {
+      setFeedback(response.error?.message ?? "The broken reference could not be fixed.")
+      return
+    }
+    setBrokenReferences((current) => current.filter((item) => (
+      `${item.sourceDocumentId}:${item.referenceKind}:${item.reference}` !== key
+    )))
+    setBrokenReferenceReplacements((current) => {
+      const next = { ...current }
+      delete next[key]
+      return next
+    })
+    setFeedback(`Updated ${proposal.sourceTitle} through the approved edit path.`)
+  }), [brokenReferenceReplacements, runAction, service])
+
   const persistResolvedIds = useCallback((next: Set<string>) => {
     setResolvedIds(next)
     if (typeof window !== "undefined") {
@@ -365,7 +415,9 @@ export function WorkspaceAgentPanel({
     const next = new Set(resolvedIds)
     next.add(activeContradiction.id)
     persistResolvedIds(next)
-    setReviewIndex((current) => Math.min(current, Math.max(0, activeContradictions.length - 2)))
+    const remainingCount = Math.max(0, activeContradictions.length - 1)
+    setReviewIndex((current) => Math.min(current, Math.max(0, remainingCount - 1)))
+    setIsReviewExpanded(remainingCount > 0)
     setFeedback(resolution === "discard" ? "Finding discarded from this review queue." : "The selected evidence was applied to the target artifact.")
   }), [activeContradiction, activeContradictions.length, persistResolvedIds, resolvedIds, runAction, service])
 
@@ -384,13 +436,15 @@ export function WorkspaceAgentPanel({
   const submitChat = useCallback(() => {
     const text = chatDraft.trim()
     if (!text) return
+    const messageAttachments = attachments.map((attachment) => ({ ...attachment }))
+    const messageTimestamp = Date.now()
     setMessages((current) => [
       ...current,
-      { id: `user-${Date.now()}`, role: "user", text },
-      { id: `agent-${Date.now() + 1}`, role: "agent", text: "Context noted for this session. Choose an analysis action to produce an evidence-backed result." },
+      { id: `user-${messageTimestamp}`, role: "user", text, attachments: messageAttachments.length > 0 ? messageAttachments : undefined },
+      { id: `agent-${messageTimestamp + 1}`, role: "agent", text: "Context noted for this session. Choose an analysis action to produce an evidence-backed result." },
     ])
     setChatDraft("")
-  }, [chatDraft])
+  }, [attachments, chatDraft])
 
   if (!open) {
     return (
@@ -538,9 +592,30 @@ export function WorkspaceAgentPanel({
             <p className="text-[11px] font-medium text-ink">Broken references</p>
             <div className="mt-2 space-y-1.5">
               {brokenReferences.slice(0, 3).map((proposal) => (
-                <div key={`${proposal.sourceDocumentId}:${proposal.reference}`} className="rounded-[7px] border-[0.5px] border-border/70 bg-bg/80 px-2 py-1.5 text-[10px] leading-[1.4] text-ink-3">
+                <div key={`${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`} className="rounded-[7px] border-[0.5px] border-border/70 bg-bg/80 px-2 py-1.5 text-[10px] leading-[1.4] text-ink-3">
                   <span className="font-medium text-ink">{proposal.reference}</span> in {proposal.sourceTitle}
                   {proposal.candidateTitle ? <span className="block text-ink-4">Nearest catalog match: {proposal.candidateTitle}</span> : null}
+                  <label className="mt-2 block text-[9px] font-medium uppercase tracking-[0.08em] text-ink-4">
+                    Replacement {proposal.referenceKind}
+                    <input
+                      value={brokenReferenceReplacements[`${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`] ?? proposal.suggestedReference ?? ""}
+                      onChange={(event) => setBrokenReferenceReplacements((current) => ({
+                        ...current,
+                        [`${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`]: event.target.value,
+                      }))}
+                      placeholder={proposal.referenceKind === "slug" ? "slug" : "path/to/document.md"}
+                      aria-label={`Replacement for ${proposal.reference}`}
+                      className="mt-1 h-7 w-full rounded-[6px] border-[0.5px] border-border bg-bg px-2 text-[10px] font-normal normal-case tracking-normal text-ink outline-none placeholder:text-ink-4 focus:border-ink-3"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={busyAction === "apply-broken-link" || !(brokenReferenceReplacements[`${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`] ?? proposal.suggestedReference ?? "").trim()}
+                    onClick={() => void applyBrokenReference(proposal)}
+                    className="mt-1.5 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50"
+                  >
+                    <Check className="h-3 w-3" strokeWidth={1.5} /> Approve fix
+                  </button>
                 </div>
               ))}
             </div>
@@ -604,7 +679,17 @@ export function WorkspaceAgentPanel({
           >
             {messages.map((message) => (
               <div key={message.id} className={cn("rounded-[8px] px-2.5 py-2 text-[10.5px] leading-[1.45]", message.role === "user" ? "ml-4 bg-muted text-ink" : "mr-4 border-[0.5px] border-border text-ink-3")}>
-                {message.text}
+                <p>{message.text}</p>
+                {message.attachments?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1" data-testid="workspace-agent-message-context" aria-label="Message context">
+                    {message.attachments.map((attachment) => (
+                      <span key={`${attachment.kind}:${attachment.path}`} className="inline-flex max-w-full items-center gap-1 rounded-[5px] border-[0.5px] border-border/70 bg-bg/50 px-1.5 py-1 text-[9px] text-ink-3">
+                        {attachment.kind === "folder" ? <Folder className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} /> : <FileText className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />}
+                        <span className="truncate">{attachment.label}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
           </section>

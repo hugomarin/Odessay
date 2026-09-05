@@ -97,6 +97,7 @@ export const WORKSPACE_AGENT_TOOLS_CONTRACT = {
   invariants: [
     "Every operation receives an action-specific approval in the same call; there is no global trust mode.",
     "A rejected approval performs no filesystem, manifest, catalog or sync mutation.",
+    "Every filesystem candidate is canonicalized at the native desktop boundary, remains inside the configured BindingRoot, and never enters .odessay internal state.",
     "UUID-to-path resolution always goes through DocumentCatalog before a filesystem adapter is called.",
     "The materialized .md remains the content authority and metadata is never written into frontmatter.",
     "Move and delete preserve the existing catalog identity and use the established desktop write path.",
@@ -108,7 +109,7 @@ export const WORKSPACE_AGENT_TOOLS_CONTRACT = {
     summary: `${name} a workspace document after explicit approval for this action`,
     input: ["action-specific WorkspaceAgentApproval"],
     output: ["WorkspaceAgentDocument and execution receipt"],
-    errorCodes: ["FORBIDDEN", "INVALID_INPUT", "NOT_FOUND", "STORAGE_ERROR", "UNAVAILABLE"],
+    errorCodes: ["CONFLICT", "FORBIDDEN", "INVALID_INPUT", "NOT_FOUND", "STORAGE_ERROR", "UNAVAILABLE"],
   })),
   hotspots: [{
     id: "workspace-agent-approval",

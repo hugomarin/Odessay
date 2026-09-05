@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use uuid::Uuid;
 
@@ -139,6 +139,133 @@ fn normalize_selected_paths(selected_paths: Vec<String>) -> Result<Vec<String>, 
 
     normalized.sort();
     Ok(normalized)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceAgentPathValidation {
+    pub canonical_root: String,
+    pub canonical_path: String,
+}
+
+fn has_workspace_component(path: &Path, expected: &str) -> bool {
+    path.components().any(|component| match component {
+        Component::Normal(value) => value.to_string_lossy().eq_ignore_ascii_case(expected),
+        _ => false,
+    })
+}
+
+/// Canonicalize a path even when the final file (or one of its parent
+/// directories) has not been created yet. Existing path components are still
+/// resolved through the filesystem, so a symlink cannot widen the workspace
+/// boundary during an agent write or move preflight.
+fn canonicalize_workspace_agent_candidate(
+    candidate: &Path,
+    allow_missing: bool,
+) -> Result<PathBuf, String> {
+    match fs::symlink_metadata(candidate) {
+        Ok(_) => candidate.canonicalize().map_err(|error| {
+            format!("workspace_agent_validate_path: canonicalize candidate: {error}")
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound && allow_missing => {
+            let mut missing_components = Vec::new();
+            let mut existing_parent = candidate.to_path_buf();
+
+            loop {
+                match fs::symlink_metadata(&existing_parent) {
+                    Ok(_) => break,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        let component = existing_parent.file_name().ok_or_else(|| {
+                            "workspace_agent_validate_path: candidate has no existing parent"
+                                .to_string()
+                        })?;
+                        missing_components.push(component.to_os_string());
+                        existing_parent = existing_parent
+                            .parent()
+                            .ok_or_else(|| {
+                                "workspace_agent_validate_path: candidate has no existing parent"
+                                    .to_string()
+                            })?
+                            .to_path_buf();
+                    }
+                    Err(error) => {
+                        return Err(format!(
+                            "workspace_agent_validate_path: inspect candidate parent: {error}"
+                        ));
+                    }
+                }
+            }
+
+            let mut canonical = existing_parent.canonicalize().map_err(|error| {
+                format!("workspace_agent_validate_path: canonicalize candidate parent: {error}")
+            })?;
+            for component in missing_components.iter().rev() {
+                canonical.push(component);
+            }
+            Ok(canonical)
+        }
+        Err(error) => Err(format!(
+            "workspace_agent_validate_path: inspect candidate: {error}"
+        )),
+    }
+}
+
+/// Validate an agent path at the native desktop boundary. The TypeScript
+/// adapter calls this before consuming an approval, and the returned path is
+/// the one passed to the filesystem/catalog adapters.
+#[tauri::command]
+pub fn workspace_agent_validate_path(
+    root_path: String,
+    candidate_path: String,
+    allow_missing: bool,
+) -> Result<WorkspaceAgentPathValidation, String> {
+    let root = Path::new(&root_path);
+    let candidate = Path::new(&candidate_path);
+
+    if !root.is_absolute() || !candidate.is_absolute() {
+        return Err(
+            "workspace_agent_validate_path: root and candidate must be absolute paths".to_string(),
+        );
+    }
+    if has_workspace_component(root, WORKSPACE_DIR_NAME) {
+        return Err("workspace_agent_validate_path: workspace root cannot be .odessay".to_string());
+    }
+    if has_workspace_component(candidate, WORKSPACE_DIR_NAME) {
+        return Err(
+            "workspace_agent_validate_path: .odessay is outside the agent scope".to_string(),
+        );
+    }
+
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|error| format!("workspace_agent_validate_path: canonicalize root: {error}"))?;
+    if has_workspace_component(&canonical_root, WORKSPACE_DIR_NAME) {
+        return Err(
+            "workspace_agent_validate_path: canonical workspace root cannot be .odessay"
+                .to_string(),
+        );
+    }
+    if !canonical_root.is_dir() {
+        return Err("workspace_agent_validate_path: root is not a directory".to_string());
+    }
+
+    let canonical_candidate = canonicalize_workspace_agent_candidate(candidate, allow_missing)?;
+    if has_workspace_component(&canonical_candidate, WORKSPACE_DIR_NAME) {
+        return Err(
+            "workspace_agent_validate_path: .odessay is outside the agent scope".to_string(),
+        );
+    }
+    if canonical_candidate == canonical_root || !canonical_candidate.starts_with(&canonical_root) {
+        return Err(
+            "workspace_agent_validate_path: candidate is outside the agent workspace root"
+                .to_string(),
+        );
+    }
+
+    Ok(WorkspaceAgentPathValidation {
+        canonical_root: canonical_root.to_string_lossy().to_string(),
+        canonical_path: canonical_candidate.to_string_lossy().to_string(),
+    })
 }
 
 fn should_ignore_entry(name: &str, is_dir: bool) -> bool {
@@ -991,6 +1118,97 @@ mod tests {
 
     fn cleanup(path: &Path) {
         let _ = fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn workspace_agent_validate_path_canonicalizes_traversal_and_excludes_internal_state() {
+        let root = temp_workspace_root("agent-path-validation");
+        fs::create_dir_all(root.join("nested")).expect("create nested directory");
+
+        let inside = workspace_agent_validate_path(
+            root.to_string_lossy().to_string(),
+            root.join("nested")
+                .join("..")
+                .join("inside.md")
+                .to_string_lossy()
+                .to_string(),
+            true,
+        )
+        .expect("in-root path should validate");
+        assert_eq!(
+            inside.canonical_path,
+            Path::new(&inside.canonical_root)
+                .join("inside.md")
+                .to_string_lossy()
+                .to_string()
+        );
+
+        let escaped = workspace_agent_validate_path(
+            root.to_string_lossy().to_string(),
+            root.join("..")
+                .join("outside.md")
+                .to_string_lossy()
+                .to_string(),
+            true,
+        );
+        assert!(escaped.is_err());
+
+        let internal = workspace_agent_validate_path(
+            root.to_string_lossy().to_string(),
+            root.join(WORKSPACE_DIR_NAME)
+                .join("index.json")
+                .to_string_lossy()
+                .to_string(),
+            true,
+        );
+        assert!(internal.is_err());
+
+        cleanup(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workspace_agent_validate_path_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_workspace_root("agent-symlink-validation");
+        let outside = root
+            .parent()
+            .expect("temp root parent")
+            .join(format!("odessay-agent-outside-{}", Uuid::new_v4()));
+        fs::create_dir_all(&outside).expect("create outside directory");
+        symlink(&outside, root.join("linked")).expect("create symlink");
+
+        let escaped = workspace_agent_validate_path(
+            root.to_string_lossy().to_string(),
+            root.join("linked")
+                .join("secret.md")
+                .to_string_lossy()
+                .to_string(),
+            true,
+        );
+        assert!(escaped.is_err());
+
+        let internal_alias = root
+            .parent()
+            .expect("temp root parent")
+            .join(format!("odessay-agent-internal-alias-{}", Uuid::new_v4()));
+        fs::create_dir_all(outside.join(WORKSPACE_DIR_NAME)).expect("create internal directory");
+        symlink(outside.join(WORKSPACE_DIR_NAME), &internal_alias)
+            .expect("create internal root symlink");
+        let internal_root = workspace_agent_validate_path(
+            internal_alias.to_string_lossy().to_string(),
+            internal_alias
+                .join("secret.md")
+                .to_string_lossy()
+                .to_string(),
+            true,
+        );
+        assert!(internal_root.is_err());
+
+        cleanup(&root);
+        cleanup(&outside);
+        let _ = fs::remove_file(&internal_alias);
     }
 
     fn read_index(root: &Path) -> WorkspaceIndexDocument {

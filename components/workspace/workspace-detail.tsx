@@ -15,9 +15,8 @@ import {
   Tag,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WorkspaceTree } from "@/components/workspace/workspace-tree";
-import { WorkspaceAgentPanel } from "@/components/agent/workspace-agent-panel";
 import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar";
 import { BulkActionBar } from "@/components/desk/bulk-action-bar";
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
@@ -112,6 +111,12 @@ import type {
   WorkspaceDetail as WorkspaceDetailType,
   WorkspaceFile,
 } from "@/lib/workspace/types";
+
+const WorkspaceAgentPanel = lazy(() =>
+  import("@/components/agent/workspace-agent-panel").then((module) => ({
+    default: module.WorkspaceAgentPanel,
+  })),
+);
 
 function formatFileTimestamp(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", {
@@ -1528,13 +1533,15 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 />
               )}
             </div>
-            <WorkspaceAgentPanel
-              scope={{ kind: "workspace", rootId: workspace.slug }}
-              workspaceRootPath={workspace.rootPath}
-              scopeLabel={workspace.name}
-              open={isAgentPanelOpen}
-              onOpenChange={setIsAgentPanelOpen}
-            />
+            <Suspense fallback={null}>
+              <WorkspaceAgentPanel
+                scope={{ kind: "workspace", rootId: workspace.slug }}
+                workspaceRootPath={workspace.rootPath}
+                scopeLabel={workspace.name}
+                open={isAgentPanelOpen}
+                onOpenChange={setIsAgentPanelOpen}
+              />
+            </Suspense>
             </div>
           </div>
         </div>

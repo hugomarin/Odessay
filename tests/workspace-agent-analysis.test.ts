@@ -4,6 +4,7 @@ import {
   detectBrokenDocumentReferences,
   detectDocumentContradictions,
   findArchiveCandidates,
+  replaceBrokenDocumentReference,
   replaceContradictionFragment,
   suggestArtifactClassification,
 } from "@/lib/agent/workspace-agent-analysis"
@@ -88,7 +89,24 @@ describe("Workspace agent analysis", () => {
     ])
 
     expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({ sourceDocumentId: "source", reference: "missing.md", candidateDocumentId: null })
+    expect(result[0]).toMatchObject({ sourceDocumentId: "source", reference: "missing.md", candidateDocumentId: null, suggestedReference: null })
+  })
+
+  it("builds an editable replacement from the nearest catalog match", () => {
+    const result = detectBrokenDocumentReferences([
+      record("source", "Source", { excerpt: "See [project plan](project-plan-old.md)." }),
+      record("candidate", "Project plan", {
+        slug: "project-plan",
+        binding: { ...record("candidate", "Project plan").binding!, relativePath: "notes/project-plan.md", canonicalPath: "/workspace/notes/project-plan.md" },
+      }),
+    ])
+
+    expect(result[0]).toMatchObject({
+      candidateDocumentId: "candidate",
+      suggestedReference: "notes/project-plan.md",
+    })
+    expect(replaceBrokenDocumentReference("See [project plan](project-plan-old.md).", result[0]!, "notes/project-plan.md"))
+      .toBe("See [project plan](notes/project-plan.md).")
   })
 
   it("never suggests a type or status outside the current vocabulary", () => {
@@ -151,5 +169,11 @@ describe("Workspace agent analysis", () => {
     const fragment = { text: "Storage: SQLite.", start: 0, end: 16, line: 1 }
     expect(replaceContradictionFragment("Storage: Postgres.", fragment, "Storage: SQLite.")).toBeNull()
     expect(replaceContradictionFragment("Storage: SQLite.", fragment, "Storage: IndexedDB.")).toBe("Storage: IndexedDB.")
+  })
+
+  it("rebases a contradiction fragment when an earlier edit changes document length", () => {
+    const fragment = { text: "Storage: SQLite.", start: 0, end: 16, line: 1 }
+    expect(replaceContradictionFragment("Intro added.\nStorage: SQLite.", fragment, "Storage: IndexedDB."))
+      .toBe("Intro added.\nStorage: IndexedDB.")
   })
 })

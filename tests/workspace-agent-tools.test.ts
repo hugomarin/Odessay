@@ -97,6 +97,7 @@ describe("DesktopWorkspaceAgentToolsService", () => {
       documentService: documentService as unknown as DocumentService,
       importDocument: importDocument as unknown as (path: string, content: string) => Promise<ServiceResponse<WritingRecord>>,
       relocateDocument: relocateDocument as unknown as (id: string, requestedPath: string, content?: string) => Promise<RelocateDesktopWritingResult>,
+      validatePath: async (rootPath, candidatePath) => ({ canonicalRoot: rootPath, canonicalPath: candidatePath }),
       now: () => new Date("2026-01-02T00:00:00.000Z"),
     })
   })
@@ -180,5 +181,51 @@ describe("DesktopWorkspaceAgentToolsService", () => {
     expect(result.error).toBeNull()
     expect(importDocument).toHaveBeenCalledWith("/workspace/workflow.md", "# Workspace workflow\n")
     expect(result.data?.document.documentId).toBe(id)
+  })
+
+  it("canonicalizes traversal before consuming approval or reaching a desktop adapter", async () => {
+    const target = "/workspace/../outside.md"
+    const result = await service.write({
+      target: { canonicalPath: target },
+      markdown: "# Outside",
+      approval: approval("write", target, "write-outside"),
+    })
+
+    expect(result.error?.code).toBe("FORBIDDEN")
+    expect(catalog.resolvePath).not.toHaveBeenCalled()
+    expect(importDocument).not.toHaveBeenCalled()
+    expect(documentService.openWriting).not.toHaveBeenCalled()
+  })
+
+  it("never exposes the internal .odessay ledger through agent writes", async () => {
+    const target = "/workspace/.odessay/index.json"
+    const result = await service.write({
+      target: { canonicalPath: target },
+      markdown: "{}",
+      approval: approval("write", target, "write-internal"),
+    })
+
+    expect(result.error?.code).toBe("FORBIDDEN")
+    expect(catalog.resolvePath).not.toHaveBeenCalled()
+    expect(importDocument).not.toHaveBeenCalled()
+  })
+
+  it("honors the native path validator for symlink escapes", async () => {
+    const validatePath = vi.fn(async () => {
+      throw new Error("candidate resolves outside the agent workspace root")
+    })
+    const guardedService = new DesktopWorkspaceAgentToolsService(root, {
+      catalog: catalog as unknown as DocumentCatalog,
+      documentService: documentService as unknown as DocumentService,
+      importDocument: importDocument as unknown as (path: string, content: string) => Promise<ServiceResponse<WritingRecord>>,
+      relocateDocument: relocateDocument as unknown as (id: string, requestedPath: string, content?: string) => Promise<RelocateDesktopWritingResult>,
+      validatePath,
+    })
+
+    const result = await guardedService.read({ documentId: id, approval: approval("read") })
+
+    expect(result.error?.code).toBe("FORBIDDEN")
+    expect(validatePath).toHaveBeenCalledWith(root, "/workspace/Doc.md", true)
+    expect(documentService.openWriting).not.toHaveBeenCalled()
   })
 })
