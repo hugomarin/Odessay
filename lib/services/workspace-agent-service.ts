@@ -2,17 +2,23 @@ import type { CollectionSummary } from "@/lib/collections/collections"
 import {
   buildWorkflowDraft,
   detectBrokenDocumentReferences,
+  detectDocumentContradictions,
   findArchiveCandidates,
+  replaceContradictionFragment,
   suggestArtifactClassification,
   type ArchiveCandidate,
   type BrokenReferenceProposal,
   type ClassificationProposal,
+  type ContradictionProposal,
+  type ContradictionResolution,
+  type WorkspaceAgentContentSnapshot,
   type WorkflowDraftProposal,
 } from "@/lib/agent/workspace-agent-analysis"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import type {
   WorkspaceAgentApproval,
+  WorkspaceAgentDocument,
   WorkspaceAgentEditInput,
   WorkspaceAgentMutationResult,
   WorkspaceAgentToolsService,
@@ -41,6 +47,16 @@ function isInsideRoot(path: string | null | undefined, rootPath: string): boolea
 
 function workflowPath(rootPath: string): string {
   return `${normalizePath(rootPath)}/workflow.md`
+}
+
+function contentSnapshot(document: WorkspaceAgentDocument): WorkspaceAgentContentSnapshot {
+  return {
+    documentId: document.documentId,
+    title: document.title?.trim() || document.catalogRecord.title || document.documentId,
+    markdown: document.markdown,
+    updatedAt: new Date(document.catalogRecord.modifiedAt ?? Date.now()).toISOString(),
+    canonicalPath: document.canonicalPath,
+  }
 }
 
 type WorkspaceAgentContext = {
@@ -95,6 +111,15 @@ export type WorkspaceAgentService = {
     approval: WorkspaceAgentApproval,
   ): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
   findBrokenReferences(readApproval?: WorkspaceAgentApproval): Promise<ServiceResponse<BrokenReferenceProposal[]>>
+  findContradictions(
+    documentIds: string[],
+    readApprovals: Readonly<Record<string, WorkspaceAgentApproval>>,
+  ): Promise<ServiceResponse<ContradictionProposal[]>>
+  resolveContradiction(
+    proposal: ContradictionProposal,
+    resolution: ContradictionResolution,
+    approvals?: { read: WorkspaceAgentApproval; edit: WorkspaceAgentApproval },
+  ): Promise<ServiceResponse<ContradictionResolutionResult>>
   suggestClassification(documentId: string, readApproval?: WorkspaceAgentApproval): Promise<ServiceResponse<ClassificationProposal>>
   applyClassification(
     proposal: ClassificationProposal,
@@ -106,6 +131,13 @@ export type WorkspaceAgentService = {
     approval: WorkspaceAgentApproval,
   ): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
   tools: WorkspaceAgentToolsService
+}
+
+export type ContradictionResolutionResult = {
+  proposal: ContradictionProposal
+  resolution: ContradictionResolution
+  resolvedDocumentId: string | null
+  mutation: WorkspaceAgentMutationResult | null
 }
 
 export async function createWorkspaceAgentService(
@@ -145,6 +177,58 @@ export async function createWorkspaceAgentService(
       const context = await getContext(readApproval)
       if (context.error || !context.data) return context as ServiceResponse<BrokenReferenceProposal[]>
       return ok(detectBrokenDocumentReferences(context.data.documents))
+    },
+    async findContradictions(documentIds, readApprovals) {
+      const uniqueDocumentIds = [...new Set(documentIds.filter(Boolean))]
+      if (uniqueDocumentIds.length < 2) {
+        return error("INVALID_INPUT", "At least two documents are required to compare contradictions.")
+      }
+
+      for (const documentId of uniqueDocumentIds) {
+        if (!readApprovals[documentId]) {
+          return error("FORBIDDEN", `Reading document ${documentId} requires an explicit approval.`)
+        }
+      }
+
+      const documents: WorkspaceAgentContentSnapshot[] = []
+      for (const documentId of uniqueDocumentIds) {
+        const approval = readApprovals[documentId]!
+        const read = await tools.read({ documentId, approval })
+        if (read.error || !read.data) return error("NOT_FOUND", read.error?.message ?? `Document ${documentId} could not be read.`)
+        documents.push(contentSnapshot(read.data.document))
+      }
+
+      return ok(detectDocumentContradictions(documents))
+    },
+    async resolveContradiction(proposal, resolution, approvals) {
+      if (resolution === "discard") {
+        return ok({ proposal, resolution, resolvedDocumentId: null, mutation: null })
+      }
+      if (!approvals) {
+        return error("FORBIDDEN", "Resolving a contradiction requires read and edit approvals for the target document.")
+      }
+
+      const selected = resolution === "left" ? proposal.left : proposal.right
+      const target = resolution === "left" ? proposal.right : proposal.left
+      const read = await tools.read({ documentId: target.documentId, approval: approvals.read })
+      if (read.error || !read.data) return error("NOT_FOUND", read.error?.message ?? `Document ${target.documentId} could not be read.`)
+      const markdown = replaceContradictionFragment(read.data.document.markdown, target.fragment, selected.fragment.text)
+      if (markdown === null) {
+        return error("CONFLICT", `The evidence in ${target.title} changed since this contradiction was proposed.`)
+      }
+
+      const mutation = await tools.edit({
+        documentId: target.documentId,
+        markdown,
+        approval: approvals.edit,
+      })
+      if (mutation.error || !mutation.data) return mutation as ServiceResponse<ContradictionResolutionResult>
+      return ok({
+        proposal,
+        resolution,
+        resolvedDocumentId: target.documentId,
+        mutation: mutation.data,
+      })
     },
     async suggestClassification(documentId, readApproval) {
       const context = await getContext(readApproval)

@@ -17,6 +17,13 @@ export type WorkspaceTreeItem = {
 
 export type WorkspaceTreeMode = "studio" | "detail";
 
+export type WorkspaceTreeDragPayload = {
+  kind: "folder" | "file";
+  id?: string;
+  path: string;
+  label: string;
+};
+
 export type WorkspaceTreeProps = {
   items: WorkspaceTreeItem[];
   mode: WorkspaceTreeMode;
@@ -36,6 +43,7 @@ export type WorkspaceTreeProps = {
   foldersOnly?: boolean;
   onOpenFile?: (id: string) => void;
   onSelectFolder?: (path: string) => void;
+  onDragStart?: (payload: WorkspaceTreeDragPayload) => void;
   onCountChange?: (count?: number) => void;
   emptyState?: React.ReactNode;
   className?: string;
@@ -58,6 +66,7 @@ function TreeRow({
   onToggleFolder,
   onOpenFile,
   onSelectFolder,
+  onDragStart,
 }: {
   depth: number;
   node: WorkspaceFolderTreeNode;
@@ -70,6 +79,7 @@ function TreeRow({
   onToggleFolder: (path: string) => void;
   onOpenFile?: (id: string) => void;
   onSelectFolder?: (path: string) => void;
+  onDragStart?: (payload: WorkspaceTreeDragPayload) => void;
 }) {
   if (node.kind === "file") {
     if (foldersOnly) return null;
@@ -84,6 +94,19 @@ function TreeRow({
           aria-selected={active}
           aria-current={active ? "page" : undefined}
           disabled={disabled}
+          draggable={Boolean(onDragStart)}
+          onDragStart={(event) => {
+            const payload: WorkspaceTreeDragPayload = {
+              kind: "file",
+              id: fileId,
+              path: node.path,
+              label: node.name.replace(/\.md$/i, ""),
+            };
+            event.dataTransfer.effectAllowed = "copy";
+            event.dataTransfer.setData("application/x-odessay-agent-context", JSON.stringify(payload));
+            event.dataTransfer.setData("text/plain", JSON.stringify(payload));
+            onDragStart?.(payload);
+          }}
           onClick={() => onOpenFile?.(fileId)}
           style={{ paddingLeft: `${8 + depth * 18}px` }}
           className={cn(
@@ -123,6 +146,18 @@ function TreeRow({
         aria-expanded={hasChildren ? expanded : undefined}
         aria-selected={isSelected}
         disabled={folderDisabled}
+        draggable={Boolean(onDragStart)}
+        onDragStart={(event) => {
+          const payload: WorkspaceTreeDragPayload = {
+            kind: "folder",
+            path: node.path,
+            label: node.name,
+          };
+          event.dataTransfer.effectAllowed = "copy";
+          event.dataTransfer.setData("application/x-odessay-agent-context", JSON.stringify(payload));
+          event.dataTransfer.setData("text/plain", JSON.stringify(payload));
+          onDragStart?.(payload);
+        }}
         onClick={() => {
           if (mode === "detail") {
             onSelectFolder?.(node.path);
@@ -171,6 +206,7 @@ function TreeRow({
               onToggleFolder={onToggleFolder}
               onOpenFile={onOpenFile}
               onSelectFolder={onSelectFolder}
+              onDragStart={onDragStart}
             />
           ))}
         </ul>
@@ -191,6 +227,7 @@ export function WorkspaceTree({
   foldersOnly,
   onOpenFile,
   onSelectFolder,
+  onDragStart,
   onCountChange,
   emptyState,
   className,
@@ -353,6 +390,7 @@ export function WorkspaceTree({
             onToggleFolder={handleToggleFolder}
             onOpenFile={onOpenFile}
             onSelectFolder={onSelectFolder}
+            onDragStart={onDragStart}
           />
         ))}
       </ul>

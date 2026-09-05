@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest"
 import {
   buildWorkflowDraft,
   detectBrokenDocumentReferences,
+  detectDocumentContradictions,
   findArchiveCandidates,
+  replaceContradictionFragment,
   suggestArtifactClassification,
 } from "@/lib/agent/workspace-agent-analysis"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
@@ -118,5 +120,36 @@ describe("Workspace agent analysis", () => {
     expect(candidates).toHaveLength(1)
     expect(candidates[0]).toMatchObject({ documentId: "old", duplicateOfDocumentId: "new", suggestedStatus: "archived" })
     expect(candidates[0]?.evidence.map((item) => item.kind)).toEqual(expect.arrayContaining(["date", "similarity"]))
+  })
+
+  it("detects multiple contradictions with exact fragments and evidence", () => {
+    const proposals = detectDocumentContradictions([
+      {
+        documentId: "left",
+        title: "Architecture decision",
+        markdown: "Storage: SQLite.\nThe editor uses local files.",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+        canonicalPath: "/workspace/architecture.md",
+      },
+      {
+        documentId: "right",
+        title: "Migration note",
+        markdown: "Storage: IndexedDB.\nThe editor does not use local files.",
+        updatedAt: "2026-01-03T00:00:00.000Z",
+        canonicalPath: "/workspace/migration.md",
+      },
+    ])
+
+    expect(proposals).toHaveLength(2)
+    expect(proposals[0]?.suggestedDocumentId).toBe("right")
+    expect(proposals.flatMap((proposal) => proposal.evidence.map((item) => item.detail))).toEqual(
+      expect.arrayContaining(["line 1: Storage: SQLite.", "line 1: Storage: IndexedDB."]),
+    )
+  })
+
+  it("rejects stale contradiction offsets before writing a replacement", () => {
+    const fragment = { text: "Storage: SQLite.", start: 0, end: 16, line: 1 }
+    expect(replaceContradictionFragment("Storage: Postgres.", fragment, "Storage: SQLite.")).toBeNull()
+    expect(replaceContradictionFragment("Storage: SQLite.", fragment, "Storage: IndexedDB.")).toBe("Storage: IndexedDB.")
   })
 })
