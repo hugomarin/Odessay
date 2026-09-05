@@ -3,8 +3,8 @@
 import {
   AlertCircle,
   AlertTriangle,
-  CheckCircle2,
   Cloud,
+  CloudUpload,
   Clock3,
   HardDrive,
   History,
@@ -58,7 +58,7 @@ export const DOCUMENT_STATE_BADGE_COPY: Record<
     label: "Synced",
     tooltip:
       "This artifact has both a cloud record and a local file on this machine.",
-    icon: CheckCircle2,
+    icon: CloudUpload,
     className: "bg-[hsl(140,30%,91%)] text-[hsl(140,40%,30%)]",
   },
   pending: {
