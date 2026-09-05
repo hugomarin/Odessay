@@ -65,6 +65,42 @@ export type ArchiveCandidate = {
   reason: string
 }
 
+export type WorkspaceAgentContentSnapshot = {
+  documentId: string
+  title: string
+  markdown: string
+  updatedAt: string
+  canonicalPath: string
+}
+
+export type ContradictionFragment = {
+  text: string
+  start: number
+  end: number
+  line: number
+}
+
+export type ContradictionProposal = {
+  id: string
+  topic: string
+  left: {
+    documentId: string
+    title: string
+    updatedAt: string
+    fragment: ContradictionFragment
+  }
+  right: {
+    documentId: string
+    title: string
+    updatedAt: string
+    fragment: ContradictionFragment
+  }
+  suggestedDocumentId: string | null
+  evidence: EvidenceCitation[]
+}
+
+export type ContradictionResolution = "left" | "right" | "discard"
+
 function normalizePath(value: string): string {
   return value.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "")
 }
@@ -351,6 +387,165 @@ export function findArchiveCandidates(
   }
 
   return [...candidates.values()].sort((left, right) => left.title.localeCompare(right.title))
+}
+
+type StatementSegment = ContradictionFragment
+
+const CONTRADICTION_STOP_WORDS = new Set([
+  "about", "after", "again", "also", "because", "before", "being", "between", "could", "document",
+  "from", "have", "into", "more", "only", "other", "over", "should", "some", "than", "that", "their",
+  "there", "these", "they", "this", "through", "under", "using", "where", "which", "with", "would",
+])
+
+const CONTRADICTION_NEGATIONS = new Set(["cannot", "cant", "disabled", "doesnt", "isnt", "never", "no", "not", "without", "wont"])
+
+function statementSegments(markdown: string): StatementSegment[] {
+  const segments: StatementSegment[] = []
+  let lineStart = 0
+  let inCodeFence = false
+
+  for (const [lineIndex, line] of markdown.split("\n").entries()) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith("```")) {
+      inCodeFence = !inCodeFence
+      lineStart += line.length + 1
+      continue
+    }
+    if (!inCodeFence && trimmed.length > 0) {
+      const sentencePattern = /[^.!?]+(?:[.!?]+|$)/g
+      for (const match of line.matchAll(sentencePattern)) {
+        const raw = match[0]
+        const leadingWhitespace = raw.search(/\S/)
+        if (leadingWhitespace < 0) continue
+        const text = raw.slice(leadingWhitespace).trim()
+        if (text.length < 12) continue
+        const start = lineStart + (match.index ?? 0) + leadingWhitespace
+        segments.push({ text, start, end: start + text.length, line: lineIndex + 1 })
+      }
+    }
+    lineStart += line.length + 1
+  }
+
+  return segments
+}
+
+function statementWords(value: string): string[] {
+  return value
+    .toLocaleLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2)
+}
+
+function statementKey(value: string): string | null {
+  const beforeColon = value.split(":", 1)[0]?.trim() ?? ""
+  const words = statementWords(beforeColon || value)
+    .filter((word) => !CONTRADICTION_STOP_WORDS.has(word) && !CONTRADICTION_NEGATIONS.has(word))
+  return words.length > 0 ? words.join(" ") : null
+}
+
+function hasNegation(value: string): boolean {
+  return statementWords(value).some((word) => CONTRADICTION_NEGATIONS.has(word))
+}
+
+function statementSimilarity(left: string, right: string): number {
+  const leftWords = new Set(statementWords(left).filter((word) => !CONTRADICTION_STOP_WORDS.has(word)))
+  const rightWords = new Set(statementWords(right).filter((word) => !CONTRADICTION_STOP_WORDS.has(word)))
+  if (leftWords.size === 0 || rightWords.size === 0) return 0
+  const intersection = [...leftWords].filter((word) => rightWords.has(word)).length
+  return intersection / Math.max(leftWords.size, rightWords.size)
+}
+
+function contradictionScore(left: string, right: string): number {
+  if (left.toLocaleLowerCase() === right.toLocaleLowerCase()) return 0
+  const leftKey = statementKey(left)
+  const rightKey = statementKey(right)
+  if (leftKey && rightKey && leftKey === rightKey) return 1
+  const similarity = statementSimilarity(left, right)
+  return hasNegation(left) !== hasNegation(right) && similarity >= 0.45 ? similarity : 0
+}
+
+function suggestedDocumentId(left: WorkspaceAgentContentSnapshot, right: WorkspaceAgentContentSnapshot): string | null {
+  const leftTime = Date.parse(left.updatedAt)
+  const rightTime = Date.parse(right.updatedAt)
+  if (!Number.isFinite(leftTime) || !Number.isFinite(rightTime) || leftTime === rightTime) return null
+  return leftTime > rightTime ? left.documentId : right.documentId
+}
+
+function contradictionTopic(left: string, right: string): string {
+  const leftKey = statementKey(left)
+  if (leftKey) return leftKey
+  const sharedWords = statementWords(left).filter((word) => statementWords(right).includes(word))
+  return sharedWords.slice(0, 4).join(" ") || "document claim"
+}
+
+export function detectDocumentContradictions(
+  documents: WorkspaceAgentContentSnapshot[],
+): ContradictionProposal[] {
+  const proposals: ContradictionProposal[] = []
+
+  for (let leftIndex = 0; leftIndex < documents.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < documents.length; rightIndex += 1) {
+      const leftDocument = documents[leftIndex]
+      const rightDocument = documents[rightIndex]
+      const leftSegments = statementSegments(leftDocument.markdown)
+      const rightSegments = statementSegments(rightDocument.markdown)
+
+      for (const leftFragment of leftSegments) {
+        for (const rightFragment of rightSegments) {
+          const score = contradictionScore(leftFragment.text, rightFragment.text)
+          if (score === 0) continue
+          const leftEvidence: EvidenceCitation = {
+            kind: "document",
+            sourceId: leftDocument.documentId,
+            label: leftDocument.title,
+            detail: `line ${leftFragment.line}: ${leftFragment.text}`,
+          }
+          const rightEvidence: EvidenceCitation = {
+            kind: "document",
+            sourceId: rightDocument.documentId,
+            label: rightDocument.title,
+            detail: `line ${rightFragment.line}: ${rightFragment.text}`,
+          }
+          proposals.push({
+            id: `contradiction:${leftDocument.documentId}:${leftFragment.start}:${rightDocument.documentId}:${rightFragment.start}`,
+            topic: contradictionTopic(leftFragment.text, rightFragment.text),
+            left: {
+              documentId: leftDocument.documentId,
+              title: leftDocument.title,
+              updatedAt: leftDocument.updatedAt,
+              fragment: leftFragment,
+            },
+            right: {
+              documentId: rightDocument.documentId,
+              title: rightDocument.title,
+              updatedAt: rightDocument.updatedAt,
+              fragment: rightFragment,
+            },
+            suggestedDocumentId: suggestedDocumentId(leftDocument, rightDocument),
+            evidence: [leftEvidence, rightEvidence, {
+              kind: "similarity",
+              sourceId: `${leftDocument.documentId}:${rightDocument.documentId}`,
+              label: "Contradiction matcher",
+              detail: `matched claim structure (${Math.round(score * 100)}% overlap) with opposing values or polarity`,
+            }],
+          })
+        }
+      }
+    }
+  }
+
+  return proposals.sort((left, right) => left.id.localeCompare(right.id))
+}
+
+export function replaceContradictionFragment(
+  markdown: string,
+  fragment: ContradictionFragment,
+  replacement: string,
+): string | null {
+  if (fragment.start < 0 || fragment.end <= fragment.start || fragment.end > markdown.length) return null
+  if (markdown.slice(fragment.start, fragment.end) !== fragment.text) return null
+  return `${markdown.slice(0, fragment.start)}${replacement}${markdown.slice(fragment.end)}`
 }
 
 export function isWorkflowFilePath(path: string): boolean {

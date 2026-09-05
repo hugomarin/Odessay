@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WorkspaceTree } from "@/components/workspace/workspace-tree";
+import { WorkspaceAgentPanel } from "@/components/agent/workspace-agent-panel";
 import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar";
 import { BulkActionBar } from "@/components/desk/bulk-action-bar";
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
@@ -222,6 +223,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const [newFileName, setNewFileName] = useState("");
   const [isCreatingFile, setIsCreatingFile] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(true);
   const [headerAction, setHeaderAction] = useState<WorkspaceHeaderAction>(null);
   const [headerActionValue, setHeaderActionValue] = useState("");
   const [documentJoin, setDocumentJoin] = useState<
@@ -767,6 +769,18 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               description={document?.excerpt ?? null}
               localPath={file.path}
               dateLabel={formatFileTimestamp(file.modifiedAt)}
+              draggable
+              onDragStart={(event) => {
+                const payload = {
+                  kind: "file",
+                  id: document?.id,
+                  path: file.path,
+                  label: writingTitle,
+                } as const;
+                event.dataTransfer.effectAllowed = "copy";
+                event.dataTransfer.setData("application/x-odessay-agent-context", JSON.stringify(payload));
+                event.dataTransfer.setData("text/plain", JSON.stringify(payload));
+              }}
               actions={
                 <>
                   <ArtifactWritingAction
@@ -1098,6 +1112,8 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     if (file) void openInEditor(file);
   };
 
+  const handleTreeDragStart = useCallback(() => undefined, []);
+
   if (isLoading || !workspace) {
     return (
       <div className="flex h-screen min-h-0 flex-col bg-bg">
@@ -1316,6 +1332,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 selectedFolderPath={selectedFolderPath}
                 onSelectFolder={setSelectedFolderPath}
                 onOpenFile={handleOpenFileFromTree}
+                onDragStart={handleTreeDragStart}
                 foldersOnly={true}
               />
             </div>
@@ -1417,6 +1434,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               onClearFilters={clearFilters}
             />
 
+            <div className="flex min-h-0 flex-1">
             <div className={`od-scroll min-h-0 flex-1 overflow-y-auto ${APP_SHELL_CONTENT_GUTTER_CLASS} pb-4`}>
               {errorMessage ? (
                 <div className="mb-6 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 text-sm text-ink-3">
@@ -1509,6 +1527,14 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                   onCreateCollection={handleBulkCreateCollection}
                 />
               )}
+            </div>
+            <WorkspaceAgentPanel
+              scope={{ kind: "workspace", rootId: workspace.slug }}
+              workspaceRootPath={workspace.rootPath}
+              scopeLabel={workspace.name}
+              open={isAgentPanelOpen}
+              onOpenChange={setIsAgentPanelOpen}
+            />
             </div>
           </div>
         </div>
