@@ -175,6 +175,41 @@ Mermaid es un bloque de código configurable. El editor puede mostrar el código
 
 ## Invocación en Artifact Studio
 
+### Modelo de creación: contenido vs. propiedades
+
+Para los componentes enriquecidos conviene separar dos capas:
+
+1. **Contenido:** texto y Markdown que el usuario escribe dentro del componente. Se edita inline, con el mismo editor normal.
+2. **Propiedades:** decisiones de presentación o estructura (`type`, `color`, `icon`, `href`, `columns`, orden). Se editan desde una configuración contextual y se serializan como atributos del nodo.
+
+Eso permite que el usuario nunca tenga que escribir manualmente `<Card icon="server">` ni descubrir dónde cerrar una etiqueta. El editor manipula el nodo estructurado y el Markdown solo es la representación persistida.
+
+### Dos maneras de crear un componente de bloque
+
+| Flujo | Cuándo usarlo | Resultado |
+| --- | --- | --- |
+| `Insert → [componente]` | Cuando el usuario quiere empezar un bloque nuevo | Crea el nodo con defaults, coloca el cursor en su contenido y abre configuración solo si hacen falta varios datos |
+| `Convert selection → [componente]` | Cuando ya existe contenido que debe adquirir ese formato | Envuelve uno o más **bloques completos**, conserva el texto seleccionado y prellena la configuración |
+
+Un `Tip` o un `Card` son bloques. Por eso la conversión debe trabajar sobre párrafos/bloques completos, no sobre una selección arbitraria de media frase que produciría una estructura inválida. Si el usuario selecciona solo parte de un párrafo, el editor puede promover la operación al párrafo completo o deshabilitarla con una explicación clara.
+
+### Ejemplo: Tip
+
+- **Crear vacío:** `Insert → Tip` inserta `<Tip>`, pone el cursor dentro y permite escribir normalmente.
+- **Convertir contenido:** seleccionar uno o más párrafos completos y elegir `Tip`; el contenido pasa a ser el cuerpo del bloque.
+- **Editar después:** el cuerpo se modifica inline. Un botón de settings en el borde del bloque abre un popover o modal ligero para `variant`, color/acento y, si algún día existe, icono.
+
+La primera versión puede tener un único estilo y no abrir configuración. La capacidad de cambiar el color no debe obligar a editar el texto ni a tocar el Markdown; debe ser una propiedad del nodo.
+
+### Ejemplo: Card y CardGroup
+
+- **Crear un Card:** `Insert → Card` abre un modal porque hay varios campos que no son cuerpo editorial: `title`, `icon`, `href` y, opcionalmente, color/acento. Al confirmar, el cuerpo queda listo para editar inline.
+- **Convertir contenido:** seleccionar bloques completos y elegir `Card`; el modal aparece prellenado con el texto seleccionado como body.
+- **Crear un grupo:** `Insert → Card group` abre primero la configuración de `columns` y crea la primera card. Las siguientes se agregan desde `Add card`; cada una puede abrir su propio modal de propiedades.
+- **Editar después:** hacer click en la card deja el texto editable; `⋯` o `settings` abre la configuración de icono, URL, título y apariencia sin convertir esos datos en texto del cuerpo.
+
+En resumen: `Insert` crea la estructura; escribir modifica el contenido; `Configure` modifica la presentación. Esa misma regla se aplica a `CodeGroup`, Mermaid y los demás componentes.
+
 El editor actual tiene superficies concretas de invocación. El playground las documenta para que podamos decidir los componentes nuevos sin inventar un slash menu que todavía no existe.
 
 ### Superficies actuales

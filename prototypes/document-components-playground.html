@@ -400,9 +400,10 @@
       .bubble-meta { display: flex; justify-content: space-between; color: var(--ink-4); font-size: 10px; }
 
       .tip {
+        --tip-accent: var(--cursor);
         padding: 18px 20px;
         border: 0.5px solid hsl(35 45% 82%);
-        border-left: 3px solid var(--cursor);
+        border-left: 3px solid var(--tip-accent);
         border-radius: 9px;
         background: hsl(38 50% 97%);
         color: var(--ink-2);
@@ -411,7 +412,12 @@
         line-height: 1.7;
       }
 
-      .tip-heading { margin-bottom: 5px; color: var(--cursor); font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+      .tip-accent-amber { --tip-accent: hsl(35 75% 45%); }
+      .tip-accent-blue { --tip-accent: hsl(210 60% 43%); }
+      .tip-variant-info { background: hsl(210 55% 97%); border-color: hsl(210 45% 83%); }
+      .tip-variant-warning { background: hsl(42 65% 97%); border-color: hsl(42 55% 80%); }
+
+      .tip-heading { margin-bottom: 5px; color: var(--tip-accent); font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
 
       .card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 
@@ -431,7 +437,12 @@
 
       .doc-card:hover { border-color: var(--cursor); background: hsl(38 20% 99%); transform: translateY(-1px); }
 
-      .doc-card-icon { color: var(--cursor); font-family: var(--font-mono); font-size: 13px; }
+      .doc-card { --card-accent: var(--cursor); }
+
+      .doc-card-icon { color: var(--card-accent); font-family: var(--font-mono); font-size: 13px; }
+
+      .card-accent-amber { --card-accent: hsl(35 75% 45%); }
+      .card-accent-blue { --card-accent: hsl(210 60% 43%); }
 
       .doc-card h3 { margin: 22px 0 6px; color: var(--ink); font-size: 16px; font-weight: 600; }
 
@@ -532,6 +543,70 @@
       .invocation-value { color: var(--ink-2); font-size: 11px; line-height: 1.45; }
 
       .invocation-note { margin: 12px 0 0; color: var(--ink-3); font-size: 11px; line-height: 1.5; }
+
+      .authoring-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+
+      .authoring-scope { padding: 4px 7px; border-radius: 6px; background: var(--muted); color: var(--ink-4); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; }
+
+      .flow-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-bottom: 12px; padding: 3px; border-radius: 8px; background: var(--muted); }
+
+      .flow-tabs[hidden], .configure-button[hidden] { display: none; }
+
+      .flow-tab { min-width: 0; padding: 7px 6px; border-radius: 6px; background: transparent; color: var(--ink-3); font-size: 10px; font-weight: 500; line-height: 1.25; }
+
+      .flow-tab:hover { color: var(--ink); }
+
+      .flow-tab.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-float); }
+
+      .flow-tab:disabled { cursor: not-allowed; color: var(--ink-5); opacity: 0.75; }
+
+      .authoring-summary { margin: 0; color: var(--ink-2); font-size: 12px; line-height: 1.5; }
+
+      .authoring-summary strong { color: var(--ink); font-weight: 600; }
+
+      .authoring-layers { display: grid; gap: 7px; margin-top: 14px; }
+
+      .authoring-layer { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 8px; padding-top: 9px; border-top: 0.5px solid var(--border); }
+
+      .authoring-layer-label { color: var(--ink-5); font-size: 9px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; }
+
+      .authoring-layer-value { color: var(--ink-3); font-size: 11px; line-height: 1.45; }
+
+      .configure-button { width: 100%; margin-top: 14px; }
+
+      .config-overlay { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: hsl(25 18% 10% / 0.22); backdrop-filter: blur(4px); }
+
+      .config-overlay[hidden] { display: none; }
+
+      .config-modal { width: min(440px, 100%); overflow: hidden; border: 0.5px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-panel); }
+
+      .config-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 18px 14px; border-bottom: 0.5px solid var(--border); }
+
+      .config-modal-title { margin: 0; color: var(--ink); font-size: 16px; font-weight: 600; }
+
+      .config-modal-description { margin: 5px 0 0; color: var(--ink-3); font-family: var(--font-prose); font-size: 13px; line-height: 1.5; }
+
+      .modal-close { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 6px; background: transparent; color: var(--ink-4); font-size: 18px; line-height: 1; }
+
+      .modal-close:hover { background: var(--muted); color: var(--ink); }
+
+      .config-fields { display: grid; gap: 14px; padding: 18px; }
+
+      .config-field { display: grid; gap: 6px; }
+
+      .config-field label { color: var(--ink-3); font-size: 11px; font-weight: 600; }
+
+      .config-field input, .config-field select, .config-field textarea { width: 100%; padding: 9px 10px; border: 0.5px solid var(--border); border-radius: 7px; outline: none; background: var(--bg); color: var(--ink-2); font-size: 12px; }
+
+      .config-field textarea { min-height: 74px; resize: vertical; line-height: 1.5; }
+
+      .config-field input:focus, .config-field select:focus, .config-field textarea:focus { border-color: var(--cursor); box-shadow: 0 0 0 3px hsl(22 55% 38% / 0.08); }
+
+      .config-help { color: var(--ink-4); font-size: 10px; line-height: 1.4; }
+
+      .config-modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 18px 16px; border-top: 0.5px solid var(--border); }
+
+      .config-modal-hint { margin-right: auto; color: var(--ink-5); font-size: 10px; }
 
       .decision-label { display: block; margin-bottom: 8px; color: var(--ink-4); font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
 
@@ -659,6 +734,29 @@
               </section>
 
               <section class="inspector-card">
+                <div class="authoring-head">
+                  <h2 class="inspector-title" style="margin-bottom: 0">Authoring flow</h2>
+                  <span class="authoring-scope" id="authoring-scope">Rich component</span>
+                </div>
+                <div class="flow-tabs" id="flow-tabs" role="tablist" aria-label="Authoring flow">
+                  <button class="flow-tab active" type="button" data-flow-mode="insert">Insert new</button>
+                  <button class="flow-tab" type="button" data-flow-mode="selection">Convert selection</button>
+                </div>
+                <p class="authoring-summary" id="authoring-summary"></p>
+                <div class="authoring-layers">
+                  <div class="authoring-layer">
+                    <span class="authoring-layer-label">Body</span>
+                    <span class="authoring-layer-value" id="authoring-body"></span>
+                  </div>
+                  <div class="authoring-layer">
+                    <span class="authoring-layer-label">Properties</span>
+                    <span class="authoring-layer-value" id="authoring-properties"></span>
+                  </div>
+                </div>
+                <button class="button configure-button" id="configure-component" type="button">Configure properties</button>
+              </section>
+
+              <section class="inspector-card">
                 <label class="decision-label" for="decision-notes">Your decision notes</label>
                 <textarea class="decision-notes" id="decision-notes" placeholder="Qué debería cambiar aquí…"></textarea>
                 <span class="save-status" id="save-status">Saved locally in this browser.</span>
@@ -667,6 +765,24 @@
           </div>
         </main>
       </div>
+    </div>
+
+    <div class="config-overlay" id="config-overlay" hidden>
+      <section class="config-modal" role="dialog" aria-modal="true" aria-labelledby="config-modal-title">
+        <div class="config-modal-head">
+          <div>
+            <h2 class="config-modal-title" id="config-modal-title">Configure properties</h2>
+            <p class="config-modal-description" id="config-modal-description"></p>
+          </div>
+          <button class="modal-close" id="close-config" type="button" aria-label="Close configuration">×</button>
+        </div>
+        <div class="config-fields" id="config-fields"></div>
+        <div class="config-modal-foot">
+          <span class="config-modal-hint" id="config-modal-hint">Writes attributes, not body text.</span>
+          <button class="button" id="cancel-config" type="button">Cancel</button>
+          <button class="button primary" id="apply-config" type="button">Apply</button>
+        </div>
+      </section>
     </div>
 
     <script>
@@ -717,7 +833,29 @@
           insertion: ["Choose Tip from the proposed Insert menu.", "Place the cursor inside the new block.", "Keep the first version simple: one visual treatment."],
           render(source) {
             const text = tagBody(source, "Tip") || "Recuerda validar el cierre de cada etiqueta.";
-            return '<div class="tip"><div class="tip-heading">Tip</div><div>' + esc(text) + '</div></div>';
+            const type = attr(source, "type", "default").toLowerCase();
+            const color = attr(source, "color", "inherit").toLowerCase();
+            const typeClass = type === "info" ? "tip-variant-info" : type === "warning" ? "tip-variant-warning" : "";
+            const colorClass = color === "amber" ? "tip-accent-amber" : color === "blue" ? "tip-accent-blue" : "";
+            return '<div class="tip ' + typeClass + ' ' + colorClass + '"><div class="tip-heading">Tip</div><div>' + esc(text) + '</div></div>';
+          },
+        },
+        card: {
+          label: "Card",
+          glyph: "□",
+          kind: "block",
+          tag: "<Card>",
+          source: '<Card title="Build a Server" icon="server" href="/docs/build-server" accent="terracotta">Create MCP servers.</Card>',
+          properties: [["title", "Visible heading."], ["icon", "Icon name from the allowed icon map."], ["href", "Optional destination URL."], ["accent", "Optional presentation token."], ["body", "Markdown content inside the card."]],
+          insertion: ["Choose Card from the proposed Insert menu.", "Configure title, icon and URL in the card modal.", "Edit the body inline after insertion."],
+          render(source) {
+            const title = attr(source, "title", "Build a Server");
+            const icon = attr(source, "icon", "server");
+            const accent = attr(source, "accent", "terracotta").toLowerCase();
+            const href = attr(source, "href", "#");
+            const body = tagBody(source, "Card") || "Create MCP servers.";
+            const accentClass = accent === "amber" ? "card-accent-amber" : accent === "blue" ? "card-accent-blue" : "";
+            return '<div class="card-grid columns-1"><article class="doc-card ' + accentClass + '"><div class="doc-card-icon">' + esc(icon) + '</div><h3>' + esc(title) + '</h3><p>' + esc(body) + '</p><div class="doc-card-link">' + esc(href) + ' ↗</div></article></div>';
           },
         },
         cardGroup: {
@@ -733,9 +871,9 @@
             const re = /<Card\b([^>]*)>([\s\S]*?)<\/Card>/gi;
             const columns = Math.min(3, Math.max(1, Number(attr(source, "columns", "2")) || 2));
             let match;
-            while ((match = re.exec(source))) cards.push({ title: attr(match[1], "title", "Untitled card"), icon: attr(match[1], "icon", "•"), href: attr(match[1], "href", "#"), body: clean(match[2]) });
-            if (!cards.length) cards.push({ title: "Build a Server", icon: "server", href: "#", body: "Create MCP servers." }, { title: "Build a Client", icon: "computer", href: "#", body: "Connect to MCP servers." });
-            return '<div class="card-grid columns-' + columns + '">' + cards.map((card) => '<article class="doc-card"><div class="doc-card-icon">' + esc(card.icon) + '</div><h3>' + esc(card.title) + '</h3><p>' + esc(card.body) + '</p><div class="doc-card-link">Open resource ↗</div></article>').join("") + '</div>';
+            while ((match = re.exec(source))) cards.push({ title: attr(match[1], "title", "Untitled card"), icon: attr(match[1], "icon", "•"), href: attr(match[1], "href", "#"), accent: attr(match[1], "accent", "terracotta"), body: clean(match[2]) });
+            if (!cards.length) cards.push({ title: "Build a Server", icon: "server", href: "#", accent: "terracotta", body: "Create MCP servers." }, { title: "Build a Client", icon: "computer", href: "#", accent: "terracotta", body: "Connect to MCP servers." });
+            return '<div class="card-grid columns-' + columns + '">' + cards.map((card) => { const accent = card.accent.toLowerCase() === "amber" ? "card-accent-amber" : card.accent.toLowerCase() === "blue" ? "card-accent-blue" : ""; return '<article class="doc-card ' + accent + '"><div class="doc-card-icon">' + esc(card.icon) + '</div><h3>' + esc(card.title) + '</h3><p>' + esc(card.body) + '</p><div class="doc-card-link">Open resource ↗</div></article>'; }).join("") + '</div>';
           },
         },
         steps: {
@@ -960,7 +1098,7 @@
         },
       };
 
-      const richKeys = ["annotation", "highlight", "tip", "cardGroup", "steps", "codeGroup", "mermaid"];
+      const richKeys = ["annotation", "highlight", "tip", "card", "cardGroup", "steps", "codeGroup", "mermaid"];
       const markdownKeys = ["paragraph", "bold", "italic", "heading1", "heading2", "heading3", "blockquote", "bulletList", "orderedList", "link", "inlineCode", "strike", "codeBlock", "table", "image", "footnote", "horizontalRule"];
 
       const invocations = {
@@ -996,6 +1134,17 @@
           configuration: "No · one visual variant",
           selection: "Cursor between blocks",
           note: "Insert an empty block and place the cursor inside. Only add a setup popover if Tip later gains variants such as warning or note.",
+        },
+        card: {
+          status: "Proposed",
+          tone: "proposed",
+          surface: "Insert menu",
+          entry: "Insert → Card",
+          shortcut: "—",
+          overlay: "Card form modal",
+          configuration: "Yes · title + icon + href",
+          selection: "Cursor or whole block selection",
+          note: "The Card body is prose; title, icon, URL and accent are presentation metadata edited through the card settings flow.",
         },
         cardGroup: {
           status: "Proposed",
@@ -1230,7 +1379,115 @@
         },
       };
 
-      const state = { selected: "annotation", sources: {}, notes: {} };
+      const authoringFlows = {
+        annotation: {
+          scope: "Rich component",
+          defaultMode: "selection",
+          insert: "Not available: an annotation always starts with a selected passage.",
+          selection: "Select text → choose AI today (Annotate recommended) → write the comment in the floating composer.",
+          body: "The selected passage remains editable inline; the comment is composed separately.",
+          properties: "Generated id · type · comment",
+          configure: "Edit annotation properties",
+          configTitle: "Configure annotation",
+          configDescription: "The selection is the body. These fields describe its associated comment.",
+          configHint: "Writes attributes, not selected text.",
+          selectionAvailable: true,
+        },
+        highlight: {
+          scope: "Rich component",
+          defaultMode: "selection",
+          insert: "Not available: a highlight is created from selected text.",
+          selection: "Select text → Highlight; apply the default color immediately.",
+          body: "The selected passage is the complete body of the node.",
+          properties: "color · optional id",
+          configure: "Adjust highlight properties",
+          configTitle: "Configure highlight",
+          configDescription: "Color is presentation metadata; the selected text stays in the document body.",
+          configHint: "Writes the color attribute only.",
+          selectionAvailable: true,
+        },
+        tip: {
+          scope: "Rich component",
+          defaultMode: "insert",
+          insert: "Insert → Tip creates an empty block and places the cursor inside so you can write normally.",
+          selection: "Select one or more whole blocks → Tip wraps them. A partial inline selection should promote its paragraph or be rejected.",
+          body: "Write and format Markdown directly inside the Tip body.",
+          properties: "Optional variant · optional accent color · future icon",
+          configure: "Configure Tip properties",
+          configTitle: "Configure Tip",
+          configDescription: "Keep content inline. Use settings for presentation choices that are not prose.",
+          configHint: "Body text remains outside this form.",
+          selectionAvailable: true,
+        },
+        card: {
+          scope: "Rich component",
+          defaultMode: "insert",
+          insert: "Insert → Card opens the card setup modal, then leaves the body ready for inline editing.",
+          selection: "Select a whole block → Card pre-fills the body and opens the same setup modal.",
+          body: "Write and format Markdown directly inside the Card body.",
+          properties: "title · icon · href · optional accent",
+          configure: "Configure Card properties",
+          configTitle: "Configure Card",
+          configDescription: "Configure the Card shell without mixing metadata into its editorial body.",
+          configHint: "Body copy remains editable in the document.",
+          selectionAvailable: true,
+        },
+        cardGroup: {
+          scope: "Rich component",
+          defaultMode: "insert",
+          insert: "Insert → Card group opens the group setup, then creates the first Card with its body ready to edit.",
+          selection: "Select whole blocks → convert them into Cards (future). Do not treat an arbitrary text range as a complete Card.",
+          body: "Each Card body is edited inline after its shell is created.",
+          properties: "Group columns · Card title · icon · href · optional accent",
+          configure: "Configure group and first Card",
+          configTitle: "Configure Card group",
+          configDescription: "Set the group layout and the metadata of the first Card. Add more Cards from the group.",
+          configHint: "Body copy remains editable in the document.",
+          selectionAvailable: true,
+        },
+        steps: {
+          scope: "Rich component",
+          defaultMode: "insert",
+          insert: "Insert → Steps creates the container with one Step and puts the cursor in its body.",
+          selection: "Select consecutive whole blocks → convert them into ordered Steps (future). Numbering stays structural.",
+          body: "Step titles and body copy are edited inline; add, remove and reorder with local controls.",
+          properties: "Step title · derived order",
+          configure: "No configuration modal",
+          configTitle: "Steps use inline controls",
+          configDescription: "The structure is visible while editing, so a modal would add friction without adding clarity.",
+          configHint: "No separate properties to apply.",
+          selectionAvailable: true,
+          noModal: true,
+        },
+        codeGroup: {
+          scope: "Rich component",
+          defaultMode: "insert",
+          insert: "Insert → Code group opens a setup flow for tabs, then focuses the first opaque code block.",
+          selection: "Select consecutive code blocks → group them (future). Only complete code blocks are eligible.",
+          body: "Each tab is edited as literal code with the normal code editor.",
+          properties: "Tab title · language · tab order",
+          configure: "Configure code group",
+          configTitle: "Configure Code group",
+          configDescription: "Tabs carry labels and languages; their inner code is never interpreted as component markup.",
+          configHint: "Writes fence metadata, not code content.",
+          selectionAvailable: true,
+        },
+        mermaid: {
+          scope: "Rich component",
+          defaultMode: "insert",
+          insert: "Text → Code → Mermaid creates a fenced block and opens the diagram view when requested.",
+          selection: "Select an existing code block → set its language to Mermaid. Do not wrap an arbitrary prose selection.",
+          body: "Edit the Mermaid source as literal code; the source remains canonical.",
+          properties: "language · code/diagram/split view · theme",
+          configure: "Configure code block",
+          configTitle: "Configure Mermaid block",
+          configDescription: "The block remains Markdown code. These settings affect presentation, not the diagram source.",
+          configHint: "View settings are preview metadata.",
+          selectionAvailable: true,
+        },
+      };
+
+      const state = { selected: "annotation", sources: {}, notes: {}, authoringModes: {}, presentation: {} };
       const list = document.getElementById("component-list");
       const markdownList = document.getElementById("markdown-list");
       const sourceEditor = document.getElementById("source-editor");
@@ -1241,6 +1498,17 @@
       const invocationSurface = document.getElementById("invocation-surface");
       const invocationGrid = document.getElementById("invocation-grid");
       const invocationNote = document.getElementById("invocation-note");
+      const flowTabs = document.getElementById("flow-tabs");
+      const authoringScope = document.getElementById("authoring-scope");
+      const authoringSummary = document.getElementById("authoring-summary");
+      const authoringBody = document.getElementById("authoring-body");
+      const authoringProperties = document.getElementById("authoring-properties");
+      const configureComponent = document.getElementById("configure-component");
+      const configOverlay = document.getElementById("config-overlay");
+      const configModalTitle = document.getElementById("config-modal-title");
+      const configModalDescription = document.getElementById("config-modal-description");
+      const configModalHint = document.getElementById("config-modal-hint");
+      const configFields = document.getElementById("config-fields");
       const decisionNotes = document.getElementById("decision-notes");
 
       try {
@@ -1302,6 +1570,168 @@
         markdownList.innerHTML = renderButtons(markdownKeys);
       }
 
+      function escapeSourceAttribute(value) {
+        return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+      }
+
+      function updateOpeningTagAttribute(openingTag, name, value) {
+        const text = String(value).trim();
+        const attributePattern = new RegExp('(' + name + '\\s*=\\s*")[^"]*(")', 'i');
+        if (!text) return openingTag.replace(new RegExp('\\s+' + name + '\\s*=\\s*"[^"]*"', 'i'), "");
+        if (attributePattern.test(openingTag)) return openingTag.replace(attributePattern, "$1" + escapeSourceAttribute(text) + "$2");
+        return openingTag.replace(/\/?>(\s*)$/, ' ' + name + '="' + escapeSourceAttribute(text) + '"$&');
+      }
+
+      function updateTagAttribute(source, tag, name, value) {
+        return String(source).replace(new RegExp("<" + tag + "\\b[^>]*>", "i"), (openingTag) => updateOpeningTagAttribute(openingTag, name, value));
+      }
+
+      function updateFirstCardAttribute(source, name, value) {
+        return String(source).replace(/<Card\b[^>]*>/i, (openingTag) => updateOpeningTagAttribute(openingTag, name, value));
+      }
+
+      function updateFirstFence(source, language, title) {
+        const info = [String(language).trim() || "text", String(title).trim()].filter(Boolean).join(" ");
+        return String(source).replace(new RegExp(fence + "[^\\n]*\\n"), fence + info + "\n");
+      }
+
+      function getConfigFields(key, source) {
+        const cardOpeningTag = /<Card\b[^>]*>/i.exec(String(source))?.[0] || "";
+        const firstFence = parseFences(source)[0] || { language: "json", title: "Discover Request" };
+        switch (key) {
+          case "annotation":
+            return [
+              { key: "type", label: "Type", kind: "select", value: attr(source, "type", "personal"), options: ["personal", "ai", "footnote"], help: "The comment remains part of the annotation contract." },
+              { key: "comment", label: "Comment", kind: "textarea", value: attr(source, "comment", ""), help: "Optional metadata; never a second note node." },
+            ];
+          case "highlight":
+            return [{ key: "color", label: "Highlight color", kind: "select", value: attr(source, "color", "yellow"), options: ["yellow", "blue", "green"], help: "Only the presentation attribute changes." }];
+          case "tip":
+            return [
+              { key: "type", label: "Variant", kind: "select", value: attr(source, "type", "default"), options: ["default", "info", "warning"], help: "Proposal: keep one default visual treatment until variants are needed." },
+              { key: "color", label: "Accent color", kind: "select", value: attr(source, "color", "inherit"), options: ["inherit", "terracotta", "amber", "blue"], help: "Proposal: presentation metadata, separate from body text." },
+            ];
+          case "card":
+            return [
+              { key: "title", label: "Card title", kind: "text", value: attr(source, "title", ""), help: "Card metadata; the body stays inline." },
+              { key: "icon", label: "Card icon", kind: "text", value: attr(source, "icon", ""), help: "Use an icon from the allowed icon map." },
+              { key: "accent", label: "Card accent", kind: "select", value: attr(source, "accent", "terracotta"), options: ["terracotta", "amber", "blue"], help: "Proposal: presentation metadata for the icon and accent." },
+              { key: "href", label: "Card URL", kind: "url", value: attr(source, "href", ""), help: "Optional destination for the card." },
+            ];
+          case "cardGroup":
+            return [
+              { key: "columns", label: "Columns", kind: "select", value: attr(source, "columns", "2"), options: ["1", "2", "3"], help: "Group-level layout setting." },
+              { key: "title", label: "First Card title", kind: "text", value: attr(cardOpeningTag, "title", ""), help: "Card metadata; the body stays inline." },
+              { key: "icon", label: "First Card icon", kind: "text", value: attr(cardOpeningTag, "icon", ""), help: "Use an icon from the allowed icon map." },
+              { key: "accent", label: "First Card accent", kind: "select", value: attr(cardOpeningTag, "accent", "terracotta"), options: ["terracotta", "amber", "blue"], help: "Proposal: presentation metadata for the icon and accent." },
+              { key: "href", label: "First Card URL", kind: "url", value: attr(cardOpeningTag, "href", ""), help: "Optional destination for the card." },
+            ];
+          case "codeGroup":
+            return [
+              { key: "title", label: "First tab title", kind: "text", value: firstFence.title || firstFence.language, help: "Tab label only; code remains opaque." },
+              { key: "language", label: "First tab language", kind: "text", value: firstFence.language, help: "Fence metadata; it does not parse the code body." },
+            ];
+          case "mermaid":
+            return [
+              { key: "view", label: "Preview mode", kind: "select", value: state.presentation.mermaid?.view || "split", options: ["code", "diagram", "split"], help: "Presentation preference; the fenced source remains canonical." },
+              { key: "theme", label: "Diagram theme", kind: "select", value: state.presentation.mermaid?.theme || "document", options: ["document", "light", "dark"], help: "Proposal: inherit the document theme by default." },
+            ];
+          default:
+            return [];
+        }
+      }
+
+      function renderAuthoringFlow() {
+        const flow = authoringFlows[state.selected];
+        const isNative = !flow;
+        flowTabs.hidden = isNative;
+        configureComponent.hidden = isNative;
+        authoringScope.textContent = isNative ? "Markdown native" : flow.scope;
+
+        if (isNative) {
+          authoringSummary.innerHTML = "<strong>Use the current Artifact Studio command.</strong> The content is edited directly as native Markdown text, mark or block.";
+          authoringBody.textContent = "Selected text or the current block, depending on the element.";
+          authoringProperties.textContent = "No additional component properties.";
+          return;
+        }
+
+        const mode = state.authoringModes[state.selected] || flow.defaultMode;
+        flowTabs.querySelectorAll("[data-flow-mode]").forEach((button) => {
+          const buttonMode = button.dataset.flowMode;
+          button.classList.toggle("active", buttonMode === mode);
+          button.disabled = buttonMode === "insert" ? flow.insert.startsWith("Not available") : !flow.selectionAvailable;
+        });
+        const modeLabel = mode === "selection" ? "Convert selection" : "Insert new";
+        authoringSummary.innerHTML = "<strong>" + esc(modeLabel) + ".</strong> " + esc(flow[mode]);
+        authoringBody.textContent = flow.body;
+        authoringProperties.textContent = flow.properties;
+        configureComponent.textContent = flow.configure;
+        configureComponent.disabled = Boolean(flow.noModal);
+      }
+
+      function openConfiguration() {
+        const flow = authoringFlows[state.selected];
+        if (!flow || flow.noModal) return;
+        configModalTitle.textContent = flow.configTitle;
+        configModalDescription.textContent = flow.configDescription;
+        configModalHint.textContent = flow.configHint;
+        const fields = getConfigFields(state.selected, sourceEditor.value);
+        configFields.innerHTML = fields.map((field) => {
+          const control = field.kind === "textarea"
+            ? '<textarea data-config-field="' + esc(field.key) + '">' + esc(field.value) + '</textarea>'
+            : field.kind === "select"
+              ? '<select data-config-field="' + esc(field.key) + '">' + field.options.map((option) => '<option value="' + esc(option) + '" ' + (option === field.value ? "selected" : "") + '>' + esc(option) + '</option>').join("") + '</select>'
+              : '<input type="' + esc(field.kind) + '" data-config-field="' + esc(field.key) + '" value="' + esc(field.value) + '" />';
+          return '<div class="config-field"><label>' + esc(field.label) + '</label>' + control + '<span class="config-help">' + esc(field.help) + '</span></div>';
+        }).join("");
+        configOverlay.hidden = false;
+        configFields.querySelector("[data-config-field]")?.focus();
+      }
+
+      function closeConfiguration() {
+        configOverlay.hidden = true;
+      }
+
+      function applyConfiguration() {
+        const values = {};
+        configFields.querySelectorAll("[data-config-field]").forEach((field) => { values[field.dataset.configField] = field.value; });
+        const key = state.selected;
+        let source = sourceEditor.value;
+
+        if (key === "annotation") {
+          source = updateTagAttribute(source, "annotation", "type", values.type);
+          source = updateTagAttribute(source, "annotation", "comment", values.comment);
+        } else if (key === "highlight") {
+          source = updateTagAttribute(source, "highlight", "color", values.color);
+        } else if (key === "tip") {
+          source = updateTagAttribute(source, "Tip", "type", values.type);
+          source = updateTagAttribute(source, "Tip", "color", values.color);
+        } else if (key === "card") {
+          source = updateFirstCardAttribute(source, "title", values.title);
+          source = updateFirstCardAttribute(source, "icon", values.icon);
+          source = updateFirstCardAttribute(source, "accent", values.accent);
+          source = updateFirstCardAttribute(source, "href", values.href);
+        } else if (key === "cardGroup") {
+          source = updateTagAttribute(source, "CardGroup", "columns", values.columns);
+          source = updateFirstCardAttribute(source, "title", values.title);
+          source = updateFirstCardAttribute(source, "icon", values.icon);
+          source = updateFirstCardAttribute(source, "accent", values.accent);
+          source = updateFirstCardAttribute(source, "href", values.href);
+        } else if (key === "codeGroup") {
+          source = updateFirstFence(source, values.language, values.title);
+        } else if (key === "mermaid") {
+          state.presentation.mermaid = { view: values.view, theme: values.theme };
+        }
+
+        state.sources[key] = source;
+        sourceEditor.value = source;
+        previewCanvas.innerHTML = samples[key].render(source);
+        persist();
+        renderInspector();
+        bindCodeTabs();
+        closeConfiguration();
+      }
+
       function renderInspector() {
         const sample = samples[state.selected];
         document.getElementById("source-tag").textContent = sample.tag;
@@ -1322,6 +1752,7 @@
         ];
         invocationGrid.innerHTML = invocationFields.map(([label, value, wide]) => '<div class="invocation-item ' + (wide ? "wide" : "") + '"><span class="invocation-label">' + esc(label) + '</span><div class="invocation-value">' + esc(value) + '</div></div>').join("");
         invocationNote.textContent = invocation.note;
+        renderAuthoringFlow();
         decisionNotes.value = state.notes[state.selected] || "";
       }
 
@@ -1345,6 +1776,24 @@
 
       list.addEventListener("click", handleComponentClick);
       markdownList.addEventListener("click", handleComponentClick);
+
+      flowTabs.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-flow-mode]");
+        if (!button || button.disabled) return;
+        state.authoringModes[state.selected] = button.dataset.flowMode;
+        renderAuthoringFlow();
+      });
+
+      configureComponent.addEventListener("click", openConfiguration);
+      document.getElementById("close-config").addEventListener("click", closeConfiguration);
+      document.getElementById("cancel-config").addEventListener("click", closeConfiguration);
+      document.getElementById("apply-config").addEventListener("click", applyConfiguration);
+      configOverlay.addEventListener("click", (event) => {
+        if (event.target === configOverlay) closeConfiguration();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !configOverlay.hidden) closeConfiguration();
+      });
 
       sourceEditor.addEventListener("input", () => {
         state.sources[state.selected] = sourceEditor.value;
