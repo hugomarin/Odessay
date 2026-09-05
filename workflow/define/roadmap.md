@@ -629,6 +629,64 @@ Referencia: `workflow/define/dod-fase-10.md`, `docs/design/migration-plan.md`, `
 
 ---
 
+## Fase 11 — Artifact Studio: Agente de Workspace
+
+Al terminar esta fase: Artifact Studio tiene un agente invocado bajo demanda que expone la capa de contexto ya construida en fases anteriores —catálogo, anotaciones, vocabulary configurable, collections, learned words— y que, con autorización explícita del usuario, puede leer, escribir, mover, editar y eliminar documentos del workspace. Vive en el entorno local; esta fase no construye ni depende de una versión web/cloud del agente. Fase 10 no se toca: el vocabulario y el shell visual que esa fase entregó son insumo de esta, no se rediseñan.
+
+DoD formal: `workflow/define/dod-fase-11.md`.
+
+---
+
+**Hito**
+El agente resuelve enlaces rotos, sugiere tipo/estatus, señala candidatos a archivar y detecta contradicciones entre documentos citando evidencia real, sin escribir nada sin aprobación explícita por acción, y sin introducir ni una fuente de contexto paralela ni un store durable nuevo.
+
+**Al cierre de esta fase debe ser verdad que:**
+
+- con autorización explícita del usuario, el agente puede leer, escribir, mover, editar y eliminar documentos del workspace, y cada una de esas operaciones requiere aprobación por acción individual, nunca una autorización global de sesión;
+- el agente lee anotaciones, vocabulary, collections y learned words tal como existen hoy, sin duplicar ninguno en un almacén paralelo;
+- `workflow.md` puede ser redactado por el propio agente a partir del contexto existente del workspace, y una vez que existe se carga como contexto de cualquier otra acción sobre ese workspace;
+- cada acción individual (enlaces rotos, tipo/estatus, archivar, contradicciones) cita evidencia real antes de ofrecer una escritura, y ninguna se ejecuta sin que el usuario la vea primero;
+- revisar un hallazgo ensancha el panel del agente en el lugar — nunca aparece un modal o sheet que cubra Desk, Studio o Workspace detrás;
+- el mismo componente se monta en Studio (`editor-right-panel-tabs.tsx`) y en Workspace (`workspace-detail.tsx`), diferenciado solo por scope;
+- arrastrar un archivo o una carpeta hacia el panel del agente lo acumula como contexto adjunto antes de enviar;
+- el chat es efímero por sesión — no se introduce tabla ni superficie de sync nueva;
+- el wireframe interactivo aprobado el 2026-09-05 es la referencia de interacción de la fase, nunca de visual final: la piel se construye contra `skill-design`, no contra los colores/iconos del wireframe.
+
+**Temas que entran en esta fase**
+
+- capa de herramientas autorizada: leer, escribir, mover, editar y eliminar documentos, con aprobación explícita por acción;
+- acción "generar/actualizar `workflow.md`" a partir del contexto existente del workspace;
+- acción "enlaces rotos" (determinística, sin llamada a modelo);
+- acción "sugerir tipo y estatus" contra el catálogo de vocabulary vigente;
+- acción "candidatos a archivar" con razón explícita citada;
+- acción "contradicciones y fusión", incluyendo el patrón de cola cuando hay más de un hallazgo;
+- montaje dual del panel del agente en Studio y Workspace, con drag-and-drop de archivos y carpetas como contexto adjunto;
+- traducción del wireframe interactivo a los tokens, tipografía e iconografía reales de Artifact Studio.
+
+**Temas que no son objetivo de esta fase**
+
+- vocabulario de entidades (extender `LearnedWordEntry` con tipo/definición) — queda nombrado en Horizonte Posterior hasta que este epic esté cerrado;
+- writing harness / editorial intelligence layer — sigue diferido en Horizonte Posterior; esta fase es la que lo vuelve viable, no la que lo construye;
+- cualquier cambio al catálogo, binding, apertura o sync cerrados en Fase 9;
+- cualquier cambio al shell visual, overlays o marca cerrados en Fase 10;
+- versión web/cloud del agente;
+- acción de "mover/reorganizar carpetas completas" más allá de lo que la capa de herramientas de M0 ya habilita — se nombra como candidata futura, no se compromete en esta fase.
+
+**Secuencia de ejecución**
+
+1. **M0 — capa de herramientas:** leer/escribir/mover/editar/eliminar documentos con aprobación explícita por acción, montada sobre el catálogo y el filesystem local ya existentes. Nada más en esta fase funciona sin esto.
+2. **M1 — primera acción end-to-end:** generar/actualizar `workflow.md`, porque ejercita la capa completa (lee contexto real, escribe con aprobación) con el riesgo más bajo.
+3. **M2 — enlaces rotos:** determinística, valida el patrón de detección de solo-lectura antes de tocar acciones con juicio.
+4. **M3 — sugerir tipo y estatus:** clasificación acotada contra vocabulary.
+5. **M4 — candidatos a archivar:** señales del catálogo más juicio, siempre con razón citada.
+6. **M5 — contradicciones y fusión:** comparación real de contenido; incluye el patrón de cola para varios hallazgos.
+7. **M6 — chrome dual y drag-and-drop:** montaje en Studio y Workspace, arrastrar archivos/carpetas como contexto.
+8. **M7 — gate:** traducción visual contra `skill-design`, matriz de evidencia y aceptación explícita del dueño.
+
+Referencia: `workflow/define/dod-fase-11.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `lib/queries/document-catalog.ts`, `lib/vocabulary/catalog.ts`, `lib/margins/margins.ts`, `lib/collections/collections.ts`, `lib/workspace/types.ts`, `components/editor/panels/editor-right-panel-tabs.tsx`, `components/workspace/workspace-detail.tsx`, `docs/design/system-app.md`, `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`, `workflow/agents.md`.
+
+---
+
 ## Horizonte Posterior — Iniciativas Diferidas
 
 Estas líneas no desaparecen del producto, pero salen del critical path mientras se construye la plataforma multi-runtime.
