@@ -304,6 +304,16 @@
       "description": "Gate de cierre de Fase 9 — Workspace: Filesystem y Nube. Exige un catálogo SQLite y una apertura únicos para desktop, manifest v2 y reconciliador global, paridad Desk/Workspace, migración de IndexedDB, materialización cloud-only y resiliencia validada en DMG."
     },
     {
+      "path": "workflow/define/dod-fase-11.md",
+      "type": "ops",
+      "description": "Gate de cierre de Fase 11 — Artifact Studio: Agente de Workspace. Exige una capa de herramientas autorizada (leer/escribir/mover/editar/eliminar) gateada por aprobación explícita por acción, contexto leído del sustrato ya existente (catálogo, anotaciones, vocabulary, collections, learned words), workflow.md como acción del propio agente, panel que se expande en el lugar (nunca modal/sheet), y el wireframe interactivo tratado como referencia de interacción, nunca de visual final."
+    },
+    {
+      "path": "workflow/define/fase-11-issues-pending-linear.md",
+      "type": "ops",
+      "description": "Staging provisional de los Issue Briefs de Fase 11 (M4-M7) redactados durante una caída real de Linear (MCP y fallback de API key ambos afectados) para no perder el trabajo de /wf-define. Se borra una vez que los issues quedan creados en Linear."
+    },
+    {
       "path": "workflow/define/dod-fase-8.md",
       "type": "ops",
       "description": "Gate de cierre de Fase 8 — Biblioteca, Preview y Calidad de Producto: checklist de cierre post-convergencia para Biblioteca (Desk/Workspace), Preview, sharing nativo desktop, identidad de documento D1-D10 y calidad de correcciones/anotaciones."
