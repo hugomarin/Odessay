@@ -67,6 +67,7 @@ Current local validation:
 - `npm run ops:perf:capture -- --scenario editor`
 - `npm run ops:perf:gate -- --trace artifacts/perf/editor-trace.json.gz` — 14 pass, 0 warn, 1 optional skip, 0 required failures
 - `cargo test --manifest-path src-tauri/Cargo.toml` — 68 passed, 2 ignored; catalog reference projection, traversal, `.odessay`, legacy internal state and symlink escape regressions pass
+- Real OpenAI provider smoke — `gpt-5.6-luna` returned HTTP 200 / `completed` through `v1/responses`; the Workspace schema validated, and a synthetic decision artifact produced a `change` proposal with `decision` + `active`, concrete benefit and 3 evidence citations. The key value was not logged or committed.
 - `npx playwright test tests/playwright/workspace-agent-panel.e2e.ts` — independent panel beside Properties, drop context, immutable message attachment record + chat scroll, focus-mode preservation, close/reopen and document-scope reset; screenshots in `output/playwright/ode-486/`
 - `npx vitest run tests/workspace-agent-service.test.ts tests/api/workspace-classification-route.test.ts tests/ai-auth-services.test.ts tests/openai-workspace-provider-config.test.ts` — semantic model ownership, folder expansion, full-body context, bounded additional reads, exact evidence/vocabulary validation, stale approval rejection, OpenAI Responses payload/configuration and web adapter envelope mapping; no Fireworks fallback
 - Browser performance evidence from the same smoke: `output/playwright/ode-486/agent-performance.json` — panel open `429.1ms`, reopen `65.1ms`, document reset `83.8ms` in the local Chromium harness. These are direct browser measurements, not a packaged-desktop claim.
@@ -77,6 +78,7 @@ The `studio-shell` performance harness still expects the old `New writing` label
 
 Remaining owner/evidence checks (intentionally not claimed by automated web tests):
 
+- authenticated app/desktop smoke through the Workspace UI with the live OpenAI key, including rendering the returned semantic proposal and approval action (the provider contract itself has passed the real smoke above)
 - packaged/Tauri desktop interactive smoke flow for opening the panel, dragging context, comparing two artifacts, applying a broken-reference fix, resolving one contradiction and reopening the panel (bundle validation is still required separately)
 - packaged-desktop screenshots for the action/evidence/approval states; the interaction-level wireframe comparison is recorded above
 - direct performance capture for panel open and review expansion in the packaged desktop shell; the browser measurements above are a lower-level smoke signal only
