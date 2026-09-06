@@ -10,9 +10,9 @@ export const MAX_WORKSPACE_ASK_BODY_CHARS = 90_000
 export const MAX_WORKSPACE_ASK_REQUEST_CHARS = 2_000
 export const MAX_WORKSPACE_ASK_EVIDENCE_ITEMS = 6
 export const MAX_WORKSPACE_ASK_QUOTE_CHARS = 800
-export const MAX_WORKSPACE_ASK_ANSWER_CHARS = 4_000
+export const MAX_WORKSPACE_ASK_ANSWER_CHARS = 8_000
 export const MAX_WORKSPACE_ASK_ADDITIONAL_REQUESTS = 4
-export const WORKSPACE_ASK_OUTPUT_TOKENS = 4_096
+export const WORKSPACE_ASK_OUTPUT_TOKENS = 8_192
 
 const referenceSchema = z.object({
   value: z.string().trim().min(1).max(500),
@@ -125,6 +125,45 @@ export const workspaceAskResponseSchema = z.object({
   })).max(MAX_WORKSPACE_ASK_EVIDENCE_ITEMS),
   requestedDocumentIds: z.array(z.string().trim().min(1).max(200)).max(MAX_WORKSPACE_ASK_ADDITIONAL_REQUESTS),
 })
+
+/**
+ * A well-formed answer can still overshoot one of our bounds — one extra
+ * evidence citation, an answer a little longer than the cap, a stray empty
+ * quote. Clamp those fields instead of letting the whole response fail
+ * strict validation over a boundary the user never sees; only a genuinely
+ * malformed payload (wrong types, missing answer) should still be rejected.
+ */
+export function sanitizeWorkspaceAskPayload(raw: unknown): unknown {
+  if (typeof raw !== "object" || raw === null) return raw
+  const value = raw as Record<string, unknown>
+  const sanitized: Record<string, unknown> = { ...value }
+
+  if (typeof value.answer === "string") {
+    sanitized.answer = value.answer.trim().slice(0, MAX_WORKSPACE_ASK_ANSWER_CHARS)
+  }
+
+  if (Array.isArray(value.evidence)) {
+    sanitized.evidence = value.evidence
+      .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+      .map((item) => ({
+        documentId: typeof item.documentId === "string" ? item.documentId.trim().slice(0, 200) : "",
+        quote: typeof item.quote === "string" ? item.quote.trim().slice(0, MAX_WORKSPACE_ASK_QUOTE_CHARS) : "",
+        reason: typeof item.reason === "string" ? item.reason.trim().slice(0, 600) : "",
+      }))
+      .filter((item) => item.documentId && item.quote && item.reason)
+      .slice(0, MAX_WORKSPACE_ASK_EVIDENCE_ITEMS)
+  }
+
+  if (Array.isArray(value.requestedDocumentIds)) {
+    sanitized.requestedDocumentIds = [...new Set(
+      value.requestedDocumentIds
+        .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+        .map((id) => id.trim().slice(0, 200)),
+    )].slice(0, MAX_WORKSPACE_ASK_ADDITIONAL_REQUESTS)
+  }
+
+  return sanitized
+}
 
 const outputShapeForPrompt = JSON.stringify({
   answer: "a direct, conversational answer to the user's question",
