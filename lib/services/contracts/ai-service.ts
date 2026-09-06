@@ -224,6 +224,8 @@ export type WorkspaceAskRequest = {
   annotations: WorkspaceClassificationAnnotation[]
   workflowMarkdown: string | null
   catalogTruncated: boolean
+  /** Short summaries of what happened earlier in this chat session (actions run, prior Q&A), most recent last. */
+  recentSessionActions?: string[]
 }
 
 export type WorkspaceAskResult = {

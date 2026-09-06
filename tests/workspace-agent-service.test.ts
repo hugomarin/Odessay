@@ -261,6 +261,44 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     expect(result.data?.documents).toEqual([{ documentId: "target", title: "target", path: "target.md" }])
   })
 
+  it("askAgent forwards the session's recent actions as memory for the model, so later answers stay consistent with earlier ones", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: {
+        answer: "As before, this document uses SQLite.",
+        evidence: [],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({
+      question: "And in Spanish, what storage does it use?",
+      selection: [{ kind: "file", documentId: "target" }],
+      sessionContext: ["Q: What storage does this artifact use?\nA: This document decides to use SQLite for storage."],
+    })
+
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      recentSessionActions: ["Q: What storage does this artifact use?\nA: This document decides to use SQLite for storage."],
+    }))
+  })
+
   it("askAgent drops evidence whose quote no longer appears in the current document content", async () => {
     const target = document("target", "Storage: SQLite.")
     contextMocks.list.mockResolvedValue([target.catalogRecord])
