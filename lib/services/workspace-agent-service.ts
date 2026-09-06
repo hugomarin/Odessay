@@ -201,6 +201,8 @@ export type WorkspaceAgentAskInput = {
   question: string
   selection: readonly WorkspaceAgentSelection[]
   workflowReadApproval?: WorkspaceAgentApproval
+  /** Short summaries of what already happened earlier in this chat session, most recent last. */
+  sessionContext?: readonly string[]
 }
 
 export type WorkspaceAgentCitedDocument = {
@@ -851,6 +853,7 @@ export async function createWorkspaceAgentService(
         annotations,
         workflowMarkdown: context.data.workflowMarkdown,
         catalogTruncated,
+        recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
       }
       const aiResult = await getAIService().askWorkspace(aiRequest)
       if (aiResult.error || !aiResult.data) {
