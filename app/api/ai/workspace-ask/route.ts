@@ -6,6 +6,7 @@ import { NextResponse } from "next/server"
 import {
   buildWorkspaceAskSystemPrompt,
   buildWorkspaceAskUserPrompt,
+  sanitizeWorkspaceAskPayload,
   workspaceAskRequestSchema,
   workspaceAskTextFormat,
   workspaceAskResponseSchema,
@@ -107,7 +108,7 @@ async function callAskModel({
           { role: "system", content: buildWorkspaceAskSystemPrompt() },
           { role: "user", content: promptText },
         ],
-        max_output_tokens: Math.max(config.maxOutputTokens, 4_096),
+        max_output_tokens: Math.max(config.maxOutputTokens, 8_192),
         reasoning: { effort: config.reasoningEffort },
         store: false,
         text: { format: workspaceAskTextFormat },
@@ -304,8 +305,12 @@ export async function POST(request: Request) {
       )
     }
 
-    const validated = workspaceAskResponseSchema.safeParse(modelPayload)
+    const validated = workspaceAskResponseSchema.safeParse(sanitizeWorkspaceAskPayload(modelPayload))
     if (!validated.success) {
+      console.error("[workspace-ask] response failed validation after sanitizing", {
+        issues: validated.error.issues,
+        payloadPreview: JSON.stringify(modelPayload).slice(0, 2_000),
+      })
       throw new AskRouteError(
         502,
         "AI_RESPONSE_PARSE_FAILED",
