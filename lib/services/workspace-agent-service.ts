@@ -15,8 +15,10 @@ import {
   detectBrokenDocumentReferences,
   detectDocumentContradictions,
   findArchiveCandidates,
+  removeBrokenDocumentReference,
   replaceBrokenDocumentReference,
   replaceContradictionFragment,
+  resolveBrokenReferenceTargetPath,
   suggestArtifactClassification,
   type ArchiveCandidate,
   type BrokenReferenceProposal,
@@ -574,6 +576,16 @@ export type WorkspaceAgentService = {
     replacementReference: string,
     approvals: BrokenReferenceFixApprovals,
   ): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
+  /** Deletes the broken mention from the source instead of repointing it (a link collapses to its plain-text label; a `#slug` mention is removed). */
+  removeBrokenReference(
+    proposal: BrokenReferenceProposal,
+    approvals: BrokenReferenceFixApprovals,
+  ): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
+  /** Creates a new, empty document at the exact path the broken reference points to, so the existing link resolves without editing the source. Path references only. */
+  createDocumentForBrokenReference(
+    proposal: BrokenReferenceProposal,
+    approval: WorkspaceAgentApproval,
+  ): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
   findContradictions(
     documentIds: string[],
     readApprovals: Readonly<Record<string, WorkspaceAgentApproval>>,
@@ -683,6 +695,43 @@ export async function createWorkspaceAgentService(
       })
       if (mutation.error || !mutation.data) return mutation
       return ok(mutation.data)
+    },
+    async removeBrokenReference(proposal, approvals) {
+      if (!approvals) return error("FORBIDDEN", "Removing a broken reference requires read and edit approvals for the source document.")
+      const read = await tools.read({ documentId: proposal.sourceDocumentId, approval: approvals.read })
+      if (read.error || !read.data) {
+        return error(
+          read.error?.code ?? "NOT_FOUND",
+          read.error?.message ?? `Document ${proposal.sourceDocumentId} could not be read.`,
+        )
+      }
+      const markdown = removeBrokenDocumentReference(read.data.document.markdown, proposal)
+      if (markdown === null) {
+        return error("CONFLICT", `The reference in ${proposal.sourceTitle} changed since this fix was proposed.`)
+      }
+      const mutation = await tools.edit({
+        documentId: proposal.sourceDocumentId,
+        markdown,
+        approval: approvals.edit,
+      })
+      if (mutation.error || !mutation.data) return mutation
+      return ok(mutation.data)
+    },
+    async createDocumentForBrokenReference(proposal, approval) {
+      if (proposal.referenceKind !== "path") {
+        return error("INVALID_INPUT", "Only a path reference can be created as a new document; a slug has no filesystem path.")
+      }
+      const context = await getContext()
+      if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentMutationResult>
+      const source = context.data.documents.find((record) => record.id === proposal.sourceDocumentId && !record.deletedAt)
+      if (!source) return error("NOT_FOUND", `Document ${proposal.sourceDocumentId} was not found in the workspace.`)
+      const relativePath = resolveBrokenReferenceTargetPath(source, proposal)
+      if (!relativePath) {
+        return error("INVALID_INPUT", "This reference could not be resolved to a workspace path.")
+      }
+      const canonicalPath = `${normalizePath(workspaceRootPath)}/${relativePath}`
+      const title = relativePath.split("/").pop()?.replace(/\.md$/i, "") || relativePath
+      return tools.write({ target: { canonicalPath }, markdown: `# ${title}\n`, approval })
     },
     async findContradictions(documentIds, readApprovals, workflowReadApproval) {
       const uniqueDocumentIds = [...new Set(documentIds.filter(Boolean))]

@@ -599,6 +599,16 @@ function WorkspaceAgentPanelSession({
     setFeedback(`${candidate.title} was marked with the suggested vocabulary status.`)
   }), [runAction, service, updateMessageToolResult])
 
+  const removeBrokenReferenceProposal = useCallback((messageId: string, proposal: BrokenReferenceProposal) => {
+    updateMessageToolResult(messageId, "broken-links", (toolResult) => {
+      const next = toolResult.proposals.filter((item) => (
+        `${item.sourceDocumentId}:${item.referenceKind}:${item.reference}`
+        !== `${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
+      ))
+      return next.length > 0 ? { ...toolResult, proposals: next } : null
+    })
+  }, [updateMessageToolResult])
+
   const applyBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("apply-broken-link", async () => {
     if (!service) return
     const key = `${messageId}:${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
@@ -615,20 +625,39 @@ function WorkspaceAgentPanelSession({
       setFeedback(response.error?.message ?? "The broken reference could not be fixed.")
       return
     }
-    updateMessageToolResult(messageId, "broken-links", (toolResult) => {
-      const next = toolResult.proposals.filter((item) => (
-        `${item.sourceDocumentId}:${item.referenceKind}:${item.reference}`
-        !== `${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
-      ))
-      return next.length > 0 ? { ...toolResult, proposals: next } : null
-    })
+    removeBrokenReferenceProposal(messageId, proposal)
     setBrokenReferenceReplacements((current) => {
       const next = { ...current }
       delete next[key]
       return next
     })
     setFeedback(`Updated ${proposal.sourceTitle} through the approved edit path.`)
-  }), [brokenReferenceReplacements, runAction, service, updateMessageToolResult])
+  }), [brokenReferenceReplacements, removeBrokenReferenceProposal, runAction, service])
+
+  const removeBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("remove-broken-link", async () => {
+    if (!service) return
+    const response = await service.removeBrokenReference(proposal, {
+      read: createApproval("read", proposal.sourceDocumentId),
+      edit: createApproval("edit", proposal.sourceDocumentId),
+    })
+    if (response.error || !response.data) {
+      setFeedback(response.error?.message ?? "The broken reference could not be removed.")
+      return
+    }
+    removeBrokenReferenceProposal(messageId, proposal)
+    setFeedback(`Removed the link from ${proposal.sourceTitle} through the approved edit path.`)
+  }), [removeBrokenReferenceProposal, runAction, service])
+
+  const createDocumentForBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("create-broken-link-doc", async () => {
+    if (!service) return
+    const response = await service.createDocumentForBrokenReference(proposal, createApproval("write", proposal.reference))
+    if (response.error || !response.data) {
+      setFeedback(response.error?.message ?? "The new document could not be created.")
+      return
+    }
+    removeBrokenReferenceProposal(messageId, proposal)
+    setFeedback(`Created ${response.data.document.title ?? proposal.reference} through the approved write path.`)
+  }), [removeBrokenReferenceProposal, runAction, service])
 
   const persistResolvedIds = useCallback((next: Set<string>) => {
     setResolvedIds(next)
@@ -945,6 +974,8 @@ function WorkspaceAgentPanelSession({
         onApplyClassification={applyClassification}
         onApplyArchiveCandidate={applyArchiveCandidate}
         onApplyBrokenReference={applyBrokenReference}
+        onRemoveBrokenReference={removeBrokenReference}
+        onCreateDocumentForBrokenReference={createDocumentForBrokenReference}
         onResolveContradiction={(proposal, resolution) => void resolveContradiction(proposal, resolution)}
       />
     </aside>
@@ -1187,31 +1218,46 @@ function BrokenLinksReviewBody({
   messageId,
   proposals,
   busy,
+  busyAction,
   replacements,
   onReplacementChange,
   onApprove,
+  onRemove,
+  onCreate,
 }: {
   messageId: string
   proposals: BrokenReferenceProposal[]
   busy: boolean
+  busyAction: string | null
   replacements: Record<string, string>
   onReplacementChange: (key: string, value: string) => void
   onApprove: (proposal: BrokenReferenceProposal) => void
+  onRemove: (proposal: BrokenReferenceProposal) => void
+  onCreate: (proposal: BrokenReferenceProposal) => void
 }) {
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-3">
       {proposals.map((proposal) => {
         const key = `${messageId}:${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
+        const isSlug = proposal.referenceKind === "slug"
         return (
-          <div key={key} className="rounded-[8px] border-[0.5px] border-border/70 bg-bg/80 px-2.5 py-2 text-[11px] leading-[1.45] text-ink-3">
-            <span className="font-medium text-ink">{proposal.reference}</span> in {proposal.sourceTitle}
-            {proposal.candidateTitle ? <span className="block text-ink-4">Nearest catalog match: {proposal.candidateTitle}</span> : null}
-            <label className="mt-2 block text-[9.5px] font-medium uppercase tracking-[0.08em] text-ink-4">
-              Replacement {proposal.referenceKind}
+          <div key={key} className="rounded-[9px] border-[0.5px] border-border/70 bg-bg/80 p-2.5">
+            <p className="text-[9.5px] font-medium uppercase tracking-[0.08em] text-ink-4">In {proposal.sourceTitle}</p>
+            <p className="mt-1.5 text-[12px] leading-[1.55] text-ink">
+              Broken {isSlug ? "reference" : "link"} to{" "}
+              <span className="rounded-[4px] bg-danger-surface px-1 py-0.5 font-mono text-[11px] text-cursor">{proposal.reference}</span>
+              {" — "}this {isSlug ? "reference" : "document"} doesn&apos;t exist in the workspace.
+            </p>
+            {proposal.candidateTitle ? (
+              <p className="mt-1.5 text-[11px] leading-[1.4] text-ink-3">Closest match: <span className="font-medium text-ink">{proposal.candidateTitle}</span></p>
+            ) : null}
+
+            <label className="mt-2.5 block text-[9.5px] font-medium uppercase tracking-[0.08em] text-ink-4">
+              Point it to
               <input
                 value={replacements[key] ?? proposal.suggestedReference ?? ""}
                 onChange={(event) => onReplacementChange(key, event.target.value)}
-                placeholder={proposal.referenceKind === "slug" ? "slug" : "path/to/document.md"}
+                placeholder={isSlug ? "slug" : "path/to/document.md"}
                 aria-label={`Replacement for ${proposal.reference}`}
                 className="mt-1 h-8 w-full rounded-[7px] border-[0.5px] border-border bg-bg px-2 text-[11px] font-normal normal-case tracking-normal text-ink outline-none placeholder:text-ink-4 focus:border-ink-3"
               />
@@ -1220,10 +1266,31 @@ function BrokenLinksReviewBody({
               type="button"
               disabled={busy || !(replacements[key] ?? proposal.suggestedReference ?? "").trim()}
               onClick={() => onApprove(proposal)}
-              className="mt-2 inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-[7px] bg-ink px-2 text-[11px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50"
+              className="mt-1.5 inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-[7px] bg-ink px-2 text-[11px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50"
             >
-              <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> Approve fix
+              <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> Point to this document
             </button>
+
+            <div className="mt-1.5 flex items-center gap-1.5">
+              {!isSlug ? (
+                <button
+                  type="button"
+                  disabled={busyAction === "create-broken-link-doc"}
+                  onClick={() => onCreate(proposal)}
+                  className="inline-flex min-h-8 flex-1 items-center justify-center gap-1.5 rounded-[7px] border-[0.5px] border-border px-2 text-[10.5px] font-medium text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink disabled:opacity-50"
+                >
+                  <FileText className="h-3.5 w-3.5" strokeWidth={1.5} /> Create as new document
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={busyAction === "remove-broken-link"}
+                onClick={() => onRemove(proposal)}
+                className="inline-flex min-h-8 flex-1 items-center justify-center gap-1.5 rounded-[7px] border-[0.5px] border-border px-2 text-[10.5px] font-medium text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink disabled:opacity-50"
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={1.5} /> Remove this link
+              </button>
+            </div>
           </div>
         )
       })}
@@ -1257,6 +1324,8 @@ function WorkspaceAgentReviewModal({
   onApplyClassification,
   onApplyArchiveCandidate,
   onApplyBrokenReference,
+  onRemoveBrokenReference,
+  onCreateDocumentForBrokenReference,
   onResolveContradiction,
 }: {
   message: AgentMessage | null
@@ -1269,6 +1338,8 @@ function WorkspaceAgentReviewModal({
   onApplyClassification: (messageId: string, proposal: ClassificationProposal) => void
   onApplyArchiveCandidate: (messageId: string, candidate: ArchiveCandidate) => void
   onApplyBrokenReference: (messageId: string, proposal: BrokenReferenceProposal) => void
+  onRemoveBrokenReference: (messageId: string, proposal: BrokenReferenceProposal) => void
+  onCreateDocumentForBrokenReference: (messageId: string, proposal: BrokenReferenceProposal) => void
   onResolveContradiction: (proposal: ContradictionProposal, resolution: "left" | "right" | "discard") => void
 }) {
   const toolResult = message?.toolResult
@@ -1310,9 +1381,12 @@ function WorkspaceAgentReviewModal({
                   messageId={message.id}
                   proposals={toolResult.proposals}
                   busy={busyAction === "apply-broken-link"}
+                  busyAction={busyAction}
                   replacements={brokenReferenceReplacements}
                   onReplacementChange={onReplacementChange}
                   onApprove={(proposal) => onApplyBrokenReference(message.id, proposal)}
+                  onRemove={(proposal) => onRemoveBrokenReference(message.id, proposal)}
+                  onCreate={(proposal) => onCreateDocumentForBrokenReference(message.id, proposal)}
                 />
               ) : null}
               {toolResult.kind === "contradictions" ? (

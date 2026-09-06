@@ -790,6 +790,120 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     expect(tools.edit).toHaveBeenCalledWith(expect.objectContaining({ documentId: "source", markdown: "See [missing](target.md).", approval: approval("edit", "source") }))
   })
 
+  it("removeBrokenReference deletes the mention instead of repointing it", async () => {
+    const source = document("source", "See [missing](missing.md) for details.")
+    const proposal = {
+      sourceDocumentId: "source",
+      sourceTitle: "Source",
+      reference: "missing.md",
+      referenceKind: "path" as const,
+      candidateDocumentId: null,
+      candidateTitle: null,
+      suggestedReference: null,
+      evidence: [],
+    }
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async () => ({
+        data: {
+          document: source,
+          receipt: { action: "read" as const, approvalId: "read:source", executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      edit: vi.fn(async ({ markdown, approval: approvalArg }) => ({
+        data: {
+          document: document("source", markdown ?? ""),
+          receipt: { action: "edit" as const, approvalId: approvalArg.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.removeBrokenReference(proposal, {
+      read: approval("read", "source"),
+      edit: approval("edit", "source"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(tools.edit).toHaveBeenCalledWith(expect.objectContaining({ documentId: "source", markdown: "See missing for details." }))
+  })
+
+  it("createDocumentForBrokenReference writes a new stub document at the exact path the link expects", async () => {
+    const sourceRecord = {
+      id: "source",
+      artifactType: "general",
+      status: "draft",
+      visibility: "private",
+      version: 1,
+      title: "Source",
+      modifiedAt: 1_700_000_000_000,
+      deletedAt: null,
+      binding: { canonicalPath: "/workspace/notes/source.md", relativePath: "notes/source.md" },
+    } as DocumentCatalogRecord
+    contextMocks.list.mockResolvedValue([sourceRecord])
+    const proposal = {
+      sourceDocumentId: "source",
+      sourceTitle: "Source",
+      reference: "../presupuesto-detallado.md",
+      referenceKind: "path" as const,
+      candidateDocumentId: null,
+      candidateTitle: null,
+      suggestedReference: null,
+      evidence: [],
+    }
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(),
+      edit: vi.fn(),
+      write: vi.fn(async ({ markdown, approval: approvalArg }) => ({
+        data: {
+          document: document("presupuesto-detallado", markdown, 1_700_000_000_000, "presupuesto-detallado.md"),
+          receipt: { action: "write" as const, approvalId: approvalArg.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      move: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.createDocumentForBrokenReference(proposal, approval("write", "presupuesto-detallado.md"))
+
+    expect(result.error).toBeNull()
+    expect(tools.write).toHaveBeenCalledWith(expect.objectContaining({
+      target: { canonicalPath: "/workspace/presupuesto-detallado.md" },
+      markdown: "# presupuesto-detallado\n",
+    }))
+  })
+
+  it("createDocumentForBrokenReference rejects a slug reference — there is no filesystem path to create", async () => {
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(),
+      edit: vi.fn(),
+      write: vi.fn(),
+      move: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.createDocumentForBrokenReference({
+      sourceDocumentId: "source",
+      sourceTitle: "Source",
+      reference: "missing-slug",
+      referenceKind: "slug",
+      candidateDocumentId: null,
+      candidateTitle: null,
+      suggestedReference: null,
+      evidence: [],
+    }, approval("write", "missing-slug"))
+
+    expect(result.error?.code).toBe("INVALID_INPUT")
+    expect(tools.write).not.toHaveBeenCalled()
+  })
+
   it("rebases the next queued contradiction after a length-changing resolution", async () => {
     const documents = new Map([
       ["left", document("left", "Storage: SQLite.\nThe editor uses local files.", 1_700_000_000_000)],

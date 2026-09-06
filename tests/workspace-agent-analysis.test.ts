@@ -4,8 +4,10 @@ import {
   detectBrokenDocumentReferences,
   detectDocumentContradictions,
   findArchiveCandidates,
+  removeBrokenDocumentReference,
   replaceBrokenDocumentReference,
   replaceContradictionFragment,
+  resolveBrokenReferenceTargetPath,
   suggestArtifactClassification,
 } from "@/lib/agent/workspace-agent-analysis"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
@@ -188,6 +190,61 @@ describe("Workspace agent analysis", () => {
       candidateDocumentId: "candidate",
       suggestedReference: "../docs/guide.md",
     })
+  })
+
+  it("resolves a broken path reference to the workspace-root-relative path a new document would need", () => {
+    const source = record("source", "Source", {
+      binding: { ...record("source", "Source").binding!, relativePath: "notes/source.md", canonicalPath: "/workspace/notes/source.md" },
+    })
+    const [proposal] = detectBrokenDocumentReferences([
+      { ...source, referenceTargets: [{ value: "../presupuesto-detallado.md", kind: "path" }] },
+    ])
+
+    expect(proposal).toMatchObject({ reference: "../presupuesto-detallado.md", referenceKind: "path" })
+    expect(resolveBrokenReferenceTargetPath(source, proposal!)).toBe("presupuesto-detallado.md")
+  })
+
+  it("does not resolve a target path for a slug reference — there is no filesystem path to create", () => {
+    const source = record("source", "Source", { referenceTargets: [{ value: "missing-slug", kind: "slug" }] })
+    const [proposal] = detectBrokenDocumentReferences([source])
+
+    expect(proposal).toMatchObject({ referenceKind: "slug" })
+    expect(resolveBrokenReferenceTargetPath(source, proposal!)).toBeNull()
+  })
+
+  it("removes a broken Markdown link, collapsing it to its plain-text label", () => {
+    const markdown = "See [the budget](presupuesto-detallado.md) for details."
+    const [proposal] = detectBrokenDocumentReferences([
+      record("source", "Source", { excerpt: markdown }),
+    ])
+
+    expect(removeBrokenDocumentReference(markdown, proposal!)).toBe("See the budget for details.")
+  })
+
+  it("removes a broken wiki link, keeping its custom label when present", () => {
+    const markdown = "See [[presupuesto-detallado.md|the budget]] for details."
+    const [proposal] = detectBrokenDocumentReferences([
+      record("source", "Source", { excerpt: markdown }),
+    ])
+
+    expect(removeBrokenDocumentReference(markdown, proposal!)).toBe("See the budget for details.")
+  })
+
+  it("removes a broken slug mention outright", () => {
+    const markdown = "See #missing-slug for details."
+    const [proposal] = detectBrokenDocumentReferences([
+      record("source", "Source", { referenceTargets: [{ value: "missing-slug", kind: "slug" }] }),
+    ])
+
+    expect(removeBrokenDocumentReference(markdown, proposal!)).toBe("See for details.")
+  })
+
+  it("does not remove a broken reference that no longer matches the current markdown", () => {
+    const [proposal] = detectBrokenDocumentReferences([
+      record("source", "Source", { excerpt: "See [the budget](presupuesto-detallado.md) for details." }),
+    ])
+
+    expect(removeBrokenDocumentReference("The link was already fixed by someone else.", proposal!)).toBeNull()
   })
 
   it("never suggests a type or status outside the current vocabulary", () => {
