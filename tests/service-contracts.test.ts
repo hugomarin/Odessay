@@ -11,6 +11,8 @@ import {
   type PublicationReviewResult,
   type TitleSuggestion,
   type TitleSuggestionRequest,
+  type WorkspaceClassificationRequest,
+  type WorkspaceClassificationResult,
 } from "@/lib/services/contracts/ai-service"
 import {
   ASSET_SERVICE_CONTRACT,
@@ -222,6 +224,9 @@ describe("service contracts", () => {
     >()
     expectTypeOf<AIService["reviewPublication"]>().toEqualTypeOf<
       (input: PublicationReviewRequest) => Promise<ServiceResponse<PublicationReviewResult>>
+    >()
+    expectTypeOf<AIService["classifyWorkspace"]>().toEqualTypeOf<
+      (input: WorkspaceClassificationRequest) => Promise<ServiceResponse<WorkspaceClassificationResult>>
     >()
     expectTypeOf<PublicationReviewResult>().toMatchTypeOf<{
       summary: string

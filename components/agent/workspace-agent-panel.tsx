@@ -18,6 +18,9 @@ import {
 } from "lucide-react"
 import {
   getWorkspaceAgentService,
+  type WorkspaceAgentClassificationRun,
+  type WorkspaceAgentClassificationRequestedDocument,
+  type WorkspaceAgentSelection,
   type WorkspaceAgentService,
 } from "@/lib/services/workspace-agent-service"
 import type {
@@ -104,6 +107,24 @@ function uniqueDocumentIds(attachments: WorkspaceAgentContextAttachment[], scope
   return [...new Set(ids)]
 }
 
+function classificationSelection(
+  attachments: WorkspaceAgentContextAttachment[],
+  scope: WorkspaceAgentScope,
+): WorkspaceAgentSelection[] {
+  const selection: WorkspaceAgentSelection[] = []
+  if (scope.kind === "document") {
+    selection.push({ kind: "file", documentId: scope.id })
+  }
+  for (const attachment of attachments) {
+    selection.push({
+      kind: attachment.kind,
+      documentId: attachment.id,
+      path: attachment.path,
+    })
+  }
+  return selection
+}
+
 function resultFromWorkflow(proposal: WorkflowDraftProposal): AgentResult {
   return {
     label: "Workflow draft",
@@ -120,12 +141,25 @@ function resultFromBrokenReferences(proposals: BrokenReferenceProposal[]): Agent
   }
 }
 
-function resultFromClassification(proposal: ClassificationProposal): AgentResult {
+function resultFromClassification(run: WorkspaceAgentClassificationRun): AgentResult {
   return {
     label: "Vocabulary fit",
-    summary: proposal.reason,
-    evidence: proposal.evidence,
+    summary: run.summary,
+    evidence: run.proposals.slice(0, 3).flatMap((proposal) => proposal.evidence),
   }
+}
+
+function classificationChatMessage(run: WorkspaceAgentClassificationRun): string {
+  const changes = run.proposals.filter((proposal) => proposal.decision === "change")
+  const needsReview = run.proposals.filter((proposal) => proposal.decision === "needs-review")
+  const proposal = changes[0] ?? run.proposals[0]
+  const details = proposal
+    ? ` Reviewed ${run.targetDocumentIds.length} artifact(s). ${proposal.change} Benefit: ${proposal.benefit}${proposal.uncertainty ? ` Uncertainty: ${proposal.uncertainty}` : ""}${changes.length > 1 ? ` ${changes.length - 1} more change(s) are ready in the review cards.` : ""}${needsReview.length > 0 ? ` ${needsReview.length} artifact(s) need more review before any metadata change.` : ""}`
+    : " I did not receive a proposal with enough evidence to recommend a metadata change."
+  const additionalContext = run.requestedDocuments.length > 0
+    ? ` I need more context for ${run.requestedDocuments.map((document) => document.title).join(", ")} before making a firmer call; attach them to continue.`
+    : ""
+  return `${run.summary}${details}${additionalContext}`
 }
 
 function resultFromArchiveCandidates(candidates: ArchiveCandidate[]): AgentResult {
@@ -156,7 +190,10 @@ function WorkspaceAgentPanelSession({
   const [workflowProposal, setWorkflowProposal] = useState<WorkflowDraftProposal | null>(null)
   const [brokenReferences, setBrokenReferences] = useState<BrokenReferenceProposal[]>([])
   const [brokenReferenceReplacements, setBrokenReferenceReplacements] = useState<Record<string, string>>({})
-  const [classificationProposal, setClassificationProposal] = useState<ClassificationProposal | null>(null)
+  const [classificationProposals, setClassificationProposals] = useState<ClassificationProposal[]>([])
+  const [classificationSummary, setClassificationSummary] = useState<string | null>(null)
+  const [classificationRequestedDocumentIds, setClassificationRequestedDocumentIds] = useState<string[]>([])
+  const [classificationRequestedDocuments, setClassificationRequestedDocuments] = useState<WorkspaceAgentClassificationRequestedDocument[]>([])
   const [archiveCandidates, setArchiveCandidates] = useState<ArchiveCandidate[]>([])
   const [contradictions, setContradictions] = useState<ContradictionProposal[]>([])
   const [reviewIndex, setReviewIndex] = useState(0)
@@ -212,6 +249,7 @@ function WorkspaceAgentPanelSession({
   const activeContradiction = activeContradictions[reviewIndex] ?? null
   const documentIds = useMemo(() => uniqueDocumentIds(attachments, scope), [attachments, scope])
   const canCompare = Boolean(service) && documentIds.length >= 2
+  const canClassify = Boolean(service) && (scope.kind === "document" || attachments.length > 0)
 
   const recordResult = useCallback((result: AgentResult) => {
     setResults((current) => [result, ...current.filter((item) => item.label !== result.label)].slice(0, 4))
@@ -275,23 +313,41 @@ function WorkspaceAgentPanelSession({
     recordResult(resultFromBrokenReferences(response.data))
   }), [getWorkflowReadApproval, recordResult, runAction, service])
 
-  const runClassification = useCallback(() => runAction("classification", async () => {
-    if (!service) return
-    const documentId = documentIds[0]
-    if (!documentId) {
+  const executeClassification = useCallback(async (request: string): Promise<WorkspaceAgentClassificationRun | null> => {
+    if (!service) {
+      setFeedback("The Workspace agent is not available in this runtime.")
+      return null
+    }
+    const selection = classificationSelection(attachments, scope)
+    if (selection.length === 0) {
       setFeedback("Attach an artifact or open a document before asking for a vocabulary fit.")
-      return
+      return null
     }
     const workflowReadApproval = await getWorkflowReadApproval()
-    if (workflowReadApproval === null) return
-    const response = await service.suggestClassification(documentId, workflowReadApproval)
+    if (workflowReadApproval === null) return null
+    const response = await service.suggestClassification({
+      request,
+      selection,
+      workflowReadApproval,
+    })
     if (response.error || !response.data) {
-      setFeedback(response.error?.message ?? "Classification could not be suggested.")
-      return
+      setFeedback(response.error?.message ?? "Classification could not be completed.")
+      return null
     }
-    setClassificationProposal(response.data)
+    setClassificationProposals(response.data.proposals)
+    setClassificationSummary(response.data.summary)
+    setClassificationRequestedDocumentIds(response.data.requestedDocumentIds)
+    setClassificationRequestedDocuments(response.data.requestedDocuments)
     recordResult(resultFromClassification(response.data))
-  }), [documentIds, getWorkflowReadApproval, recordResult, runAction, service])
+    if (response.data.requestedDocumentIds.length > 0) {
+      setFeedback("The agent needs more document evidence before it can make a firmer classification.")
+    }
+    return response.data
+  }, [attachments, getWorkflowReadApproval, recordResult, scope, service])
+
+  const runClassification = useCallback(() => runAction("classification", async () => {
+    await executeClassification("Review these artifacts and propose their type and status with evidence.")
+  }), [executeClassification, runAction])
 
   const runArchiveCandidates = useCallback(() => runAction("archive", async () => {
     if (!service) return
@@ -337,16 +393,16 @@ function WorkspaceAgentPanelSession({
     setFeedback("workflow.md was updated through the approved desktop write path.")
   }), [runAction, service, workflowProposal])
 
-  const applyClassification = useCallback(() => runAction("apply-classification", async () => {
-    if (!service || !classificationProposal) return
-    const response = await service.applyClassification(classificationProposal, createApproval("edit", classificationProposal.documentId))
+  const applyClassification = useCallback((proposal: ClassificationProposal) => runAction("apply-classification", async () => {
+    if (!service) return
+    const response = await service.applyClassification(proposal, createApproval("edit", proposal.documentId))
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "The vocabulary classification could not be applied.")
       return
     }
-    setClassificationProposal(null)
-    setFeedback("Vocabulary classification applied through the approved edit path.")
-  }), [classificationProposal, runAction, service])
+    setClassificationProposals((current) => current.filter((item) => item.documentId !== proposal.documentId))
+    setFeedback(`Updated ${proposal.documentTitle} through the approved edit path.`)
+  }), [runAction, service])
 
   const applyArchiveCandidate = useCallback(() => runAction("apply-archive", async () => {
     if (!service || archiveCandidates.length === 0) return
@@ -441,10 +497,17 @@ function WorkspaceAgentPanelSession({
     setMessages((current) => [
       ...current,
       { id: `user-${messageTimestamp}`, role: "user", text, attachments: messageAttachments.length > 0 ? messageAttachments : undefined },
-      { id: `agent-${messageTimestamp + 1}`, role: "agent", text: "Context noted for this session. Choose an analysis action to produce an evidence-backed result." },
     ])
     setChatDraft("")
-  }, [attachments, chatDraft])
+    void runAction("classification", async () => {
+      const run = await executeClassification(text)
+      if (!run) return
+      setMessages((current) => [
+        ...current,
+        { id: `agent-${messageTimestamp + 1}`, role: "agent", text: classificationChatMessage(run) },
+      ])
+    })
+  }, [attachments, chatDraft, executeClassification, runAction])
 
   if (!open) {
     return (
@@ -538,7 +601,7 @@ function WorkspaceAgentPanelSession({
             <AgentActionButton icon={<Workflow />} label="Workflow" busy={busyAction === "workflow"} disabled={!service} onClick={() => void runWorkflow()} />
             <AgentActionButton icon={<GitCompareArrows />} label="Compare" busy={busyAction === "contradictions"} disabled={!canCompare} onClick={() => void runContradictions()} />
             <AgentActionButton icon={<MessageCircle />} label="Broken links" busy={busyAction === "broken-links"} disabled={!service} onClick={() => void runBrokenReferences()} />
-            <AgentActionButton icon={<Sparkles />} label="Classify" busy={busyAction === "classification"} disabled={!service || documentIds.length === 0} onClick={() => void runClassification()} />
+            <AgentActionButton icon={<Sparkles />} label="Classify" busy={busyAction === "classification"} disabled={!canClassify} onClick={() => void runClassification()} />
             <AgentActionButton icon={<Archive />} label="Archive" busy={busyAction === "archive"} disabled={!service} onClick={() => void runArchiveCandidates()} />
           </div>
         </div>
@@ -560,17 +623,82 @@ function WorkspaceAgentPanelSession({
           </section>
         ) : null}
 
-        {classificationProposal ? (
+        {classificationSummary || classificationRequestedDocuments.length > 0 || classificationProposals.length > 0 ? (
           <section className="mt-4 rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-classification-review">
-            <p className="text-[11px] font-medium text-ink">Review vocabulary fit</p>
-            <p className="mt-1 text-[10.5px] leading-[1.45] text-ink-3">{classificationProposal.reason}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-ink-3">
-              {classificationProposal.artifactType ? <span className="rounded-[6px] bg-muted px-1.5 py-1">Type: {classificationProposal.artifactType}</span> : null}
-              {classificationProposal.status ? <span className="rounded-[6px] bg-muted px-1.5 py-1">Status: {classificationProposal.status}</span> : null}
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-ink">Semantic classification</p>
+                {classificationSummary ? <p className="mt-1 text-[10.5px] leading-[1.45] text-ink-3">{classificationSummary}</p> : null}
+              </div>
+              <span className="shrink-0 rounded-[6px] bg-muted px-1.5 py-1 text-[9px] text-ink-4">{classificationProposals.length}</span>
             </div>
-            <button type="button" disabled={busyAction === "apply-classification"} onClick={() => void applyClassification()} className="mt-2 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
-              <Check className="h-3 w-3" strokeWidth={1.5} /> Approve classification
-            </button>
+            {classificationRequestedDocumentIds.length > 0 ? (
+              <p className="mt-2 rounded-[7px] border-[0.5px] border-border/70 bg-surface-selected px-2 py-1.5 text-[10px] leading-[1.4] text-ink-3">
+                Needs {classificationRequestedDocumentIds.length} additional catalog document(s) to reduce uncertainty. Attach them to continue.
+                {classificationRequestedDocuments.length > 0 ? (
+                  <span className="mt-1 block text-ink-4">
+                    {classificationRequestedDocuments.map((document) => document.path ?? document.title).join(" · ")}
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
+            {classificationProposals.length === 0 ? (
+              <p className="mt-2 rounded-[7px] bg-muted px-2 py-1.5 text-[10px] leading-[1.4] text-ink-4">
+                No metadata change is ready. The agent needs more evidence before making a responsible classification.
+              </p>
+            ) : null}
+            <div className="mt-2 space-y-2.5">
+              {classificationProposals.map((proposal) => (
+                <article key={proposal.documentId} className="rounded-[8px] border-[0.5px] border-border/70 bg-bg/80 p-2" data-testid={`workspace-agent-classification-${proposal.documentId}`}>
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[10.5px] font-medium text-ink">{proposal.documentTitle}</p>
+                      {proposal.documentPath ? <p className="truncate font-mono text-[9px] text-ink-4">{proposal.documentPath}</p> : null}
+                    </div>
+                    <span className={cn(
+                      "shrink-0 rounded-[5px] px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.06em]",
+                      proposal.decision === "change" ? "bg-success-tint text-success" : "bg-muted text-ink-4",
+                    )}>
+                      {proposal.decision === "change" ? "Proposed" : proposal.decision === "keep" ? "Keep" : "Review"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[10.5px] leading-[1.45] text-ink">{proposal.change}</p>
+                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                    <div className="rounded-[6px] bg-muted/70 px-1.5 py-1.5">
+                      <p className="text-[8px] font-medium uppercase tracking-[0.08em] text-ink-4">Current</p>
+                      <p className="mt-1 text-[9.5px] leading-[1.35] text-ink-3">{proposal.currentArtifactType ?? "No type"} · {proposal.currentStatus ?? "No status"}</p>
+                    </div>
+                    <div className="rounded-[6px] bg-surface-selected px-1.5 py-1.5">
+                      <p className="text-[8px] font-medium uppercase tracking-[0.08em] text-ink-4">Proposed</p>
+                      <p className="mt-1 text-[9.5px] leading-[1.35] text-ink-3">{proposal.artifactType ?? "No type"} · {proposal.status ?? "No status"}</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-[1.4] text-ink-3"><span className="font-medium text-ink">Why:</span> {proposal.reason}</p>
+                  <p className="mt-1 text-[10px] leading-[1.4] text-ink-3"><span className="font-medium text-ink">Benefit:</span> {proposal.benefit}</p>
+                  {proposal.uncertainty ? <p className="mt-1 text-[10px] leading-[1.4] text-ink-4"><span className="font-medium text-ink-3">Uncertainty:</span> {proposal.uncertainty}</p> : null}
+                  {proposal.evidence.length > 0 ? (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-[8px] font-medium uppercase tracking-[0.08em] text-ink-4">Evidence</p>
+                      {proposal.evidence.map((evidence) => (
+                        <div key={`${evidence.sourceId}:${evidence.line ?? "unknown"}:${evidence.quote ?? evidence.detail}`} className="rounded-[6px] border-[0.5px] border-border/70 bg-bg px-1.5 py-1 text-[9.5px] leading-[1.4] text-ink-3">
+                          {evidence.quote ? <p className="font-lora italic text-ink">“{evidence.quote}”</p> : null}
+                          <p className={evidence.quote ? "mt-0.5 text-ink-4" : "text-ink-3"}>{evidence.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="mt-2 text-[9.5px] text-ink-4">No exact evidence could be verified for this proposal.</p>}
+                  {proposal.decision === "change" ? (
+                    <button type="button" disabled={busyAction === "apply-classification"} onClick={() => void applyClassification(proposal)} className="mt-2 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
+                      <Check className="h-3 w-3" strokeWidth={1.5} /> Approve metadata change
+                    </button>
+                  ) : (
+                    <p className="mt-2 rounded-[6px] bg-muted px-1.5 py-1.5 text-[9.5px] leading-[1.35] text-ink-4">
+                      {proposal.decision === "keep" ? "No metadata change recommended." : "No change is available until the uncertainty is resolved."}
+                    </p>
+                  )}
+                </article>
+              ))}
+            </div>
           </section>
         ) : null}
 

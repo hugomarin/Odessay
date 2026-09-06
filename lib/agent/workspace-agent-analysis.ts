@@ -36,6 +36,15 @@ export type EvidenceCitation = {
   sourceId: string
   label: string
   detail: string
+  quote?: string
+  line?: number
+}
+
+export type ClassificationEvidenceSource = {
+  documentId: string
+  contentHash: string | null
+  version: number | null
+  modifiedAt: number | null
 }
 
 export type BrokenReferenceProposal = {
@@ -51,8 +60,20 @@ export type BrokenReferenceProposal = {
 
 export type ClassificationProposal = {
   documentId: string
+  documentTitle: string
+  documentPath: string | null
+  currentArtifactType: ArtifactType | null
+  currentStatus: WritingStatus | null
   artifactType: ArtifactType | null
   status: WritingStatus | null
+  decision: "change" | "keep" | "needs-review"
+  change: string
+  benefit: string
+  uncertainty: string | null
+  sourceContentHash: string | null
+  sourceVersion: number | null
+  sourceModifiedAt: number | null
+  evidenceSources: ClassificationEvidenceSource[]
   evidence: EvidenceCitation[]
   reason: string
 }
@@ -479,15 +500,46 @@ export function suggestArtifactClassification(
   const evidence: EvidenceCitation[] = peer
     ? [{ kind: "similarity", sourceId: peer.id, label: documentLabel(peer), detail: `similar catalog document (${Math.round((peers[0]?.score ?? 0) * 100)}%)` }]
     : [{ kind: "catalog", sourceId: document.id, label: documentLabel(document), detail: "no sufficiently similar classified document was found" }]
+  const proposedArtifactType = type?.key ?? null
+  const proposedStatus = status?.key ?? null
+  const changed = proposedArtifactType !== document.artifactType || proposedStatus !== document.status
 
   return {
     documentId: document.id,
-    artifactType: type?.key ?? null,
-    status: status?.key ?? null,
+    documentTitle: documentLabel(document),
+    documentPath: document.binding?.relativePath ?? null,
+    currentArtifactType: document.artifactType ?? null,
+    currentStatus: document.status ?? null,
+    artifactType: proposedArtifactType,
+    status: proposedStatus,
+    decision: peer && changed ? "needs-review" : "keep",
+    change: changed
+      ? "Heuristic baseline only; a semantic review is required before changing metadata."
+      : "Keep the current type and status until document evidence supports a change.",
+    benefit: "Provides a comparison baseline without treating similarity as a final decision.",
+    uncertainty: peer
+      ? "This is a similarity signal, not an interpretation of the document's purpose or progress."
+      : "No comparable catalog signal was available.",
+    sourceContentHash: document.binding?.contentHash ?? null,
+    sourceVersion: document.version ?? null,
+    sourceModifiedAt: document.modifiedAt ?? null,
+    evidenceSources: peer
+      ? [document, peer].map((source) => ({
+          documentId: source.id,
+          contentHash: source.binding?.contentHash ?? null,
+          version: source.version ?? null,
+          modifiedAt: source.modifiedAt ?? null,
+        }))
+      : [{
+          documentId: document.id,
+          contentHash: document.binding?.contentHash ?? null,
+          version: document.version ?? null,
+          modifiedAt: document.modifiedAt ?? null,
+        }],
     evidence,
     reason: peer
-      ? `Suggested from ${documentLabel(peer)}; both values were verified against the active vocabulary catalog.`
-      : "No suggestion was made because the catalog did not provide a sufficiently similar classified document.",
+      ? `Similarity baseline from ${documentLabel(peer)}; it is not a semantic classification.`
+      : "No heuristic suggestion was made because the catalog did not provide a sufficiently similar classified document.",
   }
 }
 
