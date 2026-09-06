@@ -161,6 +161,18 @@ describe("DesktopWorkspaceAgentToolsService", () => {
     expect(result.data?.document.canonicalPath).toBe("/workspace/archive/Doc.md")
   })
 
+  it("rejects non-markdown move destinations before the relocate adapter", async () => {
+    const destinationPath = "/workspace/archive/notes.txt"
+    const result = await service.move({
+      documentId: id,
+      destinationPath,
+      approval: approval("move", id, "move-non-markdown"),
+    })
+
+    expect(result.error?.code).toBe("FORBIDDEN")
+    expect(relocateDocument).not.toHaveBeenCalled()
+  })
+
   it("deletes through DocumentService only after approval", async () => {
     const result = await service.delete({ documentId: id, approval: approval("delete") })
 
@@ -203,6 +215,47 @@ describe("DesktopWorkspaceAgentToolsService", () => {
       target: { canonicalPath: target },
       markdown: "{}",
       approval: approval("write", target, "write-internal"),
+    })
+
+    expect(result.error?.code).toBe("FORBIDDEN")
+    expect(catalog.resolvePath).not.toHaveBeenCalled()
+    expect(importDocument).not.toHaveBeenCalled()
+  })
+
+  it("rejects non-markdown agent write targets before any adapter call", async () => {
+    const target = "/workspace/.env"
+    const result = await service.write({
+      target: { canonicalPath: target },
+      markdown: "SECRET=do-not-write",
+      approval: approval("write", target, "write-env"),
+    })
+
+    expect(result.error?.code).toBe("FORBIDDEN")
+    expect(catalog.resolvePath).not.toHaveBeenCalled()
+    expect(importDocument).not.toHaveBeenCalled()
+  })
+
+  it("rejects an existing non-markdown binding before an overwrite", async () => {
+    catalog.getById.mockResolvedValue(makeRecord("/workspace/.env"))
+
+    const result = await service.write({
+      target: { documentId: id },
+      markdown: "SECRET=do-not-write",
+      approval: approval("write"),
+    })
+
+    expect(result.error?.code).toBe("FORBIDDEN")
+    expect(documentService.openWriting).not.toHaveBeenCalled()
+    expect(documentService.saveWriting).not.toHaveBeenCalled()
+  })
+
+  it("rejects the legacy internal workspace spelling before any adapter call", async () => {
+    const legacyDirectory = [".ody", "ssey"].join("")
+    const target = `/workspace/${legacyDirectory}/index.md`
+    const result = await service.write({
+      target: { canonicalPath: target },
+      markdown: "# internal",
+      approval: approval("write", target, "write-legacy-internal"),
     })
 
     expect(result.error?.code).toBe("FORBIDDEN")

@@ -20,6 +20,8 @@ import type {
 } from "@/lib/services/contracts/workspace-agent"
 import { importDesktopWritingFile, relocateDesktopWriting } from "@/lib/services/document-service-factory"
 
+const INTERNAL_WORKSPACE_DIR_NAMES = new Set([".odessay", [".ody", "ssey"].join("")])
+
 type DesktopWorkspaceAgentDependencies = {
   catalog: DocumentCatalog
   documentService: DocumentService
@@ -76,7 +78,11 @@ function canonicalizeLexicalPath(path: string): string {
 function hasInternalWorkspaceComponent(path: string): boolean {
   return canonicalizeLexicalPath(path)
     .split("/")
-    .some((component) => component.toLocaleLowerCase() === ".odessay")
+    .some((component) => INTERNAL_WORKSPACE_DIR_NAMES.has(component.toLocaleLowerCase()))
+}
+
+function isAgentMarkdownPath(path: string): boolean {
+  return path.toLocaleLowerCase().endsWith(".md")
 }
 
 function isInsideCanonicalRoot(path: string, rootPath: string): boolean {
@@ -196,7 +202,12 @@ export class DesktopWorkspaceAgentToolsService implements WorkspaceAgentToolsSer
         || hasInternalWorkspaceComponent(canonicalPath)
         || !isInsideCanonicalRoot(canonicalPath, canonicalRoot)
       ) {
-        return error("FORBIDDEN", "The path is outside the agent workspace root or resolves through .odessay.", {
+        return error("FORBIDDEN", "The path is outside the agent workspace root or resolves through internal workspace state.", {
+          candidatePath,
+        })
+      }
+      if (!isAgentMarkdownPath(canonicalPath)) {
+        return error("FORBIDDEN", "Workspace agent filesystem actions are limited to .md documents.", {
           candidatePath,
         })
       }

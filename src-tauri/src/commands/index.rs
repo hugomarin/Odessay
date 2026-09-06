@@ -56,7 +56,9 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
             created_at INTEGER,
             modified_at INTEGER,
             excerpt_cache TEXT,
-            excerpt_content_hash TEXT
+            excerpt_content_hash TEXT,
+            reference_targets_cache TEXT,
+            reference_targets_content_hash TEXT
         );
         CREATE TABLE IF NOT EXISTS document_bindings (
             document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
@@ -182,6 +184,36 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
         )
         .map_err(|e| format!("catalog migration add excerpt_content_hash: {e}"))?;
     }
+    let (has_reference_targets_cache, has_reference_targets_content_hash) = {
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(documents)")
+            .map_err(|e| format!("catalog migration inspect reference projection: {e}"))?;
+        let columns: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| format!("catalog migration list reference projection columns: {e}"))?
+            .filter_map(Result::ok)
+            .collect();
+        (
+            columns.iter().any(|name| name == "reference_targets_cache"),
+            columns
+                .iter()
+                .any(|name| name == "reference_targets_content_hash"),
+        )
+    };
+    if !has_reference_targets_cache {
+        conn.execute(
+            "ALTER TABLE documents ADD COLUMN reference_targets_cache TEXT",
+            [],
+        )
+        .map_err(|e| format!("catalog migration add reference_targets_cache: {e}"))?;
+    }
+    if !has_reference_targets_content_hash {
+        conn.execute(
+            "ALTER TABLE documents ADD COLUMN reference_targets_content_hash TEXT",
+            [],
+        )
+        .map_err(|e| format!("catalog migration add reference_targets_content_hash: {e}"))?;
+    }
     let has_retired_at = {
         let mut stmt = conn
             .prepare("PRAGMA table_info(binding_roots)")
@@ -226,7 +258,7 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
            WHERE deleted_at_cache='legacy' AND cloud_present=0;
          INSERT INTO catalog_schema(singleton, version) VALUES (1, 3)
            ON CONFLICT(singleton) DO UPDATE SET version = MAX(version, excluded.version);
-         UPDATE catalog_schema SET version=8 WHERE singleton=1;"
+         UPDATE catalog_schema SET version=9 WHERE singleton=1;"
     ).map_err(|e| format!("catalog migration v3: {e}"))?;
     Ok(())
 }
@@ -399,6 +431,8 @@ pub struct CatalogRow {
     pub modified_at: Option<i64>,
     pub excerpt: Option<String>,
     pub excerpt_content_hash: Option<String>,
+    pub reference_targets: Option<Vec<CatalogReferenceTarget>>,
+    pub reference_targets_content_hash: Option<String>,
     pub binding_root_id: Option<String>,
     pub relative_path: Option<String>,
     pub canonical_path: Option<String>,
@@ -426,13 +460,17 @@ fn map_catalog_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CatalogRow> {
         modified_at: row.get(13)?,
         excerpt: row.get(14)?,
         excerpt_content_hash: row.get(15)?,
-        binding_root_id: row.get(16)?,
-        relative_path: row.get(17)?,
-        canonical_path: row.get(18)?,
-        inode: row.get(19)?,
-        content_hash: row.get(20)?,
-        size: row.get(21)?,
-        last_seen_at: row.get(22)?,
+        reference_targets: row
+            .get::<_, Option<String>>(16)?
+            .and_then(|value| serde_json::from_str(&value).ok()),
+        reference_targets_content_hash: row.get(17)?,
+        binding_root_id: row.get(18)?,
+        relative_path: row.get(19)?,
+        canonical_path: row.get(20)?,
+        inode: row.get(21)?,
+        content_hash: row.get(22)?,
+        size: row.get(23)?,
+        last_seen_at: row.get(24)?,
     })
 }
 
@@ -440,10 +478,166 @@ const CATALOG_SELECT: &str =
     "SELECT d.id,d.local_present,d.cloud_present,d.cloud_account_id,d.sync_status,
  d.title_cache,d.slug_cache,d.status_cache,d.artifact_type_cache,d.visibility_cache,d.version_cache,
  d.deleted_at_cache,d.created_at,d.modified_at,d.excerpt_cache,d.excerpt_content_hash,
+ d.reference_targets_cache,d.reference_targets_content_hash,
  b.binding_root_id,b.relative_path,b.canonical_path,b.inode,b.content_hash,b.size,b.last_seen_at
  FROM documents d LEFT JOIN document_bindings b ON b.document_id=d.id";
 
 const MAX_EXCERPT_CHARS: usize = 120;
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogReferenceTarget {
+    pub value: String,
+    pub kind: String,
+}
+
+fn has_uri_scheme(value: &str) -> bool {
+    let mut characters = value.chars();
+    let Some(first) = characters.next() else {
+        return false;
+    };
+    if !first.is_ascii_alphabetic() {
+        return false;
+    }
+    for character in characters {
+        if character == ':' {
+            return true;
+        }
+        if !(character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')) {
+            return false;
+        }
+    }
+    false
+}
+
+fn normalized_internal_reference(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    let unwrapped = trimmed
+        .strip_prefix('<')
+        .and_then(|value| value.strip_suffix('>'))
+        .unwrap_or(trimmed)
+        .trim();
+    let value = unwrapped.split('#').next().unwrap_or_default().trim();
+    let lowercase_value = value.to_ascii_lowercase();
+    if value.is_empty()
+        || value.starts_with('#')
+        || value.starts_with("//")
+        || lowercase_value.starts_with("www.")
+        || has_uri_scheme(value)
+    {
+        return None;
+    }
+    Some(value.to_string())
+}
+
+fn push_catalog_reference_target(targets: &mut Vec<CatalogReferenceTarget>, raw: &str) {
+    let Some(value) = normalized_internal_reference(raw) else {
+        return;
+    };
+    if targets
+        .iter()
+        .any(|target| target.kind == "path" && target.value == value)
+    {
+        return;
+    }
+    targets.push(CatalogReferenceTarget {
+        value,
+        kind: "path".to_string(),
+    });
+}
+
+/// Keep link destinations as a small rebuildable catalog projection. The
+/// materialized Markdown remains authoritative; this cache only lets metadata
+/// analysis inspect outbound references without loading every document body.
+fn markdown_reference_targets(markdown: &str) -> Option<String> {
+    let mut targets = Vec::new();
+    let mut in_fenced_code = false;
+
+    for line in markdown.replace("\r\n", "\n").replace('\r', "\n").lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            in_fenced_code = !in_fenced_code;
+            continue;
+        }
+        if in_fenced_code {
+            continue;
+        }
+
+        let characters: Vec<char> = line.chars().collect();
+        let mut index = 0;
+        while index + 1 < characters.len() {
+            if characters[index] == ']' && characters[index + 1] == '(' {
+                let opening_bracket = (0..index)
+                    .rev()
+                    .find(|candidate| characters[*candidate] == '[');
+                if opening_bracket
+                    .and_then(|start| start.checked_sub(1))
+                    .is_some_and(|start| characters[start] == '!')
+                {
+                    index += 2;
+                    continue;
+                }
+                let mut cursor = index + 2;
+                while cursor < characters.len() && characters[cursor].is_whitespace() {
+                    cursor += 1;
+                }
+                let start = cursor;
+                if cursor < characters.len() && characters[cursor] == '<' {
+                    cursor += 1;
+                    let value_start = cursor;
+                    while cursor < characters.len() && characters[cursor] != '>' {
+                        cursor += 1;
+                    }
+                    if cursor < characters.len() && characters[cursor] == '>' {
+                        push_catalog_reference_target(
+                            &mut targets,
+                            &characters[value_start..cursor].iter().collect::<String>(),
+                        );
+                        cursor += 1;
+                    }
+                } else {
+                    while cursor < characters.len()
+                        && !characters[cursor].is_whitespace()
+                        && characters[cursor] != ')'
+                    {
+                        cursor += 1;
+                    }
+                    if cursor > start {
+                        push_catalog_reference_target(
+                            &mut targets,
+                            &characters[start..cursor].iter().collect::<String>(),
+                        );
+                    }
+                }
+                index = cursor.max(index + 2);
+                continue;
+            }
+
+            if characters[index] == '[' && characters[index + 1] == '[' {
+                let mut cursor = index + 2;
+                while cursor + 1 < characters.len()
+                    && !(characters[cursor] == ']' && characters[cursor + 1] == ']')
+                {
+                    cursor += 1;
+                }
+                if cursor + 1 < characters.len() {
+                    let raw = characters[index + 2..cursor].iter().collect::<String>();
+                    let value = raw.split('|').next().unwrap_or_default();
+                    push_catalog_reference_target(&mut targets, value);
+                    index = cursor + 2;
+                    continue;
+                }
+            }
+            index += 1;
+        }
+    }
+
+    if targets.is_empty() {
+        None
+    } else {
+        serde_json::to_string(&targets).ok()
+    }
+}
 
 fn markdown_excerpt(markdown: &str) -> Option<String> {
     let normalized = markdown.replace("\r\n", "\n").replace('\r', "\n");
@@ -507,10 +701,11 @@ fn markdown_excerpt(markdown: &str) -> Option<String> {
     }
 }
 
-/// Rebuild stale/missing excerpts away from React. Reads execute sequentially
-/// in this background command (bounded concurrency = 1), then every valid result
-/// commits in one SQLite transaction. The content-hash predicate prevents a
-/// watcher result from overwriting a newer save.
+/// Rebuild stale/missing excerpts and outbound-reference projections away from
+/// React. Reads execute sequentially in this background command (bounded
+/// concurrency = 1), then every valid result commits in one SQLite transaction.
+/// The content-hash predicate prevents a watcher result from overwriting a newer
+/// save.
 #[tauri::command]
 pub fn catalog_hydrate_excerpts(db_path: String) -> Result<Vec<String>, String> {
     let mut conn = open_db(&db_path)?;
@@ -520,7 +715,11 @@ pub fn catalog_hydrate_excerpts(db_path: String) -> Result<Vec<String>, String> 
                 "SELECT d.id,b.canonical_path,b.content_hash
                  FROM documents d JOIN document_bindings b ON b.document_id=d.id
                  WHERE d.local_present=1 AND b.content_hash IS NOT NULL
-                   AND (d.excerpt_content_hash IS NULL OR d.excerpt_content_hash != b.content_hash)
+                   AND (
+                     d.excerpt_content_hash IS NULL OR d.excerpt_content_hash != b.content_hash
+                     OR d.reference_targets_content_hash IS NULL
+                     OR d.reference_targets_content_hash != b.content_hash
+                   )
                  ORDER BY d.modified_at DESC",
             )
             .map_err(|e| format!("catalog excerpt candidates prepare: {e}"))?;
@@ -532,11 +731,16 @@ pub fn catalog_hydrate_excerpts(db_path: String) -> Result<Vec<String>, String> 
         rows
     };
 
-    let prepared: Vec<(String, Option<String>, String)> = candidates
+    let prepared: Vec<(String, Option<String>, Option<String>, String)> = candidates
         .into_iter()
         .filter_map(|(id, path, content_hash)| {
             let markdown = fs::read_to_string(path).ok()?;
-            Some((id, markdown_excerpt(&markdown), content_hash))
+            Some((
+                id,
+                markdown_excerpt(&markdown),
+                markdown_reference_targets(&markdown),
+                content_hash,
+            ))
         })
         .collect();
     if prepared.is_empty() {
@@ -547,15 +751,16 @@ pub fn catalog_hydrate_excerpts(db_path: String) -> Result<Vec<String>, String> 
         .transaction()
         .map_err(|e| format!("catalog excerpt batch begin: {e}"))?;
     let mut updated = Vec::new();
-    for (id, excerpt, content_hash) in prepared {
+    for (id, excerpt, reference_targets, content_hash) in prepared {
         let changed = tx
             .execute(
-                "UPDATE documents SET excerpt_cache=?1,excerpt_content_hash=?2
-                 WHERE id=?3 AND EXISTS (
+                "UPDATE documents SET excerpt_cache=?1,excerpt_content_hash=?2,
+                 reference_targets_cache=?3,reference_targets_content_hash=?2
+                 WHERE id=?4 AND EXISTS (
                    SELECT 1 FROM document_bindings b
-                   WHERE b.document_id=?3 AND b.content_hash=?2
+                   WHERE b.document_id=?4 AND b.content_hash=?2
                  )",
-                params![excerpt, content_hash, id],
+                params![excerpt, content_hash, reference_targets, id],
             )
             .map_err(|e| format!("catalog excerpt batch update: {e}"))?;
         if changed > 0 {
@@ -909,7 +1114,8 @@ pub fn catalog_apply_workspace_removal(
             .map_err(|e| format!("catalog workspace removal mutation: {e}"))?;
             tx.execute(
                 "UPDATE documents SET local_present=0, sync_status='pending', deleted_at_cache=?1,
-                 excerpt_cache=NULL, excerpt_content_hash=NULL, modified_at=?2
+                 excerpt_cache=NULL, excerpt_content_hash=NULL,
+                 reference_targets_cache=NULL, reference_targets_content_hash=NULL, modified_at=?2
                  WHERE id=?3",
                 params![deleted_at, now_millis, row.id],
             )
@@ -917,7 +1123,8 @@ pub fn catalog_apply_workspace_removal(
         } else {
             tx.execute(
                 "UPDATE documents SET local_present=0, sync_status='deleted', deleted_at_cache=NULL,
-                 excerpt_cache=NULL, excerpt_content_hash=NULL
+                 excerpt_cache=NULL, excerpt_content_hash=NULL,
+                 reference_targets_cache=NULL, reference_targets_content_hash=NULL
                  WHERE id=?1",
                 params![row.id],
             )
@@ -1230,7 +1437,8 @@ pub fn catalog_apply_reconcile(
         .map_err(|e| format!("catalog reconcile detach binding: {e}"))?;
         // Confirmed physical absence never deletes cloud metadata (spec §Fallas).
         tx.execute(
-            "UPDATE documents SET local_present=0,excerpt_cache=NULL,excerpt_content_hash=NULL WHERE id=?1",
+            "UPDATE documents SET local_present=0,excerpt_cache=NULL,excerpt_content_hash=NULL,
+             reference_targets_cache=NULL,reference_targets_content_hash=NULL WHERE id=?1",
             params![id],
         )
         .map_err(|e| format!("catalog reconcile detach document: {e}"))?;
@@ -1253,7 +1461,8 @@ pub fn catalog_detach_local_file(db_path: String, id: String) -> Result<(), Stri
     )
     .map_err(|e| format!("catalog detach binding: {e}"))?;
     tx.execute(
-        "UPDATE documents SET local_present=0,excerpt_cache=NULL,excerpt_content_hash=NULL WHERE id=?1",
+        "UPDATE documents SET local_present=0,excerpt_cache=NULL,excerpt_content_hash=NULL,
+         reference_targets_cache=NULL,reference_targets_content_hash=NULL WHERE id=?1",
         params![id],
     )
     .map_err(|e| format!("catalog detach document: {e}"))?;
@@ -1707,6 +1916,13 @@ mod catalog_tests {
                 |row| row.get(0),
             )
             .unwrap();
+        let reference_columns: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('documents') WHERE name IN ('reference_targets_cache','reference_targets_content_hash')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         let retired_root_column: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM pragma_table_info('binding_roots') WHERE name='retired_at'",
@@ -1714,10 +1930,11 @@ mod catalog_tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         assert_eq!(cloud_hash_column, 1);
         assert_eq!(deleted_at_column, 1);
         assert_eq!(excerpt_columns, 2);
+        assert_eq!(reference_columns, 2);
         assert_eq!(retired_root_column, 1);
         eprintln!("catalog_startup_ms={startup_ms:.3}");
         assert!(startup_ms < 1000.0, "catalog startup exceeded 1s budget");
@@ -1739,6 +1956,16 @@ mod catalog_tests {
     }
 
     #[test]
+    fn markdown_reference_projection_filters_non_document_destinations() {
+        let markdown = "[target](notes/target.md#overview) [mail](MAILTO:author@example.com) [remote](HTTPS://example.com) [cdn](//cdn.example.com/file.md) [site](WWW.example.com/file.md) [section](#overview) ![image](image.md)";
+
+        assert_eq!(
+            markdown_reference_targets(markdown).as_deref(),
+            Some(r#"[{"value":"notes/target.md","kind":"path"}]"#),
+        );
+    }
+
+    #[test]
     fn catalog_hydrates_excerpt_as_one_rebuildable_batch() {
         let path = temp_db();
         let root = std::env::temp_dir().join(format!("odessay-excerpt-{}", Uuid::new_v4()));
@@ -1746,7 +1973,7 @@ mod catalog_tests {
         let document_path = root.join("guide.md");
         fs::write(
             &document_path,
-            "---\ntitle: Guide\n---\n# Guide CMP\n\nSame content",
+            "---\ntitle: Guide\n---\n# Guide CMP\n\nSame content\n\nSee [target](notes/target.md) and [remote](https://example.com).",
         )
         .unwrap();
 
@@ -1761,8 +1988,22 @@ mod catalog_tests {
         let row = catalog_get_by_id(path.clone(), "doc-1".into())
             .unwrap()
             .unwrap();
-        assert_eq!(row.excerpt.as_deref(), Some("Guide CMP Same content"));
+        assert_eq!(
+            row.excerpt.as_deref(),
+            Some("Guide CMP Same content See target and remote.")
+        );
         assert_eq!(row.excerpt_content_hash.as_deref(), Some("blake3:current"));
+        assert_eq!(
+            row.reference_targets,
+            Some(vec![CatalogReferenceTarget {
+                value: "notes/target.md".into(),
+                kind: "path".into(),
+            }]),
+        );
+        assert_eq!(
+            row.reference_targets_content_hash.as_deref(),
+            Some("blake3:current"),
+        );
         assert!(catalog_hydrate_excerpts(path.clone()).unwrap().is_empty());
 
         let _ = fs::remove_file(path);
@@ -2397,7 +2638,7 @@ mod catalog_tests {
         assert_eq!(snapshot.collections[0].name, "Research");
         assert_eq!(snapshot.writing_collections.len(), 1);
         assert_eq!(snapshot.writing_collections[0].writing_id, "doc-1");
-        assert_eq!(catalog_schema_version(path.clone()).unwrap(), 8);
+        assert_eq!(catalog_schema_version(path.clone()).unwrap(), 9);
         let _ = fs::remove_file(path);
     }
 

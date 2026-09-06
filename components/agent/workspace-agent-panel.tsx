@@ -140,7 +140,7 @@ function formatEvidence(evidence: EvidenceCitation): string {
   return `${evidence.label}: ${evidence.detail}`
 }
 
-export function WorkspaceAgentPanel({
+function WorkspaceAgentPanelSession({
   scope,
   workspaceRootPath,
   scopeLabel,
@@ -465,6 +465,7 @@ export function WorkspaceAgentPanel({
       data-testid="workspace-agent-panel"
       data-section="workspace-agent-panel"
       data-scope={scope.kind}
+      data-scope-id={scope.kind === "workspace" ? scope.rootId : scope.id}
       onDragEnter={() => setIsDropTarget(true)}
       onDragOver={(event) => event.preventDefault()}
       onDragLeave={() => setIsDropTarget(false)}
@@ -720,6 +721,14 @@ export function WorkspaceAgentPanel({
       </form>
     </aside>
   )
+}
+
+export function WorkspaceAgentPanel(props: WorkspaceAgentPanelProps) {
+  const scopeKey = props.scope.kind === "workspace"
+    ? `workspace:${props.scope.rootId}`
+    : `document:${props.scope.id}`
+
+  return <WorkspaceAgentPanelSession key={scopeKey} {...props} />
 }
 
 function AgentActionButton({
