@@ -16,6 +16,7 @@ const contextMocks = vi.hoisted(() => ({
 
 const aiMocks = vi.hoisted(() => ({
   classifyWorkspace: vi.fn(),
+  askWorkspace: vi.fn(),
 }))
 
 vi.mock("@/lib/services/document-catalog-factory", () => ({
@@ -69,6 +70,11 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     aiMocks.classifyWorkspace.mockReset()
     aiMocks.classifyWorkspace.mockResolvedValue({
       data: { summary: "No change.", proposals: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    aiMocks.askWorkspace.mockReset()
+    aiMocks.askWorkspace.mockResolvedValue({
+      data: { answer: "No answer configured.", evidence: [], requestedDocumentIds: [], usage: null },
       error: null,
     })
   })
@@ -209,6 +215,103 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       decision: "keep",
       evidence: [expect.objectContaining({ quote: "Storage: SQLite.", line: 1 })],
     })
+  })
+
+  it("askAgent answers a free-form question grounded in the selected document, without requiring metadata classification", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: {
+        answer: "This document decides to use SQLite for storage.",
+        evidence: [{ documentId: "target", quote: "Storage: SQLite.", reason: "States the storage decision." }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "What storage does this artifact use?",
+      selection: [{ kind: "file", documentId: "target" }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      question: "What storage does this artifact use?",
+      targetDocumentIds: ["target"],
+    }))
+    expect(result.data).toMatchObject({
+      answer: "This document decides to use SQLite for storage.",
+      evidence: [expect.objectContaining({ quote: "Storage: SQLite.", line: 1 })],
+    })
+    expect(result.data?.documents).toEqual([{ documentId: "target", title: "target", path: "target.md" }])
+  })
+
+  it("askAgent drops evidence whose quote no longer appears in the current document content", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: {
+        answer: "This document mentions PostgreSQL.",
+        evidence: [{ documentId: "target", quote: "Storage: PostgreSQL.", reason: "Hallucinated quote not present in the source." }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "What storage does this artifact use?",
+      selection: [{ kind: "file", documentId: "target" }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.evidence).toEqual([])
+  })
+
+  it("askAgent rejects an empty selection instead of silently answering with no context", async () => {
+    contextMocks.list.mockResolvedValue([])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({ question: "What is this workspace about?", selection: [] })
+
+    expect(result.error?.code).toBe("NOT_FOUND")
+    expect(aiMocks.askWorkspace).not.toHaveBeenCalled()
   })
 
   it("uses a workflow-specific read approval only when proposing an existing workflow", async () => {
