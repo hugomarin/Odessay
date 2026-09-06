@@ -31,6 +31,7 @@ This document is the implementation evidence matrix for ODE-479 through ODE-486.
 | Queue complete | Resolving the last finding collapses the review width and returns the panel to the normal chat width | `setIsReviewExpanded(remainingCount > 0)` |
 | Closed/reopened | Panel closes to a rail and resolved finding ids survive through local UI memory only | `localStorage` key scoped by workspace/document; `output/playwright/ode-486/agent-reopened.png` |
 | Document switch | A new document receives a fresh session: chat, attachments, results and review proposals do not cross the document boundary | Scope-keyed remount; `output/playwright/ode-486/agent-document-switch-reset.png` |
+| Focus mode | Focus mode hides the agent host without unmounting its session; Escape restores the same chat and attachment snapshot | `workspace-agent-focus-host`; Playwright assertion plus `output/playwright/ode-486/agent-focus-mode.png` |
 | Unavailable runtime | Web/unbound contexts explain that desktop Workspace actions need a local root; the panel does not create a draft fallback | `WorkspaceAgentPanel` service availability state |
 
 ## Wireframe-to-build comparison
@@ -43,6 +44,7 @@ The approved interactive wireframe is referenced by `workflow/define/dod-fase-11
 | Context and chat | Drop artifacts anywhere in the panel, show removable chips, preserve the sent context | `agent-context-chat.png` | Compact tokenized chips, local `bg-muted`/`bg-bg` surfaces and chat-owned scroll capped inside the body |
 | Evidence / approval | Show cited findings and make mutations explicit before applying them | `workspace-agent-review-queue`, action review sections and approval-gated service tests | Inline review cards and buttons inside the rail; no modal, backdrop or separate sheet |
 | Queue completion | Resolve/discard findings one at a time and collapse the review state when complete | `resolveContradiction`, `setIsReviewExpanded(remainingCount > 0)` | Review width changes from 276px to 344px in place and returns to 276px when the queue is empty |
+| Focus mode | Keep the agent session available when the editor temporarily takes the full viewport | `workspace-agent-focus-host`, focus-mode Playwright smoke | The host is hidden with the existing `hidden` utility while React state stays mounted; no new surface or background is introduced |
 | Scope reset | Do not reuse one document's working context for another | `agent-document-switch-reset.png` | Session state is keyed by `workspace:{rootId}` / `document:{id}` and remains local React state, with no new global store |
 
 The remaining packaged-desktop screenshots are called out below rather than represented by web-only evidence.
@@ -53,14 +55,14 @@ Current local validation:
 
 - `npm run typecheck`
 - `npm run lint` (existing warnings only)
-- `npm test` — 240 files / 1,858 tests (the review baseline was 1,847; this pass adds the regression coverage listed below)
+- `npm test` — 240 files / 1,862 tests (the review baseline was 1,847; this pass adds the regression coverage listed below)
 - `npm run ops:workflow:validate`
 - `npm run ops:delivery:gate` — passed for the committed ODE-479 through ODE-483 scope; rerun after the new commit for ODE-484 through ODE-486 traceability
 - `npm run ops:perf:capture -- --scenario editor`
 - `npm run ops:perf:gate -- --trace artifacts/perf/editor-trace.json.gz` — 14 pass, 0 warn, 1 optional skip, 0 required failures
 - `cargo test --manifest-path src-tauri/Cargo.toml` — 68 passed, 2 ignored; catalog reference projection, traversal, `.odessay`, legacy internal state and symlink escape regressions pass
-- `npx playwright test tests/playwright/workspace-agent-panel.e2e.ts` — independent panel beside Properties, drop context, immutable message attachment record + chat scroll, close/reopen and document-scope reset; screenshots in `output/playwright/ode-486/`
-- Browser performance evidence from the same smoke: `output/playwright/ode-486/agent-performance.json` — panel open `442.1ms`, reopen `79ms`, document reset `147.4ms` in the local Chromium harness. These are direct browser measurements, not a packaged-desktop claim.
+- `npx playwright test tests/playwright/workspace-agent-panel.e2e.ts` — independent panel beside Properties, drop context, immutable message attachment record + chat scroll, focus-mode preservation, close/reopen and document-scope reset; screenshots in `output/playwright/ode-486/`
+- Browser performance evidence from the same smoke: `output/playwright/ode-486/agent-performance.json` — panel open `429.1ms`, reopen `65.1ms`, document reset `83.8ms` in the local Chromium harness. These are direct browser measurements, not a packaged-desktop claim.
 - `npm run desktop:release:local` — desktop draft lifecycle (92 tests), static export, optimized Tauri release build and local DMG generation passed; the artifact intentionally embeds `http://localhost:3000` and is not distributable.
 - `npm run validate:desktop -- --dmg dist/releases/ArtifactStudio-0.7.1-aarch64.dmg --allow-localhost` — bundle discovery, app structure, CSP, version alignment, static export and ad-hoc signature checks passed (0 failures, 1 expected localhost warning).
 

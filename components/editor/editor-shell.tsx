@@ -6885,8 +6885,15 @@ export function EditorShell({
           </aside>
         ) : null}
 
-        {!isFocusMode && editorSession.tabs.length > 0 ? (
-          <div className="-mb-2.5 -mt-1.5 flex min-h-0 shrink-0 self-stretch">
+        {editorSession.tabs.length > 0 ? (
+          <div
+            data-testid="workspace-agent-focus-host"
+            aria-hidden={isFocusMode}
+            className={cn(
+              "-mb-2.5 -mt-1.5 flex min-h-0 shrink-0 self-stretch",
+              isFocusMode && "hidden",
+            )}
+          >
             {isAgentPanelOpen || hasOpenedAgentPanel ? (
               <Suspense fallback={null}>
                 <WorkspaceAgentPanel

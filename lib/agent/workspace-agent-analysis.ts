@@ -153,8 +153,33 @@ function documentLabel(record: DocumentCatalogRecord): string {
   return record.title?.trim() || basename(documentPath(record) ?? record.id)
 }
 
-function documentReference(record: DocumentCatalogRecord, kind: "path" | "slug"): string | null {
-  return kind === "slug" ? record.slug : documentPath(record)
+function documentReference(
+  source: DocumentCatalogRecord,
+  target: DocumentCatalogRecord,
+  kind: "path" | "slug",
+): string | null {
+  if (kind === "slug") return target.slug
+  const sourcePath = documentPath(source)
+  const targetPath = documentPath(target)
+  if (!targetPath) return null
+  if (!sourcePath) return normalizedCatalogPath(targetPath)
+
+  const sourceParts = normalizedCatalogPath(sourcePath).split("/").filter(Boolean)
+  const targetParts = normalizedCatalogPath(targetPath).split("/").filter(Boolean)
+  const sourceDirectory = sourceParts.slice(0, -1)
+  let commonLength = 0
+  while (
+    commonLength < sourceDirectory.length
+    && commonLength < targetParts.length
+    && sourceDirectory[commonLength]?.toLocaleLowerCase() === targetParts[commonLength]?.toLocaleLowerCase()
+  ) {
+    commonLength += 1
+  }
+  const relativeParts = [
+    ...sourceDirectory.slice(commonLength).map(() => ".."),
+    ...targetParts.slice(commonLength),
+  ]
+  return relativeParts.join("/") || basename(targetPath)
 }
 
 function tokenize(value: string | null | undefined): Set<string> {
@@ -174,6 +199,19 @@ function similarity(left: string, right: string): number {
   let intersection = 0
   for (const token of a) if (b.has(token)) intersection += 1
   return intersection / new Set([...a, ...b]).size
+}
+
+function hashEvidenceText(value: string): string {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return value.length.toString(16) + "-" + (hash >>> 0).toString(16)
+}
+
+function contradictionFragmentIdentity(fragment: ContradictionFragment): string {
+  return String(fragment.start) + ":" + String(fragment.end) + ":" + hashEvidenceText(fragment.text)
 }
 
 function relativePathForRoot(rootPath: string): string {
@@ -291,31 +329,27 @@ function sourceReferenceCandidates(source: DocumentCatalogRecord): DocumentCatal
 function pathLookupCandidates(source: DocumentCatalogRecord, reference: string): string[] {
   const normalizedReference = normalizedInternalReference(reference)
   if (!normalizedReference) return []
-  const rawPath = normalizedCatalogPath(normalizedReference)
+  const rawPath = normalizePath(normalizedReference).replace(/^\/+/, "")
   const sourcePath = normalizedCatalogPath(documentPath(source) ?? "")
   const sourceDirectory = sourcePath.includes("/") ? sourcePath.slice(0, sourcePath.lastIndexOf("/")) : ""
   const relativeToSource = normalizedCatalogPath(sourceDirectory ? `${sourceDirectory}/${rawPath}` : rawPath)
-  return [...new Set([relativeToSource, rawPath])].filter(Boolean)
+  return relativeToSource ? [relativeToSource] : []
 }
 
 export function detectBrokenDocumentReferences(records: DocumentCatalogRecord[]): BrokenReferenceProposal[] {
   const activeRecords = records.filter((record) => !record.deletedAt)
   const byPath = new Map<string, DocumentCatalogRecord[]>()
-  const byBasename = new Map<string, DocumentCatalogRecord[]>()
   const bySlug = new Map<string, DocumentCatalogRecord>()
-  const addPath = (map: Map<string, DocumentCatalogRecord[]>, value: string, record: DocumentCatalogRecord) => {
+  const addPath = (value: string, record: DocumentCatalogRecord) => {
     const key = normalizedCatalogPath(value).toLocaleLowerCase()
     if (!key) return
-    const current = map.get(key) ?? []
+    const current = byPath.get(key) ?? []
     if (!current.some((item) => item.id === record.id)) current.push(record)
-    map.set(key, current)
+    byPath.set(key, current)
   }
   for (const record of activeRecords) {
     const path = documentPath(record)
-    if (path) {
-      addPath(byPath, path, record)
-      addPath(byBasename, basename(path), record)
-    }
+    if (path) addPath(path, record)
     if (record.slug) bySlug.set(record.slug.toLocaleLowerCase(), record)
   }
 
@@ -329,9 +363,6 @@ export function detectBrokenDocumentReferences(records: DocumentCatalogRecord[])
         : pathLookupCandidates(source, reference.value)
           .map((candidate) => byPath.get(candidate.toLocaleLowerCase()))
           .find((matches) => matches?.length === 1)?.[0]
-          ?? (byBasename.get(normalizedCatalogPath(reference.value).split("/").at(-1)?.toLocaleLowerCase() ?? "")?.length === 1
-            ? byBasename.get(normalizedCatalogPath(reference.value).split("/").at(-1)?.toLocaleLowerCase() ?? "")?.[0]
-            : undefined)
       if (resolved) continue
 
       const nearest = activeRecords
@@ -346,7 +377,7 @@ export function detectBrokenDocumentReferences(records: DocumentCatalogRecord[])
         referenceKind: reference.kind,
         candidateDocumentId: candidate?.id ?? null,
         candidateTitle: candidate ? documentLabel(candidate) : null,
-        suggestedReference: candidate ? documentReference(candidate, reference.kind) : null,
+        suggestedReference: candidate ? documentReference(source, candidate, reference.kind) : null,
         evidence: [
           { kind: "document", sourceId: source.id, label: documentLabel(source), detail: "catalog reference projection contains this destination" },
           ...(candidate ? [{ kind: "similarity" as const, sourceId: candidate.id, label: documentLabel(candidate), detail: `nearest catalog match (${Math.round((nearest?.score ?? 0) * 100)}%)` }] : []),
@@ -383,10 +414,14 @@ function referenceRange(markdown: string, proposal: BrokenReferenceProposal): Re
     if (!target || target.toLocaleLowerCase() !== normalizedInternalReference(expected)?.toLocaleLowerCase()) continue
     const fragmentIndex = trimmed.indexOf("#")
     const targetText = fragmentIndex >= 0 ? trimmed.slice(0, fragmentIndex).trim() : trimmed
-    const rawOffset = match[0].indexOf(raw)
+    const destinationMarker = match[0].indexOf("](")
+    if (destinationMarker < 0) continue
+    let destinationOffset = destinationMarker + 2
+    while (/\s/.test(match[0][destinationOffset] ?? "")) destinationOffset += 1
+    if (match[1] !== undefined) destinationOffset += 1
     const valueOffset = raw.indexOf(targetText)
-    if (rawOffset < 0 || valueOffset < 0) continue
-    const start = match.index + rawOffset + valueOffset
+    if (valueOffset < 0) continue
+    const start = match.index + destinationOffset + valueOffset
     return { start, end: start + targetText.length }
   }
 
@@ -650,7 +685,13 @@ export function detectDocumentContradictions(
             detail: `line ${rightFragment.line}: ${rightFragment.text}`,
           }
           proposals.push({
-            id: `contradiction:${leftDocument.documentId}:${leftFragment.start}:${rightDocument.documentId}:${rightFragment.start}`,
+            id: [
+              "contradiction",
+              leftDocument.documentId,
+              contradictionFragmentIdentity(leftFragment),
+              rightDocument.documentId,
+              contradictionFragmentIdentity(rightFragment),
+            ].join(":"),
             topic: contradictionTopic(leftFragment.text, rightFragment.text),
             left: {
               documentId: leftDocument.documentId,
@@ -685,10 +726,12 @@ export function replaceContradictionFragment(
   fragment: ContradictionFragment,
   replacement: string,
 ): string | null {
-  if (fragment.start < 0 || fragment.end <= fragment.start || fragment.end > markdown.length) return null
+  if (fragment.start < 0 || fragment.end <= fragment.start || fragment.text.length === 0) return null
 
   let start = fragment.start
-  if (markdown.slice(start, fragment.end) !== fragment.text) {
+  const isAtExpectedPosition = fragment.end <= markdown.length
+    && markdown.slice(start, fragment.end) === fragment.text
+  if (!isAtExpectedPosition) {
     const matches: number[] = []
     let candidate = markdown.indexOf(fragment.text)
     while (candidate >= 0) {
