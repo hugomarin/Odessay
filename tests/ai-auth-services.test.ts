@@ -81,7 +81,7 @@ describe("webAIService", () => {
               }],
             }],
             requestedDocumentIds: ["doc-2"],
-            model: "fireworks-test",
+            model: "gpt-5.6-luna",
             promptTokens: 200,
             completionTokens: 80,
             totalTokens: 280,
@@ -137,7 +137,7 @@ describe("webAIService", () => {
         proposals: [expect.objectContaining({ documentId: "doc-1", decision: "change" })],
         requestedDocumentIds: ["doc-2"],
         usage: {
-          model: "fireworks-test",
+          model: "gpt-5.6-luna",
           promptTokens: 200,
           completionTokens: 80,
           totalTokens: 280,

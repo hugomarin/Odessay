@@ -7,11 +7,11 @@ import {
   buildWorkspaceClassificationSystemPrompt,
   buildWorkspaceClassificationUserPrompt,
   workspaceClassificationRequestSchema,
-  workspaceClassificationResponseFormat,
+  workspaceClassificationTextFormat,
   workspaceClassificationResponseSchema,
   type WorkspaceClassificationApiPayload,
 } from "@/lib/ai/workspace-classification"
-import { getAIProviderConfig } from "@/lib/ai/provider-config"
+import { getOpenAIWorkspaceProviderConfig } from "@/lib/ai/openai-workspace-provider-config"
 import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors"
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth"
 
@@ -85,18 +85,16 @@ function extractJsonPayload(value: string): string {
 async function callClassificationModel({
   config,
   promptText,
-  structuredOutput,
 }: {
-  config: ReturnType<typeof getAIProviderConfig>
+  config: ReturnType<typeof getOpenAIWorkspaceProviderConfig>
   promptText: string
-  structuredOutput: boolean
 }): Promise<{ text: string; usage: ClassificationUsage }> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), PROVIDER_REQUEST_TIMEOUT_MS)
 
   let response: Response
   try {
-    response = await fetch(config.chatCompletionsUrl, {
+    response = await fetch(config.responsesUrl, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -105,15 +103,14 @@ async function callClassificationModel({
       },
       body: JSON.stringify({
         model: config.model,
-        max_tokens: Math.max(config.maxTokens, 8_192),
-        temperature: 0.1,
-        top_p: config.topP,
-        reasoning_effort: "none",
-        ...(structuredOutput ? { response_format: workspaceClassificationResponseFormat } : {}),
-        messages: [
+        input: [
           { role: "system", content: buildWorkspaceClassificationSystemPrompt() },
           { role: "user", content: promptText },
         ],
+        max_output_tokens: Math.max(config.maxOutputTokens, 8_192),
+        reasoning: { effort: config.reasoningEffort },
+        store: false,
+        text: { format: workspaceClassificationTextFormat },
       }),
       signal: controller.signal,
     })
@@ -137,7 +134,6 @@ async function callClassificationModel({
     console.info("[workspace-classification] provider error", {
       status: response.status,
       bodyClass: providerBodyClass,
-      structuredOutput,
     })
 
     if (response.status === 429) {
@@ -150,15 +146,21 @@ async function callClassificationModel({
       )
     }
 
-    if (structuredOutput && (response.status === 400 || response.status === 422 || response.status >= 500)) {
-      return callClassificationModel({ config, promptText, structuredOutput: false })
-    }
-
     if (response.status === 400 || response.status === 422) {
       throw new ClassificationRouteError(
         422,
         "AI_PROVIDER_CONTRACT_ERROR",
         "AI provider rejected the workspace classification contract.",
+        false,
+        { phase: "provider", providerStatus: response.status, providerBodyClass },
+      )
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new ClassificationRouteError(
+        502,
+        "AI_PROVIDER_AUTH_ERROR",
+        "OpenAI rejected the configured workspace classification credentials.",
         false,
         { phase: "provider", providerStatus: response.status, providerBodyClass },
       )
@@ -176,13 +178,20 @@ async function callClassificationModel({
   }
 
   let payload: {
-    choices?: Array<{
-      finish_reason?: string
-      message?: { content?: string }
+    output_text?: string
+    status?: string
+    incomplete_details?: { reason?: string | null } | null
+    output?: Array<{
+      type?: string
+      content?: Array<{
+        type?: string
+        text?: string
+        refusal?: string
+      }>
     }>
     usage?: {
-      prompt_tokens?: number
-      completion_tokens?: number
+      input_tokens?: number
+      output_tokens?: number
       total_tokens?: number
     }
   }
@@ -199,8 +208,7 @@ async function callClassificationModel({
     )
   }
 
-  const choice = payload.choices?.[0]
-  if (choice?.finish_reason === "length") {
+  if (payload.status === "incomplete") {
     throw new ClassificationRouteError(
       502,
       "AI_RESPONSE_PARSE_FAILED",
@@ -210,7 +218,27 @@ async function callClassificationModel({
     )
   }
 
-  const text = choice?.message?.content?.trim() ?? ""
+  const refusal = payload.output
+    ?.flatMap((item) => item.content ?? [])
+    .find((content) => content.type === "refusal")
+
+  if (refusal) {
+    throw new ClassificationRouteError(
+      502,
+      "AI_RESPONSE_REFUSED",
+      "OpenAI refused to classify the selected artifacts.",
+      false,
+      { phase: "parse", providerStatus: response.status },
+    )
+  }
+
+  const outputText = payload.output_text
+    ?? payload.output
+      ?.flatMap((item) => item.content ?? [])
+      .filter((content) => content.type === "output_text")
+      .map((content) => content.text ?? "")
+      .join("")
+  const text = outputText?.trim() ?? ""
   if (!text) {
     throw new ClassificationRouteError(
       502,
@@ -224,8 +252,8 @@ async function callClassificationModel({
   return {
     text,
     usage: {
-      promptTokens: payload.usage?.prompt_tokens ?? null,
-      completionTokens: payload.usage?.completion_tokens ?? null,
+      promptTokens: payload.usage?.input_tokens ?? null,
+      completionTokens: payload.usage?.output_tokens ?? null,
       totalTokens: payload.usage?.total_tokens ?? null,
     },
   }
@@ -247,9 +275,9 @@ export async function POST(request: Request) {
 
   const startedAt = Date.now()
   try {
-    let config: ReturnType<typeof getAIProviderConfig>
+    let config: ReturnType<typeof getOpenAIWorkspaceProviderConfig>
     try {
-      config = getAIProviderConfig()
+      config = getOpenAIWorkspaceProviderConfig()
     } catch (cause) {
       throw new ClassificationRouteError(
         500,
@@ -262,7 +290,6 @@ export async function POST(request: Request) {
     const response = await callClassificationModel({
       config,
       promptText: buildWorkspaceClassificationUserPrompt(parsed.data),
-      structuredOutput: true,
     })
     let modelPayload: unknown
     try {
