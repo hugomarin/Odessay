@@ -42,6 +42,7 @@ import { MAX_WORKSPACE_ASK_TARGETS } from "@/lib/ai/workspace-ask"
 import { cn } from "@/lib/utils"
 
 const CHAT_TEXTAREA_MAX_HEIGHT = 160
+const MAX_SESSION_ACTIONS_CONTEXT = 8
 
 export type WorkspaceAgentScope =
   | { kind: "document"; id: string }
@@ -64,6 +65,26 @@ export type WorkspaceAgentPanelProps = {
   onOpenDocument?: (documentId: string) => void
 }
 
+/**
+ * The structured result of a predetermined action, carried by the chat
+ * message that announced it instead of a parallel `useState` per card type.
+ * This is what lets the review card render inline, right under the message
+ * that produced it, and keeps every past run's card visible in history
+ * instead of one run silently overwriting another's UI state.
+ */
+type ToolResult =
+  | { kind: "workflow"; proposal: WorkflowDraftProposal }
+  | { kind: "broken-links"; proposals: BrokenReferenceProposal[] }
+  | {
+      kind: "classification"
+      summary: string
+      proposals: ClassificationProposal[]
+      requestedDocumentIds: string[]
+      requestedDocuments: WorkspaceAgentClassificationRequestedDocument[]
+    }
+  | { kind: "archive"; candidates: ArchiveCandidate[] }
+  | { kind: "contradictions"; proposals: ContradictionProposal[] }
+
 type AgentMessage = {
   id: string
   role: "user" | "agent"
@@ -74,6 +95,8 @@ type AgentMessage = {
   isError?: boolean
   /** Documents the model could see while answering, used to turn `` `filename` `` mentions into open-document links. */
   citedDocuments?: WorkspaceAgentCitedDocument[]
+  /** The predetermined action's result, if this message announced one. */
+  toolResult?: ToolResult
 }
 
 /**
@@ -263,17 +286,7 @@ function WorkspaceAgentPanelSession({
   const [serviceError, setServiceError] = useState<string | null>(null)
   const [isDropTarget, setIsDropTarget] = useState(false)
   const [attachments, setAttachments] = useState<WorkspaceAgentContextAttachment[]>([])
-  const [workflowProposal, setWorkflowProposal] = useState<WorkflowDraftProposal | null>(null)
-  const [brokenReferences, setBrokenReferences] = useState<BrokenReferenceProposal[]>([])
   const [brokenReferenceReplacements, setBrokenReferenceReplacements] = useState<Record<string, string>>({})
-  const [classificationProposals, setClassificationProposals] = useState<ClassificationProposal[]>([])
-  const [classificationSummary, setClassificationSummary] = useState<string | null>(null)
-  const [classificationRequestedDocumentIds, setClassificationRequestedDocumentIds] = useState<string[]>([])
-  const [classificationRequestedDocuments, setClassificationRequestedDocuments] = useState<WorkspaceAgentClassificationRequestedDocument[]>([])
-  const [archiveCandidates, setArchiveCandidates] = useState<ArchiveCandidate[]>([])
-  const [contradictions, setContradictions] = useState<ContradictionProposal[]>([])
-  const [reviewIndex, setReviewIndex] = useState(0)
-  const [isReviewExpanded, setIsReviewExpanded] = useState(false)
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set())
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
@@ -283,6 +296,8 @@ function WorkspaceAgentPanelSession({
   const [isActionsExpanded, setIsActionsExpanded] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  /** A rolling memory of what happened earlier in this session, fed to askAgent so it stays consistent with prior actions and answers. */
+  const sessionActionLogRef = useRef<string[]>([])
 
   const storageKey = `odessay.workspace-agent.resolved.${scope.kind}.${scope.kind === "workspace" ? scope.rootId : scope.id}`
 
@@ -335,24 +350,52 @@ function WorkspaceAgentPanelSession({
     }
   }, [open, workspaceRootPath])
 
-  const activeContradictions = useMemo(
-    () => contradictions.filter((proposal) => !resolvedIds.has(proposal.id)),
-    [contradictions, resolvedIds],
+  const hasActiveContradictionReview = useMemo(
+    () => messages.some((message) => (
+      message.toolResult?.kind === "contradictions"
+      && message.toolResult.proposals.some((proposal) => !resolvedIds.has(proposal.id))
+    )),
+    [messages, resolvedIds],
   )
-  const activeContradiction = activeContradictions[reviewIndex] ?? null
   const documentIds = useMemo(() => uniqueDocumentIds(attachments, scope), [attachments, scope])
   const canCompare = Boolean(service) && documentIds.length >= 2
   const canClassify = Boolean(service)
 
   /**
-   * A predetermined action (Workflow, Broken links, ...) resolves its detail
-   * into a review card above, but the conversation should still say what
-   * happened — otherwise running an action feels disconnected from the chat
-   * the user is already having.
+   * A predetermined action (Workflow, Broken links, ...) carries its
+   * structured result on the chat message that announced it, so the review
+   * card renders inline with the conversation instead of in a separate,
+   * disconnected area — and a repeat run adds a new message/card instead of
+   * silently overwriting the previous one.
    */
-  const pushAgentNote = useCallback((text: string) => {
-    setMessages((current) => [...current, { id: `agent-${Date.now()}`, role: "agent", text }])
+  const pushAgentNote = useCallback((text: string, toolResult?: ToolResult) => {
+    setMessages((current) => [...current, { id: `agent-${Date.now()}`, role: "agent", text, toolResult }])
     setFeedback(null)
+  }, [])
+
+  const recordSessionAction = useCallback((text: string) => {
+    const entries = sessionActionLogRef.current
+    entries.push(text.length > 300 ? `${text.slice(0, 300)}…` : text)
+    if (entries.length > MAX_SESSION_ACTIONS_CONTEXT) entries.splice(0, entries.length - MAX_SESSION_ACTIONS_CONTEXT)
+  }, [])
+
+  /** Announces a predetermined action's outcome in chat and records it as session memory so later questions stay consistent with it. */
+  const announceToolResult = useCallback((text: string, toolResult?: ToolResult) => {
+    pushAgentNote(text, toolResult)
+    recordSessionAction(text)
+  }, [pushAgentNote, recordSessionAction])
+
+  /** Immutably updates the `toolResult` carried by one message — used when approving part of a review card. */
+  const updateMessageToolResult = useCallback(<K extends ToolResult["kind"]>(
+    messageId: string,
+    kind: K,
+    updater: (toolResult: Extract<ToolResult, { kind: K }>) => ToolResult | null,
+  ) => {
+    setMessages((current) => current.map((message) => {
+      if (message.id !== messageId || message.toolResult?.kind !== kind) return message
+      const next = updater(message.toolResult as Extract<ToolResult, { kind: K }>)
+      return { ...message, toolResult: next ?? undefined }
+    }))
   }, [])
 
   const runAction = useCallback(async (action: string, operation: () => Promise<void>) => {
@@ -394,9 +437,8 @@ function WorkspaceAgentPanelSession({
       setFeedback(proposal.error?.message ?? "Workflow draft could not be generated.")
       return
     }
-    setWorkflowProposal(proposal.data)
-    pushAgentNote(workflowNote(proposal.data))
-  }), [pushAgentNote, runAction, service])
+    announceToolResult(workflowNote(proposal.data), { kind: "workflow", proposal: proposal.data })
+  }), [announceToolResult, runAction, service])
 
   const runBrokenReferences = useCallback(() => runAction("broken-links", async () => {
     if (!service) return
@@ -407,10 +449,9 @@ function WorkspaceAgentPanelSession({
       setFeedback(response.error?.message ?? "Broken references could not be checked.")
       return
     }
-    setBrokenReferences(response.data)
     setBrokenReferenceReplacements({})
-    pushAgentNote(brokenReferencesNote(response.data))
-  }), [getWorkflowReadApproval, pushAgentNote, runAction, service])
+    announceToolResult(brokenReferencesNote(response.data), { kind: "broken-links", proposals: response.data })
+  }), [announceToolResult, getWorkflowReadApproval, runAction, service])
 
   const executeClassification = useCallback(async (request: string): Promise<WorkspaceAgentClassificationRun | null> => {
     if (!service) {
@@ -436,16 +477,21 @@ function WorkspaceAgentPanelSession({
     const run = resolved.autoSelectedNotice
       ? { ...response.data, summary: `${resolved.autoSelectedNotice} ${response.data.summary}` }
       : response.data
-    setClassificationProposals(run.proposals)
-    setClassificationSummary(run.summary)
-    setClassificationRequestedDocumentIds(run.requestedDocumentIds)
-    setClassificationRequestedDocuments(run.requestedDocuments)
-    pushAgentNote(run.proposals.length === 0 ? run.summary : `${run.summary} See the review below.`)
+    announceToolResult(
+      run.proposals.length === 0 ? run.summary : `${run.summary} See the review below.`,
+      {
+        kind: "classification",
+        summary: run.summary,
+        proposals: run.proposals,
+        requestedDocumentIds: run.requestedDocumentIds,
+        requestedDocuments: run.requestedDocuments,
+      },
+    )
     if (run.requestedDocumentIds.length > 0) {
       setFeedback("The agent needs more document evidence before it can make a firmer classification.")
     }
     return run
-  }, [attachments, getWorkflowReadApproval, pushAgentNote, scope, service])
+  }, [announceToolResult, attachments, getWorkflowReadApproval, scope, service])
 
   const executeAsk = useCallback(async (question: string): Promise<AskOutcome> => {
     if (!service) {
@@ -463,6 +509,7 @@ function WorkspaceAgentPanelSession({
       question,
       selection: resolved.selection,
       workflowReadApproval,
+      sessionContext: sessionActionLogRef.current.slice(-MAX_SESSION_ACTIONS_CONTEXT),
     })
     if (response.error || !response.data) {
       return { ok: false, message: response.error?.message ?? "The Workspace agent could not answer right now." }
@@ -485,9 +532,8 @@ function WorkspaceAgentPanelSession({
       setFeedback(response.error?.message ?? "Archive candidates could not be checked.")
       return
     }
-    setArchiveCandidates(response.data)
-    pushAgentNote(archiveCandidatesNote(response.data))
-  }), [getWorkflowReadApproval, pushAgentNote, runAction, service])
+    announceToolResult(archiveCandidatesNote(response.data), { kind: "archive", candidates: response.data })
+  }), [announceToolResult, getWorkflowReadApproval, runAction, service])
 
   const runContradictions = useCallback(() => runAction("contradictions", async () => {
     if (!service || documentIds.length < 2) {
@@ -502,52 +548,57 @@ function WorkspaceAgentPanelSession({
       setFeedback(response.error?.message ?? "Contradictions could not be compared.")
       return
     }
-    setContradictions(response.data)
-    setReviewIndex(0)
-    setIsReviewExpanded(response.data.length > 0)
-    pushAgentNote(response.data.length === 0
-      ? "No contradictions were found in the selected artifacts."
-      : `${response.data.length} contradiction(s) added to the review queue below.`)
-  }), [documentIds, getWorkflowReadApproval, pushAgentNote, runAction, service])
+    announceToolResult(
+      response.data.length === 0
+        ? "No contradictions were found in the selected artifacts."
+        : `${response.data.length} contradiction(s) added to the review queue below.`,
+      { kind: "contradictions", proposals: response.data },
+    )
+  }), [announceToolResult, documentIds, getWorkflowReadApproval, runAction, service])
 
-  const applyWorkflow = useCallback(() => runAction("apply-workflow", async () => {
-    if (!service || !workflowProposal) return
-    const resource = workflowProposal.existingDocumentId ?? workflowProposal.canonicalPath
-    const response = await service.applyWorkflow(workflowProposal, createApproval("write", resource))
+  const applyWorkflow = useCallback((messageId: string, proposal: WorkflowDraftProposal) => runAction("apply-workflow", async () => {
+    if (!service) return
+    const resource = proposal.existingDocumentId ?? proposal.canonicalPath
+    const response = await service.applyWorkflow(proposal, createApproval("write", resource))
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "The workflow draft could not be written.")
       return
     }
-    setWorkflowProposal(null)
+    updateMessageToolResult(messageId, "workflow", () => null)
     setFeedback("workflow.md was updated through the approved desktop write path.")
-  }), [runAction, service, workflowProposal])
+  }), [runAction, service, updateMessageToolResult])
 
-  const applyClassification = useCallback((proposal: ClassificationProposal) => runAction("apply-classification", async () => {
+  const applyClassification = useCallback((messageId: string, proposal: ClassificationProposal) => runAction("apply-classification", async () => {
     if (!service) return
     const response = await service.applyClassification(proposal, createApproval("edit", proposal.documentId))
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "The vocabulary classification could not be applied.")
       return
     }
-    setClassificationProposals((current) => current.filter((item) => item.documentId !== proposal.documentId))
+    updateMessageToolResult(messageId, "classification", (toolResult) => ({
+      ...toolResult,
+      proposals: toolResult.proposals.filter((item) => item.documentId !== proposal.documentId),
+    }))
     setFeedback(`Updated ${proposal.documentTitle} through the approved edit path.`)
-  }), [runAction, service])
+  }), [runAction, service, updateMessageToolResult])
 
-  const applyArchiveCandidate = useCallback(() => runAction("apply-archive", async () => {
-    if (!service || archiveCandidates.length === 0) return
-    const candidate = archiveCandidates[0]
+  const applyArchiveCandidate = useCallback((messageId: string, candidate: ArchiveCandidate) => runAction("apply-archive", async () => {
+    if (!service) return
     const response = await service.applyArchiveCandidate(candidate, createApproval("edit", candidate.documentId))
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "The archive candidate could not be updated.")
       return
     }
-    setArchiveCandidates((current) => current.slice(1))
+    updateMessageToolResult(messageId, "archive", (toolResult) => {
+      const next = toolResult.candidates.filter((item) => item.documentId !== candidate.documentId)
+      return next.length > 0 ? { ...toolResult, candidates: next } : null
+    })
     setFeedback(`${candidate.title} was marked with the suggested vocabulary status.`)
-  }), [archiveCandidates, runAction, service])
+  }), [runAction, service, updateMessageToolResult])
 
-  const applyBrokenReference = useCallback((proposal: BrokenReferenceProposal) => runAction("apply-broken-link", async () => {
+  const applyBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("apply-broken-link", async () => {
     if (!service) return
-    const key = `${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
+    const key = `${messageId}:${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
     const replacement = (brokenReferenceReplacements[key] ?? proposal.suggestedReference ?? "").trim()
     if (!replacement) {
       setFeedback("Enter a replacement reference before approving this fix.")
@@ -561,16 +612,20 @@ function WorkspaceAgentPanelSession({
       setFeedback(response.error?.message ?? "The broken reference could not be fixed.")
       return
     }
-    setBrokenReferences((current) => current.filter((item) => (
-      `${item.sourceDocumentId}:${item.referenceKind}:${item.reference}` !== key
-    )))
+    updateMessageToolResult(messageId, "broken-links", (toolResult) => {
+      const next = toolResult.proposals.filter((item) => (
+        `${item.sourceDocumentId}:${item.referenceKind}:${item.reference}`
+        !== `${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
+      ))
+      return next.length > 0 ? { ...toolResult, proposals: next } : null
+    })
     setBrokenReferenceReplacements((current) => {
       const next = { ...current }
       delete next[key]
       return next
     })
     setFeedback(`Updated ${proposal.sourceTitle} through the approved edit path.`)
-  }), [brokenReferenceReplacements, runAction, service])
+  }), [brokenReferenceReplacements, runAction, service, updateMessageToolResult])
 
   const persistResolvedIds = useCallback((next: Set<string>) => {
     setResolvedIds(next)
@@ -583,28 +638,25 @@ function WorkspaceAgentPanelSession({
     }
   }, [storageKey])
 
-  const resolveContradiction = useCallback((resolution: "left" | "right" | "discard") => runAction("resolve", async () => {
-    if (!service || !activeContradiction) return
-    const target = resolution === "left" ? activeContradiction.right : activeContradiction.left
+  const resolveContradiction = useCallback((proposal: ContradictionProposal, resolution: "left" | "right" | "discard") => runAction("resolve", async () => {
+    if (!service) return
+    const target = resolution === "left" ? proposal.right : proposal.left
     const approvals = resolution === "discard"
       ? undefined
       : {
           read: createApproval("read", target.documentId),
           edit: createApproval("edit", target.documentId),
         }
-    const response = await service.resolveContradiction(activeContradiction, resolution, approvals)
+    const response = await service.resolveContradiction(proposal, resolution, approvals)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "This contradiction could not be resolved.")
       return
     }
     const next = new Set(resolvedIds)
-    next.add(activeContradiction.id)
+    next.add(proposal.id)
     persistResolvedIds(next)
-    const remainingCount = Math.max(0, activeContradictions.length - 1)
-    setReviewIndex((current) => Math.min(current, Math.max(0, remainingCount - 1)))
-    setIsReviewExpanded(remainingCount > 0)
     setFeedback(resolution === "discard" ? "Finding discarded from this review queue." : "The selected evidence was applied to the target artifact.")
-  }), [activeContradiction, activeContradictions.length, persistResolvedIds, resolvedIds, runAction, service])
+  }), [persistResolvedIds, resolvedIds, runAction, service])
 
   const handleDrop = useCallback((event: DragEvent<HTMLElement>) => {
     event.preventDefault()
@@ -655,8 +707,11 @@ function WorkspaceAgentPanelSession({
               isError: true,
             },
       ])
+      if (outcome.ok) {
+        recordSessionAction(`Q: ${text}\nA: ${outcome.run.answer}`)
+      }
     })
-  }, [attachments, chatDraft, executeAsk, runAction])
+  }, [attachments, chatDraft, executeAsk, recordSessionAction, runAction])
 
   if (!open) {
     return (
@@ -684,7 +739,7 @@ function WorkspaceAgentPanelSession({
       onDrop={handleDrop}
       className={cn(
         "flex h-full min-h-0 shrink-0 flex-col border-l-[0.5px] border-border bg-muted/70 font-sans",
-        isReviewExpanded ? "w-[344px]" : "w-[276px]",
+        hasActiveContradictionReview ? "w-[344px]" : "w-[276px]",
         isDropTarget && "bg-surface-selected/80",
       )}
     >
@@ -783,217 +838,196 @@ function WorkspaceAgentPanelSession({
             <Bot className="h-5 w-5 text-ink-4" strokeWidth={1.5} />
             <p className="text-[12px] leading-[1.45] text-ink-4">Ask anything about this workspace or the open artifact.</p>
           </div>
-        ) : messages.map((message) => (
-          <div key={message.id} className={cn("flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
-            {message.note ? (
-              <details className="group mb-1 max-w-[90%]">
-                <summary className="flex cursor-pointer list-none items-center gap-1 text-[10px] text-ink-4 hover:text-ink-3">
-                  <ChevronRight className="h-2.5 w-2.5 shrink-0 transition-transform group-open:rotate-90" strokeWidth={1.5} />
-                  <Sparkles className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />
-                  <span>Context used</span>
-                </summary>
-                <p className="mt-1 pl-4 text-[10.5px] italic leading-[1.4] text-ink-4" data-testid="workspace-agent-message-note">{message.note}</p>
-              </details>
-            ) : null}
-            <div className={cn(
-              "text-[13px] leading-[1.6]",
-              message.role === "user"
-                ? "max-w-[90%] rounded-[10px] bg-ink px-3 py-2 text-bg"
-                : message.isError
-                  ? "max-w-[90%] rounded-[10px] border-[0.5px] border-danger-border bg-danger-surface px-3 py-2 text-cursor"
-                  : "w-full px-0.5 py-1 text-ink",
-            )}>
-              <p className="whitespace-pre-wrap">{renderMessageText(message.text, buildCitationLookup(message.citedDocuments), onOpenDocument)}</p>
-              {message.attachments?.length ? (
-                <div className="mt-2 flex flex-wrap gap-1" data-testid="workspace-agent-message-context" aria-label="Message context">
-                  {message.attachments.map((attachment) => (
-                    <span key={`${attachment.kind}:${attachment.path}`} className="inline-flex max-w-full items-center gap-1 rounded-[5px] border-[0.5px] border-border/70 bg-bg/50 px-1.5 py-1 text-[9px] text-ink-3">
-                      {attachment.kind === "folder" ? <Folder className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} /> : <FileText className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />}
-                      <span className="truncate">{attachment.label}</span>
-                    </span>
-                  ))}
-                </div>
+        ) : messages.map((message) => {
+          const toolResult = message.toolResult
+          return (
+            <div key={message.id} className={cn("flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
+              {message.note ? (
+                <details className="group mb-1 max-w-[90%]">
+                  <summary className="flex cursor-pointer list-none items-center gap-1 text-[10px] text-ink-4 hover:text-ink-3">
+                    <ChevronRight className="h-2.5 w-2.5 shrink-0 transition-transform group-open:rotate-90" strokeWidth={1.5} />
+                    <Sparkles className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />
+                    <span>Context used</span>
+                  </summary>
+                  <p className="mt-1 pl-4 text-[10.5px] italic leading-[1.4] text-ink-4" data-testid="workspace-agent-message-note">{message.note}</p>
+                </details>
+              ) : null}
+              <div className={cn(
+                "text-[13px] leading-[1.6]",
+                message.role === "user"
+                  ? "max-w-[90%] rounded-[10px] bg-ink px-3 py-2 text-bg"
+                  : message.isError
+                    ? "max-w-[90%] rounded-[10px] border-[0.5px] border-danger-border bg-danger-surface px-3 py-2 text-cursor"
+                    : "w-full px-0.5 py-1 text-ink",
+              )}>
+                <p className="whitespace-pre-wrap">{renderMessageText(message.text, buildCitationLookup(message.citedDocuments), onOpenDocument)}</p>
+                {message.attachments?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1" data-testid="workspace-agent-message-context" aria-label="Message context">
+                    {message.attachments.map((attachment) => (
+                      <span key={`${attachment.kind}:${attachment.path}`} className="inline-flex max-w-full items-center gap-1 rounded-[5px] border-[0.5px] border-border/70 bg-bg/50 px-1.5 py-1 text-[9px] text-ink-3">
+                        {attachment.kind === "folder" ? <Folder className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} /> : <FileText className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />}
+                        <span className="truncate">{attachment.label}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              {toolResult?.kind === "workflow" ? (
+                <section className="mt-2 w-full rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-workflow-review">
+                  <div className="flex items-center gap-1.5">
+                    <Workflow className="h-3.5 w-3.5 text-cursor" strokeWidth={1.5} />
+                    <p className="text-[11px] font-medium text-ink">Review workflow.md</p>
+                  </div>
+                  <pre className="od-scroll mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded-[7px] border-[0.5px] border-border/70 bg-bg/80 p-2 text-[10px] leading-[1.45] text-ink-3">{toolResult.proposal.markdown}</pre>
+                  <button type="button" disabled={busyAction === "apply-workflow"} onClick={() => void applyWorkflow(message.id, toolResult.proposal)} className="mt-2 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
+                    <Check className="h-3 w-3" strokeWidth={1.5} /> Approve workflow update
+                  </button>
+                </section>
+              ) : null}
+
+              {toolResult?.kind === "classification" ? (
+                <section className="mt-2 w-full rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-classification-review">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium text-ink">Semantic classification</p>
+                      {toolResult.summary ? <p className="mt-1 text-[10.5px] leading-[1.45] text-ink-3">{toolResult.summary}</p> : null}
+                    </div>
+                    <span className="shrink-0 rounded-[6px] bg-muted px-1.5 py-1 text-[9px] text-ink-4">{toolResult.proposals.length}</span>
+                  </div>
+                  {toolResult.requestedDocumentIds.length > 0 ? (
+                    <p className="mt-2 rounded-[7px] border-[0.5px] border-border/70 bg-surface-selected px-2 py-1.5 text-[10px] leading-[1.4] text-ink-3">
+                      Needs {toolResult.requestedDocumentIds.length} additional catalog document(s) to reduce uncertainty. Attach them to continue.
+                      {toolResult.requestedDocuments.length > 0 ? (
+                        <span className="mt-1 block text-ink-4">
+                          {toolResult.requestedDocuments.map((document) => document.path ?? document.title).join(" · ")}
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : null}
+                  {toolResult.proposals.length === 0 ? (
+                    <p className="mt-2 rounded-[7px] bg-muted px-2 py-1.5 text-[10px] leading-[1.4] text-ink-4">
+                      No metadata change is ready. The agent needs more evidence before making a responsible classification.
+                    </p>
+                  ) : null}
+                  <div className="mt-2 space-y-2.5">
+                    {toolResult.proposals.map((proposal) => (
+                      <article key={proposal.documentId} className="rounded-[8px] border-[0.5px] border-border/70 bg-bg/80 p-2" data-testid={`workspace-agent-classification-${proposal.documentId}`}>
+                        <div className="flex items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[10.5px] font-medium text-ink">{proposal.documentTitle}</p>
+                            {proposal.documentPath ? <p className="truncate font-mono text-[9px] text-ink-4">{proposal.documentPath}</p> : null}
+                          </div>
+                          <span className={cn(
+                            "shrink-0 rounded-[5px] px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.06em]",
+                            proposal.decision === "change" ? "bg-success-tint text-success" : "bg-muted text-ink-4",
+                          )}>
+                            {proposal.decision === "change" ? "Proposed" : proposal.decision === "keep" ? "Keep" : "Review"}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-[10.5px] leading-[1.45] text-ink">{proposal.change}</p>
+                        <div className="mt-2 grid grid-cols-2 gap-1.5">
+                          <div className="rounded-[6px] bg-muted/70 px-1.5 py-1.5">
+                            <p className="text-[8px] font-medium uppercase tracking-[0.08em] text-ink-4">Current</p>
+                            <p className="mt-1 text-[9.5px] leading-[1.35] text-ink-3">{proposal.currentArtifactType ?? "No type"} · {proposal.currentStatus ?? "No status"}</p>
+                          </div>
+                          <div className="rounded-[6px] bg-surface-selected px-1.5 py-1.5">
+                            <p className="text-[8px] font-medium uppercase tracking-[0.08em] text-ink-4">Proposed</p>
+                            <p className="mt-1 text-[9.5px] leading-[1.35] text-ink-3">{proposal.artifactType ?? "No type"} · {proposal.status ?? "No status"}</p>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-[10px] leading-[1.4] text-ink-3"><span className="font-medium text-ink">Why:</span> {proposal.reason}</p>
+                        <p className="mt-1 text-[10px] leading-[1.4] text-ink-3"><span className="font-medium text-ink">Benefit:</span> {proposal.benefit}</p>
+                        {proposal.uncertainty ? <p className="mt-1 text-[10px] leading-[1.4] text-ink-4"><span className="font-medium text-ink-3">Uncertainty:</span> {proposal.uncertainty}</p> : null}
+                        {proposal.evidence.length > 0 ? (
+                          <div className="mt-2 space-y-1">
+                            <p className="text-[8px] font-medium uppercase tracking-[0.08em] text-ink-4">Evidence</p>
+                            {proposal.evidence.map((evidence) => (
+                              <div key={`${evidence.sourceId}:${evidence.line ?? "unknown"}:${evidence.quote ?? evidence.detail}`} className="rounded-[6px] border-[0.5px] border-border/70 bg-bg px-1.5 py-1 text-[9.5px] leading-[1.4] text-ink-3">
+                                {evidence.quote ? <p className="font-lora italic text-ink">“{evidence.quote}”</p> : null}
+                                <p className={evidence.quote ? "mt-0.5 text-ink-4" : "text-ink-3"}>{evidence.detail}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : <p className="mt-2 text-[9.5px] text-ink-4">No exact evidence could be verified for this proposal.</p>}
+                        {proposal.decision === "change" ? (
+                          <button type="button" disabled={busyAction === "apply-classification"} onClick={() => void applyClassification(message.id, proposal)} className="mt-2 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
+                            <Check className="h-3 w-3" strokeWidth={1.5} /> Approve metadata change
+                          </button>
+                        ) : (
+                          <p className="mt-2 rounded-[6px] bg-muted px-1.5 py-1.5 text-[9.5px] leading-[1.35] text-ink-4">
+                            {proposal.decision === "keep" ? "No metadata change recommended." : "No change is available until the uncertainty is resolved."}
+                          </p>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              {toolResult?.kind === "archive" && toolResult.candidates.length > 0 ? (
+                <section className="mt-2 w-full rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-archive-review">
+                  <div className="flex items-center gap-1.5">
+                    <Archive className="h-3.5 w-3.5 text-cursor" strokeWidth={1.5} />
+                    <p className="text-[11px] font-medium text-ink">Review archive candidate</p>
+                  </div>
+                  <p className="mt-1 text-[10.5px] font-medium text-ink-3">{toolResult.candidates[0].title}</p>
+                  <p className="mt-1 text-[10.5px] leading-[1.45] text-ink-4">{toolResult.candidates[0].reason}</p>
+                  <button type="button" disabled={busyAction === "apply-archive" || !toolResult.candidates[0].suggestedStatus} onClick={() => void applyArchiveCandidate(message.id, toolResult.candidates[0])} className="mt-2 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
+                    <Check className="h-3 w-3" strokeWidth={1.5} /> Approve archive status
+                  </button>
+                </section>
+              ) : null}
+
+              {toolResult?.kind === "broken-links" && toolResult.proposals.length > 0 ? (
+                <section className="mt-2 w-full rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-broken-links-review">
+                  <p className="text-[11px] font-medium text-ink">Broken references</p>
+                  <div className="mt-2 space-y-1.5">
+                    {toolResult.proposals.slice(0, 3).map((proposal) => {
+                      const key = `${message.id}:${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
+                      return (
+                        <div key={key} className="rounded-[7px] border-[0.5px] border-border/70 bg-bg/80 px-2 py-1.5 text-[10px] leading-[1.4] text-ink-3">
+                          <span className="font-medium text-ink">{proposal.reference}</span> in {proposal.sourceTitle}
+                          {proposal.candidateTitle ? <span className="block text-ink-4">Nearest catalog match: {proposal.candidateTitle}</span> : null}
+                          <label className="mt-2 block text-[9px] font-medium uppercase tracking-[0.08em] text-ink-4">
+                            Replacement {proposal.referenceKind}
+                            <input
+                              value={brokenReferenceReplacements[key] ?? proposal.suggestedReference ?? ""}
+                              onChange={(event) => setBrokenReferenceReplacements((current) => ({
+                                ...current,
+                                [key]: event.target.value,
+                              }))}
+                              placeholder={proposal.referenceKind === "slug" ? "slug" : "path/to/document.md"}
+                              aria-label={`Replacement for ${proposal.reference}`}
+                              className="mt-1 h-7 w-full rounded-[6px] border-[0.5px] border-border bg-bg px-2 text-[10px] font-normal normal-case tracking-normal text-ink outline-none placeholder:text-ink-4 focus:border-ink-3"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            disabled={busyAction === "apply-broken-link" || !(brokenReferenceReplacements[key] ?? proposal.suggestedReference ?? "").trim()}
+                            onClick={() => void applyBrokenReference(message.id, proposal)}
+                            className="mt-1.5 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50"
+                          >
+                            <Check className="h-3 w-3" strokeWidth={1.5} /> Approve fix
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </section>
+              ) : null}
+
+              {toolResult?.kind === "contradictions" ? (
+                <ContradictionReviewCard
+                  proposals={toolResult.proposals}
+                  resolvedIds={resolvedIds}
+                  busy={busyAction === "resolve"}
+                  onResolve={(proposal, resolution) => void resolveContradiction(proposal, resolution)}
+                />
               ) : null}
             </div>
-          </div>
-        ))}
-
-        {workflowProposal ? (
-          <section className="mt-4 rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-workflow-review">
-            <div className="flex items-center gap-1.5">
-              <Workflow className="h-3.5 w-3.5 text-cursor" strokeWidth={1.5} />
-              <p className="text-[11px] font-medium text-ink">Review workflow.md</p>
-            </div>
-            <pre className="od-scroll mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded-[7px] border-[0.5px] border-border/70 bg-bg/80 p-2 text-[10px] leading-[1.45] text-ink-3">{workflowProposal.markdown}</pre>
-            <button type="button" disabled={busyAction === "apply-workflow"} onClick={() => void applyWorkflow()} className="mt-2 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
-              <Check className="h-3 w-3" strokeWidth={1.5} /> Approve workflow update
-            </button>
-          </section>
-        ) : null}
-
-        {classificationSummary || classificationRequestedDocuments.length > 0 || classificationProposals.length > 0 ? (
-          <section className="mt-4 rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-classification-review">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[11px] font-medium text-ink">Semantic classification</p>
-                {classificationSummary ? <p className="mt-1 text-[10.5px] leading-[1.45] text-ink-3">{classificationSummary}</p> : null}
-              </div>
-              <span className="shrink-0 rounded-[6px] bg-muted px-1.5 py-1 text-[9px] text-ink-4">{classificationProposals.length}</span>
-            </div>
-            {classificationRequestedDocumentIds.length > 0 ? (
-              <p className="mt-2 rounded-[7px] border-[0.5px] border-border/70 bg-surface-selected px-2 py-1.5 text-[10px] leading-[1.4] text-ink-3">
-                Needs {classificationRequestedDocumentIds.length} additional catalog document(s) to reduce uncertainty. Attach them to continue.
-                {classificationRequestedDocuments.length > 0 ? (
-                  <span className="mt-1 block text-ink-4">
-                    {classificationRequestedDocuments.map((document) => document.path ?? document.title).join(" · ")}
-                  </span>
-                ) : null}
-              </p>
-            ) : null}
-            {classificationProposals.length === 0 ? (
-              <p className="mt-2 rounded-[7px] bg-muted px-2 py-1.5 text-[10px] leading-[1.4] text-ink-4">
-                No metadata change is ready. The agent needs more evidence before making a responsible classification.
-              </p>
-            ) : null}
-            <div className="mt-2 space-y-2.5">
-              {classificationProposals.map((proposal) => (
-                <article key={proposal.documentId} className="rounded-[8px] border-[0.5px] border-border/70 bg-bg/80 p-2" data-testid={`workspace-agent-classification-${proposal.documentId}`}>
-                  <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[10.5px] font-medium text-ink">{proposal.documentTitle}</p>
-                      {proposal.documentPath ? <p className="truncate font-mono text-[9px] text-ink-4">{proposal.documentPath}</p> : null}
-                    </div>
-                    <span className={cn(
-                      "shrink-0 rounded-[5px] px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.06em]",
-                      proposal.decision === "change" ? "bg-success-tint text-success" : "bg-muted text-ink-4",
-                    )}>
-                      {proposal.decision === "change" ? "Proposed" : proposal.decision === "keep" ? "Keep" : "Review"}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-[10.5px] leading-[1.45] text-ink">{proposal.change}</p>
-                  <div className="mt-2 grid grid-cols-2 gap-1.5">
-                    <div className="rounded-[6px] bg-muted/70 px-1.5 py-1.5">
-                      <p className="text-[8px] font-medium uppercase tracking-[0.08em] text-ink-4">Current</p>
-                      <p className="mt-1 text-[9.5px] leading-[1.35] text-ink-3">{proposal.currentArtifactType ?? "No type"} · {proposal.currentStatus ?? "No status"}</p>
-                    </div>
-                    <div className="rounded-[6px] bg-surface-selected px-1.5 py-1.5">
-                      <p className="text-[8px] font-medium uppercase tracking-[0.08em] text-ink-4">Proposed</p>
-                      <p className="mt-1 text-[9.5px] leading-[1.35] text-ink-3">{proposal.artifactType ?? "No type"} · {proposal.status ?? "No status"}</p>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-[10px] leading-[1.4] text-ink-3"><span className="font-medium text-ink">Why:</span> {proposal.reason}</p>
-                  <p className="mt-1 text-[10px] leading-[1.4] text-ink-3"><span className="font-medium text-ink">Benefit:</span> {proposal.benefit}</p>
-                  {proposal.uncertainty ? <p className="mt-1 text-[10px] leading-[1.4] text-ink-4"><span className="font-medium text-ink-3">Uncertainty:</span> {proposal.uncertainty}</p> : null}
-                  {proposal.evidence.length > 0 ? (
-                    <div className="mt-2 space-y-1">
-                      <p className="text-[8px] font-medium uppercase tracking-[0.08em] text-ink-4">Evidence</p>
-                      {proposal.evidence.map((evidence) => (
-                        <div key={`${evidence.sourceId}:${evidence.line ?? "unknown"}:${evidence.quote ?? evidence.detail}`} className="rounded-[6px] border-[0.5px] border-border/70 bg-bg px-1.5 py-1 text-[9.5px] leading-[1.4] text-ink-3">
-                          {evidence.quote ? <p className="font-lora italic text-ink">“{evidence.quote}”</p> : null}
-                          <p className={evidence.quote ? "mt-0.5 text-ink-4" : "text-ink-3"}>{evidence.detail}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : <p className="mt-2 text-[9.5px] text-ink-4">No exact evidence could be verified for this proposal.</p>}
-                  {proposal.decision === "change" ? (
-                    <button type="button" disabled={busyAction === "apply-classification"} onClick={() => void applyClassification(proposal)} className="mt-2 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
-                      <Check className="h-3 w-3" strokeWidth={1.5} /> Approve metadata change
-                    </button>
-                  ) : (
-                    <p className="mt-2 rounded-[6px] bg-muted px-1.5 py-1.5 text-[9.5px] leading-[1.35] text-ink-4">
-                      {proposal.decision === "keep" ? "No metadata change recommended." : "No change is available until the uncertainty is resolved."}
-                    </p>
-                  )}
-                </article>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {archiveCandidates.length > 0 ? (
-          <section className="mt-4 rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-archive-review">
-            <div className="flex items-center gap-1.5">
-              <Archive className="h-3.5 w-3.5 text-cursor" strokeWidth={1.5} />
-              <p className="text-[11px] font-medium text-ink">Review archive candidate</p>
-            </div>
-            <p className="mt-1 text-[10.5px] font-medium text-ink-3">{archiveCandidates[0].title}</p>
-            <p className="mt-1 text-[10.5px] leading-[1.45] text-ink-4">{archiveCandidates[0].reason}</p>
-            <button type="button" disabled={busyAction === "apply-archive" || !archiveCandidates[0].suggestedStatus} onClick={() => void applyArchiveCandidate()} className="mt-2 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
-              <Check className="h-3 w-3" strokeWidth={1.5} /> Approve archive status
-            </button>
-          </section>
-        ) : null}
-
-        {brokenReferences.length > 0 ? (
-          <section className="mt-4 rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-broken-links-review">
-            <p className="text-[11px] font-medium text-ink">Broken references</p>
-            <div className="mt-2 space-y-1.5">
-              {brokenReferences.slice(0, 3).map((proposal) => (
-                <div key={`${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`} className="rounded-[7px] border-[0.5px] border-border/70 bg-bg/80 px-2 py-1.5 text-[10px] leading-[1.4] text-ink-3">
-                  <span className="font-medium text-ink">{proposal.reference}</span> in {proposal.sourceTitle}
-                  {proposal.candidateTitle ? <span className="block text-ink-4">Nearest catalog match: {proposal.candidateTitle}</span> : null}
-                  <label className="mt-2 block text-[9px] font-medium uppercase tracking-[0.08em] text-ink-4">
-                    Replacement {proposal.referenceKind}
-                    <input
-                      value={brokenReferenceReplacements[`${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`] ?? proposal.suggestedReference ?? ""}
-                      onChange={(event) => setBrokenReferenceReplacements((current) => ({
-                        ...current,
-                        [`${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`]: event.target.value,
-                      }))}
-                      placeholder={proposal.referenceKind === "slug" ? "slug" : "path/to/document.md"}
-                      aria-label={`Replacement for ${proposal.reference}`}
-                      className="mt-1 h-7 w-full rounded-[6px] border-[0.5px] border-border bg-bg px-2 text-[10px] font-normal normal-case tracking-normal text-ink outline-none placeholder:text-ink-4 focus:border-ink-3"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    disabled={busyAction === "apply-broken-link" || !(brokenReferenceReplacements[`${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`] ?? proposal.suggestedReference ?? "").trim()}
-                    onClick={() => void applyBrokenReference(proposal)}
-                    className="mt-1.5 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50"
-                  >
-                    <Check className="h-3 w-3" strokeWidth={1.5} /> Approve fix
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {activeContradiction ? (
-          <section className="mt-4 rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-review-queue">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <GitCompareArrows className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />
-                <p className="truncate text-[11px] font-medium text-ink">Contradiction queue</p>
-              </div>
-              <span className="shrink-0 text-[10px] text-ink-4">{reviewIndex + 1} / {activeContradictions.length}</span>
-            </div>
-            <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-ink-4">{activeContradiction.topic}</p>
-            <EvidenceCard
-              title={activeContradiction.left.title}
-              text={activeContradiction.left.fragment.text}
-              line={activeContradiction.left.fragment.line}
-              updatedAt={activeContradiction.left.updatedAt}
-              suggested={activeContradiction.suggestedDocumentId === activeContradiction.left.documentId}
-            />
-            <EvidenceCard
-              title={activeContradiction.right.title}
-              text={activeContradiction.right.fragment.text}
-              line={activeContradiction.right.fragment.line}
-              updatedAt={activeContradiction.right.updatedAt}
-              suggested={activeContradiction.suggestedDocumentId === activeContradiction.right.documentId}
-            />
-            <div className="mt-2 flex items-center gap-1.5">
-              <button type="button" disabled={busyAction === "resolve"} onClick={() => void resolveContradiction("left")} className="inline-flex min-h-7 flex-1 items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
-                <Check className="h-3 w-3" strokeWidth={1.5} /> Use left
-              </button>
-              <button type="button" disabled={busyAction === "resolve"} onClick={() => void resolveContradiction("right")} className="inline-flex min-h-7 flex-1 items-center justify-center gap-1 rounded-[6px] border-[0.5px] border-border px-2 text-[10px] font-medium text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink disabled:opacity-50">
-                <Check className="h-3 w-3" strokeWidth={1.5} /> Use right
-              </button>
-            </div>
-            <button type="button" disabled={busyAction === "resolve"} onClick={() => void resolveContradiction("discard")} className="mt-1.5 inline-flex h-6 w-full items-center justify-center text-[10px] text-ink-4 hover:text-ink disabled:opacity-50">Discard finding</button>
-          </section>
-        ) : null}
+          )
+        })}
 
         {busyAction === "ask" ? (
           <div className="flex items-start" data-testid="workspace-agent-thinking">
@@ -1076,6 +1110,62 @@ function AgentActionButton({
       {busy ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.5} /> : <span className="[&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0 [&>svg]:stroke-[1.5]">{icon}</span>}
       {label}
     </button>
+  )
+}
+
+/**
+ * One card per Compare run's message, always reviewing the first
+ * unresolved proposal — the queue advances on its own as resolvedIds grows.
+ */
+function ContradictionReviewCard({
+  proposals,
+  resolvedIds,
+  busy,
+  onResolve,
+}: {
+  proposals: ContradictionProposal[]
+  resolvedIds: Set<string>
+  busy: boolean
+  onResolve: (proposal: ContradictionProposal, resolution: "left" | "right" | "discard") => void
+}) {
+  const active = proposals.filter((proposal) => !resolvedIds.has(proposal.id))
+  const current = active[0] ?? null
+  if (!current) return null
+
+  return (
+    <section className="mt-2 w-full rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-review-queue">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <GitCompareArrows className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />
+          <p className="truncate text-[11px] font-medium text-ink">Contradiction queue</p>
+        </div>
+        <span className="shrink-0 text-[10px] text-ink-4">1 / {active.length}</span>
+      </div>
+      <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-ink-4">{current.topic}</p>
+      <EvidenceCard
+        title={current.left.title}
+        text={current.left.fragment.text}
+        line={current.left.fragment.line}
+        updatedAt={current.left.updatedAt}
+        suggested={current.suggestedDocumentId === current.left.documentId}
+      />
+      <EvidenceCard
+        title={current.right.title}
+        text={current.right.fragment.text}
+        line={current.right.fragment.line}
+        updatedAt={current.right.updatedAt}
+        suggested={current.suggestedDocumentId === current.right.documentId}
+      />
+      <div className="mt-2 flex items-center gap-1.5">
+        <button type="button" disabled={busy} onClick={() => onResolve(current, "left")} className="inline-flex min-h-7 flex-1 items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
+          <Check className="h-3 w-3" strokeWidth={1.5} /> Use left
+        </button>
+        <button type="button" disabled={busy} onClick={() => onResolve(current, "right")} className="inline-flex min-h-7 flex-1 items-center justify-center gap-1 rounded-[6px] border-[0.5px] border-border px-2 text-[10px] font-medium text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink disabled:opacity-50">
+          <Check className="h-3 w-3" strokeWidth={1.5} /> Use right
+        </button>
+      </div>
+      <button type="button" disabled={busy} onClick={() => onResolve(current, "discard")} className="mt-1.5 inline-flex h-6 w-full items-center justify-center text-[10px] text-ink-4 hover:text-ink disabled:opacity-50">Discard finding</button>
+    </section>
   )
 }
 
