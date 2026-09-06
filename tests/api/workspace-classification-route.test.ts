@@ -68,7 +68,10 @@ const providerResponse = (content: string, status = 200) => new Response(
         id: "resp_test",
         object: "response",
         status: "completed",
-        output_text: content,
+        output: [{
+          type: "message",
+          content: [{ type: "output_text", text: content }],
+        }],
         usage: { input_tokens: 220, output_tokens: 160, total_tokens: 380 },
       })
     : content,
