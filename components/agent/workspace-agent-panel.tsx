@@ -31,7 +31,6 @@ import type {
   BrokenReferenceProposal,
   ClassificationProposal,
   ContradictionProposal,
-  EvidenceCitation,
   WorkflowDraftProposal,
 } from "@/lib/agent/workspace-agent-analysis"
 import type {
@@ -63,12 +62,6 @@ export type WorkspaceAgentPanelProps = {
   onOpenChange?: (open: boolean) => void
   /** Opens a document by id (e.g. in a preview) when the user clicks a file the agent cited in chat. */
   onOpenDocument?: (documentId: string) => void
-}
-
-type AgentResult = {
-  label: string
-  summary: string
-  evidence: EvidenceCitation[]
 }
 
 type AgentMessage = {
@@ -148,28 +141,16 @@ function classificationSelection(
   return selection
 }
 
-function resultFromWorkflow(proposal: WorkflowDraftProposal): AgentResult {
-  return {
-    label: "Workflow draft",
-    summary: proposal.existingDocumentId ? "A new workflow.md revision is ready to review." : "A workflow.md draft is ready to review.",
-    evidence: proposal.evidence,
-  }
+function workflowNote(proposal: WorkflowDraftProposal): string {
+  return proposal.existingDocumentId
+    ? "A new workflow.md revision is ready to review above."
+    : "A workflow.md draft is ready to review above."
 }
 
-function resultFromBrokenReferences(proposals: BrokenReferenceProposal[]): AgentResult {
-  return {
-    label: "Broken links",
-    summary: proposals.length === 0 ? "No broken internal references were found." : `${proposals.length} reference(s) need review.`,
-    evidence: proposals.slice(0, 3).flatMap((proposal) => proposal.evidence),
-  }
-}
-
-function resultFromClassification(run: WorkspaceAgentClassificationRun): AgentResult {
-  return {
-    label: "Vocabulary fit",
-    summary: run.summary,
-    evidence: run.proposals.slice(0, 3).flatMap((proposal) => proposal.evidence),
-  }
+function brokenReferencesNote(proposals: BrokenReferenceProposal[]): string {
+  return proposals.length === 0
+    ? "No broken internal references were found."
+    : `${proposals.length} broken reference(s) need review above.`
 }
 
 function askChatMessage(run: WorkspaceAgentAskRun): string {
@@ -218,16 +199,10 @@ async function resolveChatSelection(
   }
 }
 
-function resultFromArchiveCandidates(candidates: ArchiveCandidate[]): AgentResult {
-  return {
-    label: "Archive candidates",
-    summary: candidates.length === 0 ? "No stale or duplicate artifacts were found." : `${candidates.length} candidate(s) need review.`,
-    evidence: candidates.slice(0, 3).flatMap((candidate) => candidate.evidence),
-  }
-}
-
-function formatEvidence(evidence: EvidenceCitation): string {
-  return `${evidence.label}: ${evidence.detail}`
+function archiveCandidatesNote(candidates: ArchiveCandidate[]): string {
+  return candidates.length === 0
+    ? "No stale or duplicate artifacts were found."
+    : `${candidates.length} archive candidate(s) need review above.`
 }
 
 /** Renders `` `filename.md` `` spans from agent prose as bold text instead of literal backticks. */
@@ -288,7 +263,6 @@ function WorkspaceAgentPanelSession({
   const [serviceError, setServiceError] = useState<string | null>(null)
   const [isDropTarget, setIsDropTarget] = useState(false)
   const [attachments, setAttachments] = useState<WorkspaceAgentContextAttachment[]>([])
-  const [results, setResults] = useState<AgentResult[]>([])
   const [workflowProposal, setWorkflowProposal] = useState<WorkflowDraftProposal | null>(null)
   const [brokenReferences, setBrokenReferences] = useState<BrokenReferenceProposal[]>([])
   const [brokenReferenceReplacements, setBrokenReferenceReplacements] = useState<Record<string, string>>({})
@@ -370,8 +344,14 @@ function WorkspaceAgentPanelSession({
   const canCompare = Boolean(service) && documentIds.length >= 2
   const canClassify = Boolean(service)
 
-  const recordResult = useCallback((result: AgentResult) => {
-    setResults((current) => [result, ...current.filter((item) => item.label !== result.label)].slice(0, 4))
+  /**
+   * A predetermined action (Workflow, Broken links, ...) resolves its detail
+   * into a review card above, but the conversation should still say what
+   * happened — otherwise running an action feels disconnected from the chat
+   * the user is already having.
+   */
+  const pushAgentNote = useCallback((text: string) => {
+    setMessages((current) => [...current, { id: `agent-${Date.now()}`, role: "agent", text }])
     setFeedback(null)
   }, [])
 
@@ -415,8 +395,8 @@ function WorkspaceAgentPanelSession({
       return
     }
     setWorkflowProposal(proposal.data)
-    recordResult(resultFromWorkflow(proposal.data))
-  }), [recordResult, runAction, service])
+    pushAgentNote(workflowNote(proposal.data))
+  }), [pushAgentNote, runAction, service])
 
   const runBrokenReferences = useCallback(() => runAction("broken-links", async () => {
     if (!service) return
@@ -429,8 +409,8 @@ function WorkspaceAgentPanelSession({
     }
     setBrokenReferences(response.data)
     setBrokenReferenceReplacements({})
-    recordResult(resultFromBrokenReferences(response.data))
-  }), [getWorkflowReadApproval, recordResult, runAction, service])
+    pushAgentNote(brokenReferencesNote(response.data))
+  }), [getWorkflowReadApproval, pushAgentNote, runAction, service])
 
   const executeClassification = useCallback(async (request: string): Promise<WorkspaceAgentClassificationRun | null> => {
     if (!service) {
@@ -460,12 +440,12 @@ function WorkspaceAgentPanelSession({
     setClassificationSummary(run.summary)
     setClassificationRequestedDocumentIds(run.requestedDocumentIds)
     setClassificationRequestedDocuments(run.requestedDocuments)
-    recordResult(resultFromClassification(run))
+    pushAgentNote(run.proposals.length === 0 ? run.summary : `${run.summary} See the review above.`)
     if (run.requestedDocumentIds.length > 0) {
       setFeedback("The agent needs more document evidence before it can make a firmer classification.")
     }
     return run
-  }, [attachments, getWorkflowReadApproval, recordResult, scope, service])
+  }, [attachments, getWorkflowReadApproval, pushAgentNote, scope, service])
 
   const executeAsk = useCallback(async (question: string): Promise<AskOutcome> => {
     if (!service) {
@@ -506,8 +486,8 @@ function WorkspaceAgentPanelSession({
       return
     }
     setArchiveCandidates(response.data)
-    recordResult(resultFromArchiveCandidates(response.data))
-  }), [getWorkflowReadApproval, recordResult, runAction, service])
+    pushAgentNote(archiveCandidatesNote(response.data))
+  }), [getWorkflowReadApproval, pushAgentNote, runAction, service])
 
   const runContradictions = useCallback(() => runAction("contradictions", async () => {
     if (!service || documentIds.length < 2) {
@@ -525,8 +505,10 @@ function WorkspaceAgentPanelSession({
     setContradictions(response.data)
     setReviewIndex(0)
     setIsReviewExpanded(response.data.length > 0)
-    setFeedback(response.data.length === 0 ? "No contradictions were found in the selected artifacts." : `${response.data.length} contradiction(s) added to the review queue.`)
-  }), [documentIds, getWorkflowReadApproval, runAction, service])
+    pushAgentNote(response.data.length === 0
+      ? "No contradictions were found in the selected artifacts."
+      : `${response.data.length} contradiction(s) added to the review queue above.`)
+  }), [documentIds, getWorkflowReadApproval, pushAgentNote, runAction, service])
 
   const applyWorkflow = useCallback(() => runAction("apply-workflow", async () => {
     if (!service || !workflowProposal) return
@@ -966,18 +948,6 @@ function WorkspaceAgentPanelSession({
           </section>
         ) : null}
 
-        {results.length > 0 ? (
-          <section className="mt-4 space-y-2" data-testid="workspace-agent-results">
-            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-4">Evidence</p>
-            {results.map((result) => (
-              <article key={result.label} className="rounded-[9px] border-[0.5px] border-border bg-bg px-2.5 py-2">
-                <p className="text-[11px] font-medium text-ink">{result.label}</p>
-                <p className="mt-1 text-[10.5px] leading-[1.45] text-ink-3">{result.summary}</p>
-                {result.evidence.slice(0, 2).map((evidence) => <p key={`${evidence.sourceId}:${evidence.detail}`} className="mt-1 truncate text-[10px] text-ink-4">{formatEvidence(evidence)}</p>)}
-              </article>
-            ))}
-          </section>
-        ) : null}
       </div>
 
       <section
