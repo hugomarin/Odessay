@@ -475,6 +475,75 @@ export function replaceBrokenDocumentReference(
   return `${markdown.slice(0, range.start)}${nextReference}${markdown.slice(range.end)}`
 }
 
+/**
+ * Resolves a broken path reference to the workspace-root-relative path a new
+ * document would need in order to satisfy it — e.g. `../guide.md` written
+ * from `notes/source.md` resolves to `guide.md`. Returns null for a slug
+ * reference (there is no filesystem path to create one at).
+ */
+export function resolveBrokenReferenceTargetPath(
+  source: DocumentCatalogRecord,
+  proposal: BrokenReferenceProposal,
+): string | null {
+  if (proposal.referenceKind !== "path") return null
+  return pathLookupCandidates(source, proposal.reference)[0] ?? null
+}
+
+/**
+ * Removes the broken reference from the source markdown instead of
+ * repointing it: a Markdown or wiki link collapses to its visible label
+ * (the mention stays readable, just no longer a link), and a bare `#slug`
+ * mention is deleted outright. Returns null if the reference can no longer
+ * be found — the document changed since this fix was proposed.
+ */
+export function removeBrokenDocumentReference(
+  markdown: string,
+  proposal: BrokenReferenceProposal,
+): string | null {
+  const expected = normalizedInternalReference(proposal.reference)?.toLocaleLowerCase()
+  if (!expected) return null
+
+  if (proposal.referenceKind === "slug") {
+    const slugPattern = /(?:^|\s)#([a-z0-9][a-z0-9_-]{2,})\b/gi
+    for (const match of markdown.matchAll(slugPattern)) {
+      if (match[1]?.toLocaleLowerCase() !== proposal.reference.toLocaleLowerCase() || match.index === undefined) continue
+      // Consume the leading `\s` the pattern matched too, so removing a
+      // mid-sentence mention doesn't leave a doubled space behind.
+      const start = match.index
+      const end = match.index + match[0].length
+      return `${markdown.slice(0, start)}${markdown.slice(end)}`
+    }
+    return null
+  }
+
+  const markdownLinks = /\[([^\]]+)\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)/g
+  for (const match of markdown.matchAll(markdownLinks)) {
+    if (match.index !== undefined && markdown[match.index - 1] === "!") continue
+    const label = match[1]
+    const raw = match[2] ?? match[3]
+    if (!label || !raw || match.index === undefined) continue
+    const target = normalizedInternalReference(raw.trim())
+    if (!target || target.toLocaleLowerCase() !== expected) continue
+    const start = match.index
+    const end = match.index + match[0].length
+    return `${markdown.slice(0, start)}${label}${markdown.slice(end)}`
+  }
+
+  const wikiLinks = /\[\[([^\]]+)\]\]/g
+  for (const match of markdown.matchAll(wikiLinks)) {
+    if (match.index === undefined) continue
+    const [rawTarget, rawLabel] = (match[1] ?? "").split("|", 2)
+    const target = normalizedInternalReference((rawTarget ?? "").trim())
+    if (!target || target.toLocaleLowerCase() !== expected) continue
+    const start = match.index
+    const end = match.index + match[0].length
+    const replacement = (rawLabel ?? rawTarget ?? "").trim()
+    return `${markdown.slice(0, start)}${replacement}${markdown.slice(end)}`
+  }
+
+  return null
+}
+
 function chooseVocabularyItem(
   vocabulary: readonly VocabularyItem[],
   kind: "type" | "status",
