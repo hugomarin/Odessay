@@ -44,6 +44,16 @@ test("opens the agent independently, preserves dropped context in chat, and reop
   await expect(page.getByTestId("workspace-agent-message-context")).toContainText("context.md")
   await page.screenshot({ path: "output/playwright/ode-486/agent-context-chat.png" })
 
+  await page.getByTestId("editor-topbar").getByRole("button", { name: "Focus mode" }).click()
+  await expect(page.locator('[data-focus-mode="true"]')).toBeVisible()
+  await expect(page.getByTestId("workspace-agent-focus-host")).toHaveCount(1)
+  await page.screenshot({ path: "output/playwright/ode-486/agent-focus-mode.png" })
+  await page.keyboard.press("Escape")
+  await expect(page.locator('[data-focus-mode="false"]')).toBeVisible()
+  await expect(page.getByTestId("workspace-agent-panel")).toBeVisible()
+  await expect(page.getByTestId("workspace-agent-chat")).toContainText("Summarize this context")
+  await expect(page.getByTestId("workspace-agent-message-context")).toContainText("context.md")
+
   await panel.getByRole("button", { name: "Close Workspace agent" }).click()
   const rail = page.getByTestId("workspace-agent-rail")
   await expect(rail).toBeVisible()

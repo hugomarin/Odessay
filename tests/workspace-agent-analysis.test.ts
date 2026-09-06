@@ -161,6 +161,35 @@ describe("Workspace agent analysis", () => {
       .toBe("See [project plan](notes/project-plan.md#overview).")
   })
 
+  it("replaces the Markdown destination instead of an identical link label", () => {
+    const markdown = "See [missing.md](missing.md)."
+    const [proposal] = detectBrokenDocumentReferences([
+      record("source", "Source", { excerpt: markdown }),
+    ])
+
+    expect(replaceBrokenDocumentReference(markdown, proposal!, "fixed.md"))
+      .toBe("See [missing.md](fixed.md).")
+  })
+
+  it("validates exact source-relative paths and suggests replacements from nested folders", () => {
+    const result = detectBrokenDocumentReferences([
+      record("source", "Source", {
+        binding: { ...record("source", "Source").binding!, relativePath: "notes/source.md", canonicalPath: "/workspace/notes/source.md" },
+        referenceTargets: [{ value: "absent/guide.md", kind: "path" }],
+      }),
+      record("candidate", "Guide", {
+        binding: { ...record("candidate", "Guide").binding!, relativePath: "docs/guide.md", canonicalPath: "/workspace/docs/guide.md" },
+      }),
+    ])
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      reference: "absent/guide.md",
+      candidateDocumentId: "candidate",
+      suggestedReference: "../docs/guide.md",
+    })
+  })
+
   it("never suggests a type or status outside the current vocabulary", () => {
     const result = suggestArtifactClassification(
       record("target", "Design system", { excerpt: "tokens spacing" }),
@@ -227,5 +256,36 @@ describe("Workspace agent analysis", () => {
     const fragment = { text: "Storage: SQLite.", start: 0, end: 16, line: 1 }
     expect(replaceContradictionFragment("Intro added.\nStorage: SQLite.", fragment, "Storage: IndexedDB."))
       .toBe("Intro added.\nStorage: IndexedDB.")
+  })
+
+  it("rebases a contradiction when the stale end offset exceeds the current document length", () => {
+    const fragment = { text: "Storage: SQLite.", start: 100, end: 116, line: 1 }
+    expect(replaceContradictionFragment("Storage: SQLite.", fragment, "Storage: IndexedDB."))
+      .toBe("Storage: IndexedDB.")
+  })
+
+  it("changes contradiction identity when the evidence text changes at the same position", () => {
+    const detect = (leftText: string) => detectDocumentContradictions([
+      {
+        documentId: "left",
+        title: "Architecture decision",
+        markdown: leftText,
+        updatedAt: "2026-01-02T00:00:00.000Z",
+        canonicalPath: "/workspace/architecture.md",
+      },
+      {
+        documentId: "right",
+        title: "Migration note",
+        markdown: "Storage: IndexedDB.",
+        updatedAt: "2026-01-03T00:00:00.000Z",
+        canonicalPath: "/workspace/migration.md",
+      },
+    ])
+
+    const first = detect("Storage: SQLite.")
+    const second = detect("Storage: Postgres.")
+    expect(first[0]).toBeDefined()
+    expect(second[0]).toBeDefined()
+    expect(first[0]?.id).not.toBe(second[0]?.id)
   })
 })
