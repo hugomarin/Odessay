@@ -148,11 +148,24 @@ pub struct WorkspaceAgentPathValidation {
     pub canonical_path: String,
 }
 
-fn has_workspace_component(path: &Path, expected: &str) -> bool {
+fn has_internal_workspace_component(path: &Path) -> bool {
     path.components().any(|component| match component {
-        Component::Normal(value) => value.to_string_lossy().eq_ignore_ascii_case(expected),
+        Component::Normal(value) => {
+            value
+                .to_string_lossy()
+                .eq_ignore_ascii_case(WORKSPACE_DIR_NAME)
+                || value
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(LEGACY_WORKSPACE_DIR_NAME)
+        }
         _ => false,
     })
+}
+
+fn is_agent_markdown_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case("md"))
 }
 
 /// Canonicalize a path even when the final file (or one of its parent
@@ -227,21 +240,25 @@ pub fn workspace_agent_validate_path(
             "workspace_agent_validate_path: root and candidate must be absolute paths".to_string(),
         );
     }
-    if has_workspace_component(root, WORKSPACE_DIR_NAME) {
-        return Err("workspace_agent_validate_path: workspace root cannot be .odessay".to_string());
-    }
-    if has_workspace_component(candidate, WORKSPACE_DIR_NAME) {
+    if has_internal_workspace_component(root) {
         return Err(
-            "workspace_agent_validate_path: .odessay is outside the agent scope".to_string(),
+            "workspace_agent_validate_path: workspace root cannot be internal workspace state"
+                .to_string(),
+        );
+    }
+    if has_internal_workspace_component(candidate) {
+        return Err(
+            "workspace_agent_validate_path: internal workspace state is outside the agent scope"
+                .to_string(),
         );
     }
 
     let canonical_root = root
         .canonicalize()
         .map_err(|error| format!("workspace_agent_validate_path: canonicalize root: {error}"))?;
-    if has_workspace_component(&canonical_root, WORKSPACE_DIR_NAME) {
+    if has_internal_workspace_component(&canonical_root) {
         return Err(
-            "workspace_agent_validate_path: canonical workspace root cannot be .odessay"
+            "workspace_agent_validate_path: canonical workspace root cannot be internal workspace state"
                 .to_string(),
         );
     }
@@ -250,14 +267,21 @@ pub fn workspace_agent_validate_path(
     }
 
     let canonical_candidate = canonicalize_workspace_agent_candidate(candidate, allow_missing)?;
-    if has_workspace_component(&canonical_candidate, WORKSPACE_DIR_NAME) {
+    if has_internal_workspace_component(&canonical_candidate) {
         return Err(
-            "workspace_agent_validate_path: .odessay is outside the agent scope".to_string(),
+            "workspace_agent_validate_path: internal workspace state is outside the agent scope"
+                .to_string(),
         );
     }
     if canonical_candidate == canonical_root || !canonical_candidate.starts_with(&canonical_root) {
         return Err(
             "workspace_agent_validate_path: candidate is outside the agent workspace root"
+                .to_string(),
+        );
+    }
+    if !is_agent_markdown_path(&canonical_candidate) {
+        return Err(
+            "workspace_agent_validate_path: agent filesystem actions are limited to .md documents"
                 .to_string(),
         );
     }
@@ -1162,6 +1186,23 @@ mod tests {
             true,
         );
         assert!(internal.is_err());
+
+        let legacy_internal = workspace_agent_validate_path(
+            root.to_string_lossy().to_string(),
+            root.join(LEGACY_WORKSPACE_DIR_NAME)
+                .join("index.json")
+                .to_string_lossy()
+                .to_string(),
+            true,
+        );
+        assert!(legacy_internal.is_err());
+
+        let non_markdown = workspace_agent_validate_path(
+            root.to_string_lossy().to_string(),
+            root.join("secrets.env").to_string_lossy().to_string(),
+            true,
+        );
+        assert!(non_markdown.is_err());
 
         cleanup(&root);
     }

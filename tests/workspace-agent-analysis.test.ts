@@ -92,6 +92,48 @@ describe("Workspace agent analysis", () => {
     expect(result[0]).toMatchObject({ sourceDocumentId: "source", reference: "missing.md", candidateDocumentId: null, suggestedReference: null })
   })
 
+  it("uses the desktop catalog reference projection when the excerpt has no destination", () => {
+    const result = detectBrokenDocumentReferences([
+      record("source", "Source", {
+        excerpt: "A deliberately short preview.",
+        referenceTargets: [{ value: "deep/missing.md", kind: "path" }],
+      }),
+    ])
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ reference: "deep/missing.md", referenceKind: "path" })
+  })
+
+  it("ignores external destinations, protocol-relative URLs and fragments", () => {
+    const result = detectBrokenDocumentReferences([
+      record("source", "Source", {
+        excerpt: [
+          "[external](https://example.com/missing)",
+          "[mail](mailto:author@example.com)",
+          "[cdn](//cdn.example.com/file.md)",
+          "[section](#missing-section)",
+          "[[present.md#section]]",
+          "# a heading, not a document slug",
+        ].join(" "),
+      }),
+      record("present", "Present", { binding: { ...record("present", "Present").binding!, relativePath: "present.md", canonicalPath: "/workspace/present.md" } }),
+    ])
+
+    expect(result).toEqual([])
+  })
+
+  it("resolves relative links from the source document directory", () => {
+    const result = detectBrokenDocumentReferences([
+      record("source", "Source", {
+        binding: { ...record("source", "Source").binding!, relativePath: "notes/source.md", canonicalPath: "/workspace/notes/source.md" },
+        referenceTargets: [{ value: "../present.md", kind: "path" }],
+      }),
+      record("present", "Present", { binding: { ...record("present", "Present").binding!, relativePath: "present.md", canonicalPath: "/workspace/present.md" } }),
+    ])
+
+    expect(result).toEqual([])
+  })
+
   it("builds an editable replacement from the nearest catalog match", () => {
     const result = detectBrokenDocumentReferences([
       record("source", "Source", { excerpt: "See [project plan](project-plan-old.md)." }),
@@ -107,6 +149,16 @@ describe("Workspace agent analysis", () => {
     })
     expect(replaceBrokenDocumentReference("See [project plan](project-plan-old.md).", result[0]!, "notes/project-plan.md"))
       .toBe("See [project plan](notes/project-plan.md).")
+  })
+
+  it("preserves a Markdown fragment when replacing only the broken destination", () => {
+    const [proposal] = detectBrokenDocumentReferences([
+      record("source", "Source", { excerpt: "See [project plan](missing.md#overview)." }),
+    ])
+
+    expect(proposal).toMatchObject({ reference: "missing.md", referenceKind: "path" })
+    expect(replaceBrokenDocumentReference("See [project plan](missing.md#overview).", proposal!, "notes/project-plan.md"))
+      .toBe("See [project plan](notes/project-plan.md#overview).")
   })
 
   it("never suggests a type or status outside the current vocabulary", () => {

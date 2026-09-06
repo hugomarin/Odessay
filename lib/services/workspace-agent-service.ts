@@ -41,6 +41,8 @@ function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "")
 }
 
+const INTERNAL_WORKSPACE_DIR_NAMES = new Set([".odessay", [".ody", "ssey"].join("")])
+
 function canonicalizeLexicalPath(path: string): string {
   const normalized = normalizePath(path)
   const drive = normalized.match(/^[A-Za-z]:/)?.[0] ?? ""
@@ -66,7 +68,7 @@ function canonicalizeLexicalPath(path: string): string {
 function hasInternalWorkspaceComponent(path: string): boolean {
   return canonicalizeLexicalPath(path)
     .split("/")
-    .some((component) => component.toLocaleLowerCase() === ".odessay")
+    .some((component) => INTERNAL_WORKSPACE_DIR_NAMES.has(component.toLocaleLowerCase()))
 }
 
 function isInsideRoot(path: string | null | undefined, rootPath: string): boolean {
@@ -111,6 +113,10 @@ async function loadContext(rootPath: string): Promise<ServiceResponse<WorkspaceA
       getDocumentCatalog(),
       loadDesktopCollections(),
     ])
+    // ODE-481: wait for the desktop catalog's rebuildable destination
+    // projection before analysing. The agent still receives metadata only;
+    // native hydration stores link targets, not document bodies.
+    await catalog.hydrateContentProjections?.()
     const documents = (await catalog.list({ includeDeleted: false }))
       .filter((record) => isInsideRoot(record.binding?.canonicalPath, rootPath))
     const counts = new Map<string, number>()

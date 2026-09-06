@@ -31,6 +31,9 @@ import type { ReconcileCommit } from "@/lib/services/desktop/workspace-reconcile
 import { filenameToTitle, splitCanonicalPath } from "@/lib/desktop/document-naming"
 
 function toRecord(row: DesktopCatalogRow): DocumentCatalogRecord {
+  const referenceTargets = row.referenceTargetsContentHash && row.referenceTargetsContentHash === row.contentHash
+    ? row.referenceTargets
+    : null
   return {
     id: row.id, localPresent: row.localPresent, cloudPresent: row.cloudPresent,
     cloudAccountId: row.cloudAccountId, syncStatus: row.syncStatus as DocumentCatalogRecord["syncStatus"],
@@ -42,6 +45,7 @@ function toRecord(row: DesktopCatalogRow): DocumentCatalogRecord {
     excerpt: row.excerptContentHash && row.excerptContentHash === row.contentHash
       ? row.excerpt
       : null,
+    referenceTargets,
     binding: row.canonicalPath && row.bindingRootId && row.relativePath ? {
       documentId: row.id, bindingRootId: row.bindingRootId, relativePath: row.relativePath,
       canonicalPath: row.canonicalPath, inode: row.inode, contentHash: row.contentHash,
@@ -86,8 +90,15 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
     this.scheduleExcerptHydration()
     return records
   }
+  async hydrateContentProjections() {
+    await this.startContentProjectionHydration()
+  }
   private scheduleExcerptHydration() {
-    if (excerptHydrationsByDatabase.has(this.dbPath)) return
+    void this.startContentProjectionHydration()
+  }
+  private startContentProjectionHydration() {
+    const existing = excerptHydrationsByDatabase.get(this.dbPath)
+    if (existing) return existing
     const hydration = tauriCatalogHydrateExcerpts(this.dbPath)
       .then((documentIds) => {
         if (documentIds.length > 0) this.emit(documentIds, "bulk")
@@ -98,6 +109,7 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
       })
       .finally(() => excerptHydrationsByDatabase.delete(this.dbPath))
     excerptHydrationsByDatabase.set(this.dbPath, hydration)
+    return hydration
   }
   async registerBinding(input: RegisterBindingInput) {
     const { document: catalogDocument } = input

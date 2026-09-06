@@ -1,5 +1,5 @@
 import type { CollectionSummary } from "@/lib/collections/collections"
-import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
+import type { DocumentCatalogRecord, DocumentCatalogReference } from "@/lib/services/contracts/document-catalog"
 import type { VocabularyItem } from "@/lib/vocabulary/types"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
 import type { WritingStatus } from "@/lib/writings/status"
@@ -104,6 +104,40 @@ export type ContradictionResolution = "left" | "right" | "discard"
 
 function normalizePath(value: string): string {
   return value.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "")
+}
+
+function hasUriScheme(value: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)
+}
+
+function normalizedInternalReference(value: string): string | null {
+  const trimmed = value.trim()
+  const unwrapped = trimmed.startsWith("<") && trimmed.endsWith(">")
+    ? trimmed.slice(1, -1).trim()
+    : trimmed
+  const withoutFragment = (unwrapped.split("#", 1)[0] ?? "").trim()
+  if (
+    !withoutFragment
+    || withoutFragment.startsWith("#")
+    || withoutFragment.startsWith("//")
+    || withoutFragment.toLocaleLowerCase().startsWith("www.")
+    || hasUriScheme(withoutFragment)
+  ) return null
+  return withoutFragment
+}
+
+function normalizedCatalogPath(value: string): string {
+  const normalized = normalizePath(value).replace(/^\/+/, "")
+  const parts: string[] = []
+  for (const part of normalized.split("/")) {
+    if (!part || part === ".") continue
+    if (part === "..") {
+      parts.pop()
+      continue
+    }
+    parts.push(part)
+  }
+  return parts.join("/")
 }
 
 function basename(value: string): string {
@@ -228,36 +262,76 @@ export function buildWorkflowDraft(context: WorkspaceContext): WorkflowDraftProp
   }
 }
 
-function referenceCandidates(text: string): Array<{ value: string; kind: "path" | "slug" }> {
-  const candidates: Array<{ value: string; kind: "path" | "slug" }> = []
-  const markdownLinks = /\[[^\]]+\]\(([^)#]+)(?:#[^)]*)?\)/g
-  const wikiLinks = /\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g
-  const slugTokens = /(?:^|\s)#([a-z0-9][a-z0-9_-]{2,})\b/gi
+function referenceCandidates(text: string): DocumentCatalogReference[] {
+  const candidates: DocumentCatalogReference[] = []
+  const add = (raw: string, kind: DocumentCatalogReference["kind"]) => {
+    const value = normalizedInternalReference(raw)
+    if (!value || candidates.some((candidate) => candidate.kind === kind && candidate.value === value)) return
+    candidates.push({ value, kind })
+  }
+  const markdownLinks = /\[[^\]]+\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)/g
+  const wikiLinks = /\[\[([^\]]+)\]\]/g
 
-  for (const match of text.matchAll(markdownLinks)) candidates.push({ value: match[1].trim(), kind: "path" })
-  for (const match of text.matchAll(wikiLinks)) candidates.push({ value: match[1].trim(), kind: "path" })
-  for (const match of text.matchAll(slugTokens)) candidates.push({ value: match[1].trim(), kind: "slug" })
+  for (const match of text.matchAll(markdownLinks)) {
+    if (match.index !== undefined && text[match.index - 1] === "!") continue
+    add(match[1] ?? match[2] ?? "", "path")
+  }
+  for (const match of text.matchAll(wikiLinks)) add((match[1] ?? "").split("|", 1)[0] ?? "", "path")
   return candidates
+}
+
+function sourceReferenceCandidates(source: DocumentCatalogRecord): DocumentCatalogReference[] {
+  // Desktop records expose this projection even when the preview is empty. An
+  // empty array is authoritative: do not fall back to a truncated excerpt and
+  // accidentally report stale or stripped links.
+  if (source.referenceTargets !== undefined) return source.referenceTargets ?? []
+  return referenceCandidates(source.excerpt ?? "")
+}
+
+function pathLookupCandidates(source: DocumentCatalogRecord, reference: string): string[] {
+  const normalizedReference = normalizedInternalReference(reference)
+  if (!normalizedReference) return []
+  const rawPath = normalizedCatalogPath(normalizedReference)
+  const sourcePath = normalizedCatalogPath(documentPath(source) ?? "")
+  const sourceDirectory = sourcePath.includes("/") ? sourcePath.slice(0, sourcePath.lastIndexOf("/")) : ""
+  const relativeToSource = normalizedCatalogPath(sourceDirectory ? `${sourceDirectory}/${rawPath}` : rawPath)
+  return [...new Set([relativeToSource, rawPath])].filter(Boolean)
 }
 
 export function detectBrokenDocumentReferences(records: DocumentCatalogRecord[]): BrokenReferenceProposal[] {
   const activeRecords = records.filter((record) => !record.deletedAt)
-  const byPath = new Map<string, DocumentCatalogRecord>()
+  const byPath = new Map<string, DocumentCatalogRecord[]>()
+  const byBasename = new Map<string, DocumentCatalogRecord[]>()
   const bySlug = new Map<string, DocumentCatalogRecord>()
+  const addPath = (map: Map<string, DocumentCatalogRecord[]>, value: string, record: DocumentCatalogRecord) => {
+    const key = normalizedCatalogPath(value).toLocaleLowerCase()
+    if (!key) return
+    const current = map.get(key) ?? []
+    if (!current.some((item) => item.id === record.id)) current.push(record)
+    map.set(key, current)
+  }
   for (const record of activeRecords) {
     const path = documentPath(record)
     if (path) {
-      byPath.set(normalizePath(path).toLocaleLowerCase(), record)
-      byPath.set(basename(path).toLocaleLowerCase(), record)
+      addPath(byPath, path, record)
+      addPath(byBasename, basename(path), record)
     }
     if (record.slug) bySlug.set(record.slug.toLocaleLowerCase(), record)
   }
 
   const proposals: BrokenReferenceProposal[] = []
   for (const source of activeRecords) {
-    for (const reference of referenceCandidates(source.excerpt ?? "")) {
-      const normalized = normalizePath(reference.value).toLocaleLowerCase()
-      const resolved = reference.kind === "slug" ? bySlug.get(normalized) : byPath.get(normalized)
+    for (const reference of sourceReferenceCandidates(source)) {
+      const normalized = normalizedInternalReference(reference.value)?.toLocaleLowerCase()
+      if (!normalized) continue
+      const resolved = reference.kind === "slug"
+        ? bySlug.get(normalized)
+        : pathLookupCandidates(source, reference.value)
+          .map((candidate) => byPath.get(candidate.toLocaleLowerCase()))
+          .find((matches) => matches?.length === 1)?.[0]
+          ?? (byBasename.get(normalizedCatalogPath(reference.value).split("/").at(-1)?.toLocaleLowerCase() ?? "")?.length === 1
+            ? byBasename.get(normalizedCatalogPath(reference.value).split("/").at(-1)?.toLocaleLowerCase() ?? "")?.[0]
+            : undefined)
       if (resolved) continue
 
       const nearest = activeRecords
@@ -274,7 +348,7 @@ export function detectBrokenDocumentReferences(records: DocumentCatalogRecord[])
         candidateTitle: candidate ? documentLabel(candidate) : null,
         suggestedReference: candidate ? documentReference(candidate, reference.kind) : null,
         evidence: [
-          { kind: "document", sourceId: source.id, label: documentLabel(source), detail: "catalog excerpt contains this reference" },
+          { kind: "document", sourceId: source.id, label: documentLabel(source), detail: "catalog reference projection contains this destination" },
           ...(candidate ? [{ kind: "similarity" as const, sourceId: candidate.id, label: documentLabel(candidate), detail: `nearest catalog match (${Math.round((nearest?.score ?? 0) * 100)}%)` }] : []),
         ],
       })
@@ -299,27 +373,36 @@ function referenceRange(markdown: string, proposal: BrokenReferenceProposal): Re
     return null
   }
 
-  const candidates = [
-    {
-      pattern: /\[[^\]]+\]\(([^)#]+)(?:#[^)]*)?\)/g,
-      valueOffset: (match: string) => match.indexOf("](") + 2,
-    },
-    {
-      pattern: /\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g,
-      valueOffset: () => 2,
-    },
-  ]
-  for (const candidate of candidates) {
-    for (const match of markdown.matchAll(candidate.pattern)) {
-      const raw = match[1]
-      if (!raw || normalizePath(raw.trim()).toLocaleLowerCase() !== normalizePath(expected).toLocaleLowerCase()) continue
-      const rawOffset = candidate.valueOffset(match[0])
-      const trimmed = raw.trim()
-      const valueOffset = raw.indexOf(trimmed)
-      if (rawOffset < 0 || valueOffset < 0 || match.index === undefined) continue
-      const start = match.index + rawOffset + valueOffset
-      return { start, end: start + trimmed.length }
-    }
+  const markdownLinks = /\[[^\]]+\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)/g
+  for (const match of markdown.matchAll(markdownLinks)) {
+    if (match.index !== undefined && markdown[match.index - 1] === "!") continue
+    const raw = match[1] ?? match[2]
+    if (!raw || match.index === undefined) continue
+    const trimmed = raw.trim()
+    const target = normalizedInternalReference(trimmed)
+    if (!target || target.toLocaleLowerCase() !== normalizedInternalReference(expected)?.toLocaleLowerCase()) continue
+    const fragmentIndex = trimmed.indexOf("#")
+    const targetText = fragmentIndex >= 0 ? trimmed.slice(0, fragmentIndex).trim() : trimmed
+    const rawOffset = match[0].indexOf(raw)
+    const valueOffset = raw.indexOf(targetText)
+    if (rawOffset < 0 || valueOffset < 0) continue
+    const start = match.index + rawOffset + valueOffset
+    return { start, end: start + targetText.length }
+  }
+
+  const wikiLinks = /\[\[([^\]]+)\]\]/g
+  for (const match of markdown.matchAll(wikiLinks)) {
+    const raw = (match[1] ?? "").split("|", 1)[0] ?? ""
+    const trimmed = raw.trim()
+    const target = normalizedInternalReference(trimmed)
+    if (!target || target.toLocaleLowerCase() !== normalizedInternalReference(expected)?.toLocaleLowerCase() || match.index === undefined) continue
+    const fragmentIndex = trimmed.indexOf("#")
+    const targetText = fragmentIndex >= 0 ? trimmed.slice(0, fragmentIndex).trim() : trimmed
+    const rawOffset = match[0].indexOf(raw)
+    const valueOffset = raw.indexOf(targetText)
+    if (rawOffset < 0 || valueOffset < 0) continue
+    const start = match.index + rawOffset + valueOffset
+    return { start, end: start + targetText.length }
   }
   return null
 }
