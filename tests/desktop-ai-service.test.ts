@@ -60,7 +60,7 @@ describe("desktopAIService workspace classification", () => {
         summary: "The artifact is a prompt.",
         proposals: [],
         requestedDocumentIds: [],
-        model: "fireworks-test",
+        model: "gpt-5.6-luna",
         promptTokens: 12,
         completionTokens: 8,
         totalTokens: 20,
@@ -83,7 +83,7 @@ describe("desktopAIService workspace classification", () => {
     expect(result).toMatchObject({
       data: {
         summary: "The artifact is a prompt.",
-        usage: { model: "fireworks-test", totalTokens: 20, latencyMs: 200 },
+        usage: { model: "gpt-5.6-luna", totalTokens: 20, latencyMs: 200 },
       },
       error: null,
     })

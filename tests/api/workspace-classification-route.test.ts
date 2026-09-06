@@ -6,11 +6,11 @@ const authMock = vi.hoisted(() => ({
 }))
 
 const providerMock = vi.hoisted(() => ({
-  getAIProviderConfig: vi.fn(),
+  getOpenAIWorkspaceProviderConfig: vi.fn(),
 }))
 
 vi.mock("@/lib/supabase/request-auth", () => authMock)
-vi.mock("@/lib/ai/provider-config", () => providerMock)
+vi.mock("@/lib/ai/openai-workspace-provider-config", () => providerMock)
 
 const requestBody = {
   request: "Review the selected artifact and propose type/status only when there is a concrete improvement.",
@@ -65,8 +65,11 @@ const createRequest = (body: Record<string, unknown> = {}) => new Request(
 const providerResponse = (content: string, status = 200) => new Response(
   status === 200
     ? JSON.stringify({
-        choices: [{ message: { content } }],
-        usage: { prompt_tokens: 220, completion_tokens: 160, total_tokens: 380 },
+        id: "resp_test",
+        object: "response",
+        status: "completed",
+        output_text: content,
+        usage: { input_tokens: 220, output_tokens: 160, total_tokens: 380 },
       })
     : content,
   { status, headers: { "content-type": "application/json" } },
@@ -76,33 +79,35 @@ describe("POST /api/ai/workspace-classification", () => {
   beforeEach(() => {
     vi.unstubAllGlobals()
     authMock.getCurrentUserFromRequest.mockReset()
-    providerMock.getAIProviderConfig.mockReset()
+    providerMock.getOpenAIWorkspaceProviderConfig.mockReset()
     authMock.getCurrentUserFromRequest.mockResolvedValue({ userId: "user-1" })
-    providerMock.getAIProviderConfig.mockReturnValue({
-      baseUrl: "https://provider.test",
+    providerMock.getOpenAIWorkspaceProviderConfig.mockReturnValue({
+      provider: "openai",
+      baseUrl: "https://api.openai.com/v1",
       apiKey: "test-key",
-      model: "test-model",
-      chatCompletionsUrl: "https://provider.test/chat/completions",
-      maxTokens: 4_096,
-      topP: 0.95,
+      model: "gpt-5.6-luna",
+      responsesUrl: "https://api.openai.com/v1/responses",
+      maxOutputTokens: 8_192,
+      reasoningEffort: "none",
     })
   })
 
   it("sends bounded document context and returns an evidence-backed semantic proposal", async () => {
     const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
-      expect(body.max_tokens).toBe(8_192)
-      expect(body.reasoning_effort).toBe("none")
-      expect(body.response_format).toMatchObject({
+      expect(_url).toBe("https://api.openai.com/v1/responses")
+      expect(body.max_output_tokens).toBe(8_192)
+      expect(body.reasoning).toEqual({ effort: "none" })
+      expect(body.store).toBe(false)
+      expect(body.text.format).toMatchObject({
         type: "json_schema",
-        json_schema: {
-          name: "WorkspaceClassificationResponse",
-          schema: { required: ["summary", "proposals", "requestedDocumentIds"] },
-        },
+        name: "WorkspaceClassificationResponse",
+        schema: { required: ["summary", "proposals", "requestedDocumentIds"] },
+        strict: true,
       })
-      expect(body.messages[0].content).toContain("Similarity")
-      expect(body.messages[1].content).toContain("We use SQLite for the desktop catalog.")
-      expect(body.messages[1].content).toContain("A draft can be read end to end.")
+      expect(body.input[0].content).toContain("Similarity")
+      expect(body.input[1].content).toContain("We use SQLite for the desktop catalog.")
+      expect(body.input[1].content).toContain("A draft can be read end to end.")
 
       return providerResponse(JSON.stringify({
         summary: "The current classification fits the document's purpose and progress.",
@@ -134,7 +139,7 @@ describe("POST /api/ai/workspace-classification", () => {
     expect(payload.error).toBeNull()
     expect(payload.data).toMatchObject({
       summary: "The current classification fits the document's purpose and progress.",
-      model: "test-model",
+      model: "gpt-5.6-luna",
       promptTokens: 220,
       completionTokens: 160,
       totalTokens: 380,
@@ -142,27 +147,19 @@ describe("POST /api/ai/workspace-classification", () => {
     })
   })
 
-  it("retries without response_format when the provider rejects structured output", async () => {
-    const providerFetch = vi
-      .fn()
-      .mockResolvedValueOnce(providerResponse("schema invalid", 400))
-      .mockImplementationOnce(async (_url: string, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body))
-        expect(body.response_format).toBeUndefined()
-        return providerResponse(JSON.stringify({
-          summary: "No change is justified.",
-          proposals: [],
-          requestedDocumentIds: ["doc-2"],
-        }))
-      })
+  it("returns an OpenAI contract error without falling back to Fireworks", async () => {
+    const providerFetch = vi.fn(async () => providerResponse("schema invalid", 400))
     vi.stubGlobal("fetch", providerFetch)
 
     const response = await POST(createRequest())
     const payload = await response.json()
 
-    expect(response.status).toBe(200)
-    expect(providerFetch).toHaveBeenCalledTimes(2)
-    expect(payload.data.requestedDocumentIds).toEqual(["doc-2"])
+    expect(response.status).toBe(422)
+    expect(providerFetch).toHaveBeenCalledTimes(1)
+    expect(payload.error).toMatchObject({
+      code: "AI_PROVIDER_CONTRACT_ERROR",
+      retryable: false,
+    })
   })
 
   it("does not call the provider without a session", async () => {
@@ -191,8 +188,8 @@ describe("POST /api/ai/workspace-classification", () => {
   })
 
   it("returns a non-retryable configuration error without calling the provider", async () => {
-    providerMock.getAIProviderConfig.mockImplementationOnce(() => {
-      throw new Error("Missing FIREWORKS_API_KEY")
+    providerMock.getOpenAIWorkspaceProviderConfig.mockImplementationOnce(() => {
+      throw new Error("Missing OPENAI_API_KEY environment variable.")
     })
     const providerFetch = vi.fn()
     vi.stubGlobal("fetch", providerFetch)
@@ -203,7 +200,7 @@ describe("POST /api/ai/workspace-classification", () => {
     expect(response.status).toBe(500)
     expect(payload.error).toMatchObject({
       code: "MISSING_CONFIG",
-      message: "Missing FIREWORKS_API_KEY",
+      message: "Missing OPENAI_API_KEY environment variable.",
       retryable: false,
     })
     expect(providerFetch).not.toHaveBeenCalled()

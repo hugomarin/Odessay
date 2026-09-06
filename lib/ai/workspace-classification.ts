@@ -100,55 +100,61 @@ const nullableStringSchema = {
   anyOf: [{ type: "string" }, { type: "null" }],
 } as const
 
-export const workspaceClassificationResponseFormat = {
+/**
+ * Responses API text.format configuration.
+ *
+ * This is deliberately shaped for OpenAI's Responses API. The existing
+ * Fireworks routes keep their own Chat Completions response format and are not
+ * coupled to this semantic Workspace contract.
+ */
+export const workspaceClassificationTextFormat = {
   type: "json_schema",
-  json_schema: {
-    name: "WorkspaceClassificationResponse",
-    schema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        summary: { type: "string" },
-        proposals: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              documentId: { type: "string" },
-              decision: { type: "string", enum: ["change", "keep", "needs-review"] },
-              proposedArtifactType: nullableStringSchema,
-              proposedStatus: nullableStringSchema,
-              change: { type: "string" },
-              rationale: { type: "string" },
-              benefit: { type: "string" },
-              uncertainty: nullableStringSchema,
-              evidence: {
-                type: "array",
-                items: evidenceSchema,
-              },
+  name: "WorkspaceClassificationResponse",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      summary: { type: "string" },
+      proposals: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            documentId: { type: "string" },
+            decision: { type: "string", enum: ["change", "keep", "needs-review"] },
+            proposedArtifactType: nullableStringSchema,
+            proposedStatus: nullableStringSchema,
+            change: { type: "string" },
+            rationale: { type: "string" },
+            benefit: { type: "string" },
+            uncertainty: nullableStringSchema,
+            evidence: {
+              type: "array",
+              items: evidenceSchema,
             },
-            required: [
-              "documentId",
-              "decision",
-              "proposedArtifactType",
-              "proposedStatus",
-              "change",
-              "rationale",
-              "benefit",
-              "uncertainty",
-              "evidence",
-            ],
           },
-        },
-        requestedDocumentIds: {
-          type: "array",
-          items: { type: "string" },
+          required: [
+            "documentId",
+            "decision",
+            "proposedArtifactType",
+            "proposedStatus",
+            "change",
+            "rationale",
+            "benefit",
+            "uncertainty",
+            "evidence",
+          ],
         },
       },
-      required: ["summary", "proposals", "requestedDocumentIds"],
+      requestedDocumentIds: {
+        type: "array",
+        items: { type: "string" },
+      },
     },
+    required: ["summary", "proposals", "requestedDocumentIds"],
   },
+  strict: true,
 } as const
 
 export const workspaceClassificationResponseSchema = z.object({
