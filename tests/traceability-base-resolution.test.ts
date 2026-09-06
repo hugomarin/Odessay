@@ -52,7 +52,8 @@ function createRepository(options: { processDrift?: boolean } = {}) {
   git(root, "merge", "--no-ff", "feature", "-m", "Merge feature for test")
   const merge = git(root, "rev-parse", "HEAD")
 
-  return { root, base, prHead, merge }
+  const prBranchPoint = git(root, "merge-base", base, prHead)
+  return { root, base, prHead, prBranchPoint, merge }
 }
 
 function traceabilityEnv(fixture: ReturnType<typeof createRepository>) {
@@ -64,6 +65,7 @@ function traceabilityEnv(fixture: ReturnType<typeof createRepository>) {
     TRACEABILITY_BASE_SHA: fixture.base,
     TRACEABILITY_MERGE_BASE_SHA: fixture.base,
     TRACEABILITY_PR_HEAD_SHA: fixture.prHead,
+    TRACEABILITY_PR_BRANCH_POINT_SHA: fixture.prBranchPoint,
     TRACEABILITY_HEAD_SHA: fixture.merge,
     TRACEABILITY_MERGE_SHA: fixture.merge,
     TRACEABILITY_ISSUE_IDS: "ODE-465,ODE-466",
@@ -91,7 +93,9 @@ describe("immutable Traceability range", () => {
     expect(before).toContain(`base=${fixture.base}`)
     expect(runScript(fixture.root, "check-process-sync.mjs", env)).toContain("pinned-environment")
     expect(runScript(fixture.root, "check-status-drift.mjs", env)).toContain(`aligned against ${fixture.base}`)
-    expect(runScript(fixture.root, "check-delivery-gate.mjs", env)).toContain("have branch and commit traceability")
+    const deliveryBefore = runScript(fixture.root, "check-delivery-gate.mjs", env)
+    expect(deliveryBefore).toContain(`Comparing ${fixture.prBranchPoint}..${fixture.prHead} for commit traceability`)
+    expect(deliveryBefore).toContain("have branch and commit traceability")
 
     git(fixture.root, "switch", "main")
     writeFileSync(join(fixture.root, "main-after-preflight.txt"), "main moved again\n")
@@ -104,7 +108,9 @@ describe("immutable Traceability range", () => {
     expect(after).not.toContain(advancedMain)
     expect(runScript(fixture.root, "check-process-sync.mjs", env)).toContain("pinned-environment")
     expect(runScript(fixture.root, "check-status-drift.mjs", env)).toContain(`aligned against ${fixture.base}`)
-    expect(runScript(fixture.root, "check-delivery-gate.mjs", env)).toContain("have branch and commit traceability")
+    const deliveryAfter = runScript(fixture.root, "check-delivery-gate.mjs", env)
+    expect(deliveryAfter).toContain(`Comparing ${fixture.prBranchPoint}..${fixture.prHead} for commit traceability`)
+    expect(deliveryAfter).toContain("have branch and commit traceability")
   })
 
   it("still rejects real process drift introduced by the PR", () => {
