@@ -39,6 +39,7 @@ import type {
 } from "@/lib/services/contracts/workspace-agent"
 import { MAX_WORKSPACE_CLASSIFICATION_TARGETS } from "@/lib/ai/workspace-classification"
 import { MAX_WORKSPACE_ASK_TARGETS } from "@/lib/ai/workspace-ask"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
 const CHAT_TEXTAREA_MAX_HEIGHT = 160
@@ -288,6 +289,8 @@ function WorkspaceAgentPanelSession({
   const [attachments, setAttachments] = useState<WorkspaceAgentContextAttachment[]>([])
   const [brokenReferenceReplacements, setBrokenReferenceReplacements] = useState<Record<string, string>>({})
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set())
+  /** Which message's review card is open in the full-detail modal — same click-to-preview pattern as citations. */
+  const [activeReviewMessageId, setActiveReviewMessageId] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [chatDraft, setChatDraft] = useState("")
@@ -873,156 +876,11 @@ function WorkspaceAgentPanelSession({
                 ) : null}
               </div>
 
-              {toolResult?.kind === "workflow" ? (
-                <section className="mt-2 w-full rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-workflow-review">
-                  <div className="flex items-center gap-1.5">
-                    <Workflow className="h-3.5 w-3.5 text-cursor" strokeWidth={1.5} />
-                    <p className="text-[11px] font-medium text-ink">Review workflow.md</p>
-                  </div>
-                  <pre className="od-scroll mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded-[7px] border-[0.5px] border-border/70 bg-bg/80 p-2 text-[10px] leading-[1.45] text-ink-3">{toolResult.proposal.markdown}</pre>
-                  <button type="button" disabled={busyAction === "apply-workflow"} onClick={() => void applyWorkflow(message.id, toolResult.proposal)} className="mt-2 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
-                    <Check className="h-3 w-3" strokeWidth={1.5} /> Approve workflow update
-                  </button>
-                </section>
-              ) : null}
-
-              {toolResult?.kind === "classification" ? (
-                <section className="mt-2 w-full rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-classification-review">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-medium text-ink">Semantic classification</p>
-                      {toolResult.summary ? <p className="mt-1 text-[10.5px] leading-[1.45] text-ink-3">{toolResult.summary}</p> : null}
-                    </div>
-                    <span className="shrink-0 rounded-[6px] bg-muted px-1.5 py-1 text-[9px] text-ink-4">{toolResult.proposals.length}</span>
-                  </div>
-                  {toolResult.requestedDocumentIds.length > 0 ? (
-                    <p className="mt-2 rounded-[7px] border-[0.5px] border-border/70 bg-surface-selected px-2 py-1.5 text-[10px] leading-[1.4] text-ink-3">
-                      Needs {toolResult.requestedDocumentIds.length} additional catalog document(s) to reduce uncertainty. Attach them to continue.
-                      {toolResult.requestedDocuments.length > 0 ? (
-                        <span className="mt-1 block text-ink-4">
-                          {toolResult.requestedDocuments.map((document) => document.path ?? document.title).join(" · ")}
-                        </span>
-                      ) : null}
-                    </p>
-                  ) : null}
-                  {toolResult.proposals.length === 0 ? (
-                    <p className="mt-2 rounded-[7px] bg-muted px-2 py-1.5 text-[10px] leading-[1.4] text-ink-4">
-                      No metadata change is ready. The agent needs more evidence before making a responsible classification.
-                    </p>
-                  ) : null}
-                  <div className="mt-2 space-y-2.5">
-                    {toolResult.proposals.map((proposal) => (
-                      <article key={proposal.documentId} className="rounded-[8px] border-[0.5px] border-border/70 bg-bg/80 p-2" data-testid={`workspace-agent-classification-${proposal.documentId}`}>
-                        <div className="flex items-start gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-[10.5px] font-medium text-ink">{proposal.documentTitle}</p>
-                            {proposal.documentPath ? <p className="truncate font-mono text-[9px] text-ink-4">{proposal.documentPath}</p> : null}
-                          </div>
-                          <span className={cn(
-                            "shrink-0 rounded-[5px] px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.06em]",
-                            proposal.decision === "change" ? "bg-success-tint text-success" : "bg-muted text-ink-4",
-                          )}>
-                            {proposal.decision === "change" ? "Proposed" : proposal.decision === "keep" ? "Keep" : "Review"}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-[10.5px] leading-[1.45] text-ink">{proposal.change}</p>
-                        <div className="mt-2 grid grid-cols-2 gap-1.5">
-                          <div className="rounded-[6px] bg-muted/70 px-1.5 py-1.5">
-                            <p className="text-[8px] font-medium uppercase tracking-[0.08em] text-ink-4">Current</p>
-                            <p className="mt-1 text-[9.5px] leading-[1.35] text-ink-3">{proposal.currentArtifactType ?? "No type"} · {proposal.currentStatus ?? "No status"}</p>
-                          </div>
-                          <div className="rounded-[6px] bg-surface-selected px-1.5 py-1.5">
-                            <p className="text-[8px] font-medium uppercase tracking-[0.08em] text-ink-4">Proposed</p>
-                            <p className="mt-1 text-[9.5px] leading-[1.35] text-ink-3">{proposal.artifactType ?? "No type"} · {proposal.status ?? "No status"}</p>
-                          </div>
-                        </div>
-                        <p className="mt-2 text-[10px] leading-[1.4] text-ink-3"><span className="font-medium text-ink">Why:</span> {proposal.reason}</p>
-                        <p className="mt-1 text-[10px] leading-[1.4] text-ink-3"><span className="font-medium text-ink">Benefit:</span> {proposal.benefit}</p>
-                        {proposal.uncertainty ? <p className="mt-1 text-[10px] leading-[1.4] text-ink-4"><span className="font-medium text-ink-3">Uncertainty:</span> {proposal.uncertainty}</p> : null}
-                        {proposal.evidence.length > 0 ? (
-                          <div className="mt-2 space-y-1">
-                            <p className="text-[8px] font-medium uppercase tracking-[0.08em] text-ink-4">Evidence</p>
-                            {proposal.evidence.map((evidence) => (
-                              <div key={`${evidence.sourceId}:${evidence.line ?? "unknown"}:${evidence.quote ?? evidence.detail}`} className="rounded-[6px] border-[0.5px] border-border/70 bg-bg px-1.5 py-1 text-[9.5px] leading-[1.4] text-ink-3">
-                                {evidence.quote ? <p className="font-lora italic text-ink">“{evidence.quote}”</p> : null}
-                                <p className={evidence.quote ? "mt-0.5 text-ink-4" : "text-ink-3"}>{evidence.detail}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : <p className="mt-2 text-[9.5px] text-ink-4">No exact evidence could be verified for this proposal.</p>}
-                        {proposal.decision === "change" ? (
-                          <button type="button" disabled={busyAction === "apply-classification"} onClick={() => void applyClassification(message.id, proposal)} className="mt-2 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
-                            <Check className="h-3 w-3" strokeWidth={1.5} /> Approve metadata change
-                          </button>
-                        ) : (
-                          <p className="mt-2 rounded-[6px] bg-muted px-1.5 py-1.5 text-[9.5px] leading-[1.35] text-ink-4">
-                            {proposal.decision === "keep" ? "No metadata change recommended." : "No change is available until the uncertainty is resolved."}
-                          </p>
-                        )}
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-
-              {toolResult?.kind === "archive" && toolResult.candidates.length > 0 ? (
-                <section className="mt-2 w-full rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-archive-review">
-                  <div className="flex items-center gap-1.5">
-                    <Archive className="h-3.5 w-3.5 text-cursor" strokeWidth={1.5} />
-                    <p className="text-[11px] font-medium text-ink">Review archive candidate</p>
-                  </div>
-                  <p className="mt-1 text-[10.5px] font-medium text-ink-3">{toolResult.candidates[0].title}</p>
-                  <p className="mt-1 text-[10.5px] leading-[1.45] text-ink-4">{toolResult.candidates[0].reason}</p>
-                  <button type="button" disabled={busyAction === "apply-archive" || !toolResult.candidates[0].suggestedStatus} onClick={() => void applyArchiveCandidate(message.id, toolResult.candidates[0])} className="mt-2 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
-                    <Check className="h-3 w-3" strokeWidth={1.5} /> Approve archive status
-                  </button>
-                </section>
-              ) : null}
-
-              {toolResult?.kind === "broken-links" && toolResult.proposals.length > 0 ? (
-                <section className="mt-2 w-full rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-broken-links-review">
-                  <p className="text-[11px] font-medium text-ink">Broken references</p>
-                  <div className="mt-2 space-y-1.5">
-                    {toolResult.proposals.slice(0, 3).map((proposal) => {
-                      const key = `${message.id}:${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
-                      return (
-                        <div key={key} className="rounded-[7px] border-[0.5px] border-border/70 bg-bg/80 px-2 py-1.5 text-[10px] leading-[1.4] text-ink-3">
-                          <span className="font-medium text-ink">{proposal.reference}</span> in {proposal.sourceTitle}
-                          {proposal.candidateTitle ? <span className="block text-ink-4">Nearest catalog match: {proposal.candidateTitle}</span> : null}
-                          <label className="mt-2 block text-[9px] font-medium uppercase tracking-[0.08em] text-ink-4">
-                            Replacement {proposal.referenceKind}
-                            <input
-                              value={brokenReferenceReplacements[key] ?? proposal.suggestedReference ?? ""}
-                              onChange={(event) => setBrokenReferenceReplacements((current) => ({
-                                ...current,
-                                [key]: event.target.value,
-                              }))}
-                              placeholder={proposal.referenceKind === "slug" ? "slug" : "path/to/document.md"}
-                              aria-label={`Replacement for ${proposal.reference}`}
-                              className="mt-1 h-7 w-full rounded-[6px] border-[0.5px] border-border bg-bg px-2 text-[10px] font-normal normal-case tracking-normal text-ink outline-none placeholder:text-ink-4 focus:border-ink-3"
-                            />
-                          </label>
-                          <button
-                            type="button"
-                            disabled={busyAction === "apply-broken-link" || !(brokenReferenceReplacements[key] ?? proposal.suggestedReference ?? "").trim()}
-                            onClick={() => void applyBrokenReference(message.id, proposal)}
-                            className="mt-1.5 inline-flex min-h-7 w-full items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50"
-                          >
-                            <Check className="h-3 w-3" strokeWidth={1.5} /> Approve fix
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </section>
-              ) : null}
-
-              {toolResult?.kind === "contradictions" ? (
-                <ContradictionReviewCard
-                  proposals={toolResult.proposals}
+              {toolResult ? (
+                <ReviewSummaryRow
+                  toolResult={toolResult}
                   resolvedIds={resolvedIds}
-                  busy={busyAction === "resolve"}
-                  onResolve={(proposal, resolution) => void resolveContradiction(proposal, resolution)}
+                  onOpen={() => setActiveReviewMessageId(message.id)}
                 />
               ) : null}
             </div>
@@ -1075,6 +933,20 @@ function WorkspaceAgentPanelSession({
           </div>
         </div>
       </form>
+
+      <WorkspaceAgentReviewModal
+        message={messages.find((message) => message.id === activeReviewMessageId) ?? null}
+        busyAction={busyAction}
+        brokenReferenceReplacements={brokenReferenceReplacements}
+        onReplacementChange={(key, value) => setBrokenReferenceReplacements((current) => ({ ...current, [key]: value }))}
+        resolvedIds={resolvedIds}
+        onClose={() => setActiveReviewMessageId(null)}
+        onApplyWorkflow={applyWorkflow}
+        onApplyClassification={applyClassification}
+        onApplyArchiveCandidate={applyArchiveCandidate}
+        onApplyBrokenReference={applyBrokenReference}
+        onResolveContradiction={(proposal, resolution) => void resolveContradiction(proposal, resolution)}
+      />
     </aside>
   )
 }
@@ -1114,7 +986,353 @@ function AgentActionButton({
 }
 
 /**
- * One card per Compare run's message, always reviewing the first
+ * Compact, clickable row for a predetermined action's result — the chat
+ * surface. Clicking it opens the full-detail modal for decision-making,
+ * the same click-to-preview pattern already used for cited documents.
+ */
+function ReviewSummaryRow({
+  toolResult,
+  resolvedIds,
+  onOpen,
+}: {
+  toolResult: ToolResult
+  resolvedIds: Set<string>
+  onOpen: () => void
+}) {
+  const summary = (() => {
+    switch (toolResult.kind) {
+      case "workflow":
+        return {
+          icon: <Workflow className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />,
+          title: "workflow.md draft",
+          subtitle: toolResult.proposal.existingDocumentId ? "Revision ready to review" : "New draft ready to review",
+          testId: "workspace-agent-workflow-review",
+        }
+      case "broken-links":
+        return toolResult.proposals.length === 0 ? null : {
+          icon: <MessageCircle className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />,
+          title: "Broken references",
+          subtitle: `${toolResult.proposals.length} to review`,
+          testId: "workspace-agent-broken-links-review",
+        }
+      case "classification": {
+        const actionable = toolResult.proposals.length > 0 || toolResult.requestedDocumentIds.length > 0
+        return !actionable ? null : {
+          icon: <Sparkles className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />,
+          title: "Semantic classification",
+          subtitle: toolResult.requestedDocumentIds.length > 0 ? "Needs more evidence" : `${toolResult.proposals.length} proposal(s)`,
+          testId: "workspace-agent-classification-review",
+        }
+      }
+      case "archive":
+        return toolResult.candidates.length === 0 ? null : {
+          icon: <Archive className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />,
+          title: "Archive candidate",
+          subtitle: toolResult.candidates[0].title,
+          testId: "workspace-agent-archive-review",
+        }
+      case "contradictions": {
+        const activeCount = toolResult.proposals.filter((proposal) => !resolvedIds.has(proposal.id)).length
+        return activeCount === 0 ? null : {
+          icon: <GitCompareArrows className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />,
+          title: "Contradiction queue",
+          subtitle: `${activeCount} finding(s) to resolve`,
+          testId: "workspace-agent-review-queue",
+        }
+      }
+    }
+  })()
+  if (!summary) return null
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      data-testid={summary.testId}
+      className="mt-2 flex w-full items-center gap-2 rounded-[10px] border-[0.5px] border-border bg-bg px-2.5 py-2 text-left transition-colors hover:bg-muted-hover"
+    >
+      {summary.icon}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[11px] font-medium text-ink">{summary.title}</p>
+        <p className="truncate text-[10px] text-ink-4">{summary.subtitle}</p>
+      </div>
+      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-4" strokeWidth={1.5} />
+    </button>
+  )
+}
+
+function WorkflowReviewBody({
+  proposal,
+  busy,
+  onApprove,
+}: {
+  proposal: WorkflowDraftProposal
+  busy: boolean
+  onApprove: () => void
+}) {
+  return (
+    <div>
+      <pre className="od-scroll max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-[8px] border-[0.5px] border-border/70 bg-bg/80 p-2.5 text-[11px] leading-[1.5] text-ink-3">{proposal.markdown}</pre>
+      <button type="button" disabled={busy} onClick={onApprove} className="mt-3 inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-[7px] bg-ink px-2 text-[11px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
+        <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> Approve workflow update
+      </button>
+    </div>
+  )
+}
+
+function ClassificationReviewBody({
+  toolResult,
+  busy,
+  onApprove,
+}: {
+  toolResult: Extract<ToolResult, { kind: "classification" }>
+  busy: boolean
+  onApprove: (proposal: ClassificationProposal) => void
+}) {
+  return (
+    <div>
+      {toolResult.summary ? <p className="text-[12px] leading-[1.5] text-ink-3">{toolResult.summary}</p> : null}
+      {toolResult.requestedDocumentIds.length > 0 ? (
+        <p className="mt-2 rounded-[8px] border-[0.5px] border-border/70 bg-surface-selected px-2.5 py-2 text-[11px] leading-[1.45] text-ink-3">
+          Needs {toolResult.requestedDocumentIds.length} additional catalog document(s) to reduce uncertainty. Attach them to continue.
+          {toolResult.requestedDocuments.length > 0 ? (
+            <span className="mt-1 block text-ink-4">
+              {toolResult.requestedDocuments.map((document) => document.path ?? document.title).join(" · ")}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
+      {toolResult.proposals.length === 0 ? (
+        <p className="mt-2 rounded-[8px] bg-muted px-2.5 py-2 text-[11px] leading-[1.45] text-ink-4">
+          No metadata change is ready. The agent needs more evidence before making a responsible classification.
+        </p>
+      ) : null}
+      <div className="mt-3 space-y-3">
+        {toolResult.proposals.map((proposal) => (
+          <article key={proposal.documentId} className="rounded-[9px] border-[0.5px] border-border/70 bg-bg/80 p-2.5" data-testid={`workspace-agent-classification-${proposal.documentId}`}>
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[11.5px] font-medium text-ink">{proposal.documentTitle}</p>
+                {proposal.documentPath ? <p className="truncate font-mono text-[9.5px] text-ink-4">{proposal.documentPath}</p> : null}
+              </div>
+              <span className={cn(
+                "shrink-0 rounded-[5px] px-1.5 py-0.5 text-[8.5px] font-medium uppercase tracking-[0.06em]",
+                proposal.decision === "change" ? "bg-success-tint text-success" : "bg-muted text-ink-4",
+              )}>
+                {proposal.decision === "change" ? "Proposed" : proposal.decision === "keep" ? "Keep" : "Review"}
+              </span>
+            </div>
+            <p className="mt-2 text-[11.5px] leading-[1.5] text-ink">{proposal.change}</p>
+            <div className="mt-2 grid grid-cols-2 gap-1.5">
+              <div className="rounded-[7px] bg-muted/70 px-2 py-1.5">
+                <p className="text-[8.5px] font-medium uppercase tracking-[0.08em] text-ink-4">Current</p>
+                <p className="mt-1 text-[10.5px] leading-[1.4] text-ink-3">{proposal.currentArtifactType ?? "No type"} · {proposal.currentStatus ?? "No status"}</p>
+              </div>
+              <div className="rounded-[7px] bg-surface-selected px-2 py-1.5">
+                <p className="text-[8.5px] font-medium uppercase tracking-[0.08em] text-ink-4">Proposed</p>
+                <p className="mt-1 text-[10.5px] leading-[1.4] text-ink-3">{proposal.artifactType ?? "No type"} · {proposal.status ?? "No status"}</p>
+              </div>
+            </div>
+            <p className="mt-2 text-[11px] leading-[1.45] text-ink-3"><span className="font-medium text-ink">Why:</span> {proposal.reason}</p>
+            <p className="mt-1 text-[11px] leading-[1.45] text-ink-3"><span className="font-medium text-ink">Benefit:</span> {proposal.benefit}</p>
+            {proposal.uncertainty ? <p className="mt-1 text-[11px] leading-[1.45] text-ink-4"><span className="font-medium text-ink-3">Uncertainty:</span> {proposal.uncertainty}</p> : null}
+            {proposal.evidence.length > 0 ? (
+              <div className="mt-2 space-y-1">
+                <p className="text-[8.5px] font-medium uppercase tracking-[0.08em] text-ink-4">Evidence</p>
+                {proposal.evidence.map((evidence) => (
+                  <div key={`${evidence.sourceId}:${evidence.line ?? "unknown"}:${evidence.quote ?? evidence.detail}`} className="rounded-[7px] border-[0.5px] border-border/70 bg-bg px-2 py-1.5 text-[10.5px] leading-[1.45] text-ink-3">
+                    {evidence.quote ? <p className="font-lora italic text-ink">“{evidence.quote}”</p> : null}
+                    <p className={evidence.quote ? "mt-0.5 text-ink-4" : "text-ink-3"}>{evidence.detail}</p>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="mt-2 text-[10.5px] text-ink-4">No exact evidence could be verified for this proposal.</p>}
+            {proposal.decision === "change" ? (
+              <button type="button" disabled={busy} onClick={() => onApprove(proposal)} className="mt-2.5 inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-[7px] bg-ink px-2 text-[11px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
+                <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> Approve metadata change
+              </button>
+            ) : (
+              <p className="mt-2.5 rounded-[7px] bg-muted px-2 py-1.5 text-[10.5px] leading-[1.4] text-ink-4">
+                {proposal.decision === "keep" ? "No metadata change recommended." : "No change is available until the uncertainty is resolved."}
+              </p>
+            )}
+          </article>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ArchiveReviewBody({
+  candidate,
+  busy,
+  onApprove,
+}: {
+  candidate: ArchiveCandidate
+  busy: boolean
+  onApprove: () => void
+}) {
+  return (
+    <div>
+      <p className="text-[12px] font-medium text-ink-3">{candidate.title}</p>
+      <p className="mt-1 text-[11.5px] leading-[1.5] text-ink-4">{candidate.reason}</p>
+      <button type="button" disabled={busy || !candidate.suggestedStatus} onClick={onApprove} className="mt-3 inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-[7px] bg-ink px-2 text-[11px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
+        <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> Approve archive status
+      </button>
+    </div>
+  )
+}
+
+function BrokenLinksReviewBody({
+  messageId,
+  proposals,
+  busy,
+  replacements,
+  onReplacementChange,
+  onApprove,
+}: {
+  messageId: string
+  proposals: BrokenReferenceProposal[]
+  busy: boolean
+  replacements: Record<string, string>
+  onReplacementChange: (key: string, value: string) => void
+  onApprove: (proposal: BrokenReferenceProposal) => void
+}) {
+  return (
+    <div className="space-y-2.5">
+      {proposals.map((proposal) => {
+        const key = `${messageId}:${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
+        return (
+          <div key={key} className="rounded-[8px] border-[0.5px] border-border/70 bg-bg/80 px-2.5 py-2 text-[11px] leading-[1.45] text-ink-3">
+            <span className="font-medium text-ink">{proposal.reference}</span> in {proposal.sourceTitle}
+            {proposal.candidateTitle ? <span className="block text-ink-4">Nearest catalog match: {proposal.candidateTitle}</span> : null}
+            <label className="mt-2 block text-[9.5px] font-medium uppercase tracking-[0.08em] text-ink-4">
+              Replacement {proposal.referenceKind}
+              <input
+                value={replacements[key] ?? proposal.suggestedReference ?? ""}
+                onChange={(event) => onReplacementChange(key, event.target.value)}
+                placeholder={proposal.referenceKind === "slug" ? "slug" : "path/to/document.md"}
+                aria-label={`Replacement for ${proposal.reference}`}
+                className="mt-1 h-8 w-full rounded-[7px] border-[0.5px] border-border bg-bg px-2 text-[11px] font-normal normal-case tracking-normal text-ink outline-none placeholder:text-ink-4 focus:border-ink-3"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={busy || !(replacements[key] ?? proposal.suggestedReference ?? "").trim()}
+              onClick={() => onApprove(proposal)}
+              className="mt-2 inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-[7px] bg-ink px-2 text-[11px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50"
+            >
+              <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> Approve fix
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+const REVIEW_MODAL_TITLES: Record<ToolResult["kind"], string> = {
+  workflow: "Review workflow.md",
+  classification: "Semantic classification",
+  archive: "Archive candidate",
+  "broken-links": "Broken references",
+  contradictions: "Contradiction queue",
+}
+
+/**
+ * Full-detail modal for a predetermined action's result, opened by clicking
+ * its compact chat card — the same click-to-preview pattern
+ * `onOpenDocument`/`WritingPreviewModal` already use for cited documents.
+ * Approving here still executes through the same approval-gated tools calls
+ * as before; the modal only changes where the decision gets made.
+ */
+function WorkspaceAgentReviewModal({
+  message,
+  busyAction,
+  brokenReferenceReplacements,
+  onReplacementChange,
+  resolvedIds,
+  onClose,
+  onApplyWorkflow,
+  onApplyClassification,
+  onApplyArchiveCandidate,
+  onApplyBrokenReference,
+  onResolveContradiction,
+}: {
+  message: AgentMessage | null
+  busyAction: string | null
+  brokenReferenceReplacements: Record<string, string>
+  onReplacementChange: (key: string, value: string) => void
+  resolvedIds: Set<string>
+  onClose: () => void
+  onApplyWorkflow: (messageId: string, proposal: WorkflowDraftProposal) => void
+  onApplyClassification: (messageId: string, proposal: ClassificationProposal) => void
+  onApplyArchiveCandidate: (messageId: string, candidate: ArchiveCandidate) => void
+  onApplyBrokenReference: (messageId: string, proposal: BrokenReferenceProposal) => void
+  onResolveContradiction: (proposal: ContradictionProposal, resolution: "left" | "right" | "discard") => void
+}) {
+  const toolResult = message?.toolResult
+  const open = Boolean(message && toolResult)
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose() }}>
+      <DialogContent
+        data-testid="workspace-agent-review-modal"
+        className="max-h-[calc(100vh-80px)] w-[520px] max-w-[calc(100vw-40px)] overflow-y-auto font-sans"
+      >
+        {message && toolResult ? (
+          <>
+            <DialogTitle>{REVIEW_MODAL_TITLES[toolResult.kind]}</DialogTitle>
+            <div className="mt-1">
+              {toolResult.kind === "workflow" ? (
+                <WorkflowReviewBody
+                  proposal={toolResult.proposal}
+                  busy={busyAction === "apply-workflow"}
+                  onApprove={() => onApplyWorkflow(message.id, toolResult.proposal)}
+                />
+              ) : null}
+              {toolResult.kind === "classification" ? (
+                <ClassificationReviewBody
+                  toolResult={toolResult}
+                  busy={busyAction === "apply-classification"}
+                  onApprove={(proposal) => onApplyClassification(message.id, proposal)}
+                />
+              ) : null}
+              {toolResult.kind === "archive" && toolResult.candidates.length > 0 ? (
+                <ArchiveReviewBody
+                  candidate={toolResult.candidates[0]}
+                  busy={busyAction === "apply-archive"}
+                  onApprove={() => onApplyArchiveCandidate(message.id, toolResult.candidates[0])}
+                />
+              ) : null}
+              {toolResult.kind === "broken-links" ? (
+                <BrokenLinksReviewBody
+                  messageId={message.id}
+                  proposals={toolResult.proposals}
+                  busy={busyAction === "apply-broken-link"}
+                  replacements={brokenReferenceReplacements}
+                  onReplacementChange={onReplacementChange}
+                  onApprove={(proposal) => onApplyBrokenReference(message.id, proposal)}
+                />
+              ) : null}
+              {toolResult.kind === "contradictions" ? (
+                <ContradictionReviewCard
+                  proposals={toolResult.proposals}
+                  resolvedIds={resolvedIds}
+                  busy={busyAction === "resolve"}
+                  onResolve={onResolveContradiction}
+                />
+              ) : null}
+            </div>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * One review per Compare run's message, always showing the first
  * unresolved proposal — the queue advances on its own as resolvedIds grows.
  */
 function ContradictionReviewCard({
@@ -1133,15 +1351,11 @@ function ContradictionReviewCard({
   if (!current) return null
 
   return (
-    <section className="mt-2 w-full rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-review-queue">
+    <div data-testid="workspace-agent-review-queue">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <GitCompareArrows className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />
-          <p className="truncate text-[11px] font-medium text-ink">Contradiction queue</p>
-        </div>
+        <p className="text-[10px] uppercase tracking-[0.1em] text-ink-4">{current.topic}</p>
         <span className="shrink-0 text-[10px] text-ink-4">1 / {active.length}</span>
       </div>
-      <p className="mt-2 text-[10px] uppercase tracking-[0.1em] text-ink-4">{current.topic}</p>
       <EvidenceCard
         title={current.left.title}
         text={current.left.fragment.text}
@@ -1165,7 +1379,7 @@ function ContradictionReviewCard({
         </button>
       </div>
       <button type="button" disabled={busy} onClick={() => onResolve(current, "discard")} className="mt-1.5 inline-flex h-6 w-full items-center justify-center text-[10px] text-ink-4 hover:text-ink disabled:opacity-50">Discard finding</button>
-    </section>
+    </div>
   )
 }
 
