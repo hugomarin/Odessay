@@ -143,14 +143,14 @@ function classificationSelection(
 
 function workflowNote(proposal: WorkflowDraftProposal): string {
   return proposal.existingDocumentId
-    ? "A new workflow.md revision is ready to review above."
-    : "A workflow.md draft is ready to review above."
+    ? "A new workflow.md revision is ready to review below."
+    : "A workflow.md draft is ready to review below."
 }
 
 function brokenReferencesNote(proposals: BrokenReferenceProposal[]): string {
   return proposals.length === 0
     ? "No broken internal references were found."
-    : `${proposals.length} broken reference(s) need review above.`
+    : `${proposals.length} broken reference(s) need review below.`
 }
 
 function askChatMessage(run: WorkspaceAgentAskRun): string {
@@ -202,7 +202,7 @@ async function resolveChatSelection(
 function archiveCandidatesNote(candidates: ArchiveCandidate[]): string {
   return candidates.length === 0
     ? "No stale or duplicate artifacts were found."
-    : `${candidates.length} archive candidate(s) need review above.`
+    : `${candidates.length} archive candidate(s) need review below.`
 }
 
 /** Renders `` `filename.md` `` spans from agent prose as bold text instead of literal backticks. */
@@ -440,7 +440,7 @@ function WorkspaceAgentPanelSession({
     setClassificationSummary(run.summary)
     setClassificationRequestedDocumentIds(run.requestedDocumentIds)
     setClassificationRequestedDocuments(run.requestedDocuments)
-    pushAgentNote(run.proposals.length === 0 ? run.summary : `${run.summary} See the review above.`)
+    pushAgentNote(run.proposals.length === 0 ? run.summary : `${run.summary} See the review below.`)
     if (run.requestedDocumentIds.length > 0) {
       setFeedback("The agent needs more document evidence before it can make a firmer classification.")
     }
@@ -507,7 +507,7 @@ function WorkspaceAgentPanelSession({
     setIsReviewExpanded(response.data.length > 0)
     pushAgentNote(response.data.length === 0
       ? "No contradictions were found in the selected artifacts."
-      : `${response.data.length} contradiction(s) added to the review queue above.`)
+      : `${response.data.length} contradiction(s) added to the review queue below.`)
   }), [documentIds, getWorkflowReadApproval, pushAgentNote, runAction, service])
 
   const applyWorkflow = useCallback(() => runAction("apply-workflow", async () => {
@@ -771,6 +771,53 @@ function WorkspaceAgentPanelSession({
         {!workspaceRootPath ? <p className="mt-3 text-[10.5px] leading-[1.45] text-ink-4">Open this artifact from a desktop Workspace to run local agent actions.</p> : null}
         {feedback ? <p className="mt-3 text-[11px] leading-[1.45] text-ink-3" role="status">{feedback}</p> : null}
 
+      </div>
+
+      <section
+        className="od-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3"
+        aria-label="Agent conversation"
+        data-testid="workspace-agent-chat"
+      >
+        {messages.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
+            <Bot className="h-5 w-5 text-ink-4" strokeWidth={1.5} />
+            <p className="text-[12px] leading-[1.45] text-ink-4">Ask anything about this workspace or the open artifact.</p>
+          </div>
+        ) : messages.map((message) => (
+          <div key={message.id} className={cn("flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
+            {message.note ? (
+              <details className="group mb-1 max-w-[90%]">
+                <summary className="flex cursor-pointer list-none items-center gap-1 text-[10px] text-ink-4 hover:text-ink-3">
+                  <ChevronRight className="h-2.5 w-2.5 shrink-0 transition-transform group-open:rotate-90" strokeWidth={1.5} />
+                  <Sparkles className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />
+                  <span>Context used</span>
+                </summary>
+                <p className="mt-1 pl-4 text-[10.5px] italic leading-[1.4] text-ink-4" data-testid="workspace-agent-message-note">{message.note}</p>
+              </details>
+            ) : null}
+            <div className={cn(
+              "text-[13px] leading-[1.6]",
+              message.role === "user"
+                ? "max-w-[90%] rounded-[10px] bg-ink px-3 py-2 text-bg"
+                : message.isError
+                  ? "max-w-[90%] rounded-[10px] border-[0.5px] border-danger-border bg-danger-surface px-3 py-2 text-cursor"
+                  : "w-full px-0.5 py-1 text-ink",
+            )}>
+              <p className="whitespace-pre-wrap">{renderMessageText(message.text, buildCitationLookup(message.citedDocuments), onOpenDocument)}</p>
+              {message.attachments?.length ? (
+                <div className="mt-2 flex flex-wrap gap-1" data-testid="workspace-agent-message-context" aria-label="Message context">
+                  {message.attachments.map((attachment) => (
+                    <span key={`${attachment.kind}:${attachment.path}`} className="inline-flex max-w-full items-center gap-1 rounded-[5px] border-[0.5px] border-border/70 bg-bg/50 px-1.5 py-1 text-[9px] text-ink-3">
+                      {attachment.kind === "folder" ? <Folder className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} /> : <FileText className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />}
+                      <span className="truncate">{attachment.label}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ))}
+
         {workflowProposal ? (
           <section className="mt-4 rounded-[10px] border-[0.5px] border-border bg-bg p-2.5" data-testid="workspace-agent-workflow-review">
             <div className="flex items-center gap-1.5">
@@ -948,52 +995,6 @@ function WorkspaceAgentPanelSession({
           </section>
         ) : null}
 
-      </div>
-
-      <section
-        className="od-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3"
-        aria-label="Agent conversation"
-        data-testid="workspace-agent-chat"
-      >
-        {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
-            <Bot className="h-5 w-5 text-ink-4" strokeWidth={1.5} />
-            <p className="text-[12px] leading-[1.45] text-ink-4">Ask anything about this workspace or the open artifact.</p>
-          </div>
-        ) : messages.map((message) => (
-          <div key={message.id} className={cn("flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
-            {message.note ? (
-              <details className="group mb-1 max-w-[90%]">
-                <summary className="flex cursor-pointer list-none items-center gap-1 text-[10px] text-ink-4 hover:text-ink-3">
-                  <ChevronRight className="h-2.5 w-2.5 shrink-0 transition-transform group-open:rotate-90" strokeWidth={1.5} />
-                  <Sparkles className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />
-                  <span>Context used</span>
-                </summary>
-                <p className="mt-1 pl-4 text-[10.5px] italic leading-[1.4] text-ink-4" data-testid="workspace-agent-message-note">{message.note}</p>
-              </details>
-            ) : null}
-            <div className={cn(
-              "text-[13px] leading-[1.6]",
-              message.role === "user"
-                ? "max-w-[90%] rounded-[10px] bg-ink px-3 py-2 text-bg"
-                : message.isError
-                  ? "max-w-[90%] rounded-[10px] border-[0.5px] border-danger-border bg-danger-surface px-3 py-2 text-cursor"
-                  : "w-full px-0.5 py-1 text-ink",
-            )}>
-              <p className="whitespace-pre-wrap">{renderMessageText(message.text, buildCitationLookup(message.citedDocuments), onOpenDocument)}</p>
-              {message.attachments?.length ? (
-                <div className="mt-2 flex flex-wrap gap-1" data-testid="workspace-agent-message-context" aria-label="Message context">
-                  {message.attachments.map((attachment) => (
-                    <span key={`${attachment.kind}:${attachment.path}`} className="inline-flex max-w-full items-center gap-1 rounded-[5px] border-[0.5px] border-border/70 bg-bg/50 px-1.5 py-1 text-[9px] text-ink-3">
-                      {attachment.kind === "folder" ? <Folder className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} /> : <FileText className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />}
-                      <span className="truncate">{attachment.label}</span>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        ))}
         {busyAction === "ask" ? (
           <div className="flex items-start" data-testid="workspace-agent-thinking">
             <div className="rounded-[10px] border-[0.5px] border-border bg-bg px-3 py-2.5">
