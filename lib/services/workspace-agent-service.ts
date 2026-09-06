@@ -6,6 +6,11 @@ import {
   MAX_WORKSPACE_CLASSIFICATION_TARGETS,
 } from "@/lib/ai/workspace-classification"
 import {
+  MAX_WORKSPACE_ASK_BODY_CHARS,
+  MAX_WORKSPACE_ASK_CATALOG_DOCUMENTS,
+  MAX_WORKSPACE_ASK_TARGETS,
+} from "@/lib/ai/workspace-ask"
+import {
   buildWorkflowDraft,
   detectBrokenDocumentReferences,
   detectDocumentContradictions,
@@ -24,6 +29,8 @@ import {
   type WorkflowDraftProposal,
 } from "@/lib/agent/workspace-agent-analysis"
 import type {
+  WorkspaceAskEvidence,
+  WorkspaceAskRequest,
   WorkspaceClassificationAnnotation,
   WorkspaceClassificationDocument,
   WorkspaceClassificationRequest,
@@ -190,6 +197,28 @@ export type WorkspaceAgentClassificationRun = {
   targetDocumentIds: string[]
 }
 
+export type WorkspaceAgentAskInput = {
+  question: string
+  selection: readonly WorkspaceAgentSelection[]
+  workflowReadApproval?: WorkspaceAgentApproval
+}
+
+export type WorkspaceAgentCitedDocument = {
+  documentId: string
+  title: string
+  path: string | null
+}
+
+export type WorkspaceAgentAskRun = {
+  answer: string
+  evidence: EvidenceCitation[]
+  requestedDocumentIds: string[]
+  requestedDocuments: WorkspaceAgentClassificationRequestedDocument[]
+  targetDocumentIds: string[]
+  /** Every document the model could see while answering, so the UI can turn `` `filename` `` mentions into open-document links. */
+  documents: WorkspaceAgentCitedDocument[]
+}
+
 const DEFAULT_CLASSIFICATION_REQUEST = "Review these artifacts and propose their type and status with evidence."
 
 export type BrokenReferenceFixApprovals = {
@@ -294,6 +323,123 @@ function documentForClassification(
     references: record.referenceTargets ?? [],
     markdown,
   }
+}
+
+type PreparedDocumentEvidence = {
+  selectedRecords: DocumentCatalogRecord[]
+  recordsById: Map<string, DocumentCatalogRecord>
+  currentRecordsById: Map<string, DocumentCatalogRecord>
+  markdownById: Map<string, string>
+  annotations: WorkspaceClassificationAnnotation[]
+  promptRecords: DocumentCatalogRecord[]
+  catalogTruncated: boolean
+}
+
+/**
+ * Shared by suggestClassification and askAgent: resolve a selection down to
+ * live catalog records, read each one's full content through the approved
+ * tools boundary, and assemble the bounded catalog slice sent to the model.
+ */
+async function prepareDocumentEvidence(
+  context: WorkspaceAgentContext,
+  selection: readonly WorkspaceAgentSelection[],
+  tools: WorkspaceAgentToolsService,
+  options: { maxTargets: number; maxCatalogDocuments: number; maxBodyChars: number; noSelectionMessage: string },
+): Promise<ServiceResponse<PreparedDocumentEvidence>> {
+  const selectedIds = resolveSelectionDocumentIds(context, selection)
+    .filter((documentId) => documentId !== context.existingWorkflow?.id)
+  if (selectedIds.length === 0) {
+    return error("NOT_FOUND", options.noSelectionMessage)
+  }
+  if (selectedIds.length > options.maxTargets) {
+    return error(
+      "INVALID_INPUT",
+      `Select at most ${options.maxTargets} artifacts at a time so the agent can read each one completely.`,
+    )
+  }
+
+  const recordsById = new Map(context.documents.map((record) => [record.id, record]))
+  const selectedRecords = selectedIds
+    .map((documentId) => recordsById.get(documentId))
+    .filter((record): record is DocumentCatalogRecord => Boolean(record && !record.deletedAt))
+  if (selectedRecords.length !== selectedIds.length) {
+    return error("NOT_FOUND", "One or more selected artifacts are no longer available in the workspace catalog.")
+  }
+
+  const reads = await Promise.all(selectedRecords.map(async (record) => {
+    const result = await tools.read({
+      documentId: record.id,
+      approval: createInternalReadApproval(record.id),
+    })
+    return { record, result }
+  }))
+  const markdownById = new Map<string, string>()
+  const currentRecordsById = new Map(recordsById)
+  const annotations: WorkspaceClassificationAnnotation[] = []
+  for (const { record, result } of reads) {
+    if (result.error || !result.data) {
+      return error("NOT_FOUND", result.error?.message ?? `Document ${record.id} could not be read.`)
+    }
+    const document = result.data.document
+    markdownById.set(record.id, document.markdown)
+    currentRecordsById.set(record.id, document.catalogRecord)
+    annotations.push(...annotationEvidence(record.id, document.markdown))
+  }
+
+  const contentChars = [...markdownById.values()].reduce((total, markdown) => total + markdown.length, 0)
+    + (context.workflowMarkdown?.length ?? 0)
+  if (contentChars > options.maxBodyChars) {
+    return error(
+      "INVALID_INPUT",
+      "The selected artifacts are too large to review together. Narrow the selection so the agent can use complete document evidence.",
+    )
+  }
+
+  const activeRecords = context.documents.filter((record) => !record.deletedAt)
+  const selectedRecordSet = new Set(selectedRecords.map((record) => record.id))
+  const remainingRecords = activeRecords
+    .filter((record) => !selectedRecordSet.has(record.id))
+    .sort((left, right) => {
+      const leftLabel = left.title?.trim() || left.binding?.relativePath || left.id
+      const rightLabel = right.title?.trim() || right.binding?.relativePath || right.id
+      return leftLabel.localeCompare(rightLabel)
+    })
+  const promptRecords = [
+    ...selectedRecords,
+    ...remainingRecords.slice(0, Math.max(0, options.maxCatalogDocuments - selectedRecords.length)),
+  ]
+
+  return ok({
+    selectedRecords,
+    recordsById,
+    currentRecordsById,
+    markdownById,
+    annotations,
+    promptRecords,
+    catalogTruncated: promptRecords.length < activeRecords.length,
+  })
+}
+
+function requestedDocumentsFrom(
+  requestedDocumentIds: readonly string[],
+  recordsById: ReadonlyMap<string, DocumentCatalogRecord>,
+  selectedRecordSet: ReadonlySet<string>,
+  markdownById: ReadonlyMap<string, string>,
+): { requestedDocumentIds: string[]; requestedDocuments: WorkspaceAgentClassificationRequestedDocument[] } {
+  const filteredIds = [...new Set(requestedDocumentIds)].filter((documentId) => {
+    const record = recordsById.get(documentId)
+    return Boolean(record && !record.deletedAt && !selectedRecordSet.has(documentId) && !markdownById.has(documentId))
+  })
+  const requestedDocuments = filteredIds.flatMap((documentId) => {
+    const record = recordsById.get(documentId)
+    if (!record) return []
+    return [{
+      documentId,
+      title: record.title?.trim() || record.binding?.relativePath || documentId,
+      path: record.binding?.relativePath ?? null,
+    }]
+  })
+  return { requestedDocumentIds: filteredIds, requestedDocuments }
 }
 
 function activeVocabularyKey(
@@ -439,6 +585,9 @@ export type WorkspaceAgentService = {
   suggestClassification(
     input: WorkspaceAgentClassificationInput,
   ): Promise<ServiceResponse<WorkspaceAgentClassificationRun>>
+  askAgent(
+    input: WorkspaceAgentAskInput,
+  ): Promise<ServiceResponse<WorkspaceAgentAskRun>>
   applyClassification(
     proposal: ClassificationProposal,
     approval: WorkspaceAgentApproval,
@@ -593,68 +742,15 @@ export async function createWorkspaceAgentService(
       const context = await getContextWithWorkflow(input.workflowReadApproval)
       if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentClassificationRun>
 
-      const selectedIds = resolveSelectionDocumentIds(context.data, input.selection)
-        .filter((documentId) => documentId !== context.data.existingWorkflow?.id)
-      if (selectedIds.length === 0) {
-        return error("NOT_FOUND", "Select at least one local artifact before asking for a semantic classification.")
-      }
-      if (selectedIds.length > MAX_WORKSPACE_CLASSIFICATION_TARGETS) {
-        return error(
-          "INVALID_INPUT",
-          `Select at most ${MAX_WORKSPACE_CLASSIFICATION_TARGETS} artifacts per classification review so the agent can read each one completely.`,
-        )
-      }
+      const prepared = await prepareDocumentEvidence(context.data, input.selection, tools, {
+        maxTargets: MAX_WORKSPACE_CLASSIFICATION_TARGETS,
+        maxCatalogDocuments: MAX_WORKSPACE_CLASSIFICATION_CATALOG_DOCUMENTS,
+        maxBodyChars: MAX_WORKSPACE_CLASSIFICATION_BODY_CHARS,
+        noSelectionMessage: "Select at least one local artifact before asking for a semantic classification.",
+      })
+      if (prepared.error || !prepared.data) return prepared as ServiceResponse<WorkspaceAgentClassificationRun>
+      const { selectedRecords, recordsById, currentRecordsById, markdownById, annotations, promptRecords, catalogTruncated } = prepared.data
 
-      const recordsById = new Map(context.data.documents.map((record) => [record.id, record]))
-      const selectedRecords = selectedIds
-        .map((documentId) => recordsById.get(documentId))
-        .filter((record): record is DocumentCatalogRecord => Boolean(record && !record.deletedAt))
-      if (selectedRecords.length !== selectedIds.length) {
-        return error("NOT_FOUND", "One or more selected artifacts are no longer available in the workspace catalog.")
-      }
-
-      const reads = await Promise.all(selectedRecords.map(async (record) => {
-        const result = await tools.read({
-          documentId: record.id,
-          approval: createInternalReadApproval(record.id),
-        })
-        return { record, result }
-      }))
-      const markdownById = new Map<string, string>()
-      const currentRecordsById = new Map(recordsById)
-      const annotations: WorkspaceClassificationAnnotation[] = []
-      for (const { record, result } of reads) {
-        if (result.error || !result.data) {
-          return error("NOT_FOUND", result.error?.message ?? `Document ${record.id} could not be read for classification.`)
-        }
-        const document = result.data.document
-        markdownById.set(record.id, document.markdown)
-        currentRecordsById.set(record.id, document.catalogRecord)
-        annotations.push(...annotationEvidence(record.id, document.markdown))
-      }
-
-      const contentChars = [...markdownById.values()].reduce((total, markdown) => total + markdown.length, 0)
-        + (context.data.workflowMarkdown?.length ?? 0)
-      if (contentChars > MAX_WORKSPACE_CLASSIFICATION_BODY_CHARS) {
-        return error(
-          "INVALID_INPUT",
-          "The selected artifacts are too large to review together. Narrow the selection so the agent can use complete document evidence.",
-        )
-      }
-
-      const activeRecords = context.data.documents.filter((record) => !record.deletedAt)
-      const selectedRecordSet = new Set(selectedRecords.map((record) => record.id))
-      const remainingRecords = activeRecords
-        .filter((record) => !selectedRecordSet.has(record.id))
-        .sort((left, right) => {
-          const leftLabel = left.title?.trim() || left.binding?.relativePath || left.id
-          const rightLabel = right.title?.trim() || right.binding?.relativePath || right.id
-          return leftLabel.localeCompare(rightLabel)
-        })
-      const promptRecords = [
-        ...selectedRecords,
-        ...remainingRecords.slice(0, Math.max(0, MAX_WORKSPACE_CLASSIFICATION_CATALOG_DOCUMENTS - selectedRecords.length)),
-      ]
       const vocabulary = getVocabularyCatalogSnapshot()
         .filter((item) => !item.hidden)
         .map((item) => ({
@@ -681,7 +777,7 @@ export async function createWorkspaceAgentService(
         annotations,
         vocabulary,
         workflowMarkdown: context.data.workflowMarkdown,
-        catalogTruncated: promptRecords.length < activeRecords.length,
+        catalogTruncated,
       }
       const aiResult = await getAIService().classifyWorkspace(aiRequest)
       if (aiResult.error || !aiResult.data) {
@@ -709,19 +805,13 @@ export async function createWorkspaceAgentService(
             )
           : missingClassificationProposal(currentRecord)
       })
-      const requestedDocumentIds = [...new Set(aiResult.data.requestedDocumentIds)].filter((documentId) => {
-        const record = recordsById.get(documentId)
-        return Boolean(record && !record.deletedAt && !selectedRecordSet.has(documentId) && !markdownById.has(documentId))
-      })
-      const requestedDocuments = requestedDocumentIds.flatMap((documentId) => {
-        const record = recordsById.get(documentId)
-        if (!record) return []
-        return [{
-          documentId,
-          title: record.title?.trim() || record.binding?.relativePath || documentId,
-          path: record.binding?.relativePath ?? null,
-        }]
-      })
+      const selectedRecordSet = new Set(selectedRecords.map((record) => record.id))
+      const { requestedDocumentIds, requestedDocuments } = requestedDocumentsFrom(
+        aiResult.data.requestedDocumentIds,
+        recordsById,
+        selectedRecordSet,
+        markdownById,
+      )
 
       return ok({
         summary: aiResult.data.summary,
@@ -729,6 +819,79 @@ export async function createWorkspaceAgentService(
         requestedDocumentIds,
         requestedDocuments,
         targetDocumentIds: selectedRecords.map((record) => record.id),
+      })
+    },
+    async askAgent(input) {
+      const context = await getContextWithWorkflow(input.workflowReadApproval)
+      if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentAskRun>
+
+      const prepared = await prepareDocumentEvidence(context.data, input.selection, tools, {
+        maxTargets: MAX_WORKSPACE_ASK_TARGETS,
+        maxCatalogDocuments: MAX_WORKSPACE_ASK_CATALOG_DOCUMENTS,
+        maxBodyChars: MAX_WORKSPACE_ASK_BODY_CHARS,
+        noSelectionMessage: "Select at least one local artifact before asking the Workspace agent.",
+      })
+      if (prepared.error || !prepared.data) return prepared as ServiceResponse<WorkspaceAgentAskRun>
+      const { selectedRecords, recordsById, currentRecordsById, markdownById, annotations, promptRecords, catalogTruncated } = prepared.data
+
+      const aiRequest: WorkspaceAskRequest = {
+        question: input.question.slice(0, 2_000),
+        targetDocumentIds: selectedRecords.map((record) => record.id),
+        documents: promptRecords.map((record) => documentForClassification(
+          currentRecordsById.get(record.id) ?? record,
+          markdownById.get(record.id) ?? null,
+        )),
+        collections: context.data.collections.map((collection) => ({
+          id: collection.id,
+          name: collection.name,
+          description: collection.description,
+          writingsCount: collection.writingsCount,
+        })),
+        documentCollectionIds: context.data.documentCollectionIds,
+        annotations,
+        workflowMarkdown: context.data.workflowMarkdown,
+        catalogTruncated,
+      }
+      const aiResult = await getAIService().askWorkspace(aiRequest)
+      if (aiResult.error || !aiResult.data) {
+        return error(aiResult.error?.code ?? "AI_REQUEST_FAILED", aiResult.error?.message ?? "The Workspace agent could not answer right now.")
+      }
+
+      const validEvidence: WorkspaceAskEvidence[] = aiResult.data.evidence.filter((item) => markdownById.get(item.documentId)?.includes(item.quote))
+      const evidence: EvidenceCitation[] = validEvidence.flatMap((item) => {
+        const source = recordsById.get(item.documentId)
+        const markdown = markdownById.get(item.documentId)
+        if (!source || markdown === undefined) return []
+        const line = lineForQuote(markdown, item.quote)
+        if (line === null) return []
+        return [{
+          kind: "document",
+          sourceId: source.id,
+          label: source.title?.trim() || source.binding?.relativePath || source.id,
+          detail: item.reason,
+          quote: item.quote,
+          line,
+        }]
+      })
+      const selectedRecordSet = new Set(selectedRecords.map((record) => record.id))
+      const { requestedDocumentIds, requestedDocuments } = requestedDocumentsFrom(
+        aiResult.data.requestedDocumentIds,
+        recordsById,
+        selectedRecordSet,
+        markdownById,
+      )
+
+      return ok({
+        answer: aiResult.data.answer,
+        evidence,
+        requestedDocumentIds,
+        requestedDocuments,
+        targetDocumentIds: selectedRecords.map((record) => record.id),
+        documents: promptRecords.map((record) => ({
+          documentId: record.id,
+          title: record.title?.trim() || record.binding?.relativePath || record.id,
+          path: record.binding?.relativePath ?? null,
+        })),
       })
     },
     async applyClassification(proposal, approval) {

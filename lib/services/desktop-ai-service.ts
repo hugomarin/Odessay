@@ -14,6 +14,8 @@ import type {
   ListLearnedWordsInput,
   TitleSuggestion,
   TitleSuggestionRequest,
+  WorkspaceAskRequest,
+  WorkspaceAskResult,
   WorkspaceClassificationRequest,
   WorkspaceClassificationResult,
 } from "@/lib/services/contracts/ai-service"
@@ -70,6 +72,17 @@ type PublicationReviewPayload = {
 type WorkspaceClassificationPayload = {
   summary: string
   proposals: WorkspaceClassificationResult["proposals"]
+  requestedDocumentIds: string[]
+  model: string
+  promptTokens: number | null
+  completionTokens: number | null
+  totalTokens: number | null
+  latencyMs: number | null
+}
+
+type WorkspaceAskPayload = {
+  answer: string
+  evidence: WorkspaceAskResult["evidence"]
   requestedDocumentIds: string[]
   model: string
   promptTokens: number | null
@@ -217,6 +230,52 @@ export const desktopAIService: AIService = {
       })
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not classify the selected artifacts right now.")
+    }
+  },
+
+  async askWorkspace(input: WorkspaceAskRequest) {
+    const token = await getBearerToken()
+
+    if (!token) {
+      return err<WorkspaceAskResult>({
+        code: "UNAUTHORIZED",
+        message: "No active session.",
+        retryable: false,
+      })
+    }
+
+    try {
+      const response = await fetch(`${getWebRuntimeBaseUrl()}/api/ai/workspace-ask`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(input),
+      })
+
+      const parsed = await parseServiceEnvelope<WorkspaceAskPayload>(
+        response,
+        "AI_REQUEST_FAILED",
+        "Could not answer that question right now.",
+      )
+
+      if (parsed.error) return parsed
+
+      return ok<WorkspaceAskResult>({
+        answer: parsed.data.answer,
+        evidence: parsed.data.evidence,
+        requestedDocumentIds: parsed.data.requestedDocumentIds,
+        usage: {
+          model: parsed.data.model,
+          promptTokens: parsed.data.promptTokens,
+          completionTokens: parsed.data.completionTokens,
+          totalTokens: parsed.data.totalTokens,
+          latencyMs: parsed.data.latencyMs,
+        },
+      })
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not answer that question right now.")
     }
   },
 
