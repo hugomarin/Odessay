@@ -21,6 +21,7 @@ try {
 
 const currentHead = git(["rev-parse", "HEAD"]);
 const prHead = process.env.TRACEABILITY_PR_HEAD_SHA?.trim() ?? "";
+const pinnedPrBranchPoint = process.env.TRACEABILITY_PR_BRANCH_POINT_SHA?.trim() ?? "";
 const mergeSha = process.env.TRACEABILITY_MERGE_SHA?.trim() ?? "";
 const pinnedMergeBase = process.env.TRACEABILITY_MERGE_BASE_SHA?.trim() ?? "";
 
@@ -28,6 +29,7 @@ for (const [label, commit] of [
   ["base", range.base],
   ["head", range.head],
   ["pr-head", prHead],
+  ["pr-branch-point", pinnedPrBranchPoint],
   ["merge", mergeSha],
   ["merge-base", pinnedMergeBase],
 ]) {
@@ -41,7 +43,11 @@ if (range.source === "pinned-environment" && currentHead !== range.head) {
   fail(`Pinned head differs from checkout: ${range.head} != ${currentHead}.`);
 }
 
-const prBranchPoint = git(["merge-base", range.eventBase || range.base, prHead || range.head]);
+// The PR branch point is calculated once during CI's immutable-ref preflight.
+// Reusing it after a build avoids depending on mutable runner ref state while
+// preserving the local fallback for direct script invocations.
+const prBranchPoint =
+  pinnedPrBranchPoint || git(["merge-base", range.eventBase || range.base, prHead || range.head]);
 console.log(`[ops:traceability:refs] source=${range.source}`);
 console.log(`[ops:traceability:refs] HEAD=${currentHead}`);
 console.log(`[ops:traceability:refs] base=${range.base}`);
