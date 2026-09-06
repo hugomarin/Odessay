@@ -11,10 +11,16 @@ This document is the implementation evidence matrix for ODE-479 through ODE-486.
 | Authorized tools | `lib/services/contracts/workspace-agent.ts`, `lib/services/desktop/workspace-agent-tools.ts`, `lib/services/workspace-agent-tools-factory.ts` | `tests/workspace-agent-tools.test.ts`; every read/write/move/edit/delete call requires an action/resource approval, and native path preflight canonicalizes the BindingRoot boundary before approval consumption | Implemented |
 | Workspace context | `lib/agent/workspace-agent-analysis.ts`, `loadContext`/`getContextWithWorkflow` in `lib/services/workspace-agent-service.ts` | `tests/workspace-agent-analysis.test.ts`; catalog, collections and vocabulary remain the source of truth, while agent analysis actions load existing workflow context through a separate workflow approval | Implemented |
 | `workflow.md` | `buildWorkflowDraft`, `proposeWorkflow`, `applyWorkflow` | Existing workflow analysis tests plus `npm run ops:workflow:validate`; every existing-workflow body read uses a workflow-specific approval and missing approval fails closed | Implemented |
-| Evidence-backed analysis | broken references, vocabulary classification, archive candidates and contradiction proposals in `lib/agent/workspace-agent-analysis.ts` | Desktop catalog hydrates a hash-validated outbound-reference projection without exposing document bodies to analysis; external URLs and fragments are excluded, relative paths resolve from the source document, and broken-reference fixes retain read/edit approvals | Implemented |
+| Evidence-backed analysis | deterministic link/contradiction/archive mechanics remain in `lib/agent/workspace-agent-analysis.ts`; semantic type/status classification is owned by `AIService.classifyWorkspace` | Desktop catalog hydrates a hash-validated outbound-reference projection without exposing document bodies to analysis; semantic classification sends selected document bodies, active vocabulary definitions, workflow, collections and annotations through the server AI adapter, then verifies quotes, vocabulary keys and freshness before any approved metadata edit | Implemented; contradiction/archive semantics remain the next vertical |
 | Shared agent surface | `components/agent/workspace-agent-panel.tsx`, mounted by `components/editor/editor-shell.tsx` and `components/workspace/workspace-detail.tsx` | Shared scope prop, independent full-height rail, scope-keyed session reset on document change, drag/drop payload, attachment message records, review queue and close/reopen rail | Implemented; desktop owner flow pending |
 | Design-system translation | editor tabs/topbar and Workspace detail layout use existing tokens, typography, borders, panel width and Lucide icon treatment | `npm run typecheck`, `npm run lint`; manual visual acceptance still required in the desktop shell | Implemented; visual acceptance pending |
 | Phase gate | This matrix, PR checks and the validation commands below | Owner acceptance of desktop flow plus final performance capture | In review |
+
+## Semantic classification vertical
+
+The first value slice is the user task “review these documents and propose type and status with evidence”. `workspace-agent-service.ts` resolves explicit files/folders through `DocumentCatalog`, reads selected `.md` bodies through the approved desktop tool, and sends bounded context to `AIService.classifyWorkspace`. The server route owns provider transport and structured-output validation; the model owns the semantic decision. Similarity and neighboring metadata remain a comparison baseline for the later archive flow and are never promoted to a classification proposal.
+
+Every returned target receives a proposal or an explicit `needs-review` placeholder. The application verifies each cited quote against the current body, rejects inactive vocabulary keys, preserves uncertainty, and requires a fresh content/metadata snapshot plus an exact target quote before an approved edit. The service also returns bounded catalog metadata for any additional document ids requested by the model so the user can attach the missing evidence.
 
 ## Interaction state matrix
 
@@ -55,13 +61,14 @@ Current local validation:
 
 - `npm run typecheck`
 - `npm run lint` (existing warnings only)
-- `npm test` — 240 files / 1,862 tests (the review baseline was 1,847; this pass adds the regression coverage listed below)
+- `npm test` — 242 files / 1,876 tests (the review baseline was 1,847; this pass adds the regression coverage listed below)
 - `npm run ops:workflow:validate`
 - `npm run ops:delivery:gate` — passed for the committed ODE-479 through ODE-483 scope; rerun after the new commit for ODE-484 through ODE-486 traceability
 - `npm run ops:perf:capture -- --scenario editor`
 - `npm run ops:perf:gate -- --trace artifacts/perf/editor-trace.json.gz` — 14 pass, 0 warn, 1 optional skip, 0 required failures
 - `cargo test --manifest-path src-tauri/Cargo.toml` — 68 passed, 2 ignored; catalog reference projection, traversal, `.odessay`, legacy internal state and symlink escape regressions pass
 - `npx playwright test tests/playwright/workspace-agent-panel.e2e.ts` — independent panel beside Properties, drop context, immutable message attachment record + chat scroll, focus-mode preservation, close/reopen and document-scope reset; screenshots in `output/playwright/ode-486/`
+- `npx vitest run tests/workspace-agent-service.test.ts tests/api/workspace-classification-route.test.ts tests/ai-auth-services.test.ts` — semantic model ownership, folder expansion, full-body context, bounded additional reads, exact evidence/vocabulary validation, stale approval rejection, server structured-output fallback and web adapter envelope mapping
 - Browser performance evidence from the same smoke: `output/playwright/ode-486/agent-performance.json` — panel open `429.1ms`, reopen `65.1ms`, document reset `83.8ms` in the local Chromium harness. These are direct browser measurements, not a packaged-desktop claim.
 - `npm run desktop:release:local` — desktop draft lifecycle (92 tests), static export, optimized Tauri release build and local DMG generation passed; the artifact intentionally embeds `http://localhost:3000` and is not distributable.
 - `npm run validate:desktop -- --dmg dist/releases/ArtifactStudio-0.7.1-aarch64.dmg --allow-localhost` — bundle discovery, app structure, CSP, version alignment, static export and ad-hoc signature checks passed (0 failures, 1 expected localhost warning).

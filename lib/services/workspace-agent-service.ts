@@ -1,4 +1,10 @@
 import type { CollectionSummary } from "@/lib/collections/collections"
+import { findInlineAnnotationMarkers } from "@/lib/editor/annotation-markdown"
+import {
+  MAX_WORKSPACE_CLASSIFICATION_BODY_CHARS,
+  MAX_WORKSPACE_CLASSIFICATION_CATALOG_DOCUMENTS,
+  MAX_WORKSPACE_CLASSIFICATION_TARGETS,
+} from "@/lib/ai/workspace-classification"
 import {
   buildWorkflowDraft,
   detectBrokenDocumentReferences,
@@ -10,11 +16,19 @@ import {
   type ArchiveCandidate,
   type BrokenReferenceProposal,
   type ClassificationProposal,
+  type ClassificationEvidenceSource,
   type ContradictionProposal,
   type ContradictionResolution,
+  type EvidenceCitation,
   type WorkspaceAgentContentSnapshot,
   type WorkflowDraftProposal,
 } from "@/lib/agent/workspace-agent-analysis"
+import type {
+  WorkspaceClassificationAnnotation,
+  WorkspaceClassificationDocument,
+  WorkspaceClassificationRequest,
+  WorkspaceClassificationResult,
+} from "@/lib/services/contracts/ai-service"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import type {
@@ -25,6 +39,7 @@ import type {
   WorkspaceAgentToolsService,
 } from "@/lib/services/contracts/workspace-agent"
 import { getDocumentCatalog } from "@/lib/services/document-catalog-factory"
+import { getAIService } from "@/lib/services/ai-service-factory"
 import { loadDesktopCollections } from "@/lib/services/desktop/desktop-collection-service"
 import { getWorkspaceAgentToolsService } from "@/lib/services/workspace-agent-tools-factory"
 import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
@@ -84,6 +99,52 @@ function workflowPath(rootPath: string): string {
   return `${normalizePath(rootPath)}/workflow.md`
 }
 
+function isWithinOrEqualPath(path: string, rootPath: string): boolean {
+  const candidate = canonicalizeLexicalPath(path)
+  const root = canonicalizeLexicalPath(rootPath)
+  if (hasInternalWorkspaceComponent(candidate) || hasInternalWorkspaceComponent(root)) return false
+  return candidate === root || (root === "/" ? candidate.startsWith("/") : candidate.startsWith(`${root}/`))
+}
+
+function selectionPath(path: string | undefined, rootPath: string): string | null {
+  const trimmed = path?.trim()
+  if (!trimmed) return null
+  const normalized = canonicalizeLexicalPath(trimmed)
+  const isAbsolute = normalized.startsWith("/") || /^[A-Za-z]:\//.test(normalized)
+  return canonicalizeLexicalPath(isAbsolute ? normalized : `${rootPath}/${normalized}`)
+}
+
+function createInternalReadApproval(documentId: string): WorkspaceAgentApproval {
+  const approvalId = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `workspace-agent-read-${documentId}-${Date.now()}`
+  return {
+    action: "read",
+    approvalId,
+    approved: true,
+    approvedAt: new Date().toISOString(),
+    resource: documentId,
+  }
+}
+
+function lineForQuote(markdown: string, quote: string): number | null {
+  const start = markdown.indexOf(quote)
+  if (start < 0) return null
+  return markdown.slice(0, start).split("\n").length
+}
+
+function annotationEvidence(documentId: string, markdown: string): WorkspaceClassificationAnnotation[] {
+  return findInlineAnnotationMarkers(markdown)
+    .filter((annotation) => annotation.text.trim().length > 0)
+    .slice(0, 24)
+    .map((annotation) => ({
+      documentId,
+      type: annotation.type,
+      anchorText: annotation.text.slice(0, 500),
+      note: annotation.text.slice(0, 1_000),
+    }))
+}
+
 function contentSnapshot(document: WorkspaceAgentDocument): WorkspaceAgentContentSnapshot {
   return {
     documentId: document.documentId,
@@ -98,9 +159,38 @@ type WorkspaceAgentContext = {
   rootPath: string
   documents: DocumentCatalogRecord[]
   collections: CollectionSummary[]
+  documentCollectionIds: Record<string, string[]>
   existingWorkflow: DocumentCatalogRecord | null
   workflowMarkdown: string | null
 }
+
+export type WorkspaceAgentSelection = {
+  kind: "file" | "folder"
+  documentId?: string
+  path?: string
+}
+
+export type WorkspaceAgentClassificationInput = {
+  request?: string
+  selection: readonly WorkspaceAgentSelection[]
+  workflowReadApproval?: WorkspaceAgentApproval
+}
+
+export type WorkspaceAgentClassificationRequestedDocument = {
+  documentId: string
+  title: string
+  path: string | null
+}
+
+export type WorkspaceAgentClassificationRun = {
+  summary: string
+  proposals: ClassificationProposal[]
+  requestedDocumentIds: string[]
+  requestedDocuments: WorkspaceAgentClassificationRequestedDocument[]
+  targetDocumentIds: string[]
+}
+
+const DEFAULT_CLASSIFICATION_REQUEST = "Review these artifacts and propose their type and status with evidence."
 
 export type BrokenReferenceFixApprovals = {
   read: WorkspaceAgentApproval
@@ -120,9 +210,13 @@ async function loadContext(rootPath: string): Promise<ServiceResponse<WorkspaceA
     const documents = (await catalog.list({ includeDeleted: false }))
       .filter((record) => isInsideRoot(record.binding?.canonicalPath, rootPath))
     const counts = new Map<string, number>()
+    const documentCollectionIds = new Map<string, string[]>()
     for (const assignment of collectionState.writingCollections) {
       if (documents.some((record) => record.id === assignment.writing_id)) {
         counts.set(assignment.collection_id, (counts.get(assignment.collection_id) ?? 0) + 1)
+        const current = documentCollectionIds.get(assignment.writing_id) ?? []
+        if (!current.includes(assignment.collection_id)) current.push(assignment.collection_id)
+        documentCollectionIds.set(assignment.writing_id, current)
       }
     }
     const collections = collectionState.collections
@@ -139,11 +233,183 @@ async function loadContext(rootPath: string): Promise<ServiceResponse<WorkspaceA
       rootPath,
       documents,
       collections,
+      documentCollectionIds: Object.fromEntries(documentCollectionIds),
       existingWorkflow: documents.find((record) => normalizePath(record.binding?.canonicalPath ?? "") === workflowPath(rootPath)) ?? null,
       workflowMarkdown: null,
     })
   } catch (cause) {
     return error("DB_ERROR", cause instanceof Error ? cause.message : "Workspace context could not be loaded.")
+  }
+}
+
+function resolveSelectionDocumentIds(
+  context: WorkspaceAgentContext,
+  selection: readonly WorkspaceAgentSelection[],
+): string[] {
+  const activeDocuments = context.documents.filter((record) => !record.deletedAt)
+  const selected = new Set<string>()
+  const add = (record: DocumentCatalogRecord | undefined) => {
+    if (record && !record.deletedAt) selected.add(record.id)
+  }
+
+  for (const item of selection) {
+    if (item.kind === "file") {
+      if (item.documentId) {
+        add(activeDocuments.find((record) => record.id === item.documentId))
+      }
+      const filePath = selectionPath(item.path, context.rootPath)
+      if (filePath) {
+        add(activeDocuments.find((record) => canonicalizeLexicalPath(record.binding?.canonicalPath ?? "") === filePath))
+      }
+      continue
+    }
+
+    const folderPath = selectionPath(item.path, context.rootPath)
+    if (!folderPath || !isWithinOrEqualPath(folderPath, context.rootPath)) continue
+    for (const record of activeDocuments) {
+      const documentPath = record.binding?.canonicalPath
+      if (documentPath && isWithinOrEqualPath(documentPath, folderPath) && canonicalizeLexicalPath(documentPath) !== folderPath) {
+        add(record)
+      }
+    }
+  }
+
+  return [...selected]
+}
+
+function documentForClassification(
+  record: DocumentCatalogRecord,
+  markdown: string | null,
+): WorkspaceClassificationDocument {
+  return {
+    id: record.id,
+    title: record.title,
+    relativePath: record.binding?.relativePath ?? null,
+    currentArtifactType: record.artifactType,
+    currentStatus: record.status,
+    visibility: record.visibility,
+    version: record.version,
+    modifiedAt: record.modifiedAt,
+    excerpt: record.excerpt ?? null,
+    references: record.referenceTargets ?? [],
+    markdown,
+  }
+}
+
+function activeVocabularyKey(
+  vocabulary: ReturnType<typeof getVocabularyCatalogSnapshot>,
+  kind: "type" | "status",
+  key: string | null,
+): string | null {
+  if (!key) return null
+  return vocabulary.some((item) => item.kind === kind && item.key === key && !item.hidden) ? key : null
+}
+
+function classificationSnapshotMatches(
+  record: DocumentCatalogRecord,
+  snapshot: ClassificationEvidenceSource,
+): boolean {
+  if (snapshot.contentHash !== null) return record.binding?.contentHash === snapshot.contentHash
+  return record.version === snapshot.version && record.modifiedAt === snapshot.modifiedAt
+}
+
+function missingClassificationProposal(targetRecord: DocumentCatalogRecord): ClassificationProposal {
+  const currentArtifactType = targetRecord.artifactType ?? null
+  const currentStatus = targetRecord.status ?? null
+  return {
+    documentId: targetRecord.id,
+    documentTitle: targetRecord.title?.trim() || targetRecord.binding?.relativePath || targetRecord.id,
+    documentPath: targetRecord.binding?.relativePath ?? null,
+    currentArtifactType,
+    currentStatus,
+    artifactType: currentArtifactType,
+    status: currentStatus,
+    decision: "needs-review",
+    change: "No semantic decision was returned for this artifact.",
+    benefit: "Keeps metadata unchanged instead of hiding an incomplete analysis.",
+    uncertainty: "The AI response omitted this selected artifact; review it again before changing metadata.",
+    sourceContentHash: targetRecord.binding?.contentHash ?? null,
+    sourceVersion: targetRecord.version ?? null,
+    sourceModifiedAt: targetRecord.modifiedAt ?? null,
+    evidenceSources: [],
+    evidence: [],
+    reason: "No model proposal was returned for the selected artifact.",
+  }
+}
+
+function normalizeClassificationProposal(
+  modelProposal: WorkspaceClassificationResult["proposals"][number],
+  targetRecord: DocumentCatalogRecord,
+  recordsById: ReadonlyMap<string, DocumentCatalogRecord>,
+  markdownById: ReadonlyMap<string, string>,
+  vocabulary: ReturnType<typeof getVocabularyCatalogSnapshot>,
+): ClassificationProposal {
+  const proposedArtifactType = activeVocabularyKey(vocabulary, "type", modelProposal.proposedArtifactType)
+  const proposedStatus = activeVocabularyKey(vocabulary, "status", modelProposal.proposedStatus)
+  const invalidType = modelProposal.proposedArtifactType !== null && !proposedArtifactType
+  const invalidStatus = modelProposal.proposedStatus !== null && !proposedStatus
+  const validEvidence: EvidenceCitation[] = []
+
+  for (const item of modelProposal.evidence) {
+    const source = recordsById.get(item.documentId)
+    const markdown = markdownById.get(item.documentId)
+    if (!source || markdown === undefined) continue
+    const line = lineForQuote(markdown, item.quote)
+    if (line === null) continue
+    validEvidence.push({
+      kind: "document",
+      sourceId: source.id,
+      label: source.title?.trim() || source.binding?.relativePath || source.id,
+      detail: `line ${line}: ${item.reason}`,
+      quote: item.quote,
+      line,
+    })
+  }
+
+  const currentArtifactType = targetRecord.artifactType ?? null
+  const currentStatus = targetRecord.status ?? null
+  const metadataChanged = proposedArtifactType !== currentArtifactType || proposedStatus !== currentStatus
+  const hasTargetEvidence = validEvidence.some((item) => item.sourceId === targetRecord.id)
+  const warnings = [
+    modelProposal.uncertainty,
+    invalidType ? `The proposed type "${modelProposal.proposedArtifactType}" is not active in the current vocabulary.` : null,
+    invalidStatus ? `The proposed status "${modelProposal.proposedStatus}" is not active in the current vocabulary.` : null,
+    validEvidence.length === 0 ? "No exact evidence quote could be verified against the current document content." : null,
+    validEvidence.length > 0 && !hasTargetEvidence ? "The proposal has no exact quote from the artifact being classified." : null,
+  ].filter((value): value is string => Boolean(value?.trim()))
+
+  let decision = modelProposal.decision
+  if (invalidType || invalidStatus || validEvidence.length === 0 || !hasTargetEvidence) decision = "needs-review"
+  if (decision === "keep" && metadataChanged) decision = "needs-review"
+  if (decision === "change" && !metadataChanged) decision = "keep"
+
+  return {
+    documentId: targetRecord.id,
+    documentTitle: targetRecord.title?.trim() || targetRecord.binding?.relativePath || targetRecord.id,
+    documentPath: targetRecord.binding?.relativePath ?? null,
+    currentArtifactType,
+    currentStatus,
+    artifactType: proposedArtifactType,
+    status: proposedStatus,
+    decision,
+    change: modelProposal.change,
+    benefit: modelProposal.benefit,
+    uncertainty: warnings.length > 0 ? warnings.join(" ") : null,
+    sourceContentHash: targetRecord.binding?.contentHash ?? null,
+    sourceVersion: targetRecord.version ?? null,
+    sourceModifiedAt: targetRecord.modifiedAt ?? null,
+    evidenceSources: [...new Set(validEvidence.map((item) => item.sourceId))].flatMap((documentId) => {
+      const source = recordsById.get(documentId)
+      if (!source) return []
+      return [{
+        documentId: source.id,
+        contentHash: source.binding?.contentHash ?? null,
+        version: source.version ?? null,
+        modifiedAt: source.modifiedAt ?? null,
+      }]
+    }),
+    evidence: validEvidence,
+    reason: modelProposal.rationale,
   }
 }
 
@@ -170,7 +436,9 @@ export type WorkspaceAgentService = {
     resolution: ContradictionResolution,
     approvals?: { read: WorkspaceAgentApproval; edit: WorkspaceAgentApproval },
   ): Promise<ServiceResponse<ContradictionResolutionResult>>
-  suggestClassification(documentId: string, workflowReadApproval?: WorkspaceAgentApproval): Promise<ServiceResponse<ClassificationProposal>>
+  suggestClassification(
+    input: WorkspaceAgentClassificationInput,
+  ): Promise<ServiceResponse<WorkspaceAgentClassificationRun>>
   applyClassification(
     proposal: ClassificationProposal,
     approval: WorkspaceAgentApproval,
@@ -320,19 +588,237 @@ export async function createWorkspaceAgentService(
         mutation: mutation.data,
       })
     },
-    async suggestClassification(documentId, workflowReadApproval) {
-      const context = await getContextWithWorkflow(workflowReadApproval)
-      if (context.error || !context.data) return context as ServiceResponse<ClassificationProposal>
-      const document = context.data.documents.find((record) => record.id === documentId)
-      if (!document) return error("NOT_FOUND", `Document ${documentId} was not found in the workspace.`)
-      return ok(suggestArtifactClassification(document, context.data.documents, getVocabularyCatalogSnapshot()))
+    async suggestClassification(input) {
+      const requestedText = input.request?.trim() || DEFAULT_CLASSIFICATION_REQUEST
+      const context = await getContextWithWorkflow(input.workflowReadApproval)
+      if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentClassificationRun>
+
+      const selectedIds = resolveSelectionDocumentIds(context.data, input.selection)
+        .filter((documentId) => documentId !== context.data.existingWorkflow?.id)
+      if (selectedIds.length === 0) {
+        return error("NOT_FOUND", "Select at least one local artifact before asking for a semantic classification.")
+      }
+      if (selectedIds.length > MAX_WORKSPACE_CLASSIFICATION_TARGETS) {
+        return error(
+          "INVALID_INPUT",
+          `Select at most ${MAX_WORKSPACE_CLASSIFICATION_TARGETS} artifacts per classification review so the agent can read each one completely.`,
+        )
+      }
+
+      const recordsById = new Map(context.data.documents.map((record) => [record.id, record]))
+      const selectedRecords = selectedIds
+        .map((documentId) => recordsById.get(documentId))
+        .filter((record): record is DocumentCatalogRecord => Boolean(record && !record.deletedAt))
+      if (selectedRecords.length !== selectedIds.length) {
+        return error("NOT_FOUND", "One or more selected artifacts are no longer available in the workspace catalog.")
+      }
+
+      const reads = await Promise.all(selectedRecords.map(async (record) => {
+        const result = await tools.read({
+          documentId: record.id,
+          approval: createInternalReadApproval(record.id),
+        })
+        return { record, result }
+      }))
+      const markdownById = new Map<string, string>()
+      const currentRecordsById = new Map(recordsById)
+      const annotations: WorkspaceClassificationAnnotation[] = []
+      for (const { record, result } of reads) {
+        if (result.error || !result.data) {
+          return error("NOT_FOUND", result.error?.message ?? `Document ${record.id} could not be read for classification.`)
+        }
+        const document = result.data.document
+        markdownById.set(record.id, document.markdown)
+        currentRecordsById.set(record.id, document.catalogRecord)
+        annotations.push(...annotationEvidence(record.id, document.markdown))
+      }
+
+      const contentChars = [...markdownById.values()].reduce((total, markdown) => total + markdown.length, 0)
+        + (context.data.workflowMarkdown?.length ?? 0)
+      if (contentChars > MAX_WORKSPACE_CLASSIFICATION_BODY_CHARS) {
+        return error(
+          "INVALID_INPUT",
+          "The selected artifacts are too large to review together. Narrow the selection so the agent can use complete document evidence.",
+        )
+      }
+
+      const activeRecords = context.data.documents.filter((record) => !record.deletedAt)
+      const selectedRecordSet = new Set(selectedRecords.map((record) => record.id))
+      const remainingRecords = activeRecords
+        .filter((record) => !selectedRecordSet.has(record.id))
+        .sort((left, right) => {
+          const leftLabel = left.title?.trim() || left.binding?.relativePath || left.id
+          const rightLabel = right.title?.trim() || right.binding?.relativePath || right.id
+          return leftLabel.localeCompare(rightLabel)
+        })
+      const promptRecords = [
+        ...selectedRecords,
+        ...remainingRecords.slice(0, Math.max(0, MAX_WORKSPACE_CLASSIFICATION_CATALOG_DOCUMENTS - selectedRecords.length)),
+      ]
+      const vocabulary = getVocabularyCatalogSnapshot()
+        .filter((item) => !item.hidden)
+        .map((item) => ({
+          kind: item.kind,
+          key: item.key,
+          name: item.name,
+          description: item.description,
+          isRequired: item.isRequired,
+        }))
+      const aiRequest: WorkspaceClassificationRequest = {
+        request: requestedText.slice(0, 2_000),
+        targetDocumentIds: selectedRecords.map((record) => record.id),
+        documents: promptRecords.map((record) => documentForClassification(
+          currentRecordsById.get(record.id) ?? record,
+          markdownById.get(record.id) ?? null,
+        )),
+        collections: context.data.collections.map((collection) => ({
+          id: collection.id,
+          name: collection.name,
+          description: collection.description,
+          writingsCount: collection.writingsCount,
+        })),
+        documentCollectionIds: context.data.documentCollectionIds,
+        annotations,
+        vocabulary,
+        workflowMarkdown: context.data.workflowMarkdown,
+        catalogTruncated: promptRecords.length < activeRecords.length,
+      }
+      const aiResult = await getAIService().classifyWorkspace(aiRequest)
+      if (aiResult.error || !aiResult.data) {
+        return error(aiResult.error?.code ?? "AI_REQUEST_FAILED", aiResult.error?.message ?? "Workspace classification could not be completed.")
+      }
+
+      const seenProposalIds = new Set<string>()
+      const modelProposalsById = new Map<string, WorkspaceClassificationResult["proposals"][number]>()
+      for (const modelProposal of aiResult.data.proposals) {
+        if (!seenProposalIds.has(modelProposal.documentId)) {
+          seenProposalIds.add(modelProposal.documentId)
+          modelProposalsById.set(modelProposal.documentId, modelProposal)
+        }
+      }
+      const proposals = selectedRecords.map((record) => {
+        const currentRecord = currentRecordsById.get(record.id) ?? record
+        const modelProposal = modelProposalsById.get(record.id)
+        return modelProposal
+          ? normalizeClassificationProposal(
+              modelProposal,
+              currentRecord,
+              currentRecordsById,
+              markdownById,
+              getVocabularyCatalogSnapshot(),
+            )
+          : missingClassificationProposal(currentRecord)
+      })
+      const requestedDocumentIds = [...new Set(aiResult.data.requestedDocumentIds)].filter((documentId) => {
+        const record = recordsById.get(documentId)
+        return Boolean(record && !record.deletedAt && !selectedRecordSet.has(documentId) && !markdownById.has(documentId))
+      })
+      const requestedDocuments = requestedDocumentIds.flatMap((documentId) => {
+        const record = recordsById.get(documentId)
+        if (!record) return []
+        return [{
+          documentId,
+          title: record.title?.trim() || record.binding?.relativePath || documentId,
+          path: record.binding?.relativePath ?? null,
+        }]
+      })
+
+      return ok({
+        summary: aiResult.data.summary,
+        proposals,
+        requestedDocumentIds,
+        requestedDocuments,
+        targetDocumentIds: selectedRecords.map((record) => record.id),
+      })
     },
     async applyClassification(proposal, approval) {
+      if (proposal.decision !== "change") {
+        return error("INVALID_INPUT", "This classification does not recommend a metadata change.")
+      }
+
+      const context = await getContext()
+      if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentMutationResult>
+      const catalogTarget = context.data.documents.find((record) => record.id === proposal.documentId)
+      if (!catalogTarget) return error("NOT_FOUND", `Document ${proposal.documentId} was not found in the workspace.`)
+      const read = await tools.read({
+        documentId: proposal.documentId,
+        approval: createInternalReadApproval(proposal.documentId),
+      })
+      if (read.error || !read.data) {
+        return error("NOT_FOUND", read.error?.message ?? `Document ${proposal.documentId} could not be read before applying the classification.`)
+      }
+      const current = read.data.document.catalogRecord
+      if (current.id !== catalogTarget.id || current.deletedAt) {
+        return error("CONFLICT", "The classification target is no longer active in the workspace.")
+      }
+      const vocabulary = getVocabularyCatalogSnapshot()
+      const validArtifactType = activeVocabularyKey(vocabulary, "type", proposal.artifactType)
+      const validStatus = activeVocabularyKey(vocabulary, "status", proposal.status)
+      if (proposal.artifactType !== null && !validArtifactType) {
+        return error("INVALID_INPUT", "The proposed type is not active in the current vocabulary.")
+      }
+      if (proposal.status !== null && !validStatus) {
+        return error("INVALID_INPUT", "The proposed status is not active in the current vocabulary.")
+      }
+      if (
+        current.artifactType !== proposal.currentArtifactType
+        || current.status !== proposal.currentStatus
+        || (proposal.sourceContentHash !== null && current.binding?.contentHash !== proposal.sourceContentHash)
+        || (proposal.sourceContentHash === null && (
+          current.version !== proposal.sourceVersion
+          || current.modifiedAt !== proposal.sourceModifiedAt
+        ))
+      ) {
+        return error("CONFLICT", "The classification evidence is stale. Review the artifact again before applying this change.")
+      }
+
+      const targetQuotes = proposal.evidence
+        .filter((item) => item.sourceId === proposal.documentId && item.quote)
+        .map((item) => item.quote!)
+      if (targetQuotes.length === 0 || targetQuotes.some((quote) => !read.data.document.markdown.includes(quote))) {
+        return error("CONFLICT", "The classification evidence is no longer present in the artifact. Review it again before applying this change.")
+      }
+
+      const refreshedContext = await getContext()
+      if (refreshedContext.error || !refreshedContext.data) {
+        return error("DB_ERROR", refreshedContext.error?.message ?? "Workspace context could not be refreshed before the classification edit.")
+      }
+      const refreshedTarget = refreshedContext.data.documents.find((record) => record.id === proposal.documentId)
+      if (
+        !refreshedTarget
+        || refreshedTarget.deletedAt
+        || refreshedTarget.artifactType !== current.artifactType
+        || refreshedTarget.status !== current.status
+        || !classificationSnapshotMatches(refreshedTarget, {
+          documentId: proposal.documentId,
+          contentHash: proposal.sourceContentHash,
+          version: proposal.sourceVersion,
+          modifiedAt: proposal.sourceModifiedAt,
+        })
+      ) {
+        return error("CONFLICT", "The classification evidence is stale. Review the artifact again before applying this change.")
+      }
+      for (const source of proposal.evidenceSources ?? []) {
+        const currentSource = refreshedContext.data.documents.find((record) => record.id === source.documentId)
+        if (!currentSource || currentSource.deletedAt || !classificationSnapshotMatches(currentSource, source)) {
+          return error("CONFLICT", "The classification evidence is stale. Review the artifact again before applying this change.")
+        }
+      }
+
       const metadata: WorkspaceAgentEditInput["metadata"] = {}
-      if (proposal.artifactType !== null) metadata.artifactType = proposal.artifactType
-      if (proposal.status !== null) metadata.status = proposal.status
+      if (validArtifactType !== null && validArtifactType !== current.artifactType) metadata.artifactType = validArtifactType
+      if (validStatus !== null && validStatus !== current.status) metadata.status = validStatus
       if (Object.keys(metadata).length === 0) return error("INVALID_INPUT", "The classification proposal contains no vocabulary value to apply.")
-      return tools.edit({ documentId: proposal.documentId, metadata, approval })
+      const mutation = await tools.edit({ documentId: proposal.documentId, metadata, approval })
+      if (mutation.error || !mutation.data) return mutation
+      const updated = mutation.data.document.catalogRecord
+      if (
+        (validArtifactType !== null && updated.artifactType !== validArtifactType)
+        || (validStatus !== null && updated.status !== validStatus)
+      ) {
+        return error("CONFLICT", "The classification change could not be verified after the approved edit.")
+      }
+      return ok(mutation.data)
     },
     async findArchiveCandidates(options, workflowReadApproval) {
       const context = await getContextWithWorkflow(workflowReadApproval)

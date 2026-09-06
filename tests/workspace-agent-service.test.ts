@@ -5,11 +5,17 @@ import type {
   WorkspaceAgentDocument,
   WorkspaceAgentToolsService,
 } from "@/lib/services/contracts/workspace-agent"
+import { suggestArtifactClassification } from "@/lib/agent/workspace-agent-analysis"
+import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
 import { createWorkspaceAgentService } from "@/lib/services/workspace-agent-service"
 
 const contextMocks = vi.hoisted(() => ({
   list: vi.fn(),
   loadCollections: vi.fn(),
+}))
+
+const aiMocks = vi.hoisted(() => ({
+  classifyWorkspace: vi.fn(),
 }))
 
 vi.mock("@/lib/services/document-catalog-factory", () => ({
@@ -18,6 +24,10 @@ vi.mock("@/lib/services/document-catalog-factory", () => ({
 
 vi.mock("@/lib/services/desktop/desktop-collection-service", () => ({
   loadDesktopCollections: contextMocks.loadCollections,
+}))
+
+vi.mock("@/lib/services/ai-service-factory", () => ({
+  getAIService: () => aiMocks,
 }))
 
 function approval(action: WorkspaceAgentApproval["action"], resource: string, approvalId = `${action}:${resource}`): WorkspaceAgentApproval {
@@ -30,12 +40,16 @@ function approval(action: WorkspaceAgentApproval["action"], resource: string, ap
   }
 }
 
-function document(id: string, markdown: string, modifiedAt = 1_700_000_000_000): WorkspaceAgentDocument {
+function document(id: string, markdown: string, modifiedAt = 1_700_000_000_000, relativePath = `${id}.md`): WorkspaceAgentDocument {
   const catalogRecord = {
     id,
+    artifactType: "general",
+    status: "draft",
+    visibility: "private",
+    version: 1,
     title: id,
     modifiedAt,
-    binding: { canonicalPath: `/workspace/${id}.md` },
+    binding: { canonicalPath: `/workspace/${relativePath}`, relativePath },
   } as DocumentCatalogRecord
   return {
     documentId: id,
@@ -52,6 +66,11 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     contextMocks.list.mockResolvedValue([])
     contextMocks.loadCollections.mockReset()
     contextMocks.loadCollections.mockResolvedValue({ collections: [], writingCollections: [] })
+    aiMocks.classifyWorkspace.mockReset()
+    aiMocks.classifyWorkspace.mockResolvedValue({
+      data: { summary: "No change.", proposals: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
   })
 
   it("reads only selected documents and applies a cited resolution through edit", async () => {
@@ -123,7 +142,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     expect(tools.read).not.toHaveBeenCalled()
   })
 
-  it("uses a workflow approval instead of reusing the target approval during classification", async () => {
+  it("sends full target content and a separate workflow context through the semantic AI adapter", async () => {
     const workflow = document("workflow", "# Existing workflow")
     const target = document("target", "Storage: SQLite.")
     contextMocks.list.mockResolvedValue([workflow.catalogRecord, target.catalogRecord])
@@ -131,7 +150,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     const tools: WorkspaceAgentToolsService = {
       read: vi.fn(async ({ documentId, approval }) => ({
         data: {
-          document: workflow,
+          document: documentId === "workflow" ? workflow : target,
           receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
         },
         error: null,
@@ -143,11 +162,53 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     }
     const service = await createWorkspaceAgentService("/workspace", tools)
 
-    const result = await service.suggestClassification("target", approval("read", "workflow"))
+    aiMocks.classifyWorkspace.mockResolvedValueOnce({
+      data: {
+        summary: "The artifact is a general draft.",
+        proposals: [{
+          documentId: "target",
+          decision: "keep",
+          proposedArtifactType: "general",
+          proposedStatus: "draft",
+          change: "Keep the current type and status.",
+          rationale: "The document states a concrete storage decision and is readable end to end.",
+          benefit: "Avoids changing metadata without a user-visible improvement.",
+          uncertainty: null,
+          evidence: [{ documentId: "target", quote: "Storage: SQLite.", reason: "This is the document's concrete subject." }],
+        }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+
+    const result = await service.suggestClassification({
+      request: "Review this document and keep metadata when no improvement is justified.",
+      selection: [{ kind: "file", documentId: "target" }],
+      workflowReadApproval: approval("read", "workflow"),
+    })
 
     expect(result.error).toBeNull()
     expect(tools.read).toHaveBeenCalledWith(expect.objectContaining({ documentId: "workflow", approval: approval("read", "workflow") }))
-    expect(tools.read).not.toHaveBeenCalledWith(expect.objectContaining({ documentId: "target" }))
+    expect(tools.read).toHaveBeenCalledWith(expect.objectContaining({ documentId: "target", approval: expect.objectContaining({ action: "read", resource: "target" }) }))
+    expect(aiMocks.classifyWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      request: "Review this document and keep metadata when no improvement is justified.",
+      targetDocumentIds: ["target"],
+      workflowMarkdown: "# Existing workflow",
+      documents: expect.arrayContaining([
+        expect.objectContaining({ id: "target", markdown: "Storage: SQLite.", currentStatus: "draft" }),
+      ]),
+      vocabulary: expect.arrayContaining([
+        expect.objectContaining({ kind: "type", key: "general", description: expect.any(String) }),
+        expect.objectContaining({ kind: "status", key: "draft", description: expect.any(String) }),
+      ]),
+    }))
+    expect(result.data?.proposals[0]).toMatchObject({
+      documentId: "target",
+      documentTitle: "target",
+      decision: "keep",
+      evidence: [expect.objectContaining({ quote: "Storage: SQLite.", line: 1 })],
+    })
   })
 
   it("uses a workflow-specific read approval only when proposing an existing workflow", async () => {
@@ -174,6 +235,355 @@ describe("WorkspaceAgentService contradiction workflow", () => {
 
     expect(result.error).toBeNull()
     expect(tools.read).toHaveBeenCalledWith(expect.objectContaining({ documentId: "workflow", approval: approval("read", "workflow") }))
+  })
+
+  it("expands a selected folder through the catalog and reads each selected artifact completely", async () => {
+    const first = document("first", "# First\n\nA reusable prompt.", 1_700_000_000_000, "notes/first.md")
+    const second = document("second", "# Second\n\nA reusable template.", 1_700_000_100_000, "notes/second.md")
+    contextMocks.list.mockResolvedValue([first.catalogRecord, second.catalogRecord])
+    const documents = new Map([["first", first], ["second", second]])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.classifyWorkspace.mockResolvedValueOnce({
+      data: {
+        summary: "Both selected artifacts were reviewed from their full content.",
+        proposals: [
+          {
+            documentId: "first",
+            decision: "change",
+            proposedArtifactType: "prompt",
+            proposedStatus: "draft",
+            change: "Classify as Prompt / Draft.",
+            rationale: "The heading and body describe a reusable request.",
+            benefit: "Makes the artifact easier to find as a reusable prompt.",
+            uncertainty: null,
+            evidence: [{ documentId: "first", quote: "A reusable prompt.", reason: "States the artifact's purpose." }],
+          },
+          {
+            documentId: "second",
+            decision: "change",
+            proposedArtifactType: "template",
+            proposedStatus: "draft",
+            change: "Classify as Template / Draft.",
+            rationale: "The body identifies a reusable starting shape.",
+            benefit: "Makes the artifact easier to reuse consistently.",
+            uncertainty: null,
+            evidence: [{ documentId: "second", quote: "A reusable template.", reason: "States the artifact's purpose." }],
+          },
+        ],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.suggestClassification({
+      request: "Review the notes folder.",
+      selection: [{ kind: "folder", path: "/workspace/notes" }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(tools.read).toHaveBeenCalledTimes(2)
+    expect(aiMocks.classifyWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      targetDocumentIds: ["first", "second"],
+      documents: expect.arrayContaining([
+        expect.objectContaining({ id: "first", markdown: "# First\n\nA reusable prompt." }),
+        expect.objectContaining({ id: "second", markdown: "# Second\n\nA reusable template." }),
+      ]),
+    }))
+    expect(result.data?.proposals.map((proposal) => proposal.artifactType)).toEqual(["prompt", "template"])
+  })
+
+  it("keeps the model decision authoritative instead of copying a similar catalog peer", async () => {
+    const target = document("target", "# Reusable prompt\n\nAsk the user for the missing context.")
+    const peer = document("peer", "# Reusable prompt\n\nAsk the user for the missing context.")
+    target.catalogRecord.title = "Reusable prompt"
+    target.catalogRecord.excerpt = "Ask the user for the missing context."
+    peer.catalogRecord.title = "Reusable prompt"
+    peer.catalogRecord.excerpt = "Ask the user for the missing context."
+    peer.catalogRecord.artifactType = "template"
+    peer.catalogRecord.status = "done"
+    contextMocks.list.mockResolvedValue([target.catalogRecord, peer.catalogRecord])
+    const heuristic = suggestArtifactClassification(
+      target.catalogRecord,
+      [target.catalogRecord, peer.catalogRecord],
+      getVocabularyCatalogSnapshot(),
+    )
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.classifyWorkspace.mockResolvedValueOnce({
+      data: {
+        summary: "The body is a reusable prompt, not a template.",
+        proposals: [{
+          documentId: "target",
+          decision: "change",
+          proposedArtifactType: "prompt",
+          proposedStatus: "draft",
+          change: "Change the type to Prompt.",
+          rationale: "The document directly asks an agent to ask the user for context.",
+          benefit: "Makes the artifact discoverable as a reusable prompt.",
+          uncertainty: null,
+          evidence: [{ documentId: "target", quote: "Ask the user for the missing context.", reason: "The instruction defines the reusable prompt behavior." }],
+        }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.suggestClassification({
+      request: "Classify this artifact by its purpose, not by a similar peer.",
+      selection: [{ kind: "file", documentId: "target" }],
+    })
+
+    expect(heuristic.artifactType).toBe("template")
+    expect(result.data?.proposals[0]).toMatchObject({ artifactType: "prompt", status: "draft", decision: "change" })
+  })
+
+  it("creates a review-only proposal when the model omits a selected artifact", async () => {
+    const first = document("first", "# First\n\nA complete note.")
+    const second = document("second", "# Second\n\nAnother complete note.")
+    contextMocks.list.mockResolvedValue([first.catalogRecord, second.catalogRecord])
+    const documents = new Map([["first", first], ["second", second]])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.classifyWorkspace.mockResolvedValueOnce({
+      data: {
+        summary: "Only one selected artifact was classified.",
+        proposals: [{
+          documentId: "first",
+          decision: "keep",
+          proposedArtifactType: "general",
+          proposedStatus: "draft",
+          change: "Keep the current values.",
+          rationale: "The note is complete and its metadata remains accurate.",
+          benefit: "Avoids unnecessary metadata churn.",
+          uncertainty: null,
+          evidence: [{ documentId: "first", quote: "A complete note.", reason: "The body supports the current classification." }],
+        }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.suggestClassification({
+      request: "Review both artifacts.",
+      selection: [{ kind: "file", documentId: "first" }, { kind: "file", documentId: "second" }],
+    })
+
+    expect(result.data?.proposals).toHaveLength(2)
+    expect(result.data?.proposals[1]).toMatchObject({
+      documentId: "second",
+      decision: "needs-review",
+      change: "No semantic decision was returned for this artifact.",
+    })
+    expect(tools.edit).not.toHaveBeenCalled()
+  })
+
+  it("downgrades unverifiable evidence and inactive vocabulary to review-only output", async () => {
+    const target = document("target", "The body contains the evidence.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.classifyWorkspace.mockResolvedValueOnce({
+      data: {
+        summary: "The model returned an unsupported type and a non-existent quote.",
+        proposals: [{
+          documentId: "target",
+          decision: "change",
+          proposedArtifactType: "not-active",
+          proposedStatus: "draft",
+          change: "Change the type.",
+          rationale: "The evidence suggests a different purpose.",
+          benefit: "Would improve discovery if verified.",
+          uncertainty: null,
+          evidence: [{ documentId: "target", quote: "This sentence is not present.", reason: "Unverified claim." }],
+        }],
+        requestedDocumentIds: ["unknown", "target"],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.suggestClassification({
+      request: "Classify this artifact.",
+      selection: [{ kind: "file", documentId: "target" }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.proposals[0]).toMatchObject({ decision: "needs-review", artifactType: null, status: "draft" })
+    expect(result.data?.proposals[0]?.uncertainty).toEqual(expect.stringContaining("not active"))
+    expect(result.data?.proposals[0]?.evidence).toEqual([])
+    expect(result.data?.requestedDocumentIds).toEqual([])
+  })
+
+  it("rejects a metadata approval when the classification evidence is stale", async () => {
+    const target = document("target", "A skill.")
+    target.catalogRecord = {
+      ...target.catalogRecord,
+      binding: {
+        ...target.catalogRecord.binding!,
+        contentHash: "current-hash",
+      },
+    }
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.applyClassification({
+      documentId: "target",
+      documentTitle: "target",
+      documentPath: "target.md",
+      currentArtifactType: "general",
+      currentStatus: "draft",
+      artifactType: "skill",
+      status: "draft",
+      decision: "change",
+      change: "Change type to Skill.",
+      benefit: "Improves discovery.",
+      uncertainty: null,
+      sourceContentHash: "old-hash",
+      sourceVersion: 1,
+      sourceModifiedAt: 1_700_000_000_000,
+      evidenceSources: [{
+        documentId: "target",
+        contentHash: "old-hash",
+        version: 1,
+        modifiedAt: 1_700_000_000_000,
+      }],
+      evidence: [],
+      reason: "The body describes a reusable procedure.",
+    }, approval("edit", "target"))
+
+    expect(result.error?.code).toBe("CONFLICT")
+    expect(tools.edit).not.toHaveBeenCalled()
+  })
+
+  it("revalidates the target quote and active vocabulary before applying approved metadata", async () => {
+    const target = document("target", "# Prompt\n\nAsk for context.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const updated = document("target", target.markdown)
+    updated.catalogRecord.artifactType = "prompt"
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(async ({ approval, metadata }) => ({
+        data: {
+          document: { ...updated, catalogRecord: { ...updated.catalogRecord, artifactType: metadata?.artifactType ?? updated.catalogRecord.artifactType } },
+          receipt: { action: "edit" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.applyClassification({
+      documentId: "target",
+      documentTitle: "target",
+      documentPath: "target.md",
+      currentArtifactType: "general",
+      currentStatus: "draft",
+      artifactType: "prompt",
+      status: "draft",
+      decision: "change",
+      change: "Change type to Prompt.",
+      benefit: "Makes the reusable instruction easier to find.",
+      uncertainty: null,
+      sourceContentHash: null,
+      sourceVersion: 1,
+      sourceModifiedAt: 1_700_000_000_000,
+      evidenceSources: [{
+        documentId: "target",
+        contentHash: null,
+        version: 1,
+        modifiedAt: 1_700_000_000_000,
+      }],
+      evidence: [{
+        kind: "document",
+        sourceId: "target",
+        label: "target",
+        detail: "line 3: The instruction defines the purpose.",
+        quote: "Ask for context.",
+        line: 3,
+      }],
+      reason: "The body is written as a reusable instruction.",
+    }, approval("edit", "target"))
+
+    expect(result.error).toBeNull()
+    expect(result.data?.document.catalogRecord.artifactType).toBe("prompt")
+    expect(tools.edit).toHaveBeenCalledWith(expect.objectContaining({
+      documentId: "target",
+      metadata: { artifactType: "prompt" },
+    }))
   })
 
   it("requires the workflow-specific approval before proposing an existing workflow", async () => {

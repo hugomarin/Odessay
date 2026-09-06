@@ -13,6 +13,8 @@ import type {
   ListLearnedWordsInput,
   TitleSuggestion,
   TitleSuggestionRequest,
+  WorkspaceClassificationRequest,
+  WorkspaceClassificationResult,
 } from "@/lib/services/contracts/ai-service"
 import type { ServiceError } from "@/lib/services/contracts/service-types"
 import { err, ok, parseServiceEnvelope } from "@/lib/services/service-response"
@@ -49,6 +51,17 @@ type PublicationReviewPayload = {
   completionTokens?: number | null
   totalTokens?: number | null
   engineRevision?: string | null
+}
+
+type WorkspaceClassificationPayload = {
+  summary: string
+  proposals: WorkspaceClassificationResult["proposals"]
+  requestedDocumentIds: string[]
+  model: string
+  promptTokens: number | null
+  completionTokens: number | null
+  totalTokens: number | null
+  latencyMs: number | null
 }
 
 type LearnedWordsPayload = {
@@ -142,6 +155,41 @@ export const webAIService: AIService = {
       })
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not review this text right now.")
+    }
+  },
+
+  async classifyWorkspace(input: WorkspaceClassificationRequest) {
+    try {
+      const response = await fetch("/api/ai/workspace-classification", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(input),
+      })
+
+      const parsed = await parseServiceEnvelope<WorkspaceClassificationPayload>(
+        response,
+        "AI_REQUEST_FAILED",
+        "Could not classify the selected artifacts right now.",
+      )
+
+      if (parsed.error) return parsed
+
+      return ok<WorkspaceClassificationResult>({
+        summary: parsed.data.summary,
+        proposals: parsed.data.proposals,
+        requestedDocumentIds: parsed.data.requestedDocumentIds,
+        usage: {
+          model: parsed.data.model,
+          promptTokens: parsed.data.promptTokens,
+          completionTokens: parsed.data.completionTokens,
+          totalTokens: parsed.data.totalTokens,
+          latencyMs: parsed.data.latencyMs,
+        },
+      })
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not classify the selected artifacts right now.")
     }
   },
 
