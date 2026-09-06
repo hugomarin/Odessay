@@ -1540,6 +1540,11 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 scopeLabel={workspace.name}
                 open={isAgentPanelOpen}
                 onOpenChange={setIsAgentPanelOpen}
+                onOpenDocument={(documentId) => {
+                  if (previewRows.some((row) => row.id === documentId)) {
+                    setPreviewWritingId(documentId);
+                  }
+                }}
               />
             </Suspense>
             </div>

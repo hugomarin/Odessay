@@ -6902,6 +6902,9 @@ export function EditorShell({
                   scopeLabel={title.trim() || UNTITLED_WRITING_TITLE}
                   open={isAgentPanelOpen}
                   onOpenChange={setIsAgentPanelOpen}
+                  onOpenDocument={(documentId) => {
+                    router.push(buildWritingRouteHref("/write", { id: documentId, slug: null }))
+                  }}
                 />
               </Suspense>
             ) : (
