@@ -44,6 +44,20 @@ export type ToolResult =
   | { kind: "contradictions"; proposals: ContradictionProposal[] }
   | { kind: "merge"; merge: MergeReviewToolResult }
 
+/**
+ * Which Writing/Workspace was active when a message was produced (ODE-502).
+ * The `AgentSession` itself now outlives tab changes, so each message needs
+ * its own frozen record of the location it was actually grounded in — the
+ * session's "current" scope keeps moving, but a past message must not be
+ * reinterpreted as if it had been asked/answered somewhere else.
+ */
+export type WorkspaceAgentMessageContext = {
+  scopeKind: "document" | "workspace"
+  scopeId: string
+  scopeLabel: string | null
+  workspaceRootPath: string | null
+}
+
 export type AgentMessage = {
   id: string
   role: "user" | "agent"
@@ -56,6 +70,8 @@ export type AgentMessage = {
   citedDocuments?: WorkspaceAgentCitedDocument[]
   /** The predetermined action's result, if this message announced one. */
   toolResult?: ToolResult
+  /** The Writing/Workspace this message was produced against — set once, at creation. */
+  context?: WorkspaceAgentMessageContext
 }
 
 let messageSequence = 0
@@ -72,8 +88,13 @@ export function createAgentMessageId(prefix: "user" | "agent"): string {
   return `${prefix}-${Date.now()}-${messageSequence}`
 }
 
-export function createToolResultMessage(text: string, toolResult?: ToolResult, id?: string): AgentMessage {
-  return { id: id ?? createAgentMessageId("agent"), role: "agent", text, toolResult }
+export function createToolResultMessage(
+  text: string,
+  toolResult?: ToolResult,
+  id?: string,
+  context?: WorkspaceAgentMessageContext,
+): AgentMessage {
+  return { id: id ?? createAgentMessageId("agent"), role: "agent", text, toolResult, context }
 }
 
 export function createApproval(action: WorkspaceAgentAction, resource: string): WorkspaceAgentApproval {

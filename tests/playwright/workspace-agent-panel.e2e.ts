@@ -65,19 +65,34 @@ test("opens the agent independently, preserves dropped context in chat, and reop
   await expect(page.getByTestId("workspace-agent-message-context")).toContainText("context.md")
   await page.screenshot({ path: "output/playwright/ode-486/agent-reopened.png" })
 
+  // ODE-502: switching to a different Writing changes the scope the panel is
+  // grounded in, but the AgentSession itself (history, draft, pending review
+  // state) is application state, not content-keyed — it must survive the
+  // switch instead of remounting from scratch.
   const previousScopeId = await page.getByTestId("workspace-agent-panel").getAttribute("data-scope-id")
-  const resetStartedAt = await page.evaluate(() => performance.now())
+  const switchStartedAt = await page.evaluate(() => performance.now())
   await page.locator('button[aria-label="New Artifact"]').last().click()
   await expect.poll(async () => page.getByTestId("workspace-agent-panel").getAttribute("data-scope-id"))
     .not.toBe(previousScopeId)
-  const documentResetMs = await page.evaluate((startedAt) => performance.now() - startedAt, resetStartedAt)
+  const documentSwitchMs = await page.evaluate((startedAt) => performance.now() - startedAt, switchStartedAt)
+  await expect(page.getByTestId("workspace-agent-chat")).toContainText("Summarize this context")
+  await expect(page.getByTestId("workspace-agent-message-context")).toContainText("context.md")
+  await mkdir("output/playwright/ode-502", { recursive: true })
+  await page.screenshot({ path: "output/playwright/ode-502/agent-tab-switch-preserved.png" })
+
+  // The prior turn's message keeps the label of the Writing it was actually
+  // asked from, now that we're grounded somewhere else.
+  await expect(page.getByTestId("workspace-agent-message-scope")).toBeVisible()
+
+  // "New conversation" is the only thing that resets the session.
+  await page.getByTestId("workspace-agent-new-conversation").click()
   await expect(page.getByTestId("workspace-agent-chat")).toHaveCount(0)
   await expect(page.getByTestId("workspace-agent-context")).toHaveCount(0)
-  await expect(page.getByTestId("workspace-agent-results")).toHaveCount(0)
-  await page.screenshot({ path: "output/playwright/ode-486/agent-document-switch-reset.png" })
+  await page.screenshot({ path: "output/playwright/ode-502/agent-new-conversation.png" })
+
   await writeFile(
-    "output/playwright/ode-486/agent-performance.json",
-    `${JSON.stringify({ panelOpenMs, panelReopenMs, documentResetMs }, null, 2)}\n`,
+    "output/playwright/ode-502/agent-performance.json",
+    `${JSON.stringify({ panelOpenMs, panelReopenMs, documentSwitchMs }, null, 2)}\n`,
     "utf8",
   )
 })
