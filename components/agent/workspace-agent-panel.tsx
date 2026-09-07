@@ -33,7 +33,6 @@ import {
   type WorkspaceAgentAskRun,
   type WorkspaceAgentCitedDocument,
   type WorkspaceAgentClassificationRun,
-  type WorkspaceAgentClassificationRequestedDocument,
   type WorkspaceAgentSelection,
   type WorkspaceAgentService,
 } from "@/lib/services/workspace-agent-service"
@@ -45,11 +44,20 @@ import type {
   WorkflowDraftProposal,
 } from "@/lib/agent/workspace-agent-analysis"
 import type {
-  WorkspaceAgentAction,
   WorkspaceAgentApproval,
 } from "@/lib/services/contracts/workspace-agent"
 import { MAX_WORKSPACE_CLASSIFICATION_TARGETS } from "@/lib/ai/workspace-classification"
 import { MAX_WORKSPACE_ASK_TARGETS } from "@/lib/ai/workspace-ask"
+import {
+  approveArchiveCandidate,
+  approveClassificationProposal,
+  approveWorkflowDraft,
+  createApproval,
+  createToolResultMessage,
+  type AgentMessage,
+  type ToolResult,
+  type WorkspaceAgentContextAttachment,
+} from "@/lib/agent/workspace-agent-chat"
 import { useWorkspaceAgentDropZone, type WorkspaceAgentDragPayload } from "@/components/agent/workspace-agent-drag"
 import {
   ReviewShellCancelButton,
@@ -64,7 +72,7 @@ import {
 import { ClassificationReviewBody } from "@/components/agent/workspace-agent-review-classify"
 import { ArchiveReviewBody } from "@/components/agent/workspace-agent-review-archive"
 import { ContradictionReviewCard } from "@/components/agent/workspace-agent-review-contradict"
-import { buildMergeMock, MergeReviewBody, type MergeReviewToolResult } from "@/components/agent/workspace-agent-review-merge"
+import { buildMergeMock, MergeReviewBody } from "@/components/agent/workspace-agent-review-merge"
 import { cn } from "@/lib/utils"
 
 const CHAT_TEXTAREA_MAX_HEIGHT = 160
@@ -74,12 +82,7 @@ export type WorkspaceAgentScope =
   | { kind: "document"; id: string }
   | { kind: "workspace"; rootId: string }
 
-export type WorkspaceAgentContextAttachment = {
-  kind: "file" | "folder"
-  id?: string
-  path: string
-  label: string
-}
+export type { WorkspaceAgentContextAttachment }
 
 export type WorkspaceAgentDocumentSnapshot = {
   documentId: string
@@ -106,40 +109,7 @@ export type WorkspaceAgentPanelProps = {
   getDocumentSnapshot?: () => WorkspaceAgentDocumentSnapshot | null
 }
 
-/**
- * The structured result of a predetermined action, carried by the chat
- * message that announced it instead of a parallel `useState` per card type.
- * This is what lets the review card render inline, right under the message
- * that produced it, and keeps every past run's card visible in history
- * instead of one run silently overwriting another's UI state.
- */
-export type ToolResult =
-  | { kind: "workflow"; proposal: WorkflowDraftProposal }
-  | { kind: "broken-links"; proposals: BrokenReferenceProposal[] }
-  | {
-      kind: "classification"
-      summary: string
-      proposals: ClassificationProposal[]
-      requestedDocumentIds: string[]
-      requestedDocuments: WorkspaceAgentClassificationRequestedDocument[]
-    }
-  | { kind: "archive"; candidates: ArchiveCandidate[] }
-  | { kind: "contradictions"; proposals: ContradictionProposal[] }
-  | { kind: "merge"; merge: MergeReviewToolResult }
-
-type AgentMessage = {
-  id: string
-  role: "user" | "agent"
-  text: string
-  attachments?: WorkspaceAgentContextAttachment[]
-  /** A short processing note (e.g. which artifacts were auto-selected), rendered separately from the answer itself. */
-  note?: string | null
-  isError?: boolean
-  /** Documents the model could see while answering, used to turn `` `filename` `` mentions into open-document links. */
-  citedDocuments?: WorkspaceAgentCitedDocument[]
-  /** The predetermined action's result, if this message announced one. */
-  toolResult?: ToolResult
-}
+export type { ToolResult, AgentMessage }
 
 /**
  * Chat must never go silent: every submitted question resolves to either an
@@ -149,19 +119,6 @@ type AgentMessage = {
 type AskOutcome =
   | { ok: true; run: WorkspaceAgentAskRun; autoSelectedNotice: string | null }
   | { ok: false; message: string }
-
-function createApproval(action: WorkspaceAgentAction, resource: string): WorkspaceAgentApproval {
-  const approvalId = typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${action}-${Date.now()}`
-  return {
-    action,
-    approvalId,
-    approved: true,
-    approvedAt: new Date().toISOString(),
-    resource,
-  }
-}
 
 function uniqueDocumentIds(attachments: WorkspaceAgentContextAttachment[], scope: WorkspaceAgentScope): string[] {
   const ids = attachments
@@ -189,16 +146,21 @@ function classificationSelection(
   return selection
 }
 
-function workflowNote(proposal: WorkflowDraftProposal): string {
-  return proposal.existingDocumentId
+/**
+ * These build the deterministic, factual bullets handed to the presentation
+ * stage (ODE-491) — the LLM call only decides how to phrase them in the
+ * conversation's language/tone, it never adds to or drops from this list.
+ */
+function workflowFacts(proposal: WorkflowDraftProposal): string[] {
+  return [proposal.existingDocumentId
     ? "A new workflow.md revision is ready to review below."
-    : "A workflow.md draft is ready to review below."
+    : "A workflow.md draft is ready to review below."]
 }
 
-function brokenReferencesNote(proposals: BrokenReferenceProposal[]): string {
-  return proposals.length === 0
+function brokenReferencesFacts(proposals: BrokenReferenceProposal[]): string[] {
+  return [proposals.length === 0
     ? "No broken internal references were found."
-    : `${proposals.length} broken reference(s) need review below.`
+    : `${proposals.length} broken reference(s) need review below.`]
 }
 
 function askChatMessage(run: WorkspaceAgentAskRun): string {
@@ -247,10 +209,10 @@ async function resolveChatSelection(
   }
 }
 
-function archiveCandidatesNote(candidates: ArchiveCandidate[]): string {
-  return candidates.length === 0
+function archiveCandidatesFacts(candidates: ArchiveCandidate[]): string[] {
+  return [candidates.length === 0
     ? "No stale or duplicate artifacts were found."
-    : `${candidates.length} archive candidate(s) need review below.`
+    : `${candidates.length} archive candidate(s) need review below.`]
 }
 
 /** Renders `` `filename.md` `` spans from agent prose as bold text instead of literal backticks. */
@@ -415,7 +377,7 @@ function WorkspaceAgentPanelSession({
    * silently overwriting the previous one.
    */
   const pushAgentNote = useCallback((text: string, toolResult?: ToolResult) => {
-    setMessages((current) => [...current, { id: `agent-${Date.now()}`, role: "agent", text, toolResult }])
+    setMessages((current) => [...current, createToolResultMessage(text, toolResult)])
     setFeedback(null)
   }, [])
 
@@ -483,7 +445,8 @@ function WorkspaceAgentPanelSession({
       setFeedback(proposal.error?.message ?? "Workflow draft could not be generated.")
       return
     }
-    announceToolResult(workflowNote(proposal.data), { kind: "workflow", proposal: proposal.data })
+    const note = await service.presentNote("workflow", workflowFacts(proposal.data), sessionActionLogRef.current)
+    announceToolResult(note, { kind: "workflow", proposal: proposal.data })
   }), [announceToolResult, runAction, service])
 
   const runBrokenReferences = useCallback(() => runAction("broken-links", async () => {
@@ -496,7 +459,8 @@ function WorkspaceAgentPanelSession({
       return
     }
     setBrokenReferenceReplacements({})
-    announceToolResult(brokenReferencesNote(response.data), { kind: "broken-links", proposals: response.data })
+    const note = await service.presentNote("broken-links", brokenReferencesFacts(response.data), sessionActionLogRef.current)
+    announceToolResult(note, { kind: "broken-links", proposals: response.data })
   }), [announceToolResult, getWorkflowReadApproval, runAction, service])
 
   const executeClassification = useCallback(async (request: string): Promise<WorkspaceAgentClassificationRun | null> => {
@@ -523,8 +487,13 @@ function WorkspaceAgentPanelSession({
     const run = resolved.autoSelectedNotice
       ? { ...response.data, summary: `${resolved.autoSelectedNotice} ${response.data.summary}` }
       : response.data
+    const classificationFacts = [
+      run.summary,
+      run.proposals.length > 0 ? "The proposals are ready to review below." : null,
+    ].filter((fact): fact is string => Boolean(fact))
+    const note = await service.presentNote("classification", classificationFacts, sessionActionLogRef.current)
     announceToolResult(
-      run.proposals.length === 0 ? run.summary : `${run.summary} See the review below.`,
+      note,
       {
         kind: "classification",
         summary: run.summary,
@@ -596,7 +565,8 @@ function WorkspaceAgentPanelSession({
       setFeedback(response.error?.message ?? "Archive candidates could not be checked.")
       return
     }
-    announceToolResult(archiveCandidatesNote(response.data), { kind: "archive", candidates: response.data })
+    const note = await service.presentNote("archive", archiveCandidatesFacts(response.data), sessionActionLogRef.current)
+    announceToolResult(note, { kind: "archive", candidates: response.data })
   }), [announceToolResult, getWorkflowReadApproval, runAction, service])
 
   const runContradictions = useCallback(() => runAction("contradictions", async () => {
@@ -612,12 +582,13 @@ function WorkspaceAgentPanelSession({
       setFeedback(response.error?.message ?? "Contradictions could not be compared.")
       return
     }
-    announceToolResult(
+    const contradictionFacts = [
       response.data.length === 0
         ? "No contradictions were found in the selected artifacts."
         : `${response.data.length} contradiction(s) added to the review queue below.`,
-      { kind: "contradictions", proposals: response.data },
-    )
+    ]
+    const note = await service.presentNote("contradictions", contradictionFacts, sessionActionLogRef.current)
+    announceToolResult(note, { kind: "contradictions", proposals: response.data })
   }), [announceToolResult, documentIds, getWorkflowReadApproval, runAction, service])
 
   /**
@@ -647,7 +618,9 @@ function WorkspaceAgentPanelSession({
       })
     }
     const merge = buildMergeMock(sources)
-    announceToolResult(`Combined ${sources.length} artifacts into a ${merge.sections.length}-section draft below (preview only — see below).`, { kind: "merge", merge })
+    const mergeFacts = [`Combined ${sources.length} artifacts into a ${merge.sections.length}-section draft (preview only).`]
+    const note = await service.presentNote("merge", mergeFacts, sessionActionLogRef.current)
+    announceToolResult(note, { kind: "merge", merge })
   }), [announceToolResult, documentIds, runAction, service])
 
   /**
@@ -724,8 +697,7 @@ function WorkspaceAgentPanelSession({
 
   const applyWorkflow = useCallback((messageId: string, proposal: WorkflowDraftProposal) => runAction("apply-workflow", async () => {
     if (!service) return
-    const resource = proposal.existingDocumentId ?? proposal.canonicalPath
-    const response = await service.applyWorkflow(proposal, createApproval("write", resource))
+    const response = await approveWorkflowDraft(service, proposal)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "The workflow draft could not be written.")
       return
@@ -742,7 +714,7 @@ function WorkspaceAgentPanelSession({
 
   const applyClassification = useCallback((messageId: string, proposal: ClassificationProposal) => runAction("apply-classification", async () => {
     if (!service) return
-    const response = await service.applyClassification(proposal, createApproval("edit", proposal.documentId))
+    const response = await approveClassificationProposal(service, proposal)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "The vocabulary classification could not be applied.")
       return
@@ -760,7 +732,7 @@ function WorkspaceAgentPanelSession({
     const appliedIds = new Set<string>()
     let failure: string | null = null
     for (const proposal of proposals) {
-      const response = await service.applyClassification(proposal, createApproval("edit", proposal.documentId))
+      const response = await approveClassificationProposal(service, proposal)
       if (response.error || !response.data) {
         failure = response.error?.message ?? `${proposal.documentTitle} could not be updated.`
         break
@@ -778,7 +750,7 @@ function WorkspaceAgentPanelSession({
 
   const applyArchiveCandidate = useCallback((messageId: string, candidate: ArchiveCandidate) => runAction("apply-archive", async () => {
     if (!service) return
-    const response = await service.applyArchiveCandidate(candidate, createApproval("edit", candidate.documentId))
+    const response = await approveArchiveCandidate(service, candidate)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "The archive candidate could not be updated.")
       return
@@ -796,7 +768,7 @@ function WorkspaceAgentPanelSession({
     const appliedIds = new Set<string>()
     let failure: string | null = null
     for (const candidate of candidates) {
-      const response = await service.applyArchiveCandidate(candidate, createApproval("edit", candidate.documentId))
+      const response = await approveArchiveCandidate(service, candidate)
       if (response.error || !response.data) {
         failure = response.error?.message ?? `${candidate.title} could not be updated.`
         break

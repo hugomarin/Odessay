@@ -38,6 +38,7 @@ import type {
   WorkspaceClassificationDocument,
   WorkspaceClassificationRequest,
   WorkspaceClassificationResult,
+  WorkspaceToolPresentationRequest,
 } from "@/lib/services/contracts/ai-service"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
@@ -674,6 +675,19 @@ export type WorkspaceAgentService = {
   askAgent(
     input: WorkspaceAgentAskInput,
   ): Promise<ServiceResponse<WorkspaceAgentAskRun>>
+  /**
+   * Presentation stage of the pipeline (ODE-491): phrases facts already
+   * established by a predetermined action's deterministic result as one
+   * chat note, in the conversation's language and tone, without adding or
+   * dropping a finding. Always resolves to a usable note — falls back to a
+   * plain join of the facts if the AI call fails — so the chat can never
+   * go silent over a presentation failure.
+   */
+  presentNote(
+    kind: WorkspaceToolPresentationRequest["kind"],
+    facts: readonly string[],
+    sessionContext?: readonly string[],
+  ): Promise<string>
   applyClassification(
     proposal: ClassificationProposal,
     approval: WorkspaceAgentApproval,
@@ -1017,6 +1031,17 @@ export async function createWorkspaceAgentService(
           path: record.binding?.relativePath ?? null,
         })),
       })
+    },
+    async presentNote(kind, facts, sessionContext) {
+      const cleanFacts = facts.map((fact) => fact.trim()).filter(Boolean)
+      if (cleanFacts.length === 0) return ""
+      const fallback = cleanFacts.join(" ")
+      const result = await getAIService().presentToolResult({
+        kind,
+        facts: cleanFacts,
+        recentSessionActions: sessionContext ? [...sessionContext] : undefined,
+      })
+      return result.data?.note?.trim() || fallback
     },
     async applyClassification(proposal, approval) {
       if (proposal.decision !== "change") {
