@@ -236,6 +236,24 @@ export type WorkspaceAskResult = {
   usage: AiUsage | null
 }
 
+/**
+ * The presentation stage of the Workspace agent pipeline (ODE-491):
+ * `facts` are already-established, deterministic facts computed by a tool
+ * or workflow — this call only decides how they are phrased in the chat,
+ * matching the conversation's language and tone. It never adds a finding.
+ */
+export type WorkspaceToolPresentationRequest = {
+  kind: "workflow" | "broken-links" | "classification" | "archive" | "contradictions" | "merge"
+  facts: string[]
+  /** Short summaries of what happened earlier in this chat session, most recent last, for language/tone continuity only. */
+  recentSessionActions?: string[]
+}
+
+export type WorkspaceToolPresentationResult = {
+  note: string
+  usage: AiUsage | null
+}
+
 export type PersistedCorrectionBlock = {
   id: string
   writingId: string
@@ -279,6 +297,7 @@ export interface AIService {
   reviewPublication(input: PublicationReviewRequest): Promise<ServiceResponse<PublicationReviewResult>>
   classifyWorkspace(input: WorkspaceClassificationRequest): Promise<ServiceResponse<WorkspaceClassificationResult>>
   askWorkspace(input: WorkspaceAskRequest): Promise<ServiceResponse<WorkspaceAskResult>>
+  presentToolResult(input: WorkspaceToolPresentationRequest): Promise<ServiceResponse<WorkspaceToolPresentationResult>>
   hydrateCorrectionBlocks(writingId: string): Promise<ServiceResponse<PersistedCorrectionBlock[]>>
   persistCorrectionBlock(input: PersistCorrectionBlockInput): Promise<ServiceResponse<PersistCorrectionBlockResult>>
   listLearnedWords(input?: ListLearnedWordsInput): Promise<ServiceResponse<LearnedWordsPage>>
@@ -336,6 +355,14 @@ export const AI_SERVICE_CONTRACT = {
       summary: "Answer a free-form question grounded in selected (or auto-selected recent) document content, always returning a helpful answer rather than a hard requirement for a specific action.",
       input: ["user question", "selected document bodies", "catalog metadata", "workflow", "collections", "annotations"],
       output: ["WorkspaceAskResult"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
+    },
+    {
+      name: "presentToolResult",
+      kind: "command",
+      summary: "Phrase an already-computed tool or workflow result as one short chat note in the conversation's language and tone, without adding, dropping, or verifying a finding.",
+      input: ["action kind", "deterministic facts", "optional recent session memory"],
+      output: ["WorkspaceToolPresentationResult"],
       errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
     },
     {

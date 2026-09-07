@@ -17,6 +17,7 @@ const contextMocks = vi.hoisted(() => ({
 const aiMocks = vi.hoisted(() => ({
   classifyWorkspace: vi.fn(),
   askWorkspace: vi.fn(),
+  presentToolResult: vi.fn(),
 }))
 
 vi.mock("@/lib/services/document-catalog-factory", () => ({
@@ -1054,5 +1055,57 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     expect(secondResolution.error).toBeNull()
     expect(documents.get("left")?.markdown).toBe("Storage: IndexedDB.\nThe editor does not use local files.")
     expect(tools.edit).toHaveBeenCalledTimes(2)
+  })
+
+  describe("presentNote (ODE-491 — presentation stage of the pipeline)", () => {
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+
+    beforeEach(() => {
+      aiMocks.presentToolResult.mockReset()
+    })
+
+    it("phrases the given facts using the AI-authored note", async () => {
+      aiMocks.presentToolResult.mockResolvedValueOnce({
+        data: { note: "3 referencias rotas necesitan revisión.", usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const note = await service.presentNote("broken-links", ["3 broken reference(s) need review below."], ["¿Qué encontraste?"])
+
+      expect(note).toBe("3 referencias rotas necesitan revisión.")
+      expect(aiMocks.presentToolResult).toHaveBeenCalledWith({
+        kind: "broken-links",
+        facts: ["3 broken reference(s) need review below."],
+        recentSessionActions: ["¿Qué encontraste?"],
+      })
+    })
+
+    it("falls back to a plain join of the facts when the AI call fails, so the chat never goes silent", async () => {
+      aiMocks.presentToolResult.mockResolvedValueOnce({
+        data: null,
+        error: { code: "AI_REQUEST_FAILED", message: "unavailable", retryable: true },
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const note = await service.presentNote("archive", ["No stale or duplicate artifacts were found."])
+
+      expect(note).toBe("No stale or duplicate artifacts were found.")
+    })
+
+    it("never calls the AI adapter when there are no facts to present", async () => {
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const note = await service.presentNote("merge", [])
+
+      expect(note).toBe("")
+      expect(aiMocks.presentToolResult).not.toHaveBeenCalled()
+    })
   })
 })
