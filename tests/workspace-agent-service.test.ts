@@ -7,7 +7,7 @@ import type {
 } from "@/lib/services/contracts/workspace-agent"
 import { suggestArtifactClassification } from "@/lib/agent/workspace-agent-analysis"
 import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
-import { createWorkspaceAgentService } from "@/lib/services/workspace-agent-service"
+import { askAboutDocument, createWorkspaceAgentService } from "@/lib/services/workspace-agent-service"
 
 const contextMocks = vi.hoisted(() => ({
   list: vi.fn(),
@@ -350,6 +350,105 @@ describe("WorkspaceAgentService contradiction workflow", () => {
 
     expect(result.error?.code).toBe("NOT_FOUND")
     expect(aiMocks.askWorkspace).not.toHaveBeenCalled()
+  })
+
+  describe("askAboutDocument (ODE-490 — no Workspace, BindingRoot, or catalog needed)", () => {
+    it("answers from a single document's live content with no catalog, tools, or filesystem access", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: {
+          answer: "This document decides to use SQLite for storage.",
+          evidence: [{ documentId: "draft-1", quote: "Storage: SQLite.", reason: "States the storage decision." }],
+          requestedDocumentIds: [],
+          usage: null,
+        },
+        error: null,
+      })
+
+      const result = await askAboutDocument({
+        question: "What storage does this use?",
+        documentId: "draft-1",
+        title: "Untitled draft",
+        markdown: "Storage: SQLite.",
+      })
+
+      expect(result.error).toBeNull()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+        question: "What storage does this use?",
+        targetDocumentIds: ["draft-1"],
+        documents: [expect.objectContaining({ id: "draft-1", title: "Untitled draft", markdown: "Storage: SQLite." })],
+        collections: [],
+        catalogTruncated: false,
+      }))
+      expect(result.data).toMatchObject({
+        answer: "This document decides to use SQLite for storage.",
+        evidence: [expect.objectContaining({ quote: "Storage: SQLite.", line: 1 })],
+        documents: [{ documentId: "draft-1", title: "Untitled draft", path: null }],
+      })
+      // Nothing here goes through the desktop tools layer or the document
+      // catalog — an empty conversational exchange creates no side effect.
+      expect(contextMocks.list).not.toHaveBeenCalled()
+    })
+
+    it("answers a purely conversational question against a blank, unmaterialized draft", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "¡Hola! ¿En qué te ayudo?", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+
+      const result = await askAboutDocument({
+        question: "hola",
+        documentId: "draft-blank",
+        title: null,
+        markdown: "",
+      })
+
+      expect(result.error).toBeNull()
+      expect(result.data?.answer).toBe("¡Hola! ¿En qué te ayudo?")
+      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+        documents: [expect.objectContaining({ id: "draft-blank", title: null, markdown: "" })],
+      }))
+    })
+
+    it("drops evidence whose quote isn't actually present in the document", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: {
+          answer: "This document mentions PostgreSQL.",
+          evidence: [{ documentId: "draft-1", quote: "Storage: PostgreSQL.", reason: "Hallucinated quote." }],
+          requestedDocumentIds: [],
+          usage: null,
+        },
+        error: null,
+      })
+
+      const result = await askAboutDocument({
+        question: "What storage does this use?",
+        documentId: "draft-1",
+        title: "Draft",
+        markdown: "Storage: SQLite.",
+      })
+
+      expect(result.error).toBeNull()
+      expect(result.data?.evidence).toEqual([])
+    })
+
+    it("forwards recent session actions as memory, same as the Workspace-backed ask", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "As before.", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+
+      await askAboutDocument({
+        question: "And in Spanish?",
+        documentId: "draft-1",
+        title: "Draft",
+        markdown: "Storage: SQLite.",
+        sessionContext: ["Q: What storage does this use?\nA: SQLite."],
+      })
+
+      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+        recentSessionActions: ["Q: What storage does this use?\nA: SQLite."],
+      }))
+    })
   })
 
   it("uses a workflow-specific read approval only when proposing an existing workflow", async () => {

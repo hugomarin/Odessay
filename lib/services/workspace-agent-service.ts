@@ -8,6 +8,7 @@ import {
 import {
   MAX_WORKSPACE_ASK_BODY_CHARS,
   MAX_WORKSPACE_ASK_CATALOG_DOCUMENTS,
+  MAX_WORKSPACE_ASK_DOCUMENT_CHARS,
   MAX_WORKSPACE_ASK_TARGETS,
 } from "@/lib/ai/workspace-ask"
 import {
@@ -221,6 +222,77 @@ export type WorkspaceAgentAskRun = {
   targetDocumentIds: string[]
   /** Every document the model could see while answering, so the UI can turn `` `filename` `` mentions into open-document links. */
   documents: WorkspaceAgentCitedDocument[]
+}
+
+export type WorkspaceAgentDocumentAskInput = {
+  question: string
+  documentId: string
+  title: string | null
+  markdown: string
+  sessionContext?: readonly string[]
+}
+
+/**
+ * Answers a question grounded in a single document's live content — the
+ * Writing currently open in the editor — without a Workspace, BindingRoot,
+ * or DocumentCatalog. Nothing here touches the filesystem or the desktop
+ * tools layer, so it works for an unmaterialized draft, a Writing outside
+ * any visible Workspace, and on the web/cloud runtime alike (ODE-490):
+ * `askWorkspace` only needs a bounded catalog slice, and one in-memory
+ * document is a valid (if minimal) slice.
+ */
+export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): Promise<ServiceResponse<WorkspaceAgentAskRun>> {
+  const title = input.title?.trim() || null
+  const aiRequest: WorkspaceAskRequest = {
+    question: input.question.slice(0, 2_000),
+    targetDocumentIds: [input.documentId],
+    documents: [{
+      id: input.documentId,
+      title,
+      relativePath: null,
+      currentArtifactType: null,
+      currentStatus: null,
+      visibility: null,
+      version: null,
+      modifiedAt: null,
+      excerpt: null,
+      references: [],
+      markdown: input.markdown.slice(0, MAX_WORKSPACE_ASK_DOCUMENT_CHARS),
+    }],
+    collections: [],
+    documentCollectionIds: {},
+    annotations: [],
+    workflowMarkdown: null,
+    catalogTruncated: false,
+    recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
+  }
+  const aiResult = await getAIService().askWorkspace(aiRequest)
+  if (aiResult.error || !aiResult.data) {
+    return error(aiResult.error?.code ?? "AI_REQUEST_FAILED", aiResult.error?.message ?? "The Workspace agent could not answer right now.")
+  }
+
+  const validEvidence = aiResult.data.evidence.filter((item) => item.documentId === input.documentId && input.markdown.includes(item.quote))
+  const evidence: EvidenceCitation[] = validEvidence.flatMap((item) => {
+    const line = lineForQuote(input.markdown, item.quote)
+    if (line === null) return []
+    return [{
+      kind: "document",
+      sourceId: input.documentId,
+      label: title ?? input.documentId,
+      detail: item.reason,
+      quote: item.quote,
+      line,
+    }]
+  })
+
+  return ok({
+    answer: aiResult.data.answer,
+    evidence,
+    requestedDocumentIds: [],
+    requestedDocuments: [],
+    targetDocumentIds: [input.documentId],
+    documents: [{ documentId: input.documentId, title: title ?? input.documentId, path: null }],
+  })
 }
 
 const DEFAULT_CLASSIFICATION_REQUEST = "Review these artifacts and propose their type and status with evidence."
