@@ -48,6 +48,7 @@ import {
   updateMarkdownAnnotation,
 } from "@/lib/editor/footnote-extension"
 import type { AnnotationPanelEntry } from "@/components/editor/panels/notes-panel"
+import type { WorkspaceAgentDocumentSnapshot } from "@/components/agent/workspace-agent-panel"
 import {
   convertHtmlTablesToMarkdown,
   materializeMarkdownForRichParser,
@@ -4254,6 +4255,15 @@ export function EditorShell({
     [automaticCorrectionSuggestions, currentDocumentMarkdown],
   )
 
+  // Lets the Workspace agent chat answer from the Writing's live content
+  // when no Workspace is available to ground it (unmaterialized draft, or a
+  // Writing outside any visible Workspace) — no filesystem/catalog read,
+  // just what's already in the editor (ODE-490).
+  const getAgentDocumentSnapshot = useCallback((): WorkspaceAgentDocumentSnapshot | null => {
+    if (!currentWritingId) return null
+    return { documentId: currentWritingId, title: title.trim() || null, markdown: currentDocumentMarkdown }
+  }, [currentDocumentMarkdown, currentWritingId, title])
+
 
   useEffect(() => {
     currentDocumentMarkdownRef.current = currentDocumentMarkdown
@@ -6890,7 +6900,7 @@ export function EditorShell({
             data-testid="workspace-agent-focus-host"
             aria-hidden={isFocusMode}
             className={cn(
-              "-mb-2.5 -mt-1.5 flex min-h-0 shrink-0 self-stretch",
+              "flex min-h-0 shrink-0 self-stretch",
               isFocusMode && "hidden",
             )}
           >
@@ -6905,6 +6915,7 @@ export function EditorShell({
                   onOpenDocument={(documentId) => {
                     router.push(buildWritingRouteHref("/write", { id: documentId, slug: null }))
                   }}
+                  getDocumentSnapshot={getAgentDocumentSnapshot}
                 />
               </Suspense>
             ) : (

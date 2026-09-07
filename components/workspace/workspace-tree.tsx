@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, FileText, Folder, Home } from "lucide-react";
 import { buildWorkspaceFolderTree } from "@/lib/workspace/folder-tree";
 import type { WorkspaceFolderTreeNode } from "@/lib/workspace/folder-tree";
+import { startWorkspaceAgentDrag } from "@/components/agent/workspace-agent-drag";
 import { cn } from "@/lib/utils";
 
 export type WorkspaceTreeItem = {
@@ -94,19 +95,16 @@ function TreeRow({
           aria-selected={active}
           aria-current={active ? "page" : undefined}
           disabled={disabled}
-          draggable={Boolean(onDragStart)}
-          onDragStart={(event) => {
+          onPointerDown={onDragStart ? (event) => {
             const payload: WorkspaceTreeDragPayload = {
               kind: "file",
               id: fileId,
               path: node.path,
               label: node.name.replace(/\.md$/i, ""),
             };
-            event.dataTransfer.effectAllowed = "copy";
-            event.dataTransfer.setData("application/x-odessay-agent-context", JSON.stringify(payload));
-            event.dataTransfer.setData("text/plain", JSON.stringify(payload));
-            onDragStart?.(payload);
-          }}
+            startWorkspaceAgentDrag(event, payload);
+            onDragStart(payload);
+          } : undefined}
           onClick={() => onOpenFile?.(fileId)}
           style={{ paddingLeft: `${8 + depth * 18}px` }}
           className={cn(
@@ -146,18 +144,15 @@ function TreeRow({
         aria-expanded={hasChildren ? expanded : undefined}
         aria-selected={isSelected}
         disabled={folderDisabled}
-        draggable={Boolean(onDragStart)}
-        onDragStart={(event) => {
+        onPointerDown={onDragStart ? (event) => {
           const payload: WorkspaceTreeDragPayload = {
             kind: "folder",
             path: node.path,
             label: node.name,
           };
-          event.dataTransfer.effectAllowed = "copy";
-          event.dataTransfer.setData("application/x-odessay-agent-context", JSON.stringify(payload));
-          event.dataTransfer.setData("text/plain", JSON.stringify(payload));
-          onDragStart?.(payload);
-        }}
+          startWorkspaceAgentDrag(event, payload);
+          onDragStart(payload);
+        } : undefined}
         onClick={() => {
           if (mode === "detail") {
             onSelectFolder?.(node.path);

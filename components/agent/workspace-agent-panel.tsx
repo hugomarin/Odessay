@@ -1,23 +1,34 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
+  AlertCircle,
   Archive,
+  ArrowRight,
   Bot,
-  Check,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
+  CornerDownLeft,
   FileText,
   Folder,
   GitCompareArrows,
+  Link2Off,
   Loader2,
+  Merge as MergeIcon,
   MessageCircle,
   Paperclip,
-  Send,
+  PanelRightOpen,
+  PictureInPicture2,
+  SlidersHorizontal,
   Sparkles,
   Workflow,
   X,
+  Zap,
 } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
+  askAboutDocument,
   getWorkspaceAgentService,
   type WorkspaceAgentAskRun,
   type WorkspaceAgentCitedDocument,
@@ -39,7 +50,21 @@ import type {
 } from "@/lib/services/contracts/workspace-agent"
 import { MAX_WORKSPACE_CLASSIFICATION_TARGETS } from "@/lib/ai/workspace-classification"
 import { MAX_WORKSPACE_ASK_TARGETS } from "@/lib/ai/workspace-ask"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { useWorkspaceAgentDropZone, type WorkspaceAgentDragPayload } from "@/components/agent/workspace-agent-drag"
+import {
+  ReviewShellCancelButton,
+  ReviewShellPrimaryButton,
+  WorkspaceAgentReviewShell,
+} from "@/components/agent/workspace-agent-review-shell"
+import { WorkflowReviewBody } from "@/components/agent/workspace-agent-review-workflow"
+import {
+  BrokenLinksReviewBody,
+  type WorkspaceAgentSearchableDocument,
+} from "@/components/agent/workspace-agent-review-links"
+import { ClassificationReviewBody } from "@/components/agent/workspace-agent-review-classify"
+import { ArchiveReviewBody } from "@/components/agent/workspace-agent-review-archive"
+import { ContradictionReviewCard } from "@/components/agent/workspace-agent-review-contradict"
+import { buildMergeMock, MergeReviewBody, type MergeReviewToolResult } from "@/components/agent/workspace-agent-review-merge"
 import { cn } from "@/lib/utils"
 
 const CHAT_TEXTAREA_MAX_HEIGHT = 160
@@ -56,6 +81,12 @@ export type WorkspaceAgentContextAttachment = {
   label: string
 }
 
+export type WorkspaceAgentDocumentSnapshot = {
+  documentId: string
+  title: string | null
+  markdown: string
+}
+
 export type WorkspaceAgentPanelProps = {
   scope: WorkspaceAgentScope
   workspaceRootPath?: string | null
@@ -64,6 +95,15 @@ export type WorkspaceAgentPanelProps = {
   onOpenChange?: (open: boolean) => void
   /** Opens a document by id (e.g. in a preview) when the user clicks a file the agent cited in chat. */
   onOpenDocument?: (documentId: string) => void
+  /**
+   * Returns the current Writing's live content (id, title, markdown) on
+   * demand, read straight from the editor in memory. Chat falls back to
+   * this — no Workspace, BindingRoot, or filesystem needed — whenever no
+   * Workspace is available: an unmaterialized draft, or a Writing outside
+   * any visible Workspace (ODE-490). Predetermined actions still require a
+   * real Workspace `service` and stay disabled without one.
+   */
+  getDocumentSnapshot?: () => WorkspaceAgentDocumentSnapshot | null
 }
 
 /**
@@ -73,7 +113,7 @@ export type WorkspaceAgentPanelProps = {
  * that produced it, and keeps every past run's card visible in history
  * instead of one run silently overwriting another's UI state.
  */
-type ToolResult =
+export type ToolResult =
   | { kind: "workflow"; proposal: WorkflowDraftProposal }
   | { kind: "broken-links"; proposals: BrokenReferenceProposal[] }
   | {
@@ -85,6 +125,7 @@ type ToolResult =
     }
   | { kind: "archive"; candidates: ArchiveCandidate[] }
   | { kind: "contradictions"; proposals: ContradictionProposal[] }
+  | { kind: "merge"; merge: MergeReviewToolResult }
 
 type AgentMessage = {
   id: string
@@ -119,23 +160,6 @@ function createApproval(action: WorkspaceAgentAction, resource: string): Workspa
     approved: true,
     approvedAt: new Date().toISOString(),
     resource,
-  }
-}
-
-function parseAttachment(event: DragEvent<HTMLElement>): WorkspaceAgentContextAttachment | null {
-  const raw = event.dataTransfer.getData("application/x-odessay-agent-context") || event.dataTransfer.getData("text/plain")
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as Partial<WorkspaceAgentContextAttachment>
-    if ((parsed.kind !== "file" && parsed.kind !== "folder") || !parsed.path || !parsed.label) return null
-    return {
-      kind: parsed.kind,
-      id: parsed.id,
-      path: parsed.path,
-      label: parsed.label,
-    }
-  } catch {
-    return null
   }
 }
 
@@ -281,11 +305,11 @@ function WorkspaceAgentPanelSession({
   open = true,
   onOpenChange,
   onOpenDocument,
+  getDocumentSnapshot,
 }: WorkspaceAgentPanelProps) {
   const [service, setService] = useState<WorkspaceAgentService | null>(null)
   const [serviceLoading, setServiceLoading] = useState(false)
   const [serviceError, setServiceError] = useState<string | null>(null)
-  const [isDropTarget, setIsDropTarget] = useState(false)
   const [attachments, setAttachments] = useState<WorkspaceAgentContextAttachment[]>([])
   const [brokenReferenceReplacements, setBrokenReferenceReplacements] = useState<Record<string, string>>({})
   const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set())
@@ -296,13 +320,19 @@ function WorkspaceAgentPanelSession({
   const [chatDraft, setChatDraft] = useState("")
   const [messages, setMessages] = useState<AgentMessage[]>([])
   const hasShownAutoSelectNotice = useRef(false)
-  const [isActionsExpanded, setIsActionsExpanded] = useState(true)
+  const [actionsOpen, setActionsOpen] = useState(false)
+  const [dockMode, setDockMode] = useState<"sidebar" | "float">("sidebar")
+  const [attachPickerOpen, setAttachPickerOpen] = useState(false)
+  const [attachPickerQuery, setAttachPickerQuery] = useState("")
+  const [workspaceDocuments, setWorkspaceDocuments] = useState<WorkspaceAgentSearchableDocument[] | null>(null)
+  const [reviewCursor, setReviewCursor] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   /** A rolling memory of what happened earlier in this session, fed to askAgent so it stays consistent with prior actions and answers. */
   const sessionActionLogRef = useRef<string[]>([])
 
   const storageKey = `odessay.workspace-agent.resolved.${scope.kind}.${scope.kind === "workspace" ? scope.rootId : scope.id}`
+  const dockStorageKey = "odessay.workspace-agent.dock-mode"
 
   useEffect(() => {
     if (!open || typeof window === "undefined") return
@@ -313,6 +343,26 @@ function WorkspaceAgentPanelSession({
       // Local UI memory is optional; a storage failure must not block the panel.
     }
   }, [open, storageKey])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    try {
+      const stored = window.localStorage.getItem(dockStorageKey)
+      if (stored === "sidebar" || stored === "float") setDockMode(stored)
+    } catch {
+      // Anchoring preference is a convenience, not a source of truth.
+    }
+  }, [])
+
+  const setDockModePersisted = useCallback((mode: "sidebar" | "float") => {
+    setDockMode(mode)
+    if (typeof window === "undefined") return
+    try {
+      window.localStorage.setItem(dockStorageKey, mode)
+    } catch {
+      // Anchoring preference is a convenience, not a source of truth.
+    }
+  }, [])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" })
@@ -353,13 +403,6 @@ function WorkspaceAgentPanelSession({
     }
   }, [open, workspaceRootPath])
 
-  const hasActiveContradictionReview = useMemo(
-    () => messages.some((message) => (
-      message.toolResult?.kind === "contradictions"
-      && message.toolResult.proposals.some((proposal) => !resolvedIds.has(proposal.id))
-    )),
-    [messages, resolvedIds],
-  )
   const documentIds = useMemo(() => uniqueDocumentIds(attachments, scope), [attachments, scope])
   const canCompare = Boolean(service) && documentIds.length >= 2
   const canClassify = Boolean(service)
@@ -498,7 +541,25 @@ function WorkspaceAgentPanelSession({
 
   const executeAsk = useCallback(async (question: string): Promise<AskOutcome> => {
     if (!service) {
-      return { ok: false, message: "The Workspace agent is not available in this runtime." }
+      // No Workspace to ground the full evidence-driven pipeline in — an
+      // unmaterialized draft, or a Writing outside any visible Workspace.
+      // The chat must still work: fall back to the current document's live
+      // content directly, with no filesystem/catalog involved (ODE-490).
+      const snapshot = getDocumentSnapshot?.()
+      if (!snapshot) {
+        return { ok: false, message: "The Workspace agent is not available in this runtime." }
+      }
+      const response = await askAboutDocument({
+        question,
+        documentId: snapshot.documentId,
+        title: snapshot.title,
+        markdown: snapshot.markdown,
+        sessionContext: sessionActionLogRef.current.slice(-MAX_SESSION_ACTIONS_CONTEXT),
+      })
+      if (response.error || !response.data) {
+        return { ok: false, message: response.error?.message ?? "The Workspace agent could not answer right now." }
+      }
+      return { ok: true, run: response.data, autoSelectedNotice: null }
     }
     const resolved = await resolveChatSelection(attachments, scope, service, MAX_WORKSPACE_ASK_TARGETS)
     if (!resolved.ok) {
@@ -520,7 +581,7 @@ function WorkspaceAgentPanelSession({
     const autoSelectedNotice = hasShownAutoSelectNotice.current ? null : resolved.autoSelectedNotice
     if (resolved.autoSelectedNotice) hasShownAutoSelectNotice.current = true
     return { ok: true, run: response.data, autoSelectedNotice }
-  }, [attachments, getWorkflowReadApproval, scope, service])
+  }, [attachments, getDocumentSnapshot, getWorkflowReadApproval, scope, service])
 
   const runClassification = useCallback(() => runAction("classification", async () => {
     await executeClassification("Review these artifacts and propose their type and status with evidence.")
@@ -559,6 +620,108 @@ function WorkspaceAgentPanelSession({
     )
   }), [announceToolResult, documentIds, getWorkflowReadApproval, runAction, service])
 
+  /**
+   * Merge (Fase H) — UI-only mock: reads the real markdown of the attached
+   * documents through the same approval-gated read tool other actions use,
+   * then builds the combined-document preview client-side (no merge tool
+   * exists on the backend yet). "Crear el documento" stays disabled in the
+   * body for that reason.
+   */
+  const runMerge = useCallback(() => runAction("merge", async () => {
+    if (!service || documentIds.length < 2) {
+      setFeedback("Attach at least two artifacts to combine them.")
+      return
+    }
+    const targets = documentIds.slice(0, 4)
+    const sources: { documentId: string; title: string; markdown: string }[] = []
+    for (const documentId of targets) {
+      const response = await service.tools.read({ documentId, approval: createApproval("read", documentId) })
+      if (response.error || !response.data) {
+        setFeedback(response.error?.message ?? "One of the attached artifacts could not be read.")
+        return
+      }
+      sources.push({
+        documentId,
+        title: response.data.document.title?.trim() || response.data.document.canonicalPath.split("/").pop() || documentId,
+        markdown: response.data.document.markdown,
+      })
+    }
+    const merge = buildMergeMock(sources)
+    announceToolResult(`Combined ${sources.length} artifacts into a ${merge.sections.length}-section draft below (preview only — see below).`, { kind: "merge", merge })
+  }), [announceToolResult, documentIds, runAction, service])
+
+  /**
+   * Data-driven catalog for the Actions popover — one entry per predetermined
+   * action, in the exact order/copy the design handoff specifies. "Merge" has
+   * no backend yet (mock-only, see workspace-agent-review-merge.tsx once
+   * built) so it stays disabled here until that lands.
+   */
+  const agentActionCatalog = useMemo(() => ([
+    {
+      key: "workflow",
+      label: "Workflow",
+      description: "Coordina los documentos del workspace en un plan de trabajo.",
+      icon: <Workflow className="h-[17px] w-[17px] text-ink-4" strokeWidth={1.5} />,
+      disabled: !service,
+      busy: busyAction === "workflow",
+      onRun: () => { setActionsOpen(false); void runWorkflow() },
+    },
+    {
+      key: "compare",
+      label: "Compare",
+      description: "Requiere dos artifacts seleccionados en la lista.",
+      icon: <GitCompareArrows className="h-[17px] w-[17px] text-ink-5" strokeWidth={1.5} />,
+      disabled: true,
+      busy: false,
+      onRun: () => {},
+    },
+    {
+      key: "broken-links",
+      label: "Broken links",
+      description: "Revisa referencias entre artifacts y rutas locales.",
+      icon: <Link2Off className="h-[17px] w-[17px] text-ink-4" strokeWidth={1.5} />,
+      disabled: !service,
+      busy: busyAction === "broken-links",
+      onRun: () => { setActionsOpen(false); void runBrokenReferences() },
+    },
+    {
+      key: "classify",
+      label: "Classify",
+      description: "Asigna status y tipo según el contenido de cada archivo.",
+      icon: <Sparkles className="h-[17px] w-[17px] text-[#5B5BD6]" strokeWidth={1.5} />,
+      disabled: !canClassify,
+      busy: busyAction === "classification",
+      onRun: () => { setActionsOpen(false); void runClassification() },
+    },
+    {
+      key: "contradictions",
+      label: "Contradictions",
+      description: "Cruza un grupo de documentos y marca las ideas que se contraponen.",
+      icon: <AlertCircle className="h-[17px] w-[17px] text-cursor" strokeWidth={1.5} />,
+      disabled: !canCompare,
+      busy: busyAction === "contradictions",
+      onRun: () => { setActionsOpen(false); void runContradictions() },
+    },
+    {
+      key: "merge",
+      label: "Merge",
+      description: "Propone una estructura única y reparte qué parte aporta cada documento.",
+      icon: <MergeIcon className="h-[17px] w-[17px] text-ink-4" strokeWidth={1.5} />,
+      disabled: !canCompare,
+      busy: busyAction === "merge",
+      onRun: () => { setActionsOpen(false); void runMerge() },
+    },
+    {
+      key: "archive",
+      label: "Archive",
+      description: "Propone candidatos sin cambios en las últimas semanas.",
+      icon: <Archive className="h-[17px] w-[17px] text-ink-4" strokeWidth={1.5} />,
+      disabled: !service,
+      busy: busyAction === "archive",
+      onRun: () => { setActionsOpen(false); void runArchiveCandidates() },
+    },
+  ]), [busyAction, canClassify, canCompare, runArchiveCandidates, runBrokenReferences, runClassification, runContradictions, runMerge, runWorkflow, service])
+
   const applyWorkflow = useCallback((messageId: string, proposal: WorkflowDraftProposal) => runAction("apply-workflow", async () => {
     if (!service) return
     const resource = proposal.existingDocumentId ?? proposal.canonicalPath
@@ -570,6 +733,12 @@ function WorkspaceAgentPanelSession({
     updateMessageToolResult(messageId, "workflow", () => null)
     setFeedback("workflow.md was updated through the approved desktop write path.")
   }), [runAction, service, updateMessageToolResult])
+
+  /** Discards a workflow draft without writing anything — nothing was applied, so this is purely local UI state. */
+  const discardWorkflow = useCallback((messageId: string) => {
+    updateMessageToolResult(messageId, "workflow", () => null)
+    setFeedback("Workflow draft discarded.")
+  }, [updateMessageToolResult])
 
   const applyClassification = useCallback((messageId: string, proposal: ClassificationProposal) => runAction("apply-classification", async () => {
     if (!service) return
@@ -585,6 +754,28 @@ function WorkspaceAgentPanelSession({
     setFeedback(`Updated ${proposal.documentTitle} through the approved edit path.`)
   }), [runAction, service, updateMessageToolResult])
 
+  /** Applies a batch of classification proposals sequentially (each through the same approval-gated edit path) — the Fase E bulk "Aplicar los N cambios" footer. */
+  const applyClassificationMany = useCallback((messageId: string, proposals: ClassificationProposal[]) => runAction("apply-classification", async () => {
+    if (!service || proposals.length === 0) return
+    const appliedIds = new Set<string>()
+    let failure: string | null = null
+    for (const proposal of proposals) {
+      const response = await service.applyClassification(proposal, createApproval("edit", proposal.documentId))
+      if (response.error || !response.data) {
+        failure = response.error?.message ?? `${proposal.documentTitle} could not be updated.`
+        break
+      }
+      appliedIds.add(proposal.documentId)
+    }
+    if (appliedIds.size > 0) {
+      updateMessageToolResult(messageId, "classification", (toolResult) => ({
+        ...toolResult,
+        proposals: toolResult.proposals.filter((item) => !appliedIds.has(item.documentId)),
+      }))
+    }
+    setFeedback(failure ?? `Updated ${appliedIds.size} artifact(s) through the approved edit path.`)
+  }), [runAction, service, updateMessageToolResult])
+
   const applyArchiveCandidate = useCallback((messageId: string, candidate: ArchiveCandidate) => runAction("apply-archive", async () => {
     if (!service) return
     const response = await service.applyArchiveCandidate(candidate, createApproval("edit", candidate.documentId))
@@ -597,6 +788,28 @@ function WorkspaceAgentPanelSession({
       return next.length > 0 ? { ...toolResult, candidates: next } : null
     })
     setFeedback(`${candidate.title} was marked with the suggested vocabulary status.`)
+  }), [runAction, service, updateMessageToolResult])
+
+  /** Applies a batch of archive candidates sequentially — the Fase F bulk "Aplicar los N cambios" footer. */
+  const applyArchiveCandidateMany = useCallback((messageId: string, candidates: ArchiveCandidate[]) => runAction("apply-archive", async () => {
+    if (!service || candidates.length === 0) return
+    const appliedIds = new Set<string>()
+    let failure: string | null = null
+    for (const candidate of candidates) {
+      const response = await service.applyArchiveCandidate(candidate, createApproval("edit", candidate.documentId))
+      if (response.error || !response.data) {
+        failure = response.error?.message ?? `${candidate.title} could not be updated.`
+        break
+      }
+      appliedIds.add(candidate.documentId)
+    }
+    if (appliedIds.size > 0) {
+      updateMessageToolResult(messageId, "archive", (toolResult) => {
+        const next = toolResult.candidates.filter((item) => !appliedIds.has(item.documentId))
+        return next.length > 0 ? { ...toolResult, candidates: next } : null
+      })
+    }
+    setFeedback(failure ?? `Updated ${appliedIds.size} artifact(s) with their suggested vocabulary status.`)
   }), [runAction, service, updateMessageToolResult])
 
   const removeBrokenReferenceProposal = useCallback((messageId: string, proposal: BrokenReferenceProposal) => {
@@ -690,16 +903,40 @@ function WorkspaceAgentPanelSession({
     setFeedback(resolution === "discard" ? "Finding discarded from this review queue." : "The selected evidence was applied to the target artifact.")
   }), [persistResolvedIds, resolvedIds, runAction, service])
 
-  const handleDrop = useCallback((event: DragEvent<HTMLElement>) => {
-    event.preventDefault()
-    setIsDropTarget(false)
-    const attachment = parseAttachment(event)
-    if (!attachment) return
+  const handleAgentDrop = useCallback((attachment: WorkspaceAgentDragPayload) => {
     setAttachments((current) => {
       if (current.some((item) => item.path === attachment.path && item.kind === attachment.kind)) return current
       return [...current, attachment]
     })
     setFeedback(`${attachment.label} added as agent context.`)
+  }, [])
+  const { ref: composerDropZoneRef, isOver: isDropTarget } = useWorkspaceAgentDropZone(handleAgentDrop)
+
+  /** Lazily loads the workspace's documents once — backs both the attach popover and the Broken links "Apuntar a" search. */
+  const ensureWorkspaceDocuments = useCallback(() => {
+    if (!service || workspaceDocuments !== null) return
+    void service.getContext().then((result) => {
+      if (result.error || !result.data) return
+      setWorkspaceDocuments(result.data.documents.map((document) => ({
+        id: document.id,
+        title: document.title?.trim() || document.binding?.relativePath || document.id,
+        path: document.binding?.relativePath ?? undefined,
+      })))
+    })
+  }, [service, workspaceDocuments])
+
+  const openAttachPicker = useCallback(() => {
+    setAttachPickerOpen(true)
+    ensureWorkspaceDocuments()
+  }, [ensureWorkspaceDocuments])
+
+  const attachDocument = useCallback((document: WorkspaceAgentSearchableDocument) => {
+    setAttachments((current) => {
+      if (current.some((item) => item.kind === "file" && item.id === document.id)) return current
+      return [...current, { kind: "file", id: document.id, path: document.path ?? document.id, label: document.title }]
+    })
+    setAttachPickerOpen(false)
+    setAttachPickerQuery("")
   }, [])
 
   const submitChat = useCallback(() => {
@@ -712,7 +949,7 @@ function WorkspaceAgentPanelSession({
       { id: `user-${messageTimestamp}`, role: "user", text, attachments: messageAttachments.length > 0 ? messageAttachments : undefined },
     ])
     setChatDraft("")
-    setIsActionsExpanded(false)
+    setActionsOpen(false)
     void runAction("ask", async () => {
       // Chat must never go silent: whatever happens, exactly one agent bubble
       // is appended — the answer, a handled error, or an unexpected one.
@@ -759,225 +996,343 @@ function WorkspaceAgentPanelSession({
     )
   }
 
-  return (
-    <aside
-      data-testid="workspace-agent-panel"
-      data-section="workspace-agent-panel"
-      data-scope={scope.kind}
-      data-scope-id={scope.kind === "workspace" ? scope.rootId : scope.id}
-      onDragEnter={() => setIsDropTarget(true)}
-      onDragOver={(event) => event.preventDefault()}
-      onDragLeave={() => setIsDropTarget(false)}
-      onDrop={handleDrop}
-      className={cn(
-        "flex h-full min-h-0 shrink-0 flex-col border-l-[0.5px] border-border bg-muted/70 font-sans",
-        hasActiveContradictionReview ? "w-[344px]" : "w-[276px]",
-        isDropTarget && "bg-surface-selected/80",
-      )}
+  const isFloat = dockMode === "float"
+
+  const header = (
+    <header className={cn("flex h-[52px] shrink-0 items-center gap-2.5 border-b-[0.5px] border-border bg-sb pl-4 pr-2.5", isFloat && "cursor-grab")}>
+      <Bot className="h-5 w-5 shrink-0 text-[#5B5BD6]" strokeWidth={1.5} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-medium leading-[1.2] text-ink">Workspace agent</p>
+        <p className="mt-0.5 truncate font-mono text-[11px] leading-[1.2] text-ink-4">{scopeLabel ?? (scope.kind === "workspace" ? "Workspace context" : "Current artifact")}</p>
+      </div>
+      <button
+        type="button"
+        title="Anclar como sidebar"
+        aria-label="Anclar como sidebar"
+        aria-pressed={dockMode === "sidebar"}
+        onClick={() => setDockModePersisted("sidebar")}
+        data-testid="workspace-agent-dock-sidebar"
+        className={cn(
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] transition-colors",
+          dockMode === "sidebar" ? "bg-surface-selected text-ink" : "text-ink-4 hover:bg-muted hover:text-ink",
+        )}
+      >
+        <PanelRightOpen className="h-[17px] w-[17px]" strokeWidth={1.5} />
+      </button>
+      <button
+        type="button"
+        title="Ventana flotante"
+        aria-label="Ventana flotante"
+        aria-pressed={dockMode === "float"}
+        onClick={() => setDockModePersisted("float")}
+        data-testid="workspace-agent-dock-float"
+        className={cn(
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] transition-colors",
+          dockMode === "float" ? "bg-surface-selected text-ink" : "text-ink-4 hover:bg-muted hover:text-ink",
+        )}
+      >
+        <PictureInPicture2 className="h-[17px] w-[17px]" strokeWidth={1.5} />
+      </button>
+      <button
+        type="button"
+        aria-label="Close Workspace agent"
+        onClick={() => onOpenChange?.(false)}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+      >
+        <X className="h-[17px] w-[17px]" strokeWidth={1.5} />
+      </button>
+    </header>
+  )
+
+  const chatSection = (
+    <section
+      className="od-scroll min-h-0 flex-1 space-y-3.5 overflow-y-auto p-4"
+      aria-label="Agent conversation"
+      data-testid="workspace-agent-chat"
     >
-      <header className="flex h-[46px] shrink-0 items-center gap-2 border-b-[0.5px] border-border bg-muted/35 px-3">
-        <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-muted text-ink-3">
-          <Bot className="h-[15px] w-[15px]" strokeWidth={1.5} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[12px] font-medium text-ink">Workspace agent</p>
-          <p className="truncate text-[10px] text-ink-4">{scopeLabel ?? (scope.kind === "workspace" ? "Workspace context" : "Current artifact")}</p>
+      {serviceError ? <p className="rounded-[9px] border-[0.5px] border-border bg-bg px-2.5 py-2 text-[11px] leading-[1.45] text-ink-3">{serviceError}</p> : null}
+      {!workspaceRootPath ? <p className="text-[11px] leading-[1.45] text-ink-4">Open this artifact from a desktop Workspace to run local agent actions.</p> : null}
+      {feedback ? <p className="text-[11px] leading-[1.45] text-ink-3" role="status">{feedback}</p> : null}
+
+      {messages.length === 0 ? (
+        <div className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
+          {serviceLoading ? <Loader2 className="h-5 w-5 animate-spin text-ink-4" strokeWidth={1.5} /> : <Bot className="h-5 w-5 text-ink-4" strokeWidth={1.5} />}
+          <p className="text-[12px] leading-[1.45] text-ink-4">Ask anything about this workspace or the open artifact.</p>
         </div>
-        <button
-          type="button"
-          aria-label="Close Workspace agent"
-          onClick={() => onOpenChange?.(false)}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted-hover hover:text-ink"
-        >
-          <X className="h-[13px] w-[13px]" strokeWidth={1.5} />
-        </button>
-      </header>
-
-      <div className="od-scroll max-h-[38vh] shrink-0 overflow-y-auto border-b-[0.5px] border-border/70 px-3 py-3">
-        {messages.length === 0 ? (
-          <div className="rounded-[9px] border-[0.5px] border-border bg-bg/70 px-2.5 py-2.5">
-            <div className="flex items-start gap-2">
-              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />
-              <p className="text-[11px] leading-[1.45] text-ink-3">
-                Add artifacts here to give the agent focused context. Drops work anywhere in this panel.
-              </p>
+      ) : messages.map((message) => {
+        const toolResult = message.toolResult
+        return (
+          <div key={message.id} className={cn("flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
+            {message.note ? (
+              <details className="group mb-1 max-w-[90%]">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] text-ink-4 hover:text-ink-3">
+                  <Sparkles className="h-[15px] w-[15px] shrink-0 text-[#5B5BD6]" strokeWidth={1.5} />
+                  <span>Contexto usado</span>
+                  <ChevronRight className="h-[15px] w-[15px] shrink-0 text-ink-5 transition-transform group-open:rotate-90" strokeWidth={1.5} />
+                </summary>
+                <p className="mt-2 text-[12px] italic leading-[1.5] text-ink-4" data-testid="workspace-agent-message-note">{message.note}</p>
+              </details>
+            ) : null}
+            <div className={cn(
+              "text-[13px] leading-[1.6]",
+              message.role === "user"
+                ? "max-w-[80%] rounded-[12px] bg-muted-hover px-3.5 py-2.5 text-ink"
+                : message.isError
+                  ? "max-w-[90%] rounded-[10px] border-[0.5px] border-danger-border bg-danger-surface px-3 py-2 text-cursor"
+                  : "w-full px-0 py-0.5 text-ink",
+            )}>
+              <p className="whitespace-pre-wrap">{renderMessageText(message.text, buildCitationLookup(message.citedDocuments), onOpenDocument)}</p>
+              {message.attachments?.length ? (
+                <div className="mt-2 flex flex-wrap gap-1" data-testid="workspace-agent-message-context" aria-label="Message context">
+                  {message.attachments.map((attachment) => (
+                    <span key={`${attachment.kind}:${attachment.path}`} className="inline-flex max-w-full items-center gap-1 rounded-[5px] border-[0.5px] border-border/70 bg-bg/50 px-1.5 py-1 text-[9px] text-ink-3">
+                      {attachment.kind === "folder" ? <Folder className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} /> : <FileText className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />}
+                      <span className="truncate">{attachment.label}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
+
+            {toolResult ? (
+              <ReviewSummaryRow
+                toolResult={toolResult}
+                resolvedIds={resolvedIds}
+                onOpen={() => { setReviewCursor(0); setActiveReviewMessageId(message.id) }}
+              />
+            ) : null}
           </div>
-        ) : null}
+        )
+      })}
 
-        {attachments.length > 0 ? (
-          <div className="mt-3 space-y-1.5" data-testid="workspace-agent-context">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-4">Context</p>
-              <span className="text-[10px] text-ink-4">{attachments.length}</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {attachments.map((attachment) => (
-                <span key={`${attachment.kind}:${attachment.path}`} className="inline-flex max-w-full items-center gap-1 rounded-[6px] border-[0.5px] border-border bg-bg/80 px-1.5 py-1 text-[10px] text-ink-3">
-                  {attachment.kind === "folder" ? <Folder className="h-3 w-3 shrink-0" strokeWidth={1.5} /> : <FileText className="h-3 w-3 shrink-0" strokeWidth={1.5} />}
-                  <span className="truncate">{attachment.label}</span>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${attachment.label}`}
-                    onClick={() => setAttachments((current) => current.filter((item) => item.path !== attachment.path))}
-                    className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded text-ink-4 hover:text-ink"
-                  >
-                    <X className="h-2.5 w-2.5" strokeWidth={1.5} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="mt-4">
-          <button
-            type="button"
-            onClick={() => setIsActionsExpanded((current) => !current)}
-            aria-expanded={isActionsExpanded}
-            className="mb-2 flex w-full items-center justify-between text-left"
-          >
-            <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.12em] text-ink-4">
-              <ChevronRight className={cn("h-3 w-3 transition-transform", isActionsExpanded && "rotate-90")} strokeWidth={1.5} />
-              Actions
+      {busyAction === "ask" ? (
+        <div className="flex items-start" data-testid="workspace-agent-thinking">
+          <div className="rounded-[10px] border-[0.5px] border-border bg-bg px-3 py-2.5">
+            <span className="flex items-center gap-1" aria-label="Thinking">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-4 [animation-delay:-0.3s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-4 [animation-delay:-0.15s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-4" />
             </span>
-            {serviceLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-4" strokeWidth={1.5} /> : null}
-          </button>
-          {isActionsExpanded ? (
-            <div className="grid grid-cols-2 gap-1.5">
-              <AgentActionButton icon={<Workflow />} label="Workflow" busy={busyAction === "workflow"} disabled={!service} onClick={() => void runWorkflow()} />
-              <AgentActionButton icon={<GitCompareArrows />} label="Compare" busy={busyAction === "contradictions"} disabled={!canCompare} onClick={() => void runContradictions()} />
-              <AgentActionButton icon={<MessageCircle />} label="Broken links" busy={busyAction === "broken-links"} disabled={!service} onClick={() => void runBrokenReferences()} />
-              <AgentActionButton icon={<Sparkles />} label="Classify" busy={busyAction === "classification"} disabled={!canClassify} onClick={() => void runClassification()} />
-              <AgentActionButton icon={<Archive />} label="Archive" busy={busyAction === "archive"} disabled={!service} onClick={() => void runArchiveCandidates()} />
-            </div>
-          ) : null}
+          </div>
         </div>
+      ) : null}
+      <p className="mt-auto text-[11px] leading-[1.5] text-ink-5">Las respuestas las genera un modelo. Nada se modifica sin tu confirmación.</p>
+      <div ref={messagesEndRef} />
+    </section>
+  )
 
-        {serviceError ? <p className="mt-3 rounded-[8px] border-[0.5px] border-border bg-bg px-2.5 py-2 text-[11px] leading-[1.45] text-ink-3">{serviceError}</p> : null}
-        {!workspaceRootPath ? <p className="mt-3 text-[10.5px] leading-[1.45] text-ink-4">Open this artifact from a desktop Workspace to run local agent actions.</p> : null}
-        {feedback ? <p className="mt-3 text-[11px] leading-[1.45] text-ink-3" role="status">{feedback}</p> : null}
-
+  const composer = (
+    <form
+      className="relative shrink-0 px-3.5 pb-3"
+      onSubmit={(event) => {
+        event.preventDefault()
+        submitChat()
+      }}
+    >
+      <div
+        ref={composerDropZoneRef}
+        className={cn(
+          "relative rounded-[14px] bg-sb p-3 shadow-[0_1px_2px_rgba(35,24,15,0.05)] transition-colors",
+          isDropTarget ? "border border-dashed border-[#5B5BD6]" : "border-[0.5px] border-border",
+        )}
+      >
+        {attachments.length > 0 ? (
+          <div className="mb-2.5 flex flex-wrap gap-1.5" data-testid="workspace-agent-context">
+            {attachments.map((attachment) => (
+              <span key={`${attachment.kind}:${attachment.path}`} className="inline-flex h-[26px] max-w-full items-center gap-1.5 rounded-[7px] bg-muted pl-2 pr-1.5 text-[12px] text-ink-2">
+                {attachment.kind === "folder" ? <Folder className="h-3.5 w-3.5 shrink-0 text-ink-4" strokeWidth={1.5} /> : <FileText className="h-3.5 w-3.5 shrink-0 text-ink-4" strokeWidth={1.5} />}
+                <span className="max-w-[150px] truncate">{attachment.label}</span>
+                <button
+                  type="button"
+                  aria-label={`Remove ${attachment.label}`}
+                  onClick={() => setAttachments((current) => current.filter((item) => item.path !== attachment.path))}
+                  className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] text-ink-4 transition-colors hover:bg-border hover:text-ink"
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <textarea
+          ref={textareaRef}
+          value={chatDraft}
+          onChange={(event) => setChatDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault()
+              submitChat()
+            }
+          }}
+          placeholder="Pregunta sobre este contexto…"
+          rows={1}
+          className="min-h-[56px] w-full resize-none bg-transparent pr-6 text-[13.5px] leading-[1.55] text-ink outline-none placeholder:text-ink-5"
+          style={{ maxHeight: CHAT_TEXTAREA_MAX_HEIGHT }}
+          aria-label="Message Workspace agent"
+        />
+        {isDropTarget ? (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 rounded-[14px] bg-[rgba(250,250,248,0.92)]">
+            <span className="h-[17px] w-[17px] rounded-full bg-[#5B5BD6]" />
+            <span className="text-[12.5px] font-medium text-ink">Suelta para adjuntarlo al contexto</span>
+          </div>
+        ) : null}
+        <CornerDownLeft className="pointer-events-none absolute bottom-[10px] right-3 h-4 w-4 text-border" strokeWidth={1.5} />
       </div>
 
-      <section
-        className="od-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3"
-        aria-label="Agent conversation"
-        data-testid="workspace-agent-chat"
-      >
-        {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
-            <Bot className="h-5 w-5 text-ink-4" strokeWidth={1.5} />
-            <p className="text-[12px] leading-[1.45] text-ink-4">Ask anything about this workspace or the open artifact.</p>
-          </div>
-        ) : messages.map((message) => {
-          const toolResult = message.toolResult
-          return (
-            <div key={message.id} className={cn("flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
-              {message.note ? (
-                <details className="group mb-1 max-w-[90%]">
-                  <summary className="flex cursor-pointer list-none items-center gap-1 text-[10px] text-ink-4 hover:text-ink-3">
-                    <ChevronRight className="h-2.5 w-2.5 shrink-0 transition-transform group-open:rotate-90" strokeWidth={1.5} />
-                    <Sparkles className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />
-                    <span>Context used</span>
-                  </summary>
-                  <p className="mt-1 pl-4 text-[10.5px] italic leading-[1.4] text-ink-4" data-testid="workspace-agent-message-note">{message.note}</p>
-                </details>
-              ) : null}
-              <div className={cn(
-                "text-[13px] leading-[1.6]",
-                message.role === "user"
-                  ? "max-w-[90%] rounded-[10px] bg-ink px-3 py-2 text-bg"
-                  : message.isError
-                    ? "max-w-[90%] rounded-[10px] border-[0.5px] border-danger-border bg-danger-surface px-3 py-2 text-cursor"
-                    : "w-full px-0.5 py-1 text-ink",
-              )}>
-                <p className="whitespace-pre-wrap">{renderMessageText(message.text, buildCitationLookup(message.citedDocuments), onOpenDocument)}</p>
-                {message.attachments?.length ? (
-                  <div className="mt-2 flex flex-wrap gap-1" data-testid="workspace-agent-message-context" aria-label="Message context">
-                    {message.attachments.map((attachment) => (
-                      <span key={`${attachment.kind}:${attachment.path}`} className="inline-flex max-w-full items-center gap-1 rounded-[5px] border-[0.5px] border-border/70 bg-bg/50 px-1.5 py-1 text-[9px] text-ink-3">
-                        {attachment.kind === "folder" ? <Folder className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} /> : <FileText className="h-2.5 w-2.5 shrink-0" strokeWidth={1.5} />}
-                        <span className="truncate">{attachment.label}</span>
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-
-              {toolResult ? (
-                <ReviewSummaryRow
-                  toolResult={toolResult}
-                  resolvedIds={resolvedIds}
-                  onOpen={() => setActiveReviewMessageId(message.id)}
-                />
-              ) : null}
-            </div>
-          )
-        })}
-
-        {busyAction === "ask" ? (
-          <div className="flex items-start" data-testid="workspace-agent-thinking">
-            <div className="rounded-[10px] border-[0.5px] border-border bg-bg px-3 py-2.5">
-              <span className="flex items-center gap-1" aria-label="Thinking">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-4 [animation-delay:-0.3s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-4 [animation-delay:-0.15s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-4" />
-              </span>
-            </div>
-          </div>
-        ) : null}
-        <div ref={messagesEndRef} />
-      </section>
-
-      <form
-        className="shrink-0 border-t-[0.5px] border-border bg-muted/35 p-2.5"
-        onSubmit={(event) => {
-          event.preventDefault()
-          submitChat()
-        }}
-      >
-        <div className="flex flex-col gap-1.5 rounded-[10px] border-[0.5px] border-border bg-bg/80 px-2.5 py-2 focus-within:border-ink-3">
-          <textarea
-            ref={textareaRef}
-            value={chatDraft}
-            onChange={(event) => setChatDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault()
-                submitChat()
-              }
-            }}
-            placeholder="Ask about this context…"
-            rows={1}
-            className="min-h-6 w-full resize-none bg-transparent text-[13px] leading-[1.5] text-ink outline-none placeholder:text-ink-4"
-            style={{ maxHeight: CHAT_TEXTAREA_MAX_HEIGHT }}
-            aria-label="Message Workspace agent"
-          />
-          <div className="flex items-center justify-between">
-            <Paperclip className="h-3.5 w-3.5 shrink-0 text-ink-4" strokeWidth={1.5} />
-            <button type="submit" aria-label="Send message" disabled={!chatDraft.trim()} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-ink text-bg transition-opacity disabled:opacity-30">
-              <Send className="h-3 w-3" strokeWidth={1.5} />
+      <div className="mt-2 flex items-center gap-0.5">
+        <Popover open={actionsOpen} onOpenChange={setActionsOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              title="Acciones del agente"
+              data-testid="workspace-agent-actions-trigger"
+              className={cn(
+                "flex h-7 items-center gap-1.5 rounded-[8px] px-2 text-[12px] transition-colors",
+                actionsOpen ? "bg-surface-selected text-ink" : "text-ink-3 hover:bg-muted hover:text-ink",
+              )}
+            >
+              <Zap className="h-[17px] w-[17px]" strokeWidth={1.5} />
+              Acciones
+              {actionsOpen ? <ChevronDown className="h-[15px] w-[15px]" strokeWidth={1.5} /> : <ChevronUp className="h-[15px] w-[15px]" strokeWidth={1.5} />}
             </button>
-          </div>
-        </div>
-      </form>
+          </PopoverTrigger>
+          <PopoverContent side="top" align="start" sideOffset={8} className="w-[280px] max-w-[280px] p-2" data-testid="workspace-agent-actions-popover">
+            <p className="px-2 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-4">Acciones del agente</p>
+            <div className="flex flex-col">
+              {agentActionCatalog.map((action) => (
+                <button
+                  key={action.key}
+                  type="button"
+                  disabled={action.disabled || action.busy}
+                  onClick={action.onRun}
+                  data-testid={`workspace-agent-action-${action.key}`}
+                  className={cn(
+                    "flex items-start gap-2.5 rounded-[9px] px-2.5 py-2.5 text-left transition-colors",
+                    action.disabled ? "cursor-default opacity-55" : "cursor-pointer hover:bg-[#FAFAF8]",
+                  )}
+                >
+                  {action.icon}
+                  <span className="min-w-0">
+                    <span className="block text-[12.5px] font-medium text-ink">{action.label}</span>
+                    <span className="mt-0.5 block text-[11px] leading-[1.4] text-ink-4">{action.description}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
-      <WorkspaceAgentReviewModal
-        message={messages.find((message) => message.id === activeReviewMessageId) ?? null}
-        busyAction={busyAction}
-        brokenReferenceReplacements={brokenReferenceReplacements}
-        onReplacementChange={(key, value) => setBrokenReferenceReplacements((current) => ({ ...current, [key]: value }))}
-        resolvedIds={resolvedIds}
-        onClose={() => setActiveReviewMessageId(null)}
-        onApplyWorkflow={applyWorkflow}
-        onApplyClassification={applyClassification}
-        onApplyArchiveCandidate={applyArchiveCandidate}
-        onApplyBrokenReference={applyBrokenReference}
-        onRemoveBrokenReference={removeBrokenReference}
-        onCreateDocumentForBrokenReference={createDocumentForBrokenReference}
-        onResolveContradiction={(proposal, resolution) => void resolveContradiction(proposal, resolution)}
-      />
+        <Popover open={attachPickerOpen} onOpenChange={setAttachPickerOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Attach a document"
+              title="Attach a document"
+              onClick={openAttachPicker}
+              className="flex h-7 items-center gap-1.5 rounded-[8px] px-2 text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+            >
+              <Paperclip className="h-[17px] w-[17px]" strokeWidth={1.5} />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent side="top" align="start" sideOffset={8} className="w-[280px] max-w-[280px] p-2">
+            <input
+              autoFocus
+              value={attachPickerQuery}
+              onChange={(event) => setAttachPickerQuery(event.target.value)}
+              placeholder="Buscar un artifact…"
+              className="mb-1.5 h-8 w-full rounded-[8px] border-[0.5px] border-border bg-bg px-2.5 text-[12px] text-ink outline-none placeholder:text-ink-5"
+            />
+            <div className="od-scroll max-h-[220px] overflow-y-auto">
+              {workspaceDocuments === null ? (
+                <p className="px-2 py-2 text-[11px] text-ink-4">Loading…</p>
+              ) : workspaceDocuments.filter((document) => document.title.toLowerCase().includes(attachPickerQuery.trim().toLowerCase())).length === 0 ? (
+                <p className="px-2 py-2 text-[11px] text-ink-4">No documents found.</p>
+              ) : (
+                workspaceDocuments
+                  .filter((document) => document.title.toLowerCase().includes(attachPickerQuery.trim().toLowerCase()))
+                  .slice(0, 30)
+                  .map((document) => (
+                    <button
+                      key={document.id}
+                      type="button"
+                      onClick={() => attachDocument(document)}
+                      className="flex w-full items-center gap-2 rounded-[7px] px-2 py-1.5 text-left transition-colors hover:bg-muted"
+                    >
+                      <FileText className="h-3.5 w-3.5 shrink-0 text-ink-4" strokeWidth={1.5} />
+                      <span className="min-w-0 truncate text-[12px] text-ink">{document.title}</span>
+                    </button>
+                  ))
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+    </form>
+  )
+
+  const reviewModal = (
+    <WorkspaceAgentReviewModal
+      message={messages.find((message) => message.id === activeReviewMessageId) ?? null}
+      busyAction={busyAction}
+      brokenReferenceReplacements={brokenReferenceReplacements}
+      onReplacementChange={(key, value) => setBrokenReferenceReplacements((current) => ({ ...current, [key]: value }))}
+      resolvedIds={resolvedIds}
+      onClose={() => setActiveReviewMessageId(null)}
+      onApplyWorkflow={applyWorkflow}
+      onDiscardWorkflow={discardWorkflow}
+      onAskFollowUp={async (question) => {
+        const outcome = await executeAsk(question)
+        return outcome.ok ? { ok: true, answer: outcome.run.answer } : { ok: false, answer: outcome.message }
+      }}
+      onApplyClassification={applyClassification}
+      onApplyClassificationMany={applyClassificationMany}
+      onApplyArchiveCandidate={applyArchiveCandidate}
+      onApplyArchiveCandidateMany={applyArchiveCandidateMany}
+      onApplyBrokenReference={applyBrokenReference}
+      onRemoveBrokenReference={removeBrokenReference}
+      onCreateDocumentForBrokenReference={createDocumentForBrokenReference}
+      onResolveContradiction={(proposal, resolution) => void resolveContradiction(proposal, resolution)}
+      onOpenDocument={onOpenDocument}
+      reviewCursor={reviewCursor}
+      onReviewCursorChange={setReviewCursor}
+      workspaceDocuments={workspaceDocuments}
+      onLoadWorkspaceDocuments={ensureWorkspaceDocuments}
+    />
+  )
+
+  const sharedProps = {
+    "data-testid": "workspace-agent-panel",
+    "data-section": "workspace-agent-panel",
+    "data-scope": scope.kind,
+    "data-scope-id": scope.kind === "workspace" ? scope.rootId : scope.id,
+    "data-dock": dockMode,
+  } as const
+
+  if (isFloat) {
+    return (
+      <>
+        <div
+          {...sharedProps}
+          className="absolute bottom-5 right-5 z-[5] flex h-[600px] w-[372px] flex-col overflow-hidden rounded-[14px] border-[0.5px] border-border bg-sb shadow-[0_32px_80px_-20px_rgba(35,24,15,0.36),0_2px_6px_rgba(35,24,15,0.10)] font-sans"
+        >
+          {header}
+          {chatSection}
+          {composer}
+        </div>
+        {reviewModal}
+      </>
+    )
+  }
+
+  return (
+    <aside
+      {...sharedProps}
+      className="my-2.5 mr-2.5 flex h-[calc(100%-20px)] min-h-0 w-[344px] shrink-0 flex-col overflow-hidden rounded-[14px] border-[0.5px] border-border bg-sb font-sans shadow-float"
+    >
+      {header}
+      {chatSection}
+      {composer}
+      {reviewModal}
     </aside>
   )
 }
@@ -990,36 +1345,21 @@ export function WorkspaceAgentPanel(props: WorkspaceAgentPanelProps) {
   return <WorkspaceAgentPanelSession key={scopeKey} {...props} />
 }
 
-function AgentActionButton({
-  icon,
-  label,
-  busy,
-  disabled,
-  onClick,
-}: {
+type ReviewCardFinding = { value: string; origin: string }
+
+type ReviewCardSummary = {
   icon: ReactNode
-  label: string
-  busy?: boolean
-  disabled?: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled || busy}
-      onClick={onClick}
-      className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-[7px] border-[0.5px] border-border px-1.5 text-[10px] text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-45"
-    >
-      {busy ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.5} /> : <span className="[&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0 [&>svg]:stroke-[1.5]">{icon}</span>}
-      {label}
-    </button>
-  )
+  title: string
+  subtitle: string
+  testId: string
+  findings: ReviewCardFinding[]
 }
 
 /**
- * Compact, clickable row for a predetermined action's result — the chat
- * surface. Clicking it opens the full-detail modal for decision-making,
- * the same click-to-preview pattern already used for cited documents.
+ * Card shown right under the chat message that announced a predetermined
+ * action's result — header (icon/title/count), a compact list of findings,
+ * and a full-width CTA into the detail modal. The card never resolves
+ * anything itself; it only ever leads to the review shell.
  */
 function ReviewSummaryRow({
   toolResult,
@@ -1030,280 +1370,125 @@ function ReviewSummaryRow({
   resolvedIds: Set<string>
   onOpen: () => void
 }) {
-  const summary = (() => {
+  const summary: ReviewCardSummary | null = (() => {
     switch (toolResult.kind) {
       case "workflow":
         return {
-          icon: <Workflow className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />,
+          icon: <Workflow className="h-[17px] w-[17px] shrink-0 text-cursor" strokeWidth={1.5} />,
           title: "workflow.md draft",
-          subtitle: toolResult.proposal.existingDocumentId ? "Revision ready to review" : "New draft ready to review",
+          subtitle: toolResult.proposal.existingDocumentId ? "Revisión lista para revisar" : "Borrador nuevo listo para revisar",
           testId: "workspace-agent-workflow-review",
+          findings: [],
         }
       case "broken-links":
         return toolResult.proposals.length === 0 ? null : {
-          icon: <MessageCircle className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />,
-          title: "Broken references",
-          subtitle: `${toolResult.proposals.length} to review`,
+          icon: <MessageCircle className="h-[17px] w-[17px] shrink-0 text-cursor" strokeWidth={1.5} />,
+          title: "Referencias rotas",
+          subtitle: `${toolResult.proposals.length} por revisar`,
           testId: "workspace-agent-broken-links-review",
+          findings: toolResult.proposals.map((proposal) => ({ value: proposal.reference, origin: proposal.sourceTitle })),
         }
       case "classification": {
         const actionable = toolResult.proposals.length > 0 || toolResult.requestedDocumentIds.length > 0
         return !actionable ? null : {
-          icon: <Sparkles className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />,
-          title: "Semantic classification",
-          subtitle: toolResult.requestedDocumentIds.length > 0 ? "Needs more evidence" : `${toolResult.proposals.length} proposal(s)`,
+          icon: <Sparkles className="h-[17px] w-[17px] shrink-0 text-cursor" strokeWidth={1.5} />,
+          title: "Clasificación semántica",
+          subtitle: toolResult.requestedDocumentIds.length > 0 ? "Necesita más evidencia" : `${toolResult.proposals.length} propuesta(s)`,
           testId: "workspace-agent-classification-review",
+          findings: toolResult.proposals.map((proposal) => ({
+            value: proposal.documentTitle,
+            origin: [proposal.artifactType, proposal.status].filter(Boolean).join(" · ") || "Sin cambios",
+          })),
         }
       }
       case "archive":
         return toolResult.candidates.length === 0 ? null : {
-          icon: <Archive className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />,
-          title: "Archive candidate",
-          subtitle: toolResult.candidates[0].title,
+          icon: <Archive className="h-[17px] w-[17px] shrink-0 text-cursor" strokeWidth={1.5} />,
+          title: "Candidatos para archivar",
+          subtitle: `${toolResult.candidates.length} por revisar`,
           testId: "workspace-agent-archive-review",
+          findings: toolResult.candidates.map((candidate) => ({ value: candidate.title, origin: candidate.reason })),
         }
       case "contradictions": {
-        const activeCount = toolResult.proposals.filter((proposal) => !resolvedIds.has(proposal.id)).length
-        return activeCount === 0 ? null : {
-          icon: <GitCompareArrows className="h-3.5 w-3.5 shrink-0 text-cursor" strokeWidth={1.5} />,
-          title: "Contradiction queue",
-          subtitle: `${activeCount} finding(s) to resolve`,
+        const active = toolResult.proposals.filter((proposal) => !resolvedIds.has(proposal.id))
+        return active.length === 0 ? null : {
+          icon: <GitCompareArrows className="h-[17px] w-[17px] shrink-0 text-cursor" strokeWidth={1.5} />,
+          title: "Contradicciones",
+          subtitle: `${active.length} por revisar`,
           testId: "workspace-agent-review-queue",
+          findings: active.map((proposal) => ({ value: proposal.topic, origin: `${proposal.left.title} vs ${proposal.right.title}` })),
         }
       }
+      case "merge":
+        return {
+          icon: <MergeIcon className="h-[17px] w-[17px] shrink-0 text-cursor" strokeWidth={1.5} />,
+          title: "Documento combinado (vista previa)",
+          subtitle: `${toolResult.merge.sections.length} sección(es) · ${toolResult.merge.sourceDocuments.length} documentos`,
+          testId: "workspace-agent-merge-review",
+          findings: toolResult.merge.sections
+            .filter((section) => section.status === "conflict")
+            .map((section) => ({ value: section.heading, origin: "elige una versión" })),
+        }
     }
   })()
   if (!summary) return null
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
+    <div
       data-testid={summary.testId}
-      className="mt-2 flex w-full items-center gap-2 rounded-[10px] border-[0.5px] border-border bg-bg px-2.5 py-2 text-left transition-colors hover:bg-muted-hover"
+      className="mt-2 w-full overflow-hidden rounded-[12px] border-[0.5px] border-border bg-sb"
     >
-      {summary.icon}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[11px] font-medium text-ink">{summary.title}</p>
-        <p className="truncate text-[10px] text-ink-4">{summary.subtitle}</p>
+      <div className="flex items-center gap-2.5 border-b-[0.5px] border-[#F0EEEB] px-3 py-2.5">
+        {summary.icon}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12.5px] font-medium text-ink">{summary.title}</p>
+          <p className="truncate text-[11px] text-ink-4">{summary.subtitle}</p>
+        </div>
       </div>
-      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-4" strokeWidth={1.5} />
-    </button>
-  )
-}
-
-function WorkflowReviewBody({
-  proposal,
-  busy,
-  onApprove,
-}: {
-  proposal: WorkflowDraftProposal
-  busy: boolean
-  onApprove: () => void
-}) {
-  return (
-    <div>
-      <pre className="od-scroll max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-[8px] border-[0.5px] border-border/70 bg-bg/80 p-2.5 text-[11px] leading-[1.5] text-ink-3">{proposal.markdown}</pre>
-      <button type="button" disabled={busy} onClick={onApprove} className="mt-3 inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-[7px] bg-ink px-2 text-[11px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
-        <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> Approve workflow update
+      {summary.findings.length > 0 ? (
+        <div className="flex flex-col">
+          {summary.findings.slice(0, 4).map((finding, index) => (
+            <div key={`${finding.value}-${index}`} className="flex items-baseline gap-2 border-b-[0.5px] border-[#F7F5F3] px-3 py-2 last:border-b-0">
+              <span className="min-w-0 truncate font-mono text-[11px] text-cursor">{finding.value}</span>
+              <span className="shrink-0 text-[11px] text-ink-5">{finding.origin}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex h-[38px] w-full items-center justify-center gap-1.5 bg-ink text-[12.5px] font-medium text-bg transition-colors hover:bg-[#3F3731]"
+      >
+        Revisar en contexto
+        <ArrowRight className="h-4 w-4" strokeWidth={1.5} />
       </button>
     </div>
   )
 }
 
-function ClassificationReviewBody({
-  toolResult,
-  busy,
-  onApprove,
-}: {
-  toolResult: Extract<ToolResult, { kind: "classification" }>
-  busy: boolean
-  onApprove: (proposal: ClassificationProposal) => void
-}) {
-  return (
-    <div>
-      {toolResult.summary ? <p className="text-[12px] leading-[1.5] text-ink-3">{toolResult.summary}</p> : null}
-      {toolResult.requestedDocumentIds.length > 0 ? (
-        <p className="mt-2 rounded-[8px] border-[0.5px] border-border/70 bg-surface-selected px-2.5 py-2 text-[11px] leading-[1.45] text-ink-3">
-          Needs {toolResult.requestedDocumentIds.length} additional catalog document(s) to reduce uncertainty. Attach them to continue.
-          {toolResult.requestedDocuments.length > 0 ? (
-            <span className="mt-1 block text-ink-4">
-              {toolResult.requestedDocuments.map((document) => document.path ?? document.title).join(" · ")}
-            </span>
-          ) : null}
-        </p>
-      ) : null}
-      {toolResult.proposals.length === 0 ? (
-        <p className="mt-2 rounded-[8px] bg-muted px-2.5 py-2 text-[11px] leading-[1.45] text-ink-4">
-          No metadata change is ready. The agent needs more evidence before making a responsible classification.
-        </p>
-      ) : null}
-      <div className="mt-3 space-y-3">
-        {toolResult.proposals.map((proposal) => (
-          <article key={proposal.documentId} className="rounded-[9px] border-[0.5px] border-border/70 bg-bg/80 p-2.5" data-testid={`workspace-agent-classification-${proposal.documentId}`}>
-            <div className="flex items-start gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[11.5px] font-medium text-ink">{proposal.documentTitle}</p>
-                {proposal.documentPath ? <p className="truncate font-mono text-[9.5px] text-ink-4">{proposal.documentPath}</p> : null}
-              </div>
-              <span className={cn(
-                "shrink-0 rounded-[5px] px-1.5 py-0.5 text-[8.5px] font-medium uppercase tracking-[0.06em]",
-                proposal.decision === "change" ? "bg-success-tint text-success" : "bg-muted text-ink-4",
-              )}>
-                {proposal.decision === "change" ? "Proposed" : proposal.decision === "keep" ? "Keep" : "Review"}
-              </span>
-            </div>
-            <p className="mt-2 text-[11.5px] leading-[1.5] text-ink">{proposal.change}</p>
-            <div className="mt-2 grid grid-cols-2 gap-1.5">
-              <div className="rounded-[7px] bg-muted/70 px-2 py-1.5">
-                <p className="text-[8.5px] font-medium uppercase tracking-[0.08em] text-ink-4">Current</p>
-                <p className="mt-1 text-[10.5px] leading-[1.4] text-ink-3">{proposal.currentArtifactType ?? "No type"} · {proposal.currentStatus ?? "No status"}</p>
-              </div>
-              <div className="rounded-[7px] bg-surface-selected px-2 py-1.5">
-                <p className="text-[8.5px] font-medium uppercase tracking-[0.08em] text-ink-4">Proposed</p>
-                <p className="mt-1 text-[10.5px] leading-[1.4] text-ink-3">{proposal.artifactType ?? "No type"} · {proposal.status ?? "No status"}</p>
-              </div>
-            </div>
-            <p className="mt-2 text-[11px] leading-[1.45] text-ink-3"><span className="font-medium text-ink">Why:</span> {proposal.reason}</p>
-            <p className="mt-1 text-[11px] leading-[1.45] text-ink-3"><span className="font-medium text-ink">Benefit:</span> {proposal.benefit}</p>
-            {proposal.uncertainty ? <p className="mt-1 text-[11px] leading-[1.45] text-ink-4"><span className="font-medium text-ink-3">Uncertainty:</span> {proposal.uncertainty}</p> : null}
-            {proposal.evidence.length > 0 ? (
-              <div className="mt-2 space-y-1">
-                <p className="text-[8.5px] font-medium uppercase tracking-[0.08em] text-ink-4">Evidence</p>
-                {proposal.evidence.map((evidence) => (
-                  <div key={`${evidence.sourceId}:${evidence.line ?? "unknown"}:${evidence.quote ?? evidence.detail}`} className="rounded-[7px] border-[0.5px] border-border/70 bg-bg px-2 py-1.5 text-[10.5px] leading-[1.45] text-ink-3">
-                    {evidence.quote ? <p className="font-lora italic text-ink">“{evidence.quote}”</p> : null}
-                    <p className={evidence.quote ? "mt-0.5 text-ink-4" : "text-ink-3"}>{evidence.detail}</p>
-                  </div>
-                ))}
-              </div>
-            ) : <p className="mt-2 text-[10.5px] text-ink-4">No exact evidence could be verified for this proposal.</p>}
-            {proposal.decision === "change" ? (
-              <button type="button" disabled={busy} onClick={() => onApprove(proposal)} className="mt-2.5 inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-[7px] bg-ink px-2 text-[11px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
-                <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> Approve metadata change
-              </button>
-            ) : (
-              <p className="mt-2.5 rounded-[7px] bg-muted px-2 py-1.5 text-[10.5px] leading-[1.4] text-ink-4">
-                {proposal.decision === "keep" ? "No metadata change recommended." : "No change is available until the uncertainty is resolved."}
-              </p>
-            )}
-          </article>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function ArchiveReviewBody({
-  candidate,
-  busy,
-  onApprove,
-}: {
-  candidate: ArchiveCandidate
-  busy: boolean
-  onApprove: () => void
-}) {
-  return (
-    <div>
-      <p className="text-[12px] font-medium text-ink-3">{candidate.title}</p>
-      <p className="mt-1 text-[11.5px] leading-[1.5] text-ink-4">{candidate.reason}</p>
-      <button type="button" disabled={busy || !candidate.suggestedStatus} onClick={onApprove} className="mt-3 inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-[7px] bg-ink px-2 text-[11px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
-        <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> Approve archive status
-      </button>
-    </div>
-  )
-}
-
-function BrokenLinksReviewBody({
-  messageId,
-  proposals,
-  busy,
-  busyAction,
-  replacements,
-  onReplacementChange,
-  onApprove,
-  onRemove,
-  onCreate,
-}: {
-  messageId: string
-  proposals: BrokenReferenceProposal[]
-  busy: boolean
-  busyAction: string | null
-  replacements: Record<string, string>
-  onReplacementChange: (key: string, value: string) => void
-  onApprove: (proposal: BrokenReferenceProposal) => void
-  onRemove: (proposal: BrokenReferenceProposal) => void
-  onCreate: (proposal: BrokenReferenceProposal) => void
-}) {
-  return (
-    <div className="space-y-3">
-      {proposals.map((proposal) => {
-        const key = `${messageId}:${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
-        const isSlug = proposal.referenceKind === "slug"
-        return (
-          <div key={key} className="rounded-[9px] border-[0.5px] border-border/70 bg-bg/80 p-2.5">
-            <p className="text-[9.5px] font-medium uppercase tracking-[0.08em] text-ink-4">In {proposal.sourceTitle}</p>
-            <p className="mt-1.5 text-[12px] leading-[1.55] text-ink">
-              Broken {isSlug ? "reference" : "link"} to{" "}
-              <span className="rounded-[4px] bg-danger-surface px-1 py-0.5 font-mono text-[11px] text-cursor">{proposal.reference}</span>
-              {" — "}this {isSlug ? "reference" : "document"} doesn&apos;t exist in the workspace.
-            </p>
-            {proposal.candidateTitle ? (
-              <p className="mt-1.5 text-[11px] leading-[1.4] text-ink-3">Closest match: <span className="font-medium text-ink">{proposal.candidateTitle}</span></p>
-            ) : null}
-
-            <label className="mt-2.5 block text-[9.5px] font-medium uppercase tracking-[0.08em] text-ink-4">
-              Point it to
-              <input
-                value={replacements[key] ?? proposal.suggestedReference ?? ""}
-                onChange={(event) => onReplacementChange(key, event.target.value)}
-                placeholder={isSlug ? "slug" : "path/to/document.md"}
-                aria-label={`Replacement for ${proposal.reference}`}
-                className="mt-1 h-8 w-full rounded-[7px] border-[0.5px] border-border bg-bg px-2 text-[11px] font-normal normal-case tracking-normal text-ink outline-none placeholder:text-ink-4 focus:border-ink-3"
-              />
-            </label>
-            <button
-              type="button"
-              disabled={busy || !(replacements[key] ?? proposal.suggestedReference ?? "").trim()}
-              onClick={() => onApprove(proposal)}
-              className="mt-1.5 inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-[7px] bg-ink px-2 text-[11px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50"
-            >
-              <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> Point to this document
-            </button>
-
-            <div className="mt-1.5 flex items-center gap-1.5">
-              {!isSlug ? (
-                <button
-                  type="button"
-                  disabled={busyAction === "create-broken-link-doc"}
-                  onClick={() => onCreate(proposal)}
-                  className="inline-flex min-h-8 flex-1 items-center justify-center gap-1.5 rounded-[7px] border-[0.5px] border-border px-2 text-[10.5px] font-medium text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink disabled:opacity-50"
-                >
-                  <FileText className="h-3.5 w-3.5" strokeWidth={1.5} /> Create as new document
-                </button>
-              ) : null}
-              <button
-                type="button"
-                disabled={busyAction === "remove-broken-link"}
-                onClick={() => onRemove(proposal)}
-                className="inline-flex min-h-8 flex-1 items-center justify-center gap-1.5 rounded-[7px] border-[0.5px] border-border px-2 text-[10.5px] font-medium text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink disabled:opacity-50"
-              >
-                <X className="h-3.5 w-3.5" strokeWidth={1.5} /> Remove this link
-              </button>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-const REVIEW_MODAL_TITLES: Record<ToolResult["kind"], string> = {
-  workflow: "Review workflow.md",
-  classification: "Semantic classification",
-  archive: "Archive candidate",
-  "broken-links": "Broken references",
-  contradictions: "Contradiction queue",
+/**
+ * Header copy for the review shell — pager text (left-most, count-shaped)
+ * and the uppercase action label next to it. Broken links is the only kind
+ * paged one-at-a-time so far (Fase C); the others still show a plain count
+ * until their own redesign (Fases D–H) wires up real navigation.
+ */
+function reviewShellCopy(toolResult: ToolResult, cursor: number): { pagerLabel: string; actionLabel: string } {
+  switch (toolResult.kind) {
+    case "workflow":
+      return { pagerLabel: toolResult.proposal.existingDocumentId ? "Revisión" : "Borrador", actionLabel: "Revisión de workflow" }
+    case "broken-links":
+      return { pagerLabel: `${Math.min(cursor, Math.max(toolResult.proposals.length - 1, 0)) + 1} de ${toolResult.proposals.length}`, actionLabel: "Referencias rotas" }
+    case "classification":
+      return { pagerLabel: `${toolResult.proposals.length} propuesta(s)`, actionLabel: "Classify" }
+    case "archive":
+      return { pagerLabel: `${toolResult.candidates.length} candidato(s)`, actionLabel: "Archive" }
+    case "contradictions": {
+      return { pagerLabel: `${toolResult.proposals.length} conflicto(s)`, actionLabel: "Contradicciones" }
+    }
+    case "merge":
+      return { pagerLabel: `${toolResult.merge.sections.length} secciones`, actionLabel: "Combinar" }
+  }
 }
 
 /**
@@ -1321,12 +1506,21 @@ function WorkspaceAgentReviewModal({
   resolvedIds,
   onClose,
   onApplyWorkflow,
+  onDiscardWorkflow,
+  onAskFollowUp,
   onApplyClassification,
+  onApplyClassificationMany,
   onApplyArchiveCandidate,
+  onApplyArchiveCandidateMany,
   onApplyBrokenReference,
   onRemoveBrokenReference,
   onCreateDocumentForBrokenReference,
   onResolveContradiction,
+  onOpenDocument,
+  reviewCursor,
+  onReviewCursorChange,
+  workspaceDocuments,
+  onLoadWorkspaceDocuments,
 }: {
   message: AgentMessage | null
   busyAction: string | null
@@ -1335,151 +1529,121 @@ function WorkspaceAgentReviewModal({
   resolvedIds: Set<string>
   onClose: () => void
   onApplyWorkflow: (messageId: string, proposal: WorkflowDraftProposal) => void
+  onDiscardWorkflow: (messageId: string) => void
+  onAskFollowUp: (question: string) => Promise<{ ok: boolean; answer: string }>
   onApplyClassification: (messageId: string, proposal: ClassificationProposal) => void
+  onApplyClassificationMany: (messageId: string, proposals: ClassificationProposal[]) => void
   onApplyArchiveCandidate: (messageId: string, candidate: ArchiveCandidate) => void
+  onApplyArchiveCandidateMany: (messageId: string, candidates: ArchiveCandidate[]) => void
   onApplyBrokenReference: (messageId: string, proposal: BrokenReferenceProposal) => void
   onRemoveBrokenReference: (messageId: string, proposal: BrokenReferenceProposal) => void
   onCreateDocumentForBrokenReference: (messageId: string, proposal: BrokenReferenceProposal) => void
   onResolveContradiction: (proposal: ContradictionProposal, resolution: "left" | "right" | "discard") => void
+  onOpenDocument?: (documentId: string) => void
+  reviewCursor: number
+  onReviewCursorChange: (index: number) => void
+  workspaceDocuments: WorkspaceAgentSearchableDocument[] | null
+  onLoadWorkspaceDocuments: () => void
 }) {
   const toolResult = message?.toolResult
   const open = Boolean(message && toolResult)
+  const copy = toolResult ? reviewShellCopy(toolResult, reviewCursor) : null
+
+  const brokenLinksTotal = toolResult?.kind === "broken-links" ? toolResult.proposals.length : 0
+  const brokenLinksCursor = Math.min(reviewCursor, Math.max(brokenLinksTotal - 1, 0))
+  const activeProposal = toolResult?.kind === "broken-links" ? toolResult.proposals[brokenLinksCursor] ?? null : null
+
+  const advanceBrokenLinks = () => {
+    if (brokenLinksCursor < brokenLinksTotal - 1) onReviewCursorChange(brokenLinksCursor + 1)
+    else onClose()
+  }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose() }}>
-      <DialogContent
-        data-testid="workspace-agent-review-modal"
-        className="max-h-[calc(100vh-80px)] w-[520px] max-w-[calc(100vw-40px)] overflow-y-auto font-sans"
-      >
-        {message && toolResult ? (
-          <>
-            <DialogTitle>{REVIEW_MODAL_TITLES[toolResult.kind]}</DialogTitle>
-            <div className="mt-1">
-              {toolResult.kind === "workflow" ? (
-                <WorkflowReviewBody
-                  proposal={toolResult.proposal}
-                  busy={busyAction === "apply-workflow"}
-                  onApprove={() => onApplyWorkflow(message.id, toolResult.proposal)}
-                />
-              ) : null}
-              {toolResult.kind === "classification" ? (
-                <ClassificationReviewBody
-                  toolResult={toolResult}
-                  busy={busyAction === "apply-classification"}
-                  onApprove={(proposal) => onApplyClassification(message.id, proposal)}
-                />
-              ) : null}
-              {toolResult.kind === "archive" && toolResult.candidates.length > 0 ? (
-                <ArchiveReviewBody
-                  candidate={toolResult.candidates[0]}
-                  busy={busyAction === "apply-archive"}
-                  onApprove={() => onApplyArchiveCandidate(message.id, toolResult.candidates[0])}
-                />
-              ) : null}
-              {toolResult.kind === "broken-links" ? (
-                <BrokenLinksReviewBody
-                  messageId={message.id}
-                  proposals={toolResult.proposals}
-                  busy={busyAction === "apply-broken-link"}
-                  busyAction={busyAction}
-                  replacements={brokenReferenceReplacements}
-                  onReplacementChange={onReplacementChange}
-                  onApprove={(proposal) => onApplyBrokenReference(message.id, proposal)}
-                  onRemove={(proposal) => onRemoveBrokenReference(message.id, proposal)}
-                  onCreate={(proposal) => onCreateDocumentForBrokenReference(message.id, proposal)}
-                />
-              ) : null}
-              {toolResult.kind === "contradictions" ? (
-                <ContradictionReviewCard
-                  proposals={toolResult.proposals}
-                  resolvedIds={resolvedIds}
-                  busy={busyAction === "resolve"}
-                  onResolve={onResolveContradiction}
-                />
-              ) : null}
-            </div>
-          </>
-        ) : null}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/**
- * One review per Compare run's message, always showing the first
- * unresolved proposal — the queue advances on its own as resolvedIds grows.
- */
-function ContradictionReviewCard({
-  proposals,
-  resolvedIds,
-  busy,
-  onResolve,
-}: {
-  proposals: ContradictionProposal[]
-  resolvedIds: Set<string>
-  busy: boolean
-  onResolve: (proposal: ContradictionProposal, resolution: "left" | "right" | "discard") => void
-}) {
-  const active = proposals.filter((proposal) => !resolvedIds.has(proposal.id))
-  const current = active[0] ?? null
-  if (!current) return null
-
-  return (
-    <div data-testid="workspace-agent-review-queue">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] uppercase tracking-[0.1em] text-ink-4">{current.topic}</p>
-        <span className="shrink-0 text-[10px] text-ink-4">1 / {active.length}</span>
-      </div>
-      <EvidenceCard
-        title={current.left.title}
-        text={current.left.fragment.text}
-        line={current.left.fragment.line}
-        updatedAt={current.left.updatedAt}
-        suggested={current.suggestedDocumentId === current.left.documentId}
-      />
-      <EvidenceCard
-        title={current.right.title}
-        text={current.right.fragment.text}
-        line={current.right.fragment.line}
-        updatedAt={current.right.updatedAt}
-        suggested={current.suggestedDocumentId === current.right.documentId}
-      />
-      <div className="mt-2 flex items-center gap-1.5">
-        <button type="button" disabled={busy} onClick={() => onResolve(current, "left")} className="inline-flex min-h-7 flex-1 items-center justify-center gap-1 rounded-[6px] bg-ink px-2 text-[10px] font-medium text-bg transition-colors hover:bg-ink/90 disabled:opacity-50">
-          <Check className="h-3 w-3" strokeWidth={1.5} /> Use left
-        </button>
-        <button type="button" disabled={busy} onClick={() => onResolve(current, "right")} className="inline-flex min-h-7 flex-1 items-center justify-center gap-1 rounded-[6px] border-[0.5px] border-border px-2 text-[10px] font-medium text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink disabled:opacity-50">
-          <Check className="h-3 w-3" strokeWidth={1.5} /> Use right
-        </button>
-      </div>
-      <button type="button" disabled={busy} onClick={() => onResolve(current, "discard")} className="mt-1.5 inline-flex h-6 w-full items-center justify-center text-[10px] text-ink-4 hover:text-ink disabled:opacity-50">Discard finding</button>
-    </div>
-  )
-}
-
-function EvidenceCard({
-  title,
-  text,
-  line,
-  updatedAt,
-  suggested = false,
-}: {
-  title: string
-  text: string
-  line: number
-  updatedAt: string
-  suggested?: boolean
-}) {
-  return (
-    <div className="mt-2 rounded-[7px] border-[0.5px] border-border/70 bg-bg/80 px-2 py-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <p className="truncate text-[10px] font-medium text-ink-3">{title}</p>
-          {suggested ? <span className="shrink-0 rounded-[4px] bg-muted px-1 py-0.5 text-[8px] font-medium text-cursor">Suggested</span> : null}
+    <WorkspaceAgentReviewShell
+      open={open}
+      onOpenChange={(next) => { if (!next) onClose() }}
+      pagerLabel={copy?.pagerLabel ?? ""}
+      actionLabel={copy?.actionLabel ?? ""}
+      testId="workspace-agent-review-modal"
+      onBack={toolResult?.kind === "broken-links" && brokenLinksCursor > 0 ? () => onReviewCursorChange(brokenLinksCursor - 1) : undefined}
+      onForward={toolResult?.kind === "broken-links" && brokenLinksCursor < brokenLinksTotal - 1 ? () => onReviewCursorChange(brokenLinksCursor + 1) : undefined}
+      pill={toolResult?.kind === "merge" ? {
+        icon: <SlidersHorizontal className="h-4 w-4" strokeWidth={1.5} />,
+        label: `${toolResult.merge.sourceDocuments.length} documentos`,
+      } : undefined}
+      footer={toolResult?.kind === "broken-links" && activeProposal ? (
+        <>
+          <span className="flex-1" />
+          <ReviewShellCancelButton onClick={advanceBrokenLinks} label="Saltar por ahora" />
+          <ReviewShellPrimaryButton onClick={advanceBrokenLinks}>Siguiente</ReviewShellPrimaryButton>
+        </>
+      ) : undefined}
+    >
+      {message && toolResult ? (
+        <div className={cn(
+          "h-full",
+          toolResult.kind !== "broken-links"
+            && toolResult.kind !== "workflow"
+            && toolResult.kind !== "classification"
+            && toolResult.kind !== "archive"
+            && toolResult.kind !== "contradictions"
+            && toolResult.kind !== "merge"
+            && "od-scroll overflow-y-auto p-6",
+        )}>
+          {toolResult.kind === "workflow" ? (
+            <WorkflowReviewBody
+              proposal={toolResult.proposal}
+              busy={busyAction === "apply-workflow"}
+              onApprove={() => onApplyWorkflow(message.id, toolResult.proposal)}
+              onDiscard={() => onDiscardWorkflow(message.id)}
+              onAskFollowUp={onAskFollowUp}
+            />
+          ) : null}
+          {toolResult.kind === "classification" ? (
+            <ClassificationReviewBody
+              toolResult={toolResult}
+              busy={busyAction === "apply-classification"}
+              onApprove={(proposal) => onApplyClassification(message.id, proposal)}
+              onApproveMany={(proposals) => onApplyClassificationMany(message.id, proposals)}
+            />
+          ) : null}
+          {toolResult.kind === "archive" ? (
+            <ArchiveReviewBody
+              candidates={toolResult.candidates}
+              busy={busyAction === "apply-archive"}
+              onApprove={(candidate) => onApplyArchiveCandidate(message.id, candidate)}
+              onApproveMany={(candidates) => onApplyArchiveCandidateMany(message.id, candidates)}
+            />
+          ) : null}
+          {toolResult.kind === "broken-links" && activeProposal ? (
+            <BrokenLinksReviewBody
+              messageId={message.id}
+              proposal={activeProposal}
+              busy={busyAction === "apply-broken-link"}
+              busyAction={busyAction}
+              replacements={brokenReferenceReplacements}
+              onReplacementChange={onReplacementChange}
+              onApprove={(proposal) => onApplyBrokenReference(message.id, proposal)}
+              onRemove={(proposal) => onRemoveBrokenReference(message.id, proposal)}
+              onCreate={(proposal) => onCreateDocumentForBrokenReference(message.id, proposal)}
+              documents={workspaceDocuments}
+              onLoadDocuments={onLoadWorkspaceDocuments}
+            />
+          ) : null}
+          {toolResult.kind === "contradictions" ? (
+            <ContradictionReviewCard
+              proposals={toolResult.proposals}
+              resolvedIds={resolvedIds}
+              busy={busyAction === "resolve"}
+              onResolve={onResolveContradiction}
+              onOpenDocument={onOpenDocument}
+            />
+          ) : null}
+          {toolResult.kind === "merge" ? (
+            <MergeReviewBody toolResult={toolResult.merge} onCreate={() => {}} />
+          ) : null}
         </div>
-        <span className="shrink-0 text-[9px] text-ink-4">line {line} · {updatedAt.slice(0, 10)}</span>
-      </div>
-      <p className="mt-1 text-[10.5px] leading-[1.4] text-ink">{text}</p>
-    </div>
+      ) : null}
+    </WorkspaceAgentReviewShell>
   )
 }

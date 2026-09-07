@@ -1,6 +1,6 @@
 "use client";
 
-import type { DragEventHandler, ReactNode } from "react";
+import type { PointerEventHandler, ReactNode } from "react";
 import { DocumentStateIcon } from "@/components/ui/document-state-icon";
 import type { DocumentState } from "@/lib/writings/document-state";
 import { cn } from "@/lib/utils";
@@ -14,8 +14,12 @@ type ArtifactWritingCellProps = {
   actions?: ReactNode;
   collections?: ReactNode;
   className?: string;
-  draggable?: boolean;
-  onDragStart?: DragEventHandler<HTMLDivElement>;
+  /**
+   * Pointer-based drag (not native HTML5 `draggable`) — native drag doesn't fire
+   * reliably in Tauri's WKWebView. Pass a handler that calls
+   * `startWorkspaceAgentDrag` from `components/agent/workspace-agent-drag`.
+   */
+  onDragPointerDown?: PointerEventHandler<HTMLDivElement>;
 };
 
 /**
@@ -33,8 +37,7 @@ export function ArtifactWritingCell({
   actions,
   collections,
   className,
-  draggable = false,
-  onDragStart,
+  onDragPointerDown,
 }: ArtifactWritingCellProps) {
   const resolvedDescription = description?.trim() || null;
   const resolvedLocalPath = localPath?.trim() || null;
@@ -47,8 +50,7 @@ export function ArtifactWritingCell({
       className={cn("ArtifactWritingCell min-w-0", className)}
       data-section="artifact-writing-cell"
       title={locationLabel}
-      draggable={draggable}
-      onDragStart={onDragStart}
+      onPointerDown={onDragPointerDown}
     >
       {locationLabel ? (
         <span className="sr-only" data-section="artifact-writing-location">
