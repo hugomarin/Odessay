@@ -26,6 +26,46 @@ describe("workspaceAskRequestSchema (ODE-489's documented Context Gap — a conv
   })
 })
 
+describe("workspaceAskRequestSchema.focusedDocumentId (ODE-489 follow-up — a reference to the open Writing, not its content)", () => {
+  const documentMeta = {
+    id: "doc-1",
+    title: "My draft",
+    relativePath: "doc-1.md",
+    currentArtifactType: null,
+    currentStatus: null,
+    visibility: null,
+    version: null,
+    modifiedAt: null,
+    excerpt: null,
+    references: [],
+    markdown: null,
+  }
+  const base = {
+    question: "Hola",
+    targetDocumentIds: [],
+    collections: [],
+    documentCollectionIds: {},
+    annotations: [],
+    workflowMarkdown: null,
+    catalogTruncated: false,
+  }
+
+  it("accepts a focusedDocumentId that is present in documents, with markdown left null", () => {
+    const result = workspaceAskRequestSchema.safeParse({ ...base, documents: [documentMeta], focusedDocumentId: "doc-1" })
+    expect(result.success).toBe(true)
+  })
+
+  it("accepts a null or omitted focusedDocumentId", () => {
+    expect(workspaceAskRequestSchema.safeParse({ ...base, documents: [], focusedDocumentId: null }).success).toBe(true)
+    expect(workspaceAskRequestSchema.safeParse({ ...base, documents: [] }).success).toBe(true)
+  })
+
+  it("rejects a focusedDocumentId that isn't present in documents (same rule as targetDocumentIds)", () => {
+    const result = workspaceAskRequestSchema.safeParse({ ...base, documents: [], focusedDocumentId: "doc-1" })
+    expect(result.success).toBe(false)
+  })
+})
+
 describe("workspaceAskResponseSchema.suggestedAction (ODE-489/491 follow-up — free text can now dispatch to a predetermined action)", () => {
   const base = { answer: "ok", evidence: [], requestedDocumentIds: [] }
 

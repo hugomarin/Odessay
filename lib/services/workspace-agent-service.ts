@@ -34,6 +34,7 @@ import {
 import type {
   WorkspaceAskEvidence,
   WorkspaceAskRequest,
+  WorkspaceAskResult,
   WorkspaceClassificationAnnotation,
   WorkspaceClassificationDocument,
   WorkspaceClassificationRequest,
@@ -235,6 +236,15 @@ export type WorkspaceAgentAskInput = {
    * unopened document).
    */
   liveOverride?: { documentId: string; markdown: string }
+  /**
+   * The id of the Writing currently open, referenced but not eagerly read
+   * (ODE-489 follow-up — "el contexto solo se debe invocar en la medida
+   * que el usuario lo solicite"). Not part of `selection`. `askAgent` tells
+   * the model this id exists; if the model requests it back via
+   * `requestedDocumentIds`, `askAgent` performs one bounded extra round
+   * with its content included — never on every turn, only when asked for.
+   */
+  focusedDocumentId?: string | null
 }
 
 export type WorkspaceAgentCitedDocument = {
@@ -504,6 +514,15 @@ async function prepareDocumentEvidence(
      * moment the user keeps typing without saving.
      */
     liveOverrides?: ReadonlyMap<string, string>
+    /**
+     * Referenced but never read here (ODE-489 follow-up — "una etiqueta de
+     * dónde estás parado"): when the selection is otherwise empty, this
+     * record's metadata alone (never its markdown) is still offered in
+     * `promptRecords`, so the model knows the artifact exists and can
+     * request it — instead of the wider catalog, which stays withheld
+     * exactly as before.
+     */
+    focusedDocumentId?: string | null
   },
   contextServices: { store: ContextArtifactStore; ledger: ContextLedger },
 ): Promise<ServiceResponse<PreparedDocumentEvidence>> {
@@ -512,13 +531,14 @@ async function prepareDocumentEvidence(
   if (selectedIds.length === 0) {
     if (options.allowEmptySelection) {
       const recordsById = new Map(context.documents.map((record) => [record.id, record]))
+      const focusedRecord = options.focusedDocumentId ? recordsById.get(options.focusedDocumentId) : undefined
       return ok({
         selectedRecords: [],
         recordsById,
         currentRecordsById: new Map(recordsById),
         markdownById: new Map(),
         annotations: [],
-        promptRecords: [],
+        promptRecords: focusedRecord && !focusedRecord.deletedAt ? [focusedRecord] : [],
         catalogTruncated: false,
       })
     }
@@ -1122,44 +1142,80 @@ export async function createWorkspaceAgentService(
     async askAgent(input) {
       const context = await getContextWithWorkflow(input.workflowReadApproval)
       if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentAskRun>
+      const contextData = context.data
 
-      const prepared = await prepareDocumentEvidence(context.data, input.selection, tools, {
-        maxTargets: MAX_WORKSPACE_ASK_TARGETS,
-        maxCatalogDocuments: MAX_WORKSPACE_ASK_CATALOG_DOCUMENTS,
-        maxBodyChars: MAX_WORKSPACE_ASK_BODY_CHARS,
-        noSelectionMessage: "Select at least one local artifact before asking the Workspace agent.",
-        contextPurpose: "ask-evidence",
-        allowEmptySelection: true,
-        liveOverrides: input.liveOverride ? new Map([[input.liveOverride.documentId, input.liveOverride.markdown]]) : undefined,
-      }, contextServices)
-      if (prepared.error || !prepared.data) return prepared as ServiceResponse<WorkspaceAgentAskRun>
-      const { selectedRecords, recordsById, currentRecordsById, markdownById, annotations, promptRecords, catalogTruncated } = prepared.data
+      const liveOverrides = input.liveOverride ? new Map([[input.liveOverride.documentId, input.liveOverride.markdown]]) : undefined
+      const focusedDocumentId = input.focusedDocumentId ?? null
 
-      const aiRequest: WorkspaceAskRequest = {
-        question: input.question.slice(0, 2_000),
-        targetDocumentIds: selectedRecords.map((record) => record.id),
-        documents: promptRecords.map((record) => documentForClassification(
-          currentRecordsById.get(record.id) ?? record,
-          markdownById.get(record.id) ?? null,
-        )),
-        collections: context.data.collections.map((collection) => ({
-          id: collection.id,
-          name: collection.name,
-          description: collection.description,
-          writingsCount: collection.writingsCount,
-        })),
-        documentCollectionIds: context.data.documentCollectionIds,
-        annotations,
-        workflowMarkdown: context.data.workflowMarkdown,
-        catalogTruncated,
-        recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
+      /**
+       * One full round: prepare evidence for `selection`, then ask the
+       * model. Called twice at most — see the bounded retry below.
+       */
+      const runAskRound = async (
+        selection: readonly WorkspaceAgentSelection[],
+      ): Promise<ServiceResponse<{ prepared: PreparedDocumentEvidence; aiResult: WorkspaceAskResult }>> => {
+        const prepared = await prepareDocumentEvidence(contextData, selection, tools, {
+          maxTargets: MAX_WORKSPACE_ASK_TARGETS,
+          maxCatalogDocuments: MAX_WORKSPACE_ASK_CATALOG_DOCUMENTS,
+          maxBodyChars: MAX_WORKSPACE_ASK_BODY_CHARS,
+          noSelectionMessage: "Select at least one local artifact before asking the Workspace agent.",
+          contextPurpose: "ask-evidence",
+          allowEmptySelection: true,
+          liveOverrides,
+          focusedDocumentId,
+        }, contextServices)
+        if (prepared.error || !prepared.data) return prepared as ServiceResponse<{ prepared: PreparedDocumentEvidence; aiResult: WorkspaceAskResult }>
+
+        const aiRequest: WorkspaceAskRequest = {
+          question: input.question.slice(0, 2_000),
+          targetDocumentIds: prepared.data.selectedRecords.map((record) => record.id),
+          documents: prepared.data.promptRecords.map((record) => documentForClassification(
+            prepared.data!.currentRecordsById.get(record.id) ?? record,
+            prepared.data!.markdownById.get(record.id) ?? null,
+          )),
+          collections: contextData.collections.map((collection) => ({
+            id: collection.id,
+            name: collection.name,
+            description: collection.description,
+            writingsCount: collection.writingsCount,
+          })),
+          documentCollectionIds: contextData.documentCollectionIds,
+          annotations: prepared.data.annotations,
+          workflowMarkdown: contextData.workflowMarkdown,
+          catalogTruncated: prepared.data.catalogTruncated,
+          recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
+          focusedDocumentId,
+        }
+        const aiResult = await getAIService().askWorkspace(aiRequest)
+        if (aiResult.error || !aiResult.data) {
+          return error(aiResult.error?.code ?? "AI_REQUEST_FAILED", aiResult.error?.message ?? "The Workspace agent could not answer right now.")
+        }
+        return ok({ prepared: prepared.data, aiResult: aiResult.data })
       }
-      const aiResult = await getAIService().askWorkspace(aiRequest)
-      if (aiResult.error || !aiResult.data) {
-        return error(aiResult.error?.code ?? "AI_REQUEST_FAILED", aiResult.error?.message ?? "The Workspace agent could not answer right now.")
+
+      const first = await runAskRound(input.selection)
+      if (first.error || !first.data) return first as ServiceResponse<WorkspaceAgentAskRun>
+
+      let { prepared, aiResult } = first.data
+
+      // Bounded, one-shot retry — only for the document the caller told the
+      // model was "currently open" (ODE-489 follow-up), never for an
+      // arbitrary id the model merely guessed at from catalog metadata.
+      // The user is already looking at it; materializing it on request
+      // isn't new scope the way auto-fetching some other workspace document
+      // would be. If the retry itself fails for any reason, the first
+      // round's already-valid answer is kept rather than erroring the turn.
+      const alreadyHasFocus = prepared.selectedRecords.some((record) => record.id === focusedDocumentId)
+      if (focusedDocumentId && !alreadyHasFocus && aiResult.requestedDocumentIds.includes(focusedDocumentId)) {
+        const retry = await runAskRound([...input.selection, { kind: "file", documentId: focusedDocumentId }])
+        if (!retry.error && retry.data) {
+          ;({ prepared, aiResult } = retry.data)
+        }
       }
 
-      const validEvidence: WorkspaceAskEvidence[] = aiResult.data.evidence.filter((item) => markdownById.get(item.documentId)?.includes(item.quote))
+      const { selectedRecords, recordsById, markdownById, promptRecords } = prepared
+
+      const validEvidence: WorkspaceAskEvidence[] = aiResult.evidence.filter((item) => markdownById.get(item.documentId)?.includes(item.quote))
       const evidence: EvidenceCitation[] = validEvidence.flatMap((item) => {
         const source = recordsById.get(item.documentId)
         const markdown = markdownById.get(item.documentId)
@@ -1177,14 +1233,14 @@ export async function createWorkspaceAgentService(
       })
       const selectedRecordSet = new Set(selectedRecords.map((record) => record.id))
       const { requestedDocumentIds, requestedDocuments } = requestedDocumentsFrom(
-        aiResult.data.requestedDocumentIds,
+        aiResult.requestedDocumentIds,
         recordsById,
         selectedRecordSet,
         markdownById,
       )
 
       return ok({
-        answer: aiResult.data.answer,
+        answer: aiResult.answer,
         evidence,
         requestedDocumentIds,
         requestedDocuments,
@@ -1194,7 +1250,7 @@ export async function createWorkspaceAgentService(
           title: record.title?.trim() || record.binding?.relativePath || record.id,
           path: record.binding?.relativePath ?? null,
         })),
-        suggestedAction: aiResult.data.suggestedAction ?? null,
+        suggestedAction: aiResult.suggestedAction ?? null,
       })
     },
     async presentNote(kind, facts, sessionContext) {

@@ -518,7 +518,9 @@ function WorkspaceAgentPanelSession({
       attachments,
       hasService: true,
       recentSessionActions: sessionActionLogRef.current,
-      policies: { autoSelectRecent: true },
+      // Classify always reads what it classifies — there's no "defer and
+      // ask again" for the thing the action exists to evaluate.
+      policies: { autoSelectRecent: true, eagerlyLoadFocusedDocument: true },
     })
     const resolved = await resolveChatSelection(envelope, service, MAX_WORKSPACE_CLASSIFICATION_TARGETS)
     if (!resolved.ok) {
@@ -584,12 +586,14 @@ function WorkspaceAgentPanelSession({
       return { ok: true, run: response.data, autoSelectedNotice: null }
     }
     // Frozen once, read three ways below: the selection to ground in
-    // (envelope.availableSources), and — only when it actually belongs to
-    // the document being asked about — the live override
-    // (liveOverrideFromEnvelope). The focused Writing's on-screen content
-    // may be ahead of its last persisted catalog version; a Workspace
-    // service being available must not mean unsaved edits get silently
-    // ignored (ODE-489/490 follow-up).
+    // (envelope.availableSources, with the focused document excluded per
+    // eagerlyLoadFocusedDocument: false below — it's referenced, not
+    // loaded, until askAgent's own bounded retry fetches it on request);
+    // the live override (liveOverrideFromEnvelope), only when it actually
+    // belongs to the document being asked about; and the focused
+    // document's bare id, so the model knows it exists without having its
+    // content pushed on every single turn (ODE-489/490 follow-up — a plain
+    // "Hola" must cost zero document reads, not just zero *extra* ones).
     const envelope = buildContextEnvelope({
       text: question,
       source: "chat",
@@ -600,7 +604,7 @@ function WorkspaceAgentPanelSession({
       liveSnapshot: getDocumentSnapshot?.() ?? null,
       hasService: true,
       recentSessionActions: sessionActionLogRef.current,
-      policies: { autoSelectRecent: false },
+      policies: { autoSelectRecent: false, eagerlyLoadFocusedDocument: false },
     })
     const resolved = await resolveChatSelection(envelope, service, MAX_WORKSPACE_ASK_TARGETS)
     if (!resolved.ok) {
@@ -616,6 +620,7 @@ function WorkspaceAgentPanelSession({
       workflowReadApproval,
       sessionContext: sessionActionLogRef.current.slice(-MAX_SESSION_ACTIONS_CONTEXT),
       liveOverride: liveOverrideFromEnvelope(envelope),
+      focusedDocumentId: envelope.invocation.location.focusedDocument?.documentId ?? null,
     })
     if (response.error || !response.data) {
       return { ok: false, message: response.error?.message ?? "The Workspace agent could not answer right now." }

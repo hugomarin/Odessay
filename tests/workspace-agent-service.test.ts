@@ -465,6 +465,139 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     }))
   })
 
+  describe("askAgent — lazy focused document + bounded retry (ODE-489 follow-up: 'el contexto solo se debe invocar en la medida que el usuario lo solicite')", () => {
+    it("does not read the focused document on the first round — only its metadata is offered, via focusedDocumentId", async () => {
+      const focused = document("focused", "Storage: SQLite. A long design rationale follows.")
+      contextMocks.list.mockResolvedValue([focused.catalogRecord])
+      const read = vi.fn(async ({ approval }) => ({
+        data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
+        error: null,
+      }))
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "Hi! How can I help?", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({ question: "Hola", selection: [], focusedDocumentId: "focused" })
+
+      expect(result.error).toBeNull()
+      expect(read).not.toHaveBeenCalled()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+        focusedDocumentId: "focused",
+        targetDocumentIds: [],
+        documents: expect.arrayContaining([expect.objectContaining({ id: "focused", markdown: null })]),
+      }))
+    })
+
+    it("performs one bounded extra round with the focused document's content when the model requests it, and returns the retried answer", async () => {
+      const focused = document("focused", "Storage: SQLite.")
+      contextMocks.list.mockResolvedValue([focused.catalogRecord])
+      const read = vi.fn(async ({ approval }) => ({
+        data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
+        error: null,
+      }))
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace
+        .mockResolvedValueOnce({
+          data: { answer: "I'd need to read it to answer that.", evidence: [], requestedDocumentIds: ["focused"], usage: null },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: {
+            answer: "This document decides to use SQLite for storage.",
+            evidence: [{ documentId: "focused", quote: "Storage: SQLite.", reason: "States the storage decision." }],
+            requestedDocumentIds: [],
+            usage: null,
+          },
+          error: null,
+        })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({ question: "What storage does this use?", selection: [], focusedDocumentId: "focused" })
+
+      expect(result.error).toBeNull()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+      expect(read).toHaveBeenCalledTimes(1)
+      expect(result.data?.answer).toBe("This document decides to use SQLite for storage.")
+      expect(result.data?.evidence).toEqual([expect.objectContaining({ quote: "Storage: SQLite.", line: 1 })])
+      expect(result.data?.requestedDocumentIds).toEqual([])
+    })
+
+    it("keeps the first round's answer when the retry itself fails, instead of erroring the whole turn", async () => {
+      const focused = document("focused", "Storage: SQLite.")
+      contextMocks.list.mockResolvedValue([focused.catalogRecord])
+      let callCount = 0
+      const read = vi.fn(async ({ approval }) => {
+        callCount += 1
+        if (callCount === 1) return { data: null, error: { code: "UNAVAILABLE" as const, message: "boom", retryable: true } }
+        return { data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } }, error: null }
+      })
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "I don't have enough context yet, but here's what I can say generally.", evidence: [], requestedDocumentIds: ["focused"], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({ question: "What storage does this use?", selection: [], focusedDocumentId: "focused" })
+
+      expect(result.error).toBeNull()
+      expect(result.data?.answer).toBe("I don't have enough context yet, but here's what I can say generally.")
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+    })
+
+    it("does not auto-fetch a requested id that isn't the focused document — that stays the existing manual 'note the user' path", async () => {
+      const focused = document("focused", "Storage: SQLite.")
+      const other = document("other-doc", "Some other content.")
+      contextMocks.list.mockResolvedValue([focused.catalogRecord, other.catalogRecord])
+      const read = vi.fn(async ({ approval }) => ({
+        data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
+        error: null,
+      }))
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "Might be related to another artifact.", evidence: [], requestedDocumentIds: ["other-doc"], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({ question: "Is this related to anything else?", selection: [], focusedDocumentId: "focused" })
+
+      expect(result.error).toBeNull()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+      expect(read).not.toHaveBeenCalled()
+      expect(result.data?.requestedDocumentIds).toEqual(["other-doc"])
+    })
+
+    it("does not retry when the focused document was already part of the explicit selection", async () => {
+      const focused = document("focused", "Storage: SQLite.")
+      contextMocks.list.mockResolvedValue([focused.catalogRecord])
+      const read = vi.fn(async ({ approval }) => ({
+        data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
+        error: null,
+      }))
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "Answer.", evidence: [], requestedDocumentIds: ["focused"], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({
+        question: "q",
+        selection: [{ kind: "file", documentId: "focused" }],
+        focusedDocumentId: "focused",
+      })
+
+      expect(result.error).toBeNull()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+      expect(read).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe("askAboutDocument (ODE-490 — no Workspace, BindingRoot, or catalog needed)", () => {
     it("answers from a single document's live content with no catalog, tools, or filesystem access", async () => {
       aiMocks.askWorkspace.mockResolvedValueOnce({

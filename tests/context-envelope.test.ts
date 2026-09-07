@@ -155,19 +155,75 @@ describe("buildContextEnvelope — live snapshot precedence", () => {
 })
 
 describe("selectionFromEnvelope", () => {
-  it("translates available sources into the service's selection shape", () => {
+  it("translates available sources into the service's selection shape when eagerlyLoadFocusedDocument is true (Classify)", () => {
     const envelope = buildContextEnvelope({
       text: "q",
-      source: "chat",
+      source: "command",
       scope: { kind: "document", id: "doc-1" },
       attachments: [attachment("doc-2")],
       recentSessionActions: [],
       hasService: true,
+      policies: { eagerlyLoadFocusedDocument: true },
     })
     expect(selectionFromEnvelope(envelope)).toEqual([
       { kind: "file", documentId: "doc-1", path: undefined },
       { kind: "file", documentId: "doc-2", path: "doc-2.md" },
     ])
+  })
+
+  it("excludes the focused document but keeps explicit attachments when eagerlyLoadFocusedDocument is false (ODE-489 follow-up — free-text ask defers the focused Writing's content)", () => {
+    const envelope = buildContextEnvelope({
+      text: "Hola",
+      source: "chat",
+      scope: { kind: "document", id: "doc-1" },
+      attachments: [attachment("doc-2")],
+      recentSessionActions: [],
+      hasService: true,
+      policies: { eagerlyLoadFocusedDocument: false },
+    })
+    expect(selectionFromEnvelope(envelope)).toEqual([
+      { kind: "file", documentId: "doc-2", path: "doc-2.md" },
+    ])
+  })
+
+  it("is empty for a plain 'Hola' with a focused Writing and nothing attached", () => {
+    const envelope = buildContextEnvelope({
+      text: "Hola",
+      source: "chat",
+      scope: { kind: "document", id: "doc-1" },
+      attachments: [],
+      recentSessionActions: [],
+      hasService: true,
+      policies: { eagerlyLoadFocusedDocument: false },
+    })
+    expect(selectionFromEnvelope(envelope)).toEqual([])
+  })
+
+  it("still includes the focused document when it's also explicitly attached (the attachment entry, not the focused-document one)", () => {
+    const envelope = buildContextEnvelope({
+      text: "Summarize this",
+      source: "chat",
+      scope: { kind: "document", id: "doc-1" },
+      attachments: [attachment("doc-1")],
+      recentSessionActions: [],
+      hasService: true,
+      policies: { eagerlyLoadFocusedDocument: false },
+    })
+    expect(selectionFromEnvelope(envelope)).toEqual([
+      { kind: "file", documentId: "doc-1", path: "doc-1.md" },
+    ])
+  })
+
+  it("defaults to false (deferred) when the policy isn't given", () => {
+    const envelope = buildContextEnvelope({
+      text: "Hola",
+      source: "chat",
+      scope: { kind: "document", id: "doc-1" },
+      attachments: [],
+      recentSessionActions: [],
+      hasService: true,
+    })
+    expect(selectionFromEnvelope(envelope)).toEqual([])
   })
 })
 

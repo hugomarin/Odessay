@@ -226,6 +226,14 @@ export type WorkspaceAskRequest = {
   catalogTruncated: boolean
   /** Short summaries of what happened earlier in this chat session (actions run, prior Q&A), most recent last. */
   recentSessionActions?: string[]
+  /**
+   * The artifact the user currently has open, if any — a reference only
+   * (ODE-489 follow-up: "el contexto solo se debe invocar en la medida que
+   * el usuario lo solicite"). Its entry in `documents` may have
+   * `markdown: null`; if the question needs its content, request it by id
+   * in `requestedDocumentIds` rather than answering as if you'd read it.
+   */
+  focusedDocumentId?: string | null
 }
 
 export type WorkspaceAskResult = {

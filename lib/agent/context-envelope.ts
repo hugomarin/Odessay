@@ -13,9 +13,12 @@ import type { WorkspaceAgentSelection } from "@/lib/services/workspace-agent-ser
  * turn and reads it, instead of re-deriving the same precedence three times.
  *
  * What this module intentionally does NOT do:
- * - It does not read document bodies. `availableSources` are references
- *   only — turning them into an `EvidenceBundle` is the lazy Context
- *   Acquisition Plan's job (lib/services/context/), unchanged by this file.
+ * - It does not read document bodies, ever — `availableSources` are
+ *   references only. Whether a reference actually gets read is decided by
+ *   `policies.eagerlyLoadFocusedDocument` (via `selectionFromEnvelope`)
+ *   plus askAgent's own bounded retry-on-request — this module only
+ *   composes the references and the policy, not the acquisition itself
+ *   (lib/services/context/, unchanged by this file).
  * - It does not implement the full target precedence
  *   (explicit reference > live text > focused document > visible Workspace
  *   > session). The pre-existing logic this replaces put the focused
@@ -103,6 +106,20 @@ export type AgentInvocation = {
 export type ContextPolicies = {
   /** Whether an empty explicit selection may fall back to the Workspace's most recently updated artifacts. */
   autoSelectRecent: boolean
+  /**
+   * Whether the focused Writing's body is read immediately, or only
+   * referenced (id known, content deferred) until the model explicitly
+   * asks for it via `requestedDocumentIds` (ODE-489 follow-up — "el
+   * contexto solo se debe invocar en la medida que el usuario lo
+   * solicite"). `true` for Classify (there's nothing to classify without
+   * reading it). `false` for free-text ask — the focused document is
+   * "where the user is standing", not automatically evidence: a plain
+   * "Hola" must not read it, but "resume this" can still request it and
+   * get it in a bounded second round (see `askAgent`'s auto-retry).
+   * Explicit attachments are never affected by this — attaching something
+   * on purpose is already unambiguous intent to use it.
+   */
+  eagerlyLoadFocusedDocument: boolean
 }
 
 export type ContextEnvelope = {
@@ -216,17 +233,27 @@ export function buildContextEnvelope(input: {
     availableSources,
     policies: {
       autoSelectRecent: input.policies?.autoSelectRecent ?? false,
+      eagerlyLoadFocusedDocument: input.policies?.eagerlyLoadFocusedDocument ?? false,
     },
   }
 }
 
-/** The bounded selection to hand to askAgent/suggestClassification — envelope sources translated to the service's own selection shape. */
+/**
+ * The bounded selection to hand to askAgent/suggestClassification —
+ * envelope sources translated to the service's own selection shape.
+ * Excludes the focused-document source when
+ * `policies.eagerlyLoadFocusedDocument` is false: it's still `available`
+ * (findable via `envelope.focus`/`invocation.location.focusedDocument`),
+ * just not eagerly read. Explicit attachments are never excluded here.
+ */
 export function selectionFromEnvelope(envelope: ContextEnvelope): WorkspaceAgentSelection[] {
-  return envelope.availableSources.map((source) => ({
-    kind: source.kind,
-    documentId: source.documentId,
-    path: source.path,
-  }))
+  return envelope.availableSources
+    .filter((source) => envelope.policies.eagerlyLoadFocusedDocument || source.origin !== "focused-document")
+    .map((source) => ({
+      kind: source.kind,
+      documentId: source.documentId,
+      path: source.path,
+    }))
 }
 
 /** The live override to hand to askAgent — only when the live snapshot actually belongs to the turn's focused source, never a stand-in for an unrelated selection. */
