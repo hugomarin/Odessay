@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
 import { markOdessaySelfWritePath } from "@/lib/services/desktop/tauri-fs-watch"
+import type { DocumentCatalogReference } from "@/lib/services/contracts/document-catalog"
 
 export type DesktopFileMetadata = {
   path: string
@@ -30,6 +31,11 @@ export type DesktopWorkspaceSnapshot = {
   files: DesktopWorkspaceFile[]
 }
 
+export type DesktopWorkspaceAgentPathValidation = {
+  canonicalRoot: string
+  canonicalPath: string
+}
+
 export type DesktopWorkspaceTouchResult =
   | { status: "updated"; rootPath: string; bindingRootId: string; file: DesktopWorkspaceFile }
   | { status: "needsReconcile"; reason: string }
@@ -51,6 +57,7 @@ export type DesktopCatalogRow = {
   relativePath: string | null; canonicalPath: string | null; inode: number | null
   contentHash: string | null; size: number | null; lastSeenAt: number | null
   excerpt: string | null; excerptContentHash: string | null
+  referenceTargets: DocumentCatalogReference[] | null; referenceTargetsContentHash: string | null
 }
 
 export type DesktopCatalogDualWriteInput = {
@@ -155,6 +162,18 @@ export async function tauriReadLocalImageAsset(
 
 export async function tauriWorkspaceCreate(parentPath: string, name: string): Promise<string> {
   return invoke<string>("workspace_create", { parentPath, name })
+}
+
+export async function tauriValidateWorkspaceAgentPath(
+  rootPath: string,
+  candidatePath: string,
+  allowMissing = false,
+): Promise<DesktopWorkspaceAgentPathValidation> {
+  return invoke<DesktopWorkspaceAgentPathValidation>("workspace_agent_validate_path", {
+    rootPath,
+    candidatePath,
+    allowMissing,
+  })
 }
 
 export async function tauriWorkspaceInspect(rootPath: string): Promise<DesktopWorkspaceSnapshot> {

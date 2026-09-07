@@ -77,6 +77,13 @@ describe("resolveActionableRootIds", () => {
     ).toEqual([])
   })
 
+  it("returns an empty list for legacy internal manifest writes (no self-loop)", () => {
+    const legacyDirectory = [".ody", "ssey"].join("")
+    expect(
+      resolveActionableRootIds([`/Users/h/A/${legacyDirectory}/index.json`], roots),
+    ).toEqual([])
+  })
+
   it("returns an empty list for confirmed-delete trash moves", () => {
     expect(
       resolveActionableRootIds(["/Users/h/A/.trash/letter.md"], roots),

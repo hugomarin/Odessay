@@ -59,6 +59,95 @@ describe("webAIService", () => {
     })
   })
 
+  it("maps semantic workspace classification proposals and usage from the web route envelope", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            summary: "The artifact is a reusable prompt.",
+            proposals: [{
+              documentId: "doc-1",
+              decision: "change",
+              proposedArtifactType: "prompt",
+              proposedStatus: "draft",
+              change: "Change the type to Prompt.",
+              rationale: "The body is written as a reusable instruction.",
+              benefit: "Improves discovery of reusable prompts.",
+              uncertainty: null,
+              evidence: [{
+                documentId: "doc-1",
+                quote: "Ask for context.",
+                reason: "The instruction defines the artifact's purpose.",
+              }],
+            }],
+            requestedDocumentIds: ["doc-2"],
+            model: "gpt-5.6-luna",
+            promptTokens: 200,
+            completionTokens: 80,
+            totalTokens: 280,
+            latencyMs: 420,
+          },
+          error: null,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await webAIService.classifyWorkspace({
+      request: "Review this artifact.",
+      targetDocumentIds: ["doc-1"],
+      documents: [{
+        id: "doc-1",
+        title: "Prompt",
+        relativePath: "prompt.md",
+        currentArtifactType: "general",
+        currentStatus: "draft",
+        visibility: "private",
+        version: 1,
+        modifiedAt: 1_800_000_000_000,
+        excerpt: "Ask for context.",
+        references: [],
+        markdown: "Ask for context.",
+      }],
+      collections: [],
+      documentCollectionIds: {},
+      annotations: [],
+      vocabulary: [{
+        kind: "type",
+        key: "prompt",
+        name: "Prompt",
+        description: "A reusable instruction.",
+        isRequired: false,
+      }, {
+        kind: "status",
+        key: "draft",
+        name: "Draft",
+        description: "Readable end to end.",
+        isRequired: true,
+      }],
+      workflowMarkdown: null,
+      catalogTruncated: false,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/ai/workspace-classification", expect.objectContaining({ method: "POST" }))
+    expect(result).toEqual({
+      data: {
+        summary: "The artifact is a reusable prompt.",
+        proposals: [expect.objectContaining({ documentId: "doc-1", decision: "change" })],
+        requestedDocumentIds: ["doc-2"],
+        usage: {
+          model: "gpt-5.6-luna",
+          promptTokens: 200,
+          completionTokens: 80,
+          totalTokens: 280,
+          latencyMs: 420,
+        },
+      },
+      error: null,
+    })
+  })
+
   it("normalizes publication review payloads into the contract shape", async () => {
     const fetchMock = vi.fn(async () =>
         new Response(

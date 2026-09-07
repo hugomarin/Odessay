@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, FileText, Folder, Home } from "lucide-react";
 import { buildWorkspaceFolderTree } from "@/lib/workspace/folder-tree";
 import type { WorkspaceFolderTreeNode } from "@/lib/workspace/folder-tree";
+import { startWorkspaceAgentDrag } from "@/components/agent/workspace-agent-drag";
 import { cn } from "@/lib/utils";
 
 export type WorkspaceTreeItem = {
@@ -16,6 +17,13 @@ export type WorkspaceTreeItem = {
 };
 
 export type WorkspaceTreeMode = "studio" | "detail";
+
+export type WorkspaceTreeDragPayload = {
+  kind: "folder" | "file";
+  id?: string;
+  path: string;
+  label: string;
+};
 
 export type WorkspaceTreeProps = {
   items: WorkspaceTreeItem[];
@@ -36,6 +44,7 @@ export type WorkspaceTreeProps = {
   foldersOnly?: boolean;
   onOpenFile?: (id: string) => void;
   onSelectFolder?: (path: string) => void;
+  onDragStart?: (payload: WorkspaceTreeDragPayload) => void;
   onCountChange?: (count?: number) => void;
   emptyState?: React.ReactNode;
   className?: string;
@@ -58,6 +67,7 @@ function TreeRow({
   onToggleFolder,
   onOpenFile,
   onSelectFolder,
+  onDragStart,
 }: {
   depth: number;
   node: WorkspaceFolderTreeNode;
@@ -70,6 +80,7 @@ function TreeRow({
   onToggleFolder: (path: string) => void;
   onOpenFile?: (id: string) => void;
   onSelectFolder?: (path: string) => void;
+  onDragStart?: (payload: WorkspaceTreeDragPayload) => void;
 }) {
   if (node.kind === "file") {
     if (foldersOnly) return null;
@@ -84,6 +95,16 @@ function TreeRow({
           aria-selected={active}
           aria-current={active ? "page" : undefined}
           disabled={disabled}
+          onPointerDown={onDragStart ? (event) => {
+            const payload: WorkspaceTreeDragPayload = {
+              kind: "file",
+              id: fileId,
+              path: node.path,
+              label: node.name.replace(/\.md$/i, ""),
+            };
+            startWorkspaceAgentDrag(event, payload);
+            onDragStart(payload);
+          } : undefined}
           onClick={() => onOpenFile?.(fileId)}
           style={{ paddingLeft: `${8 + depth * 18}px` }}
           className={cn(
@@ -123,6 +144,15 @@ function TreeRow({
         aria-expanded={hasChildren ? expanded : undefined}
         aria-selected={isSelected}
         disabled={folderDisabled}
+        onPointerDown={onDragStart ? (event) => {
+          const payload: WorkspaceTreeDragPayload = {
+            kind: "folder",
+            path: node.path,
+            label: node.name,
+          };
+          startWorkspaceAgentDrag(event, payload);
+          onDragStart(payload);
+        } : undefined}
         onClick={() => {
           if (mode === "detail") {
             onSelectFolder?.(node.path);
@@ -171,6 +201,7 @@ function TreeRow({
               onToggleFolder={onToggleFolder}
               onOpenFile={onOpenFile}
               onSelectFolder={onSelectFolder}
+              onDragStart={onDragStart}
             />
           ))}
         </ul>
@@ -191,6 +222,7 @@ export function WorkspaceTree({
   foldersOnly,
   onOpenFile,
   onSelectFolder,
+  onDragStart,
   onCountChange,
   emptyState,
   className,
@@ -353,6 +385,7 @@ export function WorkspaceTree({
             onToggleFolder={handleToggleFolder}
             onOpenFile={onOpenFile}
             onSelectFolder={onSelectFolder}
+            onDragStart={onDragStart}
           />
         ))}
       </ul>

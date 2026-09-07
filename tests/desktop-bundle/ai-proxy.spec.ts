@@ -65,10 +65,11 @@ describe("desktop AI proxy — routing contract", () => {
     expect(src).not.toMatch(/createBrowserClient/)
   })
 
-  it("covers the three required AI endpoints: title-suggestions, publication-review, corrections", () => {
+  it("covers the AI endpoints: title-suggestions, publication-review, workspace classification, corrections", () => {
     const src = readFileSync(desktopAiService, "utf8")
     expect(src).toMatch(/title-suggestions/)
     expect(src).toMatch(/publication-review/)
+    expect(src).toMatch(/workspace-classification/)
     expect(src).toMatch(/corrections/)
   })
 })

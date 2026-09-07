@@ -49,7 +49,19 @@ if (issueIds.length === 0) {
 }
 const baseRef = range.base;
 const headRef = range.head;
-console.log(`[ops:delivery:gate] Comparing ${baseRef}..${headRef}.`);
+const prHead = process.env.TRACEABILITY_PR_HEAD_SHA?.trim() ?? "";
+const prBranchPoint = process.env.TRACEABILITY_PR_BRANCH_POINT_SHA?.trim() ?? "";
+const commitBaseRef =
+  range.source === "pinned-environment" && prHead && prBranchPoint
+    ? prBranchPoint
+    : baseRef;
+const commitHeadRef =
+  range.source === "pinned-environment" && prHead && prBranchPoint
+    ? prHead
+    : headRef;
+console.log(
+  `[ops:delivery:gate] Comparing ${commitBaseRef}..${commitHeadRef} for commit traceability (immutable range ${baseRef}..${headRef}).`,
+);
 async function githubPullRequestCommitSubjects() {
   const repository = process.env.GITHUB_REPOSITORY?.trim();
   if (
@@ -86,7 +98,7 @@ async function githubPullRequestCommitSubjects() {
 // objects. Event-only fallback may use GitHub compare; local runs use git.
 const commitSubjects = (
   (await githubPullRequestCommitSubjects()) ??
-  execFileSync("git", ["log", "--pretty=%s", `${baseRef}..${headRef}`], {
+  execFileSync("git", ["log", "--pretty=%s", `${commitBaseRef}..${commitHeadRef}`], {
     encoding: "utf8",
   }).split("\n")
 )

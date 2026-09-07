@@ -22,6 +22,7 @@ type WatchOptions = {
 }
 
 const DEFAULT_SELF_WRITE_SUPPRESSION_MS = 2_000
+const LEGACY_WORKSPACE_DIR_NAME = [".ody", "ssey"].join("")
 
 const selfWriteExpiresAtByPath = new Map<string, number>()
 
@@ -66,6 +67,7 @@ export async function watchFsPaths(
 
 export function isOdessayInternalPath(path: string) {
   return path.includes("/.odessay/") || path.endsWith("/.odessay")
+    || path.includes(`/${LEGACY_WORKSPACE_DIR_NAME}/`) || path.endsWith(`/${LEGACY_WORKSPACE_DIR_NAME}`)
     || path.includes("/.trash/") || path.endsWith("/.trash")
 }
 

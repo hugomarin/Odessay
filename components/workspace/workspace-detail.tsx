@@ -15,8 +15,9 @@ import {
   Tag,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WorkspaceTree } from "@/components/workspace/workspace-tree";
+import { startWorkspaceAgentDrag } from "@/components/agent/workspace-agent-drag";
 import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar";
 import { BulkActionBar } from "@/components/desk/bulk-action-bar";
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
@@ -111,6 +112,12 @@ import type {
   WorkspaceDetail as WorkspaceDetailType,
   WorkspaceFile,
 } from "@/lib/workspace/types";
+
+const WorkspaceAgentPanel = lazy(() =>
+  import("@/components/agent/workspace-agent-panel").then((module) => ({
+    default: module.WorkspaceAgentPanel,
+  })),
+);
 
 function formatFileTimestamp(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", {
@@ -222,6 +229,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const [newFileName, setNewFileName] = useState("");
   const [isCreatingFile, setIsCreatingFile] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(true);
   const [headerAction, setHeaderAction] = useState<WorkspaceHeaderAction>(null);
   const [headerActionValue, setHeaderActionValue] = useState("");
   const [documentJoin, setDocumentJoin] = useState<
@@ -767,6 +775,14 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               description={document?.excerpt ?? null}
               localPath={file.path}
               dateLabel={formatFileTimestamp(file.modifiedAt)}
+              onDragPointerDown={(event) => {
+                startWorkspaceAgentDrag(event, {
+                  kind: "file",
+                  id: document?.id,
+                  path: file.path,
+                  label: writingTitle,
+                });
+              }}
               actions={
                 <>
                   <ArtifactWritingAction
@@ -1098,6 +1114,8 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     if (file) void openInEditor(file);
   };
 
+  const handleTreeDragStart = useCallback(() => undefined, []);
+
   if (isLoading || !workspace) {
     return (
       <div className="flex h-screen min-h-0 flex-col bg-bg">
@@ -1316,13 +1334,17 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 selectedFolderPath={selectedFolderPath}
                 onSelectFolder={setSelectedFolderPath}
                 onOpenFile={handleOpenFileFromTree}
+                onDragStart={handleTreeDragStart}
                 foldersOnly={true}
               />
             </div>
           </div>
 
-          {/* Sheet */}
-          <div className="flex min-h-0 flex-col">
+          {/* Sheet + Workspace agent: siblings in one row so the agent panel spans the
+              full column height (flush with the title/filter rows above the file
+              list) instead of being nested under them. */}
+          <div className="relative flex min-h-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col">
             <ViewHeader
               sectionId="workspace-detail-header"
               testId="workspace-detail-header"
@@ -1510,6 +1532,21 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 />
               )}
             </div>
+          </div>
+          <Suspense fallback={null}>
+            <WorkspaceAgentPanel
+              scope={{ kind: "workspace", rootId: workspace.slug }}
+              workspaceRootPath={workspace.rootPath}
+              scopeLabel={workspace.name}
+              open={isAgentPanelOpen}
+              onOpenChange={setIsAgentPanelOpen}
+              onOpenDocument={(documentId) => {
+                if (previewRows.some((row) => row.id === documentId)) {
+                  setPreviewWritingId(documentId);
+                }
+              }}
+            />
+          </Suspense>
           </div>
         </div>
 

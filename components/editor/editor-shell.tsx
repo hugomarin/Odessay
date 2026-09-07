@@ -8,6 +8,7 @@ import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
 import { TextSelection } from "@tiptap/pm/state"
 import { useRouter } from "next/navigation"
+import { Bot } from "lucide-react"
 import { useManualCorrections } from "@/hooks/useManualCorrections"
 import {
   mapLocalSyncStatusToSaveState,
@@ -47,6 +48,7 @@ import {
   updateMarkdownAnnotation,
 } from "@/lib/editor/footnote-extension"
 import type { AnnotationPanelEntry } from "@/components/editor/panels/notes-panel"
+import type { WorkspaceAgentDocumentSnapshot } from "@/components/agent/workspace-agent-panel"
 import {
   convertHtmlTablesToMarkdown,
   materializeMarkdownForRichParser,
@@ -347,6 +349,12 @@ const TableOfContentsPanel = lazy(() =>
   })),
 )
 
+const WorkspaceAgentPanel = lazy(() =>
+  import("@/components/agent/workspace-agent-panel").then((module) => ({
+    default: module.WorkspaceAgentPanel,
+  })),
+)
+
 const MARKDOWN_SAVE_DEBOUNCE_MS = 800
 // Desktop persistence performs several ordered local commits (the `.md`, its
 // binding manifest, and SQLite). Keep that pipeline off the keystroke cadence:
@@ -498,6 +506,9 @@ export function EditorShell({
   const lifecycleRef = useRef<WritingLifecycle>("local-only")
   const [isBodyHydrating, setIsBodyHydrating] = useState(false)
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
+  const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(false)
+  const [hasOpenedAgentPanel, setHasOpenedAgentPanel] = useState(false)
+  const [agentWorkspaceRootPath, setAgentWorkspaceRootPath] = useState<string | null>(null)
   // Studio opens with both side panels closed: the ghost rail at the sheet's
   // left edge is the way in (docs/design/views/studio.md).
   const [navigationMode, setNavigationMode] = useState<EditorNavigationMode>(null)
@@ -536,6 +547,29 @@ export function EditorShell({
   const [pendingAnnotation, setPendingAnnotation] = useState<PendingAnnotationSnapshot | null>(null)
   const [pendingRichSelection, setPendingRichSelection] = useState<PendingRichSelectionSnapshot | null>(null)
 
+  useEffect(() => {
+    if (!isAgentPanelOpen || !canonicalPath || !isDesktopRuntime()) {
+      setAgentWorkspaceRootPath(null)
+      return
+    }
+
+    let cancelled = false
+    const currentCanonicalPath = canonicalPath
+    void import("@/lib/services/desktop/workspace-service")
+      .then(({ getDesktopWorkspaceService }) => getDesktopWorkspaceService())
+      .then((service) => service.getWorkspaceContainingPath(currentCanonicalPath))
+      .then((workspace) => {
+        if (!cancelled) setAgentWorkspaceRootPath(workspace?.rootPath ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) setAgentWorkspaceRootPath(null)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [canonicalPath, isAgentPanelOpen])
+
   const modeRef = useRef(mode)
   const titleRef = useRef(title)
   const hasExplicitTitleRef = useRef(hasExplicitTitle)
@@ -557,6 +591,7 @@ export function EditorShell({
   const focusModeRestorationRef = useRef<{
     activePanel: EditorPanel
     isFindReplaceOpen: boolean
+    isAgentPanelOpen: boolean
   } | null>(null)
 
   const enterFocusMode = useCallback(() => {
@@ -564,12 +599,13 @@ export function EditorShell({
       return
     }
 
-    focusModeRestorationRef.current = { activePanel, isFindReplaceOpen }
+    focusModeRestorationRef.current = { activePanel, isFindReplaceOpen, isAgentPanelOpen }
 
     setActivePanel(null)
+    setIsAgentPanelOpen(false)
     setIsFindReplaceOpen(false)
     setIsFocusMode(true)
-  }, [activePanel, isFindReplaceOpen, isFocusMode])
+  }, [activePanel, isAgentPanelOpen, isFindReplaceOpen, isFocusMode])
 
   const exitFocusMode = useCallback(() => {
     if (!isFocusMode) {
@@ -580,6 +616,7 @@ export function EditorShell({
     focusModeRestorationRef.current = null
     if (stateToRestore) {
       setActivePanel(stateToRestore.activePanel)
+      setIsAgentPanelOpen(stateToRestore.isAgentPanelOpen)
       setIsFindReplaceOpen(stateToRestore.isFindReplaceOpen)
     }
     setIsFocusMode(false)
@@ -2765,8 +2802,12 @@ export function EditorShell({
   )
 
   const closeActivePanel = useCallback(() => {
-    setActivePanel(null)
-  }, [])
+    if (activePanel !== null) {
+      setActivePanel(null)
+      return
+    }
+    setIsAgentPanelOpen(false)
+  }, [activePanel])
 
   const navigateToTableOfContentsItem = useCallback(
     (item: TableOfContentDataItem) => {
@@ -4213,6 +4254,15 @@ export function EditorShell({
         .length,
     [automaticCorrectionSuggestions, currentDocumentMarkdown],
   )
+
+  // Lets the Workspace agent chat answer from the Writing's live content
+  // when no Workspace is available to ground it (unmaterialized draft, or a
+  // Writing outside any visible Workspace) — no filesystem/catalog read,
+  // just what's already in the editor (ODE-490).
+  const getAgentDocumentSnapshot = useCallback((): WorkspaceAgentDocumentSnapshot | null => {
+    if (!currentWritingId) return null
+    return { documentId: currentWritingId, title: title.trim() || null, markdown: currentDocumentMarkdown }
+  }, [currentDocumentMarkdown, currentWritingId, title])
 
 
   useEffect(() => {
@@ -6295,7 +6345,7 @@ export function EditorShell({
         }
 
         const intent = resolveEscapeIntent({
-          hasOpenPanel: activePanel !== null,
+          hasOpenPanel: activePanel !== null || isAgentPanelOpen,
           isFocusMode,
         })
 
@@ -6334,6 +6384,7 @@ export function EditorShell({
     footnoteModalOpen,
     handleRunAction,
     isFocusMode,
+    isAgentPanelOpen,
     isFindReplaceOpen,
     linkModalOpen,
     closeFindReplacePanel,
@@ -6362,6 +6413,7 @@ export function EditorShell({
           <EditorTopbar
             isFocusMode={isFocusMode}
             activePanel={activePanel}
+            isAgentPanelOpen={isAgentPanelOpen}
             tabs={editorSession.tabs}
             tabStatuses={tabStatuses}
             activeTabId={editorSession.active_tab_id}
@@ -6371,8 +6423,10 @@ export function EditorShell({
             onReorderTab={handleReorderWorkspaceTab}
             onNewTab={handleCreateWorkspaceTab}
             onToggleFocusMode={toggleFocusMode}
-            onTogglePanel={(panel) => {
-              setActivePanel((current) => (current === panel ? null : panel))
+            onTogglePanel={(panel) => setActivePanel((current) => (current === panel ? null : panel))}
+            onToggleAgent={() => {
+              if (!isAgentPanelOpen) setHasOpenedAgentPanel(true)
+              setIsAgentPanelOpen((current) => !current)
             }}
             isTabBarVisible={isTabBarVisible}
           />
@@ -6559,7 +6613,7 @@ export function EditorShell({
             // the sheet below 1440 — the desktop window opens at 1280, so that
             // was its normal state and it covered the text (owner decision,
             // ODE-433 follow-up).
-            className="EditorRightPanel flex w-[var(--size-panel-right)] shrink-0 flex-col overflow-hidden border-l-[0.5px] border-border font-sans"
+            className="EditorRightPanel flex h-full min-h-0 w-[var(--size-panel-right)] shrink-0 flex-col overflow-hidden border-l-[0.5px] border-border font-sans"
           >
           {/* One header for the four surfaces. Each of them used to carry a
               header and a close button of its own, and Share was a section
@@ -6839,6 +6893,46 @@ export function EditorShell({
           </Suspense>
           </div>
           </aside>
+        ) : null}
+
+        {editorSession.tabs.length > 0 ? (
+          <div
+            data-testid="workspace-agent-focus-host"
+            aria-hidden={isFocusMode}
+            className={cn(
+              "flex min-h-0 shrink-0 self-stretch",
+              isFocusMode && "hidden",
+            )}
+          >
+            {isAgentPanelOpen || hasOpenedAgentPanel ? (
+              <Suspense fallback={null}>
+                <WorkspaceAgentPanel
+                  scope={{ kind: "document", id: currentWritingId ?? "current-artifact" }}
+                  workspaceRootPath={agentWorkspaceRootPath}
+                  scopeLabel={title.trim() || UNTITLED_WRITING_TITLE}
+                  open={isAgentPanelOpen}
+                  onOpenChange={setIsAgentPanelOpen}
+                  onOpenDocument={(documentId) => {
+                    router.push(buildWritingRouteHref("/write", { id: documentId, slug: null }))
+                  }}
+                  getDocumentSnapshot={getAgentDocumentSnapshot}
+                />
+              </Suspense>
+            ) : (
+              <button
+                type="button"
+                data-testid="workspace-agent-rail"
+                aria-label="Open Workspace agent"
+                onClick={() => {
+                  setHasOpenedAgentPanel(true)
+                  setIsAgentPanelOpen(true)
+                }}
+                className="flex h-full min-h-0 w-9 shrink-0 items-center justify-center border-l-[0.5px] border-border bg-muted/70 text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink"
+              >
+                <Bot className="h-4 w-4" strokeWidth={1.5} />
+              </button>
+            )}
+          </div>
         ) : null}
         </div>
       </div>

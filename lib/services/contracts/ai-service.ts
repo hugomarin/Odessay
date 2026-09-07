@@ -131,6 +131,129 @@ export type PublicationReviewResult = {
   engineRevision?: string | null
 }
 
+export type WorkspaceClassificationVocabularyItem = {
+  kind: "type" | "status"
+  key: string
+  name: string
+  description: string
+  isRequired: boolean
+}
+
+export type WorkspaceClassificationDocument = {
+  id: string
+  title: string | null
+  relativePath: string | null
+  currentArtifactType: string | null
+  currentStatus: string | null
+  visibility: string | null
+  version: number | null
+  modifiedAt: number | null
+  excerpt: string | null
+  references: Array<{
+    value: string
+    kind: "path" | "slug"
+  }>
+  /** Full content is present only for explicitly selected and approved artifacts. */
+  markdown: string | null
+}
+
+export type WorkspaceClassificationCollection = {
+  id: string
+  name: string
+  description: string | null
+  writingsCount: number
+}
+
+export type WorkspaceClassificationAnnotation = {
+  documentId: string
+  type: string
+  anchorText: string
+  note: string
+}
+
+export type WorkspaceClassificationRequest = {
+  request: string
+  targetDocumentIds: string[]
+  documents: WorkspaceClassificationDocument[]
+  collections: WorkspaceClassificationCollection[]
+  documentCollectionIds: Record<string, string[]>
+  annotations: WorkspaceClassificationAnnotation[]
+  vocabulary: WorkspaceClassificationVocabularyItem[]
+  workflowMarkdown: string | null
+  catalogTruncated: boolean
+}
+
+export type WorkspaceClassificationEvidence = {
+  documentId: string
+  quote: string
+  reason: string
+}
+
+export type WorkspaceClassificationModelProposal = {
+  documentId: string
+  decision: "change" | "keep" | "needs-review"
+  proposedArtifactType: string | null
+  proposedStatus: string | null
+  change: string
+  rationale: string
+  benefit: string
+  uncertainty: string | null
+  evidence: WorkspaceClassificationEvidence[]
+}
+
+export type WorkspaceClassificationResult = {
+  summary: string
+  proposals: WorkspaceClassificationModelProposal[]
+  /** At most a few catalog ids that need an explicit second read. */
+  requestedDocumentIds: string[]
+  usage: AiUsage | null
+}
+
+export type WorkspaceAskEvidence = {
+  documentId: string
+  quote: string
+  reason: string
+}
+
+export type WorkspaceAskRequest = {
+  question: string
+  targetDocumentIds: string[]
+  documents: WorkspaceClassificationDocument[]
+  collections: WorkspaceClassificationCollection[]
+  documentCollectionIds: Record<string, string[]>
+  annotations: WorkspaceClassificationAnnotation[]
+  workflowMarkdown: string | null
+  catalogTruncated: boolean
+  /** Short summaries of what happened earlier in this chat session (actions run, prior Q&A), most recent last. */
+  recentSessionActions?: string[]
+}
+
+export type WorkspaceAskResult = {
+  answer: string
+  evidence: WorkspaceAskEvidence[]
+  /** At most a few catalog ids that need an explicit second read. */
+  requestedDocumentIds: string[]
+  usage: AiUsage | null
+}
+
+/**
+ * The presentation stage of the Workspace agent pipeline (ODE-491):
+ * `facts` are already-established, deterministic facts computed by a tool
+ * or workflow — this call only decides how they are phrased in the chat,
+ * matching the conversation's language and tone. It never adds a finding.
+ */
+export type WorkspaceToolPresentationRequest = {
+  kind: "workflow" | "broken-links" | "classification" | "archive" | "contradictions" | "merge"
+  facts: string[]
+  /** Short summaries of what happened earlier in this chat session, most recent last, for language/tone continuity only. */
+  recentSessionActions?: string[]
+}
+
+export type WorkspaceToolPresentationResult = {
+  note: string
+  usage: AiUsage | null
+}
+
 export type PersistedCorrectionBlock = {
   id: string
   writingId: string
@@ -172,6 +295,9 @@ export type LearnWordInput = {
 export interface AIService {
   suggestTitle(input: TitleSuggestionRequest): Promise<ServiceResponse<TitleSuggestion>>
   reviewPublication(input: PublicationReviewRequest): Promise<ServiceResponse<PublicationReviewResult>>
+  classifyWorkspace(input: WorkspaceClassificationRequest): Promise<ServiceResponse<WorkspaceClassificationResult>>
+  askWorkspace(input: WorkspaceAskRequest): Promise<ServiceResponse<WorkspaceAskResult>>
+  presentToolResult(input: WorkspaceToolPresentationRequest): Promise<ServiceResponse<WorkspaceToolPresentationResult>>
   hydrateCorrectionBlocks(writingId: string): Promise<ServiceResponse<PersistedCorrectionBlock[]>>
   persistCorrectionBlock(input: PersistCorrectionBlockInput): Promise<ServiceResponse<PersistCorrectionBlockResult>>
   listLearnedWords(input?: ListLearnedWordsInput): Promise<ServiceResponse<LearnedWordsPage>>
@@ -182,11 +308,12 @@ export interface AIService {
 export const AI_SERVICE_CONTRACT = {
   name: "AIService",
   summary:
-    "Remote capability boundary for title suggestions, publication review, and correction-block persistence without exposing provider URLs, HTTP payloads, or session mechanics to the product layer.",
+    "Remote capability boundary for semantic workspace analysis, title suggestions, publication review, and correction-block persistence without exposing provider URLs, HTTP payloads, or session mechanics to the product layer.",
   responsibilities: [
     "Treat AI as a capability contract, not as direct route-handler code or provider-specific fetch logic.",
     "Keep model usage, structured output, and correction memory explicit in the contract so adapters can vary by runtime.",
     "Isolate correction hydration and persistence as part of the same AI capability boundary used by publication review flows.",
+    "Let the model make semantic workspace decisions from bounded document evidence while adapters keep provider transport and output validation private.",
   ],
   layer: ["application", "adapter"],
   runtimeScope: ["shared-core", "web", "cloud", "desktop"],
@@ -213,6 +340,30 @@ export const AI_SERVICE_CONTRACT = {
       input: ["PublicationReviewRequest including correctionBlocks, correction memory, and optional stream flag"],
       output: ["PublicationReviewResult"],
       errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED"],
+    },
+    {
+      name: "classifyWorkspace",
+      kind: "command",
+      summary: "Interpret selected document content against the active vocabulary and return evidence-backed type/status proposals.",
+      input: ["user request", "selected document bodies", "catalog metadata", "workflow", "collections", "annotations", "active vocabulary definitions"],
+      output: ["WorkspaceClassificationResult"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
+    },
+    {
+      name: "askWorkspace",
+      kind: "command",
+      summary: "Answer a free-form question grounded in selected (or auto-selected recent) document content, always returning a helpful answer rather than a hard requirement for a specific action.",
+      input: ["user question", "selected document bodies", "catalog metadata", "workflow", "collections", "annotations"],
+      output: ["WorkspaceAskResult"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
+    },
+    {
+      name: "presentToolResult",
+      kind: "command",
+      summary: "Phrase an already-computed tool or workflow result as one short chat note in the conversation's language and tone, without adding, dropping, or verifying a finding.",
+      input: ["action kind", "deterministic facts", "optional recent session memory"],
+      output: ["WorkspaceToolPresentationResult"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
     },
     {
       name: "hydrateCorrectionBlocks",
