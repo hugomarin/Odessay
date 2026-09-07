@@ -58,6 +58,7 @@ import {
   buildContextAcquisitionPlan,
   createContextArtifactStore,
   createContextLedger,
+  estimateTokenCount,
   resolveEvidenceBundle,
   type ContextArtifactStore,
   type ContextLedger,
@@ -226,6 +227,14 @@ export type WorkspaceAgentAskInput = {
   workflowReadApproval?: WorkspaceAgentApproval
   /** Short summaries of what already happened earlier in this chat session, most recent last. */
   sessionContext?: readonly string[]
+  /**
+   * The currently open Writing's live editor content, when it's part of
+   * `selection` — grounds the ask in what's on screen instead of the last-
+   * persisted catalog version (ODE-489/490 follow-up). Absent when there's
+   * no live-editor context to prefer (e.g. asking about a different,
+   * unopened document).
+   */
+  liveOverride?: { documentId: string; markdown: string }
 }
 
 export type WorkspaceAgentCitedDocument = {
@@ -242,6 +251,13 @@ export type WorkspaceAgentAskRun = {
   targetDocumentIds: string[]
   /** Every document the model could see while answering, so the UI can turn `` `filename` `` mentions into open-document links. */
   documents: WorkspaceAgentCitedDocument[]
+  /**
+   * Set only when the model judged the user was explicitly asking to run
+   * one of the predetermined actions, not just discuss it (ODE-489/491
+   * follow-up). Null from `askAboutDocument` — there's no Workspace/service
+   * available there to dispatch anything to.
+   */
+  suggestedAction: "workflow" | "broken-links" | "classification" | "archive" | "contradictions" | null
 }
 
 /**
@@ -325,6 +341,9 @@ export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): P
     // mention into a (broken) open-document link for a document that doesn't
     // exist yet.
     documents: input.documentId ? [{ documentId, title: title ?? documentId, path: null }] : [],
+    // No Workspace/service here to dispatch a predetermined action to, even
+    // if the model still suggested one.
+    suggestedAction: null,
   })
 }
 
@@ -474,6 +493,17 @@ async function prepareDocumentEvidence(
      * selection — there's nothing to classify otherwise.
      */
     allowEmptySelection?: boolean
+    /**
+     * The Writing currently open in the editor may have unsaved edits the
+     * catalog doesn't know about yet. Without this, a selected document
+     * always answers from its last-persisted content — "summarize this"
+     * silently ignores what the user just typed (ODE-489/490 follow-up).
+     * Keyed by documentId; bypasses the artifact cache entirely for that
+     * document, since the live text has no catalog version to key on and
+     * caching it under the stale catalog version would itself go stale the
+     * moment the user keeps typing without saving.
+     */
+    liveOverrides?: ReadonlyMap<string, string>
   },
   contextServices: { store: ContextArtifactStore; ledger: ContextLedger },
 ): Promise<ServiceResponse<PreparedDocumentEvidence>> {
@@ -509,10 +539,14 @@ async function prepareDocumentEvidence(
     return error("NOT_FOUND", "One or more selected artifacts are no longer available in the workspace catalog.")
   }
 
+  const liveOverrides = options.liveOverrides ?? new Map<string, string>()
+  const overriddenRecords = selectedRecords.filter((record) => liveOverrides.has(record.id))
+  const catalogRecords = selectedRecords.filter((record) => !liveOverrides.has(record.id))
+
   const workflowChars = context.workflowMarkdown?.length ?? 0
   const plan = buildContextAcquisitionPlan({
     intent: "understand",
-    candidates: selectedRecords.map((record, index) => ({
+    candidates: catalogRecords.map((record, index) => ({
       documentId: record.id,
       documentVersion: artifactVersionKey(record),
       purpose: options.contextPurpose,
@@ -527,25 +561,27 @@ async function prepareDocumentEvidence(
     },
   })
 
-  const bundle = await resolveEvidenceBundle(plan, {
-    store: contextServices.store,
-    ledger: contextServices.ledger,
-    readBody: async (documentId) => {
-      const result = await tools.read({ documentId, approval: createInternalReadApproval(documentId) })
-      if (result.error || !result.data) {
-        return { ok: false, errorMessage: result.error?.message ?? `Document ${documentId} could not be read.` }
-      }
-      const document = result.data.document
-      return {
-        ok: true,
-        markdown: document.markdown,
-        documentVersion: artifactVersionKey(document.catalogRecord),
-        raw: document.catalogRecord,
-      }
-    },
-  })
+  const bundle = catalogRecords.length > 0
+    ? await resolveEvidenceBundle(plan, {
+        store: contextServices.store,
+        ledger: contextServices.ledger,
+        readBody: async (documentId) => {
+          const result = await tools.read({ documentId, approval: createInternalReadApproval(documentId) })
+          if (result.error || !result.data) {
+            return { ok: false, errorMessage: result.error?.message ?? `Document ${documentId} could not be read.` }
+          }
+          const document = result.data.document
+          return {
+            ok: true,
+            markdown: document.markdown,
+            documentVersion: artifactVersionKey(document.catalogRecord),
+            raw: document.catalogRecord,
+          }
+        },
+      })
+    : { intent: plan.intent, entries: [], omitted: [], budgetExhausted: false }
 
-  if (bundle.entries.length !== selectedRecords.length) {
+  if (bundle.entries.length !== catalogRecords.length) {
     const stoppedOn = bundle.omitted.at(-1) ?? null
     if (stoppedOn?.reason === "budget_exhausted") {
       return error(
@@ -557,13 +593,37 @@ async function prepareDocumentEvidence(
   }
 
   const markdownById = new Map<string, string>()
+  // Seeded from `context.documents` — the catalog snapshot this very
+  // request already loaded — so it starts out fresh for every selected
+  // record, cached content or not.
   const currentRecordsById = new Map(recordsById)
   const annotations: WorkspaceClassificationAnnotation[] = []
   for (const entry of bundle.entries) {
     markdownById.set(entry.documentId, entry.content)
-    const catalogRecord = entry.raw as DocumentCatalogRecord | undefined
+    // The cache keys on content hash only (ODE-501), so a cache hit's
+    // `raw` can be an older catalog record whose status/version/etc.
+    // changed since without touching the content — using it here would
+    // silently serve that stale metadata over what `context.documents`
+    // already gave us for this same request (ODE-501 follow-up). Only a
+    // fresh read's `raw` — captured in the same request as `context` — is
+    // trusted to overwrite the seeded value.
+    const catalogRecord = !entry.cacheHit ? entry.raw as DocumentCatalogRecord | undefined : undefined
     if (catalogRecord) currentRecordsById.set(entry.documentId, catalogRecord)
     annotations.push(...annotationEvidence(entry.documentId, entry.content))
+  }
+  for (const record of overriddenRecords) {
+    const markdown = liveOverrides.get(record.id) ?? ""
+    markdownById.set(record.id, markdown)
+    annotations.push(...annotationEvidence(record.id, markdown))
+    contextServices.ledger.record({
+      ts: Date.now(),
+      documentId: record.id,
+      documentVersion: "live",
+      representation: "full",
+      tokens: estimateTokenCount(markdown),
+      cacheHit: false,
+      reason: "live-override: unsaved editor content, bypasses the artifact cache",
+    })
   }
 
   const activeRecords = context.documents.filter((record) => !record.deletedAt)
@@ -1070,6 +1130,7 @@ export async function createWorkspaceAgentService(
         noSelectionMessage: "Select at least one local artifact before asking the Workspace agent.",
         contextPurpose: "ask-evidence",
         allowEmptySelection: true,
+        liveOverrides: input.liveOverride ? new Map([[input.liveOverride.documentId, input.liveOverride.markdown]]) : undefined,
       }, contextServices)
       if (prepared.error || !prepared.data) return prepared as ServiceResponse<WorkspaceAgentAskRun>
       const { selectedRecords, recordsById, currentRecordsById, markdownById, annotations, promptRecords, catalogTruncated } = prepared.data
@@ -1133,6 +1194,7 @@ export async function createWorkspaceAgentService(
           title: record.title?.trim() || record.binding?.relativePath || record.id,
           path: record.binding?.relativePath ?? null,
         })),
+        suggestedAction: aiResult.data.suggestedAction ?? null,
       })
     },
     async presentNote(kind, facts, sessionContext) {

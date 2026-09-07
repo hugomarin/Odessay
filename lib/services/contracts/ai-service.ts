@@ -233,6 +233,14 @@ export type WorkspaceAskResult = {
   evidence: WorkspaceAskEvidence[]
   /** At most a few catalog ids that need an explicit second read. */
   requestedDocumentIds: string[]
+  /**
+   * Set only when the user explicitly asked to run one of Odessay's
+   * predetermined actions rather than just discuss it (ODE-489/491
+   * follow-up — free text otherwise never reaches these, only the
+   * dedicated buttons did). The host runs the actual action separately;
+   * `answer` above is a fallback if it isn't dispatched.
+   */
+  suggestedAction: "workflow" | "broken-links" | "classification" | "archive" | "contradictions" | null
   usage: AiUsage | null
 }
 

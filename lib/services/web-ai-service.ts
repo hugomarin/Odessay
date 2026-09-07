@@ -72,6 +72,7 @@ type WorkspaceAskPayload = {
   answer: string
   evidence: WorkspaceAskResult["evidence"]
   requestedDocumentIds: string[]
+  suggestedAction: WorkspaceAskResult["suggestedAction"]
   model: string
   promptTokens: number | null
   completionTokens: number | null
@@ -239,6 +240,7 @@ export const webAIService: AIService = {
         answer: parsed.data.answer,
         evidence: parsed.data.evidence,
         requestedDocumentIds: parsed.data.requestedDocumentIds,
+        suggestedAction: parsed.data.suggestedAction,
         usage: {
           model: parsed.data.model,
           promptTokens: parsed.data.promptTokens,

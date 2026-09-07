@@ -607,11 +607,24 @@ function WorkspaceAgentPanelSession({
     if (workflowReadApproval === null) {
       return { ok: false, message: "Workspace context could not be loaded." }
     }
+    // The focused Writing's on-screen content may be ahead of its last
+    // persisted catalog version — ground the answer in that instead of a
+    // stale read when it's the document actually being asked about
+    // (ODE-489/490 follow-up: a Workspace service being available must not
+    // mean unsaved edits get silently ignored).
+    let liveOverride: { documentId: string; markdown: string } | undefined
+    if (scope.kind === "document") {
+      const liveSnapshot = getDocumentSnapshot?.()
+      if (liveSnapshot?.documentId === scope.id) {
+        liveOverride = { documentId: scope.id, markdown: liveSnapshot.markdown }
+      }
+    }
     const response = await service.askAgent({
       question,
       selection: resolved.selection,
       workflowReadApproval,
       sessionContext: sessionActionLogRef.current.slice(-MAX_SESSION_ACTIONS_CONTEXT),
+      liveOverride,
     })
     if (response.error || !response.data) {
       return { ok: false, message: response.error?.message ?? "The Workspace agent could not answer right now." }
@@ -768,7 +781,7 @@ function WorkspaceAgentPanelSession({
     resolveExecutionServiceById(messages, messageId, service)
   ), [messages, service])
 
-  const applyWorkflow = useCallback((messageId: string, proposal: WorkflowDraftProposal) => runAction("apply-workflow", async () => {
+  const applyWorkflow = useCallback((messageId: string, proposal: WorkflowDraftProposal) => runAction("apply-workflow", async (generation) => {
     const executionService = resolveExecutionService(messageId)
     if (!executionService) return
     const response = await approveWorkflowDraft(executionService, proposal)
@@ -777,8 +790,13 @@ function WorkspaceAgentPanelSession({
       return
     }
     updateMessageToolResult(messageId, "workflow", () => null)
-    setFeedback("workflow.md was updated through the approved desktop write path.")
-  }), [resolveExecutionService, runAction, updateMessageToolResult])
+    const outcome = "workflow.md was updated through the approved desktop write path."
+    setFeedback(outcome)
+    // Distinct from the proposal's own announcement note (ODE-491 follow-up)
+    // — later questions like "what did you just apply?" must see that this
+    // was actually executed, not just proposed.
+    recordSessionAction(outcome, generation)
+  }), [recordSessionAction, resolveExecutionService, runAction, updateMessageToolResult])
 
   /** Discards a workflow draft without writing anything — nothing was applied, so this is purely local UI state. */
   const discardWorkflow = useCallback((messageId: string) => {
@@ -786,7 +804,7 @@ function WorkspaceAgentPanelSession({
     setFeedback("Workflow draft discarded.")
   }, [updateMessageToolResult])
 
-  const applyClassification = useCallback((messageId: string, proposal: ClassificationProposal) => runAction("apply-classification", async () => {
+  const applyClassification = useCallback((messageId: string, proposal: ClassificationProposal) => runAction("apply-classification", async (generation) => {
     const executionService = resolveExecutionService(messageId)
     if (!executionService) return
     const response = await approveClassificationProposal(executionService, proposal)
@@ -798,11 +816,13 @@ function WorkspaceAgentPanelSession({
       ...toolResult,
       proposals: toolResult.proposals.filter((item) => item.documentId !== proposal.documentId),
     }))
-    setFeedback(`Updated ${proposal.documentTitle} through the approved edit path.`)
-  }), [resolveExecutionService, runAction, updateMessageToolResult])
+    const outcome = `Updated ${proposal.documentTitle} through the approved edit path.`
+    setFeedback(outcome)
+    recordSessionAction(outcome, generation)
+  }), [recordSessionAction, resolveExecutionService, runAction, updateMessageToolResult])
 
   /** Applies a batch of classification proposals sequentially (each through the same approval-gated edit path) — the Fase E bulk "Aplicar los N cambios" footer. */
-  const applyClassificationMany = useCallback((messageId: string, proposals: ClassificationProposal[]) => runAction("apply-classification", async () => {
+  const applyClassificationMany = useCallback((messageId: string, proposals: ClassificationProposal[]) => runAction("apply-classification", async (generation) => {
     const executionService = resolveExecutionService(messageId)
     if (!executionService || proposals.length === 0) return
     const appliedIds = new Set<string>()
@@ -821,10 +841,12 @@ function WorkspaceAgentPanelSession({
         proposals: toolResult.proposals.filter((item) => !appliedIds.has(item.documentId)),
       }))
     }
-    setFeedback(failure ?? `Updated ${appliedIds.size} artifact(s) through the approved edit path.`)
-  }), [resolveExecutionService, runAction, updateMessageToolResult])
+    const outcome = failure ?? `Updated ${appliedIds.size} artifact(s) through the approved edit path.`
+    setFeedback(outcome)
+    if (appliedIds.size > 0) recordSessionAction(outcome, generation)
+  }), [recordSessionAction, resolveExecutionService, runAction, updateMessageToolResult])
 
-  const applyArchiveCandidate = useCallback((messageId: string, candidate: ArchiveCandidate) => runAction("apply-archive", async () => {
+  const applyArchiveCandidate = useCallback((messageId: string, candidate: ArchiveCandidate) => runAction("apply-archive", async (generation) => {
     const executionService = resolveExecutionService(messageId)
     if (!executionService) return
     const response = await approveArchiveCandidate(executionService, candidate)
@@ -836,11 +858,13 @@ function WorkspaceAgentPanelSession({
       const next = toolResult.candidates.filter((item) => item.documentId !== candidate.documentId)
       return next.length > 0 ? { ...toolResult, candidates: next } : null
     })
-    setFeedback(`${candidate.title} was marked with the suggested vocabulary status.`)
-  }), [resolveExecutionService, runAction, updateMessageToolResult])
+    const outcome = `${candidate.title} was marked with the suggested vocabulary status.`
+    setFeedback(outcome)
+    recordSessionAction(outcome, generation)
+  }), [recordSessionAction, resolveExecutionService, runAction, updateMessageToolResult])
 
   /** Applies a batch of archive candidates sequentially — the Fase F bulk "Aplicar los N cambios" footer. */
-  const applyArchiveCandidateMany = useCallback((messageId: string, candidates: ArchiveCandidate[]) => runAction("apply-archive", async () => {
+  const applyArchiveCandidateMany = useCallback((messageId: string, candidates: ArchiveCandidate[]) => runAction("apply-archive", async (generation) => {
     const executionService = resolveExecutionService(messageId)
     if (!executionService || candidates.length === 0) return
     const appliedIds = new Set<string>()
@@ -859,8 +883,10 @@ function WorkspaceAgentPanelSession({
         return next.length > 0 ? { ...toolResult, candidates: next } : null
       })
     }
-    setFeedback(failure ?? `Updated ${appliedIds.size} artifact(s) with their suggested vocabulary status.`)
-  }), [resolveExecutionService, runAction, updateMessageToolResult])
+    const outcome = failure ?? `Updated ${appliedIds.size} artifact(s) with their suggested vocabulary status.`
+    setFeedback(outcome)
+    if (appliedIds.size > 0) recordSessionAction(outcome, generation)
+  }), [recordSessionAction, resolveExecutionService, runAction, updateMessageToolResult])
 
   const removeBrokenReferenceProposal = useCallback((messageId: string, proposal: BrokenReferenceProposal) => {
     updateMessageToolResult(messageId, "broken-links", (toolResult) => {
@@ -872,7 +898,7 @@ function WorkspaceAgentPanelSession({
     })
   }, [updateMessageToolResult])
 
-  const applyBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("apply-broken-link", async () => {
+  const applyBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("apply-broken-link", async (generation) => {
     const executionService = resolveExecutionService(messageId)
     if (!executionService) return
     const key = `${messageId}:${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
@@ -895,10 +921,12 @@ function WorkspaceAgentPanelSession({
       delete next[key]
       return next
     })
-    setFeedback(`Updated ${proposal.sourceTitle} through the approved edit path.`)
-  }), [brokenReferenceReplacements, removeBrokenReferenceProposal, resolveExecutionService, runAction])
+    const outcome = `Updated ${proposal.sourceTitle} through the approved edit path.`
+    setFeedback(outcome)
+    recordSessionAction(outcome, generation)
+  }), [brokenReferenceReplacements, recordSessionAction, removeBrokenReferenceProposal, resolveExecutionService, runAction])
 
-  const removeBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("remove-broken-link", async () => {
+  const removeBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("remove-broken-link", async (generation) => {
     const executionService = resolveExecutionService(messageId)
     if (!executionService) return
     const response = await executionService.removeBrokenReference(proposal, {
@@ -910,10 +938,12 @@ function WorkspaceAgentPanelSession({
       return
     }
     removeBrokenReferenceProposal(messageId, proposal)
-    setFeedback(`Removed the link from ${proposal.sourceTitle} through the approved edit path.`)
-  }), [removeBrokenReferenceProposal, resolveExecutionService, runAction])
+    const outcome = `Removed the link from ${proposal.sourceTitle} through the approved edit path.`
+    setFeedback(outcome)
+    recordSessionAction(outcome, generation)
+  }), [recordSessionAction, removeBrokenReferenceProposal, resolveExecutionService, runAction])
 
-  const createDocumentForBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("create-broken-link-doc", async () => {
+  const createDocumentForBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("create-broken-link-doc", async (generation) => {
     const executionService = resolveExecutionService(messageId)
     if (!executionService) return
     const response = await executionService.createDocumentForBrokenReference(proposal, createApproval("write", proposal.reference))
@@ -922,8 +952,10 @@ function WorkspaceAgentPanelSession({
       return
     }
     removeBrokenReferenceProposal(messageId, proposal)
-    setFeedback(`Created ${response.data.document.title ?? proposal.reference} through the approved write path.`)
-  }), [removeBrokenReferenceProposal, resolveExecutionService, runAction])
+    const outcome = `Created ${response.data.document.title ?? proposal.reference} through the approved write path.`
+    setFeedback(outcome)
+    recordSessionAction(outcome, generation)
+  }), [recordSessionAction, removeBrokenReferenceProposal, resolveExecutionService, runAction])
 
   const persistResolvedIds = useCallback((next: Set<string>) => {
     setResolvedIds(next)
@@ -936,7 +968,7 @@ function WorkspaceAgentPanelSession({
     }
   }, [storageKey])
 
-  const resolveContradiction = useCallback((proposal: ContradictionProposal, resolution: "left" | "right" | "discard") => runAction("resolve", async () => {
+  const resolveContradiction = useCallback((proposal: ContradictionProposal, resolution: "left" | "right" | "discard") => runAction("resolve", async (generation) => {
     // No messageId on this call site — the owning message is whichever
     // "contradictions" card still lists this proposal (same reasoning as
     // resolveExecutionService: execute against the Workspace it came from).
@@ -957,8 +989,10 @@ function WorkspaceAgentPanelSession({
     const next = new Set(resolvedIds)
     next.add(proposal.id)
     persistResolvedIds(next)
-    setFeedback(resolution === "discard" ? "Finding discarded from this review queue." : "The selected evidence was applied to the target artifact.")
-  }), [messages, persistResolvedIds, resolvedIds, runAction, service])
+    const outcome = resolution === "discard" ? "Finding discarded from this review queue." : "The selected evidence was applied to the target artifact."
+    setFeedback(outcome)
+    recordSessionAction(outcome, generation)
+  }), [messages, persistResolvedIds, recordSessionAction, resolvedIds, runAction, service])
 
   const handleAgentDrop = useCallback((attachment: WorkspaceAgentDragPayload) => {
     setAttachments((current) => {
@@ -1026,6 +1060,39 @@ function WorkspaceAgentPanelSession({
     sessionActionLogRef.current = []
   }, [])
 
+  /**
+   * Hands a free-text turn off to the same tool/workflow path the
+   * predetermined-action buttons use, instead of a plain-text answer that
+   * can't actually execute anything (ODE-489/491 follow-up — chat only
+   * ever reached `askAgent`, regardless of what the user asked for). Each
+   * branch already runs its own `runAction`/generation-guarded flow;
+   * `generation` here only feeds `executeClassification`, the one branch
+   * that doesn't wrap itself.
+   */
+  const dispatchSuggestedAction = useCallback(async (
+    kind: NonNullable<WorkspaceAgentAskRun["suggestedAction"]>,
+    requestText: string,
+    generation: number,
+  ): Promise<void> => {
+    switch (kind) {
+      case "classification":
+        await executeClassification(requestText, generation)
+        return
+      case "workflow":
+        await runWorkflow()
+        return
+      case "broken-links":
+        await runBrokenReferences()
+        return
+      case "archive":
+        await runArchiveCandidates()
+        return
+      case "contradictions":
+        await runContradictions()
+        return
+    }
+  }, [executeClassification, runArchiveCandidates, runBrokenReferences, runContradictions, runWorkflow])
+
   const submitChat = useCallback(() => {
     const text = chatDraft.trim()
     if (!text) return
@@ -1053,6 +1120,14 @@ function WorkspaceAgentPanelSession({
       } catch (thrown) {
         outcome = { ok: false, message: thrown instanceof Error ? thrown.message : "The Workspace agent could not answer right now." }
       }
+      if (outcome.ok && outcome.run.suggestedAction) {
+        // The model judged this an explicit request to run a predetermined
+        // action rather than a question — its plain-text `answer` is
+        // discarded; the dispatched action produces its own review-card
+        // message (or, for the ones with no result, its own explanation).
+        await dispatchSuggestedAction(outcome.run.suggestedAction, text, generation)
+        return
+      }
       setMessages((current) => {
         if (sessionGenerationRef.current !== generation) return current
         return [
@@ -1079,7 +1154,7 @@ function WorkspaceAgentPanelSession({
         recordSessionAction(`Q: ${text}\nA: ${outcome.run.answer}`, generation)
       }
     })
-  }, [attachments, chatDraft, executeAsk, recordSessionAction, runAction, scope, scopeLabel, workspaceRootPath])
+  }, [attachments, chatDraft, dispatchSuggestedAction, executeAsk, recordSessionAction, runAction, scope, scopeLabel, workspaceRootPath])
 
   if (!open) {
     return (

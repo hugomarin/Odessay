@@ -4,6 +4,7 @@ import {
   MAX_WORKSPACE_ASK_ANSWER_CHARS,
   MAX_WORKSPACE_ASK_EVIDENCE_ITEMS,
   MAX_WORKSPACE_ASK_QUOTE_CHARS,
+  WORKSPACE_ASK_SUGGESTED_ACTIONS,
   sanitizeWorkspaceAskPayload,
   workspaceAskRequestSchema,
   workspaceAskResponseSchema,
@@ -22,6 +23,56 @@ describe("workspaceAskRequestSchema (ODE-489's documented Context Gap — a conv
       catalogTruncated: false,
     })
     expect(result.success).toBe(true)
+  })
+})
+
+describe("workspaceAskResponseSchema.suggestedAction (ODE-489/491 follow-up — free text can now dispatch to a predetermined action)", () => {
+  const base = { answer: "ok", evidence: [], requestedDocumentIds: [] }
+
+  it("accepts null (the default — a plain conversational answer)", () => {
+    const result = workspaceAskResponseSchema.safeParse({ ...base, suggestedAction: null })
+    expect(result.success).toBe(true)
+  })
+
+  it.each(WORKSPACE_ASK_SUGGESTED_ACTIONS)("accepts %s as a valid suggested action", (action) => {
+    const result = workspaceAskResponseSchema.safeParse({ ...base, suggestedAction: action })
+    expect(result.success).toBe(true)
+  })
+
+  it("rejects an unrecognized action name", () => {
+    const result = workspaceAskResponseSchema.safeParse({ ...base, suggestedAction: "merge" })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe("sanitizeWorkspaceAskPayload — suggestedAction", () => {
+  it("passes through a recognized action", () => {
+    const sanitized = sanitizeWorkspaceAskPayload({
+      answer: "ok",
+      evidence: [],
+      requestedDocumentIds: [],
+      suggestedAction: "classification",
+    }) as Record<string, unknown>
+    expect(sanitized.suggestedAction).toBe("classification")
+  })
+
+  it("downgrades a hallucinated or unrecognized action to null instead of failing the whole response", () => {
+    const sanitized = sanitizeWorkspaceAskPayload({
+      answer: "ok",
+      evidence: [],
+      requestedDocumentIds: [],
+      suggestedAction: "delete-everything",
+    }) as Record<string, unknown>
+    expect(sanitized.suggestedAction).toBeNull()
+  })
+
+  it("defaults a missing suggestedAction to null", () => {
+    const sanitized = sanitizeWorkspaceAskPayload({
+      answer: "ok",
+      evidence: [],
+      requestedDocumentIds: [],
+    }) as Record<string, unknown>
+    expect(sanitized.suggestedAction).toBeNull()
   })
 })
 

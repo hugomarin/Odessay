@@ -262,6 +262,106 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     expect(result.data?.documents).toEqual([{ documentId: "target", title: "target", path: "target.md" }])
   })
 
+  it("askAgent threads the model's suggestedAction through unchanged (ODE-489/491 follow-up — lets the panel dispatch to a real tool/workflow instead of only ever answering in prose)", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Sure, let me classify it.", evidence: [], requestedDocumentIds: [], suggestedAction: "classification", usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "Classify this document and propose its status.",
+      selection: [{ kind: "file", documentId: "target" }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.suggestedAction).toBe("classification")
+  })
+
+  it("askAgent defaults suggestedAction to null when the AI service omits it (older mocks, or a provider response the schema already normalized)", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Hi.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "Hola",
+      selection: [{ kind: "file", documentId: "target" }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.suggestedAction).toBeNull()
+  })
+
+  it("askAgent grounds the answer in a live override instead of the last-persisted read (ODE-489/490 follow-up — unsaved edits must not be silently ignored)", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const read = vi.fn(async ({ approval }) => ({
+      data: {
+        document: target,
+        receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+      },
+      error: null,
+    }))
+    const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: {
+        answer: "This document now decides to use Postgres.",
+        evidence: [{ documentId: "target", quote: "Storage: Postgres.", reason: "States the storage decision." }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "What storage does this artifact use?",
+      selection: [{ kind: "file", documentId: "target" }],
+      liveOverride: { documentId: "target", markdown: "Storage: Postgres." },
+    })
+
+    expect(result.error).toBeNull()
+    // The catalog's persisted body ("SQLite") is never read — the live
+    // override bypasses the tools/cache path entirely for this document.
+    expect(read).not.toHaveBeenCalled()
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      documents: [expect.objectContaining({ id: "target", markdown: "Storage: Postgres." })],
+    }))
+    expect(result.data?.evidence).toEqual([expect.objectContaining({ quote: "Storage: Postgres.", line: 1 })])
+  })
+
   it("askAgent forwards the session's recent actions as memory for the model, so later answers stay consistent with earlier ones", async () => {
     const target = document("target", "Storage: SQLite.")
     contextMocks.list.mockResolvedValue([target.catalogRecord])
@@ -1163,6 +1263,53 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       expect(tools.read).toHaveBeenCalledTimes(2)
       expect(aiMocks.askWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({
         documents: expect.arrayContaining([expect.objectContaining({ markdown: "Storage: PostgreSQL now." })]),
+      }))
+    })
+
+    it("serves fresh catalog metadata on a cache hit instead of the stale record captured when the body was cached (ODE-501 follow-up)", async () => {
+      const target = document("target", "Storage: SQLite.")
+      target.catalogRecord = {
+        ...target.catalogRecord,
+        status: "draft",
+        version: 1,
+        binding: { ...target.catalogRecord.binding!, contentHash: "same-content-hash" },
+      }
+      contextMocks.list.mockResolvedValue([target.catalogRecord])
+      const read = vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      }))
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace.mockResolvedValue({
+        data: { answer: "answer", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      await service.askAgent({ question: "q1", selection: [{ kind: "file", documentId: "target" }] })
+
+      // A metadata-only change: same content (same contentHash), so the
+      // cache key doesn't change — but status/version did, e.g. a
+      // classification approval that ran between the two questions.
+      contextMocks.list.mockResolvedValue([{
+        ...target.catalogRecord,
+        status: "published",
+        version: 2,
+      }])
+
+      await service.askAgent({ question: "q2", selection: [{ kind: "file", documentId: "target" }] })
+
+      // The body is still reused from cache — this isn't about re-reading content.
+      expect(read).toHaveBeenCalledTimes(1)
+      expect(aiMocks.askWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({
+        documents: expect.arrayContaining([expect.objectContaining({
+          id: "target",
+          currentStatus: "published",
+          version: 2,
+        })]),
       }))
     })
   })
