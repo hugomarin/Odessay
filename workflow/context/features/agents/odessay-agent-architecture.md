@@ -166,7 +166,7 @@ Todavía no formaliza completamente:
 - Un Intent Router formal que clasifique la intención *antes* de decidir qué leer — hoy esa decisión lazy la toma el propio modelo dentro de la misma llamada de ask, no un paso previo separado y determinista.
 - registry común de tools/workflows;
 - `AgentResponse` reutilizable entre Card y Modal;
-- Los workflows predeterminados (Workflow, Broken links, Archive, Contradictions, Merge) no construyen ni consumen `ContextEnvelope` todavía — siguen leyendo `documentIds`/`service` directo, sin pasar por el contrato lazy.
+- Workflow, Broken links y Archive no seleccionan documentos específicos — operan sobre todo el Workspace vía el servicio directamente, sin un `ContextEnvelope` que envolver. Contradictions y Merge sí seleccionan (documentos comparados/combinados) y ya construyen y consumen `ContextEnvelope`, cargando siempre de inmediato — comparar o combinar exige leer, no hay nada que diferir.
 
 La migración debe introducir esos contratos sin ampliar el camino legacy basado únicamente en `workspaceRootPath`.
 

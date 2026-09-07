@@ -271,7 +271,7 @@ Gaps que siguen abiertos, sin resolver:
 - No hay un Intent Router formal que clasifique la intención *antes* de la llamada al modelo — la decisión "necesito el documento" la toma el modelo dentro de la misma llamada de ask, reactivamente, no un paso previo separado y determinista.
 - Los adjuntos explícitos y la selección auto-elegida de Workspace (Classify) no pasan por este contrato lazy — se leen de inmediato, sin diferir, igual que antes. El contrato lazy solo cubre el documento enfocado implícito, no el resto de fuentes.
 - El resto del catálogo del Workspace (documentos que no son ni el enfocado ni un adjunto) sigue sin exponerse en absoluto durante una pregunta de chat libre, ni siquiera como referencia — solo Classify ve una porción amplia del catálogo.
-- Los workflows predeterminados (Workflow, Broken links, Archive, Contradictions, Merge) no construyen ni consumen `ContextEnvelope` todavía — siguen leyendo `documentIds`/`service` directo.
+- De los cinco workflows predeterminados, solo dos seleccionan documentos específicos: Contradictions y Merge ya construyen y consumen `ContextEnvelope` (`policies.eagerlyLoadFocusedDocument: true` — comparar o combinar exige leer, invocar la acción ya es la señal explícita; no hay "diferir y preguntar de nuevo" para el material que el usuario trajo a propósito). Workflow, Broken links y Archive no tienen selección de documentos que envolver — operan sobre todo el Workspace vía el servicio directamente (`service.proposeWorkflow`/`findBrokenReferences`/`findArchiveCandidates`), así que `ContextEnvelope` no aplica de la misma forma; envolverlos solo para etiquetar `source`/sesión sería un cambio cosmético sin efecto funcional, y no se hizo.
 
 ## Clasificación arquitectónica
 

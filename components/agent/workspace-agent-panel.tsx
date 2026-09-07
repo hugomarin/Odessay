@@ -648,14 +648,31 @@ function WorkspaceAgentPanelSession({
   }), [announceToolResult, getWorkflowReadApproval, runAction, service])
 
   const runContradictions = useCallback(() => runAction("contradictions", async (generation) => {
-    if (!service || documentIds.length < 2) {
+    if (!service) return
+    const envelope = buildContextEnvelope({
+      text: "Compare the attached artifacts for contradictions.",
+      source: "command",
+      scope,
+      scopeLabel,
+      workspaceRootPath,
+      attachments,
+      hasService: true,
+      recentSessionActions: sessionActionLogRef.current,
+      // Comparing documents requires reading them — there's no "defer and
+      // ask again" for artifacts the user explicitly brought together to
+      // compare (same reasoning as Classify: using the action at all is
+      // already an unambiguous request to read its targets).
+      policies: { autoSelectRecent: false, eagerlyLoadFocusedDocument: true },
+    })
+    const targetIds = documentIdsFromSources(envelope.availableSources)
+    if (targetIds.length < 2) {
       setFeedback("Attach at least two artifacts to compare their claims.")
       return
     }
-    const readApprovals = Object.fromEntries(documentIds.map((documentId) => [documentId, createApproval("read", documentId)]))
+    const readApprovals = Object.fromEntries(targetIds.map((documentId) => [documentId, createApproval("read", documentId)]))
     const workflowReadApproval = await getWorkflowReadApproval()
     if (workflowReadApproval === null) return
-    const response = await service.findContradictions(documentIds, readApprovals, workflowReadApproval)
+    const response = await service.findContradictions(targetIds, readApprovals, workflowReadApproval)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "Contradictions could not be compared.")
       return
@@ -667,7 +684,7 @@ function WorkspaceAgentPanelSession({
     ]
     const note = await service.presentNote("contradictions", contradictionFacts, sessionActionLogRef.current)
     announceToolResult(note, generation, { kind: "contradictions", proposals: response.data })
-  }), [announceToolResult, documentIds, getWorkflowReadApproval, runAction, service])
+  }), [announceToolResult, attachments, getWorkflowReadApproval, runAction, scope, scopeLabel, service, workspaceRootPath])
 
   /**
    * Merge (Fase H) — UI-only mock: reads the real markdown of the attached
@@ -677,11 +694,27 @@ function WorkspaceAgentPanelSession({
    * body for that reason.
    */
   const runMerge = useCallback(() => runAction("merge", async (generation) => {
-    if (!service || documentIds.length < 2) {
+    if (!service) return
+    const envelope = buildContextEnvelope({
+      text: "Merge the attached artifacts into a single draft.",
+      source: "command",
+      scope,
+      scopeLabel,
+      workspaceRootPath,
+      attachments,
+      hasService: true,
+      recentSessionActions: sessionActionLogRef.current,
+      // Same reasoning as Contradictions: merging requires reading every
+      // target, and running the action at all is already the explicit
+      // signal — nothing to defer.
+      policies: { autoSelectRecent: false, eagerlyLoadFocusedDocument: true },
+    })
+    const targetIds = documentIdsFromSources(envelope.availableSources)
+    if (targetIds.length < 2) {
       setFeedback("Attach at least two artifacts to combine them.")
       return
     }
-    const targets = documentIds.slice(0, 4)
+    const targets = targetIds.slice(0, 4)
     const sources: { documentId: string; title: string; markdown: string }[] = []
     for (const documentId of targets) {
       const response = await service.tools.read({ documentId, approval: createApproval("read", documentId) })
@@ -699,7 +732,7 @@ function WorkspaceAgentPanelSession({
     const mergeFacts = [`Combined ${sources.length} artifacts into a ${merge.sections.length}-section draft (preview only).`]
     const note = await service.presentNote("merge", mergeFacts, sessionActionLogRef.current)
     announceToolResult(note, generation, { kind: "merge", merge })
-  }), [announceToolResult, documentIds, runAction, service])
+  }), [announceToolResult, attachments, runAction, scope, scopeLabel, service, workspaceRootPath])
 
   /**
    * Data-driven catalog for the Actions popover — one entry per predetermined
