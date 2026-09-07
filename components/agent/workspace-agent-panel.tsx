@@ -20,6 +20,7 @@ import {
   Paperclip,
   PanelRightOpen,
   PictureInPicture2,
+  Plus,
   SlidersHorizontal,
   Sparkles,
   Workflow,
@@ -57,6 +58,7 @@ import {
   type AgentMessage,
   type ToolResult,
   type WorkspaceAgentContextAttachment,
+  type WorkspaceAgentMessageContext,
 } from "@/lib/agent/workspace-agent-chat"
 import { useWorkspaceAgentDropZone, type WorkspaceAgentDragPayload } from "@/components/agent/workspace-agent-drag"
 import {
@@ -119,6 +121,27 @@ export type { ToolResult, AgentMessage }
 type AskOutcome =
   | { ok: true; run: WorkspaceAgentAskRun; autoSelectedNotice: string | null }
   | { ok: false; message: string }
+
+/**
+ * Snapshots which Writing/Workspace a message is being produced against.
+ * Called with the scope/label/root captured by whichever closure is
+ * currently running (ODE-502) — a workflow started against Writing A keeps
+ * pointing at Writing A even if the caller's own render was recreated for
+ * Writing B in the meantime, because JS closures freeze their bindings at
+ * creation, not at call time.
+ */
+function buildMessageContext(
+  scope: WorkspaceAgentScope,
+  scopeLabel: string | null | undefined,
+  workspaceRootPath: string | null | undefined,
+): WorkspaceAgentMessageContext {
+  return {
+    scopeKind: scope.kind,
+    scopeId: scope.kind === "workspace" ? scope.rootId : scope.id,
+    scopeLabel: scopeLabel ?? null,
+    workspaceRootPath: workspaceRootPath ?? null,
+  }
+}
 
 function uniqueDocumentIds(attachments: WorkspaceAgentContextAttachment[], scope: WorkspaceAgentScope): string[] {
   const ids = attachments
@@ -298,11 +321,15 @@ function WorkspaceAgentPanelSession({
 
   useEffect(() => {
     if (!open || typeof window === "undefined") return
+    // The session no longer remounts on scope change (ODE-502), so this must
+    // explicitly reset to empty for a scope with no stored ids instead of
+    // leaving the previous scope's set in place.
     try {
       const stored = window.localStorage.getItem(storageKey)
-      if (stored) setResolvedIds(new Set(JSON.parse(stored) as string[]))
+      setResolvedIds(stored ? new Set(JSON.parse(stored) as string[]) : new Set())
     } catch {
       // Local UI memory is optional; a storage failure must not block the panel.
+      setResolvedIds(new Set())
     }
   }, [open, storageKey])
 
@@ -377,9 +404,10 @@ function WorkspaceAgentPanelSession({
    * silently overwriting the previous one.
    */
   const pushAgentNote = useCallback((text: string, toolResult?: ToolResult) => {
-    setMessages((current) => [...current, createToolResultMessage(text, toolResult)])
+    const context = buildMessageContext(scope, scopeLabel, workspaceRootPath)
+    setMessages((current) => [...current, createToolResultMessage(text, toolResult, undefined, context)])
     setFeedback(null)
-  }, [])
+  }, [scope, scopeLabel, workspaceRootPath])
 
   const recordSessionAction = useCallback((text: string) => {
     const entries = sessionActionLogRef.current
@@ -884,6 +912,14 @@ function WorkspaceAgentPanelSession({
   }, [])
   const { ref: composerDropZoneRef, isOver: isDropTarget } = useWorkspaceAgentDropZone(handleAgentDrop)
 
+  // The cache below is scoped to a Workspace, not to a Writing — a tab
+  // switch inside the same Workspace must not force a refetch (ODE-502), but
+  // moving to a different Workspace (a different `service`/root) must not
+  // keep serving the previous Workspace's document list either.
+  useEffect(() => {
+    setWorkspaceDocuments(null)
+  }, [workspaceRootPath])
+
   /** Lazily loads the workspace's documents once — backs both the attach popover and the Broken links "Apuntar a" search. */
   const ensureWorkspaceDocuments = useCallback(() => {
     if (!service || workspaceDocuments !== null) return
@@ -911,14 +947,37 @@ function WorkspaceAgentPanelSession({
     setAttachPickerQuery("")
   }, [])
 
+  /**
+   * The only explicit way to end a session (ODE-502) — everything else
+   * (switching tabs, the Workspace container changing, a runtime losing the
+   * agent capability) must leave history, draft, attachments and pending
+   * review state untouched. `service` and the workspace document cache are
+   * kept: they're runtime/workspace-scoped, not session-scoped.
+   */
+  const startNewConversation = useCallback(() => {
+    setMessages([])
+    setChatDraft("")
+    setAttachments([])
+    setBrokenReferenceReplacements({})
+    setActiveReviewMessageId(null)
+    setFeedback(null)
+    setReviewCursor(0)
+    setActionsOpen(false)
+    sessionActionLogRef.current = []
+  }, [])
+
   const submitChat = useCallback(() => {
     const text = chatDraft.trim()
     if (!text) return
     const messageAttachments = attachments.map((attachment) => ({ ...attachment }))
     const messageTimestamp = Date.now()
+    // Frozen at submit time — the turn stays anchored to the Writing/Workspace
+    // the question was actually asked from, even if the user switches tabs
+    // before the answer comes back (ODE-502).
+    const turnContext = buildMessageContext(scope, scopeLabel, workspaceRootPath)
     setMessages((current) => [
       ...current,
-      { id: `user-${messageTimestamp}`, role: "user", text, attachments: messageAttachments.length > 0 ? messageAttachments : undefined },
+      { id: `user-${messageTimestamp}`, role: "user", text, attachments: messageAttachments.length > 0 ? messageAttachments : undefined, context: turnContext },
     ])
     setChatDraft("")
     setActionsOpen(false)
@@ -940,19 +999,21 @@ function WorkspaceAgentPanelSession({
               text: askChatMessage(outcome.run),
               note: outcome.autoSelectedNotice,
               citedDocuments: outcome.run.documents,
+              context: turnContext,
             }
           : {
               id: `agent-${messageTimestamp + 1}`,
               role: "agent",
               text: outcome.message,
               isError: true,
+              context: turnContext,
             },
       ])
       if (outcome.ok) {
         recordSessionAction(`Q: ${text}\nA: ${outcome.run.answer}`)
       }
     })
-  }, [attachments, chatDraft, executeAsk, recordSessionAction, runAction])
+  }, [attachments, chatDraft, executeAsk, recordSessionAction, runAction, scope, scopeLabel, workspaceRootPath])
 
   if (!open) {
     return (
@@ -977,6 +1038,17 @@ function WorkspaceAgentPanelSession({
         <p className="truncate text-[13px] font-medium leading-[1.2] text-ink">Workspace agent</p>
         <p className="mt-0.5 truncate font-mono text-[11px] leading-[1.2] text-ink-4">{scopeLabel ?? (scope.kind === "workspace" ? "Workspace context" : "Current artifact")}</p>
       </div>
+      <button
+        type="button"
+        title="New conversation"
+        aria-label="New conversation"
+        onClick={startNewConversation}
+        disabled={messages.length === 0}
+        data-testid="workspace-agent-new-conversation"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-ink-4 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-4"
+      >
+        <Plus className="h-[17px] w-[17px]" strokeWidth={1.5} />
+      </button>
       <button
         type="button"
         title="Anclar como sidebar"
@@ -1033,8 +1105,19 @@ function WorkspaceAgentPanelSession({
         </div>
       ) : messages.map((message) => {
         const toolResult = message.toolResult
+        const messageScopeId = message.context?.scopeId
+        const currentScopeId = scope.kind === "workspace" ? scope.rootId : scope.id
+        // A message keeps the label of the Writing/Workspace it was actually
+        // produced against; only show it once the user has since moved
+        // elsewhere, so old turns aren't silently re-read as belonging here.
+        const fromOtherScope = Boolean(messageScopeId) && messageScopeId !== currentScopeId
         return (
           <div key={message.id} className={cn("flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
+            {fromOtherScope && message.context?.scopeLabel ? (
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-wide text-ink-5" data-testid="workspace-agent-message-scope">
+                {message.context.scopeLabel}
+              </p>
+            ) : null}
             {message.note ? (
               <details className="group mb-1 max-w-[90%]">
                 <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] text-ink-4 hover:text-ink-3">
@@ -1309,12 +1392,18 @@ function WorkspaceAgentPanelSession({
   )
 }
 
+/**
+ * A stable session across scope changes (ODE-502): `scope` is just the
+ * currently-focused Writing/Workspace the panel should ground new turns in,
+ * not the session's identity. `WorkspaceAgentPanelSession` used to remount
+ * on every `key={scopeKey}` change — destroying history, the composer draft,
+ * attachments, pending reviews and the in-memory service every time the user
+ * switched tabs. It no longer carries a scope-derived key, so React keeps
+ * the same instance and its state alive while `scope` simply flows through
+ * as an updated prop.
+ */
 export function WorkspaceAgentPanel(props: WorkspaceAgentPanelProps) {
-  const scopeKey = props.scope.kind === "workspace"
-    ? `workspace:${props.scope.rootId}`
-    : `document:${props.scope.id}`
-
-  return <WorkspaceAgentPanelSession key={scopeKey} {...props} />
+  return <WorkspaceAgentPanelSession {...props} />
 }
 
 type ReviewCardFinding = { value: string; origin: string }

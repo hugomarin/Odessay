@@ -33,6 +33,26 @@ describe("createToolResultMessage (ODE-491 — message carries the tool's own st
     const second = createToolResultMessage("second run", { kind: "archive", candidates: [] })
     expect(first.id).not.toBe(second.id)
   })
+
+  it("carries the given context snapshot (ODE-502 — a message remembers the Writing/Workspace it was produced against)", () => {
+    const message = createToolResultMessage(
+      "A workflow.md draft is ready to review below.",
+      { kind: "archive", candidates: [] },
+      undefined,
+      { scopeKind: "document", scopeId: "doc-1", scopeLabel: "My Writing", workspaceRootPath: "/root" },
+    )
+    expect(message.context).toEqual({
+      scopeKind: "document",
+      scopeId: "doc-1",
+      scopeLabel: "My Writing",
+      workspaceRootPath: "/root",
+    })
+  })
+
+  it("leaves context undefined when none is given, so existing call sites remain valid", () => {
+    const message = createToolResultMessage("first run", { kind: "archive", candidates: [] })
+    expect(message.context).toBeUndefined()
+  })
 })
 
 describe("approval wrappers (ODE-491 — approving a card always calls the correct tool with the correct approval)", () => {
