@@ -356,6 +356,122 @@
 
       .preview-canvas { min-height: 250px; }
 
+      .invocation-lab { padding: 16px 18px 20px; }
+
+      .invocation-context { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+
+      .invocation-context-copy { display: grid; gap: 4px; }
+
+      .invocation-context-copy strong { color: var(--ink); font-size: 13px; font-weight: 600; }
+
+      .invocation-context-copy span { color: var(--ink-3); font-size: 11px; line-height: 1.45; }
+
+      .invocation-trigger-chip { flex: 0 0 auto; padding: 5px 8px; border-radius: 6px; background: var(--cursor-soft); color: var(--cursor); font-family: var(--font-mono); font-size: 10px; }
+
+      .invocation-surface-demo { position: relative; overflow: visible; min-height: 184px; border: 0.5px solid var(--border); border-radius: 10px; background: hsl(38 12% 97%); }
+
+      .artifact-toolbar-demo { position: relative; display: flex; align-items: center; gap: 4px; min-height: 54px; padding: 10px 12px; border-bottom: 0.5px solid var(--border); border-radius: 10px 10px 0 0; background: var(--surface); }
+
+      .toolbar-demo-button, .toolbar-demo-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 30px; height: 32px; padding: 0 9px; border-radius: 8px; background: transparent; color: var(--ink-3); font-size: 15px; }
+
+      .toolbar-demo-button:hover, .toolbar-demo-trigger:hover { background: var(--muted); color: var(--ink); }
+
+      .toolbar-demo-button.active, .toolbar-demo-trigger.active { background: var(--muted); color: var(--ink); }
+
+      .toolbar-demo-button.muted, .toolbar-demo-trigger.muted { color: var(--ink-5); }
+
+      .toolbar-demo-button.mono { font-family: var(--font-mono); font-size: 13px; }
+
+      .toolbar-demo-trigger { min-width: 82px; justify-content: space-between; font-size: 13px; }
+
+      .toolbar-demo-trigger.insert { min-width: 92px; }
+
+      .toolbar-demo-chevron { color: var(--ink-4); font-size: 14px; line-height: 1; }
+
+      .toolbar-demo-divider { width: 0.5px; height: 25px; margin: 0 8px; background: var(--border-strong); }
+
+      .toolbar-demo-menu { position: absolute; top: 48px; right: 12px; z-index: 4; width: 252px; padding: 8px; border: 0.5px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-panel); }
+
+      .toolbar-demo-menu[hidden] { display: none; }
+
+      .toolbar-demo-menu-head { padding: 5px 9px 7px; color: var(--ink-5); font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+
+      .toolbar-demo-menu-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px; border-radius: 7px; background: transparent; color: var(--ink-2); text-align: left; font-size: 12px; }
+
+      .toolbar-demo-menu-item:hover, .toolbar-demo-menu-item.active { background: var(--muted); color: var(--ink); }
+
+      .toolbar-demo-menu-glyph { width: 20px; color: var(--cursor); font-family: var(--font-mono); font-size: 11px; text-align: center; }
+
+      .toolbar-demo-menu-label { flex: 1; }
+
+      .toolbar-demo-menu-kbd { color: var(--ink-5); font-family: var(--font-mono); font-size: 9px; }
+
+      .selection-demo-stage { min-height: 128px; display: grid; align-content: center; margin: 14px; padding: 16px 20px; border: 0.5px solid var(--border); border-radius: 8px; background: var(--surface); }
+
+      .selection-demo-kicker { margin-bottom: 8px; color: var(--ink-5); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; }
+
+      .selection-demo-copy { margin: 0; color: var(--ink-2); font-family: var(--font-prose); font-size: 16px; line-height: 1.7; }
+
+      .selection-demo-selected { padding: 0 2px; border-radius: 2px; background: var(--highlight-active); }
+
+      .selection-bubble-demo { display: flex; width: max-content; max-width: 100%; margin: 0 auto 11px; padding: 5px; border-radius: 9px; background: var(--ink); box-shadow: var(--shadow-panel); }
+
+      .selection-bubble-demo[hidden] { display: none; }
+
+      .selection-bubble-action { padding: 7px 9px; border-right: 0.5px solid hsl(38 12% 98% / 0.28); background: transparent; color: var(--bg); font-size: 11px; }
+
+      .selection-bubble-action:last-child { border-right: 0; }
+
+      .selection-bubble-action:hover, .selection-bubble-action.active { border-radius: 6px; background: hsl(38 12% 98% / 0.12); color: white; }
+
+      .invocation-config-row { position: relative; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; color: var(--ink-4); font-size: 10px; }
+
+      .invocation-config-row strong { color: var(--ink-3); font-weight: 500; }
+
+      .invocation-preview-button { height: 27px; padding-inline: 9px; font-size: 10px; }
+
+      .invocation-config-preview { display: grid; place-items: center; margin-top: 14px; padding: 12px; border: 0.5px dashed var(--border-strong); border-radius: 9px; background: hsl(38 12% 96%); }
+
+      .invocation-config-preview[hidden] { display: none; }
+
+      .invocation-config-card { width: min(100%, 390px); overflow: hidden; border: 0.5px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-panel); }
+
+      .invocation-config-card.popover { width: min(100%, 310px); margin-left: auto; }
+
+      .invocation-config-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 15px 16px 11px; border-bottom: 0.5px solid var(--border); }
+
+      .invocation-config-head h3 { margin: 0; color: var(--ink); font-family: var(--font-prose); font-size: 18px; font-weight: 500; }
+
+      .invocation-config-head p { margin: 4px 0 0; color: var(--ink-3); font-family: var(--font-prose); font-size: 12px; line-height: 1.4; }
+
+      .invocation-config-close { color: var(--ink-5); font-size: 17px; line-height: 1; }
+
+      .invocation-config-fields { display: grid; gap: 10px; padding: 14px 16px; }
+
+      .invocation-config-field { display: grid; gap: 5px; }
+
+      .invocation-config-field label { color: var(--ink-3); font-size: 10px; font-weight: 600; }
+
+      .invocation-config-control { min-height: 34px; padding: 8px 9px; border: 0.5px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--ink-2); font-size: 11px; }
+
+      .invocation-config-grid { display: grid; grid-template-columns: repeat(4, 24px); gap: 4px; padding: 4px 0; }
+
+      .invocation-config-grid span { width: 24px; height: 22px; border: 0.5px solid var(--border); border-radius: 4px; background: var(--muted); }
+
+      .invocation-config-grid span.active { border-color: var(--cursor); background: var(--cursor-soft); box-shadow: 0 0 0 2px hsl(22 55% 38% / 0.14); }
+
+      .invocation-config-foot { display: flex; align-items: center; justify-content: flex-end; gap: 7px; padding: 10px 16px 14px; border-top: 0.5px solid var(--border); }
+
+      .invocation-config-foot .button { height: 30px; font-size: 11px; }
+
+      .invocation-command-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 72px; margin: 14px; padding: 14px 16px; border: 0.5px dashed var(--border-strong); border-radius: 8px; background: var(--surface); }
+
+      .invocation-command-card strong { color: var(--ink); font-size: 12px; font-weight: 600; }
+
+      .invocation-command-card span { color: var(--ink-3); font-family: var(--font-prose); font-size: 13px; }
+
+      .invocation-command-key { padding: 5px 7px; border-radius: 5px; background: var(--muted); color: var(--ink-3); font-family: var(--font-mono); font-size: 10px; }
+
       .prose {
         color: var(--ink-2);
         font-family: var(--font-prose);
@@ -634,6 +750,12 @@
 
       .config-overlay[hidden] { display: none; }
 
+      .invocation-preview-overlay { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 24px; background: hsl(25 18% 10% / 0.22); backdrop-filter: blur(4px); }
+
+      .invocation-preview-overlay[hidden] { display: none; }
+
+      .invocation-preview-overlay .invocation-config-preview { width: min(440px, 100%); margin: 0; padding: 0; border: 0; background: transparent; }
+
       .config-modal { width: min(440px, 100%); overflow: hidden; border: 0.5px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-panel); }
 
       .config-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 18px 14px; border-bottom: 0.5px solid var(--border); }
@@ -755,6 +877,14 @@
 
               <article class="card-shell">
                 <div class="shell-head">
+                  <div class="shell-title"><span>Invocation preview</span><span class="tag-label" id="invocation-stage-tag">Selection popup</span></div>
+                  <span class="shell-meta">how the user activates it</span>
+                </div>
+                <div class="invocation-lab" id="invocation-lab"></div>
+              </article>
+
+              <article class="card-shell">
+                <div class="shell-head">
                   <div class="shell-title"><span>Preview</span><span class="tag-label" id="preview-tag">&lt;annotation&gt;</span></div>
                   <span class="shell-meta">proposed render</span>
                 </div>
@@ -839,6 +969,10 @@
           <button class="button primary" id="apply-config" type="button">Apply</button>
         </div>
       </section>
+    </div>
+
+    <div class="invocation-preview-overlay" id="invocation-preview-overlay" hidden>
+      <section id="invocation-preview-modal" role="dialog" aria-modal="true" aria-labelledby="invocation-preview-title"></section>
     </div>
 
     <script>
@@ -1644,11 +1778,100 @@
         },
       };
 
-      const state = { selected: "annotation", sources: {}, notes: {}, authoringModes: {}, presentation: {} };
+      const invocationConfigSamples = {
+        annotation: { kind: "composer", title: "Annotate selection", description: "Write a comment for the selected passage.", fields: [["Comment", "Este comentario queda vinculado a la selección."], ["Type", "Personal"]], action: "Add annotation" },
+        entity: { kind: "modal", title: "Create entity", description: "Classify the current selection without changing its visible text.", fields: [["Selected text", "Aplyca"], ["Entity type", "Company / Compañía"]], action: "Create entity" },
+        card: { kind: "modal", title: "Insert Card", description: "Configure the card shell, then edit its body inline.", fields: [["Title", "Build a Server"], ["Icon", "server"], ["URL", "/docs/build-server"]], action: "Insert Card" },
+        cardGroup: { kind: "modal", title: "Insert Card group", description: "Choose the group layout before adding cards.", fields: [["Columns", "2"], ["First Card", "Build a Server"], ["Icon", "server"]], action: "Insert group" },
+        codeGroup: { kind: "modal", title: "Insert Code group", description: "Set tab labels and languages; code stays opaque.", fields: [["Tab 1", "Discover Request · json"], ["Tab 2", "Discover Response · json"]], action: "Insert Code group" },
+        codeBlock: { kind: "popover", title: "Code settings", description: "Language is fence metadata, not code content.", fields: [["Language / type", "json"], ["Preview", "Code"]], action: "Apply settings" },
+        mermaid: { kind: "popover", title: "Mermaid settings", description: "Choose how the canonical Mermaid source is presented.", fields: [["Language", "mermaid"], ["View", "Code · diagram · split"]], action: "Apply settings" },
+        link: { kind: "modal", title: "Insert link", description: "Attach a URL to the current selection or insert linked text.", fields: [["Text", "MCP documentation"], ["URL", "https://modelcontextprotocol.io"]], action: "Insert link" },
+        table: { kind: "modal", title: "Insert table", description: "Select the number of rows and columns.", fields: [], special: "table", action: "Select grid" },
+        image: { kind: "modal", title: "Insert image", description: "Choose an image source and provide accessible alt text.", fields: [["Source", "assets/reference.png"], ["Alt text", "Reference screenshot"]], action: "Insert image" },
+        footnote: { kind: "modal", title: "Add footnote", description: "Write the note that will be referenced from the selection.", fields: [["Note text", "The response can be cached."], ["Reference", "Auto-numbered"]], action: "Add footnote" },
+      };
+
+      function invocationMode(key) {
+        const surface = invocations[key]?.surface || "";
+        if (surface.includes("Selection")) return "bubble";
+        if (surface.includes("Format")) return "format";
+        if (surface.includes("Lists")) return "lists";
+        if (surface.includes("Insert")) return "insert";
+        if (surface.includes("Text") || surface.includes("Code")) return "text";
+        if (surface.includes("Markdown")) return "command";
+        return "text";
+      }
+
+      function selectedInvocationText(key) {
+        return ({
+          annotation: "por ejemplo este texto es un solo mensaje",
+          highlight: "texto simplemente resaltado",
+          protected: "Este texto no se puede editar ni eliminar.",
+          entity: "Aplyca",
+          link: "MCP documentation",
+          footnote: "The response can be cached.",
+        }[key] || "como si se tratara de una presentación");
+      }
+
+      function renderInvocationMenu(mode, key) {
+        const menus = {
+          insert: [
+            ["▧", "Image", "⌘⇧I", "image"], ["▦", "Table", "⌘T", "table"], ["↗", "Link", "⌘⇧K", "link"],
+            ["!", "Tip", "", "tip"], ["□", "Card", "", "card"], ["▦", "Card group", "", "cardGroup"], ["1–", "Steps", "", "steps"], ["[]", "Code group", "", "codeGroup"],
+          ],
+          text: [["¶", "Normal", "⌘0", "paragraph"], ["H1", "Heading 1", "⌘1", "heading1"], ["H2", "Heading 2", "⌘2", "heading2"], ["H3", "Heading 3", "⌘3", "heading3"], ["“", "Blockquote", "⌘⇧B", "blockquote"], ["{}", "Code", "⌘⇧E", "codeBlock"], ["↝", "Mermaid", "", "mermaid"]],
+          lists: [["•", "Bullet list", "⌘L", "bulletList"], ["1.", "Numbered list", "⌘⇧L", "orderedList"]],
+        };
+        const items = menus[mode] || [];
+        return '<div class="toolbar-demo-menu"><div class="toolbar-demo-menu-head">' + esc(mode === "insert" ? "Insert" : mode === "lists" ? "List" : "Text") + '</div>' + items.map(([glyph, label, shortcut, itemKey]) => '<button class="toolbar-demo-menu-item ' + (itemKey === key ? "active" : "") + '" type="button" data-invocation-select="' + esc(itemKey) + '"><span class="toolbar-demo-menu-glyph">' + esc(glyph) + '</span><span class="toolbar-demo-menu-label">' + esc(label) + '</span><span class="toolbar-demo-menu-kbd">' + esc(shortcut) + '</span></button>').join("") + '</div>';
+      }
+
+      function renderInvocationToolbar(key, mode) {
+        const dropdownModes = ["insert", "text", "lists"];
+        const defaultMenu = dropdownModes.includes(mode) ? mode : null;
+        const visibleMenu = state.presentation.invocationMenu || defaultMenu;
+        const direct = (label, itemKey, extraClass) => '<button class="toolbar-demo-button ' + (itemKey === key ? "active " : "") + (extraClass || "") + '" type="button" title="' + esc(label) + '" data-invocation-select="' + esc(itemKey) + '">' + esc(label) + '</button>';
+        const menuTrigger = (menuKey, label, extraClass) => '<button class="toolbar-demo-trigger ' + (visibleMenu === menuKey ? "active " : "") + (extraClass || "") + '" type="button" data-invocation-menu="' + menuKey + '"><span>' + esc(label) + '</span><span class="toolbar-demo-chevron">⌄</span></button>';
+        const textLabel = ({ paragraph: "Normal", heading1: "H1", heading2: "H2", heading3: "H3", blockquote: "Quote", codeBlock: "Code", mermaid: "Code" }[key] || "Text");
+        const menu = visibleMenu && dropdownModes.includes(visibleMenu) ? renderInvocationMenu(visibleMenu, key) : "";
+        return '<div class="artifact-toolbar-demo">' + direct("B", "bold") + direct("I", "italic") + direct("S", "strike") + direct("</>", "inlineCode", "mono") + '<span class="toolbar-demo-divider"></span>' + menuTrigger("lists", "List") + menuTrigger("text", textLabel) + menuTrigger("insert", "Insert", "insert") + menu + '</div>';
+      }
+
+      function renderInvocationBubble(key, mode) {
+        const actions = [["Highlight", "highlight"], ["AI", "annotation"], ["Footnote", "footnote"], ["Protect", "protected"], ["Entity", "entity"]];
+        const bubble = mode === "bubble" ? '<div class="selection-bubble-demo">' + actions.map(([label, itemKey]) => '<button class="selection-bubble-action ' + (itemKey === key ? "active" : "") + '" type="button" data-invocation-select="' + itemKey + '">' + label + '</button>').join("") + '</div>' : '';
+        const selected = mode === "bubble" ? '<span class="selection-demo-selected">' + esc(selectedInvocationText(key)) + '</span>' : esc(selectedInvocationText(key));
+        return '<div class="selection-demo-stage"><div class="selection-demo-kicker">' + esc(mode === "bubble" ? "Selection state · choose an action" : "Document state") + '</div>' + bubble + '<p class="selection-demo-copy">Selecciona ' + selected + ' para activar la acción propuesta.</p></div>';
+      }
+
+      function renderInvocationConfig(key) {
+        const config = invocationConfigSamples[key];
+        if (!config) return "";
+        let body = config.fields.map(([label, value]) => '<div class="invocation-config-field"><label>' + esc(label) + '</label><div class="invocation-config-control">' + esc(value) + '</div></div>').join("");
+        if (config.special === "table") body = '<div class="invocation-config-field"><label>Rows × columns</label><div class="invocation-config-grid">' + Array.from({ length: 16 }, (_, index) => '<span class="' + (index < 6 ? "active" : "") + '"></span>').join("") + '</div></div>';
+        return '<div class="invocation-config-preview"><div class="invocation-config-card ' + (config.kind === "popover" ? "popover" : "") + '"><div class="invocation-config-head"><div><h3 id="invocation-preview-title">' + esc(config.title) + '</h3><p>' + esc(config.description) + '</p></div><button class="invocation-config-close" type="button" data-invocation-close aria-label="Close preview">×</button></div><div class="invocation-config-fields">' + body + '</div><div class="invocation-config-foot"><button class="button" type="button" data-invocation-close>Cancel</button><button class="button primary" type="button" data-invocation-close>' + esc(config.action) + '</button></div></div></div>';
+      }
+
+      function renderInvocationLab() {
+        const key = state.selected;
+        const invocation = invocations[key];
+        const mode = invocationMode(key);
+        const config = invocationConfigSamples[key];
+        invocationStageTag.textContent = invocation.surface;
+        const modeLabel = mode === "bubble" ? "Selection bubble" : mode === "command" ? "Markdown command" : mode === "format" ? "Format toolbar" : mode === "insert" ? "Insert dropdown" : mode === "lists" ? "List dropdown" : "Text / Code dropdown";
+        const configButton = config ? '<button class="button invocation-preview-button" type="button" data-invocation-config>' + esc(config.kind === "popover" ? "Preview settings" : "Preview modal") + '</button>' : '';
+        const command = mode === "command" ? '<div class="invocation-command-card"><div><strong>Markdown / command</strong><br /><span>Escribe la sintaxis o invoca la acción disponible.</span></div><span class="invocation-command-key">' + esc(invocation.shortcut) + '</span></div>' : '';
+        invocationLab.innerHTML = '<div class="invocation-context"><div class="invocation-context-copy"><strong>' + esc(modeLabel) + '</strong><span>' + esc(invocation.entry) + '</span></div><span class="invocation-trigger-chip">' + esc(invocation.shortcut) + '</span></div><div class="invocation-surface-demo">' + (mode === "command" ? '' : renderInvocationToolbar(key, mode)) + (mode === "command" ? command : renderInvocationBubble(key, mode)) + '</div><div class="invocation-config-row"><span><strong>Configuration:</strong> ' + esc(invocation.overlay) + '</span>' + configButton + '</div>';
+      }
+
+      const state = { selected: "annotation", sources: {}, notes: {}, authoringModes: {}, presentation: { invocationMenu: null, invocationConfig: false } };
       const list = document.getElementById("component-list");
       const markdownList = document.getElementById("markdown-list");
       const sourceEditor = document.getElementById("source-editor");
       const previewCanvas = document.getElementById("preview-canvas");
+      const invocationLab = document.getElementById("invocation-lab");
+      const invocationStageTag = document.getElementById("invocation-stage-tag");
       const propertyList = document.getElementById("property-list");
       const insertList = document.getElementById("insert-list");
       const invocationStatus = document.getElementById("invocation-status");
@@ -1667,6 +1890,8 @@
       const configModalHint = document.getElementById("config-modal-hint");
       const configFields = document.getElementById("config-fields");
       const decisionNotes = document.getElementById("decision-notes");
+      const invocationPreviewOverlay = document.getElementById("invocation-preview-overlay");
+      const invocationPreviewModal = document.getElementById("invocation-preview-modal");
 
       try {
         const stored = JSON.parse(localStorage.getItem("odessay-document-components-lab") || "{}");
@@ -1905,6 +2130,7 @@
         previewCanvas.innerHTML = samples[key].render(source);
         persist();
         renderInspector();
+        renderInvocationLab();
         bindCodeTabs();
         closeConfiguration();
       }
@@ -1938,8 +2164,20 @@
         sourceEditor.value = state.sources[state.selected] || sample.source;
         previewCanvas.innerHTML = sample.render(sourceEditor.value);
         renderList();
+        renderInvocationLab();
         renderInspector();
         bindCodeTabs();
+      }
+
+      function openInvocationPreview() {
+        if (!invocationConfigSamples[state.selected]) return;
+        invocationPreviewModal.innerHTML = renderInvocationConfig(state.selected);
+        invocationPreviewOverlay.hidden = false;
+      }
+
+      function closeInvocationPreview() {
+        invocationPreviewOverlay.hidden = true;
+        invocationPreviewModal.innerHTML = "";
       }
 
       function handleComponentClick(event) {
@@ -1947,12 +2185,57 @@
         if (!button) return;
         state.sources[state.selected] = sourceEditor.value;
         state.selected = button.dataset.component;
+        state.presentation.invocationMenu = null;
+        state.presentation.invocationConfig = false;
+        closeInvocationPreview();
         persist();
         render();
       }
 
       list.addEventListener("click", handleComponentClick);
       markdownList.addEventListener("click", handleComponentClick);
+
+      invocationLab.addEventListener("click", (event) => {
+        const selectButton = event.target.closest("[data-invocation-select]");
+        if (selectButton) {
+          const nextKey = selectButton.dataset.invocationSelect;
+          if (!samples[nextKey]) return;
+          state.sources[state.selected] = sourceEditor.value;
+          state.selected = nextKey;
+          state.presentation.invocationMenu = null;
+          state.presentation.invocationConfig = false;
+          closeInvocationPreview();
+          persist();
+          render();
+          return;
+        }
+
+        const menuButton = event.target.closest("[data-invocation-menu]");
+        if (menuButton) {
+          const nextMenu = menuButton.dataset.invocationMenu;
+          const defaultMenu = ["insert", "text", "lists"].includes(invocationMode(state.selected)) ? invocationMode(state.selected) : null;
+          state.presentation.invocationMenu = state.presentation.invocationMenu === nextMenu || (state.presentation.invocationMenu === null && defaultMenu === nextMenu) ? null : nextMenu;
+          renderInvocationLab();
+          return;
+        }
+
+        if (event.target.closest("[data-invocation-config]")) {
+          openInvocationPreview();
+          return;
+        }
+
+        if (event.target.closest("[data-invocation-close]")) {
+          closeInvocationPreview();
+        }
+      });
+
+      invocationPreviewOverlay.addEventListener("click", (event) => {
+        if (event.target.closest("[data-invocation-close]")) {
+          closeInvocationPreview();
+          return;
+        }
+        if (event.target === invocationPreviewOverlay) closeInvocationPreview();
+      });
 
       flowTabs.addEventListener("click", (event) => {
         const button = event.target.closest("[data-flow-mode]");
@@ -1970,6 +2253,7 @@
       });
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape" && !configOverlay.hidden) closeConfiguration();
+        if (event.key === "Escape" && !invocationPreviewOverlay.hidden) closeInvocationPreview();
       });
 
       sourceEditor.addEventListener("input", () => {
@@ -1993,6 +2277,9 @@
       document.getElementById("reset-all").addEventListener("click", () => {
         state.sources = {};
         state.notes = {};
+        state.presentation.invocationMenu = null;
+        state.presentation.invocationConfig = false;
+        closeInvocationPreview();
         render();
         persist();
       });

@@ -6,7 +6,7 @@
 
 ## Cómo usar este laboratorio
 
-Abre [el playground visual](../../prototypes/document-components-playground.html) en el navegador. La columna izquierda permite editar la sintaxis; el preview muestra el render propuesto y el inspector documenta los atributos y el flujo de inserción.
+Abre [el playground visual](../../prototypes/document-components-playground.html) en el navegador. La columna izquierda permite editar la sintaxis; `Invocation preview` muestra visualmente si el elemento se activa desde el toolbar, un dropdown, el selection bubble o un modal/popover; el preview muestra el render propuesto y el inspector documenta los atributos y el flujo de inserción.
 
 La fuente de verdad de esta exploración debe ser este documento más las decisiones que se vayan cerrando en el playground.
 
@@ -247,6 +247,17 @@ La primera versión puede tener un único estilo y no abrir configuración. La c
 En resumen: `Insert` crea la estructura; escribir modifica el contenido; `Configure` modifica la presentación. Esa misma regla se aplica a `CodeGroup`, Mermaid y los demás componentes.
 
 El editor actual tiene superficies concretas de invocación. El playground las documenta para que podamos decidir los componentes nuevos sin inventar un slash menu que todavía no existe.
+
+### Cómo leer `Invocation preview`
+
+El panel visual responde al componente seleccionado en la columna izquierda:
+
+- **Toolbar directo:** resalta `Bold`, `Italic`, `Strike` o `Inline code` cuando la acción es una marca inmediata.
+- **Dropdown del toolbar:** abre `List`, `H1`/`Text`/`Code` o `Insert` y marca el comando que corresponde al elemento actual.
+- **Selection bubble:** muestra `Highlight`, `AI`, `Footnote`, `Protect` y `Entity` sobre una selección simulada. `Protect` aplica una restricción; `Entity` continúa al siguiente paso de configuración.
+- **Modal o popover:** `Preview modal` / `Preview settings` permite ver la configuración que aparece después de invocar `Table`, `Link`, `Image`, `Entity`, `Card` o un bloque de código. Es una representación del flujo, no una mutación del documento real.
+
+Al hacer click en un item del toolbar o del bubble, el laboratorio cambia al componente correspondiente. Así se puede recorrer la decisión completa —superficie de invocación, configuración y representación Markdown— sin tener que imaginar qué significa cada fila de la tabla.
 
 ### Superficies actuales
 
