@@ -55,6 +55,8 @@ import {
   approveWorkflowDraft,
   createApproval,
   createToolResultMessage,
+  resolveExecutionServiceById,
+  resolveExecutionServiceByProposal,
   type AgentMessage,
   type ToolResult,
   type WorkspaceAgentContextAttachment,
@@ -87,7 +89,13 @@ export type WorkspaceAgentScope =
 export type { WorkspaceAgentContextAttachment }
 
 export type WorkspaceAgentDocumentSnapshot = {
-  documentId: string
+  /**
+   * Null for a still-blank draft that has no identity yet (ODE-490 follow-up)
+   * — conversation must not be gated on materializing a document just to
+   * satisfy the agent. `askAboutDocument` substitutes a local, non-durable
+   * placeholder for this one ask; nothing here mints a real document id.
+   */
+  documentId: string | null
   title: string | null
   markdown: string
 }
@@ -196,20 +204,31 @@ function askChatMessage(run: WorkspaceAgentAskRun): string {
 /**
  * Free-text chat and the Classify action both need a bounded document
  * selection to ground the model. When nothing is explicitly attached and the
- * scope is the whole workspace (not a single open document), fall back to
- * the most recently updated artifacts instead of dead-ending the request.
+ * scope is the whole workspace (not a single open document):
+ * - Classify (`autoSelectRecent: true`) falls back to the most recently
+ *   updated artifacts instead of dead-ending the request — classifying
+ *   *something* is the point of the action.
+ * - Free-text ask (`autoSelectRecent: false`) does not: auto-reading recent
+ *   artifacts on every plain "Hola" was ODE-489's documented "Context Gap
+ *   conocido" (conversation must produce a plan with zero document reads).
+ *   Returns an empty, still-`ok` selection instead, so askAgent can answer
+ *   conversationally with no forced read.
  */
 async function resolveChatSelection(
   attachments: WorkspaceAgentContextAttachment[],
   scope: WorkspaceAgentScope,
   service: WorkspaceAgentService,
   maxTargets: number,
+  options: { autoSelectRecent: boolean },
 ): Promise<
   | { ok: true; selection: WorkspaceAgentSelection[]; autoSelectedNotice: string | null }
   | { ok: false; message: string }
 > {
   const selection = classificationSelection(attachments, scope)
   if (selection.length > 0) return { ok: true, selection, autoSelectedNotice: null }
+  if (!options.autoSelectRecent) {
+    return { ok: true, selection: [], autoSelectedNotice: null }
+  }
   if (scope.kind !== "workspace") {
     return { ok: false, message: "Attach an artifact or open a document before asking the Workspace agent." }
   }
@@ -315,6 +334,15 @@ function WorkspaceAgentPanelSession({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   /** A rolling memory of what happened earlier in this session, fed to askAgent so it stays consistent with prior actions and answers. */
   const sessionActionLogRef = useRef<string[]>([])
+  /**
+   * Bumped by "New conversation" (ODE-502 follow-up). An in-flight action
+   * started before the bump must not append its answer or session memory
+   * once it resolves — otherwise a question asked right before "New
+   * conversation" can still land in the fresh, supposedly empty chat once
+   * its response comes back. Read via the ref (never a stale closure) at
+   * the moment each append actually happens.
+   */
+  const sessionGenerationRef = useRef(0)
 
   const storageKey = `odessay.workspace-agent.resolved.${scope.kind}.${scope.kind === "workspace" ? scope.rootId : scope.id}`
   const dockStorageKey = "odessay.workspace-agent.dock-mode"
@@ -403,22 +431,31 @@ function WorkspaceAgentPanelSession({
    * disconnected area — and a repeat run adds a new message/card instead of
    * silently overwriting the previous one.
    */
-  const pushAgentNote = useCallback((text: string, toolResult?: ToolResult) => {
+  /** `generation` is the session generation active when the action that produced this note started (see sessionGenerationRef). */
+  const pushAgentNote = useCallback((text: string, generation: number, toolResult?: ToolResult) => {
     const context = buildMessageContext(scope, scopeLabel, workspaceRootPath)
-    setMessages((current) => [...current, createToolResultMessage(text, toolResult, undefined, context)])
-    setFeedback(null)
-  }, [scope, scopeLabel, workspaceRootPath])
+    // Frozen at the same moment as `context` — this message's review card
+    // (if any) must always execute against the Workspace it was produced
+    // in, even after the user navigates elsewhere (see resolveExecutionService).
+    const executionService = service ?? undefined
+    setMessages((current) => {
+      if (sessionGenerationRef.current !== generation) return current
+      return [...current, createToolResultMessage(text, toolResult, undefined, context, executionService)]
+    })
+    if (sessionGenerationRef.current === generation) setFeedback(null)
+  }, [scope, scopeLabel, service, workspaceRootPath])
 
-  const recordSessionAction = useCallback((text: string) => {
+  const recordSessionAction = useCallback((text: string, generation: number) => {
+    if (sessionGenerationRef.current !== generation) return
     const entries = sessionActionLogRef.current
     entries.push(text.length > 300 ? `${text.slice(0, 300)}…` : text)
     if (entries.length > MAX_SESSION_ACTIONS_CONTEXT) entries.splice(0, entries.length - MAX_SESSION_ACTIONS_CONTEXT)
   }, [])
 
   /** Announces a predetermined action's outcome in chat and records it as session memory so later questions stay consistent with it. */
-  const announceToolResult = useCallback((text: string, toolResult?: ToolResult) => {
-    pushAgentNote(text, toolResult)
-    recordSessionAction(text)
+  const announceToolResult = useCallback((text: string, generation: number, toolResult?: ToolResult) => {
+    pushAgentNote(text, generation, toolResult)
+    recordSessionAction(text, generation)
   }, [pushAgentNote, recordSessionAction])
 
   /** Immutably updates the `toolResult` carried by one message — used when approving part of a review card. */
@@ -434,13 +471,16 @@ function WorkspaceAgentPanelSession({
     }))
   }, [])
 
-  const runAction = useCallback(async (action: string, operation: () => Promise<void>) => {
+  const runAction = useCallback(async (action: string, operation: (generation: number) => Promise<void>) => {
+    const generation = sessionGenerationRef.current
     setBusyAction(action)
     setFeedback(null)
     try {
-      await operation()
+      await operation(generation)
     } catch (error: unknown) {
-      setFeedback(error instanceof Error ? error.message : "The agent action could not be completed.")
+      if (sessionGenerationRef.current === generation) {
+        setFeedback(error instanceof Error ? error.message : "The agent action could not be completed.")
+      }
     } finally {
       setBusyAction(null)
     }
@@ -458,7 +498,7 @@ function WorkspaceAgentPanelSession({
       : undefined
   }, [service])
 
-  const runWorkflow = useCallback(() => runAction("workflow", async () => {
+  const runWorkflow = useCallback(() => runAction("workflow", async (generation) => {
     if (!service) return
     const context = await service.getContext()
     if (context.error || !context.data) {
@@ -474,10 +514,10 @@ function WorkspaceAgentPanelSession({
       return
     }
     const note = await service.presentNote("workflow", workflowFacts(proposal.data), sessionActionLogRef.current)
-    announceToolResult(note, { kind: "workflow", proposal: proposal.data })
+    announceToolResult(note, generation, { kind: "workflow", proposal: proposal.data })
   }), [announceToolResult, runAction, service])
 
-  const runBrokenReferences = useCallback(() => runAction("broken-links", async () => {
+  const runBrokenReferences = useCallback(() => runAction("broken-links", async (generation) => {
     if (!service) return
     const workflowReadApproval = await getWorkflowReadApproval()
     if (workflowReadApproval === null) return
@@ -488,15 +528,15 @@ function WorkspaceAgentPanelSession({
     }
     setBrokenReferenceReplacements({})
     const note = await service.presentNote("broken-links", brokenReferencesFacts(response.data), sessionActionLogRef.current)
-    announceToolResult(note, { kind: "broken-links", proposals: response.data })
+    announceToolResult(note, generation, { kind: "broken-links", proposals: response.data })
   }), [announceToolResult, getWorkflowReadApproval, runAction, service])
 
-  const executeClassification = useCallback(async (request: string): Promise<WorkspaceAgentClassificationRun | null> => {
+  const executeClassification = useCallback(async (request: string, generation: number): Promise<WorkspaceAgentClassificationRun | null> => {
     if (!service) {
       setFeedback("The Workspace agent is not available in this runtime.")
       return null
     }
-    const resolved = await resolveChatSelection(attachments, scope, service, MAX_WORKSPACE_CLASSIFICATION_TARGETS)
+    const resolved = await resolveChatSelection(attachments, scope, service, MAX_WORKSPACE_CLASSIFICATION_TARGETS, { autoSelectRecent: true })
     if (!resolved.ok) {
       setFeedback(resolved.message)
       return null
@@ -522,6 +562,7 @@ function WorkspaceAgentPanelSession({
     const note = await service.presentNote("classification", classificationFacts, sessionActionLogRef.current)
     announceToolResult(
       note,
+      generation,
       {
         kind: "classification",
         summary: run.summary,
@@ -530,7 +571,7 @@ function WorkspaceAgentPanelSession({
         requestedDocuments: run.requestedDocuments,
       },
     )
-    if (run.requestedDocumentIds.length > 0) {
+    if (run.requestedDocumentIds.length > 0 && sessionGenerationRef.current === generation) {
       setFeedback("The agent needs more document evidence before it can make a firmer classification.")
     }
     return run
@@ -558,7 +599,7 @@ function WorkspaceAgentPanelSession({
       }
       return { ok: true, run: response.data, autoSelectedNotice: null }
     }
-    const resolved = await resolveChatSelection(attachments, scope, service, MAX_WORKSPACE_ASK_TARGETS)
+    const resolved = await resolveChatSelection(attachments, scope, service, MAX_WORKSPACE_ASK_TARGETS, { autoSelectRecent: false })
     if (!resolved.ok) {
       return { ok: false, message: resolved.message }
     }
@@ -580,11 +621,11 @@ function WorkspaceAgentPanelSession({
     return { ok: true, run: response.data, autoSelectedNotice }
   }, [attachments, getDocumentSnapshot, getWorkflowReadApproval, scope, service])
 
-  const runClassification = useCallback(() => runAction("classification", async () => {
-    await executeClassification("Review these artifacts and propose their type and status with evidence.")
+  const runClassification = useCallback(() => runAction("classification", async (generation) => {
+    await executeClassification("Review these artifacts and propose their type and status with evidence.", generation)
   }), [executeClassification, runAction])
 
-  const runArchiveCandidates = useCallback(() => runAction("archive", async () => {
+  const runArchiveCandidates = useCallback(() => runAction("archive", async (generation) => {
     if (!service) return
     const workflowReadApproval = await getWorkflowReadApproval()
     if (workflowReadApproval === null) return
@@ -594,10 +635,10 @@ function WorkspaceAgentPanelSession({
       return
     }
     const note = await service.presentNote("archive", archiveCandidatesFacts(response.data), sessionActionLogRef.current)
-    announceToolResult(note, { kind: "archive", candidates: response.data })
+    announceToolResult(note, generation, { kind: "archive", candidates: response.data })
   }), [announceToolResult, getWorkflowReadApproval, runAction, service])
 
-  const runContradictions = useCallback(() => runAction("contradictions", async () => {
+  const runContradictions = useCallback(() => runAction("contradictions", async (generation) => {
     if (!service || documentIds.length < 2) {
       setFeedback("Attach at least two artifacts to compare their claims.")
       return
@@ -616,7 +657,7 @@ function WorkspaceAgentPanelSession({
         : `${response.data.length} contradiction(s) added to the review queue below.`,
     ]
     const note = await service.presentNote("contradictions", contradictionFacts, sessionActionLogRef.current)
-    announceToolResult(note, { kind: "contradictions", proposals: response.data })
+    announceToolResult(note, generation, { kind: "contradictions", proposals: response.data })
   }), [announceToolResult, documentIds, getWorkflowReadApproval, runAction, service])
 
   /**
@@ -626,7 +667,7 @@ function WorkspaceAgentPanelSession({
    * exists on the backend yet). "Crear el documento" stays disabled in the
    * body for that reason.
    */
-  const runMerge = useCallback(() => runAction("merge", async () => {
+  const runMerge = useCallback(() => runAction("merge", async (generation) => {
     if (!service || documentIds.length < 2) {
       setFeedback("Attach at least two artifacts to combine them.")
       return
@@ -648,7 +689,7 @@ function WorkspaceAgentPanelSession({
     const merge = buildMergeMock(sources)
     const mergeFacts = [`Combined ${sources.length} artifacts into a ${merge.sections.length}-section draft (preview only).`]
     const note = await service.presentNote("merge", mergeFacts, sessionActionLogRef.current)
-    announceToolResult(note, { kind: "merge", merge })
+    announceToolResult(note, generation, { kind: "merge", merge })
   }), [announceToolResult, documentIds, runAction, service])
 
   /**
@@ -723,16 +764,21 @@ function WorkspaceAgentPanelSession({
     },
   ]), [busyAction, canClassify, canCompare, runArchiveCandidates, runBrokenReferences, runClassification, runContradictions, runMerge, runWorkflow, service])
 
+  const resolveExecutionService = useCallback((messageId: string): WorkspaceAgentService | null => (
+    resolveExecutionServiceById(messages, messageId, service)
+  ), [messages, service])
+
   const applyWorkflow = useCallback((messageId: string, proposal: WorkflowDraftProposal) => runAction("apply-workflow", async () => {
-    if (!service) return
-    const response = await approveWorkflowDraft(service, proposal)
+    const executionService = resolveExecutionService(messageId)
+    if (!executionService) return
+    const response = await approveWorkflowDraft(executionService, proposal)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "The workflow draft could not be written.")
       return
     }
     updateMessageToolResult(messageId, "workflow", () => null)
     setFeedback("workflow.md was updated through the approved desktop write path.")
-  }), [runAction, service, updateMessageToolResult])
+  }), [resolveExecutionService, runAction, updateMessageToolResult])
 
   /** Discards a workflow draft without writing anything — nothing was applied, so this is purely local UI state. */
   const discardWorkflow = useCallback((messageId: string) => {
@@ -741,8 +787,9 @@ function WorkspaceAgentPanelSession({
   }, [updateMessageToolResult])
 
   const applyClassification = useCallback((messageId: string, proposal: ClassificationProposal) => runAction("apply-classification", async () => {
-    if (!service) return
-    const response = await approveClassificationProposal(service, proposal)
+    const executionService = resolveExecutionService(messageId)
+    if (!executionService) return
+    const response = await approveClassificationProposal(executionService, proposal)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "The vocabulary classification could not be applied.")
       return
@@ -752,15 +799,16 @@ function WorkspaceAgentPanelSession({
       proposals: toolResult.proposals.filter((item) => item.documentId !== proposal.documentId),
     }))
     setFeedback(`Updated ${proposal.documentTitle} through the approved edit path.`)
-  }), [runAction, service, updateMessageToolResult])
+  }), [resolveExecutionService, runAction, updateMessageToolResult])
 
   /** Applies a batch of classification proposals sequentially (each through the same approval-gated edit path) — the Fase E bulk "Aplicar los N cambios" footer. */
   const applyClassificationMany = useCallback((messageId: string, proposals: ClassificationProposal[]) => runAction("apply-classification", async () => {
-    if (!service || proposals.length === 0) return
+    const executionService = resolveExecutionService(messageId)
+    if (!executionService || proposals.length === 0) return
     const appliedIds = new Set<string>()
     let failure: string | null = null
     for (const proposal of proposals) {
-      const response = await approveClassificationProposal(service, proposal)
+      const response = await approveClassificationProposal(executionService, proposal)
       if (response.error || !response.data) {
         failure = response.error?.message ?? `${proposal.documentTitle} could not be updated.`
         break
@@ -774,11 +822,12 @@ function WorkspaceAgentPanelSession({
       }))
     }
     setFeedback(failure ?? `Updated ${appliedIds.size} artifact(s) through the approved edit path.`)
-  }), [runAction, service, updateMessageToolResult])
+  }), [resolveExecutionService, runAction, updateMessageToolResult])
 
   const applyArchiveCandidate = useCallback((messageId: string, candidate: ArchiveCandidate) => runAction("apply-archive", async () => {
-    if (!service) return
-    const response = await approveArchiveCandidate(service, candidate)
+    const executionService = resolveExecutionService(messageId)
+    if (!executionService) return
+    const response = await approveArchiveCandidate(executionService, candidate)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "The archive candidate could not be updated.")
       return
@@ -788,15 +837,16 @@ function WorkspaceAgentPanelSession({
       return next.length > 0 ? { ...toolResult, candidates: next } : null
     })
     setFeedback(`${candidate.title} was marked with the suggested vocabulary status.`)
-  }), [runAction, service, updateMessageToolResult])
+  }), [resolveExecutionService, runAction, updateMessageToolResult])
 
   /** Applies a batch of archive candidates sequentially — the Fase F bulk "Aplicar los N cambios" footer. */
   const applyArchiveCandidateMany = useCallback((messageId: string, candidates: ArchiveCandidate[]) => runAction("apply-archive", async () => {
-    if (!service || candidates.length === 0) return
+    const executionService = resolveExecutionService(messageId)
+    if (!executionService || candidates.length === 0) return
     const appliedIds = new Set<string>()
     let failure: string | null = null
     for (const candidate of candidates) {
-      const response = await approveArchiveCandidate(service, candidate)
+      const response = await approveArchiveCandidate(executionService, candidate)
       if (response.error || !response.data) {
         failure = response.error?.message ?? `${candidate.title} could not be updated.`
         break
@@ -810,7 +860,7 @@ function WorkspaceAgentPanelSession({
       })
     }
     setFeedback(failure ?? `Updated ${appliedIds.size} artifact(s) with their suggested vocabulary status.`)
-  }), [runAction, service, updateMessageToolResult])
+  }), [resolveExecutionService, runAction, updateMessageToolResult])
 
   const removeBrokenReferenceProposal = useCallback((messageId: string, proposal: BrokenReferenceProposal) => {
     updateMessageToolResult(messageId, "broken-links", (toolResult) => {
@@ -823,14 +873,15 @@ function WorkspaceAgentPanelSession({
   }, [updateMessageToolResult])
 
   const applyBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("apply-broken-link", async () => {
-    if (!service) return
+    const executionService = resolveExecutionService(messageId)
+    if (!executionService) return
     const key = `${messageId}:${proposal.sourceDocumentId}:${proposal.referenceKind}:${proposal.reference}`
     const replacement = (brokenReferenceReplacements[key] ?? proposal.suggestedReference ?? "").trim()
     if (!replacement) {
       setFeedback("Enter a replacement reference before approving this fix.")
       return
     }
-    const response = await service.applyBrokenReference(proposal, replacement, {
+    const response = await executionService.applyBrokenReference(proposal, replacement, {
       read: createApproval("read", proposal.sourceDocumentId),
       edit: createApproval("edit", proposal.sourceDocumentId),
     })
@@ -845,11 +896,12 @@ function WorkspaceAgentPanelSession({
       return next
     })
     setFeedback(`Updated ${proposal.sourceTitle} through the approved edit path.`)
-  }), [brokenReferenceReplacements, removeBrokenReferenceProposal, runAction, service])
+  }), [brokenReferenceReplacements, removeBrokenReferenceProposal, resolveExecutionService, runAction])
 
   const removeBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("remove-broken-link", async () => {
-    if (!service) return
-    const response = await service.removeBrokenReference(proposal, {
+    const executionService = resolveExecutionService(messageId)
+    if (!executionService) return
+    const response = await executionService.removeBrokenReference(proposal, {
       read: createApproval("read", proposal.sourceDocumentId),
       edit: createApproval("edit", proposal.sourceDocumentId),
     })
@@ -859,18 +911,19 @@ function WorkspaceAgentPanelSession({
     }
     removeBrokenReferenceProposal(messageId, proposal)
     setFeedback(`Removed the link from ${proposal.sourceTitle} through the approved edit path.`)
-  }), [removeBrokenReferenceProposal, runAction, service])
+  }), [removeBrokenReferenceProposal, resolveExecutionService, runAction])
 
   const createDocumentForBrokenReference = useCallback((messageId: string, proposal: BrokenReferenceProposal) => runAction("create-broken-link-doc", async () => {
-    if (!service) return
-    const response = await service.createDocumentForBrokenReference(proposal, createApproval("write", proposal.reference))
+    const executionService = resolveExecutionService(messageId)
+    if (!executionService) return
+    const response = await executionService.createDocumentForBrokenReference(proposal, createApproval("write", proposal.reference))
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "The new document could not be created.")
       return
     }
     removeBrokenReferenceProposal(messageId, proposal)
     setFeedback(`Created ${response.data.document.title ?? proposal.reference} through the approved write path.`)
-  }), [removeBrokenReferenceProposal, runAction, service])
+  }), [removeBrokenReferenceProposal, resolveExecutionService, runAction])
 
   const persistResolvedIds = useCallback((next: Set<string>) => {
     setResolvedIds(next)
@@ -884,7 +937,11 @@ function WorkspaceAgentPanelSession({
   }, [storageKey])
 
   const resolveContradiction = useCallback((proposal: ContradictionProposal, resolution: "left" | "right" | "discard") => runAction("resolve", async () => {
-    if (!service) return
+    // No messageId on this call site — the owning message is whichever
+    // "contradictions" card still lists this proposal (same reasoning as
+    // resolveExecutionService: execute against the Workspace it came from).
+    const executionService = resolveExecutionServiceByProposal(messages, proposal.id, service)
+    if (!executionService) return
     const target = resolution === "left" ? proposal.right : proposal.left
     const approvals = resolution === "discard"
       ? undefined
@@ -892,7 +949,7 @@ function WorkspaceAgentPanelSession({
           read: createApproval("read", target.documentId),
           edit: createApproval("edit", target.documentId),
         }
-    const response = await service.resolveContradiction(proposal, resolution, approvals)
+    const response = await executionService.resolveContradiction(proposal, resolution, approvals)
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "This contradiction could not be resolved.")
       return
@@ -901,7 +958,7 @@ function WorkspaceAgentPanelSession({
     next.add(proposal.id)
     persistResolvedIds(next)
     setFeedback(resolution === "discard" ? "Finding discarded from this review queue." : "The selected evidence was applied to the target artifact.")
-  }), [persistResolvedIds, resolvedIds, runAction, service])
+  }), [messages, persistResolvedIds, resolvedIds, runAction, service])
 
   const handleAgentDrop = useCallback((attachment: WorkspaceAgentDragPayload) => {
     setAttachments((current) => {
@@ -955,6 +1012,9 @@ function WorkspaceAgentPanelSession({
    * kept: they're runtime/workspace-scoped, not session-scoped.
    */
   const startNewConversation = useCallback(() => {
+    // Bumped first: any action already in flight checks this ref (not a
+    // stale closure) at the moment it would otherwise append its answer.
+    sessionGenerationRef.current += 1
     setMessages([])
     setChatDraft("")
     setAttachments([])
@@ -981,36 +1041,42 @@ function WorkspaceAgentPanelSession({
     ])
     setChatDraft("")
     setActionsOpen(false)
-    void runAction("ask", async () => {
+    void runAction("ask", async (generation) => {
       // Chat must never go silent: whatever happens, exactly one agent bubble
       // is appended — the answer, a handled error, or an unexpected one.
+      // Unless a "New conversation" started while this was in flight: then
+      // this turn's question no longer belongs to the visible chat, and its
+      // answer must not resurrect it or contaminate the new session's memory.
       let outcome: AskOutcome
       try {
         outcome = await executeAsk(text)
       } catch (thrown) {
         outcome = { ok: false, message: thrown instanceof Error ? thrown.message : "The Workspace agent could not answer right now." }
       }
-      setMessages((current) => [
-        ...current,
-        outcome.ok
-          ? {
-              id: `agent-${messageTimestamp + 1}`,
-              role: "agent",
-              text: askChatMessage(outcome.run),
-              note: outcome.autoSelectedNotice,
-              citedDocuments: outcome.run.documents,
-              context: turnContext,
-            }
-          : {
-              id: `agent-${messageTimestamp + 1}`,
-              role: "agent",
-              text: outcome.message,
-              isError: true,
-              context: turnContext,
-            },
-      ])
+      setMessages((current) => {
+        if (sessionGenerationRef.current !== generation) return current
+        return [
+          ...current,
+          outcome.ok
+            ? {
+                id: `agent-${messageTimestamp + 1}`,
+                role: "agent",
+                text: askChatMessage(outcome.run),
+                note: outcome.autoSelectedNotice,
+                citedDocuments: outcome.run.documents,
+                context: turnContext,
+              }
+            : {
+                id: `agent-${messageTimestamp + 1}`,
+                role: "agent",
+                text: outcome.message,
+                isError: true,
+                context: turnContext,
+              },
+        ]
+      })
       if (outcome.ok) {
-        recordSessionAction(`Q: ${text}\nA: ${outcome.run.answer}`)
+        recordSessionAction(`Q: ${text}\nA: ${outcome.run.answer}`, generation)
       }
     })
   }, [attachments, chatDraft, executeAsk, recordSessionAction, runAction, scope, scopeLabel, workspaceRootPath])

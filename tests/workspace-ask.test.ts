@@ -5,8 +5,25 @@ import {
   MAX_WORKSPACE_ASK_EVIDENCE_ITEMS,
   MAX_WORKSPACE_ASK_QUOTE_CHARS,
   sanitizeWorkspaceAskPayload,
+  workspaceAskRequestSchema,
   workspaceAskResponseSchema,
 } from "@/lib/ai/workspace-ask"
+
+describe("workspaceAskRequestSchema (ODE-489's documented Context Gap — a conversational question grounds in zero documents)", () => {
+  it("accepts an empty targetDocumentIds/documents pair instead of requiring at least one", () => {
+    const result = workspaceAskRequestSchema.safeParse({
+      question: "Hola",
+      targetDocumentIds: [],
+      documents: [],
+      collections: [],
+      documentCollectionIds: {},
+      annotations: [],
+      workflowMarkdown: null,
+      catalogTruncated: false,
+    })
+    expect(result.success).toBe(true)
+  })
+})
 
 describe("sanitizeWorkspaceAskPayload", () => {
   it("clamps an answer longer than the cap instead of dropping the whole response", () => {

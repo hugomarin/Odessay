@@ -244,9 +244,17 @@ export type WorkspaceAgentAskRun = {
   documents: WorkspaceAgentCitedDocument[]
 }
 
+/**
+ * Used only to correlate this one in-memory ask's request/response (target
+ * id, citation matching) — never persisted, never resolved through
+ * DocumentCatalog, and never a stand-in for real document identity.
+ */
+const EPHEMERAL_CONVERSATION_DOCUMENT_ID = "conversation-draft"
+
 export type WorkspaceAgentDocumentAskInput = {
   question: string
-  documentId: string
+  /** Null for a still-blank draft with no identity yet (ODE-490 follow-up) — conversation must not require materializing one first. */
+  documentId: string | null
   title: string | null
   markdown: string
   sessionContext?: readonly string[]
@@ -262,12 +270,13 @@ export type WorkspaceAgentDocumentAskInput = {
  * document is a valid (if minimal) slice.
  */
 export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): Promise<ServiceResponse<WorkspaceAgentAskRun>> {
+  const documentId = input.documentId ?? EPHEMERAL_CONVERSATION_DOCUMENT_ID
   const title = input.title?.trim() || null
   const aiRequest: WorkspaceAskRequest = {
     question: input.question.slice(0, 2_000),
-    targetDocumentIds: [input.documentId],
+    targetDocumentIds: [documentId],
     documents: [{
-      id: input.documentId,
+      id: documentId,
       title,
       relativePath: null,
       currentArtifactType: null,
@@ -291,14 +300,14 @@ export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): P
     return error(aiResult.error?.code ?? "AI_REQUEST_FAILED", aiResult.error?.message ?? "The Workspace agent could not answer right now.")
   }
 
-  const validEvidence = aiResult.data.evidence.filter((item) => item.documentId === input.documentId && input.markdown.includes(item.quote))
+  const validEvidence = aiResult.data.evidence.filter((item) => item.documentId === documentId && input.markdown.includes(item.quote))
   const evidence: EvidenceCitation[] = validEvidence.flatMap((item) => {
     const line = lineForQuote(input.markdown, item.quote)
     if (line === null) return []
     return [{
       kind: "document",
-      sourceId: input.documentId,
-      label: title ?? input.documentId,
+      sourceId: documentId,
+      label: title ?? documentId,
       detail: item.reason,
       quote: item.quote,
       line,
@@ -310,8 +319,12 @@ export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): P
     evidence,
     requestedDocumentIds: [],
     requestedDocuments: [],
-    targetDocumentIds: [input.documentId],
-    documents: [{ documentId: input.documentId, title: title ?? input.documentId, path: null }],
+    targetDocumentIds: [documentId],
+    // No real identity to cite back to when the draft is still unmaterialized
+    // — an empty `documents` list means the panel won't turn any `` `name` ``
+    // mention into a (broken) open-document link for a document that doesn't
+    // exist yet.
+    documents: input.documentId ? [{ documentId, title: title ?? documentId, path: null }] : [],
   })
 }
 
@@ -446,12 +459,39 @@ async function prepareDocumentEvidence(
   context: WorkspaceAgentContext,
   selection: readonly WorkspaceAgentSelection[],
   tools: WorkspaceAgentToolsService,
-  options: { maxTargets: number; maxCatalogDocuments: number; maxBodyChars: number; noSelectionMessage: string; contextPurpose: string },
+  options: {
+    maxTargets: number
+    maxCatalogDocuments: number
+    maxBodyChars: number
+    noSelectionMessage: string
+    contextPurpose: string
+    /**
+     * A conversational ask with nothing selected must not fall back to
+     * reading anything (ODE-489's documented "Context Gap conocido": a
+     * plain "Hola" was reading and sending a full document body). When
+     * true, an empty selection resolves to a zero-document plan instead of
+     * the NOT_FOUND error below. Classification still requires an explicit
+     * selection — there's nothing to classify otherwise.
+     */
+    allowEmptySelection?: boolean
+  },
   contextServices: { store: ContextArtifactStore; ledger: ContextLedger },
 ): Promise<ServiceResponse<PreparedDocumentEvidence>> {
   const selectedIds = resolveSelectionDocumentIds(context, selection)
     .filter((documentId) => documentId !== context.existingWorkflow?.id)
   if (selectedIds.length === 0) {
+    if (options.allowEmptySelection) {
+      const recordsById = new Map(context.documents.map((record) => [record.id, record]))
+      return ok({
+        selectedRecords: [],
+        recordsById,
+        currentRecordsById: new Map(recordsById),
+        markdownById: new Map(),
+        annotations: [],
+        promptRecords: [],
+        catalogTruncated: false,
+      })
+    }
     return error("NOT_FOUND", options.noSelectionMessage)
   }
   if (selectedIds.length > options.maxTargets) {
@@ -1029,6 +1069,7 @@ export async function createWorkspaceAgentService(
         maxBodyChars: MAX_WORKSPACE_ASK_BODY_CHARS,
         noSelectionMessage: "Select at least one local artifact before asking the Workspace agent.",
         contextPurpose: "ask-evidence",
+        allowEmptySelection: true,
       }, contextServices)
       if (prepared.error || !prepared.data) return prepared as ServiceResponse<WorkspaceAgentAskRun>
       const { selectedRecords, recordsById, currentRecordsById, markdownById, annotations, promptRecords, catalogTruncated } = prepared.data

@@ -336,21 +336,33 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     expect(result.data?.evidence).toEqual([])
   })
 
-  it("askAgent rejects an empty selection instead of silently answering with no context", async () => {
-    contextMocks.list.mockResolvedValue([])
+  it("askAgent answers a conversational question with an empty selection without reading any document (ODE-489's documented Context Gap: 'Hola' must not force a read)", async () => {
+    const other = document("other", "Some unrelated artifact body.")
+    contextMocks.list.mockResolvedValue([other.catalogRecord])
+    const read = vi.fn()
     const tools: WorkspaceAgentToolsService = {
-      read: vi.fn(),
+      read,
       write: vi.fn(),
       move: vi.fn(),
       edit: vi.fn(),
       delete: vi.fn(),
     }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Hi! How can I help?", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
     const service = await createWorkspaceAgentService("/workspace", tools)
 
-    const result = await service.askAgent({ question: "What is this workspace about?", selection: [] })
+    const result = await service.askAgent({ question: "Hola", selection: [] })
 
-    expect(result.error?.code).toBe("NOT_FOUND")
-    expect(aiMocks.askWorkspace).not.toHaveBeenCalled()
+    expect(result.error).toBeNull()
+    expect(result.data?.answer).toBe("Hi! How can I help?")
+    expect(read).not.toHaveBeenCalled()
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      question: "Hola",
+      targetDocumentIds: [],
+      documents: [],
+    }))
   })
 
   describe("askAboutDocument (ODE-490 — no Workspace, BindingRoot, or catalog needed)", () => {
@@ -407,6 +419,30 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       expect(result.data?.answer).toBe("¡Hola! ¿En qué te ayudo?")
       expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
         documents: [expect.objectContaining({ id: "draft-blank", title: null, markdown: "" })],
+      }))
+    })
+
+    it("answers a still-blank draft with no id at all yet (ODE-490 follow-up — a document identity must not gate a plain 'Hola')", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "¡Hola!", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+
+      const result = await askAboutDocument({
+        question: "hola",
+        documentId: null,
+        title: null,
+        markdown: "",
+      })
+
+      expect(result.error).toBeNull()
+      expect(result.data?.answer).toBe("¡Hola!")
+      // No real identity to cite back to — the citation-document list stays
+      // empty instead of pointing at a synthetic placeholder id.
+      expect(result.data?.documents).toEqual([])
+      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+        targetDocumentIds: [expect.any(String)],
+        documents: [expect.objectContaining({ title: null, markdown: "" })],
       }))
     })
 

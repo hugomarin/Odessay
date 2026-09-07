@@ -4258,10 +4258,15 @@ export function EditorShell({
   // Lets the Workspace agent chat answer from the Writing's live content
   // when no Workspace is available to ground it (unmaterialized draft, or a
   // Writing outside any visible Workspace) — no filesystem/catalog read,
-  // just what's already in the editor (ODE-490).
+  // just what's already in the editor (ODE-490). A still-blank draft with no
+  // `currentWritingId` yet must still get a real answer instead of a false
+  // "runtime not supported" error (ODE-490 follow-up) — conversation is not
+  // gated on materializing a document first. Reuses the existing ephemeral
+  // draft id when one has already been assigned elsewhere; otherwise leaves
+  // `documentId` null rather than minting a new identity just for this.
   const getAgentDocumentSnapshot = useCallback((): WorkspaceAgentDocumentSnapshot | null => {
-    if (!currentWritingId) return null
-    return { documentId: currentWritingId, title: title.trim() || null, markdown: currentDocumentMarkdown }
+    const documentId = currentWritingId ?? ephemeralDraftWritingIdRef.current
+    return { documentId, title: title.trim() || null, markdown: currentDocumentMarkdown }
   }, [currentDocumentMarkdown, currentWritingId, title])
 
 

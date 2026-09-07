@@ -72,6 +72,14 @@ export type AgentMessage = {
   toolResult?: ToolResult
   /** The Writing/Workspace this message was produced against — set once, at creation. */
   context?: WorkspaceAgentMessageContext
+  /**
+   * The Workspace agent service instance active when this message's
+   * toolResult was produced (ODE-502 follow-up). A proposal's review card
+   * survives navigating to a different Workspace; approving it must keep
+   * executing against the Workspace it was actually generated in, never
+   * whichever Workspace happens to be current when the user clicks Approve.
+   */
+  executionService?: WorkspaceAgentService
 }
 
 let messageSequence = 0
@@ -93,8 +101,9 @@ export function createToolResultMessage(
   toolResult?: ToolResult,
   id?: string,
   context?: WorkspaceAgentMessageContext,
+  executionService?: WorkspaceAgentService,
 ): AgentMessage {
-  return { id: id ?? createAgentMessageId("agent"), role: "agent", text, toolResult, context }
+  return { id: id ?? createAgentMessageId("agent"), role: "agent", text, toolResult, context, executionService }
 }
 
 export function createApproval(action: WorkspaceAgentAction, resource: string): WorkspaceAgentApproval {
@@ -128,4 +137,35 @@ export function approveClassificationProposal(service: WorkspaceAgentService, pr
 
 export function approveArchiveCandidate(service: WorkspaceAgentService, candidate: ArchiveCandidate) {
   return service.applyArchiveCandidate(candidate, createApproval("edit", candidate.documentId))
+}
+
+/**
+ * A review card's approve action must execute against the Workspace the
+ * proposal was actually generated in, not whichever Workspace happens to be
+ * current (ODE-502 follow-up) — the session, and its persisted messages,
+ * now survive navigating to a different Workspace, so the ambient "current
+ * service" is no longer a safe stand-in for "the service this proposal
+ * belongs to". Falls back to the given current service only for a message
+ * that predates this field (e.g. constructed directly in a test).
+ */
+export function resolveExecutionServiceById(
+  messages: readonly AgentMessage[],
+  messageId: string,
+  currentService: WorkspaceAgentService | null,
+): WorkspaceAgentService | null {
+  const message = messages.find((item) => item.id === messageId)
+  return message?.executionService ?? currentService
+}
+
+/** Same as {@link resolveExecutionServiceById}, for call sites (contradictions) that don't carry a messageId — the owning message is whichever card still lists this proposal. */
+export function resolveExecutionServiceByProposal(
+  messages: readonly AgentMessage[],
+  proposalId: string,
+  currentService: WorkspaceAgentService | null,
+): WorkspaceAgentService | null {
+  const message = messages.find((item) => (
+    item.toolResult?.kind === "contradictions"
+    && item.toolResult.proposals.some((proposal) => proposal.id === proposalId)
+  ))
+  return message?.executionService ?? currentService
 }
