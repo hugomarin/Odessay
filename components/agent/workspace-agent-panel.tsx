@@ -62,6 +62,16 @@ import {
   type WorkspaceAgentContextAttachment,
   type WorkspaceAgentMessageContext,
 } from "@/lib/agent/workspace-agent-chat"
+import {
+  buildContextEnvelope,
+  deriveAvailableSources,
+  documentIdsFromSources,
+  liveOverrideFromEnvelope,
+  selectionFromEnvelope,
+  type ContextEnvelope,
+  type WorkspaceAgentDocumentSnapshot,
+  type WorkspaceAgentScope,
+} from "@/lib/agent/context-envelope"
 import { useWorkspaceAgentDropZone, type WorkspaceAgentDragPayload } from "@/components/agent/workspace-agent-drag"
 import {
   ReviewShellCancelButton,
@@ -82,23 +92,8 @@ import { cn } from "@/lib/utils"
 const CHAT_TEXTAREA_MAX_HEIGHT = 160
 const MAX_SESSION_ACTIONS_CONTEXT = 8
 
-export type WorkspaceAgentScope =
-  | { kind: "document"; id: string }
-  | { kind: "workspace"; rootId: string }
-
 export type { WorkspaceAgentContextAttachment }
-
-export type WorkspaceAgentDocumentSnapshot = {
-  /**
-   * Null for a still-blank draft that has no identity yet (ODE-490 follow-up)
-   * — conversation must not be gated on materializing a document just to
-   * satisfy the agent. `askAboutDocument` substitutes a local, non-durable
-   * placeholder for this one ask; nothing here mints a real document id.
-   */
-  documentId: string | null
-  title: string | null
-  markdown: string
-}
+export type { WorkspaceAgentDocumentSnapshot, WorkspaceAgentScope }
 
 export type WorkspaceAgentPanelProps = {
   scope: WorkspaceAgentScope
@@ -151,32 +146,6 @@ function buildMessageContext(
   }
 }
 
-function uniqueDocumentIds(attachments: WorkspaceAgentContextAttachment[], scope: WorkspaceAgentScope): string[] {
-  const ids = attachments
-    .filter((attachment): attachment is WorkspaceAgentContextAttachment & { id: string } => attachment.kind === "file" && Boolean(attachment.id))
-    .map((attachment) => attachment.id)
-  if (scope.kind === "document") ids.unshift(scope.id)
-  return [...new Set(ids)]
-}
-
-function classificationSelection(
-  attachments: WorkspaceAgentContextAttachment[],
-  scope: WorkspaceAgentScope,
-): WorkspaceAgentSelection[] {
-  const selection: WorkspaceAgentSelection[] = []
-  if (scope.kind === "document") {
-    selection.push({ kind: "file", documentId: scope.id })
-  }
-  for (const attachment of attachments) {
-    selection.push({
-      kind: attachment.kind,
-      documentId: attachment.id,
-      path: attachment.path,
-    })
-  }
-  return selection
-}
-
 /**
  * These build the deterministic, factual bullets handed to the presentation
  * stage (ODE-491) — the LLM call only decides how to phrase them in the
@@ -203,33 +172,34 @@ function askChatMessage(run: WorkspaceAgentAskRun): string {
 
 /**
  * Free-text chat and the Classify action both need a bounded document
- * selection to ground the model. When nothing is explicitly attached and the
- * scope is the whole workspace (not a single open document):
- * - Classify (`autoSelectRecent: true`) falls back to the most recently
- *   updated artifacts instead of dead-ending the request — classifying
- *   *something* is the point of the action.
- * - Free-text ask (`autoSelectRecent: false`) does not: auto-reading recent
- *   artifacts on every plain "Hola" was ODE-489's documented "Context Gap
- *   conocido" (conversation must produce a plan with zero document reads).
- *   Returns an empty, still-`ok` selection instead, so askAgent can answer
+ * selection to ground the model. The envelope's own `availableSources`
+ * (explicit attachment / focused Writing, per `deriveAvailableSources`) is
+ * tried first; when it's empty and the scope is the whole workspace (not a
+ * single open document), `envelope.policies.autoSelectRecent` decides what
+ * happens next:
+ * - Classify sets it `true` — falls back to the most recently updated
+ *   artifacts instead of dead-ending the request; classifying *something*
+ *   is the point of the action.
+ * - Free-text ask sets it `false` — auto-reading recent artifacts on every
+ *   plain "Hola" was ODE-489's documented "Context Gap conocido"
+ *   (conversation must produce a plan with zero document reads). Returns an
+ *   empty, still-`ok` selection instead, so askAgent can answer
  *   conversationally with no forced read.
  */
 async function resolveChatSelection(
-  attachments: WorkspaceAgentContextAttachment[],
-  scope: WorkspaceAgentScope,
+  envelope: ContextEnvelope,
   service: WorkspaceAgentService,
   maxTargets: number,
-  options: { autoSelectRecent: boolean },
 ): Promise<
   | { ok: true; selection: WorkspaceAgentSelection[]; autoSelectedNotice: string | null }
   | { ok: false; message: string }
 > {
-  const selection = classificationSelection(attachments, scope)
+  const selection = selectionFromEnvelope(envelope)
   if (selection.length > 0) return { ok: true, selection, autoSelectedNotice: null }
-  if (!options.autoSelectRecent) {
+  if (!envelope.policies.autoSelectRecent) {
     return { ok: true, selection: [], autoSelectedNotice: null }
   }
-  if (scope.kind !== "workspace") {
+  if (envelope.invocation.location.surface !== "workspace") {
     return { ok: false, message: "Attach an artifact or open a document before asking the Workspace agent." }
   }
 
@@ -420,7 +390,10 @@ function WorkspaceAgentPanelSession({
     }
   }, [open, workspaceRootPath])
 
-  const documentIds = useMemo(() => uniqueDocumentIds(attachments, scope), [attachments, scope])
+  const documentIds = useMemo(
+    () => documentIdsFromSources(deriveAvailableSources(scope, attachments)),
+    [attachments, scope],
+  )
   const canCompare = Boolean(service) && documentIds.length >= 2
   const canClassify = Boolean(service)
 
@@ -536,7 +509,18 @@ function WorkspaceAgentPanelSession({
       setFeedback("The Workspace agent is not available in this runtime.")
       return null
     }
-    const resolved = await resolveChatSelection(attachments, scope, service, MAX_WORKSPACE_CLASSIFICATION_TARGETS, { autoSelectRecent: true })
+    const envelope = buildContextEnvelope({
+      text: request,
+      source: "command",
+      scope,
+      scopeLabel,
+      workspaceRootPath,
+      attachments,
+      hasService: true,
+      recentSessionActions: sessionActionLogRef.current,
+      policies: { autoSelectRecent: true },
+    })
+    const resolved = await resolveChatSelection(envelope, service, MAX_WORKSPACE_CLASSIFICATION_TARGETS)
     if (!resolved.ok) {
       setFeedback(resolved.message)
       return null
@@ -575,7 +559,7 @@ function WorkspaceAgentPanelSession({
       setFeedback("The agent needs more document evidence before it can make a firmer classification.")
     }
     return run
-  }, [announceToolResult, attachments, getWorkflowReadApproval, scope, service])
+  }, [announceToolResult, attachments, getWorkflowReadApproval, scope, scopeLabel, service, workspaceRootPath])
 
   const executeAsk = useCallback(async (question: string): Promise<AskOutcome> => {
     if (!service) {
@@ -599,7 +583,26 @@ function WorkspaceAgentPanelSession({
       }
       return { ok: true, run: response.data, autoSelectedNotice: null }
     }
-    const resolved = await resolveChatSelection(attachments, scope, service, MAX_WORKSPACE_ASK_TARGETS, { autoSelectRecent: false })
+    // Frozen once, read three ways below: the selection to ground in
+    // (envelope.availableSources), and — only when it actually belongs to
+    // the document being asked about — the live override
+    // (liveOverrideFromEnvelope). The focused Writing's on-screen content
+    // may be ahead of its last persisted catalog version; a Workspace
+    // service being available must not mean unsaved edits get silently
+    // ignored (ODE-489/490 follow-up).
+    const envelope = buildContextEnvelope({
+      text: question,
+      source: "chat",
+      scope,
+      scopeLabel,
+      workspaceRootPath,
+      attachments,
+      liveSnapshot: getDocumentSnapshot?.() ?? null,
+      hasService: true,
+      recentSessionActions: sessionActionLogRef.current,
+      policies: { autoSelectRecent: false },
+    })
+    const resolved = await resolveChatSelection(envelope, service, MAX_WORKSPACE_ASK_TARGETS)
     if (!resolved.ok) {
       return { ok: false, message: resolved.message }
     }
@@ -607,24 +610,12 @@ function WorkspaceAgentPanelSession({
     if (workflowReadApproval === null) {
       return { ok: false, message: "Workspace context could not be loaded." }
     }
-    // The focused Writing's on-screen content may be ahead of its last
-    // persisted catalog version — ground the answer in that instead of a
-    // stale read when it's the document actually being asked about
-    // (ODE-489/490 follow-up: a Workspace service being available must not
-    // mean unsaved edits get silently ignored).
-    let liveOverride: { documentId: string; markdown: string } | undefined
-    if (scope.kind === "document") {
-      const liveSnapshot = getDocumentSnapshot?.()
-      if (liveSnapshot?.documentId === scope.id) {
-        liveOverride = { documentId: scope.id, markdown: liveSnapshot.markdown }
-      }
-    }
     const response = await service.askAgent({
       question,
       selection: resolved.selection,
       workflowReadApproval,
       sessionContext: sessionActionLogRef.current.slice(-MAX_SESSION_ACTIONS_CONTEXT),
-      liveOverride,
+      liveOverride: liveOverrideFromEnvelope(envelope),
     })
     if (response.error || !response.data) {
       return { ok: false, message: response.error?.message ?? "The Workspace agent could not answer right now." }
@@ -632,7 +623,7 @@ function WorkspaceAgentPanelSession({
     const autoSelectedNotice = hasShownAutoSelectNotice.current ? null : resolved.autoSelectedNotice
     if (resolved.autoSelectedNotice) hasShownAutoSelectNotice.current = true
     return { ok: true, run: response.data, autoSelectedNotice }
-  }, [attachments, getDocumentSnapshot, getWorkflowReadApproval, scope, service])
+  }, [attachments, getDocumentSnapshot, getWorkflowReadApproval, scope, scopeLabel, service, workspaceRootPath])
 
   const runClassification = useCallback(() => runAction("classification", async (generation) => {
     await executeClassification("Review these artifacts and propose their type and status with evidence.", generation)
