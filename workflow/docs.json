@@ -96,8 +96,8 @@
       "path": "workflow/context/features/agents/odessay-agent-execution.md",
       "type": "feature",
       "scope": "workspace-agent-execution-contract",
-      "state": "architecture-proposal-2026-09-06",
-      "description": "Routing por intención, diferencia entre consultas libres, tools y workflows, registry, validación, propuestas, aprobación, mutaciones y presentación de AgentResponse."
+      "state": "partially-implemented-2026-09-07",
+      "description": "Routing por intención, diferencia entre consultas libres, tools y workflows, registry, validación, propuestas, aprobación, mutaciones y presentación de AgentResponse. suggestedAction (askWorkspace) es una implementación real y acotada de los kinds tool/workflow para las 5 acciones predeterminadas; no hay AgentIntent formal, Router separado, registry ni AgentResponse compartido."
     },
     {
       "path": "workflow/context/features/agents/odessay-agent-context-cache.md",

@@ -151,6 +151,7 @@ Abrir un documento citado es navegación/preview de la UI. No es una mutation to
 - El `.md` materializado sigue siendo la fuente canónica; cache, evidencia, SQLite y Supabase son derivados o metadata según sus contratos.
 - El Workspace Agent no crea un catálogo paralelo ni un write-path alternativo.
 - Los documentos disponibles no se consideran consumidos hasta que el `ContextResolver` los incorpora a un `EvidenceBundle`.
+- El chat nunca queda en silencio: toda pregunta resuelve a una respuesta o a un error explícito. Si un mecanismo de ampliación de contexto (segunda ronda, evidencia adicional) falla, se conserva la última respuesta válida en vez de propagar el fallo al turno completo.
 
 ## Estado actual frente al objetivo
 

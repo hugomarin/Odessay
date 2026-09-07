@@ -177,6 +177,16 @@ El router y el orquestador viven en `Application`. El registry contiene contrato
 
 La UI no puede convertir un botón en una escritura directa. El botón confirma una propuesta; el executor ejecuta la tool.
 
+## Estado actual frente al objetivo
+
+No existe todavía un `AgentIntent` formal ni una etapa de Router separada de la llamada al modelo — nada clasifica `conversation` / `understand` / `generate` / `tool` / `workflow` como un paso previo y determinista. Lo que sí existe, como código real y probado, es una versión más acotada de los kinds `tool`/`workflow`:
+
+`askWorkspace` — la misma llamada conversacional que responde el chat, no una llamada de router separada — devuelve un campo `suggestedAction: "workflow" | "broken-links" | "classification" | "archive" | "contradictions" | null`. El modelo lo fija solo cuando el usuario pide explícitamente ejecutar una de esas cinco acciones predeterminadas, nunca cuando solo las discute o pregunta cómo funcionan (instrucción explícita del prompt). El panel (`workspace-agent-panel.tsx`, `dispatchSuggestedAction`) despacha a la misma función que usan los botones (`runWorkflow`, `runBrokenReferences`, `executeClassification`, etc.) — el mismo camino aprobado de la sección "Proposal y mutación" arriba, no un atajo nuevo.
+
+Esto cubre parcialmente los kinds `tool`/`workflow` — solo para las cinco acciones predeterminadas de este catálogo, no composición libre de tools nuevas. `merge` queda fuera de `suggestedAction` (mock de UI sin tool de backend, ver `odessay-agent-context.md`). Los kinds `conversation`/`understand`/`generate` de la tabla "Consultas libres" no se distinguen con una etiqueta explícita en ningún punto del código: `askAgent`/`askAboutDocument` los atienden de forma uniforme a través del mismo mecanismo lazy (`odessay-agent-context.md`, "Estado de la adquisición lazy"), sin una clasificación previa que los nombre — la tabla de arriba describe el resultado esperado, no un router que literalmente produzca esas tres etiquetas.
+
+Sigue sin existir: un `Registry` de `AgentCapabilityDescriptor` consultable (la validación de cada tool/workflow vive dispersa en su propio código, no en un registry central); un `PlanValidator` formal único; un `AgentResponse` compartido que alimente tanto Chat Card como Decision Modal.
+
 ## Clasificación arquitectónica
 
 - **Layer dominante:** `Application`.

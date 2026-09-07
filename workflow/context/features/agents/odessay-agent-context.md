@@ -19,6 +19,8 @@ Evidence Bundle
 
 Tener cien documentos disponibles en un Workspace no implica enviar cien documentos al LLM. La adquisición debe ser lazy y depender de la intención de la solicitud.
 
+Ser lazy puede costar una ronda adicional al modelo en el turno puntual que sí necesita evidencia — que quien decide si hace falta esa ronda sea el propio consumidor (el modelo, viendo la pregunta) y no un clasificador previo que corra siempre, es la razón de que el costo agregado de una sesión baje: la mayoría de los turnos no necesitan evidencia y no pagan nada, en vez de que todos paguen el costo completo por si acaso.
+
 ## Contratos
 
 ### Agent Invocation
@@ -136,6 +138,8 @@ Ejemplos:
 - En un Workspace con un Writing seleccionado, el Writing pasa a ser el foco.
 - En un Writing sin Workspace visible pero con `BindingRoot`, el documento puede seguir teniendo contexto local operativo.
 - Un adjunto explícito tiene prioridad sobre el foco vivo.
+
+**Contradicción conocida entre este orden y el código actual:** `deriveAvailableSources` (`lib/agent/context-envelope.ts`) sigue listando el documento enfocado *antes* que los adjuntos explícitos — el orden inverso al declarado arriba. Para `ask` esto dejó de importar en la práctica: el documento enfocado no compite por ese orden porque se excluye por completo de la lectura inmediata (ver "Estado de la adquisición lazy" abajo). Para Classify, donde el documento enfocado sí se lee de inmediato junto con los adjuntos, el orden real sigue siendo el incorrecto — no se corrigió deliberadamente, para no cambiar comportamiento de producción sin poder probarlo en un entorno con IA en vivo. Sigue siendo una discrepancia real entre este documento y el código para ese caso.
 
 ## Adquisición bajo demanda
 
@@ -256,8 +260,11 @@ Mecanismo implementado — más simple que el pipeline Router → Planner → Re
 1. El documento enfocado se manda como referencia (`focusedDocumentId`, metadata con `markdown: null`) en la primera llamada a `askWorkspace`, nunca su cuerpo.
 2. El propio modelo, dentro de esa misma llamada, decide si necesita el contenido y lo pide de vuelta mediante el campo ya existente `requestedDocumentIds`.
 3. Si lo pide, corre como máximo **una** ronda adicional con el cuerpo incluido — nunca más de una, y nunca para un id que no sea el documento enfocado (pedir cualquier otro id sigue el camino manual existente: se lo indica al usuario, no se auto-ejecuta).
+4. Si esa segunda ronda falla (error de red, del provider, lo que sea), se conserva la respuesta de la primera ronda en vez de fallar el turno completo. El chat nunca debe quedar en silencio — ni por el mecanismo lazy ni por ningún otro motivo.
 
 Con esto, un `Hola` con cualquier Writing abierto ya no lee ni envía ningún cuerpo documental — antes sí lo hacía siempre, sin importar la intención de la pregunta. Cubre ambos runtimes: `askAgent` (con Workspace) y `askAboutDocument` (sin Workspace, borrador sin materializar).
+
+**Por qué una ronda adicional ocasional es más barato, no más caro:** antes, el 100% de los turnos de `ask` pagaban el costo completo del documento enfocado, en cada mensaje, sin importar la intención. Ahora, un turno puramente conversacional paga prácticamente cero, y solo el turno que de verdad necesita el documento paga la ronda extra. El costo agregado de una sesión baja, aunque un turno individual — el que sí necesita el documento — cueste dos llamadas en vez de una.
 
 Gaps que siguen abiertos, sin resolver:
 
