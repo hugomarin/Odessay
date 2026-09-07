@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WorkspaceTree } from "@/components/workspace/workspace-tree";
+import { startWorkspaceAgentDrag } from "@/components/agent/workspace-agent-drag";
 import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar";
 import { BulkActionBar } from "@/components/desk/bulk-action-bar";
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
@@ -774,17 +775,13 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               description={document?.excerpt ?? null}
               localPath={file.path}
               dateLabel={formatFileTimestamp(file.modifiedAt)}
-              draggable
-              onDragStart={(event) => {
-                const payload = {
+              onDragPointerDown={(event) => {
+                startWorkspaceAgentDrag(event, {
                   kind: "file",
                   id: document?.id,
                   path: file.path,
                   label: writingTitle,
-                } as const;
-                event.dataTransfer.effectAllowed = "copy";
-                event.dataTransfer.setData("application/x-odessay-agent-context", JSON.stringify(payload));
-                event.dataTransfer.setData("text/plain", JSON.stringify(payload));
+                });
               }}
               actions={
                 <>
@@ -1343,8 +1340,11 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
             </div>
           </div>
 
-          {/* Sheet */}
-          <div className="flex min-h-0 flex-col">
+          {/* Sheet + Workspace agent: siblings in one row so the agent panel spans the
+              full column height (flush with the title/filter rows above the file
+              list) instead of being nested under them. */}
+          <div className="relative flex min-h-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col">
             <ViewHeader
               sectionId="workspace-detail-header"
               testId="workspace-detail-header"
@@ -1439,7 +1439,6 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               onClearFilters={clearFilters}
             />
 
-            <div className="flex min-h-0 flex-1">
             <div className={`od-scroll min-h-0 flex-1 overflow-y-auto ${APP_SHELL_CONTENT_GUTTER_CLASS} pb-4`}>
               {errorMessage ? (
                 <div className="mb-6 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 text-sm text-ink-3">
@@ -1533,21 +1532,21 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 />
               )}
             </div>
-            <Suspense fallback={null}>
-              <WorkspaceAgentPanel
-                scope={{ kind: "workspace", rootId: workspace.slug }}
-                workspaceRootPath={workspace.rootPath}
-                scopeLabel={workspace.name}
-                open={isAgentPanelOpen}
-                onOpenChange={setIsAgentPanelOpen}
-                onOpenDocument={(documentId) => {
-                  if (previewRows.some((row) => row.id === documentId)) {
-                    setPreviewWritingId(documentId);
-                  }
-                }}
-              />
-            </Suspense>
-            </div>
+          </div>
+          <Suspense fallback={null}>
+            <WorkspaceAgentPanel
+              scope={{ kind: "workspace", rootId: workspace.slug }}
+              workspaceRootPath={workspace.rootPath}
+              scopeLabel={workspace.name}
+              open={isAgentPanelOpen}
+              onOpenChange={setIsAgentPanelOpen}
+              onOpenDocument={(documentId) => {
+                if (previewRows.some((row) => row.id === documentId)) {
+                  setPreviewWritingId(documentId);
+                }
+              }}
+            />
+          </Suspense>
           </div>
         </div>
 
