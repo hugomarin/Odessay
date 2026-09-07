@@ -599,16 +599,21 @@ describe("WorkspaceAgentService contradiction workflow", () => {
   })
 
   describe("askAboutDocument (ODE-490 — no Workspace, BindingRoot, or catalog needed)", () => {
-    it("answers from a single document's live content with no catalog, tools, or filesystem access", async () => {
-      aiMocks.askWorkspace.mockResolvedValueOnce({
-        data: {
-          answer: "This document decides to use SQLite for storage.",
-          evidence: [{ documentId: "draft-1", quote: "Storage: SQLite.", reason: "States the storage decision." }],
-          requestedDocumentIds: [],
-          usage: null,
-        },
-        error: null,
-      })
+    it("offers only a reference on the first round — no content sent — then retries with content once the model asks for it back (ODE-489 follow-up)", async () => {
+      aiMocks.askWorkspace
+        .mockResolvedValueOnce({
+          data: { answer: "I'd need to read it to answer that.", evidence: [], requestedDocumentIds: ["draft-1"], usage: null },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: {
+            answer: "This document decides to use SQLite for storage.",
+            evidence: [{ documentId: "draft-1", quote: "Storage: SQLite.", reason: "States the storage decision." }],
+            requestedDocumentIds: [],
+            usage: null,
+          },
+          error: null,
+        })
 
       const result = await askAboutDocument({
         question: "What storage does this use?",
@@ -618,12 +623,18 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       })
 
       expect(result.error).toBeNull()
-      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+      expect(aiMocks.askWorkspace).toHaveBeenNthCalledWith(1, expect.objectContaining({
         question: "What storage does this use?",
-        targetDocumentIds: ["draft-1"],
-        documents: [expect.objectContaining({ id: "draft-1", title: "Untitled draft", markdown: "Storage: SQLite." })],
+        targetDocumentIds: [],
+        focusedDocumentId: "draft-1",
+        documents: [expect.objectContaining({ id: "draft-1", title: "Untitled draft", markdown: null })],
         collections: [],
         catalogTruncated: false,
+      }))
+      expect(aiMocks.askWorkspace).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        targetDocumentIds: ["draft-1"],
+        documents: [expect.objectContaining({ id: "draft-1", markdown: "Storage: SQLite." })],
       }))
       expect(result.data).toMatchObject({
         answer: "This document decides to use SQLite for storage.",
@@ -635,7 +646,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       expect(contextMocks.list).not.toHaveBeenCalled()
     })
 
-    it("answers a purely conversational question against a blank, unmaterialized draft", async () => {
+    it("answers a purely conversational question against a blank, unmaterialized draft without ever sending its content", async () => {
       aiMocks.askWorkspace.mockResolvedValueOnce({
         data: { answer: "¡Hola! ¿En qué te ayudo?", evidence: [], requestedDocumentIds: [], usage: null },
         error: null,
@@ -645,13 +656,16 @@ describe("WorkspaceAgentService contradiction workflow", () => {
         question: "hola",
         documentId: "draft-blank",
         title: null,
-        markdown: "",
+        markdown: "Some text the user already typed that a greeting has no reason to need.",
       })
 
       expect(result.error).toBeNull()
       expect(result.data?.answer).toBe("¡Hola! ¿En qué te ayudo?")
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
       expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
-        documents: [expect.objectContaining({ id: "draft-blank", title: null, markdown: "" })],
+        targetDocumentIds: [],
+        focusedDocumentId: "draft-blank",
+        documents: [expect.objectContaining({ id: "draft-blank", title: null, markdown: null })],
       }))
     })
 
@@ -674,9 +688,46 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       // empty instead of pointing at a synthetic placeholder id.
       expect(result.data?.documents).toEqual([])
       expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
-        targetDocumentIds: [expect.any(String)],
-        documents: [expect.objectContaining({ title: null, markdown: "" })],
+        targetDocumentIds: [],
+        documents: [expect.objectContaining({ title: null, markdown: null })],
       }))
+    })
+
+    it("keeps the first round's answer when the retry itself fails, instead of erroring the turn", async () => {
+      aiMocks.askWorkspace
+        .mockResolvedValueOnce({
+          data: { answer: "I don't have enough context yet, but here's what I can say generally.", evidence: [], requestedDocumentIds: ["draft-1"], usage: null },
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: null, error: { code: "AI_REQUEST_FAILED", message: "boom", retryable: true } })
+
+      const result = await askAboutDocument({
+        question: "What storage does this use?",
+        documentId: "draft-1",
+        title: "Draft",
+        markdown: "Storage: SQLite.",
+      })
+
+      expect(result.error).toBeNull()
+      expect(result.data?.answer).toBe("I don't have enough context yet, but here's what I can say generally.")
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+    })
+
+    it("does not retry when the model doesn't ask for the document back — a single round is enough", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "General commentary needing no evidence.", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+
+      const result = await askAboutDocument({
+        question: "What do you think of writing in general?",
+        documentId: "draft-1",
+        title: "Draft",
+        markdown: "Storage: SQLite.",
+      })
+
+      expect(result.error).toBeNull()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
     })
 
     it("drops evidence whose quote isn't actually present in the document", async () => {

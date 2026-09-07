@@ -298,37 +298,65 @@ export type WorkspaceAgentDocumentAskInput = {
 export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): Promise<ServiceResponse<WorkspaceAgentAskRun>> {
   const documentId = input.documentId ?? EPHEMERAL_CONVERSATION_DOCUMENT_ID
   const title = input.title?.trim() || null
-  const aiRequest: WorkspaceAskRequest = {
-    question: input.question.slice(0, 2_000),
-    targetDocumentIds: [documentId],
-    documents: [{
-      id: documentId,
-      title,
-      relativePath: null,
-      currentArtifactType: null,
-      currentStatus: null,
-      visibility: null,
-      version: null,
-      modifiedAt: null,
-      excerpt: null,
-      references: [],
-      markdown: input.markdown.slice(0, MAX_WORKSPACE_ASK_DOCUMENT_CHARS),
-    }],
-    collections: [],
-    documentCollectionIds: {},
-    annotations: [],
-    workflowMarkdown: null,
-    catalogTruncated: false,
-    recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
+  const markdown = input.markdown.slice(0, MAX_WORKSPACE_ASK_DOCUMENT_CHARS)
+
+  /**
+   * The content is already in memory (the caller read it straight from the
+   * live editor — no I/O to defer), but *sending* it to the model still
+   * costs real context-window tokens on every turn. Same lazy contract as
+   * the Workspace-backed path (ODE-489 follow-up): round 1 offers the
+   * artifact as a reference only; a second round with content included
+   * runs only if the model actually asks for it back.
+   */
+  const runRound = (includeContent: boolean) => {
+    const aiRequest: WorkspaceAskRequest = {
+      question: input.question.slice(0, 2_000),
+      targetDocumentIds: includeContent ? [documentId] : [],
+      documents: [{
+        id: documentId,
+        title,
+        relativePath: null,
+        currentArtifactType: null,
+        currentStatus: null,
+        visibility: null,
+        version: null,
+        modifiedAt: null,
+        excerpt: null,
+        references: [],
+        markdown: includeContent ? markdown : null,
+      }],
+      collections: [],
+      documentCollectionIds: {},
+      annotations: [],
+      workflowMarkdown: null,
+      catalogTruncated: false,
+      recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
+      focusedDocumentId: documentId,
+    }
+    return getAIService().askWorkspace(aiRequest)
   }
-  const aiResult = await getAIService().askWorkspace(aiRequest)
+
+  let aiResult = await runRound(false)
   if (aiResult.error || !aiResult.data) {
     return error(aiResult.error?.code ?? "AI_REQUEST_FAILED", aiResult.error?.message ?? "The Workspace agent could not answer right now.")
   }
 
-  const validEvidence = aiResult.data.evidence.filter((item) => item.documentId === documentId && input.markdown.includes(item.quote))
+  // Bounded, one-shot — the only id this turn could ever request is the one
+  // document it already knows about, so no "unrelated id" case to guard
+  // against here the way the Workspace-backed retry does.
+  let hasContent = false
+  if (aiResult.data.requestedDocumentIds.includes(documentId)) {
+    const retry = await runRound(true)
+    if (!retry.error && retry.data) {
+      aiResult = retry
+      hasContent = true
+    }
+    // A retry failure keeps round 1's already-valid answer.
+  }
+
+  const validEvidence = aiResult.data.evidence.filter((item) => item.documentId === documentId && markdown.includes(item.quote))
   const evidence: EvidenceCitation[] = validEvidence.flatMap((item) => {
-    const line = lineForQuote(input.markdown, item.quote)
+    const line = lineForQuote(markdown, item.quote)
     if (line === null) return []
     return [{
       kind: "document",
@@ -343,9 +371,9 @@ export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): P
   return ok({
     answer: aiResult.data.answer,
     evidence,
-    requestedDocumentIds: [],
+    requestedDocumentIds: hasContent ? [] : aiResult.data.requestedDocumentIds,
     requestedDocuments: [],
-    targetDocumentIds: [documentId],
+    targetDocumentIds: hasContent ? [documentId] : [],
     // No real identity to cite back to when the draft is still unmaterialized
     // — an empty `documents` list means the panel won't turn any `` `name` ``
     // mention into a (broken) open-document link for a document that doesn't
