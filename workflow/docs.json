@@ -72,6 +72,41 @@
       "description": "El AI editor residente: qué es (editor literario con criterio propio, no generador de texto), cuándo habla, qué observa, tipos de respuesta posibles y regla de SILENCIO."
     },
     {
+      "path": "workflow/context/features/agents/README.md",
+      "type": "feature",
+      "scope": "agent-platform-index",
+      "state": "architecture-proposal-2026-09-06",
+      "description": "Índice y frontera de la documentación de agentes: Workspace Agent, contexto, ejecución, tools, workflows, cache y relación con el AI Editor residente y AI Writing Assist."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-architecture.md",
+      "type": "feature",
+      "scope": "workspace-agent-target-architecture",
+      "state": "architecture-proposal-2026-09-06",
+      "description": "Arquitectura objetivo del Workspace Agent: capas, ownership, runtimes, Agent Application, tools, workflows, AgentResponse, Card/Modal y boundaries con DocumentCatalog y adapters."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-context.md",
+      "type": "feature",
+      "scope": "workspace-agent-context-contract",
+      "state": "architecture-proposal-2026-09-06",
+      "description": "Contrato de AgentInvocation, RuntimeContext, LocationContext, ContextEnvelope, composición, precedencia, adquisición lazy, reconstrucción e invalidación del contexto."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-execution.md",
+      "type": "feature",
+      "scope": "workspace-agent-execution-contract",
+      "state": "architecture-proposal-2026-09-06",
+      "description": "Routing por intención, diferencia entre consultas libres, tools y workflows, registry, validación, propuestas, aprobación, mutaciones y presentación de AgentResponse."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-context-cache.md",
+      "type": "feature",
+      "scope": "workspace-agent-context-cost-cache",
+      "state": "architecture-proposal-2026-09-06",
+      "description": "Artifacts de contexto versionados, cache semántica, presupuesto de tokens, costo, ledger de consumo, invalidación y ownership de los adapters de cache y AI provider."
+    },
+    {
       "path": "workflow/context/features/odessay-ai-writing-assist.md",
       "type": "feature",
       "description": "Contrato operativo del AI assist del editor: correcciones mecánicas vía endpoint JSON request/response, learned words, persistencia de correction blocks, guardrails de matching/admisión, memoria de reject/manual-fix, stale handling y sugerencia de título con invocación explícita."
