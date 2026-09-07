@@ -37,8 +37,11 @@ const documentSchema = z.object({
 
 export const workspaceAskRequestSchema = z.object({
   question: z.string().trim().min(1).max(MAX_WORKSPACE_ASK_REQUEST_CHARS),
-  targetDocumentIds: z.array(z.string().trim().min(1).max(200)).min(1).max(MAX_WORKSPACE_ASK_TARGETS),
-  documents: z.array(documentSchema).min(1).max(MAX_WORKSPACE_ASK_CATALOG_DOCUMENTS),
+  // Both allow zero: a purely conversational question ("Hola") grounds in
+  // no document at all rather than forcing a read just to satisfy this
+  // schema (ODE-489's documented "Context Gap conocido").
+  targetDocumentIds: z.array(z.string().trim().min(1).max(200)).max(MAX_WORKSPACE_ASK_TARGETS),
+  documents: z.array(documentSchema).max(MAX_WORKSPACE_ASK_CATALOG_DOCUMENTS),
   collections: z.array(z.object({
     id: z.string().trim().min(1).max(200),
     name: z.string().trim().min(1).max(240),
