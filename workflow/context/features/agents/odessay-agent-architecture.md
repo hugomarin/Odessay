@@ -154,13 +154,18 @@ Abrir un documento citado es navegación/preview de la UI. No es una mutation to
 
 ## Estado actual frente al objetivo
 
-El código actual ya tiene una capa de tools autorizadas, selección acotada, lectura de evidencia y respuestas de chat. Todavía no formaliza completamente:
+El código actual ya tiene una capa de tools autorizadas, selección acotada, lectura de evidencia y respuestas de chat. Ya formalizados como código real (no solo diseño):
 
-- `AgentInvocation` y `ContextEnvelope` como contratos compartidos;
-- selección lazy dependiente de la intención;
+- `AgentInvocation`, `RuntimeContext`, `LocationContext` y `ContextEnvelope` como contratos compartidos — `lib/agent/context-envelope.ts`, consumidos por `askAgent`/`suggestClassification` en el panel.
+- Cache semántica y ledger de consumo — `lib/services/context/` (ODE-501).
+- Selección lazy del documento enfocado: no se lee su cuerpo por defecto; se ofrece como referencia (`focusedDocumentId`) y solo se materializa en una segunda ronda acotada si el modelo la solicita explícitamente (`lib/services/workspace-agent-service.ts`, `askAgent` y `askAboutDocument`). Cubre el caso más frecuente (Writing enfocado, con o sin Workspace visible), no una clasificación de intención general.
+
+Todavía no formaliza completamente:
+
+- Un Intent Router formal que clasifique la intención *antes* de decidir qué leer — hoy esa decisión lazy la toma el propio modelo dentro de la misma llamada de ask, no un paso previo separado y determinista.
 - registry común de tools/workflows;
 - `AgentResponse` reutilizable entre Card y Modal;
-- cache semántica y ledger de consumo.
+- Los workflows predeterminados (Workflow, Broken links, Archive, Contradictions, Merge) no construyen ni consumen `ContextEnvelope` todavía — siguen leyendo `documentIds`/`service` directo, sin pasar por el contrato lazy.
 
 La migración debe introducir esos contratos sin ampliar el camino legacy basado únicamente en `workspaceRootPath`.
 

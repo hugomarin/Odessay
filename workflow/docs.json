@@ -82,15 +82,15 @@
       "path": "workflow/context/features/agents/odessay-agent-architecture.md",
       "type": "feature",
       "scope": "workspace-agent-target-architecture",
-      "state": "architecture-proposal-2026-09-06",
-      "description": "Arquitectura objetivo del Workspace Agent: capas, ownership, runtimes, Agent Application, tools, workflows, AgentResponse, Card/Modal y boundaries con DocumentCatalog y adapters."
+      "state": "architecture-proposal-2026-09-07",
+      "description": "Arquitectura objetivo del Workspace Agent: capas, ownership, runtimes, Agent Application, tools, workflows, AgentResponse, Card/Modal y boundaries con DocumentCatalog y adapters. 'Estado actual frente al objetivo' distingue lo ya implementado (ContextEnvelope, cache, adquisición lazy del documento enfocado) de lo pendiente (Intent Router, registry, AgentResponse compartido)."
     },
     {
       "path": "workflow/context/features/agents/odessay-agent-context.md",
       "type": "feature",
       "scope": "workspace-agent-context-contract",
-      "state": "architecture-proposal-2026-09-06",
-      "description": "Contrato de AgentInvocation, RuntimeContext, LocationContext, ContextEnvelope, composición, precedencia, adquisición lazy, reconstrucción e invalidación del contexto."
+      "state": "partially-implemented-2026-09-07",
+      "description": "Contrato de AgentInvocation, RuntimeContext, LocationContext, ContextEnvelope, composición, precedencia, adquisición lazy, reconstrucción e invalidación del contexto. ContextEnvelope y la adquisición lazy del documento enfocado ya son código real (lib/agent/context-envelope.ts); Intent Router formal y precedencia completa siguen pendientes."
     },
     {
       "path": "workflow/context/features/agents/odessay-agent-execution.md",
@@ -103,8 +103,8 @@
       "path": "workflow/context/features/agents/odessay-agent-context-cache.md",
       "type": "feature",
       "scope": "workspace-agent-context-cost-cache",
-      "state": "architecture-proposal-2026-09-06",
-      "description": "Artifacts de contexto versionados, cache semántica, presupuesto de tokens, costo, ledger de consumo, invalidación y ownership de los adapters de cache y AI provider."
+      "state": "implemented-2026-09-07",
+      "description": "Artifacts de contexto versionados, cache semántica, presupuesto de tokens, costo, ledger de consumo, invalidación y ownership de los adapters de cache y AI provider. ContextArtifactStore/ContextLedger son código real desde ODE-501; solo el registro explícito de los workflows predeterminados a través de ContextEnvelope sigue pendiente."
     },
     {
       "path": "workflow/context/features/odessay-ai-writing-assist.md",

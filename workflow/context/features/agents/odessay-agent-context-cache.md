@@ -168,13 +168,17 @@ Turno 4: A cambia a v18
 
 ## Estado actual y evolución
 
-El código actual registra parte del historial de sesión y construye evidencia bounded por solicitud, pero aún no tiene un `ContextArtifactStore` ni un `ContextLedger` de tokens. La primera implementación puede usar cache en memoria por sesión y agregar persistencia después, siempre que:
+`ContextArtifactStore` y `ContextLedger` ya existen como código real: `lib/services/context/` (ODE-501), cache en memoria por sesión de `WorkspaceAgentService`, clave por `documentId + documentVersion + representation + extractionPolicy`. Cumplen los cinco puntos abajo — ya no son un objetivo pendiente, son el contrato vigente:
 
-- la clave use UUID y versión, no path;
-- el cache sea descartable y derivado;
-- el `.md` siga gobernando el contenido;
-- la UI no acceda directamente al store;
-- los artifacts stale nunca se presenten como evidencia vigente.
+- la clave usa `contentHash` (o `version@modifiedAt` como fallback), no path;
+- el cache es descartable y derivado — un cambio de contenido cambia la clave, nunca sirve un artifact viejo bajo la nueva versión;
+- el `.md` sigue gobernando el contenido; el cache nunca es la fuente;
+- la UI no accede directamente al store — solo `WorkspaceAgentService` lo consulta;
+- un cache *hit* ya no deja que su metadata de catálogo capturada en el momento del caché pise la metadata fresca del mismo request (corregido — antes un cambio de status/version sin cambiar contenido podía servirse obsoleto indefinidamente).
+
+`maxInputTokens` existe en el tipo `ContextBudget`, pero en `askAgent`/`suggestClassification` se pasa como `Number.MAX_SAFE_INTEGER` — no es el control real. El control real es `maxBytes` (tope de caracteres) combinado con la decisión de *si* una fuente entra siquiera al plan — ver "Estado de la adquisición lazy" en `odessay-agent-context.md`. Sumarle un tope de tokens no es la corrección pendiente; ya se decidió que el problema es arquitectónico (qué se carga, no cuánto se recorta después de cargarlo).
+
+Pendiente real: los workflows predeterminados (Workflow, Broken links, Archive, Contradictions, Merge) no pasan por `ContextArtifactStore`/`ContextLedger` de forma explícita vía `ContextEnvelope` — siguen su propio camino de lectura directa.
 
 ## Clasificación arquitectónica
 

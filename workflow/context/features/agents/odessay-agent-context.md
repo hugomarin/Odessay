@@ -194,6 +194,8 @@ No todos los turnos avanzan hasta el último nivel.
 
 Para `Hola`, el agente puede saber que está en un Workspace y que corre en desktop, pero no debe inicializar ni leer documentos solo para responder.
 
+Para `Resúmeme este documento`, la fila dice "1" documento consumido — eso describe el resultado final, no la mecánica: cuando el documento en cuestión es el enfocado (no un adjunto explícito), la implementación actual hace 1 llamada de referencia sin cuerpo y, si el modelo lo pide de vuelta, 1 llamada adicional con el cuerpo — 2 llamadas al modelo por 1 documento consumido, nunca más. Ver "Estado de la adquisición lazy" arriba.
+
 ## Reconstrucción e invalidación
 
 El `ContextBuilder` debe ser stateless y reconstruible:
@@ -245,9 +247,24 @@ No debe:
 - tratar una ruta como identidad;
 - convertir un Workspace visible en un `BindingRoot` sin el contrato de catálogo.
 
-## Context Gap conocido
+## Estado de la adquisición lazy (ODE-489, resuelto parcialmente)
 
-El camino actual de Workspace selecciona documentos recientes cuando no hay adjuntos y después lee sus cuerpos completos. Ese comportamiento es bounded, pero no representa todavía el contrato lazy de este documento. La migración debe introducir primero `ContextEnvelope` y `ContextAcquisitionPlan`, sin ampliar ese fallback como arquitectura nueva.
+`ContextEnvelope`/`AgentInvocation`/`RuntimeContext`/`LocationContext` ya existen como código real, no solo como este documento: `lib/agent/context-envelope.ts`. El documento enfocado (`LocationContext.focusedDocument`) ya sigue el contrato lazy — implementado, no solo diseñado.
+
+Mecanismo implementado — más simple que el pipeline Router → Planner → Resolver dibujado arriba; no hay una etapa de clasificación de intención separada:
+
+1. El documento enfocado se manda como referencia (`focusedDocumentId`, metadata con `markdown: null`) en la primera llamada a `askWorkspace`, nunca su cuerpo.
+2. El propio modelo, dentro de esa misma llamada, decide si necesita el contenido y lo pide de vuelta mediante el campo ya existente `requestedDocumentIds`.
+3. Si lo pide, corre como máximo **una** ronda adicional con el cuerpo incluido — nunca más de una, y nunca para un id que no sea el documento enfocado (pedir cualquier otro id sigue el camino manual existente: se lo indica al usuario, no se auto-ejecuta).
+
+Con esto, un `Hola` con cualquier Writing abierto ya no lee ni envía ningún cuerpo documental — antes sí lo hacía siempre, sin importar la intención de la pregunta. Cubre ambos runtimes: `askAgent` (con Workspace) y `askAboutDocument` (sin Workspace, borrador sin materializar).
+
+Gaps que siguen abiertos, sin resolver:
+
+- No hay un Intent Router formal que clasifique la intención *antes* de la llamada al modelo — la decisión "necesito el documento" la toma el modelo dentro de la misma llamada de ask, reactivamente, no un paso previo separado y determinista.
+- Los adjuntos explícitos y la selección auto-elegida de Workspace (Classify) no pasan por este contrato lazy — se leen de inmediato, sin diferir, igual que antes. El contrato lazy solo cubre el documento enfocado implícito, no el resto de fuentes.
+- El resto del catálogo del Workspace (documentos que no son ni el enfocado ni un adjunto) sigue sin exponerse en absoluto durante una pregunta de chat libre, ni siquiera como referencia — solo Classify ve una porción amplia del catálogo.
+- Los workflows predeterminados (Workflow, Broken links, Archive, Contradictions, Merge) no construyen ni consumen `ContextEnvelope` todavía — siguen leyendo `documentIds`/`service` directo.
 
 ## Clasificación arquitectónica
 
