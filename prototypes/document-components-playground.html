@@ -454,6 +454,8 @@
 
       .invocation-config-control { min-height: 34px; padding: 8px 9px; border: 0.5px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--ink-2); font-size: 11px; }
 
+      .invocation-config-selection { border-color: hsl(22 55% 38% / 0.28); background: var(--cursor-soft); }
+
       .invocation-config-grid { display: grid; grid-template-columns: repeat(4, 24px); gap: 4px; padding: 4px 0; }
 
       .invocation-config-grid span { width: 24px; height: 22px; border: 0.5px solid var(--border); border-radius: 4px; background: var(--muted); }
@@ -1781,7 +1783,7 @@
       const invocationConfigSamples = {
         annotation: { kind: "composer", title: "Annotate selection", description: "Write a comment for the selected passage.", fields: [["Comment", "Este comentario queda vinculado a la selección."], ["Type", "Personal"]], action: "Add annotation" },
         entity: { kind: "modal", title: "Create entity", description: "Classify the current selection without changing its visible text.", fields: [["Selected text", "Aplyca"], ["Entity type", "Company / Compañía"]], action: "Create entity" },
-        card: { kind: "modal", title: "Insert Card", description: "Configure the card shell, then edit its body inline.", fields: [["Title", "Build a Server"], ["Icon", "server"], ["URL", "/docs/build-server"]], action: "Insert Card" },
+        card: { kind: "modal", title: "Create Card from selection", description: "The selected text becomes the body. Add the title as Card metadata.", bodyFromSelection: "Learn how to create your first MCP server.", fields: [["Title (required)", "Build a Server"], ["Icon (optional)", "server"], ["URL (optional)", "/docs/build-server"]], action: "Create Card" },
         cardGroup: { kind: "modal", title: "Insert Card group", description: "Choose the group layout before adding cards.", fields: [["Columns", "2"], ["First Card", "Build a Server"], ["Icon", "server"]], action: "Insert group" },
         codeGroup: { kind: "modal", title: "Insert Code group", description: "Set tab labels and languages; code stays opaque.", fields: [["Tab 1", "Discover Request · json"], ["Tab 2", "Discover Response · json"]], action: "Insert Code group" },
         codeBlock: { kind: "popover", title: "Code settings", description: "Language is fence metadata, not code content.", fields: [["Language / type", "json"], ["Preview", "Code"]], action: "Apply settings" },
@@ -1809,6 +1811,7 @@
           highlight: "texto simplemente resaltado",
           protected: "Este texto no se puede editar ni eliminar.",
           entity: "Aplyca",
+          card: "Learn how to create your first MCP server.",
           link: "MCP documentation",
           footnote: "The response can be cached.",
         }[key] || "como si se tratara de una presentación");
@@ -1849,6 +1852,7 @@
         const config = invocationConfigSamples[key];
         if (!config) return "";
         let body = config.fields.map(([label, value]) => '<div class="invocation-config-field"><label>' + esc(label) + '</label><div class="invocation-config-control">' + esc(value) + '</div></div>').join("");
+        if (config.bodyFromSelection) body = '<div class="invocation-config-field"><label>Body from selection</label><div class="invocation-config-control invocation-config-selection">' + esc(config.bodyFromSelection) + '</div><span class="config-help">Read-only preview here; the Card body remains editable after insertion.</span></div>' + body;
         if (config.special === "table") body = '<div class="invocation-config-field"><label>Rows × columns</label><div class="invocation-config-grid">' + Array.from({ length: 16 }, (_, index) => '<span class="' + (index < 6 ? "active" : "") + '"></span>').join("") + '</div></div>';
         return '<div class="invocation-config-preview"><div class="invocation-config-card ' + (config.kind === "popover" ? "popover" : "") + '"><div class="invocation-config-head"><div><h3 id="invocation-preview-title">' + esc(config.title) + '</h3><p>' + esc(config.description) + '</p></div><button class="invocation-config-close" type="button" data-invocation-close aria-label="Close preview">×</button></div><div class="invocation-config-fields">' + body + '</div><div class="invocation-config-foot"><button class="button" type="button" data-invocation-close>Cancel</button><button class="button primary" type="button" data-invocation-close>' + esc(config.action) + '</button></div></div></div>';
       }

@@ -240,7 +240,8 @@ La primera versión puede tener un único estilo y no abrir configuración. La c
 ### Ejemplo: Card y CardGroup
 
 - **Crear un Card:** `Insert → Card` abre un modal porque hay varios campos que no son cuerpo editorial: `title`, `icon`, `href` y, opcionalmente, color/acento. Al confirmar, el cuerpo queda listo para editar inline.
-- **Convertir contenido:** seleccionar bloques completos y elegir `Card`; el modal aparece prellenado con el texto seleccionado como body.
+- **Convertir contenido:** seleccionar bloques completos y elegir `Card`; el modal muestra el texto seleccionado como `Body from selection` y lo conserva como body editable del card.
+- **Agregar título:** en ese mismo modal, `Title` es un campo separado y requerido. El usuario lo escribe o ajusta ahí; no se intenta inferirlo del texto seleccionado. `Icon` y `URL` son propiedades opcionales del card.
 - **Crear un grupo:** `Insert → Card group` abre primero la configuración de `columns` y crea la primera card. Las siguientes se agregan desde `Add card`; cada una puede abrir su propio modal de propiedades.
 - **Editar después:** hacer click en la card deja el texto editable; `⋯` o `settings` abre la configuración de icono, URL, título y apariencia sin convertir esos datos en texto del cuerpo.
 
@@ -303,7 +304,7 @@ Estos puntos de entrada todavía no existen en el toolbar actual. Son la propues
 | `protected` | Selection popup → `Protect` | No asignado; candidato | Ninguno; protección inmediata | Convierte la selección en texto de solo lectura; desbloquear es otro flujo |
 | `entity` | Selection popup → `Entity` | No asignado; candidato | Modal pequeño: tipo de entidad | Conserva `Aplyca` como texto y agrega `type="company"` |
 | `Tip` | `Insert → Tip` o convertir bloques completos | No asignado; candidato | Ninguno en v1; popover solo si aparecen variantes | Inserta bloque vacío o envuelve la selección de bloques |
-| `Card` | `Insert → Card` o convertir un bloque completo | No asignado; candidato | Modal de formulario: `title`, `icon`, `href`, accent | Card editable individualmente |
+| `Card` | `Insert → Card` o convertir un bloque completo | No asignado; candidato | Modal: body seleccionado en preview + `title` requerido + `icon`/`href` opcionales | El body queda editable; el título queda como metadata |
 | `CardGroup` | `Insert → Card group` | No asignado; candidato | Modal de grupo: `columns` + orden; después modales de Card | Inserta contenedor y permite agregar/reordenar cards |
 | `Steps` / `Step` | `Insert → Steps` o convertir bloques consecutivos | No asignado; candidato | Controles inline; sin modal inicial | Inserta un primer step y permite agregar, eliminar y reordenar |
 | `CodeGroup` | `Insert → Code group` | No asignado; candidato | Modal de setup: títulos de pestaña + lenguajes | Cada pestaña conserva un bloque de código opaco |
