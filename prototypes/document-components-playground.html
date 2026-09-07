@@ -399,6 +399,54 @@
 
       .bubble-meta { display: flex; justify-content: space-between; color: var(--ink-4); font-size: 10px; }
 
+      .protected-layout, .entity-layout { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 24px; align-items: start; }
+
+      .protected-anchor {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        padding: 0 3px;
+        border-bottom: 0.5px dashed var(--ink-4);
+        border-radius: 2px;
+        background: hsl(38 12% 94%);
+        cursor: not-allowed;
+      }
+
+      .protected-badge, .entity-type {
+        color: var(--ink-4);
+        font-family: var(--font-ui);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .protected-notice, .entity-bubble {
+        padding: 12px 14px;
+        border: 0.5px solid var(--border);
+        border-left: 0.5px solid var(--ink-4);
+        border-radius: 10px;
+        background: var(--surface);
+        box-shadow: var(--shadow-panel);
+        font-family: var(--font-ui);
+      }
+
+      .protected-notice p, .entity-bubble p { margin: 9px 0 0; color: var(--ink-2); font-size: 12px; line-height: 1.5; }
+
+      .entity-anchor {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 7px;
+        padding: 0 3px;
+        border-bottom: 0.5px dotted var(--cursor);
+        border-radius: 2px;
+        background: var(--cursor-soft);
+        cursor: pointer;
+      }
+
+      .entity-type { color: var(--cursor); }
+
       .tip {
         --tip-accent: var(--cursor);
         padding: 18px 20px;
@@ -816,6 +864,45 @@
             return '<div class="annotation-layout"><div class="prose"><p>Una selección puede conservar su identidad sin marcadores ambiguos: <span class="annotation-anchor">' + esc(text) + '</span> y continuar siendo parte normal del texto.</p></div><aside class="annotation-bubble"><div class="bubble-meta"><span>' + esc(type) + '</span><span>' + esc(id) + '</span></div><p>' + esc(comment) + '</p></aside></div>';
           },
         },
+        protected: {
+          label: "Protected text",
+          glyph: "⊘",
+          kind: "inline",
+          tag: "<protected>",
+          source: '<protected id="lock-123" reason="System-managed">Este texto no se puede editar ni eliminar.</protected>',
+          properties: [
+            ["id", "Stable identity; generated automatically."],
+            ["reason", "Optional explanation shown in the editor."],
+            ["body", "Selected text preserved as read-only content."],
+          ],
+          insertion: ["Select text and choose Protect from the selection popup.", "Apply protection immediately; do not create an empty protected node.", "Show a read-only affordance and explain why the text cannot be changed."],
+          render(source) {
+            const id = attr(source, "id", "lock-123");
+            const reason = attr(source, "reason", "This text is managed and cannot be changed.");
+            const text = tagBody(source, "protected") || "Este texto no se puede editar ni eliminar.";
+            return '<div class="protected-layout"><div class="prose"><p>Este fragmento permanece visible, pero queda fuera de la edición normal: <span class="protected-anchor"><span>' + esc(text) + '</span><span class="protected-badge">protected</span></span>.</p></div><aside class="protected-notice"><div class="bubble-meta"><span>Read-only</span><span>' + esc(id) + '</span></div><p>' + esc(reason) + '</p></aside></div>';
+          },
+        },
+        entity: {
+          label: "Entity",
+          glyph: "◇",
+          kind: "inline",
+          tag: "<entity>",
+          source: '<entity id="ent-123" type="company">Aplyca</entity>',
+          properties: [
+            ["id", "Stable identity for this entity mention."],
+            ["type", "company · person · place · product · event · custom"],
+            ["body", "The selected surface text, for example Aplyca."],
+          ],
+          insertion: ["Select a text range and choose Entity from the selection popup.", "Choose the entity type in a small configuration modal.", "Keep the selected text as the visible label and preserve the type as node metadata."],
+          render(source) {
+            const id = attr(source, "id", "ent-123");
+            const type = attr(source, "type", "company");
+            const text = tagBody(source, "entity") || "Aplyca";
+            const label = entityTypeLabel(type);
+            return '<div class="entity-layout"><div class="prose"><p>La selección se conserva como texto normal, pero ahora tiene una clasificación: <span class="entity-anchor"><span>' + esc(text) + '</span><span class="entity-type">' + esc(label) + '</span></span>.</p></div><aside class="entity-bubble"><div class="bubble-meta"><span>Entity</span><span>' + esc(id) + '</span></div><p>' + esc(text) + ' está clasificada como ' + esc(label) + '.</p></aside></div>';
+          },
+        },
         highlight: {
           label: "Highlight",
           glyph: "H",
@@ -1106,7 +1193,7 @@
         },
       };
 
-      const richKeys = ["annotation", "highlight", "tip", "card", "cardGroup", "steps", "codeGroup", "mermaid"];
+      const richKeys = ["annotation", "protected", "entity", "highlight", "tip", "card", "cardGroup", "steps", "codeGroup", "mermaid"];
       const markdownKeys = ["paragraph", "bold", "italic", "heading1", "heading2", "heading3", "blockquote", "bulletList", "orderedList", "link", "inlineCode", "strike", "codeBlock", "table", "image", "footnote", "horizontalRule"];
 
       const invocations = {
@@ -1120,6 +1207,28 @@
           configuration: "Yes · comment + type",
           selection: "Selected text required",
           note: "Current Artifact Studio exposes the annotation flow as AI. The XML proposal keeps the selection and comment together in one <annotation> node; there is no separate <note> node.",
+        },
+        protected: {
+          status: "Proposed",
+          tone: "proposed",
+          surface: "Selection popup",
+          entry: "Select text → Protect",
+          shortcut: "Not assigned · candidate",
+          overlay: "None · immediate protection",
+          configuration: "No · optional reason later",
+          selection: "Selected text required",
+          note: "Protection is a document constraint, not a comment. The selected text remains visible and gets a read-only affordance; editing requires an explicit unlock flow outside this first proposal.",
+        },
+        entity: {
+          status: "Proposed",
+          tone: "proposed",
+          surface: "Selection popup",
+          entry: "Select text → Entity",
+          shortcut: "Not assigned · candidate",
+          overlay: "Entity type modal",
+          configuration: "Yes · entity type",
+          selection: "Selected text required",
+          note: "Select Aplyca, choose Company / Compañía, and serialize the selection as one entity node without changing its visible text.",
         },
         highlight: {
           status: "Current",
@@ -1401,6 +1510,33 @@
           configHint: "Writes attributes, not selected text.",
           selectionAvailable: true,
         },
+        protected: {
+          scope: "Rich component",
+          defaultMode: "selection",
+          insert: "Not available: protected text always starts from an existing selected passage.",
+          selection: "Select text → Protect. The selection becomes read-only without opening a modal.",
+          body: "The protected passage remains visible but cannot be edited or deleted through the normal editor.",
+          properties: "Generated id · optional reason",
+          configure: "No configuration modal",
+          configTitle: "Protected text",
+          configDescription: "Protection is applied directly from the selection bubble.",
+          configHint: "An explicit unlock flow is a separate permission decision.",
+          selectionAvailable: true,
+          noModal: true,
+        },
+        entity: {
+          scope: "Rich component",
+          defaultMode: "selection",
+          insert: "Not available: an entity is created from a selected text range.",
+          selection: "Select text → Entity → choose the semantic type, such as Company / Compañía.",
+          body: "The selected surface form stays inline and editable as text only through the entity flow.",
+          properties: "Generated id · type",
+          configure: "Configure entity type",
+          configTitle: "Configure entity",
+          configDescription: "Classify the selected text without replacing its visible label.",
+          configHint: "Writes entity metadata, not body text.",
+          selectionAvailable: true,
+        },
         highlight: {
           scope: "Rich component",
           defaultMode: "selection",
@@ -1546,6 +1682,10 @@
         return String(value).replace(/<[^>]+>/g, "").replace(/```[\s\S]*?```/g, "Code block").replace(/\s+/g, " ").trim();
       }
 
+      function entityTypeLabel(value) {
+        return ({ company: "Compañía", person: "Persona", place: "Lugar", product: "Producto", event: "Evento", custom: "Personalizada" }[String(value).toLowerCase()] || String(value || "Personalizada"));
+      }
+
       function attr(source, name, fallback) {
         const match = new RegExp(name + '="([^"]*)"', "i").exec(String(source));
         return match ? match[1] : fallback;
@@ -1625,6 +1765,15 @@
               { key: "type", label: "Type", kind: "select", value: attr(source, "type", "personal"), options: ["personal", "ai", "footnote"], help: "The comment remains part of the annotation contract." },
               { key: "comment", label: "Comment", kind: "textarea", value: attr(source, "comment", ""), help: "Optional metadata; never a second note node." },
             ];
+          case "entity":
+            return [{ key: "type", label: "Entity type", kind: "select", value: attr(source, "type", "company"), options: [
+              { value: "company", label: "Company / Compañía" },
+              { value: "person", label: "Person / Persona" },
+              { value: "place", label: "Place / Lugar" },
+              { value: "product", label: "Product / Producto" },
+              { value: "event", label: "Event / Evento" },
+              { value: "custom", label: "Custom / Personalizada" },
+            ], help: "The selected text remains the visible surface form." }];
           case "highlight":
             return [{ key: "color", label: "Highlight color", kind: "select", value: attr(source, "color", "yellow"), options: ["yellow", "blue", "green"], help: "Only the presentation attribute changes." }];
           case "tip":
@@ -1703,7 +1852,7 @@
           const control = field.kind === "textarea"
             ? '<textarea data-config-field="' + esc(field.key) + '">' + esc(field.value) + '</textarea>'
             : field.kind === "select"
-              ? '<select data-config-field="' + esc(field.key) + '">' + field.options.map((option) => '<option value="' + esc(option) + '" ' + (option === field.value ? "selected" : "") + '>' + esc(option) + '</option>').join("") + '</select>'
+              ? '<select data-config-field="' + esc(field.key) + '">' + field.options.map((option) => { const optionValue = typeof option === "string" ? option : option.value; const optionLabel = typeof option === "string" ? option : option.label; return '<option value="' + esc(optionValue) + '" ' + (optionValue === field.value ? "selected" : "") + '>' + esc(optionLabel) + '</option>'; }).join("") + '</select>'
               : '<input type="' + esc(field.kind) + '" data-config-field="' + esc(field.key) + '" value="' + esc(field.value) + '" />';
           return '<div class="config-field"><label>' + esc(field.label) + '</label>' + control + '<span class="config-help">' + esc(field.help) + '</span></div>';
         }).join("");
@@ -1724,6 +1873,8 @@
         if (key === "annotation") {
           source = updateTagAttribute(source, "annotation", "type", values.type);
           source = updateTagAttribute(source, "annotation", "comment", values.comment);
+        } else if (key === "entity") {
+          source = updateTagAttribute(source, "entity", "type", values.type);
         } else if (key === "highlight") {
           source = updateTagAttribute(source, "highlight", "color", values.color);
         } else if (key === "tip") {

@@ -20,6 +20,7 @@ La fuente de verdad de esta exploración debe ser este documento más las decisi
 - Los IDs se generan automáticamente y son estables durante los round-trips.
 - `highlight` y `annotation` son entidades distintas.
 - `annotation` fusiona la selección y su comentario; no necesita un `<note>` separado.
+- `protected` y `entity` también son entidades distintas: una impone una restricción de edición y la otra agrega semántica a una selección.
 
 ## Componentes en exploración
 
@@ -27,6 +28,8 @@ La fuente de verdad de esta exploración debe ser este documento más las decisi
 | --- | --- | --- | --- |
 | `highlight` | Inline | Marcar texto sin comentario | color |
 | `annotation` | Inline | Marcar texto y asociar un comentario | `id`, `type`, `comment` |
+| `protected` | Inline | Mantener un texto visible pero fuera de la edición normal | `id`, `reason` opcional |
+| `entity` | Inline | Clasificar una selección como una entidad semántica | `id`, `type` |
 | `Tip` | Bloque | Mostrar una recomendación contextual | variante opcional |
 | `Card` | Bloque | Mostrar un recurso enlazado | `title`, `icon`, `href` |
 | `CardGroup` | Contenedor | Organizar cards en columnas | `columns` |
@@ -100,6 +103,39 @@ Reglas propuestas:
 - `type` puede empezar con `personal`, `ai` y `footnote`.
 - El renderer puede mostrar el anchor como highlight y el comentario en el panel de márgenes.
 - El comentario se edita desde un modal o panel; el usuario no necesita tocar el atributo.
+
+### Protected text
+
+```md
+<protected id="lock-123" reason="System-managed">
+  Este texto no se puede editar ni eliminar.
+</protected>
+```
+
+`protected` es una restricción editorial, no una anotación. El texto permanece visible y forma parte del documento, pero el editor no permite modificarlo ni eliminarlo desde la interacción normal. La acción de desbloquear debe ser explícita y pertenecer a un flujo de permisos separado; no se debe esconder detrás de un simple click sobre el texto.
+
+Reglas propuestas:
+
+- Se crea únicamente a partir de una selección existente; no se inserta un nodo vacío.
+- El editor muestra una affordance discreta de solo lectura y explica el motivo si existe `reason`.
+- `id` es estable y lo genera el sistema; `reason` es opcional y no forma parte del cuerpo editorial.
+- Si el usuario intenta escribir o borrar dentro del rango, el editor conserva la selección y ofrece el flujo de desbloqueo autorizado.
+
+### Entity
+
+```md
+<entity id="ent-123" type="company">Aplyca</entity>
+```
+
+`entity` conserva el texto seleccionado como su forma visible y añade una clasificación semántica. En este ejemplo, `Aplyca` sigue siendo el texto que se lee, pero queda tipado como `company` (`Compañía`).
+
+Reglas propuestas:
+
+- Se crea seleccionando un rango y eligiendo `Entity` desde el selection bubble.
+- Un modal pequeño permite elegir el tipo sin convertir esa decisión en texto del documento.
+- `type` empieza con `company`, `person`, `place`, `product`, `event` y `custom`; las etiquetas visibles pueden localizarse (`Company / Compañía`).
+- `id` identifica la mención de forma estable. La reutilización de una entidad entre varias menciones queda como una decisión posterior de catálogo.
+- La entidad no debe cambiar el texto visible ni confundirse con `annotation`, cuyo propósito es guardar un comentario.
 
 ### Tip
 
@@ -219,6 +255,7 @@ El editor actual tiene superficies concretas de invocación. El playground las d
 - **`Text` / `Code` dropdown:** `Normal`, `Heading 1`, `Heading 2`, `Heading 3`, `Blockquote` y `Code`; el trigger muestra `Code` cuando el cursor está dentro de un bloque de código.
 - **`Insert` dropdown:** `Image`, `Table` y `Link`.
 - **Selection popup:** `Highlight`, `AI` y `Footnote` cuando existe una selección.
+- **Selection popup propuesto:** `Protect` aplica la restricción inmediatamente; `Entity` abre el modal de tipo y convierte la selección en una entidad.
 - **Notes action:** acceso al panel de notas y al flujo de footnote.
 - **Markdown shortcuts:** siguen siendo una segunda vía válida (`# `, `> `, `- `, `1. `, `**text**`, `*text*`, etc.). Los componentes enriquecidos pueden recibir un shortcut propio cuando su acción y semántica estén estables; no hay que asignarlo antes.
 
@@ -252,6 +289,8 @@ Estos puntos de entrada todavía no existen en el toolbar actual. Son la propues
 | --- | --- | --- | --- | --- |
 | `highlight` | Selection popup → `Highlight` | `⌘⇧H` actual | Ninguno en v1; color opcional en popover | Inserta inmediatamente sobre la selección |
 | `annotation` | Selection popup → `AI` en el runtime actual; idealmente `Annotate` | No asignado; bubble primario | Composer flotante para `comment` + `type`, no modal de documento | Genera ID y conserva selección + comentario en un solo nodo |
+| `protected` | Selection popup → `Protect` | No asignado; candidato | Ninguno; protección inmediata | Convierte la selección en texto de solo lectura; desbloquear es otro flujo |
+| `entity` | Selection popup → `Entity` | No asignado; candidato | Modal pequeño: tipo de entidad | Conserva `Aplyca` como texto y agrega `type="company"` |
 | `Tip` | `Insert → Tip` o convertir bloques completos | No asignado; candidato | Ninguno en v1; popover solo si aparecen variantes | Inserta bloque vacío o envuelve la selección de bloques |
 | `Card` | `Insert → Card` o convertir un bloque completo | No asignado; candidato | Modal de formulario: `title`, `icon`, `href`, accent | Card editable individualmente |
 | `CardGroup` | `Insert → Card group` | No asignado; candidato | Modal de grupo: `columns` + orden; después modales de Card | Inserta contenedor y permite agregar/reordenar cards |
@@ -260,6 +299,8 @@ Estos puntos de entrada todavía no existen en el toolbar actual. Son la propues
 | Mermaid | `Text/Code → Code` → lenguaje `Mermaid` | Hereda `⌘⇧E` de Code block | Inspector/popover: lenguaje + code/diagram/split view | Continúa siendo un fenced code block; el código es canónico |
 
 La regla de producto queda así: usar una acción directa cuando el resultado no necesita datos adicionales; usar un dropdown para elegir una variante estructural; y abrir un modal solo cuando la inserción requiere varios atributos o una decisión que no cabe de forma natural en línea.
+
+Para las acciones sobre selección, el bubble funciona como una superficie de transformación: `Highlight` marca visualmente, `Protect` fija una restricción y `Entity` abre la configuración semántica. Un shortcut puede añadirse después de validar la frecuencia de uso; mientras no exista una combinación estable, el playground lo deja como candidato y no inventa un atajo que pueda colisionar con el editor.
 
 ### Bloque de código y lenguaje
 
@@ -274,6 +315,9 @@ El lenguaje se serializa en la información del fence (` ```json `, ` ```mermaid
 ## Preguntas abiertas
 
 - [ ] ¿`comment` debe vivir en el atributo o necesitamos otra representación para comentarios largos/rich text?
+- [ ] ¿Quién puede desbloquear un `protected` y cómo se comunica el permiso sin hacer que el texto parezca un error?
+- [ ] ¿Las entidades se reutilizan entre menciones mediante un catálogo o cada `<entity>` representa una mención independiente?
+- [ ] ¿Qué atajos merecen asignarse a `Protect` y `Entity` después de validar frecuencia y colisiones?
 - [ ] ¿El `id` de `highlight` es obligatorio o solo recomendado?
 - [ ] ¿Qué valores iniciales tendrá `annotation.type`?
 - [ ] ¿`Tip` necesita variantes o es siempre visualmente un tip?
