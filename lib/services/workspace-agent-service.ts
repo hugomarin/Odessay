@@ -54,6 +54,14 @@ import { getAIService } from "@/lib/services/ai-service-factory"
 import { loadDesktopCollections } from "@/lib/services/desktop/desktop-collection-service"
 import { getWorkspaceAgentToolsService } from "@/lib/services/workspace-agent-tools-factory"
 import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
+import {
+  buildContextAcquisitionPlan,
+  createContextArtifactStore,
+  createContextLedger,
+  resolveEvidenceBundle,
+  type ContextArtifactStore,
+  type ContextLedger,
+} from "@/lib/services/context"
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
@@ -123,6 +131,17 @@ function selectionPath(path: string | undefined, rootPath: string): string | nul
   const normalized = canonicalizeLexicalPath(trimmed)
   const isAbsolute = normalized.startsWith("/") || /^[A-Za-z]:\//.test(normalized)
   return canonicalizeLexicalPath(isAbsolute ? normalized : `${rootPath}/${normalized}`)
+}
+
+/**
+ * Cache key material for the Context Artifact Store (ODE-501): prefers the
+ * content hash so any content change invalidates prior artifacts; falls
+ * back to version+modifiedAt for catalog implementations that don't carry
+ * a hash yet. Either way, an edit that changes the document changes this
+ * key, so a stale artifact can never be served as current evidence.
+ */
+function artifactVersionKey(record: DocumentCatalogRecord): string {
+  return record.binding?.contentHash ?? `v${record.version ?? 0}@${record.modifiedAt ?? 0}`
 }
 
 function createInternalReadApproval(documentId: string): WorkspaceAgentApproval {
@@ -414,14 +433,21 @@ type PreparedDocumentEvidence = {
 
 /**
  * Shared by suggestClassification and askAgent: resolve a selection down to
- * live catalog records, read each one's full content through the approved
- * tools boundary, and assemble the bounded catalog slice sent to the model.
+ * live catalog records, then resolve each one's evidence through the
+ * Context Acquisition Plan / Evidence Bundle layer (ODE-501) — reusing a
+ * cached artifact keyed by document id + version when one is valid, and
+ * reading through the approved tools boundary only on a cache miss. The
+ * combined budget mirrors the previous flat char limit (`maxBodyChars`,
+ * net of any workflow.md already loaded) so behaviour for a single request
+ * is unchanged; what changes is that a repeated question against the same
+ * document version can now reuse the artifact instead of re-reading it.
  */
 async function prepareDocumentEvidence(
   context: WorkspaceAgentContext,
   selection: readonly WorkspaceAgentSelection[],
   tools: WorkspaceAgentToolsService,
-  options: { maxTargets: number; maxCatalogDocuments: number; maxBodyChars: number; noSelectionMessage: string },
+  options: { maxTargets: number; maxCatalogDocuments: number; maxBodyChars: number; noSelectionMessage: string; contextPurpose: string },
+  contextServices: { store: ContextArtifactStore; ledger: ContextLedger },
 ): Promise<ServiceResponse<PreparedDocumentEvidence>> {
   const selectedIds = resolveSelectionDocumentIds(context, selection)
     .filter((documentId) => documentId !== context.existingWorkflow?.id)
@@ -443,33 +469,61 @@ async function prepareDocumentEvidence(
     return error("NOT_FOUND", "One or more selected artifacts are no longer available in the workspace catalog.")
   }
 
-  const reads = await Promise.all(selectedRecords.map(async (record) => {
-    const result = await tools.read({
+  const workflowChars = context.workflowMarkdown?.length ?? 0
+  const plan = buildContextAcquisitionPlan({
+    intent: "understand",
+    candidates: selectedRecords.map((record, index) => ({
       documentId: record.id,
-      approval: createInternalReadApproval(record.id),
-    })
-    return { record, result }
-  }))
+      documentVersion: artifactVersionKey(record),
+      purpose: options.contextPurpose,
+      priority: index,
+      required: true,
+    })),
+    budget: {
+      maxInputTokens: Number.MAX_SAFE_INTEGER,
+      maxDocuments: options.maxTargets,
+      maxBytes: Math.max(0, options.maxBodyChars - workflowChars),
+      maxRetrievalRounds: 1,
+    },
+  })
+
+  const bundle = await resolveEvidenceBundle(plan, {
+    store: contextServices.store,
+    ledger: contextServices.ledger,
+    readBody: async (documentId) => {
+      const result = await tools.read({ documentId, approval: createInternalReadApproval(documentId) })
+      if (result.error || !result.data) {
+        return { ok: false, errorMessage: result.error?.message ?? `Document ${documentId} could not be read.` }
+      }
+      const document = result.data.document
+      return {
+        ok: true,
+        markdown: document.markdown,
+        documentVersion: artifactVersionKey(document.catalogRecord),
+        raw: document.catalogRecord,
+      }
+    },
+  })
+
+  if (bundle.entries.length !== selectedRecords.length) {
+    const stoppedOn = bundle.omitted.at(-1) ?? null
+    if (stoppedOn?.reason === "budget_exhausted") {
+      return error(
+        "INVALID_INPUT",
+        "The selected artifacts are too large to review together. Narrow the selection so the agent can use complete document evidence.",
+      )
+    }
+    return error("NOT_FOUND", stoppedOn?.reason ?? "One or more selected artifacts could not be read.")
+  }
+
   const markdownById = new Map<string, string>()
   const currentRecordsById = new Map(recordsById)
   const annotations: WorkspaceClassificationAnnotation[] = []
-  for (const { record, result } of reads) {
-    if (result.error || !result.data) {
-      return error("NOT_FOUND", result.error?.message ?? `Document ${record.id} could not be read.`)
-    }
-    const document = result.data.document
-    markdownById.set(record.id, document.markdown)
-    currentRecordsById.set(record.id, document.catalogRecord)
-    annotations.push(...annotationEvidence(record.id, document.markdown))
-  }
-
-  const contentChars = [...markdownById.values()].reduce((total, markdown) => total + markdown.length, 0)
-    + (context.workflowMarkdown?.length ?? 0)
-  if (contentChars > options.maxBodyChars) {
-    return error(
-      "INVALID_INPUT",
-      "The selected artifacts are too large to review together. Narrow the selection so the agent can use complete document evidence.",
-    )
+  for (const entry of bundle.entries) {
+    markdownById.set(entry.documentId, entry.content)
+    const catalogRecord = entry.raw as DocumentCatalogRecord | undefined
+    if (catalogRecord) currentRecordsById.set(entry.documentId, catalogRecord)
+    annotations.push(...annotationEvidence(entry.documentId, entry.content))
   }
 
   const activeRecords = context.documents.filter((record) => !record.deletedAt)
@@ -715,6 +769,12 @@ export async function createWorkspaceAgentService(
   tools: WorkspaceAgentToolsService,
 ): Promise<WorkspaceAgentService> {
   const getContext = async (): Promise<ServiceResponse<WorkspaceAgentContext>> => loadContext(workspaceRootPath)
+  // Session-scoped context cache and ledger (ODE-501): one per service
+  // instance, so artifacts are reused across turns of the same Workspace
+  // Agent session without leaking across separate workspaces or requests.
+  const contextArtifactStore = createContextArtifactStore()
+  const contextLedger = createContextLedger()
+  const contextServices = { store: contextArtifactStore, ledger: contextLedger }
 
   const withWorkflowMarkdown = async (
     context: ServiceResponse<WorkspaceAgentContext>,
@@ -884,7 +944,8 @@ export async function createWorkspaceAgentService(
         maxCatalogDocuments: MAX_WORKSPACE_CLASSIFICATION_CATALOG_DOCUMENTS,
         maxBodyChars: MAX_WORKSPACE_CLASSIFICATION_BODY_CHARS,
         noSelectionMessage: "Select at least one local artifact before asking for a semantic classification.",
-      })
+        contextPurpose: "classification-evidence",
+      }, contextServices)
       if (prepared.error || !prepared.data) return prepared as ServiceResponse<WorkspaceAgentClassificationRun>
       const { selectedRecords, recordsById, currentRecordsById, markdownById, annotations, promptRecords, catalogTruncated } = prepared.data
 
@@ -967,7 +1028,8 @@ export async function createWorkspaceAgentService(
         maxCatalogDocuments: MAX_WORKSPACE_ASK_CATALOG_DOCUMENTS,
         maxBodyChars: MAX_WORKSPACE_ASK_BODY_CHARS,
         noSelectionMessage: "Select at least one local artifact before asking the Workspace agent.",
-      })
+        contextPurpose: "ask-evidence",
+      }, contextServices)
       if (prepared.error || !prepared.data) return prepared as ServiceResponse<WorkspaceAgentAskRun>
       const { selectedRecords, recordsById, currentRecordsById, markdownById, annotations, promptRecords, catalogTruncated } = prepared.data
 
