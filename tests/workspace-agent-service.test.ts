@@ -1057,6 +1057,80 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     expect(tools.edit).toHaveBeenCalledTimes(2)
   })
 
+  describe("context acquisition cache (ODE-501)", () => {
+    it("reuses the cached artifact for a repeated question against the same document version, without a second read", async () => {
+      const target = document("target", "Storage: SQLite.")
+      contextMocks.list.mockResolvedValue([target.catalogRecord])
+      const tools: WorkspaceAgentToolsService = {
+        read: vi.fn(async ({ approval }) => ({
+          data: {
+            document: target,
+            receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+          },
+          error: null,
+        })),
+        write: vi.fn(),
+        move: vi.fn(),
+        edit: vi.fn(),
+        delete: vi.fn(),
+      }
+      aiMocks.askWorkspace.mockResolvedValue({
+        data: { answer: "This document decides to use SQLite for storage.", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const first = await service.askAgent({
+        question: "What storage does this artifact use?",
+        selection: [{ kind: "file", documentId: "target" }],
+      })
+      const second = await service.askAgent({
+        question: "Say it again in Spanish.",
+        selection: [{ kind: "file", documentId: "target" }],
+      })
+
+      expect(first.error).toBeNull()
+      expect(second.error).toBeNull()
+      expect(tools.read).toHaveBeenCalledTimes(1)
+    })
+
+    it("reads the document again after its content changes, instead of serving the stale cached artifact", async () => {
+      const documents = new Map([["target", document("target", "Storage: SQLite.", 1_700_000_000_000)]])
+      contextMocks.list.mockResolvedValue([documents.get("target")!.catalogRecord])
+      const tools: WorkspaceAgentToolsService = {
+        read: vi.fn(async ({ approval }) => ({
+          data: {
+            document: documents.get("target")!,
+            receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+          },
+          error: null,
+        })),
+        write: vi.fn(),
+        move: vi.fn(),
+        edit: vi.fn(),
+        delete: vi.fn(),
+      }
+      aiMocks.askWorkspace.mockResolvedValue({
+        data: { answer: "answer", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      await service.askAgent({ question: "q1", selection: [{ kind: "file", documentId: "target" }] })
+
+      // Content changes: a new version/modifiedAt, as a real edit would produce.
+      documents.set("target", document("target", "Storage: PostgreSQL now.", 1_700_000_200_000))
+      contextMocks.list.mockResolvedValue([documents.get("target")!.catalogRecord])
+
+      await service.askAgent({ question: "q2", selection: [{ kind: "file", documentId: "target" }] })
+
+      expect(tools.read).toHaveBeenCalledTimes(2)
+      expect(aiMocks.askWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({
+        documents: expect.arrayContaining([expect.objectContaining({ markdown: "Storage: PostgreSQL now." })]),
+      }))
+    })
+  })
+
   describe("presentNote (ODE-491 — presentation stage of the pipeline)", () => {
     const tools: WorkspaceAgentToolsService = {
       read: vi.fn(),
