@@ -92,6 +92,13 @@ terminar, respetando `next_retry_at`. El ticker de 60 s es solo recuperación de
 baja frecuencia. `stop()` limpia debounce, wakeup y ticker sin borrar la cola
 durable.
 
+El flush provocado por un guardado procesa solo mutaciones nuevas (`pending`):
+nunca adjunta al camino de escritura el backlog histórico `failed`. Los fallos
+se recuperan únicamente desde el ticker o un flush explícito, en lotes acotados,
+y respetan el máximo normativo de 10 intentos. Cada nuevo snapshot completo de
+un documento sustituye transaccionalmente snapshots anteriores del mismo UUID;
+la cola durable conserva el estado más reciente, no un replay de cada tecla.
+
 El código vigente todavía actualiza SQLite legacy e IndexedDB después del archivo. Esa es una brecha de migración, no el contrato final.
 
 ### Fallas

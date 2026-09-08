@@ -204,6 +204,22 @@ class DesktopDocumentService implements DocumentService {
       && priorContentHash !== null
       && nextContentHash !== null
       && priorContentHash === nextContentHash
+    const nextTitle = filenameToTitle(file.relativePath)
+    // Desk/Collections/Workspace only render title, slug, status, artifact
+    // type, visibility and where the file lives — none of which a keystroke
+    // autosave normally touches. Comparing against the pre-save row lets those
+    // views skip reacting (and re-reading the whole catalog) for a save that
+    // only changed document body bytes, without them having to inspect the
+    // payload themselves.
+    const metadataChanged = operation === "delete"
+      || !catalogBefore
+      || catalogBefore.title !== nextTitle
+      || catalogBefore.slug !== record.slug
+      || catalogBefore.status !== record.status
+      || catalogBefore.artifactType !== record.artifactType
+      || catalogBefore.visibility !== record.visibility
+      || catalogBefore.deletedAt !== record.deletedAt
+      || (catalogBefore.binding?.relativePath ?? null) !== file.relativePath
     const input: DesktopCatalogDualWriteInput = {
       document: {
         id: record.id,
@@ -211,7 +227,7 @@ class DesktopDocumentService implements DocumentService {
         cloudPresent: catalogBefore?.cloudPresent ?? false,
         cloudAccountId: record.authorId,
         syncStatus: "pending",
-        title: filenameToTitle(file.relativePath),
+        title: nextTitle,
         slug: record.slug,
         status: record.status,
         artifactType: record.artifactType,
@@ -240,7 +256,7 @@ class DesktopDocumentService implements DocumentService {
         // the canonical `.md` via `record.binding.canonicalPath`, keyed by
         // contentHash/contentUnchanged below — never from this payload.
         payloadJson: JSON.stringify({
-          title: filenameToTitle(file.relativePath), slug: record.slug, status: record.status,
+          title: nextTitle, slug: record.slug, status: record.status,
           artifactType: record.artifactType, visibility: record.visibility,
           parentId: record.parentId, correspondenceId: record.correspondenceId,
           version: Math.max(1, record.version), updatedAt: record.updatedAt,
@@ -250,12 +266,12 @@ class DesktopDocumentService implements DocumentService {
         status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: now, lastError: null,
       },
     }
-    await this.runtime.catalog.commitDualWrite(input)
+    await this.runtime.catalog.commitDualWrite(input, metadataChanged ? "upsert" : "content")
     void this.runtime.scheduleSyncFlush().catch(() => {
       // The SQLite mutation is durable. The rescue ticker will retry if the
       // in-memory scheduler is unavailable during shutdown.
     })
-    return { ...record, title: filenameToTitle(file.relativePath) }
+    return { ...record, title: nextTitle }
   }
 
   async listWritings(input?: ListWritingsInput): Promise<ServiceResponse<WritingSummary[]>> {
@@ -316,13 +332,14 @@ class DesktopDocumentService implements DocumentService {
       for (const change of input.updates) {
         const existing = await this.runtime.catalog.getById(change.writingId)
         if (!existing || existing.deletedAt) return err("NOT_FOUND", `Writing ${change.writingId} not found`)
+        const hasCloudOwnership = existing.cloudPresent || existing.cloudAccountId !== null
         const updated: DocumentCatalogRecord = {
           ...existing,
           status: change.status ?? existing.status,
           artifactType: change.artifactType ?? existing.artifactType,
           version: change.version,
           modifiedAt: Date.parse(change.updatedAt),
-          syncStatus: "pending",
+          syncStatus: hasCloudOwnership ? "pending" : "local-only",
         }
         const binding = existing.binding
         const rootPath = binding
@@ -334,7 +351,7 @@ class DesktopDocumentService implements DocumentService {
           localPresent: updated.localPresent,
           cloudPresent: updated.cloudPresent,
           cloudAccountId: updated.cloudAccountId,
-          syncStatus: "pending",
+          syncStatus: hasCloudOwnership ? "pending" : "local-only",
           title: updated.title,
           slug: updated.slug,
           status: updated.status,
@@ -357,7 +374,7 @@ class DesktopDocumentService implements DocumentService {
           size: binding.size,
           lastSeenAt: binding.lastSeenAt,
         } : null,
-        mutation: {
+        mutation: hasCloudOwnership ? {
           id: crypto.randomUUID(),
           operation: "upsert",
           payloadJson: JSON.stringify({
@@ -372,11 +389,11 @@ class DesktopDocumentService implements DocumentService {
           nextRetryAt: null,
           createdAt: Date.now(),
           lastError: null,
-        },
+        } : null,
         } satisfies DesktopCatalogDualWriteInput })
       }
       await this.runtime.catalog.commitBulkDualWrite(prepared.map(({ dualWrite }) => dualWrite))
-      if (prepared.length > 0) {
+      if (prepared.some(({ dualWrite }) => dualWrite.mutation !== null)) {
         void this.runtime.scheduleSyncFlush().catch(() => {
           // Local metadata remains durable and pending when scheduling fails.
         })

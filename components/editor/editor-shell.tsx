@@ -348,12 +348,18 @@ const TableOfContentsPanel = lazy(() =>
 )
 
 const MARKDOWN_SAVE_DEBOUNCE_MS = 800
-// Desktop persistence performs several ordered local commits (the `.md`, its
-// binding manifest, and SQLite). Keep that pipeline off the keystroke cadence:
-// TipTap remains immediate, while a short quiet window coalesces rapid typing
-// into one durable local snapshot. Cloud sync already has its own longer
-// trailing debounce after this local commit.
-const DESKTOP_PERSISTENCE_DEBOUNCE_MS = 150
+// Building the persistence snapshot calls getText/getJSON over the full TipTap
+// document and updates shell-level metrics. On desktop, do that work only after
+// a short quiet window so the keystroke stays inside ProseMirror. The actual
+// local commit starts immediately once the snapshot exists; cloud sync retains
+// its separate 1500 ms trailing debounce.
+const DESKTOP_EDITOR_OUTPUT_DEBOUNCE_MS = 150
+// The durable commit itself (write_file, catalog_dual_write, cloud sync
+// enqueue, and the catalog-change event every mounted view reacts to) does not
+// need to track keystrokes in near-real-time — content lives in TipTap's
+// in-memory state regardless. Coalescing it to once per 4s of typing pause
+// keeps that pipeline from running once per pause during sustained typing.
+const DESKTOP_PERSISTENCE_DEBOUNCE_MS = 4_000
 
 const AUTO_TITLE_MAX_CHARS = 48
 const UNTITLED_WRITING_TITLE = "Untitled artifact"
@@ -618,6 +624,7 @@ export function EditorShell({
   const replaceInputRef = useRef<HTMLInputElement | null>(null)
   const editorCursorSnapshotRef = useRef<EditorCursorSnapshot | null>(null)
   const richUpdateRafRef = useRef<number | null>(null)
+  const richUpdateDebounceRef = useRef<number | null>(null)
   const richUpdateEditorRef = useRef<Editor | null>(null)
   const tableOfContentsItemsRef = useRef<TableOfContentDataItem[]>([])
   const activeTableOfContentsItemIdRef = useRef<string | null>(null)
@@ -705,6 +712,15 @@ export function EditorShell({
       return createPersistenceCoordinator(
         {
           runtime: isDesktopRuntime() ? "desktop" : "web",
+          // Desktop's durable commit (write_file + catalog_dual_write + cloud
+          // sync enqueue + the catalog-change fan-out every mounted view
+          // reacts to) is expensive enough that near-real-time persistence
+          // makes typing itself the bottleneck. Coalescing it to fire once per
+          // quiet window — rather than ~150ms after every pause — cuts how
+          // often that whole pipeline runs during sustained typing, without
+          // changing what the editor shows: TipTap stays the source of truth
+          // in memory, and settle() below still flushes immediately on tab
+          // close/switch so a deliberate action never waits out this window.
           persistenceDebounceMs: isDesktopRuntime() ? DESKTOP_PERSISTENCE_DEBOUNCE_MS : 0,
           documentService: {
             saveWriting: async (input) => (await getDocumentService()).saveWriting(input),
@@ -1332,7 +1348,14 @@ export function EditorShell({
   )
 
   const flushQueuedRichModeUpdate = useCallback(() => {
-    richUpdateRafRef.current = null
+    if (richUpdateRafRef.current !== null) {
+      window.cancelAnimationFrame(richUpdateRafRef.current)
+      richUpdateRafRef.current = null
+    }
+    if (richUpdateDebounceRef.current !== null) {
+      window.clearTimeout(richUpdateDebounceRef.current)
+      richUpdateDebounceRef.current = null
+    }
     const queuedEditor = richUpdateEditorRef.current
     richUpdateEditorRef.current = null
 
@@ -1342,6 +1365,21 @@ export function EditorShell({
 
     runRichModeUpdateSideEffects(queuedEditor)
   }, [runRichModeUpdateSideEffects])
+
+  const scheduleQueuedRichModeUpdate = useCallback(() => {
+    richUpdateRafRef.current = null
+    if (!isDesktopRuntime()) {
+      flushQueuedRichModeUpdate()
+      return
+    }
+    if (richUpdateDebounceRef.current !== null) {
+      window.clearTimeout(richUpdateDebounceRef.current)
+    }
+    richUpdateDebounceRef.current = window.setTimeout(() => {
+      richUpdateDebounceRef.current = null
+      flushQueuedRichModeUpdate()
+    }, DESKTOP_EDITOR_OUTPUT_DEBOUNCE_MS)
+  }, [flushQueuedRichModeUpdate])
 
   const queueMarkdownSelectionRestore = useCallback(
     (
@@ -1483,11 +1521,11 @@ export function EditorShell({
         }
 
         richUpdateRafRef.current = window.requestAnimationFrame(() => {
-          flushQueuedRichModeUpdate()
+          scheduleQueuedRichModeUpdate()
         })
       },
     },
-    [editorExtensions, flushQueuedRichModeUpdate],
+    [editorExtensions, scheduleQueuedRichModeUpdate],
   )
 
   // Keep an imperative handle to the latest TipTap instance so persistence remaps
@@ -2593,6 +2631,10 @@ export function EditorShell({
         window.cancelAnimationFrame(richUpdateRafRef.current)
       }
 
+      if (richUpdateDebounceRef.current !== null) {
+        window.clearTimeout(richUpdateDebounceRef.current)
+      }
+
       if (markdownSelectionRafRef.current !== null) {
         window.cancelAnimationFrame(markdownSelectionRafRef.current)
       }
@@ -2610,6 +2652,7 @@ export function EditorShell({
       }
 
       richUpdateRafRef.current = null
+      richUpdateDebounceRef.current = null
       richUpdateEditorRef.current = null
       markdownSelectionRafRef.current = null
       pendingMarkdownSelectionRef.current = null
@@ -5699,27 +5742,34 @@ export function EditorShell({
     // the Tauri filesystem watcher with it, which breaks any suite that mounts
     // the editor without the desktop mocks.
     void import("@/lib/queries/document-catalog")
-      .then(({ loadCatalogRecords, subscribeToCatalog }) => {
+      .then(({ getCatalogRecord, subscribeToCatalog }) => {
         if (cancelled) return
 
-        const refresh = () => {
-          void loadCatalogRecords()
+        const wanted = new Set(openWritingIds)
+        const refresh = (documentIds: string[], replace: boolean) => {
+          void Promise.all(documentIds.map((id) => getCatalogRecord(id)))
             .then((records) => {
               if (cancelled) return
-              const wanted = new Set(openWritingIds)
-              const next: Record<string, WritingStatus | null> = {}
-              for (const record of records) {
-                if (wanted.has(record.id)) next[record.id] = record.status ?? null
-              }
-              setCatalogTabStatuses(next)
+              setCatalogTabStatuses((current) => {
+                const next: Record<string, WritingStatus | null> = replace ? {} : { ...current }
+                documentIds.forEach((id, index) => {
+                  const record = records[index]
+                  if (record) next[id] = record.status ?? null
+                  else delete next[id]
+                })
+                return next
+              })
             })
             .catch(() => {
               // A catalog miss just leaves the glyph on its fallback.
             })
         }
 
-        refresh()
-        unsubscribe = subscribeToCatalog(refresh)
+        refresh(openWritingIds, true)
+        unsubscribe = subscribeToCatalog((change) => {
+          const affected = change.documentIds.filter((id) => wanted.has(id))
+          if (affected.length > 0) refresh(affected, false)
+        })
       })
       .catch(() => {
         // No catalog in this runtime: the glyphs stay on their fallback.

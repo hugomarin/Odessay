@@ -49,7 +49,7 @@ export type PathResolution =
 export type CatalogChange = {
   transactionId: string
   documentIds: string[]
-  reason: "upsert" | "detach" | "cloud-snapshot" | "migration" | "bulk"
+  reason: "upsert" | "detach" | "cloud-snapshot" | "migration" | "bulk" | "excerpt" | "content"
   occurredAt: number
 }
 

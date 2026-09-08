@@ -417,11 +417,11 @@ export class DesktopSettingsService implements SettingsService {
 
   /**
    * Requirement 4: rewrites every SQLite-cataloged document that carried the
-   * deleted item's key to the base value, and enqueues its cloud sync
-   * mutation — both in the SAME transaction (`catalog_bulk_dual_write`
-   * inserts the document row and its `sync_mutations` row together), so the
-   * catalog write and its enqueue can't drift apart. The actual cloud PATCH
-   * happens later, in the existing background flush (`desktopCatalogSyncService`).
+   * deleted item's key to the base value. Documents that already have cloud
+   * ownership also enqueue their cloud sync mutation in the SAME transaction
+   * (`catalog_bulk_dual_write`), so the catalog write and enqueue cannot drift.
+   * Local-only/foreign documents remain local-only and are never uploaded just
+   * because a vocabulary item changed.
    * Never touches the `.md`: the key lives only in the catalog cache and the
    * cloud row.
    */
@@ -437,13 +437,14 @@ export class DesktopSettingsService implements SettingsService {
     const nowIso = new Date(now).toISOString()
     const inputs: DesktopCatalogDualWriteInput[] = matches.map((row) => {
       const nextVersion = (row.version ?? 1) + 1
+      const hasCloudOwnership = row.cloudPresent || row.cloudAccountId !== null
       return {
         document: {
           id: row.id,
           localPresent: row.localPresent,
           cloudPresent: row.cloudPresent,
           cloudAccountId: row.cloudAccountId,
-          syncStatus: "pending",
+          syncStatus: hasCloudOwnership ? "pending" : "local-only",
           title: row.title,
           slug: row.slug,
           status: kind === "status" ? baseValue : row.status,
@@ -455,7 +456,7 @@ export class DesktopSettingsService implements SettingsService {
           modifiedAt: now,
         },
         binding: null,
-        mutation: {
+        mutation: hasCloudOwnership ? {
           id: crypto.randomUUID(),
           operation: "upsert",
           payloadJson: JSON.stringify({
@@ -470,7 +471,7 @@ export class DesktopSettingsService implements SettingsService {
           nextRetryAt: null,
           createdAt: now,
           lastError: null,
-        },
+        } : null,
       }
     })
 

@@ -99,6 +99,8 @@ const editorState = vi.hoisted(() => ({
   text: "",
   json: { type: "doc", content: [] } as Record<string, unknown>,
   isEmpty: true,
+  textReads: 0,
+  jsonReads: 0,
   capturedOnUpdate: null as (({ editor }: { editor: unknown }) => void) | null,
 }))
 
@@ -133,8 +135,14 @@ const editorStub = vi.hoisted(() => {
         setTextSelection: () => ({ run: noopCommand }),
       }),
     }),
-    getText: () => editorState.text,
-    getJSON: () => editorState.json,
+    getText: () => {
+      editorState.textReads += 1
+      return editorState.text
+    },
+    getJSON: () => {
+      editorState.jsonReads += 1
+      return editorState.json
+    },
     getHTML: () => "<p></p>",
     get isEmpty() {
       return editorState.isEmpty
@@ -441,6 +449,8 @@ function resetEditorState() {
   editorState.text = ""
   editorState.json = { type: "doc", content: [] }
   editorState.isEmpty = true
+  editorState.textReads = 0
+  editorState.jsonReads = 0
   editorState.capturedOnUpdate = null
 }
 
@@ -635,7 +645,7 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
 
     await vi.waitFor(() => {
       expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1)
-    })
+    }, { timeout: 4500 })
 
     expect(mocks.createDesktopDraft).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -652,7 +662,7 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
     expect(mocks.catalogWrite).toHaveBeenCalledTimes(1)
     expect(mocks.syncEnqueue).toHaveBeenCalledTimes(1)
     expect(mocks.cloudWrite).not.toHaveBeenCalled()
-  })
+  }, 8_000)
 
   it("detaches and clears an existing writing before the new draft accepts input", async () => {
     await act(async () => root?.render(<EditorShell writingId="existing-writing" />))
@@ -675,14 +685,16 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
     expect(mocks.createDesktopDraft).not.toHaveBeenCalled()
 
     await simulateEditorInput("First new words")
-    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1), { timeout: 4500 })
     expect(mocks.createDesktopDraft).toHaveBeenCalledWith(
       expect.objectContaining({ initialBodyText: "First new words" }),
     )
     expect(mocks.saveWriting).not.toHaveBeenCalled()
-  })
+  }, 8_000)
 
   it("does not duplicate identity when concurrent updates race during materialization", async () => {
+    // Two sequential saves, each waited out through the real 4s desktop
+    // persistence debounce, can exceed vitest's default 5s test timeout.
     // Make the first materialization hang so we can interleave a second update.
     const deferred: { resolve: (() => void) | null } = { resolve: null }
     mocks.createDesktopDraft.mockImplementationOnce(
@@ -702,7 +714,7 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
 
     await vi.waitFor(() => {
       expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1)
-    })
+    }, { timeout: 4500 })
 
     // A second update while materialization is pending is coalesced and flushed
     // once against the identity produced by the first transition.
@@ -717,13 +729,13 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
 
     await vi.waitFor(() => {
       expect(mocks.saveWriting).toHaveBeenCalledTimes(1)
-    })
+    }, { timeout: 4500 })
 
     const savedWriting = mocks.saveWriting.mock.calls[0][0].writing
     expect(savedWriting.id).toBe("desktop-draft-1")
     expect(savedWriting.content.plainText).toBe("More words")
     expect(firstAttemptId).toEqual(expect.any(String))
-  })
+  }, 12_000)
 
   it("does not materialize a writing from an empty editor update", async () => {
     await act(async () => root?.render(<EditorShell />))
@@ -755,14 +767,14 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
     await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
 
     await simulateEditorInput("First attempt")
-    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1), { timeout: 4500 })
     const firstIdentity = mocks.createDesktopDraft.mock.calls[0]?.[0]?.writingId
 
     await simulateEditorInput("Retry content")
-    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(2), { timeout: 4500 })
 
     expect(mocks.createDesktopDraft.mock.calls[1]?.[0]?.writingId).toBe(firstIdentity)
-  })
+  }, 12_000)
 
   it("closes the last materialized tab without creating a replacement", async () => {
     await act(async () => root?.render(<EditorShell />))
@@ -772,7 +784,7 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
     await vi.waitFor(() => {
       expect(getEditorSessionState().session.tabs).toHaveLength(1)
       expect(topbarState.onCloseTab).not.toBeNull()
-    })
+    }, { timeout: 4500 })
 
     await act(async () => {
       topbarState.onCloseTab?.("desktop-draft-1")
@@ -784,18 +796,46 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
       expect(session.active_tab_id).toBeNull()
     })
     expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1)
-  })
+  }, 12_000)
 
 })
 
 describe("ODE-461 — desktop save reliability", () => {
+  it("keeps full-document snapshot reads outside the desktop keystroke frame", async () => {
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    })
+    const readsBeforeTyping = {
+      text: editorState.textReads,
+      json: editorState.jsonReads,
+    }
+
+    simulateEditorInput("t")
+    simulateEditorInput("tratar")
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+    })
+
+    expect(editorState.textReads).toBe(readsBeforeTyping.text)
+    expect(editorState.jsonReads).toBe(readsBeforeTyping.json)
+
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1), { timeout: 4500 })
+    expect(editorState.textReads).toBeGreaterThan(readsBeforeTyping.text)
+    expect(editorState.jsonReads).toBeGreaterThan(readsBeforeTyping.json)
+    expect(mocks.createDesktopDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ initialBodyText: "tratar" }),
+    )
+  }, 8_000)
+
   it("collapses saves fired faster than a round-trip into one in-flight and one queued attempt", async () => {
     await act(async () => root?.render(<EditorShell />))
     await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
 
     // Materialize first (mirrors the field report: "first autosave: correct").
     await simulateEditorInput("First words")
-    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1), { timeout: 4500 })
     expect(mocks.saveWriting).not.toHaveBeenCalled()
 
     // Sustained typing: hang the next save so a second RAF-flushed update
@@ -813,7 +853,7 @@ describe("ODE-461 — desktop save reliability", () => {
       simulateEditorInput("Second words")
       await new Promise((resolve) => requestAnimationFrame(resolve))
     })
-    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalledTimes(1), { timeout: 4500 })
     expect(mocks.saveWriting.mock.calls[0][0].writing.content.plainText).toBe("Second words")
 
     // Another keystroke's own RAF flush fires while the first save still hangs.
@@ -832,9 +872,9 @@ describe("ODE-461 — desktop save reliability", () => {
 
     // The queued snapshot — reflecting the latest content, not "Second
     // words" again — now runs as its own save once the guard clears.
-    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalledTimes(2), { timeout: 4500 })
     expect(mocks.saveWriting.mock.calls[1][0].writing.content.plainText).toBe("Third words")
-  })
+  }, 15_000)
 
   it("logs the cause and surfaces a distinct error state instead of a perpetual Saving...", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
@@ -843,7 +883,7 @@ describe("ODE-461 — desktop save reliability", () => {
     await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
 
     await simulateEditorInput("First words")
-    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1), { timeout: 4500 })
 
     mocks.saveWriting.mockImplementationOnce(async () => {
       throw new Error("database is locked")
@@ -852,7 +892,7 @@ describe("ODE-461 — desktop save reliability", () => {
     await act(async () => {
       simulateEditorInput("Second words")
     })
-    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalledTimes(1), { timeout: 4500 })
 
     await vi.waitFor(() => {
       expect(errorSpy).toHaveBeenCalledWith(
@@ -865,11 +905,11 @@ describe("ODE-461 — desktop save reliability", () => {
     await act(async () => {
       simulateEditorInput("Third words")
     })
-    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalledTimes(2), { timeout: 4500 })
     expect(mocks.saveWriting.mock.calls[1][0].writing.content.plainText).toBe("Third words")
 
     errorSpy.mockRestore()
-  })
+  }, 15_000)
 })
 
 /**
@@ -1231,7 +1271,7 @@ describe("ODE-478 case 3 — naming a still-blank draft", () => {
     await act(async () => {
       simulateEditorInput("contenido real")
     })
-    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1), { timeout: 4500 })
 
     // Rename while that write is still in flight — persist()'s "already
     // inFlight" branch resolves optimistically (true) without waiting for
@@ -1268,9 +1308,9 @@ describe("ODE-478 case 3 — naming a still-blank draft", () => {
     })
     const succeeded = await renamePromise
     expect(succeeded).toBe(true)
-    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalled(), { timeout: 4500 })
     expect(mocks.saveWriting.mock.calls.at(-1)?.[0].writing.title).toBe("Título mientras se guarda")
-  })
+  }, 12_000)
 
   it("materializes when the first thing added is an image, not text (ODE-478 follow-up)", async () => {
     persistedSession.value = blankDraftOnlySession()
@@ -1283,10 +1323,10 @@ describe("ODE-478 case 3 — naming a still-blank draft", () => {
       simulateImageInsert()
     })
 
-    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1), { timeout: 4500 })
     expect(mocks.filesystemWrite).toHaveBeenCalledTimes(1)
     expect(getEditorSessionState().session.tabs.some((tab) => tab.writing_id === "desktop-draft-1")).toBe(true)
-  })
+  }, 8_000)
 
   it("materializes the draft before opening Insert Image, so the upload has a real writingId (ODE-478 follow-up)", async () => {
     persistedSession.value = blankDraftOnlySession()
@@ -1305,10 +1345,10 @@ describe("ODE-478 case 3 — naming a still-blank draft", () => {
       sheetHeaderState.onRunAction?.("image")
     })
 
-    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1), { timeout: 4500 })
     await vi.waitFor(() => expect(imageModalState.writingId).toBe("desktop-draft-1"))
     expect(imageModalState.writingId).not.toBe("")
-  })
+  }, 8_000)
 })
 
 describe("ODE-478 follow-up — Save As on a still-ephemeral draft", () => {

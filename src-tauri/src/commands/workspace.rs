@@ -41,6 +41,16 @@ pub struct WorkspaceSnapshot {
     #[serde(rename = "selectedPaths")]
     pub selected_paths: Vec<String>,
     pub files: Vec<WorkspaceFileSnapshot>,
+    // Relative paths this scan found with no existing manifest entry and no
+    // matching entry in the caller's `document_ids`. Identity for a brand-new
+    // file is minted in TypeScript, never guessed here (ADR D1/D9) — so these
+    // are left out of `files` rather than erroring, and the caller mints ids
+    // for exactly these paths before calling again. That keeps the common
+    // case (nothing new since the last scan) to one recursive folder walk
+    // instead of the unconditional two the old `workspace_unbound_paths` +
+    // `workspace_sync` pairing always paid.
+    #[serde(rename = "unboundPaths")]
+    pub unbound_paths: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -329,6 +339,11 @@ pub fn workspace_inspect(root_path: String) -> Result<WorkspaceSnapshot, String>
             file.content_hash = entry.content_hash.clone().unwrap_or_default();
         }
     }
+    let unbound_paths = files
+        .iter()
+        .filter(|file| file.id.is_empty())
+        .map(|file| file.relative_path.clone())
+        .collect();
     files.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
     let updated_at = files.first().map(|file| file.modified_at);
     let name = canonical_root
@@ -346,6 +361,7 @@ pub fn workspace_inspect(root_path: String) -> Result<WorkspaceSnapshot, String>
         updated_at,
         selected_paths: normalize_selected_paths(existing_index.selected_paths)?,
         files,
+        unbound_paths,
     })
 }
 
@@ -705,6 +721,7 @@ pub fn workspace_sync(
         }
     }
 
+    let mut unbound_paths = Vec::new();
     for mut file in files {
         let existing_at_path = existing_index.files.get(&file.relative_path).cloned();
         let can_reuse_hash = existing_at_path.as_ref().is_some_and(|entry| {
@@ -737,22 +754,20 @@ pub fn workspace_sync(
                 }
             });
 
-        // The durable manifest always wins. Truly unbound documents must arrive
-        // with a UUID minted by the TypeScript application layer; Rust never
-        // reads historical frontmatter or invents document identity.
-        let id = existing_entry
-            .map(|entry| entry.id)
-            .or_else(|| {
-                document_ids
-                    .as_ref()
-                    .and_then(|ids| ids.get(&file.relative_path).cloned())
-            })
-            .ok_or_else(|| {
-                format!(
-                    "workspace_sync: missing client document id for unbound path {}",
-                    file.relative_path
-                )
-            })?;
+        // The durable manifest always wins. A truly unbound document's identity
+        // must be minted by the TypeScript application layer, never guessed
+        // here (ADR D1/D9) — but that no longer means failing this whole scan.
+        // Leaving it out of `files`/the manifest and reporting it back lets the
+        // common case (nothing actually new) resolve in one walk; the caller
+        // mints an id and calls again only for the paths listed here.
+        let Some(id) = existing_entry.map(|entry| entry.id).or_else(|| {
+            document_ids
+                .as_ref()
+                .and_then(|ids| ids.get(&file.relative_path).cloned())
+        }) else {
+            unbound_paths.push(file.relative_path.clone());
+            continue;
+        };
 
         file.id = id.clone();
         file.content_hash = content_hash.clone();
@@ -788,6 +803,7 @@ pub fn workspace_sync(
         updated_at,
         selected_paths: effective_selected_paths,
         files: files_with_ids,
+        unbound_paths,
     })
 }
 

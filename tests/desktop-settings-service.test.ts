@@ -132,7 +132,7 @@ describe("DesktopSettingsService", () => {
         },
         {
           id: "doc-2", localPresent: true, cloudPresent: false, cloudAccountId: null,
-          syncStatus: "pending", title: "Doc 2", slug: "doc-2", status: "draft", artifactType: "general",
+          syncStatus: "local-only", title: "Doc 2", slug: "doc-2", status: key, artifactType: "general",
           visibility: "private", version: 1, deletedAt: null, createdAt: 1, modifiedAt: 2,
           bindingRootId: null, relativePath: null, canonicalPath: null, inode: null,
           contentHash: null, size: null, lastSeenAt: null, excerpt: null, excerptContentHash: null,
@@ -141,13 +141,13 @@ describe("DesktopSettingsService", () => {
 
       const result = await service.deleteVocabularyItem(created.data!.id)
       expect(result.error).toBeNull()
-      expect(result.data).toEqual({ rewrittenCount: 1 })
+      expect(result.data).toEqual({ rewrittenCount: 2 })
 
       expect(tauriCatalogBulkDualWriteMock).toHaveBeenCalledTimes(1)
       const [, inputs] = tauriCatalogBulkDualWriteMock.mock.calls[0]!
-      expect(inputs).toHaveLength(1)
-      const [firstInput] = inputs as Array<{
-        document: { id: string; status: string | null }
+      expect(inputs).toHaveLength(2)
+      const [firstInput, localOnlyInput] = inputs as Array<{
+        document: { id: string; status: string | null; syncStatus: string }
         mutation: { operation: string; payloadJson: string } | null
       }>
       expect(firstInput.document.id).toBe("doc-1")
@@ -157,6 +157,12 @@ describe("DesktopSettingsService", () => {
       const payload = JSON.parse(firstInput.mutation!.payloadJson)
       expect(payload.mutationKind).toBe("metadata")
       expect(payload.status).toBe("draft")
+      expect(localOnlyInput.document).toMatchObject({
+        id: "doc-2",
+        status: "draft",
+        syncStatus: "local-only",
+      })
+      expect(localOnlyInput.mutation).toBeNull()
 
       const list = await service.listVocabulary()
       expect(list.data?.some((item) => item.key === key)).toBe(false)

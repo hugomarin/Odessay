@@ -134,6 +134,11 @@ export function WorkspaceTreePanel({
 
   useEffect(() => {
     const unsubscribe = subscribeToContextualWorkspaceChanges((change) => {
+      // "excerpt" is the hydration pipeline finishing a background preview
+      // fetch, and "content" is a body-only autosave — neither changes
+      // anything this tree renders (title/status/path), so reacting would
+      // only call back into the catalog for no visible difference.
+      if (change.reason === "excerpt" || change.reason === "content") return;
       if (change.reason === "upsert" || change.reason === "bulk") {
         for (const id of change.documentIds) pendingIds.current.add(id);
       } else {

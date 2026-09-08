@@ -496,7 +496,14 @@ export default function DeskPage() {
       { leading: false, trailing: true },
     )
 
-    const unsubscribeCatalog = subscribeToCatalog(debounced)
+    const unsubscribeCatalog = subscribeToCatalog((change) => {
+      // "excerpt" is the hydration pipeline finishing a background preview
+      // fetch, and "content" is a body-only autosave — neither changes title,
+      // status, or anything else Desk's activity list renders, so reloading
+      // here would be a full catalog re-read for no visible difference.
+      if (change.reason === "excerpt" || change.reason === "content") return
+      debounced()
+    })
     const unsubscribeCollections = subscribeToCollectionChanges(debounced)
     return () => {
       unsubscribeCatalog()

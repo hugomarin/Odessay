@@ -69,17 +69,27 @@ export function isOdessayInternalPath(path: string) {
     || path.includes("/.trash/") || path.endsWith("/.trash")
 }
 
+// macOS stores filenames on disk in NFD (decomposed) form, so FSEvents reports
+// accented paths (á, é, í, ó, ú, ñ) byte-different from the NFC (composed)
+// strings JS normally carries. Comparing raw strings made every self-write to
+// an accented path invisible to suppression — the watcher saw it as an
+// external change and woke the (expensive, full-folder-walk) reconciler on
+// every single save of any document whose name or path had an accent.
+function toComparablePath(path: string): string {
+  return path.normalize("NFC")
+}
+
 export function markOdessaySelfWritePath(
   path: string,
   now = Date.now(),
   windowMs = DEFAULT_SELF_WRITE_SUPPRESSION_MS,
 ) {
-  selfWriteExpiresAtByPath.set(path, now + windowMs)
+  selfWriteExpiresAtByPath.set(toComparablePath(path), now + windowMs)
 }
 
 export function isRecentOdessaySelfWritePath(path: string, now = Date.now()) {
   pruneExpiredSelfWritePaths(now)
-  const expiresAt = selfWriteExpiresAtByPath.get(path)
+  const expiresAt = selfWriteExpiresAtByPath.get(toComparablePath(path))
   return typeof expiresAt === "number" && expiresAt >= now
 }
 
@@ -111,9 +121,11 @@ export function resolveActionableRootIds(
 
   const affected = new Set<string>()
   for (const root of roots) {
-    const matches = actionable.some(
-      (path) => path === root.rootPath || path.startsWith(`${root.rootPath}/`),
-    )
+    const comparableRoot = toComparablePath(root.rootPath)
+    const matches = actionable.some((path) => {
+      const comparablePath = toComparablePath(path)
+      return comparablePath === comparableRoot || comparablePath.startsWith(`${comparableRoot}/`)
+    })
     if (matches) affected.add(root.id)
   }
   return Array.from(affected)

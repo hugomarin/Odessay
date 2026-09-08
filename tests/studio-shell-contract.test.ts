@@ -154,6 +154,14 @@ describe("studio shell contract", () => {
     expect(shell).toContain("setTableOfContentsItems([])")
   })
 
+  it("refreshes editor tab metadata by affected UUID instead of reloading the catalog", () => {
+    const shell = read("components/editor/editor-shell.tsx")
+
+    expect(shell).not.toContain("loadCatalogRecords")
+    expect(shell).toContain("Promise.all(documentIds.map((id) => getCatalogRecord(id)))")
+    expect(shell).toContain("change.documentIds.filter((id) => wanted.has(id))")
+  })
+
   it("routes rename and shortcuts through the overlay inventory", () => {
     const rename = read("components/editor/modals/rename-writing-modal.tsx")
     const shortcuts = read("components/editor/editor-shortcuts-dialog.tsx")

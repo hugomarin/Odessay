@@ -216,7 +216,11 @@ async function buildRuntime(): Promise<Runtime | null> {
 
       // Prior catalog bindings for this root are what SQLite currently believes;
       // the reconciler diffs them against `observed` to detect moves/detaches.
-      const rows = await catalog.list({ limit: 5000 })
+      // Scoped to this root (not `catalog.list()`) so a reconcile triggered by
+      // the fs watcher never pulls the whole catalog or reschedules excerpt
+      // hydration — this runs on every watcher burst, so its cost must stay
+      // proportional to one root, not to the whole install.
+      const rows = await catalog.listByBindingRoot(root.id)
       const knownBindings: KnownBinding[] = rows
         .filter((row) => row.binding?.bindingRootId === root.id)
         .map((row) => ({

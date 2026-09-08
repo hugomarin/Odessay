@@ -53,6 +53,22 @@ describe("tauri fs watcher self-write suppression", () => {
       ),
     ).toBe(true)
   })
+
+  it("suppresses a self-write even when JS marks NFC and the watcher reports macOS's NFD form", () => {
+    // APFS stores filenames in NFD; JS strings from typed titles/UI are
+    // normally NFC. "café.md" here: composed é (NFC) vs e + combining acute
+    // (NFD) — same visible name, different bytes. Without normalizing both
+    // sides, this comparison always misses for any accented path, so the app
+    // never recognizes its own save and the (expensive) reconciler re-scans
+    // the whole folder on every autosave of an accented file or folder name.
+    const nfc = "/Users/hugo/Documents/Odessay/café.md".normalize("NFC")
+    const nfd = "/Users/hugo/Documents/Odessay/café.md".normalize("NFD")
+    expect(nfc).not.toBe(nfd)
+
+    markOdessaySelfWritePath(nfc, 1_000, 2_000)
+
+    expect(isOdessaySelfWriteEvent(modifyEvent([nfd]), 1_500)).toBe(true)
+  })
 })
 
 describe("resolveActionableRootIds", () => {
@@ -87,5 +103,12 @@ describe("resolveActionableRootIds", () => {
     expect(
       resolveActionableRootIds(["/Users/h/A/x.md", "/Users/h/B/y.md"], roots).sort(),
     ).toEqual(["root-a", "root-b"])
+  })
+
+  it("matches a root whose accented name the watcher reports in a different Unicode normalization", () => {
+    const accentedRoots = [{ id: "root-c", rootPath: "/Users/h/Café".normalize("NFC") }]
+    const watcherPath = "/Users/h/Café/notas.md".normalize("NFD")
+
+    expect(resolveActionableRootIds([watcherPath], accentedRoots)).toEqual(["root-c"])
   })
 })

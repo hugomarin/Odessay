@@ -493,7 +493,7 @@ describe("ODE-478 case 2 — tab switch must not attribute a pending edit to the
       topbarState.onSelectTab?.("doc-b")
     })
 
-    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalled(), { timeout: 4500 })
     const [savedCall] = mocks.saveWriting.mock.calls
     expect(savedCall[0].writing.id).toBe("doc-a")
     expect(savedCall[0].writing.content.plainText).toBe("Edited in A")
@@ -553,7 +553,7 @@ describe("ODE-478 case 4 — leaving and returning to a still-materializing draf
     await act(async () => {
       topbarState.onSelectTab?.(SELECCIONADO)
     })
-    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1), { timeout: 4500 })
 
     setContentCommand.mockClear()
 
@@ -574,7 +574,7 @@ describe("ODE-478 case 4 — leaving and returning to a still-materializing draf
     await act(async () => {
       deferred.resolve?.()
     })
-    await vi.waitFor(() => expect(mocks.filesystemWrite).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.filesystemWrite).toHaveBeenCalledTimes(1), { timeout: 4500 })
 
     // The write must be reconciled to exactly one tab — no orphan file with
     // nothing pointing at it.
@@ -591,7 +591,7 @@ describe("ODE-478 case 4 — leaving and returning to a still-materializing draf
     await act(async () => {
       simulateEditorInput("recordar llamar a Juan mañana, urgente")
     })
-    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalled(), { timeout: 4500 })
     expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1)
   })
 })
@@ -619,7 +619,7 @@ describe("ODE-478 follow-up — New Tab must not discard a queued edit", () => {
       topbarState.onNewTab?.()
     })
 
-    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalled(), { timeout: 4500 })
     expect(mocks.createDesktopDraft.mock.calls[0]?.[0]?.initialBodyText).toBe(
       "nota antes de abrir otra pestaña",
     )
@@ -731,7 +731,7 @@ describe("ODE-478 follow-up — closing a tab whose own materialization complete
 
     // Closing forces the debounced write through immediately (settle bypasses
     // the debounce), so materialization is already underway.
-    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1), { timeout: 4500 })
 
     // The write lands and reconcileMaterializedDraftTab renames "draft" to
     // the real id *before* the close call resumes past its await.
@@ -797,7 +797,7 @@ describe("ODE-478 follow-up — closing one tab while a different tab's draft ma
     await act(async () => {
       topbarState.onSelectTab?.("doc-a")
     })
-    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1), { timeout: 4500 })
     await vi.waitFor(() => expect(mocks.openWriting).toHaveBeenCalledWith("doc-a"))
 
     // Now edit and close doc-a — its own settle() must not depend on the
@@ -834,7 +834,7 @@ describe("ODE-478 follow-up — closing one tab while a different tab's draft ma
     })
 
     // Only now does doc-a's own save actually start.
-    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalled(), { timeout: 4500 })
 
     // A stale post-close lookup falls through to the "no active document"
     // branch, which the session-restore effect then has to correct on a
