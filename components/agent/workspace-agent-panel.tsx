@@ -48,7 +48,7 @@ import type {
   WorkspaceAgentApproval,
 } from "@/lib/services/contracts/workspace-agent"
 import { MAX_WORKSPACE_CLASSIFICATION_TARGETS } from "@/lib/ai/workspace-classification"
-import { MAX_WORKSPACE_ASK_TARGETS } from "@/lib/ai/workspace-ask"
+import { MAX_WORKSPACE_ASK_TARGETS, MAX_WORKSPACE_ASK_SESSION_ACTION_CHARS } from "@/lib/ai/workspace-ask"
 import {
   approveArchiveCandidate,
   approveClassificationProposal,
@@ -91,6 +91,21 @@ import { cn } from "@/lib/utils"
 
 const CHAT_TEXTAREA_MAX_HEIGHT = 160
 const MAX_SESSION_ACTIONS_CONTEXT = 8
+
+/**
+ * Truncates one session-memory entry so it still fits the schema's own
+ * `max(MAX_WORKSPACE_ASK_SESSION_ACTION_CHARS)` — the appended "…" is one
+ * more character, so the slice has to stop one short of the limit. Getting
+ * this off by one doesn't just shorten memory: it makes every ask() for the
+ * rest of the session fail schema validation once any recorded answer
+ * exceeds this length, which is close to guaranteed after the first real
+ * turn in a conversation.
+ */
+export function truncateSessionActionText(text: string): string {
+  return text.length > MAX_WORKSPACE_ASK_SESSION_ACTION_CHARS
+    ? `${text.slice(0, MAX_WORKSPACE_ASK_SESSION_ACTION_CHARS - 1)}…`
+    : text
+}
 
 export type { WorkspaceAgentContextAttachment }
 export type { WorkspaceAgentDocumentSnapshot, WorkspaceAgentScope }
@@ -421,7 +436,7 @@ function WorkspaceAgentPanelSession({
   const recordSessionAction = useCallback((text: string, generation: number) => {
     if (sessionGenerationRef.current !== generation) return
     const entries = sessionActionLogRef.current
-    entries.push(text.length > 300 ? `${text.slice(0, 300)}…` : text)
+    entries.push(truncateSessionActionText(text))
     if (entries.length > MAX_SESSION_ACTIONS_CONTEXT) entries.splice(0, entries.length - MAX_SESSION_ACTIONS_CONTEXT)
   }, [])
 
