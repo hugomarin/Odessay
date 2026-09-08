@@ -492,6 +492,33 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       }))
     })
 
+    it("drops focusedDocumentId from the request instead of sending a self-inconsistent hint when the catalog doesn't have that record (e.g. a stale read right after a mutation)", async () => {
+      const other = document("other", "Unrelated artifact.")
+      // The catalog snapshot this turn resolves against does not include
+      // "focused" at all — simulating a stale read right after the record
+      // was mutated elsewhere. The schema requires focusedDocumentId to name
+      // one of `documents`, so sending it anyway would make the server
+      // reject the whole turn before the model is even called.
+      contextMocks.list.mockResolvedValue([other.catalogRecord])
+      const read = vi.fn()
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "Here's a general answer.", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({ question: "What's this about?", selection: [], focusedDocumentId: "focused" })
+
+      expect(result.error).toBeNull()
+      expect(read).not.toHaveBeenCalled()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+        focusedDocumentId: null,
+        documents: [],
+      }))
+    })
+
     it("performs one bounded extra round with the focused document's content when the model requests it, and returns the retried answer", async () => {
       const focused = document("focused", "Storage: SQLite.")
       contextMocks.list.mockResolvedValue([focused.catalogRecord])
@@ -547,6 +574,32 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       expect(result.error).toBeNull()
       expect(result.data?.answer).toBe("I don't have enough context yet, but here's what I can say generally.")
       expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+    })
+
+    it("keeps the first round's answer when the second askWorkspace call itself fails (not just the evidence read before it)", async () => {
+      const focused = document("focused", "Storage: SQLite.")
+      contextMocks.list.mockResolvedValue([focused.catalogRecord])
+      // Unlike the read-failure test above, evidence preparation for the
+      // retry succeeds every time — the failure is the provider call itself.
+      const read = vi.fn(async ({ approval }) => ({
+        data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
+        error: null,
+      }))
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace
+        .mockResolvedValueOnce({
+          data: { answer: "I don't have enough context yet, but here's what I can say generally.", evidence: [], requestedDocumentIds: ["focused"], usage: null },
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: null, error: { code: "UNAVAILABLE", message: "AI provider is unavailable for the Workspace agent.", retryable: true } })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({ question: "What storage does this use?", selection: [], focusedDocumentId: "focused" })
+
+      expect(result.error).toBeNull()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+      expect(result.data?.answer).toBe("I don't have enough context yet, but here's what I can say generally.")
+      expect(result.data?.requestedDocumentIds).toEqual(["focused"])
     })
 
     it("does not auto-fetch a requested id that isn't the focused document — that stays the existing manual 'note the user' path", async () => {

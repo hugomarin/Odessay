@@ -1150,6 +1150,13 @@ function WorkspaceAgentPanelSession({
         outcome = { ok: false, message: thrown instanceof Error ? thrown.message : "The Workspace agent could not answer right now." }
       }
       if (outcome.ok && outcome.run.suggestedAction) {
+        // A "New conversation" in flight during the ask must suppress the
+        // dispatch entirely, the same way the plain-answer branch below
+        // drops a stale append. Workflow/Broken links/Archive/Contradictions
+        // each start their own runAction and would otherwise recapture the
+        // *current* (post-reset) generation and write into the new,
+        // unrelated session instead of silently doing nothing as intended.
+        if (sessionGenerationRef.current !== generation) return
         // The model judged this an explicit request to run a predetermined
         // action rather than a question — its plain-text `answer` is
         // discarded; the dispatched action produces its own review-card

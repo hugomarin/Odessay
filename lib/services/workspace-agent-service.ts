@@ -1194,13 +1194,26 @@ export async function createWorkspaceAgentService(
         }, contextServices)
         if (prepared.error || !prepared.data) return prepared as ServiceResponse<{ prepared: PreparedDocumentEvidence; aiResult: WorkspaceAskResult }>
 
+        const documents = prepared.data.promptRecords.map((record) => documentForClassification(
+          prepared.data!.currentRecordsById.get(record.id) ?? record,
+          prepared.data!.markdownById.get(record.id) ?? null,
+        ))
+        // The schema requires focusedDocumentId to name one of `documents`
+        // (lib/ai/workspace-ask.ts). It normally does — prepareDocumentEvidence
+        // includes the focused record precisely so this holds — but a stale
+        // catalog read right after a mutation (e.g. asking again immediately
+        // after applying a classification) can momentarily miss it. Dropping
+        // the hint here keeps the request self-consistent instead of having
+        // the server reject the whole turn over a hint the model never asked
+        // for yet; the chat must not go silent over a mismatch like this.
+        const focusedDocumentIdForRequest = focusedDocumentId && documents.some((document) => document.id === focusedDocumentId)
+          ? focusedDocumentId
+          : null
+
         const aiRequest: WorkspaceAskRequest = {
           question: input.question.slice(0, 2_000),
           targetDocumentIds: prepared.data.selectedRecords.map((record) => record.id),
-          documents: prepared.data.promptRecords.map((record) => documentForClassification(
-            prepared.data!.currentRecordsById.get(record.id) ?? record,
-            prepared.data!.markdownById.get(record.id) ?? null,
-          )),
+          documents,
           collections: contextData.collections.map((collection) => ({
             id: collection.id,
             name: collection.name,
@@ -1212,7 +1225,7 @@ export async function createWorkspaceAgentService(
           workflowMarkdown: contextData.workflowMarkdown,
           catalogTruncated: prepared.data.catalogTruncated,
           recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
-          focusedDocumentId,
+          focusedDocumentId: focusedDocumentIdForRequest,
         }
         const aiResult = await getAIService().askWorkspace(aiRequest)
         if (aiResult.error || !aiResult.data) {
