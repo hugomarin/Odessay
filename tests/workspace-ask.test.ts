@@ -19,7 +19,7 @@ describe("workspaceAskRequestSchema (ODE-489's documented Context Gap — a conv
       collections: [],
       documentCollectionIds: {},
       annotations: [],
-      workflowMarkdown: null,
+      workflow: null,
       catalogTruncated: false,
     })
     expect(result.success).toBe(true)
@@ -46,7 +46,7 @@ describe("workspaceAskRequestSchema.focusedDocumentId (ODE-489 follow-up — a r
     collections: [],
     documentCollectionIds: {},
     annotations: [],
-    workflowMarkdown: null,
+    workflow: null,
     catalogTruncated: false,
   }
 

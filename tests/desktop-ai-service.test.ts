@@ -41,7 +41,7 @@ const classificationInput = {
     description: "Readable end to end.",
     isRequired: true,
   }],
-  workflowMarkdown: null,
+  workflow: null,
   catalogTruncated: false,
 }
 

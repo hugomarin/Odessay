@@ -50,7 +50,7 @@ const requestBody = {
     { kind: "type", key: "general", name: "General", description: "The default shape.", isRequired: false },
     { kind: "status", key: "draft", name: "Draft", description: "Readable end to end.", isRequired: true },
   ],
-  workflowMarkdown: "# Workflow\n\nA draft can be read end to end.",
+  workflow: { instructions: "# Workflow\n\nA draft can be read end to end.", descriptor: null },
   catalogTruncated: false,
 }
 

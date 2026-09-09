@@ -201,7 +201,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     expect(aiMocks.classifyWorkspace).toHaveBeenCalledWith(expect.objectContaining({
       request: "Review this document and keep metadata when no improvement is justified.",
       targetDocumentIds: ["target"],
-      workflowMarkdown: "# Existing workflow",
+      workflow: expect.objectContaining({ instructions: "# Existing workflow" }),
       documents: expect.arrayContaining([
         expect.objectContaining({ id: "target", markdown: "Storage: SQLite.", currentStatus: "draft" }),
       ]),
@@ -1601,5 +1601,157 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       expect(note).toBe("")
       expect(aiMocks.presentToolResult).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe("WorkspaceAgentService hybrid workflow.md instructions (ODE-504)", () => {
+  const DEFINITIONS_MARKER = "<!-- workflow-definitions -->"
+
+  beforeEach(() => {
+    contextMocks.list.mockReset()
+    contextMocks.list.mockResolvedValue([])
+    contextMocks.loadCollections.mockReset()
+    contextMocks.loadCollections.mockResolvedValue({ collections: [], writingCollections: [] })
+    aiMocks.classifyWorkspace.mockReset()
+    aiMocks.classifyWorkspace.mockResolvedValue({
+      data: { summary: "No change.", proposals: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    aiMocks.askWorkspace.mockReset()
+    aiMocks.askWorkspace.mockResolvedValue({
+      data: { answer: "No answer configured.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+  })
+
+  function workflowFixture(markdown: string): WorkspaceAgentDocument {
+    return document("workflow", markdown)
+  }
+
+  function toolsFor(workflow: WorkspaceAgentDocument): WorkspaceAgentToolsService {
+    return {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: workflow,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+  }
+
+  it("splits the workflow body: instructions ride ambiently, definitions stay behind the descriptor", async () => {
+    const workflow = workflowFixture(`# Workspace workflow\n\n## Intent\nKeep everything discoverable.\n\n${DEFINITIONS_MARKER}\n\n## Workflow: publication\nSteps: review, export, archive.`)
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "Hola",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      workflow: {
+        instructions: "# Workspace workflow\n\n## Intent\nKeep everything discoverable.",
+        descriptor: expect.objectContaining({
+          documentId: "workflow",
+          instructionsTruncated: false,
+          definitionsChars: "\n\n## Workflow: publication\nSteps: review, export, archive.".length,
+        }),
+      },
+    }))
+    const request = aiMocks.askWorkspace.mock.calls[0][0]
+    expect(request.workflow.instructions).not.toContain("Steps: review")
+  })
+
+  it("treats a workflow.md without the marker as entirely instructions, so generated drafts keep their intent riding every ask", async () => {
+    const workflow = workflowFixture("# Workspace workflow\n\n## Intent\nKeep everything discoverable.")
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({
+      question: "Hola",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      workflow: expect.objectContaining({
+        instructions: "# Workspace workflow\n\n## Intent\nKeep everything discoverable.",
+      }),
+    }))
+    const request = aiMocks.askWorkspace.mock.calls[0][0]
+    expect(request.workflow.descriptor.definitionsChars).toBe(0)
+  })
+
+  it("does not re-read workflow.md on the second ask of the same session (artifact cache hit)", async () => {
+    const workflow = workflowFixture("# Workspace workflow\n\n## Intent\nKeep everything discoverable.")
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValue({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({ question: "Uno", selection: [], workflowReadApproval: approval("read", "workflow") })
+    await service.askAgent({ question: "Dos", selection: [], workflowReadApproval: approval("read", "workflow") })
+
+    expect(tools.read).toHaveBeenCalledTimes(1)
+  })
+
+  it("materializes the full workflow.md in a second bounded round when the model explicitly requests it", async () => {
+    const workflow = workflowFixture(`# Workspace workflow\n\n## Intent\nKeep everything discoverable.\n\n${DEFINITIONS_MARKER}\n\n## Workflow: publication\nSteps: review, export, archive.`)
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace
+      .mockResolvedValueOnce({
+        data: {
+          answer: "I need the workflow definitions.",
+          evidence: [],
+          requestedDocumentIds: ["workflow"],
+          usage: null,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          answer: "The publication workflow has three steps.",
+          evidence: [{ documentId: "workflow", quote: "Steps: review, export, archive.", reason: "Defines the steps." }],
+          requestedDocumentIds: [],
+          usage: null,
+        },
+        error: null,
+      })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "¿Cómo ejecuto el workflow de publicación?",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.answer).toBe("The publication workflow has three steps.")
+    expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+    const secondRound = aiMocks.askWorkspace.mock.calls[1][0]
+    const workflowEntry = secondRound.documents.find((entry: { id: string }) => entry.id === "workflow")
+    expect(workflowEntry?.markdown).toContain("Steps: review, export, archive.")
   })
 })
