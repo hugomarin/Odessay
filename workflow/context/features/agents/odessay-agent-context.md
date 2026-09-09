@@ -21,6 +21,8 @@ Tener cien documentos disponibles en un Workspace no implica enviar cien documen
 
 Ser lazy puede costar una ronda adicional al modelo en el turno puntual que sí necesita evidencia — que quien decide si hace falta esa ronda sea el propio consumidor (el modelo, viendo la pregunta) y no un clasificador previo que corra siempre, es la razón de que el costo agregado de una sesión baje: la mayoría de los turnos no necesitan evidencia y no pagan nada, en vez de que todos paguen el costo completo por si acaso.
 
+**Excepción a lazy — instrucciones de operación de `workflow.md` (ODE-504):** el archivo cumple la función de manual de operación del agente (análogo a un CLAUDE.md). Su sección de instrucciones — cómo debe operar el agente y la intención del workspace — es contexto ambiental de la invocación y no se adquiere bajo demanda: viaja siempre con su descriptor (versión/hash) para validar frescura y consume presupuesto de contexto de ODE-501 como cualquier fuente. El resto del cuerpo (contenido ejecutable de workflows) sí sigue siendo evidencia bajo demanda.
+
 ## Contratos
 
 ### Agent Invocation
