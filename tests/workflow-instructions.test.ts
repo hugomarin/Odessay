@@ -28,7 +28,7 @@ describe("splitWorkflowMarkdown (ODE-504 — hybrid workflow.md instructions mod
     expect(split.scopeSummary).toEqual(["Workflow: publication"])
   })
 
-  it("treats a file without the marker as entirely instructions (generated drafts are intent/scope content)", () => {
+  it("treats a file without the marker as entirely instructions when every block is a known intent/scope section (generated drafts)", () => {
     const markdown = "# Workspace workflow\n\n## Intent\nKeep everything discoverable."
 
     const split = splitWorkflowMarkdown(markdown)
@@ -39,7 +39,52 @@ describe("splitWorkflowMarkdown (ODE-504 — hybrid workflow.md instructions mod
     expect(split.scopeSummary).toEqual([])
   })
 
-  it("never trusts an unbounded no-marker file: the overflow beyond the cap becomes on-demand definitions", () => {
+  it("separates a legacy short file's executable definitions even without the marker (review round 2 — P1)", () => {
+    const markdown = "# Workflow\n\n## Workflow: publication\nSteps: review, export, archive."
+
+    const split = splitWorkflowMarkdown(markdown)
+
+    // Only the title is trusted; the executable definition becomes on-demand
+    // evidence with its scope surfaced in the descriptor.
+    expect(split.instructions).toBe("# Workflow")
+    expect(split.definitions).toBe("## Workflow: publication\nSteps: review, export, archive.")
+    expect(split.instructionsTruncated).toBe(false)
+    expect(split.scopeSummary).toEqual(["Workflow: publication"])
+  })
+
+  it("keeps prose before any heading as trusted instructions even in a mixed legacy file", () => {
+    const markdown = [
+      "Coordinate this workspace: keep artifacts classified and named consistently.",
+      "",
+      "## Workflow: publication",
+      "Steps: review, export, archive.",
+    ].join("\n")
+
+    const split = splitWorkflowMarkdown(markdown)
+
+    expect(split.instructions).toBe("Coordinate this workspace: keep artifacts classified and named consistently.")
+    expect(split.definitions).toBe("## Workflow: publication\nSteps: review, export, archive.")
+    expect(split.scopeSummary).toEqual(["Workflow: publication"])
+  })
+
+  it("recognizes headings at any level (H1–H6) for the scope summary", () => {
+    const markdown = [
+      "# Workflow",
+      "",
+      WORKFLOW_DEFINITIONS_MARKER,
+      "",
+      "# Workflow: top-level",
+      "Steps.",
+      "#### Sub-workflow: revision",
+      "Details.",
+    ].join("\n")
+
+    const split = splitWorkflowMarkdown(markdown)
+
+    expect(split.scopeSummary).toEqual(["Workflow: top-level", "Sub-workflow: revision"])
+  })
+
+  it("never trusts an unbounded no-marker file: unrecognized blocks become on-demand definitions", () => {
     const long = "x".repeat(MAX_WORKFLOW_INSTRUCTIONS_CHARS + 500)
     const markdown = `${long}\n\n## Workflow: publication\nSteps: review, export, archive.`
 

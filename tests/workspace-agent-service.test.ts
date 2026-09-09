@@ -1759,6 +1759,85 @@ describe("WorkspaceAgentService hybrid workflow.md instructions (ODE-504)", () =
     expect(workflowEntry?.markdown).toContain("Steps: review, export, archive.")
   })
 
+  it("keeps a legacy short marker-less workflow's definitions out of the ambient instructions (review round 2 — P1)", async () => {
+    const workflow = workflowFixture("# Workflow\n\n## Workflow: publication\nSteps: review, export, archive.")
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({
+      question: "Hola",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      workflow: expect.objectContaining({
+        instructions: "# Workflow",
+        descriptor: expect.objectContaining({
+          documentId: "workflow",
+          definitionsChars: "## Workflow: publication\nSteps: review, export, archive.".length,
+          scopeSummary: ["Workflow: publication"],
+        }),
+      }),
+    }))
+    const request = aiMocks.askWorkspace.mock.calls[0][0]
+    expect(request.workflow.instructions).not.toContain("Steps: review")
+  })
+
+  it("prepends retry targets so a full selection cannot evict the requested workflow from the second round (review round 2 — P2)", async () => {
+    const workflow = workflowFixture(`# Workflow\n\n## Workflow: publication\nSteps: review, export, archive.`)
+    const selections = ["a", "b", "c", "d", "e", "f"].map((id) => ({ kind: "file" as const, documentId: id }))
+    const documents = new Map(selections.map(({ documentId: id }) => [id, document(id, `Content: ${id}.`)]))
+    documents.set("workflow", workflow)
+    contextMocks.list.mockResolvedValue([...documents.values()].map((doc) => doc.catalogRecord))
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace
+      .mockResolvedValueOnce({
+        data: { answer: "I need the workflow definitions.", evidence: [], requestedDocumentIds: ["workflow"], usage: null },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          answer: "The publication workflow has three steps.",
+          evidence: [],
+          requestedDocumentIds: [],
+          usage: null,
+        },
+        error: null,
+      })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "¿Cómo ejecuto el workflow de publicación?",
+      selection: selections,
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.answer).toBe("The publication workflow has three steps.")
+    const secondRound = aiMocks.askWorkspace.mock.calls[1][0]
+    const workflowEntry = secondRound.documents.find((entry: { id: string }) => entry.id === "workflow")
+    expect(workflowEntry?.markdown).toContain("Steps: review, export, archive.")
+    expect(secondRound.targetDocumentIds).toContain("workflow")
+  })
+
   it("records only the incorporated instruction tokens in the ledger, never the full document's", async () => {
     const workflow = workflowFixture(`# Workspace workflow\n\n## Intent\nKeep everything discoverable.\n\n${DEFINITIONS_MARKER}\n\n## Workflow: publication\nSteps: review, export, archive.`)
     contextMocks.list.mockResolvedValue([workflow.catalogRecord])

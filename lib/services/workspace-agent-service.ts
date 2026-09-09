@@ -1387,10 +1387,18 @@ export async function createWorkspaceAgentService(
           && aiResult.requestedDocumentIds.includes(workflowDocumentId),
       )
       if (needsFocusRetry || needsWorkflowRetry) {
-        const retrySelection = [...input.selection]
-        if (needsFocusRetry && focusedDocumentId) retrySelection.push({ kind: "file", documentId: focusedDocumentId })
-        if (needsWorkflowRetry && workflowDocumentId) retrySelection.push({ kind: "file", documentId: workflowDocumentId })
-        const uniqueRetrySelection = [...new Map(retrySelection.map((entry) => [entry.kind === "file" ? `file:${entry.documentId}` : `folder:${entry.path ?? ""}`, entry])).values()]
+        // Retry targets are prepended, not appended: under the schema's
+        // target cap, appending would let slice() silently drop the very
+        // document the model asked for and run a pointless second round
+        // without new evidence (ODE-504 review round 2). The targets the
+        // model explicitly requested this turn always fit; if the user's
+        // selection no longer does, the oldest trailing entries yield.
+        const retryTargets: WorkspaceAgentSelection[] = []
+        if (needsFocusRetry && focusedDocumentId) retryTargets.push({ kind: "file", documentId: focusedDocumentId })
+        if (needsWorkflowRetry && workflowDocumentId) retryTargets.push({ kind: "file", documentId: workflowDocumentId })
+        const retryKey = (entry: WorkspaceAgentSelection) => entry.kind === "file" ? `file:${entry.documentId}` : `folder:${entry.path ?? ""}`
+        const uniqueRetrySelection = [...retryTargets, ...input.selection]
+          .filter((entry, index, all) => all.findIndex((other) => retryKey(other) === retryKey(entry)) === index)
           .slice(0, MAX_WORKSPACE_ASK_TARGETS)
         const retry = await runAskRound(uniqueRetrySelection)
         if (!retry.error && retry.data) {
