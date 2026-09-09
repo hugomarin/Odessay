@@ -171,6 +171,23 @@ export type WorkspaceClassificationAnnotation = {
   note: string
 }
 
+/**
+ * Hybrid workflow.md model (ODE-504): the instructions section rides every
+ * agent invocation as ambient context; the executable definitions stay
+ * evidence-on-demand and are only described by the descriptor.
+ */
+export type WorkspaceAmbientWorkflowDescriptor = {
+  documentId: string
+  version: string
+  instructionsTruncated: boolean
+  definitionsChars: number
+}
+
+export type WorkspaceAmbientWorkflow = {
+  instructions: string | null
+  descriptor: WorkspaceAmbientWorkflowDescriptor | null
+}
+
 export type WorkspaceClassificationRequest = {
   request: string
   targetDocumentIds: string[]
@@ -179,7 +196,7 @@ export type WorkspaceClassificationRequest = {
   documentCollectionIds: Record<string, string[]>
   annotations: WorkspaceClassificationAnnotation[]
   vocabulary: WorkspaceClassificationVocabularyItem[]
-  workflowMarkdown: string | null
+  workflow: WorkspaceAmbientWorkflow | null
   catalogTruncated: boolean
 }
 
@@ -222,7 +239,7 @@ export type WorkspaceAskRequest = {
   collections: WorkspaceClassificationCollection[]
   documentCollectionIds: Record<string, string[]>
   annotations: WorkspaceClassificationAnnotation[]
-  workflowMarkdown: string | null
+  workflow: WorkspaceAmbientWorkflow | null
   catalogTruncated: boolean
   /** Short summaries of what happened earlier in this chat session (actions run, prior Q&A), most recent last. */
   recentSessionActions?: string[]

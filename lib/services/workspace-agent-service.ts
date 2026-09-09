@@ -31,6 +31,9 @@ import {
   type WorkspaceAgentContentSnapshot,
   type WorkflowDraftProposal,
 } from "@/lib/agent/workspace-agent-analysis"
+import {
+  splitWorkflowMarkdown,
+} from "@/lib/agent/workflow-instructions"
 import type {
   WorkspaceAskEvidence,
   WorkspaceAskRequest,
@@ -194,6 +197,15 @@ type WorkspaceAgentContext = {
   documentCollectionIds: Record<string, string[]>
   existingWorkflow: DocumentCatalogRecord | null
   workflowMarkdown: string | null
+  /** Ambient operating instructions section of workflow.md (ODE-504 hybrid model). */
+  workflowInstructions: string | null
+  /** Descriptor of workflow.md when only instructions were loaded ambiently. */
+  workflowDescriptor: {
+    documentId: string
+    version: string
+    instructionsTruncated: boolean
+    definitionsChars: number
+  } | null
 }
 
 export type WorkspaceAgentSelection = {
@@ -328,7 +340,7 @@ export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): P
       collections: [],
       documentCollectionIds: {},
       annotations: [],
-      workflowMarkdown: null,
+      workflow: null,
       catalogTruncated: false,
       recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
       focusedDocumentId: documentId,
@@ -431,6 +443,8 @@ async function loadContext(rootPath: string): Promise<ServiceResponse<WorkspaceA
       documentCollectionIds: Object.fromEntries(documentCollectionIds),
       existingWorkflow: documents.find((record) => normalizePath(record.binding?.canonicalPath ?? "") === workflowPath(rootPath)) ?? null,
       workflowMarkdown: null,
+      workflowInstructions: null,
+      workflowDescriptor: null,
     })
   } catch (cause) {
     return error("DB_ERROR", cause instanceof Error ? cause.message : "Workspace context could not be loaded.")
@@ -554,8 +568,12 @@ async function prepareDocumentEvidence(
   },
   contextServices: { store: ContextArtifactStore; ledger: ContextLedger },
 ): Promise<ServiceResponse<PreparedDocumentEvidence>> {
+  // ODE-504: workflow.md is no longer withheld from selections. Under the
+  // hybrid model the ambient context carries only its instructions section;
+  // when the model (or the user's attachment) explicitly materializes the
+  // document, the full body flows through the same evidence bundle as any
+  // other document, budget-capped and ledger-recorded.
   const selectedIds = resolveSelectionDocumentIds(context, selection)
-    .filter((documentId) => documentId !== context.existingWorkflow?.id)
   if (selectedIds.length === 0) {
     if (options.allowEmptySelection) {
       const recordsById = new Map(context.documents.map((record) => [record.id, record]))
@@ -591,7 +609,10 @@ async function prepareDocumentEvidence(
   const overriddenRecords = selectedRecords.filter((record) => liveOverrides.has(record.id))
   const catalogRecords = selectedRecords.filter((record) => !liveOverrides.has(record.id))
 
-  const workflowChars = context.workflowMarkdown?.length ?? 0
+  // Ambient instructions, not the full workflow body (ODE-504 hybrid model):
+  // the definitions stay behind the descriptor and cost the model nothing
+  // unless it explicitly asks for the document back.
+  const workflowChars = context.workflowInstructions?.length ?? 0
   const plan = buildContextAcquisitionPlan({
     intent: "understand",
     candidates: catalogRecords.map((record, index) => ({
@@ -924,24 +945,113 @@ export async function createWorkspaceAgentService(
   const contextLedger = createContextLedger()
   const contextServices = { store: contextArtifactStore, ledger: contextLedger }
 
+  /**
+   * Shared read of the full workflow.md body, served through the session
+   * artifact cache (ODE-501) so repeated invocations in the same session
+   * don't re-read the file. Every acquisition — fresh or cached — is
+   * recorded in the context ledger.
+   */
+  const readWorkflowMarkdown = async (
+    context: WorkspaceAgentContext,
+    readApproval?: WorkspaceAgentApproval,
+  ): Promise<ServiceResponse<{ markdown: string; version: string }>> => {
+    const workflow = context.existingWorkflow
+    if (!workflow) return error("NOT_FOUND", "No workflow.md exists in this workspace.")
+    if (!readApproval) {
+      return error("FORBIDDEN", "Reading an existing workflow.md requires a workflow-specific read approval.")
+    }
+    const documentVersion = artifactVersionKey(workflow)
+    const cacheKey = { documentId: workflow.id, documentVersion, representation: "full" as const, extractionPolicy: "workflow-ambient" }
+    const cached = contextServices.store.get(cacheKey)
+    if (cached?.raw) {
+      contextServices.ledger.record({
+        ts: Date.now(),
+        documentId: workflow.id,
+        documentVersion,
+        representation: "full",
+        tokens: cached.tokenCount,
+        cacheHit: true,
+        reason: "workflow-ambient: served from the session artifact cache",
+      })
+      const raw = cached.raw as { markdown?: string }
+      if (typeof raw.markdown === "string") return ok({ markdown: raw.markdown, version: documentVersion })
+    }
+    const read = await tools.read({ documentId: workflow.id, approval: readApproval })
+    if (read.error || !read.data) {
+      return error(read.error?.code ?? "NOT_FOUND", read.error?.message ?? "workflow.md could not be loaded.")
+    }
+    const markdown = read.data.document.markdown
+    contextServices.store.set({
+      documentId: workflow.id,
+      documentVersion,
+      representation: "full",
+      extractionPolicy: "workflow-ambient",
+      content: markdown,
+      citations: [],
+      tokenCount: estimateTokenCount(markdown),
+      byteCount: markdown.length,
+      createdAt: Date.now(),
+      raw: { markdown },
+    })
+    contextServices.ledger.record({
+      ts: Date.now(),
+      documentId: workflow.id,
+      documentVersion,
+      representation: "full",
+      tokens: estimateTokenCount(markdown),
+      cacheHit: false,
+      reason: "workflow-ambient: full read for the hybrid instructions split (ODE-504)",
+    })
+    return ok({ markdown, version: documentVersion })
+  }
+
+  /**
+   * Full workflow.md body — for callers that must materialize the whole
+   * document (drafting/updating it). Not for ambient chat context.
+   */
   const withWorkflowMarkdown = async (
     context: ServiceResponse<WorkspaceAgentContext>,
     readApproval?: WorkspaceAgentApproval,
   ): Promise<ServiceResponse<WorkspaceAgentContext>> => {
     if (context.error || !context.data || !context.data.existingWorkflow) return context
-    if (!readApproval) {
-      return error("FORBIDDEN", "Reading an existing workflow.md requires a workflow-specific read approval.")
-    }
-    const read = await tools.read({ documentId: context.data.existingWorkflow.id, approval: readApproval })
-    if (read.error || !read.data) {
-      return error(read.error?.code ?? "NOT_FOUND", read.error?.message ?? "workflow.md could not be loaded.")
-    }
-    return ok<WorkspaceAgentContext>({ ...context.data, workflowMarkdown: read.data.document.markdown })
+    const read = await readWorkflowMarkdown(context.data, readApproval)
+    if (read.error || !read.data) return read as ServiceResponse<WorkspaceAgentContext>
+    return ok<WorkspaceAgentContext>({ ...context.data, workflowMarkdown: read.data.markdown })
+  }
+
+  /**
+   * Hybrid instructions load (ODE-504): the instructions section rides every
+   * invocation as ambient context; the executable definitions stay behind
+   * the descriptor and are only fetched on explicit request.
+   */
+  const withWorkflowInstructions = async (
+    context: ServiceResponse<WorkspaceAgentContext>,
+    readApproval?: WorkspaceAgentApproval,
+  ): Promise<ServiceResponse<WorkspaceAgentContext>> => {
+    if (context.error || !context.data || !context.data.existingWorkflow) return context
+    const read = await readWorkflowMarkdown(context.data, readApproval)
+    if (read.error || !read.data) return read as ServiceResponse<WorkspaceAgentContext>
+    const split = splitWorkflowMarkdown(read.data.markdown)
+    return ok<WorkspaceAgentContext>({
+      ...context.data,
+      workflowMarkdown: null,
+      workflowInstructions: split.instructions.length > 0 ? split.instructions : null,
+      workflowDescriptor: {
+        documentId: context.data.existingWorkflow.id,
+        version: read.data.version,
+        instructionsTruncated: split.instructionsTruncated,
+        definitionsChars: split.definitions?.length ?? 0,
+      },
+    })
   }
 
   const getContextWithWorkflow = async (
     workflowReadApproval?: WorkspaceAgentApproval,
   ): Promise<ServiceResponse<WorkspaceAgentContext>> => withWorkflowMarkdown(await getContext(), workflowReadApproval)
+
+  const getContextWithWorkflowInstructions = async (
+    workflowReadApproval?: WorkspaceAgentApproval,
+  ): Promise<ServiceResponse<WorkspaceAgentContext>> => withWorkflowInstructions(await getContext(), workflowReadApproval)
 
   return {
     tools,
@@ -1084,7 +1194,7 @@ export async function createWorkspaceAgentService(
     },
     async suggestClassification(input) {
       const requestedText = input.request?.trim() || DEFAULT_CLASSIFICATION_REQUEST
-      const context = await getContextWithWorkflow(input.workflowReadApproval)
+      const context = await getContextWithWorkflowInstructions(input.workflowReadApproval)
       if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentClassificationRun>
 
       const prepared = await prepareDocumentEvidence(context.data, input.selection, tools, {
@@ -1122,7 +1232,10 @@ export async function createWorkspaceAgentService(
         documentCollectionIds: context.data.documentCollectionIds,
         annotations,
         vocabulary,
-        workflowMarkdown: context.data.workflowMarkdown,
+        workflow: {
+          instructions: context.data.workflowInstructions,
+          descriptor: context.data.workflowDescriptor,
+        },
         catalogTruncated,
       }
       const aiResult = await getAIService().classifyWorkspace(aiRequest)
@@ -1168,7 +1281,7 @@ export async function createWorkspaceAgentService(
       })
     },
     async askAgent(input) {
-      const context = await getContextWithWorkflow(input.workflowReadApproval)
+      const context = await getContextWithWorkflowInstructions(input.workflowReadApproval)
       if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentAskRun>
       const contextData = context.data
 
@@ -1222,7 +1335,10 @@ export async function createWorkspaceAgentService(
           })),
           documentCollectionIds: contextData.documentCollectionIds,
           annotations: prepared.data.annotations,
-          workflowMarkdown: contextData.workflowMarkdown,
+          workflow: {
+            instructions: contextData.workflowInstructions,
+            descriptor: contextData.workflowDescriptor,
+          },
           catalogTruncated: prepared.data.catalogTruncated,
           recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
           focusedDocumentId: focusedDocumentIdForRequest,
@@ -1239,16 +1355,32 @@ export async function createWorkspaceAgentService(
 
       let { prepared, aiResult } = first.data
 
-      // Bounded, one-shot retry — only for the document the caller told the
-      // model was "currently open" (ODE-489 follow-up), never for an
-      // arbitrary id the model merely guessed at from catalog metadata.
-      // The user is already looking at it; materializing it on request
-      // isn't new scope the way auto-fetching some other workspace document
-      // would be. If the retry itself fails for any reason, the first
-      // round's already-valid answer is kept rather than erroring the turn.
+      // Bounded, one-shot retry — only for a document the host already knows
+      // is relevant without a new scope decision: the one the caller said the
+      // model should treat as "currently open" (ODE-489 follow-up), or the
+      // workspace's own workflow.md whose lazy definitions the model
+      // explicitly asked for (ODE-504). Never for an arbitrary id the model
+      // merely guessed at from catalog metadata. If the retry itself fails
+      // for any reason, the first round's already-valid answer is kept
+      // rather than erroring the turn.
+      const workflowDocumentId = contextData.workflowDescriptor?.documentId ?? null
       const alreadyHasFocus = prepared.selectedRecords.some((record) => record.id === focusedDocumentId)
-      if (focusedDocumentId && !alreadyHasFocus && aiResult.requestedDocumentIds.includes(focusedDocumentId)) {
-        const retry = await runAskRound([...input.selection, { kind: "file", documentId: focusedDocumentId }])
+      const needsFocusRetry = Boolean(
+        focusedDocumentId && !alreadyHasFocus && aiResult.requestedDocumentIds.includes(focusedDocumentId),
+      )
+      const alreadyHasWorkflow = prepared.selectedRecords.some((record) => record.id === workflowDocumentId)
+      const needsWorkflowRetry = Boolean(
+        workflowDocumentId
+          && !alreadyHasWorkflow
+          && aiResult.requestedDocumentIds.includes(workflowDocumentId),
+      )
+      if (needsFocusRetry || needsWorkflowRetry) {
+        const retrySelection = [...input.selection]
+        if (needsFocusRetry && focusedDocumentId) retrySelection.push({ kind: "file", documentId: focusedDocumentId })
+        if (needsWorkflowRetry && workflowDocumentId) retrySelection.push({ kind: "file", documentId: workflowDocumentId })
+        const uniqueRetrySelection = [...new Map(retrySelection.map((entry) => [entry.kind === "file" ? `file:${entry.documentId}` : `folder:${entry.path ?? ""}`, entry])).values()]
+          .slice(0, MAX_WORKSPACE_ASK_TARGETS)
+        const retry = await runAskRound(uniqueRetrySelection)
         if (!retry.error && retry.data) {
           ;({ prepared, aiResult } = retry.data)
         }
