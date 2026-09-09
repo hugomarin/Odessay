@@ -181,6 +181,8 @@ export type WorkspaceAmbientWorkflowDescriptor = {
   version: string
   instructionsTruncated: boolean
   definitionsChars: number
+  /** Bounded names of the workflows/capabilities behind the descriptor — lets the model decide whether a bounded second round is worth it. */
+  scopeSummary: string[]
 }
 
 export type WorkspaceAmbientWorkflow = {

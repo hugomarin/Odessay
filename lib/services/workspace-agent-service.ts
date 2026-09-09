@@ -59,6 +59,7 @@ import { loadDesktopCollections } from "@/lib/services/desktop/desktop-collectio
 import { getWorkspaceAgentToolsService } from "@/lib/services/workspace-agent-tools-factory"
 import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
 import {
+  DEFAULT_EXTRACTION_POLICY,
   buildContextAcquisitionPlan,
   createContextArtifactStore,
   createContextLedger,
@@ -205,6 +206,7 @@ type WorkspaceAgentContext = {
     version: string
     instructionsTruncated: boolean
     definitionsChars: number
+    scopeSummary: string[]
   } | null
 }
 
@@ -861,6 +863,8 @@ function normalizeClassificationProposal(
 
 export type WorkspaceAgentService = {
   getContext(): Promise<ServiceResponse<WorkspaceAgentContext>>
+  /** Read-only observability over what this session actually incorporated (ODE-501 ledger). */
+  contextLedger: ContextLedger
   proposeWorkflow(readApproval?: WorkspaceAgentApproval): Promise<ServiceResponse<WorkflowDraftProposal>>
   applyWorkflow(
     proposal: WorkflowDraftProposal,
@@ -947,34 +951,26 @@ export async function createWorkspaceAgentService(
 
   /**
    * Shared read of the full workflow.md body, served through the session
-   * artifact cache (ODE-501) so repeated invocations in the same session
-   * don't re-read the file. Every acquisition — fresh or cached — is
-   * recorded in the context ledger.
+   * artifact cache (ODE-501) under the canonical `full-markdown-v1` policy —
+   * the same key the evidence bundle uses for materialization, so the second
+   * bounded round never re-reads a file whose full body is already cached.
+   * This module records nothing in the ledger: what a read means depends on
+   * how the caller incorporates it (ambient instructions vs full evidence).
    */
   const readWorkflowMarkdown = async (
     context: WorkspaceAgentContext,
     readApproval?: WorkspaceAgentApproval,
-  ): Promise<ServiceResponse<{ markdown: string; version: string }>> => {
+  ): Promise<ServiceResponse<{ markdown: string; version: string; cacheHit: boolean }>> => {
     const workflow = context.existingWorkflow
     if (!workflow) return error("NOT_FOUND", "No workflow.md exists in this workspace.")
     if (!readApproval) {
       return error("FORBIDDEN", "Reading an existing workflow.md requires a workflow-specific read approval.")
     }
     const documentVersion = artifactVersionKey(workflow)
-    const cacheKey = { documentId: workflow.id, documentVersion, representation: "full" as const, extractionPolicy: "workflow-ambient" }
+    const cacheKey = { documentId: workflow.id, documentVersion, representation: "full" as const, extractionPolicy: DEFAULT_EXTRACTION_POLICY }
     const cached = contextServices.store.get(cacheKey)
-    if (cached?.raw) {
-      contextServices.ledger.record({
-        ts: Date.now(),
-        documentId: workflow.id,
-        documentVersion,
-        representation: "full",
-        tokens: cached.tokenCount,
-        cacheHit: true,
-        reason: "workflow-ambient: served from the session artifact cache",
-      })
-      const raw = cached.raw as { markdown?: string }
-      if (typeof raw.markdown === "string") return ok({ markdown: raw.markdown, version: documentVersion })
+    if (cached) {
+      return ok({ markdown: cached.content, version: documentVersion, cacheHit: true })
     }
     const read = await tools.read({ documentId: workflow.id, approval: readApproval })
     if (read.error || !read.data) {
@@ -985,7 +981,7 @@ export async function createWorkspaceAgentService(
       documentId: workflow.id,
       documentVersion,
       representation: "full",
-      extractionPolicy: "workflow-ambient",
+      extractionPolicy: DEFAULT_EXTRACTION_POLICY,
       content: markdown,
       citations: [],
       tokenCount: estimateTokenCount(markdown),
@@ -993,16 +989,7 @@ export async function createWorkspaceAgentService(
       createdAt: Date.now(),
       raw: { markdown },
     })
-    contextServices.ledger.record({
-      ts: Date.now(),
-      documentId: workflow.id,
-      documentVersion,
-      representation: "full",
-      tokens: estimateTokenCount(markdown),
-      cacheHit: false,
-      reason: "workflow-ambient: full read for the hybrid instructions split (ODE-504)",
-    })
-    return ok({ markdown, version: documentVersion })
+    return ok({ markdown, version: documentVersion, cacheHit: false })
   }
 
   /**
@@ -1016,13 +1003,24 @@ export async function createWorkspaceAgentService(
     if (context.error || !context.data || !context.data.existingWorkflow) return context
     const read = await readWorkflowMarkdown(context.data, readApproval)
     if (read.error || !read.data) return read as ServiceResponse<WorkspaceAgentContext>
+    contextServices.ledger.record({
+      ts: Date.now(),
+      documentId: context.data.existingWorkflow.id,
+      documentVersion: read.data.version,
+      representation: "full",
+      tokens: estimateTokenCount(read.data.markdown),
+      cacheHit: read.data.cacheHit,
+      reason: "workflow.md materialized in full for drafting (proposeWorkflow, ODE-504)",
+    })
     return ok<WorkspaceAgentContext>({ ...context.data, workflowMarkdown: read.data.markdown })
   }
 
   /**
    * Hybrid instructions load (ODE-504): the instructions section rides every
    * invocation as ambient context; the executable definitions stay behind
-   * the descriptor and are only fetched on explicit request.
+   * the descriptor and are only fetched on explicit request. The ledger
+   * records what was incorporated — instruction tokens, never the full
+   * document's — whether the body came fresh or from the artifact cache.
    */
   const withWorkflowInstructions = async (
     context: ServiceResponse<WorkspaceAgentContext>,
@@ -1032,15 +1030,28 @@ export async function createWorkspaceAgentService(
     const read = await readWorkflowMarkdown(context.data, readApproval)
     if (read.error || !read.data) return read as ServiceResponse<WorkspaceAgentContext>
     const split = splitWorkflowMarkdown(read.data.markdown)
+    const instructions = split.instructions.length > 0 ? split.instructions : null
+    if (instructions) {
+      contextServices.ledger.record({
+        ts: Date.now(),
+        documentId: context.data.existingWorkflow.id,
+        documentVersion: read.data.version,
+        representation: "instructions",
+        tokens: estimateTokenCount(instructions),
+        cacheHit: read.data.cacheHit,
+        reason: "ambient workflow instructions (hybrid split, ODE-504)",
+      })
+    }
     return ok<WorkspaceAgentContext>({
       ...context.data,
       workflowMarkdown: null,
-      workflowInstructions: split.instructions.length > 0 ? split.instructions : null,
+      workflowInstructions: instructions,
       workflowDescriptor: {
         documentId: context.data.existingWorkflow.id,
         version: read.data.version,
         instructionsTruncated: split.instructionsTruncated,
         definitionsChars: split.definitions?.length ?? 0,
+        scopeSummary: split.scopeSummary,
       },
     })
   }
@@ -1056,6 +1067,7 @@ export async function createWorkspaceAgentService(
   return {
     tools,
     getContext,
+    contextLedger: contextLedger,
     async proposeWorkflow(readApproval) {
       const context = await withWorkflowMarkdown(await getContext(), readApproval)
       if (context.error || !context.data) return context as ServiceResponse<WorkflowDraftProposal>

@@ -8,7 +8,11 @@
  * ContextLedger, bounded by a ContextBudget.
  */
 
-export type ContextRepresentation = "metadata" | "summary" | "facts" | "chunks" | "full"
+/**
+ * "instructions" (ODE-504) is the hybrid workflow.md representation: the
+ * owner-authored operating-manual section that rides every agent invocation.
+ */
+export type ContextRepresentation = "metadata" | "summary" | "facts" | "chunks" | "full" | "instructions"
 
 export type ContextIntent = "conversation" | "understand" | "generate" | "tool" | "workflow"
 

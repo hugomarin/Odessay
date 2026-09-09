@@ -3,6 +3,7 @@ import type {
   WorkspaceClassificationRequest,
   WorkspaceClassificationResult,
 } from "@/lib/services/contracts/ai-service"
+import { MAX_WORKFLOW_SCOPE_HEADINGS } from "@/lib/agent/workflow-instructions"
 
 export const MAX_WORKSPACE_CLASSIFICATION_TARGETS = 6
 export const MAX_WORKSPACE_CLASSIFICATION_CATALOG_DOCUMENTS = 80
@@ -69,6 +70,7 @@ export const workspaceClassificationRequestSchema = z.object({
       version: z.string().trim().min(1).max(200),
       instructionsTruncated: z.boolean(),
       definitionsChars: z.number().int().nonnegative(),
+      scopeSummary: z.array(z.string().trim().min(1).max(120)).max(MAX_WORKFLOW_SCOPE_HEADINGS),
     }).nullable(),
   }).nullable(),
   catalogTruncated: z.boolean(),
@@ -218,6 +220,7 @@ export const buildWorkspaceClassificationSystemPrompt = () => [
   "Evidence quotes must be exact contiguous text copied from the provided markdown. Do not invent quotes. Every proposal must include at least one quote from the target document; metadata-only documents cannot be cited with a quote.",
   "Do not return confidence percentages or numeric confidence scores.",
   `If the evidence is insufficient, request at most ${MAX_WORKSPACE_CLASSIFICATION_ADDITIONAL_REQUESTS} document ids from the supplied catalog metadata in requestedDocumentIds; do not invent ids and do not conclude from missing content.`,
+  "workflow.descriptor, when present, describes the workspace's workflow.md: documentId, content version, and the executable definitions not loaded (definitionsChars plus scopeSummary naming them). The instructions section you received is the standing operating manual; the definitions behind the descriptor are lazy evidence.",
   `The JSON shape is:\n${outputShapeForPrompt}`,
 ].join("\n")
 

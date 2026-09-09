@@ -42,7 +42,7 @@ flowchart TD
 type ContextArtifact = {
   documentId: string
   documentVersion: string
-  representation: "metadata" | "summary" | "facts" | "chunks" | "full"
+  representation: "metadata" | "summary" | "facts" | "chunks" | "full" | "instructions"
   content: unknown
   citations: Citation[]
   tokenCount: number
@@ -57,7 +57,8 @@ Ejemplos:
 - `summary`: resumen compacto de una versión;
 - `facts`: afirmaciones con citas;
 - `chunks`: secciones relevantes;
-- `full`: contenido completo limitado por presupuesto.
+- `full`: contenido completo limitado por presupuesto;
+- `instructions` (ODE-504): la sección de instrucciones de operación de `workflow.md` que acompaña toda invocación del agente — el ledger contabiliza los tokens incorporados por esa sección, nunca los del documento completo.
 
 Un resumen de la versión `A@v17` no es automáticamente válido para `A@v18`.
 

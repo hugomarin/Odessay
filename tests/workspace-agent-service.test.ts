@@ -1668,6 +1668,7 @@ describe("WorkspaceAgentService hybrid workflow.md instructions (ODE-504)", () =
           documentId: "workflow",
           instructionsTruncated: false,
           definitionsChars: "\n\n## Workflow: publication\nSteps: review, export, archive.".length,
+          scopeSummary: ["Workflow: publication"],
         }),
       },
     }))
@@ -1750,8 +1751,34 @@ describe("WorkspaceAgentService hybrid workflow.md instructions (ODE-504)", () =
     expect(result.error).toBeNull()
     expect(result.data?.answer).toBe("The publication workflow has three steps.")
     expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+    // The second round must be served from the canonical artifact cache, not
+    // re-read the file whose full body round 1 already loaded (ODE-504).
+    expect(tools.read).toHaveBeenCalledTimes(1)
     const secondRound = aiMocks.askWorkspace.mock.calls[1][0]
     const workflowEntry = secondRound.documents.find((entry: { id: string }) => entry.id === "workflow")
     expect(workflowEntry?.markdown).toContain("Steps: review, export, archive.")
+  })
+
+  it("records only the incorporated instruction tokens in the ledger, never the full document's", async () => {
+    const workflow = workflowFixture(`# Workspace workflow\n\n## Intent\nKeep everything discoverable.\n\n${DEFINITIONS_MARKER}\n\n## Workflow: publication\nSteps: review, export, archive.`)
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({
+      question: "Hola",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    const ledger = service.contextLedger.entries()
+    const workflowEntries = ledger.filter((entry: { documentId: string }) => entry.documentId === "workflow")
+    expect(workflowEntries).toHaveLength(1)
+    expect(workflowEntries[0].representation).toBe("instructions")
+    expect(workflowEntries[0].tokens).toBeGreaterThan(0)
   })
 })
