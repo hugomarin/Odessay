@@ -62,6 +62,21 @@ const commitHeadRef =
 console.log(
   `[ops:delivery:gate] Comparing ${commitBaseRef}..${commitHeadRef} for commit traceability (immutable range ${baseRef}..${headRef}).`,
 );
+// Runner-side diagnostics: if CI's graph evaluation disagrees with every
+// local clone, these numbers make it visible instead of a mystery list.
+const mergeBaseCheck = execFileSync(
+  "git",
+  ["merge-base", commitBaseRef, commitHeadRef],
+  { encoding: "utf8" },
+).trim();
+const rangeCount = execFileSync(
+  "git",
+  ["rev-list", "--count", `${commitBaseRef}..${commitHeadRef}`],
+  { encoding: "utf8" },
+).trim();
+console.log(
+  `[ops:delivery:gate] Diagnostics: merge-base(${commitBaseRef.slice(0, 8)}, ${commitHeadRef.slice(0, 8)})=${mergeBaseCheck.slice(0, 8)} | rev-list --count=${rangeCount}`,
+);
 async function githubPullRequestCommitSubjects() {
   const repository = process.env.GITHUB_REPOSITORY?.trim();
   if (
