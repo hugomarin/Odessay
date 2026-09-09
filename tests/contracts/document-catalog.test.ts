@@ -75,7 +75,7 @@ describe("DocumentCatalog contract", () => {
     mocks.catalogBulkWrite.mockResolvedValue(undefined)
     mocks.catalogDetach.mockResolvedValue(undefined)
     mocks.catalogHydrateExcerpts.mockResolvedValue([])
-    mocks.catalogApplyReconcile.mockResolvedValue(true)
+    mocks.catalogApplyReconcile.mockResolvedValue({ applied: true, changed: [] })
     mocks.catalogApplyWorkspaceRemoval.mockResolvedValue([])
     mocks.writingGet.mockResolvedValue(localWriting)
     mocks.writingGetByPath.mockResolvedValue(localWriting)
@@ -160,7 +160,7 @@ describe("DocumentCatalog contract", () => {
     const catalog = new SqliteDocumentCatalog("/tmp/retired-root.db")
     const changes: unknown[] = []
     const unsubscribe = catalog.subscribe((change) => changes.push(change))
-    mocks.catalogApplyReconcile.mockResolvedValueOnce(false)
+    mocks.catalogApplyReconcile.mockResolvedValueOnce({ applied: false, changed: [] })
 
     const result = await catalog.applyReconcileTransaction({
       transactionId: "late-watcher",
@@ -174,6 +174,72 @@ describe("DocumentCatalog contract", () => {
         canonicalPath: "/tmp/retired/Doc.md",
         inode: null,
         contentHash: "blake3:late",
+        size: 10,
+        modifiedAt: 2,
+        strategy: "path",
+      }],
+      detached: [],
+    })
+
+    expect(result.documentIds).toEqual([])
+    expect(changes).toEqual([])
+    unsubscribe()
+  })
+
+  it("only includes documents Rust reports as actually changed, not every reconciled upsert", async () => {
+    // The reconciler resubmits every file in a root on every pass. If a run
+    // touches 3 files but only one of them actually moved/changed, the
+    // emitted event — and therefore every view reacting to it with its own
+    // catalog_get_by_id — must reflect only that one, not all 3.
+    const catalog = new SqliteDocumentCatalog("/tmp/partial-reconcile.db")
+    const changes: Array<{ documentIds: string[] }> = []
+    const unsubscribe = catalog.subscribe((change) => changes.push(change))
+    mocks.catalogApplyReconcile.mockResolvedValueOnce({ applied: true, changed: ["doc-2"] })
+
+    const upsert = (documentId: string) => ({
+      documentId,
+      bindingRootId: "root-1",
+      relativePath: `${documentId}.md`,
+      canonicalPath: `/tmp/root/${documentId}.md`,
+      inode: null,
+      contentHash: "blake3:x",
+      size: 10,
+      modifiedAt: 2,
+      strategy: "path" as const,
+    })
+
+    await catalog.applyReconcileTransaction({
+      transactionId: "partial-reconcile",
+      bindingRootId: "root-1",
+      rootPath: "/tmp/root",
+      visibleAsWorkspace: true,
+      upserts: [upsert("doc-1"), upsert("doc-2"), upsert("doc-3")],
+      detached: [],
+    })
+
+    expect(changes).toHaveLength(1)
+    expect(changes[0].documentIds).toEqual(["doc-2"])
+    unsubscribe()
+  })
+
+  it("emits no CatalogChange when nothing in a reconcile pass actually changed", async () => {
+    const catalog = new SqliteDocumentCatalog("/tmp/noop-reconcile.db")
+    const changes: unknown[] = []
+    const unsubscribe = catalog.subscribe((change) => changes.push(change))
+    mocks.catalogApplyReconcile.mockResolvedValueOnce({ applied: true, changed: [] })
+
+    const result = await catalog.applyReconcileTransaction({
+      transactionId: "noop-reconcile",
+      bindingRootId: "root-1",
+      rootPath: "/tmp/root",
+      visibleAsWorkspace: true,
+      upserts: [{
+        documentId: "doc-1",
+        bindingRootId: "root-1",
+        relativePath: "doc-1.md",
+        canonicalPath: "/tmp/root/doc-1.md",
+        inode: null,
+        contentHash: "blake3:x",
         size: 10,
         modifiedAt: 2,
         strategy: "path",
@@ -214,7 +280,7 @@ describe("DocumentCatalog contract", () => {
     expect(records.map((record) => record.id)).toEqual(["doc-1"])
   })
 
-  it("hydrates stale excerpts once per database and emits one bulk signal", async () => {
+  it("hydrates stale excerpts once per database and emits one excerpt signal", async () => {
     mocks.catalogHydrateExcerpts.mockResolvedValueOnce(["doc-1", "doc-2"])
     const catalog = new SqliteDocumentCatalog("/tmp/excerpt-batch.sqlite3")
     const changes: Array<{ documentIds: string[]; reason: string }> = []
@@ -226,7 +292,11 @@ describe("DocumentCatalog contract", () => {
     expect(mocks.catalogHydrateExcerpts).toHaveBeenCalledTimes(1)
     expect(changes[0]).toMatchObject({
       documentIds: ["doc-1", "doc-2"],
-      reason: "bulk",
+      // Its own reason (not "bulk"/"upsert") so a subscriber that only reacts
+      // to real content/metadata changes can ignore this notification instead
+      // of calling list() again — which would reschedule hydration and re-emit,
+      // closing an infinite list<->hydrate loop with every mounted catalog view.
+      reason: "excerpt",
     })
     unsubscribe()
   })

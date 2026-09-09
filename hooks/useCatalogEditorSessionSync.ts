@@ -10,6 +10,7 @@ import {
 } from "@/lib/stores/editor-session-store"
 
 const CATALOG_SESSION_SYNC_DELAY_MS = 75
+const CATALOG_BATCH_READ_THRESHOLD = 20
 
 /**
  * Keeps editor-session presentation metadata aligned with DocumentCatalog.
@@ -26,7 +27,11 @@ export function useCatalogEditorSessionSync() {
       await initializeEditorSessionStore()
       const catalog = await getDocumentCatalog()
       const records = documentIds
-        ? await Promise.all(documentIds.map((documentId) => catalog.getById(documentId)))
+        ? documentIds.length > CATALOG_BATCH_READ_THRESHOLD
+          ? (await catalog.list()).filter((record) =>
+              documentIds.includes(record.id),
+            )
+          : await Promise.all(documentIds.map((documentId) => catalog.getById(documentId)))
         : await catalog.list()
 
       if (cancelled) {

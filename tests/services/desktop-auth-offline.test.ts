@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { desktopAuthService } from "@/lib/services/desktop-auth-service"
+import {
+  desktopAuthService,
+  getStoredDesktopSessionUser,
+} from "@/lib/services/desktop-auth-service"
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +74,16 @@ describe("desktopAuthService.getSession offline semantics", () => {
     })
     // The fallback reads local storage only — no second network request.
     expect(supabaseAuthMock.getUser).toHaveBeenCalledOnce()
+    expect(keychainStorageMock.getItem).toHaveBeenCalledWith("sb-test-auth-token")
+  })
+
+  it("reads the local startup identity without making a network auth request", async () => {
+    keychainStorageMock.getItem.mockResolvedValue(storedSessionJson)
+
+    const user = await getStoredDesktopSessionUser()
+
+    expect(user?.id).toBe("user-offline")
+    expect(supabaseAuthMock.getUser).not.toHaveBeenCalled()
     expect(keychainStorageMock.getItem).toHaveBeenCalledWith("sb-test-auth-token")
   })
 

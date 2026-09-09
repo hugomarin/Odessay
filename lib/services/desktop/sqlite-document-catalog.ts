@@ -56,6 +56,7 @@ function toRecord(row: DesktopCatalogRow): DocumentCatalogRecord {
 
 const listenersByDatabase = new Map<string, Set<(change: CatalogChange) => void>>()
 const excerptHydrationsByDatabase = new Map<string, Promise<void>>()
+const inFlightListsByKey = new Map<string, Promise<DocumentCatalogRecord[]>>()
 
 function listenersFor(dbPath: string) {
   let listeners = listenersByDatabase.get(dbPath)
@@ -84,11 +85,27 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
   async getById(id: string) { const row = await tauriCatalogGetById(this.dbPath, id); return row ? toRecord(row) : null }
   async resolvePath(path: string): Promise<PathResolution> { const row = await tauriCatalogResolvePath(this.dbPath, path); return row ? { kind: "resolved", record: toRecord(row) } : { kind: "unbound", path } }
   async list(query?: DocumentCatalogQuery) {
-    const records = (await tauriCatalogList(this.dbPath, query))
-      .map(toRecord)
-      .filter((record) => record.localPresent || record.cloudPresent || (query?.includeDeleted && record.deletedAt))
-    this.scheduleExcerptHydration()
-    return records
+    // A single catalog change (one save) fans out to every mounted view that
+    // subscribes to it — Desk, Collections, Workspace, the tab bar. Each used
+    // to call list() independently within the same debounce window, turning
+    // one save into N full `catalog_list` + excerpt-hydration round trips. Same
+    // dbPath + same query within the same in-flight window now share one
+    // underlying read: the DB state they'd all observe is identical anyway,
+    // since catalog events only fire after the write they describe commits.
+    const key = `${this.dbPath}::${JSON.stringify(query ?? {})}`
+    const existing = inFlightListsByKey.get(key)
+    if (existing) return existing
+
+    const pending = (async () => {
+      const records = (await tauriCatalogList(this.dbPath, query))
+        .map(toRecord)
+        .filter((record) => record.localPresent || record.cloudPresent || (query?.includeDeleted && record.deletedAt))
+      this.scheduleExcerptHydration()
+      return records
+    })().finally(() => inFlightListsByKey.delete(key))
+
+    inFlightListsByKey.set(key, pending)
+    return pending
   }
   async hydrateContentProjections() {
     await this.startContentProjectionHydration()
@@ -101,7 +118,12 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
     if (existing) return existing
     const hydration = tauriCatalogHydrateExcerpts(this.dbPath)
       .then((documentIds) => {
-        if (documentIds.length > 0) this.emit(documentIds, "bulk")
+        // "excerpt" is its own reason, separate from bulk/upsert: it lets a
+        // subscriber that only reloads on real content/metadata changes ignore
+        // this notification instead of calling list() again — which would
+        // reschedule hydration and re-emit, closing an infinite list<->hydrate
+        // loop between this store and every mounted catalog view.
+        if (documentIds.length > 0) this.emit(documentIds, "excerpt")
       })
       .catch(() => {
         // A missing/unreadable file must not hide the catalog row or erase a
@@ -146,11 +168,14 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
     this.emit(snapshots.map((snapshot) => snapshot.id), "cloud-snapshot")
   }
 
-  async commitDualWrite(input: DesktopCatalogDualWriteInput): Promise<void> {
+  async commitDualWrite(
+    input: DesktopCatalogDualWriteInput,
+    reason: "upsert" | "content" = "upsert",
+  ): Promise<void> {
     const { document: catalogDocument } = input
     const documentId = catalogDocument.id
     await tauriCatalogDualWrite(this.dbPath, input)
-    this.emit([documentId], "upsert")
+    this.emit([documentId], reason)
   }
 
   async commitBulkDualWrite(inputs: DesktopCatalogDualWriteInput[]): Promise<void> {
@@ -240,7 +265,7 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
    * never written here — only local presence and the binding move.
    */
   async applyReconcileTransaction(commit: ReconcileCommit): Promise<CatalogChange> {
-    const applied = await tauriCatalogApplyReconcile(this.dbPath, {
+    const result = await tauriCatalogApplyReconcile(this.dbPath, {
       upserts: commit.upserts.map((entry) => ({
         bindingRootId: commit.bindingRootId,
         rootPath: commit.rootPath,
@@ -259,7 +284,13 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
       })),
       detached: commit.detached,
     })
-    if (!applied) {
+    // The reconciler resubmits every file in a root on every pass, not only
+    // the ones that moved or changed. `changed` — computed in Rust against
+    // what was already stored — excludes the ones this pass only
+    // re-confirmed, so a routine rescan of a large root no longer tells every
+    // mounted view (tab status, Desk, Workspace) that every one of its files
+    // just changed, each issuing its own `catalog_get_by_id` in response.
+    if (!result.applied || result.changed.length === 0) {
       return {
         transactionId: commit.transactionId,
         documentIds: [],
@@ -267,13 +298,9 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
         occurredAt: Date.now(),
       }
     }
-    const documentIds = [
-      ...commit.upserts.map((entry) => entry.documentId!),
-      ...commit.detached,
-    ]
     const change = {
       transactionId: commit.transactionId,
-      documentIds,
+      documentIds: result.changed,
       reason: "bulk",
       occurredAt: Date.now(),
     } satisfies CatalogChange

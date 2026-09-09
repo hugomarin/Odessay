@@ -206,7 +206,13 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       trailing: true,
     })
     const unsubscribeChanges = subscribeToCollectionChanges(debounced)
-    const unsubscribeCatalog = subscribeToCatalog(debounced)
+    const unsubscribeCatalog = subscribeToCatalog((change) => {
+      // "excerpt" is the hydration pipeline finishing, and "content" is a
+      // body-only autosave — neither changes title/status/collection
+      // membership, so reacting here would be a wasted full reload.
+      if (change.reason === "excerpt" || change.reason === "content") return
+      debounced()
+    })
     const unsubscribeScope = subscribeToLocalDBScopeChanges(() => void bootstrap())
 
     return () => {

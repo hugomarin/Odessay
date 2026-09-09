@@ -48,6 +48,9 @@ async function catalog() {
 // mutations while the app runs; when the queue is idle the tick costs one
 // SQLite existence probe per queue and performs no cloud queries or events.
 const RETRY_TICK_MS = 60_000
+const MAX_SYNC_ATTEMPTS = 10
+const FOREGROUND_FLUSH_LIMIT = 200
+const RETRY_FLUSH_LIMIT = 16
 
 // ODE-461: `synced` mutation rows are terminal (nothing re-reads them once
 // `documents.sync_status` resolved), yet they were never pruned — 12,579
@@ -66,6 +69,20 @@ let flushRunning = false
 let pendingWakeup = false
 let lifecycleGeneration = 0
 let nextFlushTrigger: SyncFlushTrigger = "explicit"
+
+function retryFailure(error: unknown, attempts: number) {
+  const message = error instanceof Error ? error.message : "Sync failed"
+  if (attempts >= MAX_SYNC_ATTEMPTS) {
+    return {
+      retryAt: null,
+      message: `Retry limit reached after ${attempts} attempts: ${message}`,
+    }
+  }
+  return {
+    retryAt: Date.now() + Math.min(300_000, 1_000 * 2 ** Math.min(attempts, 8)),
+    message,
+  }
+}
 
 async function sessionUserId() {
   const { data, error } = await createDesktopClient().auth.getSession()
@@ -417,8 +434,8 @@ async function retryPendingTick() {
     const store = await catalog()
     const now = Date.now()
     const hasPending =
-      (await tauriCatalogListPendingMutations(store.dbPath, now, 1)).length > 0 ||
-      (await tauriCatalogListPendingMetadataMutations(store.dbPath, now, 1)).length > 0
+      (await tauriCatalogListPendingMutations(store.dbPath, now, 1, true)).length > 0 ||
+      (await tauriCatalogListPendingMetadataMutations(store.dbPath, now, 1, true)).length > 0
     if (!hasPending) return
     nextFlushTrigger = "retry_tick"
     await desktopCatalogSyncService.flushPending()
@@ -515,6 +532,11 @@ export const desktopCatalogSyncService: SyncService = {
     const startedAt = performance.now()
     const trigger = nextFlushTrigger
     nextFlushTrigger = "explicit"
+    // A save-triggered flush owns fresh work only. Historical failures are
+    // recovered in small batches by the explicit/startup path or retry ticker,
+    // so typing can never wake an unrelated backlog on the renderer thread.
+    const includeFailed = trigger === "explicit" || trigger === "retry_tick"
+    const flushLimit = includeFailed ? RETRY_FLUSH_LIMIT : FOREGROUND_FLUSH_LIMIT
     const overlapDetected = flushRunning
     if (overlapDetected) {
       pendingWakeup = true
@@ -530,8 +552,13 @@ export const desktopCatalogSyncService: SyncService = {
       const userId = await sessionUserId()
       if (!userId) return fail("UNAUTHORIZED", "Sign in to sync pending documents")
       const store = await catalog()
-      const pending = await tauriCatalogListPendingMutations(store.dbPath, Date.now(), 200)
-      const metadataPending = await tauriCatalogListPendingMetadataMutations(store.dbPath, Date.now(), 200)
+      const pending = await tauriCatalogListPendingMutations(store.dbPath, Date.now(), flushLimit, includeFailed)
+      const metadataPending = await tauriCatalogListPendingMetadataMutations(
+        store.dbPath,
+        Date.now(),
+        flushLimit,
+        includeFailed,
+      )
       examined = pending.length + metadataPending.length
       cloudBytes = [...pending, ...metadataPending].reduce((sum, mutation) => sum + serializedBytes(JSON.parse(mutation.payloadJson)), 0)
       const attemptedAt = Date.now()
@@ -554,10 +581,9 @@ export const desktopCatalogSyncService: SyncService = {
           emitSyncMetric({ ...metricBase("desktop", "sqlite"), type: "sync.cloud_write", operation: mutation.operation === "delete" ? "delete" : "update", bytes, affectedRows: null, durationMs: performance.now() - writeStartedAt, outcome: "failure" })
           failed.push(mutation.id)
           const attempts = mutation.attemptCount + 1
-          const retryAt = Date.now() + Math.min(300_000, 1_000 * 2 ** Math.min(attempts, 8))
+          const failure = retryFailure(error, attempts)
           await tauriCatalogUpdateMutationStatus(
-            store.dbPath, mutation.id, "failed", attempts, retryAt,
-            error instanceof Error ? error.message : "Sync failed",
+            store.dbPath, mutation.id, "failed", attempts, failure.retryAt, failure.message,
           )
           emitSyncStatusChange({ writingId: mutation.documentId, status: "retrying" })
         }
@@ -573,10 +599,9 @@ export const desktopCatalogSyncService: SyncService = {
           emitSyncMetric({ ...metricBase("desktop", "sqlite"), type: "sync.cloud_write", operation: mutation.operation === "delete" ? "delete" : "upsert", bytes, affectedRows: null, durationMs: performance.now() - writeStartedAt, outcome: "failure" })
           failed.push(mutation.id)
           const attempts = mutation.attemptCount + 1
-          const retryAt = Date.now() + Math.min(300_000, 1_000 * 2 ** Math.min(attempts, 8))
+          const failure = retryFailure(error, attempts)
           await tauriCatalogUpdateMetadataMutationStatus(
-            store.dbPath, mutation.id, "failed", attempts, retryAt,
-            error instanceof Error ? error.message : "Sync failed",
+            store.dbPath, mutation.id, "failed", attempts, failure.retryAt, failure.message,
           )
         }
       }
@@ -629,8 +654,8 @@ export const desktopCatalogSyncService: SyncService = {
   async getRuntimeState(): Promise<ServiceResponse<SyncRuntimeState>> {
     try {
       const store = await catalog()
-      const pending = await tauriCatalogListPendingMutations(store.dbPath, Date.now(), 5000)
-      const metadataPending = await tauriCatalogListPendingMetadataMutations(store.dbPath, Date.now(), 5000)
+      const pending = await tauriCatalogListPendingMutations(store.dbPath, Date.now(), 5000, true)
+      const metadataPending = await tauriCatalogListPendingMetadataMutations(store.dbPath, Date.now(), 5000, true)
       const allPending = pending.length + metadataPending.length
       return ok({
         status: allPending > 0 ? (started ? "pending" : "offline") : "synced",

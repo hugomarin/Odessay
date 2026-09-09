@@ -162,6 +162,8 @@ vi.mock("@/lib/sync/queue", () => ({
 vi.mock("@/lib/sync/remote-bootstrap", () => ({ invalidateWebWritingsHydrationFreshness: vi.fn() }))
 vi.mock("@/lib/collections/remote-bootstrap", () => ({ invalidateWebCollectionsHydrationFreshness: vi.fn() }))
 vi.mock("@/lib/services/desktop-auth-service", () => ({
+  getStoredDesktopSessionUser: async () =>
+    authSession.userId ? { id: authSession.userId } : null,
   desktopAuthService: {
     getSession: async () => ({
       data: { user: authSession.userId ? { id: authSession.userId } : null },

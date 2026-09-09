@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+const CATALOG_SCHEMA_VERSION: i64 = 9;
+const MAX_SYNC_ATTEMPTS: i64 = 10;
+
 fn open_db(db_path: &str) -> Result<Connection, String> {
     let path = Path::new(db_path);
     if let Some(parent) = path.parent() {
@@ -13,16 +16,37 @@ fn open_db(db_path: &str) -> Result<Connection, String> {
     let conn = Connection::open(db_path).map_err(|e| format!("open_db: {e}"))?;
     // ODE-461: without WAL + a busy_timeout, a foreground save racing the
     // background sync flush fails instantly with "database is locked" instead
-    // of waiting — sustained typing overlaps writes on the same connection
-    // path, and the silent-catch in editor-shell turned that failure into an
-    // indefinite "Saving..." with no diagnosable trace.
-    conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;")
+    // of waiting. Reading journal_mode is cheap; changing it is not, so only
+    // take the mode-changing lock for a database that has not reached WAL yet.
+    conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")
         .map_err(|e| format!("open_db pragmas: {e}"))?;
+    let journal_mode: String = conn
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .map_err(|e| format!("read journal_mode: {e}"))?;
+    if !journal_mode.eq_ignore_ascii_case("wal") {
+        conn.execute_batch("PRAGMA journal_mode = WAL;")
+            .map_err(|e| format!("enable WAL: {e}"))?;
+    }
     ensure_catalog_v2(&conn)?;
     Ok(conn)
 }
 
 fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
+    // Every Tauri catalog command opens its own short-lived connection. Running
+    // the idempotent DDL/migration transaction on every read turned getById/list
+    // into writers and serialized them behind autosave + sync. Once the current
+    // schema is installed, catalog reads must remain read-only.
+    let current_version = conn
+        .query_row(
+            "SELECT version FROM catalog_schema WHERE singleton=1",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .ok();
+    if current_version.is_some_and(|version| version >= CATALOG_SCHEMA_VERSION) {
+        return Ok(());
+    }
+
     let tx = conn
         .unchecked_transaction()
         .map_err(|e| format!("catalog migration begin: {e}"))?;
@@ -256,6 +280,31 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
          -- local-only rows before that guard existed.
          UPDATE documents SET deleted_at_cache=NULL
            WHERE deleted_at_cache='legacy' AND cloud_present=0;
+         -- Schema v9: metadata edits for local-only/foreign documents were
+         -- historically queued as cloud-only PATCHes. They can never match a
+         -- cloud row and some installs retried them thousands of times. Retire
+         -- that legacy work without fabricating cloud presence, then restore
+         -- the honest local-only document state when no other mutation remains.
+         UPDATE sync_mutations
+           SET status='synced', next_retry_at=NULL,
+               last_error='retired local-only metadata mutation'
+         WHERE status IN ('pending','failed')
+           AND CASE WHEN json_valid(payload_json)
+                    THEN json_extract(payload_json,'$.mutationKind') END='metadata'
+           AND EXISTS (
+             SELECT 1 FROM documents d
+             WHERE d.id=sync_mutations.document_id
+               AND d.cloud_present=0 AND d.cloud_account_id IS NULL
+           );
+         UPDATE documents
+           SET sync_status='local-only'
+         WHERE local_present=1 AND cloud_present=0 AND cloud_account_id IS NULL
+           AND sync_status IN ('pending','failed')
+           AND NOT EXISTS (
+             SELECT 1 FROM sync_mutations m
+             WHERE m.document_id=documents.id
+               AND m.status IN ('pending','failed')
+           );
          INSERT INTO catalog_schema(singleton, version) VALUES (1, 3)
            ON CONFLICT(singleton) DO UPDATE SET version = MAX(version, excluded.version);
          UPDATE catalog_schema SET version=9 WHERE singleton=1;"
@@ -854,6 +903,17 @@ fn apply_dual_write(
         .map_err(|e| format!("catalog dual-write delete binding: {e}"))?;
     }
     if let Some(m) = &input.mutation {
+        // A snapshot mutation contains the complete latest state for this
+        // document. Keep exactly one actionable row per UUID so sustained
+        // typing cannot turn the durable queue into historical replay work.
+        tx.execute(
+            "UPDATE sync_mutations
+             SET status='synced', next_retry_at=NULL,
+                 last_error='superseded by later snapshot mutation'
+             WHERE document_id=?1 AND id<>?2 AND status IN ('pending','failed')",
+            params![d.id, m.id],
+        )
+        .map_err(|e| format!("catalog supersede older mutations: {e}"))?;
         tx.execute("INSERT INTO sync_mutations(id,document_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
           VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)
           ON CONFLICT(id) DO UPDATE SET status=excluded.status,attempt_count=excluded.attempt_count,next_retry_at=excluded.next_retry_at,last_error=excluded.last_error",
@@ -1345,6 +1405,20 @@ pub struct CatalogReconcileInput {
     pub detached: Vec<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogReconcileResult {
+    pub applied: bool,
+    // Ids from `upserts`/`detached` whose stored binding actually differs from
+    // what was already there — a real rename/move/content change/appear/
+    // disappear, not just this pass re-confirming a file that hasn't moved.
+    // The reconciler walks (and re-commits) every file in a BindingRoot on
+    // every run, so without this every one of them looked "changed" to every
+    // subscriber, each issuing its own `catalog_get_by_id` to re-read data
+    // that was already correct.
+    pub changed: Vec<String>,
+}
+
 /// Apply one reconciliation burst as a single SQLite transaction. Every observed
 /// upsert and every confirmed-absent detach for the burst commit atomically, so
 /// the TS catalog can emit exactly one CatalogChange (Performance Contract:
@@ -1353,7 +1427,7 @@ pub struct CatalogReconcileInput {
 pub fn catalog_apply_reconcile(
     db_path: String,
     input: CatalogReconcileInput,
-) -> Result<bool, String> {
+) -> Result<CatalogReconcileResult, String> {
     let mut conn = open_db(&db_path)?;
     let tx = conn
         .transaction()
@@ -1378,11 +1452,33 @@ pub fn catalog_apply_reconcile(
         if retired {
             tx.commit()
                 .map_err(|e| format!("catalog reconcile fenced commit: {e}"))?;
-            return Ok(false);
+            return Ok(CatalogReconcileResult { applied: false, changed: Vec::new() });
         }
     }
 
+    let mut changed = Vec::new();
     for b in &input.upserts {
+        // Compare against what's already stored before writing: the
+        // reconciler re-submits every file in the root on every run, and most
+        // of them didn't move or change — only report the ones that did.
+        let previous: Option<(String, String, Option<i64>, Option<String>)> = tx
+            .query_row(
+                "SELECT relative_path,canonical_path,inode,content_hash
+                 FROM document_bindings WHERE document_id=?1",
+                params![b.document_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()
+            .map_err(|e| format!("catalog reconcile read previous binding: {e}"))?;
+        let unchanged = previous.is_some_and(|(relative_path, canonical_path, inode, content_hash)| {
+            relative_path == b.relative_path
+                && canonical_path == b.canonical_path
+                && inode == b.inode
+                && content_hash == b.content_hash
+        });
+        if !unchanged {
+            changed.push(b.document_id.clone());
+        }
         // A physical directory has one binding-root identity even when different
         // writers name it differently. Resolve by the UNIQUE physical path before
         // inserting, mirroring `apply_dual_write`, and use that resolved id for the
@@ -1430,6 +1526,18 @@ pub fn catalog_apply_reconcile(
     }
 
     for id in &input.detached {
+        let was_present: bool = tx
+            .query_row(
+                "SELECT local_present FROM documents WHERE id=?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("catalog reconcile read previous presence: {e}"))?
+            .unwrap_or(false);
+        if was_present {
+            changed.push(id.clone());
+        }
         tx.execute(
             "DELETE FROM document_bindings WHERE document_id=?1",
             params![id],
@@ -1446,7 +1554,7 @@ pub fn catalog_apply_reconcile(
 
     tx.commit()
         .map_err(|e| format!("catalog reconcile commit: {e}"))?;
-    Ok(true)
+    Ok(CatalogReconcileResult { applied: true, changed })
 }
 
 #[tauri::command]
@@ -1549,8 +1657,19 @@ pub fn catalog_enqueue_mutation(
     document_id: String,
     mutation: CatalogMutationInput,
 ) -> Result<(), String> {
-    let conn = open_db(&db_path)?;
-    conn.execute(
+    let mut conn = open_db(&db_path)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("catalog enqueue mutation begin: {e}"))?;
+    tx.execute(
+        "UPDATE sync_mutations
+         SET status='synced', next_retry_at=NULL,
+             last_error='superseded by later snapshot mutation'
+         WHERE document_id=?1 AND id<>?2 AND status IN ('pending','failed')",
+        params![document_id, mutation.id],
+    )
+    .map_err(|e| format!("catalog enqueue supersede: {e}"))?;
+    tx.execute(
         "INSERT INTO sync_mutations(id,document_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)
          ON CONFLICT(id) DO NOTHING",
@@ -1559,12 +1678,13 @@ pub fn catalog_enqueue_mutation(
             mutation.created_at, mutation.last_error],
     )
     .map_err(|e| format!("catalog enqueue mutation: {e}"))?;
-    conn.execute(
+    tx.execute(
         "UPDATE documents SET sync_status='pending' WHERE id=?1",
         params![document_id],
     )
     .map_err(|e| format!("catalog enqueue document status: {e}"))?;
-    Ok(())
+    tx.commit()
+        .map_err(|e| format!("catalog enqueue mutation commit: {e}"))
 }
 
 #[tauri::command]
@@ -1572,30 +1692,35 @@ pub fn catalog_list_pending_mutations(
     db_path: String,
     now: i64,
     limit: usize,
+    include_failed: bool,
 ) -> Result<Vec<CatalogMutationRow>, String> {
     let conn = open_db(&db_path)?;
     let mut stmt = conn
         .prepare(
             "SELECT id,document_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error
              FROM sync_mutations
-             WHERE status IN ('pending','failed') AND (next_retry_at IS NULL OR next_retry_at<=?1)
+             WHERE (status='pending' OR (?3=1 AND status='failed' AND attempt_count<?4))
+               AND (next_retry_at IS NULL OR next_retry_at<=?1)
              ORDER BY created_at ASC LIMIT ?2",
         )
         .map_err(|e| format!("catalog list pending prepare: {e}"))?;
     let rows = stmt
-        .query_map(params![now, limit as i64], |row| {
-            Ok(CatalogMutationRow {
-                id: row.get(0)?,
-                document_id: row.get(1)?,
-                operation: row.get(2)?,
-                payload_json: row.get(3)?,
-                status: row.get(4)?,
-                attempt_count: row.get(5)?,
-                next_retry_at: row.get(6)?,
-                created_at: row.get(7)?,
-                last_error: row.get(8)?,
-            })
-        })
+        .query_map(
+            params![now, limit as i64, include_failed as i64, MAX_SYNC_ATTEMPTS],
+            |row| {
+                Ok(CatalogMutationRow {
+                    id: row.get(0)?,
+                    document_id: row.get(1)?,
+                    operation: row.get(2)?,
+                    payload_json: row.get(3)?,
+                    status: row.get(4)?,
+                    attempt_count: row.get(5)?,
+                    next_retry_at: row.get(6)?,
+                    created_at: row.get(7)?,
+                    last_error: row.get(8)?,
+                })
+            },
+        )
         .map_err(|e| format!("catalog list pending query: {e}"))?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("catalog list pending row: {e}"))
@@ -1621,6 +1746,14 @@ fn enqueue_metadata_mutation(
     conn: &Connection,
     mutation: &CatalogMetadataMutationInput,
 ) -> Result<(), String> {
+    conn.execute(
+        "UPDATE metadata_sync_mutations
+         SET status='synced', next_retry_at=NULL,
+             last_error='superseded by later metadata mutation'
+         WHERE entity_kind=?1 AND entity_id=?2 AND id<>?3 AND status IN ('pending','failed')",
+        params![mutation.entity_kind, mutation.entity_id, mutation.id],
+    )
+    .map_err(|e| format!("catalog supersede older metadata mutations: {e}"))?;
     conn.execute(
         "INSERT INTO metadata_sync_mutations(id,entity_kind,entity_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(id) DO NOTHING",
@@ -1784,28 +1917,34 @@ pub fn catalog_list_pending_metadata_mutations(
     db_path: String,
     now: i64,
     limit: usize,
+    include_failed: bool,
 ) -> Result<Vec<CatalogMetadataMutationRow>, String> {
     let conn = open_db(&db_path)?;
     let mut stmt = conn.prepare(
         "SELECT id,entity_kind,entity_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error
-         FROM metadata_sync_mutations WHERE status IN ('pending','failed') AND (next_retry_at IS NULL OR next_retry_at<=?1)
+         FROM metadata_sync_mutations
+         WHERE (status='pending' OR (?3=1 AND status='failed' AND attempt_count<?4))
+           AND (next_retry_at IS NULL OR next_retry_at<=?1)
          ORDER BY created_at ASC LIMIT ?2",
     ).map_err(|e| format!("catalog list metadata mutations prepare: {e}"))?;
     let rows = stmt
-        .query_map(params![now, limit as i64], |row| {
-            Ok(CatalogMetadataMutationRow {
-                id: row.get(0)?,
-                entity_kind: row.get(1)?,
-                entity_id: row.get(2)?,
-                operation: row.get(3)?,
-                payload_json: row.get(4)?,
-                status: row.get(5)?,
-                attempt_count: row.get(6)?,
-                next_retry_at: row.get(7)?,
-                created_at: row.get(8)?,
-                last_error: row.get(9)?,
-            })
-        })
+        .query_map(
+            params![now, limit as i64, include_failed as i64, MAX_SYNC_ATTEMPTS],
+            |row| {
+                Ok(CatalogMetadataMutationRow {
+                    id: row.get(0)?,
+                    entity_kind: row.get(1)?,
+                    entity_id: row.get(2)?,
+                    operation: row.get(3)?,
+                    payload_json: row.get(4)?,
+                    status: row.get(5)?,
+                    attempt_count: row.get(6)?,
+                    next_retry_at: row.get(7)?,
+                    created_at: row.get(8)?,
+                    last_error: row.get(9)?,
+                })
+            },
+        )
         .map_err(|e| format!("catalog list metadata mutations query: {e}"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("catalog list metadata mutations row: {e}"))?;
@@ -1930,7 +2069,7 @@ mod catalog_tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, CATALOG_SCHEMA_VERSION);
         assert_eq!(cloud_hash_column, 1);
         assert_eq!(deleted_at_column, 1);
         assert_eq!(excerpt_columns, 2);
@@ -2638,7 +2777,10 @@ mod catalog_tests {
         assert_eq!(snapshot.collections[0].name, "Research");
         assert_eq!(snapshot.writing_collections.len(), 1);
         assert_eq!(snapshot.writing_collections[0].writing_id, "doc-1");
-        assert_eq!(catalog_schema_version(path.clone()).unwrap(), 9);
+        assert_eq!(
+            catalog_schema_version(path.clone()).unwrap(),
+            CATALOG_SCHEMA_VERSION
+        );
         let _ = fs::remove_file(path);
     }
 
@@ -2706,8 +2848,8 @@ mod catalog_tests {
         )
         .unwrap();
 
-        // Every `open_db` re-runs the normalizer; this is the call that used to
-        // convert the local-only row into a fake archived one.
+        // The workspace-removal transaction itself preserves the local-only
+        // invariant; ordinary reads no longer rerun schema migrations.
         assert_eq!(deleted_at_cache_of(&path, "local-doc"), None);
 
         let pending: i64 = open_db(&path)
@@ -2738,17 +2880,73 @@ mod catalog_tests {
     fn schema_normalizer_clears_legacy_tombstones_from_local_only_rows() {
         let path = temp_db();
         seed_bound_document(&path, "local-doc", false);
-        open_db(&path)
-            .unwrap()
-            .execute(
-                "UPDATE documents SET sync_status='deleted', deleted_at_cache='legacy' WHERE id=?1",
-                params!["local-doc"],
-            )
-            .unwrap();
+        let conn = open_db(&path).unwrap();
+        conn.execute(
+            "UPDATE documents SET sync_status='deleted', deleted_at_cache='legacy' WHERE id=?1",
+            params!["local-doc"],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE catalog_schema SET version=?1 WHERE singleton=1",
+            params![CATALOG_SCHEMA_VERSION - 1],
+        )
+        .unwrap();
+        drop(conn);
 
-        // Reopening runs the normalizer.
+        // Upgrading from the previous schema version runs the normalizer once.
         assert_eq!(deleted_at_cache_of(&path, "local-doc"), None);
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn schema_v9_retires_impossible_local_only_metadata_retries() {
+        let path = temp_db();
+        seed_bound_document(&path, "local-doc", false);
+        let conn = open_db(&path).unwrap();
+        conn.execute(
+            "UPDATE documents SET sync_status='failed' WHERE id='local-doc'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO sync_mutations(
+               id,document_id,operation,payload_json,status,attempt_count,
+               next_retry_at,created_at,last_error
+             ) VALUES(
+               'legacy-metadata','local-doc','upsert',
+               '{\"mutationKind\":\"metadata\",\"status\":\"draft\"}',
+               'failed',1595,NULL,1,
+               'Metadata-only update matched no cloud writing; content was not replaced'
+             )",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE catalog_schema SET version=?1 WHERE singleton=1",
+            params![CATALOG_SCHEMA_VERSION - 1],
+        )
+        .unwrap();
+        drop(conn);
+
+        let conn = open_db(&path).unwrap();
+        let mutation_status: String = conn
+            .query_row(
+                "SELECT status FROM sync_mutations WHERE id='legacy-metadata'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let document_status: String = conn
+            .query_row(
+                "SELECT sync_status FROM documents WHERE id='local-doc'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(mutation_status, "synced");
+        assert_eq!(document_status, "local-only");
+        drop(conn);
+        remove_sqlite_files(&path);
     }
 
     #[test]
@@ -2911,7 +3109,7 @@ mod catalog_tests {
             },
         )
         .unwrap();
-        assert!(!applied);
+        assert!(!applied.applied);
 
         let conn = open_db(&path).unwrap();
         let bindings: i64 = conn
@@ -2931,6 +3129,51 @@ mod catalog_tests {
         assert_eq!(bindings, 0);
         assert_eq!(local_present, 0);
         drop(conn);
+        let _ = fs::remove_file(path);
+    }
+
+    /// The reconciler re-submits every file in a BindingRoot on every run, not
+    /// only the ones that actually moved or changed. Re-confirming a file
+    /// identical to what's already stored must not be reported as "changed" —
+    /// every mounted view (tab status, Desk, Workspace) reacts to a changed id
+    /// with its own `catalog_get_by_id`, so reporting the whole root as
+    /// changed on every pass turned a routine re-scan into a burst of
+    /// unnecessary reads for documents whose data never moved.
+    #[test]
+    fn reconcile_only_reports_documents_that_actually_changed() {
+        let path = temp_db();
+        let upsert = |content_hash: &str| CatalogReconcileInput {
+            upserts: vec![CatalogLocalBindingInput {
+                binding_root_id: "root-1".into(),
+                root_path: "/tmp/root".into(),
+                manifest_version: 2,
+                visible_as_workspace: false,
+                document_id: "doc-a".into(),
+                relative_path: "a.md".into(),
+                canonical_path: "/tmp/root/a.md".into(),
+                inode: Some(1),
+                content_hash: Some(content_hash.into()),
+                size: Some(10),
+                last_seen_at: Some(1),
+                title: "a".into(),
+                created_at: Some(1),
+                modified_at: Some(1),
+            }],
+            detached: vec![],
+        };
+
+        let first = catalog_apply_reconcile(path.clone(), upsert("blake3:v1")).unwrap();
+        assert_eq!(first.changed, vec!["doc-a".to_string()], "a brand-new binding is a real change");
+
+        let reconfirmed = catalog_apply_reconcile(path.clone(), upsert("blake3:v1")).unwrap();
+        assert!(
+            reconfirmed.changed.is_empty(),
+            "re-submitting identical data must not be reported as changed"
+        );
+
+        let edited = catalog_apply_reconcile(path.clone(), upsert("blake3:v2")).unwrap();
+        assert_eq!(edited.changed, vec!["doc-a".to_string()], "a real content change must still be reported");
+
         let _ = fs::remove_file(path);
     }
 
@@ -3200,9 +3443,7 @@ mod catalog_tests {
     // "database is locked" instead of waiting — a real failure that the
     // silent `catch` in editor-shell then made indistinguishable from a slow
     // sync, stalling the statusbar at "Saving..." on sustained typing. This
-    // exercises the exact pragmas `open_db` now applies (isolated from
-    // `ensure_catalog_v2`'s own unconditional migration write on every open,
-    // which is a separate, pre-existing characteristic of that function).
+    // exercises the exact pragmas `open_db` now applies.
     #[test]
     fn busy_timeout_lets_a_second_writer_wait_instead_of_failing_instantly() {
         let path = temp_db();
@@ -3246,6 +3487,128 @@ mod catalog_tests {
             "expected the writer to wait for the lock (waited {waited_ms}ms), not fail instantly"
         );
 
+        remove_sqlite_files(&path);
+    }
+
+    #[test]
+    fn catalog_reads_do_not_wait_for_a_concurrent_writer_after_schema_is_current() {
+        let path = temp_db();
+        let mut seed = input("doc-read", "/tmp/root/read.md", "mutation-read");
+        seed.mutation = None;
+        catalog_dual_write(path.clone(), seed).unwrap();
+
+        let hold_path = path.clone();
+        let (locked_tx, locked_rx) = std::sync::mpsc::channel();
+        let holder = std::thread::spawn(move || {
+            let mut conn = Connection::open(&hold_path).unwrap();
+            conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;")
+                .unwrap();
+            let tx = conn
+                .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+                .unwrap();
+            tx.execute(
+                "UPDATE documents SET modified_at=modified_at WHERE id='doc-read'",
+                [],
+            )
+            .unwrap();
+            locked_tx.send(()).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            tx.commit().unwrap();
+        });
+        locked_rx.recv().unwrap();
+
+        let started = std::time::Instant::now();
+        let record = catalog_get_by_id(path.clone(), "doc-read".into())
+            .unwrap()
+            .unwrap();
+        let elapsed = started.elapsed();
+        assert_eq!(record.id, "doc-read");
+        assert!(
+            elapsed < std::time::Duration::from_millis(200),
+            "catalog read waited {:?} for a writer; open_db likely wrote schema state",
+            elapsed
+        );
+        holder.join().unwrap();
+        remove_sqlite_files(&path);
+    }
+
+    #[test]
+    fn latest_document_snapshot_supersedes_older_actionable_mutations() {
+        let path = temp_db();
+        catalog_dual_write(
+            path.clone(),
+            input("doc-latest", "/tmp/root/latest.md", "mutation-old"),
+        )
+        .unwrap();
+        let mut latest = input("doc-latest", "/tmp/root/latest.md", "mutation-latest");
+        latest.mutation.as_mut().unwrap().created_at = 3;
+        catalog_dual_write(path.clone(), latest).unwrap();
+
+        let conn = open_db(&path).unwrap();
+        let old_status: String = conn
+            .query_row(
+                "SELECT status FROM sync_mutations WHERE id='mutation-old'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let actionable: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sync_mutations WHERE document_id='doc-latest' AND status IN ('pending','failed')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(old_status, "synced");
+        assert_eq!(actionable, 1);
+        drop(conn);
+        remove_sqlite_files(&path);
+    }
+
+    #[test]
+    fn failed_mutations_require_retry_mode_and_stop_after_the_attempt_budget() {
+        let path = temp_db();
+        catalog_dual_write(
+            path.clone(),
+            input("doc-retry", "/tmp/root/retry.md", "mutation-retry"),
+        )
+        .unwrap();
+        catalog_update_mutation_status(
+            path.clone(),
+            "mutation-retry".into(),
+            "failed".into(),
+            1,
+            None,
+            Some("offline".into()),
+        )
+        .unwrap();
+
+        assert!(
+            catalog_list_pending_mutations(path.clone(), i64::MAX, 10, false)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            catalog_list_pending_mutations(path.clone(), i64::MAX, 10, true)
+                .unwrap()
+                .len(),
+            1
+        );
+
+        catalog_update_mutation_status(
+            path.clone(),
+            "mutation-retry".into(),
+            "failed".into(),
+            MAX_SYNC_ATTEMPTS,
+            None,
+            Some("terminal".into()),
+        )
+        .unwrap();
+        assert!(
+            catalog_list_pending_mutations(path.clone(), i64::MAX, 10, true)
+                .unwrap()
+                .is_empty()
+        );
         remove_sqlite_files(&path);
     }
 

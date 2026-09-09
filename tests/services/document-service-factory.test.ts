@@ -890,7 +890,7 @@ describe("desktop document service after compatibility retirement", () => {
     })
   })
 
-  it("updates desktop metadata without rewriting the canonical markdown", async () => {
+  it("updates local-only desktop metadata without rewriting or enqueueing cloud work", async () => {
     const { getDocumentService } = await import("@/lib/services/document-service-factory")
     const result = await (await getDocumentService()).updateWritingMetadata({
       writingId: id,
@@ -911,14 +911,42 @@ describe("desktop document service after compatibility retirement", () => {
           status: "done",
           artifactType: "skill",
           version: 2,
+          syncStatus: "local-only",
         }),
         binding: expect.objectContaining({ canonicalPath: path, contentHash: "blake3:a" }),
+        mutation: null,
+      }),
+    ])
+    expect(mocks.scheduleSyncFlush).not.toHaveBeenCalled()
+  })
+
+  it("enqueues metadata updates for a document that already has cloud ownership", async () => {
+    mocks.catalogGet.mockResolvedValue({
+      ...catalogRecord,
+      cloudPresent: true,
+      cloudAccountId: "account-1",
+      syncStatus: "synced",
+    })
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).updateWritingMetadata({
+      writingId: id,
+      status: "done",
+      artifactType: "skill",
+      version: 2,
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    })
+
+    expect(result.error).toBeNull()
+    expect(mocks.bulkDualWrite).toHaveBeenCalledWith([
+      expect.objectContaining({
+        document: expect.objectContaining({ syncStatus: "pending" }),
         mutation: expect.objectContaining({
           operation: "upsert",
           payloadJson: expect.stringContaining('"mutationKind":"metadata"'),
         }),
       }),
     ])
+    expect(mocks.scheduleSyncFlush).toHaveBeenCalledTimes(1)
   })
 
   it("removes the local markdown and queues the confirmed cloud archive", async () => {

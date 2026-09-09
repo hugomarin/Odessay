@@ -469,6 +469,14 @@ Orden normativo desktop:
 
 Si el `.md` se confirmó, fallas posteriores no pueden reportar pérdida de contenido. Deben dejar trabajo de reconciliación/retry.
 
+La cola de contenido es de snapshots por UUID: al encolar un snapshot completo,
+los snapshots `pending`/`failed` anteriores del mismo documento quedan
+superseded dentro de la misma transacción. Un flush disparado por autosave solo
+consume trabajo nuevo; los fallos históricos se reintentan en background, en
+lotes acotados y hasta el máximo definido por el contrato de sync. Un documento
+local-only sin ownership cloud puede actualizar metadata local sin fabricar una
+mutación remota ni cambiar su estado a `pending`.
+
 ## Desk y Workspace como vistas
 
 | Superficie | Query sobre `DocumentCatalog` | Diferencia permitida |

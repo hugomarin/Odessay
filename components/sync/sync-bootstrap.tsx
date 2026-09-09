@@ -8,11 +8,14 @@ import { isTauriRuntime } from "@/lib/runtime/detect";
 import { getAuthService } from "@/lib/services/auth-service-factory";
 import { getSyncService } from "@/lib/sync/sync-service-factory";
 
+const DESKTOP_REMOTE_HYDRATION_DELAY_MS = 250;
+
 export function SyncBootstrap() {
   const lastHydratedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
+    let deferredDesktopHydration: ReturnType<typeof setTimeout> | null = null;
     const desktop = isTauriRuntime();
     const syncService = getSyncService();
 
@@ -38,6 +41,18 @@ export function SyncBootstrap() {
         console.error("[sync:bootstrap]", error);
         return false;
       }
+    };
+
+    const scheduleDesktopHydration = (userId: string) => {
+      if (deferredDesktopHydration) {
+        clearTimeout(deferredDesktopHydration);
+      }
+      deferredDesktopHydration = setTimeout(() => {
+        deferredDesktopHydration = null;
+        if (isMounted && lastHydratedUserIdRef.current === userId) {
+          void hydrateFromRemote(userId);
+        }
+      }, DESKTOP_REMOTE_HYDRATION_DELAY_MS);
     };
 
     const bootstrapWeb = async () => {
@@ -99,14 +114,22 @@ export function SyncBootstrap() {
       // getUser() here creates a second identical startup request.
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id ?? undefined;
-      if (userId) {
-        await hydrateFromRemote(userId);
-      }
 
       await syncService.start();
       await syncService.scheduleFlush();
+      if (userId) {
+        // Let Desk's first local catalog/collection read complete before the
+        // cloud snapshot opens a SQLite write transaction. Cloud hydration is
+        // still automatic, just no longer on the critical render path.
+        lastHydratedUserIdRef.current = userId;
+        scheduleDesktopHydration(userId);
+      }
       const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
         if (event === "SIGNED_OUT") {
+          if (deferredDesktopHydration) {
+            clearTimeout(deferredDesktopHydration);
+            deferredDesktopHydration = null;
+          }
           lastHydratedUserIdRef.current = null;
           return;
         }
@@ -122,6 +145,10 @@ export function SyncBootstrap() {
           return;
         }
 
+        if (deferredDesktopHydration) {
+          clearTimeout(deferredDesktopHydration);
+          deferredDesktopHydration = null;
+        }
         lastHydratedUserIdRef.current = nextUserId;
         void hydrateFromRemote(nextUserId);
         void syncService.scheduleFlush();
@@ -133,6 +160,9 @@ export function SyncBootstrap() {
 
     return () => {
       isMounted = false;
+      if (deferredDesktopHydration) {
+        clearTimeout(deferredDesktopHydration);
+      }
       void subscriptionPromise.then((subscription) => {
         if (typeof subscription === "function") {
           subscription();

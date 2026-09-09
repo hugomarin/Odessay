@@ -83,9 +83,16 @@ function isNoSessionError(error: { name?: unknown; status?: unknown }): boolean 
 // identity when the server cannot verify the session (offline).
 async function readStoredSessionUser(
   supabase: unknown,
+  options: { swallowErrors?: boolean } = {},
 ): Promise<Parameters<typeof mapIdentity>[0] | null> {
   try {
-    const storageKey = (supabase as { storageKey?: string }).storageKey
+    const client = supabase as {
+      storageKey?: string
+      auth?: { storageKey?: string }
+    }
+    // Supabase exposes storageKey on GoTrueClient (`supabase.auth`). Keep the
+    // top-level fallback for the lightweight adapters used by older bundles.
+    const storageKey = client.auth?.storageKey ?? client.storageKey
     if (!storageKey) return null
     const raw = await keychainStorage.getItem(storageKey)
     if (!raw) return null
@@ -93,9 +100,21 @@ async function readStoredSessionUser(
     const user = parsed?.user
     if (!user || typeof user.id !== "string") return null
     return user
-  } catch {
+  } catch (error) {
+    if (!options.swallowErrors) throw error
     return null
   }
+}
+
+/**
+ * Read only the locally persisted desktop identity. This deliberately avoids
+ * `auth.getSession()`/`auth.getUser()`: an expired token may trigger a network
+ * refresh, but local catalog visibility and the initial Desk render must not
+ * wait for Supabase.
+ */
+export async function getStoredDesktopSessionUser(): Promise<AccountIdentity | null> {
+  const storedUser = await readStoredSessionUser(createDesktopClient(), { swallowErrors: false })
+  return storedUser ? mapIdentity(storedUser) : null
 }
 
 async function checkDesktopUsernameAvailability(

@@ -144,6 +144,29 @@ describe("desktopCatalogSyncService", () => {
     expect(mocks.getSession).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
     expect(mocks.updateStatus).toHaveBeenCalledTimes(1)
+    expect(mocks.listPending).toHaveBeenLastCalledWith(
+      "/config/desktop-index.sqlite3",
+      expect.any(Number),
+      200,
+      false,
+    )
+  })
+
+  it("does not attach historical failures to a save-triggered flush", async () => {
+    vi.useFakeTimers()
+    mocks.listPending.mockResolvedValue([])
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+
+    await desktopCatalogSyncService.scheduleFlush()
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(mocks.listPending).toHaveBeenCalledWith(
+      "/config/desktop-index.sqlite3",
+      expect.any(Number),
+      200,
+      false,
+    )
+    expect(mocks.getSession).toHaveBeenCalledTimes(1)
   })
 
   it("runs one active flush and one pending wakeup against the current queue", async () => {
@@ -316,6 +339,25 @@ describe("desktopCatalogSyncService", () => {
       "/config/desktop-index.sqlite3", "m1", "failed", 1, expect.any(Number), "insert rejected",
     )
     expect(mocks.applyCloudSnapshots).not.toHaveBeenCalled()
+  })
+
+  it("stops retrying a mutation after the bounded attempt budget", async () => {
+    mocks.catalogGet.mockResolvedValue(catalogRecord({ cloudPresent: true }))
+    mocks.listPending.mockResolvedValue([mutationRow({ attemptCount: 9, status: "failed" })])
+    mocks.update.mockResolvedValue({ error: { message: "still offline" }, count: null })
+
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+    const result = await desktopCatalogSyncService.flushPending()
+
+    expect(result.data?.failedMutations).toEqual(["m1"])
+    expect(mocks.updateStatus).toHaveBeenCalledWith(
+      "/config/desktop-index.sqlite3",
+      "m1",
+      "failed",
+      10,
+      null,
+      expect.stringContaining("Retry limit reached after 10 attempts"),
+    )
   })
 
   it("treats a write whose affected-row count cannot be determined as failed, never synced", async () => {
@@ -500,6 +542,12 @@ describe("desktopCatalogSyncService", () => {
 
     // Next periodic tick drains the queue without any new enqueue or restart.
     await vi.advanceTimersByTimeAsync(60_000)
+    expect(mocks.listPending).toHaveBeenCalledWith(
+      "/config/desktop-index.sqlite3",
+      expect.any(Number),
+      16,
+      true,
+    )
     expect(mocks.updateStatus).toHaveBeenCalledWith(
       "/config/desktop-index.sqlite3", "m1", "synced", 0, null, null,
     )

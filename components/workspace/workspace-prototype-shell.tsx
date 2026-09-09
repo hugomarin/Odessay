@@ -502,7 +502,11 @@ function DesktopWorkspaceIndex() {
   useEffect(() => {
     if (!isDesktopRuntime()) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const unsubscribe = subscribeToCatalog(() => {
+    const unsubscribe = subscribeToCatalog((change) => {
+      // "excerpt" is the hydration pipeline finishing, and "content" is a
+      // body-only autosave — neither changes title/status/where the file
+      // lives, so reloading here would be a wasted full reload.
+      if (change.reason === "excerpt" || change.reason === "content") return;
       if (timer) return;
       timer = setTimeout(() => {
         timer = null;
@@ -1390,7 +1394,11 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     }
 
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const unsubscribe = subscribeToCatalog(() => {
+    const unsubscribe = subscribeToCatalog((change) => {
+      // "excerpt" is the hydration pipeline finishing, and "content" is a
+      // body-only autosave — neither changes title/status/where the file
+      // lives, so reloading here would be a wasted full reload.
+      if (change.reason === "excerpt" || change.reason === "content") return;
       if (timer) return;
       timer = setTimeout(() => {
         timer = null;

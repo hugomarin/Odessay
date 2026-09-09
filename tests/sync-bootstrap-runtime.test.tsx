@@ -119,6 +119,7 @@ describe("SyncBootstrap runtime split", () => {
     })
 
     await renderBootstrap()
+    await new Promise((resolve) => setTimeout(resolve, 300))
 
     expect(supabaseGetUserMock).not.toHaveBeenCalled()
     expect(desktopGetSessionMock).toHaveBeenCalledOnce()

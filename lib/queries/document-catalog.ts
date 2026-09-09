@@ -113,9 +113,9 @@ export async function loadCatalogRecords(
   // scoped to the active account. Resolve that capability here so every
   // application query (Desk, Search, Recent and Workspace) observes the same
   // catalog boundary instead of relying on each caller to remember it.
-  const { desktopAuthService } = await import("@/lib/services/desktop-auth-service")
-  const session = await desktopAuthService.getSession()
-  const cloudAccountId = session.data?.user?.id ?? null
+  const { getStoredDesktopSessionUser } = await import("@/lib/services/desktop-auth-service")
+  const user = await getStoredDesktopSessionUser().catch(() => null)
+  const cloudAccountId = user?.id ?? null
 
   return catalog.list({ ...query, cloudAccountId })
 }

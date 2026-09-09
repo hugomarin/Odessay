@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AppSplash } from "@/components/auth/app-splash"
 import { isTauriRuntime } from "@/lib/runtime/detect"
-import { createDesktopClient } from "@/lib/supabase/desktop-client"
+import { getStoredDesktopSessionUser } from "@/lib/services/desktop-auth-service"
 
 type Phase =
   | { status: "idle" }
@@ -27,8 +27,9 @@ const isDesktopBundle = process.env.NEXT_PUBLIC_TAURI_BUILD === "true"
 
 /**
  * In the Tauri desktop build the app always starts at `/`. This resolves the
- * stored session and sends the user to /desk or /login, showing the splash
- * while it does.
+ * locally persisted session and sends the user to /desk or /login, showing the
+ * splash while it does. Server validation stays in DesktopAppShell and never
+ * gates this first local render.
  *
  * The splash has no minimum duration: it is on screen exactly as long as the
  * lookup takes. On web this renders nothing.
@@ -55,19 +56,10 @@ export function DesktopStartupRedirect({
     let active = true
     setPhase({ status: "resolving" })
 
-    createDesktopClient()
-      .auth.getSession()
-      .then(({ data, error }) => {
+    getStoredDesktopSessionUser()
+      .then((user) => {
         if (!active) return
-
-        // A failed session read is not the same as "no session" — treating it as
-        // one is what caused the loop in ODE-416. Surface it instead.
-        if (error) {
-          setPhase({ status: "failed", message: bootErrorMessage })
-          return
-        }
-
-        const target = data.session ? "/desk" : "/login"
+        const target = user ? "/desk" : "/login"
 
         // Already there — /login mounts this too. Drop the splash instead of
         // leaving it over a screen the user is supposed to be using.

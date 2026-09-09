@@ -29,6 +29,11 @@ export type DesktopWorkspaceSnapshot = {
   updatedAt: number | null
   selectedPaths: string[]
   files: DesktopWorkspaceFile[]
+  /** Relative paths this scan found with no manifest entry and no id supplied
+   *  in `documentIds` — left out of `files`. `tauriWorkspaceSync` mints ids
+   *  for these and calls again; a caller invoking `workspace_sync` directly
+   *  gets a snapshot missing exactly these paths. */
+  unboundPaths: string[]
 }
 
 export type DesktopWorkspaceAgentPathValidation = {
@@ -96,13 +101,21 @@ export async function tauriCreateFile(dir: string, filename: string): Promise<st
 }
 
 export async function tauriWriteFile(path: string, content: string): Promise<void> {
+  // `write_file` (Rust) writes to `${path}.tmp` then renames it onto `path` —
+  // the watcher reports a `create` and a `rename` for the .tmp sibling before
+  // the final rename onto `path` itself. Only marking `path` left those two
+  // events unsuppressed on every single save, waking the reconciler's full
+  // BindingRoot scan for a change that was entirely our own write.
   markOdessaySelfWritePath(path)
+  markOdessaySelfWritePath(`${path}.tmp`)
   await invoke<void>("write_file", { path, content })
   markOdessaySelfWritePath(path)
 }
 
 export async function tauriWriteBinaryFile(path: string, bytes: Uint8Array): Promise<void> {
+  // Same atomic write-then-rename pattern as `write_file` — see its comment.
   markOdessaySelfWritePath(path)
+  markOdessaySelfWritePath(`${path}.tmp`)
   await invoke<void>("write_binary_file", { path, bytes: Array.from(bytes) })
   markOdessaySelfWritePath(path)
 }
@@ -197,15 +210,29 @@ export async function tauriWorkspaceSync(
   selectedPaths?: string[],
   documentIds?: Record<string, string>,
 ): Promise<DesktopWorkspaceSnapshot> {
-  const unboundPaths = await invoke<string[]>("workspace_unbound_paths", { rootPath, selectedPaths })
+  // `workspace_sync` scans the durable selected scope; only a root with an
+  // empty selection means a recursive whole-root walk. It used to always run
+  // behind a separate `workspace_unbound_paths` pre-walk so every newly-
+  // discovered file already had an id (identity is minted here in TS, never
+  // guessed in Rust — ADR D1/D9), paying two full walks even when nothing was
+  // actually new. `workspace_sync` now reports back which paths it couldn't
+  // bind instead of failing, so the common case resolves in one scoped walk; a
+  // second scoped walk only happens for the rare case of a real new file.
+  const snapshot = await invoke<DesktopWorkspaceSnapshot>("workspace_sync", {
+    rootPath,
+    selectedPaths,
+    documentIds: documentIds && Object.keys(documentIds).length > 0 ? documentIds : undefined,
+  })
+  if (snapshot.unboundPaths.length === 0) return snapshot
+
   const clientIds = { ...documentIds }
-  for (const relativePath of unboundPaths) {
+  for (const relativePath of snapshot.unboundPaths) {
     clientIds[relativePath] ??= crypto.randomUUID()
   }
   return invoke<DesktopWorkspaceSnapshot>("workspace_sync", {
     rootPath,
     selectedPaths,
-    documentIds: Object.keys(clientIds).length > 0 ? clientIds : undefined,
+    documentIds: clientIds,
   })
 }
 
@@ -337,11 +364,20 @@ export type DesktopCatalogReconcileInput = {
   detached: string[]
 }
 
+export type DesktopCatalogReconcileResult = {
+  applied: boolean
+  /** Ids whose stored binding actually differed from what was already there —
+   *  see the Rust command's doc comment. The reconciler resubmits every file
+   *  in a root on every pass, so this excludes the ones it just re-confirmed
+   *  unchanged. */
+  changed: string[]
+}
+
 export async function tauriCatalogApplyReconcile(
   dbPath: string,
   input: DesktopCatalogReconcileInput,
-): Promise<boolean> {
-  return invoke<boolean>("catalog_apply_reconcile", { dbPath, input })
+): Promise<DesktopCatalogReconcileResult> {
+  return invoke<DesktopCatalogReconcileResult>("catalog_apply_reconcile", { dbPath, input })
 }
 
 export async function tauriCatalogUpdateMutationStatus(
@@ -387,8 +423,11 @@ export async function tauriCatalogListPendingMutations(
   dbPath: string,
   now = Date.now(),
   limit = 200,
+  includeFailed = true,
 ): Promise<DesktopCatalogMutationRow[]> {
-  return invoke<DesktopCatalogMutationRow[]>("catalog_list_pending_mutations", { dbPath, now, limit })
+  return invoke<DesktopCatalogMutationRow[]>("catalog_list_pending_mutations", {
+    dbPath, now, limit, includeFailed,
+  })
 }
 
 export type DesktopCatalogCollection = {
@@ -452,8 +491,15 @@ export function tauriCatalogReplaceWritingCollections(
   })
 }
 
-export function tauriCatalogListPendingMetadataMutations(dbPath: string, now = Date.now(), limit = 200) {
-  return invoke<DesktopCatalogMetadataMutation[]>("catalog_list_pending_metadata_mutations", { dbPath, now, limit })
+export function tauriCatalogListPendingMetadataMutations(
+  dbPath: string,
+  now = Date.now(),
+  limit = 200,
+  includeFailed = true,
+) {
+  return invoke<DesktopCatalogMetadataMutation[]>("catalog_list_pending_metadata_mutations", {
+    dbPath, now, limit, includeFailed,
+  })
 }
 
 export function tauriCatalogUpdateMetadataMutationStatus(
