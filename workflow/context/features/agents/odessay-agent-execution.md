@@ -139,7 +139,8 @@ type AgentResponse = {
   answer: string
   evidence: EvidenceItem[]
   actions: ActionProposal[]
-  status: "complete" | "needs_approval" | "unable"
+  status: "complete" | "needs_approval" | "needs_context" | "insufficient_evidence" | "budget_exceeded" | "cancelled" | "unable"
+  coverage: "complete" | "partial" | "unknown"
   contextUsed: ContextReference[]
   receipts?: MutationReceipt[]
 }
@@ -159,6 +160,24 @@ flowchart LR
 ```
 
 Abrir un documento citado no es una tool: es una acción de navegación de la interfaz. La UI puede usar el `DocumentRef` de la evidencia para resolver `OpenDocument(UUID)`.
+
+## Ciclo semántico con Responses
+
+Las tools deterministas aportan observaciones, diffs y precondiciones con procedencia. No deben decidir por sí mismas que existe una contradicción ni que una versión gana. Para las operaciones que requieren comprensión del significado, el adapter de OpenAI Responses ejecuta un ciclo acotado:
+
+```text
+intención + descriptor + evidencia inicial
+  → Responses
+  → function_call (read/evidence acotada)
+  → validación de capability, identidad, versión y presupuesto
+  → ejecución por DocumentCatalog/adapter
+  → function_call_output con call_id
+  → Responses: veredicto estructurado o nueva solicitud de evidencia
+```
+
+El ciclo termina con un resultado `complete`, `insufficient_evidence`, `budget_exceeded` o `cancelled`. La cobertura (`complete | partial | unknown`) forma parte del resultado; una cobertura parcial nunca se presenta como “sin conflictos”. Las tools de `write`, `edit`, `move` y `delete` no se exponen como escrituras implícitas del modelo: solo reciben una propuesta validada y la aprobación existente.
+
+ODE-515 implementa este contrato para Contradictions y Merge. ODE-509 define el veredicto semántico, ODE-510/511 sus consumidores y ODE-512 las pruebas. ODE-513 conserva los Response IDs, Items y `call_id` en los logs de OpenAI; no convierte el chat efímero en historial local.
 
 ## Consultas libres
 
@@ -187,10 +206,11 @@ Esto cubre parcialmente los kinds `tool`/`workflow` — solo para las cinco acci
 
 Sigue sin existir: un `Registry` de `AgentCapabilityDescriptor` consultable (la validación de cada tool/workflow vive dispersa en su propio código, no en un registry central); un `PlanValidator` formal único; un `AgentResponse` compartido que alimente tanto Chat Card como Decision Modal.
 
+También falta el ciclo semántico de múltiples rondas: hoy `suggestedAction` puede despachar una acción predeterminada, pero las herramientas de Contradictions y Merge todavía no devuelven observaciones a Responses para que el modelo pida contexto adicional y reevalúe. Esa diferencia es el Context Gap que ODE-515 debe cerrar.
+
 ## Clasificación arquitectónica
 
 - **Layer dominante:** `Application`.
 - **Secundarios:** `Domain` para precondiciones; `Adapter` para ejecución; `UI` para Card/Modal.
 - **Runtime scope:** `shared-core` + adapters `desktop`, `web` y `cloud`.
 - **Owner:** `architecture-first`.
-

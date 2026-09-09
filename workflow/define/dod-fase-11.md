@@ -41,7 +41,7 @@ Referencias:
 ## 3) `workflow.md` es una acción del agente, no una precondición manual
 
 - El agente puede redactar o actualizar un borrador de `workflow.md` en la raíz del workspace, sintetizado a partir del contenido y la organización ya existentes (títulos, collections, anotaciones) — el usuario aprueba o edita antes de que se escriba a disco.
-- Cuando `workflow.md` existe en la raíz de un workspace, cualquier otra acción del agente sobre ese workspace lo carga como contexto, sin excepción y sin campo nuevo en base de datos.
+- Cuando `workflow.md` existe en la raíz de un workspace, cualquier acción del agente puede recibir su descriptor (existencia, versión/hash y alcance) sin campo nuevo en base de datos; el cuerpo se carga mediante evidencia bajo demanda cuando la intención lo requiere. Una acción explícita de ejecutar el workflow debe validar y leer los fragmentos o el documento completo que necesite antes de proponer una mutación.
 - No introduce ningún store durable nuevo: `workflow.md` es un documento más del workspace, sujeto a las mismas reglas de identidad y catálogo que cualquier otro `.md`.
 
 ## 4) Cada acción individual cumple su propio contrato de evidencia

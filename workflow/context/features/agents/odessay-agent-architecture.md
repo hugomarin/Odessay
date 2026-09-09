@@ -87,6 +87,8 @@ Los adapters implementan capacidades por runtime:
 
 El AI provider es un adapter. No es el owner de la política de contexto ni de la seguridad de las mutaciones.
 
+El Workspace Agent usa OpenAI Responses. La decisión de observabilidad del 2026-09-08 conserva llamadas en OpenAI y mantiene el chat efímero en Odessay. El reparto entre capacidades nativas del API y responsabilidades de aplicación, junto con las causas de los briefs desalineados, vive en [OpenAI Responses: observabilidad y runtime](odessay-agent-openai-runtime.md). Esta decisión específica no convierte los contratos objetivo pendientes de este documento en código implementado.
+
 ### UI — presentación
 
 La UI:
@@ -166,7 +168,7 @@ Todavía no formaliza completamente:
 - Un Intent Router formal que clasifique la intención *antes* de decidir qué leer — hoy esa decisión lazy la toma el propio modelo dentro de la misma llamada de ask, no un paso previo separado y determinista.
 - registry común de tools/workflows;
 - `AgentResponse` reutilizable entre Card y Modal;
-- Workflow, Broken links y Archive no seleccionan documentos específicos — operan sobre todo el Workspace vía el servicio directamente, sin un `ContextEnvelope` que envolver. Contradictions y Merge sí seleccionan (documentos comparados/combinados) y ya construyen y consumen `ContextEnvelope`, cargando siempre de inmediato — comparar o combinar exige leer, no hay nada que diferir.
+- Workflow, Broken links y Archive no seleccionan documentos específicos — operan sobre todo el Workspace vía el servicio directamente, sin un `ContextEnvelope` que envolver. En el estado actual Contradictions y Merge sí seleccionan (documentos comparados/combinados) y cargan de inmediato; el contrato objetivo de ODE-515 devuelve esa evidencia a Responses y permite solicitar contexto adicional acotado antes del veredicto semántico.
 
 La migración debe introducir esos contratos sin ampliar el camino legacy basado únicamente en `workspaceRootPath`.
 
@@ -177,4 +179,3 @@ La migración debe introducir esos contratos sin ampliar el camino legacy basado
 - **Runtime scope actual:** `desktop` para tools locales + `cloud` para inferencia; `web` con capacidades limitadas.
 - **Runtime scope objetivo:** `shared-core` con adapters `desktop`, `web` y `cloud`.
 - **Owner:** `architecture-first`.
-
