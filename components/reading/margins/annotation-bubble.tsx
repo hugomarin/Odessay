@@ -398,6 +398,15 @@ export function AnnotationBubble({
           {type === "footnote" ? "Add footnote" : "Save"}
         </button>
       </div>
+      {voiceError && state === "idle" ? (
+        <p
+          role="alert"
+          data-testid="annotation-voice-error"
+          className="font-sans text-[12px] leading-relaxed text-destructive"
+        >
+          {voiceError}
+        </p>
+      ) : null}
     </div>
   )
 }

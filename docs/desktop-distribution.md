@@ -220,9 +220,9 @@ Release `0.7.0` exposed two separate packaging failures:
    document relocation failed.
 
 Release `0.7.1` kept ad-hoc signing and the historical data path, and moved the
-   microphone capability into the separate audio-only profile. This is the
-   required combination until Apple Developer ID signing and notarization are
-   available.
+microphone capability into the separate audio-only profile. This is the
+required combination until Apple Developer ID signing and notarization are
+available.
 
 When signing is added (future issue), the changes will be:
 - Add `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` environment variables to the build environment.

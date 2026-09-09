@@ -21,6 +21,8 @@ const transcribe = vi.hoisted(() => ({ fn: vi.fn() }))
 const recorder = vi.hoisted(() => ({
   resetCalls: 0,
   startCalls: 0,
+  permissionDenied: false,
+  errorMessage: null as string | null,
   setState: null as ((state: string) => void) | null,
   setBlob: null as ((blob: Blob | null) => void) | null,
 }))
@@ -62,9 +64,9 @@ vi.mock("@/hooks/useVoiceRecorder", async () => {
         blob,
         waveformData: [],
         duration: 0,
-        permissionDenied: false,
+        permissionDenied: recorder.permissionDenied,
         isSupported: true,
-        errorMessage: null,
+        errorMessage: recorder.errorMessage,
       }
     },
   }
@@ -119,6 +121,8 @@ beforeEach(() => {
   transcribe.fn.mockReset()
   recorder.resetCalls = 0
   recorder.startCalls = 0
+  recorder.permissionDenied = false
+  recorder.errorMessage = null
 })
 
 afterEach(async () => {
@@ -195,6 +199,31 @@ describe("AnnotationBubble session lifecycle", () => {
 })
 
 describe("AnnotationBubble confirmation", () => {
+  it("keeps microphone retryable after a Tauri permission rejection", async () => {
+    recorder.permissionDenied = true
+    recorder.errorMessage = "Microphone permission was denied."
+
+    await render(
+      <AnnotationBubble
+        position={position()}
+        sessionId={nextAnnotationSessionId()}
+        type="personal"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+
+    const mic = container.querySelector("button[aria-label='Record a voice note']")
+    expect(mic).not.toBeNull()
+    expect((mic as HTMLButtonElement).disabled).toBe(false)
+    expect(container.querySelector("[role='alert']")?.textContent).toContain(
+      "Microphone permission was denied.",
+    )
+
+    await click(mic)
+    expect(recorder.startCalls).toBe(1)
+  })
+
   it("confirms exactly one annotation with the complete note, after repositioning", async () => {
     const onConfirm = vi.fn()
     const sessionId = nextAnnotationSessionId()
