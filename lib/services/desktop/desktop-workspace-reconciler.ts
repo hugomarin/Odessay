@@ -19,6 +19,7 @@ import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-ca
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 import {
   isOdessaySelfWriteEvent,
+  deriveWatchTargets,
   resolveActionableRootIds,
   watchFsPaths,
   type UnwatchFn,
@@ -37,6 +38,7 @@ const MANAGED_ROOT_DIRNAME = "artifact-studio-managed"
 type Runtime = {
   reconciler: WorkspaceReconciler
   unwatch: UnwatchFn[]
+  startupPromise: Promise<void>
   disposed: boolean
 }
 
@@ -121,28 +123,53 @@ async function configureRootWatcher(
   if (runtime.disposed) return
 
   // Isolate native watcher permissions per root. One historical/out-of-scope
-  // folder must not prevent healthy roots from being observed. Watch the root
-  // itself so an exact-file selection can follow a Finder rename.
+  // folder must not prevent healthy roots from being observed. Match the
+  // watcher scope to selectedPaths so an exact-file BindingRoot does not
+  // recursively observe an unrelated Documents/Desktop tree.
   for (const root of roots) {
-    try {
-      const stopWatching = await watchFsPaths(
-        [root.rootPath],
-        (event) => {
-          // Self-write suppression (ADR D6 / ODE-402): saves and conscious moves
-          // already project manifest + SQLite themselves, so their own events
-          // must not trigger a duplicate reconciliation of the same paths.
-          if (isOdessaySelfWriteEvent(event)) return
-          for (const rootId of resolveActionableRootIds(event.paths, rootRefs)) {
-            runtime.reconciler.notifyRootChanged(rootId)
-          }
-        },
-        { recursive: true, delayMs: 300 },
-      )
-      runtime.unwatch.push(stopWatching)
-    } catch {
-      // Continue configuring the remaining roots. Readiness is handled by scans;
-      // this root can recover on restart/rescan after permissions change.
+    for (const target of deriveWatchTargets(root.selectedPaths)) {
+      try {
+        const targetPath = target.relativePath
+          ? await join(root.rootPath, target.relativePath)
+          : root.rootPath
+        const stopWatching = await watchFsPaths(
+          [targetPath],
+          (event) => {
+            // Self-write suppression (ADR D6 / ODE-402): saves and conscious moves
+            // already project manifest + SQLite themselves, so their own events
+            // must not trigger a duplicate reconciliation of the same paths.
+            if (isOdessaySelfWriteEvent(event)) return
+            for (const rootId of resolveActionableRootIds(event.paths, rootRefs)) {
+              runtime.reconciler.notifyRootChanged(rootId)
+            }
+          },
+          { recursive: target.recursive, delayMs: 300 },
+        )
+        runtime.unwatch.push(stopWatching)
+      } catch {
+        // Continue configuring the remaining scopes and roots. Readiness is
+        // handled by scans; an unavailable parent can recover on rescan.
+      }
     }
+  }
+}
+
+async function startRuntime(runtime: Runtime): Promise<void> {
+  // Catalog rebuild and watcher registration are local maintenance work. They
+  // must not be part of the promise that lets DesktopAppShell render the Desk:
+  // SQLite already contains the last known catalog and the reconciler can
+  // project fresher filesystem evidence while the user is working.
+  await runtime.reconciler.start()
+  if (runtime.disposed) return
+
+  try {
+    const configDir = await appConfigDir()
+    const settings = new DesktopSettingsService(configDir)
+    const roots = (await settings.getBindingRoots()).map(toReconcilerRoot)
+    await configureRootWatcher(runtime, roots)
+  } catch {
+    // A watcher that fails to start leaves the catalog visible-but-stale; the
+    // startup projection already ran, and rescanAll can recover on focus.
   }
 }
 
@@ -238,18 +265,13 @@ async function buildRuntime(): Promise<Runtime | null> {
     },
   })
 
-  const runtime: Runtime = { reconciler, unwatch: [], disposed: false }
-
-  await reconciler.start()
-
-  // Watch every registered root scope and coalesce bursts per affected root.
-  try {
-    const roots = await loadRoots()
-    await configureRootWatcher(runtime, roots)
-  } catch {
-    // A watcher that fails to start leaves the catalog visible-but-stale; the
-    // startup projection already ran, and rescanAll can recover on focus.
+  const runtime: Runtime = {
+    reconciler,
+    unwatch: [],
+    startupPromise: Promise.resolve(),
+    disposed: false,
   }
+  runtime.startupPromise = startRuntime(runtime)
 
   return runtime
 }
@@ -275,6 +297,7 @@ export async function refreshWorkspaceReconcilerRoots(): Promise<void> {
   const runtime = runtimePromise ? await runtimePromise : null
   if (!runtime || runtime.disposed) return
 
+  await runtime.startupPromise
   await runtime.reconciler.rescanAll()
 
   const configDir = await appConfigDir()

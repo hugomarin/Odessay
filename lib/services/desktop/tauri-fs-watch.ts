@@ -21,6 +21,11 @@ type WatchOptions = {
   delayMs?: number
 }
 
+export type FsWatchTarget = {
+  relativePath: string
+  recursive: boolean
+}
+
 const DEFAULT_SELF_WRITE_SUPPRESSION_MS = 2_000
 
 const selfWriteExpiresAtByPath = new Map<string, number>()
@@ -28,6 +33,56 @@ const selfWriteExpiresAtByPath = new Map<string, number>()
 class FsWatcherResource extends Resource {}
 
 export type UnwatchFn = () => Promise<void>
+
+function normalizeRelativeWatchPath(path: string) {
+  const normalized = path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "")
+  return normalized === "." ? "" : normalized.replace(/^\.\//, "")
+}
+
+function relativeParentPath(path: string) {
+  const separator = path.lastIndexOf("/")
+  return separator === -1 ? "" : path.slice(0, separator)
+}
+
+/**
+ * Derive watcher scopes from the durable BindingRoot selection. Empty
+ * selectedPaths means the whole root; an exact Markdown selection observes its
+ * parent non-recursively, while a selected folder remains recursive. Keeping
+ * these scopes aligned with workspace_sync prevents a watcher on Documents
+ * from recursively indexing unrelated files.
+ */
+export function deriveWatchTargets(selectedPaths: string[]): FsWatchTarget[] {
+  if (selectedPaths.length === 0) {
+    return [{ relativePath: "", recursive: true }]
+  }
+
+  const recursivePaths = selectedPaths
+    .filter((path) => !/\.(?:md|mdx)$/i.test(path))
+    .map(normalizeRelativeWatchPath)
+    .filter(Boolean)
+  const fileParentPaths = selectedPaths
+    .filter((path) => /\.(?:md|mdx)$/i.test(path))
+    .map(normalizeRelativeWatchPath)
+    .map(relativeParentPath)
+
+  const uniqueRecursivePaths = [...new Set(recursivePaths)].filter(
+    (path) =>
+      !recursivePaths.some(
+        (parent) => parent !== path && path.startsWith(`${parent}/`),
+      ),
+  )
+  const uniqueFileParentPaths = [...new Set(fileParentPaths)].filter(
+    (path) =>
+      !uniqueRecursivePaths.some(
+        (parent) => path === parent || path.startsWith(`${parent}/`),
+      ),
+  )
+
+  return [
+    ...uniqueRecursivePaths.map((relativePath) => ({ relativePath, recursive: true })),
+    ...uniqueFileParentPaths.map((relativePath) => ({ relativePath, recursive: false })),
+  ]
+}
 
 export async function watchFsPaths(
   paths: string[],

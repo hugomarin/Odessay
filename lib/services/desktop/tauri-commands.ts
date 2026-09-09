@@ -191,14 +191,14 @@ export async function tauriWorkspaceSync(
   selectedPaths?: string[],
   documentIds?: Record<string, string>,
 ): Promise<DesktopWorkspaceSnapshot> {
-  // `workspace_sync` walks the BindingRoot recursively — for a large folder
-  // this is the dominant cost of a reconcile. It used to always run behind a
-  // separate `workspace_unbound_paths` pre-walk so every newly-discovered
-  // file already had an id (identity is minted here in TS, never guessed in
-  // Rust — ADR D1/D9), paying two full walks even when nothing was actually
-  // new. `workspace_sync` now reports back which paths it couldn't bind
-  // instead of failing, so the common case (nothing new) resolves in one
-  // walk; a second walk only happens for the rare case of a real new file.
+  // `workspace_sync` scans the durable selected scope; only a root with an
+  // empty selection means a recursive whole-root walk. It used to always run
+  // behind a separate `workspace_unbound_paths` pre-walk so every newly-
+  // discovered file already had an id (identity is minted here in TS, never
+  // guessed in Rust — ADR D1/D9), paying two full walks even when nothing was
+  // actually new. `workspace_sync` now reports back which paths it couldn't
+  // bind instead of failing, so the common case resolves in one scoped walk; a
+  // second scoped walk only happens for the rare case of a real new file.
   const snapshot = await invoke<DesktopWorkspaceSnapshot>("workspace_sync", {
     rootPath,
     selectedPaths,

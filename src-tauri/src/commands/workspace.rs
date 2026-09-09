@@ -200,6 +200,90 @@ fn matches_selected_paths(relative_path: &str, selected_paths: &[String]) -> boo
     })
 }
 
+#[derive(Debug, Clone)]
+struct WorkspaceScanScope {
+    relative_path: String,
+    recursive: bool,
+}
+
+fn relative_parent_path(relative_path: &str) -> String {
+    relative_path
+        .rsplit_once('/')
+        .map(|(parent, _)| parent.to_string())
+        .unwrap_or_default()
+}
+
+/// Build the smallest filesystem scopes that can prove the selected files are
+/// still present. Exact-file selections watch/scan their parent directory so a
+/// same-folder Finder rename can still be correlated by inode; folder
+/// selections retain recursive semantics. An empty selection is deliberately
+/// handled by the full-root path below and means the whole BindingRoot.
+fn workspace_scan_scopes(
+    root: &Path,
+    selected_paths: &[String],
+    existing_index: &WorkspaceIndexDocument,
+) -> Vec<WorkspaceScanScope> {
+    let mut scopes = Vec::new();
+
+    for selected_path in selected_paths {
+        let selected_fs_path = root.join(selected_path);
+        let is_file = existing_index.files.contains_key(selected_path)
+            || fs::metadata(&selected_fs_path)
+                .map(|metadata| metadata.is_file())
+                .unwrap_or_else(|_| is_markdown_file(&selected_fs_path));
+        let (relative_path, recursive) = if is_file {
+            (relative_parent_path(selected_path), false)
+        } else {
+            (selected_path.clone(), true)
+        };
+
+        if !scopes.iter().any(|scope: &WorkspaceScanScope| {
+            scope.relative_path == relative_path && scope.recursive == recursive
+        }) {
+            scopes.push(WorkspaceScanScope {
+                relative_path,
+                recursive,
+            });
+        }
+    }
+
+    scopes
+}
+
+fn should_visit_scoped_directory(relative_path: &str, scopes: &[WorkspaceScanScope]) -> bool {
+    if relative_path.is_empty() {
+        return true;
+    }
+
+    scopes.iter().any(|scope| {
+        if scope.recursive {
+            relative_path == scope.relative_path
+                || relative_path.starts_with(&format!("{}/", scope.relative_path))
+                || scope
+                    .relative_path
+                    .starts_with(&format!("{relative_path}/"))
+        } else {
+            // Walk ancestors until the exact-file parent is reached, then stop
+            // descending into sibling directories.
+            scope.relative_path == relative_path
+                || scope
+                    .relative_path
+                    .starts_with(&format!("{relative_path}/"))
+        }
+    })
+}
+
+fn should_include_scoped_file(relative_path: &str, scopes: &[WorkspaceScanScope]) -> bool {
+    scopes.iter().any(|scope| {
+        if scope.recursive {
+            relative_path == scope.relative_path
+                || relative_path.starts_with(&format!("{}/", scope.relative_path))
+        } else {
+            relative_parent_path(relative_path) == scope.relative_path
+        }
+    })
+}
+
 /// Older Workspace choosers persisted "select everything" as the top-level
 /// folders plus the root files that existed at adoption time. That freezes the
 /// root-file scope: a later `new.md` is invisible even though the author chose
@@ -646,12 +730,31 @@ pub fn workspace_sync(
 
     let mut files = Vec::new();
     let mut folder_count = 0usize;
-    visit_workspace(
-        &canonical_root,
-        &canonical_root,
-        &mut files,
-        &mut folder_count,
-    )?;
+    let exact_selected_file_is_missing = effective_selected_paths.iter().any(|selected_path| {
+        existing_index.files.contains_key(selected_path)
+            && !canonical_root.join(selected_path).is_file()
+    });
+    if effective_selected_paths.is_empty() || exact_selected_file_is_missing {
+        // A selected file can move to another directory inside the root. Keep
+        // the inode-based rename recovery by falling back to one full scan only
+        // while its durable path is missing; steady state stays scoped.
+        visit_workspace(
+            &canonical_root,
+            &canonical_root,
+            &mut files,
+            &mut folder_count,
+        )?;
+    } else {
+        let scopes =
+            workspace_scan_scopes(&canonical_root, &effective_selected_paths, &existing_index);
+        visit_workspace_scoped(
+            &canonical_root,
+            &canonical_root,
+            &scopes,
+            &mut files,
+            &mut folder_count,
+        )?;
+    }
 
     if uses_persisted_selection
         && is_legacy_complete_root_scope(&effective_selected_paths, &files, &existing_index)
@@ -898,6 +1001,39 @@ thread_local! {
     pub(crate) static VISIT_WORKSPACE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
+fn snapshot_workspace_file(
+    root: &Path,
+    path: &Path,
+    metadata: &fs::Metadata,
+) -> Result<WorkspaceFileSnapshot, String> {
+    let relative_path = path
+        .strip_prefix(root)
+        .map_err(|e| format!("workspace_sync relative path: {e}"))?
+        .to_string_lossy()
+        .replace('\\', "/");
+    let modified_at = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
+
+    Ok(WorkspaceFileSnapshot {
+        id: String::new(),
+        path: path.to_string_lossy().to_string(),
+        relative_path,
+        name: path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .to_string(),
+        modified_at,
+        size: metadata.len(),
+        inode: inode_for_path(&path.to_path_buf()),
+        content_hash: String::new(),
+    })
+}
+
 fn visit_workspace(
     root: &Path,
     current: &Path,
@@ -932,32 +1068,54 @@ fn visit_workspace(
             continue;
         }
 
+        files.push(snapshot_workspace_file(root, &path, &metadata)?);
+    }
+
+    Ok(())
+}
+
+fn visit_workspace_scoped(
+    root: &Path,
+    current: &Path,
+    scopes: &[WorkspaceScanScope],
+    files: &mut Vec<WorkspaceFileSnapshot>,
+    folder_count: &mut usize,
+) -> Result<(), String> {
+    #[cfg(test)]
+    VISIT_WORKSPACE_CALLS.with(|calls| calls.set(calls.get() + 1));
+
+    let entries = fs::read_dir(current).map_err(|e| format!("workspace_sync read_dir: {e}"))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("workspace_sync dir entry: {e}"))?;
+        let path = entry.path();
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+        let metadata = entry
+            .metadata()
+            .map_err(|e| format!("workspace_sync metadata: {e}"))?;
+
+        if should_ignore_entry(&name, metadata.is_dir()) {
+            continue;
+        }
+
         let relative_path = path
             .strip_prefix(root)
             .map_err(|e| format!("workspace_sync relative path: {e}"))?
             .to_string_lossy()
             .replace('\\', "/");
-        let modified_at = metadata
-            .modified()
-            .ok()
-            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-            .map(|duration| duration.as_millis() as u64)
-            .unwrap_or(0);
 
-        files.push(WorkspaceFileSnapshot {
-            id: String::new(),
-            path: path.to_string_lossy().to_string(),
-            relative_path,
-            name: path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or_default()
-                .to_string(),
-            modified_at,
-            size: metadata.len(),
-            inode: inode_for_path(&path),
-            content_hash: String::new(),
-        });
+        if metadata.is_dir() {
+            if should_visit_scoped_directory(&relative_path, scopes) {
+                *folder_count += 1;
+                visit_workspace_scoped(root, &path, scopes, files, folder_count)?;
+            }
+            continue;
+        }
+
+        if is_markdown_file(&path) && should_include_scoped_file(&relative_path, scopes) {
+            files.push(snapshot_workspace_file(root, &path, &metadata)?);
+        }
     }
 
     Ok(())
@@ -1631,6 +1789,31 @@ mod tests {
         assert_eq!(unchanged.files.len(), 1);
         assert_eq!(unchanged.files[0].relative_path, "included/letter.md");
 
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_does_not_recurse_into_unselected_siblings() {
+        let root = temp_workspace_root("scoped-selection");
+        fs::create_dir_all(root.join("unselected/deep")).expect("create unselected tree");
+        fs::write(root.join("selected.md"), "Selected\n").expect("write selected file");
+        fs::write(root.join("unselected/deep/notes.md"), "Not selected\n")
+            .expect("write unselected file");
+
+        VISIT_WORKSPACE_CALLS.with(|calls| calls.set(0));
+        let snapshot = super::workspace_sync(
+            root.to_string_lossy().to_string(),
+            Some(vec!["selected.md".into()]),
+            Some(HashMap::from([(
+                "selected.md".to_string(),
+                "selected-id".to_string(),
+            )])),
+        )
+        .expect("sync selected file");
+
+        assert_eq!(snapshot.files.len(), 1);
+        assert_eq!(snapshot.files[0].relative_path, "selected.md");
+        VISIT_WORKSPACE_CALLS.with(|calls| assert_eq!(calls.get(), 1));
         cleanup(&root);
     }
 

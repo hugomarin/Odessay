@@ -146,9 +146,11 @@ export async function loadDeskCatalogData(): Promise<DeskCatalogData> {
   const userId = scope === "anonymous" ? null : scope
 
   if (isDesktopRuntime()) {
-    const { desktopAuthService } = await import("@/lib/services/desktop-auth-service")
-    const session = await desktopAuthService.getSession()
-    const desktopUserId = session.data?.user?.id ?? null
+    // Desk is local-first. Server-side token validation belongs to the shell's
+    // background auth check; it must not hold the first SQLite/catalog render.
+    const { getStoredDesktopSessionUser } = await import("@/lib/services/desktop-auth-service")
+    const localUser = await getStoredDesktopSessionUser().catch(() => null)
+    const desktopUserId = localUser?.id ?? null
     const [records, metadata] = await Promise.all([
       loadCatalogRecords({ cloudAccountId: desktopUserId, limit: CATALOG_LIST_LIMIT }),
       loadDesktopCollections(),

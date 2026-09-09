@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest"
 import {
   clearOdessaySelfWritePathsForTests,
+  deriveWatchTargets,
   isOdessaySelfWriteEvent,
   markOdessaySelfWritePath,
   resolveActionableRootIds,
@@ -110,5 +111,21 @@ describe("resolveActionableRootIds", () => {
     const watcherPath = "/Users/h/Café/notas.md".normalize("NFD")
 
     expect(resolveActionableRootIds([watcherPath], accentedRoots)).toEqual(["root-c"])
+  })
+})
+
+describe("deriveWatchTargets", () => {
+  it("keeps exact-file selections non-recursive and prunes covered folders", () => {
+    expect(
+      deriveWatchTargets(["a.md", "notes/b.md", "notes/archive", "notes/archive/deep"]),
+    ).toEqual([
+      { relativePath: "notes/archive", recursive: true },
+      { relativePath: "", recursive: false },
+      { relativePath: "notes", recursive: false },
+    ])
+  })
+
+  it("keeps an empty selection as a recursive whole-root watcher", () => {
+    expect(deriveWatchTargets([])).toEqual([{ relativePath: "", recursive: true }])
   })
 })
