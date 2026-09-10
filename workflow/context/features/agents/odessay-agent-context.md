@@ -23,6 +23,8 @@ Ser lazy puede costar una ronda adicional al modelo en el turno puntual que sí 
 
 **Excepción a lazy — instrucciones de operación de `workflow.md` (ODE-504):** el archivo cumple la función de manual de operación del agente (análogo a un CLAUDE.md). Su sección de instrucciones — cómo debe operar el agente y la intención del workspace — es contexto ambiental de la invocación y no se adquiere bajo demanda: viaja siempre con su descriptor (versión/hash) para validar frescura y consume presupuesto de contexto de ODE-501 como cualquier fuente. El resto del cuerpo (contenido ejecutable de workflows) sí sigue siendo evidencia bajo demanda.
 
+El límite entre ambas naturalezas se declara preferentemente con `<!-- workflow-definitions -->`. Para archivos legacy sin marcador, el parser es conservador: confía únicamente la línea de título H1, el preámbulo cuando existe una estructura posterior y las secciones conocidas de intención/alcance (`Intent`, `Scope`, `Objectives`, `Context`, `Participants`). El cuerpo no clasificado del título, otros bloques y un archivo completamente sin headings permanecen como evidencia bajo demanda. Si las definiciones no tienen headings, el descriptor usa un resumen acotado de su primera línea no vacía para que `scopeSummary` nunca quede vacío cuando existe contenido lazy.
+
 ## Contratos
 
 ### Agent Invocation

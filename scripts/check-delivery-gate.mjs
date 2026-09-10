@@ -2,6 +2,7 @@
 
 import { execFileSync } from "node:child_process";
 import { resolveTraceabilityRange } from "./lib/traceability-refs.mjs";
+import { githubCompareCommitSubjects } from "./lib/traceability-github.mjs";
 
 function fail(message) {
   console.error(`[ops:delivery:gate] ${message}`);
@@ -79,38 +80,29 @@ console.log(
 );
 async function githubPullRequestCommitSubjects() {
   const repository = process.env.GITHUB_REPOSITORY?.trim();
-  if (
-    process.env.GITHUB_ACTIONS !== "true" ||
-    !repository ||
-    range.source !== "pull-request-event"
-  ) {
+  if (process.env.GITHUB_ACTIONS !== "true" || !repository) {
     return null;
   }
-
-  const response = await fetch(
-    `https://api.github.com/repos/${repository}/compare/${baseRef}...${headRef}`,
-    {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "User-Agent": "odessay-delivery-gate",
-        ...(process.env.GITHUB_TOKEN
-          ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
-          : {}),
-      },
-    },
-  );
-  if (!response.ok) {
-    fail(`GitHub compare API failed with ${response.status}.`);
+  try {
+    const subjects = await githubCompareCommitSubjects({
+      repository,
+      base: commitBaseRef,
+      head: commitHeadRef,
+      token: process.env.GITHUB_TOKEN?.trim(),
+    });
+    console.log(
+      `[ops:delivery:gate] Using GitHub's immutable comparison (${subjects.length} commits) for CI traceability.`,
+    );
+    return subjects;
+  } catch (error) {
+    fail(error instanceof Error ? error.message : "GitHub compare API failed.");
   }
-  const comparison = await response.json();
-  if (!Array.isArray(comparison.commits)) {
-    fail("GitHub compare API returned no commit list.");
-  }
-  return comparison.commits.map((entry) => entry.commit.message.split("\n")[0]);
 }
 
-// A pinned CI merge range is intentionally evaluated from local immutable
-// objects. Event-only fallback may use GitHub compare; local runs use git.
+// CI evaluates the pinned branch-point..PR-head range through GitHub's
+// immutable comparison API. This avoids trusting a synthetic runner checkout
+// whose revision walk may be inconsistent after a force-push. Local runs use
+// the equivalent git range.
 const commitSubjects = (
   (await githubPullRequestCommitSubjects()) ??
   execFileSync("git", ["log", "--pretty=%s", `${commitBaseRef}..${commitHeadRef}`], {

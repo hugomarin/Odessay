@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
+import { githubCompareCommitSubjects } from "../scripts/lib/traceability-github.mjs"
 
 const repoRoot = resolve(import.meta.dirname, "..")
 const temporaryRepos: string[] = []
@@ -116,5 +117,63 @@ describe("immutable Traceability range", () => {
   it("still rejects real process drift introduced by the PR", () => {
     const fixture = createRepository({ processDrift: true })
     expect(() => runScript(fixture.root, "check-process-sync.mjs", traceabilityEnv(fixture))).toThrow()
+  })
+})
+
+describe("GitHub traceability comparison", () => {
+  it("paginates the immutable range and returns complete commit evidence", async () => {
+    const requests: URL[] = []
+    const pages = [
+      {
+        total_commits: 3,
+        commits: [
+          { commit: { message: "feat: first [ODE-504]\nbody" } },
+          { commit: { message: "fix: second [ODE-504]" } },
+        ],
+      },
+      {
+        total_commits: 3,
+        commits: [{ commit: { message: "test: third [ODE-504]" } }],
+      },
+    ]
+    const fetchImpl = async (url: URL) => {
+      requests.push(url)
+      return new Response(JSON.stringify(pages[requests.length - 1]), { status: 200 })
+    }
+
+    const subjects = await githubCompareCommitSubjects({
+      repository: "hugomarin/Odessay",
+      base: "base-sha",
+      head: "head-sha",
+      token: "test-token",
+      fetchImpl,
+    })
+
+    expect(subjects).toEqual([
+      "feat: first [ODE-504]",
+      "fix: second [ODE-504]",
+      "test: third [ODE-504]",
+    ])
+    expect(requests.map((url) => url.searchParams.get("page"))).toEqual(["1", "2"])
+  })
+
+  it("rejects a partial comparison instead of accepting missing commits", async () => {
+    let requestCount = 0
+    const fetchImpl = async () => {
+      requestCount += 1
+      return new Response(JSON.stringify({
+        total_commits: 2,
+        commits: requestCount === 1
+          ? [{ commit: { message: "feat: only first [ODE-504]" } }]
+          : [],
+      }), { status: 200 })
+    }
+
+    await expect(githubCompareCommitSubjects({
+      repository: "hugomarin/Odessay",
+      base: "base-sha",
+      head: "head-sha",
+      fetchImpl,
+    })).rejects.toThrow("returned only 1 of 2 commits")
   })
 })

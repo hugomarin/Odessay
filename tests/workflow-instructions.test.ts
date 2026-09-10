@@ -52,6 +52,28 @@ describe("splitWorkflowMarkdown (ODE-504 — hybrid workflow.md instructions mod
     expect(split.scopeSummary).toEqual(["Workflow: publication"])
   })
 
+  it("trusts only the first H1 heading line, never its unclassified executable body", () => {
+    const markdown = "# Publish release\n\n1. Review\n2. Export\n3. Archive"
+
+    const split = splitWorkflowMarkdown(markdown)
+
+    expect(split.instructions).toBe("# Publish release")
+    expect(split.definitions).toBe("1. Review\n2. Export\n3. Archive")
+    expect(split.instructionsTruncated).toBe(false)
+    expect(split.scopeSummary).toEqual(["Definitions without heading: Review"])
+  })
+
+  it("keeps a fully unheaded legacy workflow on demand instead of promoting it wholesale to instructions", () => {
+    const markdown = "Run this process:\n1. Review\n2. Export\n3. Archive"
+
+    const split = splitWorkflowMarkdown(markdown)
+
+    expect(split.instructions).toBe("")
+    expect(split.definitions).toBe(markdown)
+    expect(split.instructionsTruncated).toBe(false)
+    expect(split.scopeSummary).toEqual(["Definitions without heading: Run this process:"])
+  })
+
   it("keeps prose before any heading as trusted instructions even in a mixed legacy file", () => {
     const markdown = [
       "Coordinate this workspace: keep artifacts classified and named consistently.",
@@ -84,6 +106,43 @@ describe("splitWorkflowMarkdown (ODE-504 — hybrid workflow.md instructions mod
     expect(split.scopeSummary).toEqual(["Workflow: top-level", "Sub-workflow: revision"])
   })
 
+  it("always reports bounded scope when marked definitions have no heading", () => {
+    const markdown = [
+      "# Manual",
+      "",
+      WORKFLOW_DEFINITIONS_MARKER,
+      "",
+      "1. Review",
+      "2. Export",
+      "3. Archive",
+    ].join("\n")
+
+    const split = splitWorkflowMarkdown(markdown)
+
+    expect(split.definitions).toBe("\n\n1. Review\n2. Export\n3. Archive")
+    expect(split.scopeSummary).toEqual(["Definitions without heading: Review"])
+  })
+
+  it("reports both an unheaded definition prefix and later headed definitions", () => {
+    const markdown = [
+      "# Manual",
+      "",
+      WORKFLOW_DEFINITIONS_MARKER,
+      "",
+      "1. Review the draft",
+      "",
+      "## Recovery",
+      "Restore the previous version.",
+    ].join("\n")
+
+    const split = splitWorkflowMarkdown(markdown)
+
+    expect(split.scopeSummary).toEqual([
+      "Definitions without heading: Review the draft",
+      "Recovery",
+    ])
+  })
+
   it("never trusts an unbounded no-marker file: unrecognized blocks become on-demand definitions", () => {
     const long = "x".repeat(MAX_WORKFLOW_INSTRUCTIONS_CHARS + 500)
     const markdown = `${long}\n\n## Workflow: publication\nSteps: review, export, archive.`
@@ -109,7 +168,8 @@ describe("splitWorkflowMarkdown (ODE-504 — hybrid workflow.md instructions mod
   })
 
   it("does not truncate instructions exactly at the cap", () => {
-    const exact = "x".repeat(MAX_WORKFLOW_INSTRUCTIONS_CHARS)
+    const heading = "## Intent\n"
+    const exact = `${heading}${"x".repeat(MAX_WORKFLOW_INSTRUCTIONS_CHARS - heading.length)}`
 
     const split = splitWorkflowMarkdown(exact)
 

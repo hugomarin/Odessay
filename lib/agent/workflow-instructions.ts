@@ -15,22 +15,23 @@
  * - `<!-- workflow-definitions -->` marker present → the boundary is
  *   author-declared: everything before is instructions, everything after is
  *   definitions.
- * - No marker → known-sections parsing. Only the document title (leading
- *   H1), the prose before the first heading, and blocks under the intent/
- *   scope headings the generated draft uses (`Intent`, `Scope`,
+ * - No marker → known-sections parsing. Only the document title line (leading
+ *   H1), preamble prose when a heading structure follows, and blocks under
+ *   the intent/scope headings the generated draft uses (`Intent`, `Scope`,
  *   `Objectives`, `Context`, `Participants`) are trusted instructions;
  *   every other block — a legacy file's executable definitions included —
  *   becomes on-demand definitions with its headings surfaced in the
  *   descriptor's scope summary. A legacy file therefore never rides trusted
  *   ambient context unbounded, and a small generated draft still rides in
  *   full because every one of its blocks is a known intent/scope section.
+ *   A fully unheaded file is ambiguous and remains on demand.
  *   Oversized trusted content is capped at `MAX_WORKFLOW_INSTRUCTIONS_CHARS`
  *   with the truncation flagged.
  *
  * The `scopeSummary` names the headings of the not-loaded side (any heading
- * level, H1–H6) so the model can decide, per question, whether the
- * definitions are worth a bounded second round — a descriptor size alone
- * does not describe scope.
+ * level, H1–H6), or a bounded first-line fallback when no heading exists, so
+ * the model can decide whether the definitions are worth a bounded second
+ * round — a descriptor size alone does not describe scope.
  */
 
 export const WORKFLOW_DEFINITIONS_MARKER = "<!-- workflow-definitions -->"
@@ -83,15 +84,32 @@ function blocksOf(markdown: string): MarkdownBlock[] {
   return blocks
 }
 
-function headingsOf(markdown: string): string[] {
-  const headings: string[] = []
+function scopeSummaryOf(markdown: string): string[] {
+  const scope: string[] = []
+  let firstUnheadedLine: string | null = null
+  let sawHeading = false
   for (const line of markdown.split("\n")) {
     const match = /^(#{1,6})\s+(.+)$/.exec(line.trim())
-    if (!match) continue
-    headings.push(match[2].trim().slice(0, MAX_WORKFLOW_SCOPE_HEADING_CHARS))
-    if (headings.length >= MAX_WORKFLOW_SCOPE_HEADINGS) break
+    if (match) {
+      sawHeading = true
+      scope.push(match[2].trim().slice(0, MAX_WORKFLOW_SCOPE_HEADING_CHARS))
+      if (scope.length >= MAX_WORKFLOW_SCOPE_HEADINGS) break
+      continue
+    }
+    if (!sawHeading && firstUnheadedLine === null && line.trim().length > 0) {
+      firstUnheadedLine = line
+        .trim()
+        .replace(/^(?:[-*+]\s+|\d+[.)]\s+)/, "")
+        .trim()
+    }
   }
-  return headings
+  if (firstUnheadedLine !== null) {
+    scope.unshift(
+      `Definitions without heading: ${firstUnheadedLine || "workflow steps"}`
+        .slice(0, MAX_WORKFLOW_SCOPE_HEADING_CHARS),
+    )
+  }
+  return scope.slice(0, MAX_WORKFLOW_SCOPE_HEADINGS)
 }
 
 function isKnownIntentBlock(block: MarkdownBlock): boolean {
@@ -111,37 +129,57 @@ export function splitWorkflowMarkdown(markdown: string): WorkflowInstructionsSpl
       instructions: instructionsTruncated ? instructions.slice(0, MAX_WORKFLOW_INSTRUCTIONS_CHARS) : instructions,
       definitions: definitions.trim().length > 0 ? definitions : null,
       instructionsTruncated,
-      scopeSummary: headingsOf(definitions),
+      scopeSummary: scopeSummaryOf(definitions),
     }
   }
 
   // No marker → conservative known-sections parsing: the document title,
-  // intro prose and known intent/scope blocks are the only trusted part.
+  // intro prose and known intent/scope blocks are the only trusted part. A
+  // title contributes only its heading line: its body remains unclassified
+  // evidence and must not become trusted merely because it follows the H1.
+  // A document with no headings at all is likewise ambiguous and therefore
+  // stays on demand rather than being promoted wholesale to instructions.
   const instructionLines: string[] = []
   const definitionLines: string[] = []
+  const blocks = blocksOf(markdown)
+  const hasHeading = blocks.some((block) => block.headingWord !== null)
   let titleConsumed = false
-  blocksOf(markdown).forEach((block) => {
+  blocks.forEach((block) => {
     // The document title (the first heading the file opens with, at any
     // position after intro prose) and the prose before any heading are the
     // manual's cover page; only the first heading gets that treatment — a
     // later H1 is just another section the parser does not recognize.
     const isTitle = !titleConsumed && block.headingLevel === 1
     if (block.headingWord !== null && !titleConsumed) titleConsumed = true
-    const trusted = block.headingWord === null || isTitle || isKnownIntentBlock(block)
-    if (trusted) {
+    const knownIntent = isKnownIntentBlock(block)
+    if (block.headingWord === null) {
+      if (hasHeading) instructionLines.push(block.text)
+      else definitionLines.push(block.text)
+    } else if (isTitle && !knownIntent) {
+      const [headingLine = "", ...bodyLines] = block.text.split("\n")
+      instructionLines.push(headingLine)
+      const body = bodyLines.join("\n").trim()
+      if (body.length > 0) definitionLines.push(body)
+    } else if (knownIntent) {
       instructionLines.push(block.text)
     } else {
       definitionLines.push(block.text)
     }
   })
-  const instructions = instructionLines.join("\n").trim()
-  const definitionsRaw = definitionLines.join("\n").trim()
+  const instructions = instructionLines
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0)
+    .join("\n\n")
+  const definitionsRaw = definitionLines
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0)
+    .join("\n\n")
   const definitions = definitionsRaw.length > 0 ? definitionsRaw : null
   const instructionsTruncated = instructions.length > MAX_WORKFLOW_INSTRUCTIONS_CHARS
   return {
     instructions: instructionsTruncated ? instructions.slice(0, MAX_WORKFLOW_INSTRUCTIONS_CHARS) : instructions,
     definitions,
     instructionsTruncated,
-    scopeSummary: definitions ? headingsOf(definitions) : [],
+    scopeSummary: definitions ? scopeSummaryOf(definitions) : [],
   }
 }

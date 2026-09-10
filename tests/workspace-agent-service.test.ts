@@ -1789,6 +1789,56 @@ describe("WorkspaceAgentService hybrid workflow.md instructions (ODE-504)", () =
     expect(request.workflow.instructions).not.toContain("Steps: review")
   })
 
+  it("does not promote the executable body of a legacy first-H1 workflow into ambient instructions", async () => {
+    const workflow = workflowFixture("# Publish release\n\n1. Review\n2. Export\n3. Archive")
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({
+      question: "Hola",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    const request = aiMocks.askWorkspace.mock.calls[0][0]
+    expect(request.workflow.instructions).toBe("# Publish release")
+    expect(request.workflow.instructions).not.toContain("1. Review")
+    expect(request.workflow.descriptor).toEqual(expect.objectContaining({
+      definitionsChars: "1. Review\n2. Export\n3. Archive".length,
+      scopeSummary: ["Definitions without heading: Review"],
+    }))
+  })
+
+  it("keeps a fully unheaded legacy workflow out of ambient instructions while advertising its scope", async () => {
+    const markdown = "Run this process:\n1. Review\n2. Export\n3. Archive"
+    const workflow = workflowFixture(markdown)
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({
+      question: "Hola",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    const request = aiMocks.askWorkspace.mock.calls[0][0]
+    expect(request.workflow.instructions).toBeNull()
+    expect(request.workflow.descriptor).toEqual(expect.objectContaining({
+      definitionsChars: markdown.length,
+      scopeSummary: ["Definitions without heading: Run this process:"],
+    }))
+  })
+
   it("prepends retry targets so a full selection cannot evict the requested workflow from the second round (review round 2 — P2)", async () => {
     const workflow = workflowFixture(`# Workflow\n\n## Workflow: publication\nSteps: review, export, archive.`)
     const selections = ["a", "b", "c", "d", "e", "f"].map((id) => ({ kind: "file" as const, documentId: id }))
