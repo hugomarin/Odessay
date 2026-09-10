@@ -1,7 +1,9 @@
 import { z } from "zod"
+import { workspaceExecutionContextSchema } from "@/lib/ai/workspace-execution-receipt"
 import type {
   WorkspaceAmbientWorkflow,
   WorkspaceAskRequest,
+  WorkspaceAskResult,
 } from "@/lib/services/contracts/ai-service"
 import { MAX_WORKFLOW_SCOPE_HEADINGS } from "@/lib/agent/workflow-instructions"
 
@@ -73,6 +75,7 @@ export const workspaceAskRequestSchema = z.object({
   catalogTruncated: z.boolean(),
   recentSessionActions: z.array(z.string().max(MAX_WORKSPACE_ASK_SESSION_ACTION_CHARS)).max(MAX_WORKSPACE_ASK_SESSION_ACTIONS).optional(),
   focusedDocumentId: z.string().trim().min(1).max(200).nullable().optional(),
+  execution: workspaceExecutionContextSchema.nullable().optional(),
 }).superRefine((value, context) => {
   const documentIds = new Set(value.documents.map((document) => document.id))
   for (const targetDocumentId of value.targetDocumentIds) {
@@ -289,4 +292,5 @@ export type WorkspaceAskApiPayload = {
   completionTokens: number | null
   totalTokens: number | null
   latencyMs: number | null
+  executionReceipt: WorkspaceAskResult["executionReceipt"]
 }

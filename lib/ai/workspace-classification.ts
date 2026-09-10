@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { workspaceExecutionContextSchema } from "@/lib/ai/workspace-execution-receipt"
 import type {
   WorkspaceClassificationRequest,
   WorkspaceClassificationResult,
@@ -74,6 +75,7 @@ export const workspaceClassificationRequestSchema = z.object({
     }).nullable(),
   }).nullable(),
   catalogTruncated: z.boolean(),
+  execution: workspaceExecutionContextSchema.nullable().optional(),
 }).superRefine((value, context) => {
   const documentIds = new Set(value.documents.map((document) => document.id))
   for (const targetDocumentId of value.targetDocumentIds) {
@@ -248,4 +250,5 @@ export type WorkspaceClassificationApiPayload = Omit<WorkspaceClassificationResu
   completionTokens: number | null
   totalTokens: number | null
   latencyMs: number | null
+  executionReceipt: WorkspaceClassificationResult["executionReceipt"]
 }

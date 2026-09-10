@@ -1573,12 +1573,17 @@ describe("WorkspaceAgentService contradiction workflow", () => {
 
       const note = await service.presentNote("broken-links", ["3 broken reference(s) need review below."], ["¿Qué encontraste?"])
 
-      expect(note).toBe("3 referencias rotas necesitan revisión.")
-      expect(aiMocks.presentToolResult).toHaveBeenCalledWith({
+      expect(note.note).toBe("3 referencias rotas necesitan revisión.")
+      expect(aiMocks.presentToolResult).toHaveBeenCalledWith(expect.objectContaining({
         kind: "broken-links",
         facts: ["3 broken reference(s) need review below."],
         recentSessionActions: ["¿Qué encontraste?"],
-      })
+        execution: expect.objectContaining({
+          action: "presentation",
+          stage: "presentation",
+          runtime: "desktop",
+        }),
+      }))
     })
 
     it("falls back to a plain join of the facts when the AI call fails, so the chat never goes silent", async () => {
@@ -1590,7 +1595,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
 
       const note = await service.presentNote("archive", ["No stale or duplicate artifacts were found."])
 
-      expect(note).toBe("No stale or duplicate artifacts were found.")
+      expect(note.note).toBe("No stale or duplicate artifacts were found.")
     })
 
     it("never calls the AI adapter when there are no facts to present", async () => {
@@ -1598,7 +1603,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
 
       const note = await service.presentNote("merge", [])
 
-      expect(note).toBe("")
+      expect(note.note).toBe("")
       expect(aiMocks.presentToolResult).not.toHaveBeenCalled()
     })
   })

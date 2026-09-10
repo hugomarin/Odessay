@@ -122,6 +122,66 @@ export type AiUsage = {
   latencyMs: number | null
 }
 
+export type WorkspaceExecutionAction = "classification" | "ask" | "presentation" | "relations" | "merge"
+export type WorkspaceExecutionStage = "analysis" | "context-acquisition" | "presentation" | "semantic-review" | "synthesis"
+export type WorkspaceExecutionRuntime = "web" | "desktop" | "cloud"
+
+export type WorkspaceExecutionContext = {
+  invocationId: string
+  action: WorkspaceExecutionAction
+  stage: WorkspaceExecutionStage
+  runtime: WorkspaceExecutionRuntime
+  contextVersion?: string | null
+}
+
+export type WorkspaceResponseItemSummary = {
+  id: string | null
+  type: string
+  status: string | null
+  callId: string | null
+  name: string | null
+  hasArguments: boolean
+  hasOutput: boolean
+  hasText: boolean
+}
+
+export type WorkspaceResponseTrace = {
+  action: WorkspaceExecutionAction
+  stage: WorkspaceExecutionStage
+  runtime: WorkspaceExecutionRuntime
+  contextVersion: string
+  responseId: string | null
+  previousResponseId: string | null
+  status: string | null
+  model: string | null
+  httpStatus: number | null
+  usage: AiUsage
+  latencyMs: number | null
+  outputItems: WorkspaceResponseItemSummary[]
+  outputItemsTruncated: boolean
+  errorCode: string | null
+}
+
+export type WorkspaceExecutionProductStatus =
+  | "not-evaluated"
+  | "validated"
+  | "invalid-output"
+  | "refused"
+  | "incomplete"
+  | "provider-error"
+
+export type WorkspaceExecutionReceipt = {
+  invocationId: string
+  supportId: string
+  action: WorkspaceExecutionAction
+  stage: WorkspaceExecutionStage
+  runtime: WorkspaceExecutionRuntime
+  contextVersion: string
+  providerStatus: string | null
+  productStatus: WorkspaceExecutionProductStatus
+  responses: WorkspaceResponseTrace[]
+}
+
 export type PublicationReviewResult = {
   summary: string
   language: string
@@ -200,6 +260,7 @@ export type WorkspaceClassificationRequest = {
   vocabulary: WorkspaceClassificationVocabularyItem[]
   workflow: WorkspaceAmbientWorkflow | null
   catalogTruncated: boolean
+  execution?: WorkspaceExecutionContext | null
 }
 
 export type WorkspaceClassificationEvidence = {
@@ -226,6 +287,7 @@ export type WorkspaceClassificationResult = {
   /** At most a few catalog ids that need an explicit second read. */
   requestedDocumentIds: string[]
   usage: AiUsage | null
+  executionReceipt?: WorkspaceExecutionReceipt | null
 }
 
 export type WorkspaceAskEvidence = {
@@ -253,6 +315,7 @@ export type WorkspaceAskRequest = {
    * in `requestedDocumentIds` rather than answering as if you'd read it.
    */
   focusedDocumentId?: string | null
+  execution?: WorkspaceExecutionContext | null
 }
 
 export type WorkspaceAskResult = {
@@ -269,6 +332,7 @@ export type WorkspaceAskResult = {
    */
   suggestedAction: "workflow" | "broken-links" | "classification" | "archive" | "contradictions" | null
   usage: AiUsage | null
+  executionReceipt?: WorkspaceExecutionReceipt | null
 }
 
 /**
@@ -282,11 +346,13 @@ export type WorkspaceToolPresentationRequest = {
   facts: string[]
   /** Short summaries of what happened earlier in this chat session, most recent last, for language/tone continuity only. */
   recentSessionActions?: string[]
+  execution?: WorkspaceExecutionContext | null
 }
 
 export type WorkspaceToolPresentationResult = {
   note: string
   usage: AiUsage | null
+  executionReceipt?: WorkspaceExecutionReceipt | null
 }
 
 export type PersistedCorrectionBlock = {
@@ -349,6 +415,7 @@ export const AI_SERVICE_CONTRACT = {
     "Keep model usage, structured output, and correction memory explicit in the contract so adapters can vary by runtime.",
     "Isolate correction hydration and persistence as part of the same AI capability boundary used by publication review flows.",
     "Let the model make semantic workspace decisions from bounded document evidence while adapters keep provider transport and output validation private.",
+    "Return a bounded in-memory execution receipt so stored Responses can be correlated without creating product chat persistence.",
   ],
   layer: ["application", "adapter"],
   runtimeScope: ["shared-core", "web", "cloud", "desktop"],
@@ -357,6 +424,7 @@ export const AI_SERVICE_CONTRACT = {
     "AIService can be unavailable or remote-only, but that optionality must be represented through ServiceResponse rather than hidden fetch failures.",
     "Provider endpoints, API keys, and structured-output quirks belong to adapters, not to shared core callers.",
     "Correction persistence is a capability concern adjacent to AI review and must not leak local cache or HTTP route details into the contract.",
+    "Provider status, usage, latency, refusal, incomplete output, and product validation remain separate receipt fields; no response id is invented on failure.",
   ],
   errorEnvelope: SERVICE_RESPONSE_ENVELOPE,
   operations: [

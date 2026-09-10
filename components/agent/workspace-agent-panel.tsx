@@ -9,7 +9,9 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Check,
   CornerDownLeft,
+  Copy,
   FileText,
   Folder,
   GitCompareArrows,
@@ -47,8 +49,11 @@ import type {
 import type {
   WorkspaceAgentApproval,
 } from "@/lib/services/contracts/workspace-agent"
+import type { WorkspaceExecutionReceipt } from "@/lib/ai/workspace-execution-receipt"
 import { MAX_WORKSPACE_CLASSIFICATION_TARGETS } from "@/lib/ai/workspace-classification"
 import { MAX_WORKSPACE_ASK_TARGETS, MAX_WORKSPACE_ASK_SESSION_ACTION_CHARS } from "@/lib/ai/workspace-ask"
+import { createWorkspaceExecutionContext } from "@/lib/ai/workspace-execution-receipt"
+import { mergeWorkspaceExecutionReceipts } from "@/lib/ai/workspace-execution-receipt"
 import {
   approveArchiveCandidate,
   approveClassificationProposal,
@@ -183,6 +188,36 @@ function askChatMessage(run: WorkspaceAgentAskRun): string {
     ? ` I could give a more complete answer with: ${run.requestedDocuments.map((document) => document.title).join(", ")}.`
     : ""
   return `${run.answer}${additionalContext}`
+}
+
+function ExecutionReceiptNotice({ receipt }: { receipt: WorkspaceExecutionReceipt }) {
+  const [copied, setCopied] = useState(false)
+
+  const copySupportId = async () => {
+    try {
+      await navigator.clipboard.writeText(receipt.supportId)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2_000)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <div className="mt-1 flex max-w-[90%] items-center gap-1.5 text-[10px] text-ink-5" data-testid="workspace-agent-execution-receipt">
+      <span>Support ID</span>
+      <code className="font-mono text-[10px] text-ink-4" data-testid="workspace-agent-support-id">{receipt.supportId}</code>
+      <button
+        type="button"
+        onClick={() => { void copySupportId() }}
+        aria-label="Copy support ID"
+        className="inline-flex h-5 items-center gap-1 rounded-[5px] px-1.5 text-[10px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+      >
+        {copied ? <Check className="h-3 w-3" strokeWidth={1.5} /> : <Copy className="h-3 w-3" strokeWidth={1.5} />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  )
 }
 
 /**
@@ -420,7 +455,7 @@ function WorkspaceAgentPanelSession({
    * silently overwriting the previous one.
    */
   /** `generation` is the session generation active when the action that produced this note started (see sessionGenerationRef). */
-  const pushAgentNote = useCallback((text: string, generation: number, toolResult?: ToolResult) => {
+  const pushAgentNote = useCallback((text: string, generation: number, toolResult?: ToolResult, executionReceipt?: WorkspaceExecutionReceipt | null) => {
     const context = buildMessageContext(scope, scopeLabel, workspaceRootPath)
     // Frozen at the same moment as `context` — this message's review card
     // (if any) must always execute against the Workspace it was produced
@@ -428,7 +463,7 @@ function WorkspaceAgentPanelSession({
     const executionService = service ?? undefined
     setMessages((current) => {
       if (sessionGenerationRef.current !== generation) return current
-      return [...current, createToolResultMessage(text, toolResult, undefined, context, executionService)]
+      return [...current, createToolResultMessage(text, toolResult, undefined, context, executionService, executionReceipt)]
     })
     if (sessionGenerationRef.current === generation) setFeedback(null)
   }, [scope, scopeLabel, service, workspaceRootPath])
@@ -441,8 +476,8 @@ function WorkspaceAgentPanelSession({
   }, [])
 
   /** Announces a predetermined action's outcome in chat and records it as session memory so later questions stay consistent with it. */
-  const announceToolResult = useCallback((text: string, generation: number, toolResult?: ToolResult) => {
-    pushAgentNote(text, generation, toolResult)
+  const announceToolResult = useCallback((text: string, generation: number, toolResult?: ToolResult, executionReceipt?: WorkspaceExecutionReceipt | null) => {
+    pushAgentNote(text, generation, toolResult, executionReceipt)
     recordSessionAction(text, generation)
   }, [pushAgentNote, recordSessionAction])
 
@@ -502,7 +537,7 @@ function WorkspaceAgentPanelSession({
       return
     }
     const note = await service.presentNote("workflow", workflowFacts(proposal.data), sessionActionLogRef.current)
-    announceToolResult(note, generation, { kind: "workflow", proposal: proposal.data })
+    announceToolResult(note.note, generation, { kind: "workflow", proposal: proposal.data }, note.executionReceipt)
   }), [announceToolResult, runAction, service])
 
   const runBrokenReferences = useCallback(() => runAction("broken-links", async (generation) => {
@@ -516,7 +551,7 @@ function WorkspaceAgentPanelSession({
     }
     setBrokenReferenceReplacements({})
     const note = await service.presentNote("broken-links", brokenReferencesFacts(response.data), sessionActionLogRef.current)
-    announceToolResult(note, generation, { kind: "broken-links", proposals: response.data })
+    announceToolResult(note.note, generation, { kind: "broken-links", proposals: response.data }, note.executionReceipt)
   }), [announceToolResult, getWorkflowReadApproval, runAction, service])
 
   const executeClassification = useCallback(async (request: string, generation: number): Promise<WorkspaceAgentClassificationRun | null> => {
@@ -548,6 +583,7 @@ function WorkspaceAgentPanelSession({
       request,
       selection: resolved.selection,
       workflowReadApproval,
+      execution: createWorkspaceExecutionContext("classification", envelope.invocation.runtime.kind),
     })
     if (response.error || !response.data) {
       setFeedback(response.error?.message ?? "Classification could not be completed.")
@@ -560,9 +596,9 @@ function WorkspaceAgentPanelSession({
       run.summary,
       run.proposals.length > 0 ? "The proposals are ready to review below." : null,
     ].filter((fact): fact is string => Boolean(fact))
-    const note = await service.presentNote("classification", classificationFacts, sessionActionLogRef.current)
+    const note = await service.presentNote("classification", classificationFacts, sessionActionLogRef.current, run.executionContext)
     announceToolResult(
-      note,
+      note.note,
       generation,
       {
         kind: "classification",
@@ -571,6 +607,7 @@ function WorkspaceAgentPanelSession({
         requestedDocumentIds: run.requestedDocumentIds,
         requestedDocuments: run.requestedDocuments,
       },
+      mergeWorkspaceExecutionReceipts([run.executionReceipt, note.executionReceipt]),
     )
     if (run.requestedDocumentIds.length > 0 && sessionGenerationRef.current === generation) {
       setFeedback("The agent needs more document evidence before it can make a firmer classification.")
@@ -594,6 +631,7 @@ function WorkspaceAgentPanelSession({
         title: snapshot.title,
         markdown: snapshot.markdown,
         sessionContext: sessionActionLogRef.current.slice(-MAX_SESSION_ACTIONS_CONTEXT),
+        execution: createWorkspaceExecutionContext("ask", "web"),
       })
       if (response.error || !response.data) {
         return { ok: false, message: response.error?.message ?? "The Workspace agent could not answer right now." }
@@ -636,6 +674,7 @@ function WorkspaceAgentPanelSession({
       sessionContext: sessionActionLogRef.current.slice(-MAX_SESSION_ACTIONS_CONTEXT),
       liveOverride: liveOverrideFromEnvelope(envelope),
       focusedDocumentId: envelope.invocation.location.focusedDocument?.documentId ?? null,
+      execution: createWorkspaceExecutionContext("ask", envelope.invocation.runtime.kind),
     })
     if (response.error || !response.data) {
       return { ok: false, message: response.error?.message ?? "The Workspace agent could not answer right now." }
@@ -659,7 +698,7 @@ function WorkspaceAgentPanelSession({
       return
     }
     const note = await service.presentNote("archive", archiveCandidatesFacts(response.data), sessionActionLogRef.current)
-    announceToolResult(note, generation, { kind: "archive", candidates: response.data })
+    announceToolResult(note.note, generation, { kind: "archive", candidates: response.data }, note.executionReceipt)
   }), [announceToolResult, getWorkflowReadApproval, runAction, service])
 
   const runContradictions = useCallback(() => runAction("contradictions", async (generation) => {
@@ -698,7 +737,7 @@ function WorkspaceAgentPanelSession({
         : `${response.data.length} contradiction(s) added to the review queue below.`,
     ]
     const note = await service.presentNote("contradictions", contradictionFacts, sessionActionLogRef.current)
-    announceToolResult(note, generation, { kind: "contradictions", proposals: response.data })
+    announceToolResult(note.note, generation, { kind: "contradictions", proposals: response.data }, note.executionReceipt)
   }), [announceToolResult, attachments, getWorkflowReadApproval, runAction, scope, scopeLabel, service, workspaceRootPath])
 
   /**
@@ -746,7 +785,7 @@ function WorkspaceAgentPanelSession({
     const merge = buildMergeMock(sources)
     const mergeFacts = [`Combined ${sources.length} artifacts into a ${merge.sections.length}-section draft (preview only).`]
     const note = await service.presentNote("merge", mergeFacts, sessionActionLogRef.current)
-    announceToolResult(note, generation, { kind: "merge", merge })
+    announceToolResult(note.note, generation, { kind: "merge", merge }, note.executionReceipt)
   }), [announceToolResult, attachments, runAction, scope, scopeLabel, service, workspaceRootPath])
 
   /**
@@ -1191,6 +1230,7 @@ function WorkspaceAgentPanelSession({
                 note: outcome.autoSelectedNotice,
                 citedDocuments: outcome.run.documents,
                 context: turnContext,
+                executionReceipt: outcome.run.executionReceipt,
               }
             : {
                 id: `agent-${messageTimestamp + 1}`,
@@ -1340,6 +1380,8 @@ function WorkspaceAgentPanelSession({
                 </div>
               ) : null}
             </div>
+
+            {message.executionReceipt ? <ExecutionReceiptNotice receipt={message.executionReceipt} /> : null}
 
             {toolResult ? (
               <ReviewSummaryRow

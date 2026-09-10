@@ -1,5 +1,9 @@
 import { z } from "zod"
-import type { WorkspaceToolPresentationRequest } from "@/lib/services/contracts/ai-service"
+import { workspaceExecutionContextSchema } from "@/lib/ai/workspace-execution-receipt"
+import type {
+  WorkspaceToolPresentationRequest,
+  WorkspaceToolPresentationResult,
+} from "@/lib/services/contracts/ai-service"
 
 /**
  * The presentation stage of the Workspace agent pipeline (ODE-491): every
@@ -30,6 +34,7 @@ export const workspaceToolPresentationRequestSchema = z.object({
   kind: z.enum(WORKSPACE_TOOL_PRESENTATION_KINDS),
   facts: z.array(z.string().trim().min(1).max(MAX_PRESENTATION_FACT_CHARS)).min(1).max(MAX_PRESENTATION_FACTS),
   recentSessionActions: z.array(z.string().max(MAX_PRESENTATION_SESSION_ACTION_CHARS)).max(MAX_PRESENTATION_SESSION_ACTIONS).optional(),
+  execution: workspaceExecutionContextSchema.nullable().optional(),
 })
 
 export const workspaceToolPresentationTextFormat = {
@@ -94,4 +99,5 @@ export type WorkspaceToolPresentationApiPayload = {
   completionTokens: number | null
   totalTokens: number | null
   latencyMs: number | null
+  executionReceipt: WorkspaceToolPresentationResult["executionReceipt"]
 }

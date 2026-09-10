@@ -12,19 +12,24 @@ import {
   type WorkspaceClassificationApiPayload,
 } from "@/lib/ai/workspace-classification"
 import { getOpenAIWorkspaceProviderConfig } from "@/lib/ai/openai-workspace-provider-config"
+import {
+  createWorkspaceExecutionReceipt,
+  normalizeWorkspaceExecutionContext,
+  withWorkspaceExecutionOutcome,
+  type WorkspaceExecutionReceipt,
+} from "@/lib/ai/workspace-execution-receipt"
+import {
+  callWorkspaceOpenAIResponse,
+  WorkspaceOpenAIResponseError,
+} from "@/lib/ai/workspace-openai-response"
 import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors"
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth"
-
-type ClassificationUsage = {
-  promptTokens: number | null
-  completionTokens: number | null
-  totalTokens: number | null
-}
 
 type ClassificationRouteErrorDetails = {
   providerStatus?: number
   providerBodyClass?: string
   phase?: "provider" | "parse" | "config"
+  receipt?: WorkspaceExecutionReceipt
 }
 
 class ClassificationRouteError extends Error {
@@ -38,19 +43,6 @@ class ClassificationRouteError extends Error {
     super(message)
     this.name = "ClassificationRouteError"
   }
-}
-
-const PROVIDER_REQUEST_TIMEOUT_MS = 45_000
-
-function classifyProviderBody(body: string): string {
-  const normalized = body.toLocaleLowerCase()
-  if (!body.trim()) return "empty"
-  if (normalized.includes("rate") || normalized.includes("quota")) return "rate_limit"
-  if (normalized.includes("timeout") || normalized.includes("timed out")) return "timeout"
-  if (normalized.includes("schema") || normalized.includes("response_format")) return "structured_output_contract"
-  if (normalized.includes("context") || normalized.includes("token")) return "token_budget_or_context"
-  if (normalized.includes("invalid") || normalized.includes("bad request")) return "provider_contract"
-  return "provider_error"
 }
 
 const jsonError = (
@@ -82,181 +74,8 @@ function extractJsonPayload(value: string): string {
   return value.slice(firstBrace, lastBrace + 1)
 }
 
-async function callClassificationModel({
-  config,
-  promptText,
-}: {
-  config: ReturnType<typeof getOpenAIWorkspaceProviderConfig>
-  promptText: string
-}): Promise<{ text: string; usage: ClassificationUsage }> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), PROVIDER_REQUEST_TIMEOUT_MS)
-
-  let response: Response
-  try {
-    response = await fetch(config.responsesUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "authorization": `Bearer ${config.apiKey}`,
-        "user-agent": "Odessay/1.0",
-      },
-      body: JSON.stringify({
-        model: config.model,
-        input: [
-          { role: "system", content: buildWorkspaceClassificationSystemPrompt() },
-          { role: "user", content: promptText },
-        ],
-        max_output_tokens: Math.max(config.maxOutputTokens, 8_192),
-        reasoning: { effort: config.reasoningEffort },
-        store: false,
-        text: { format: workspaceClassificationTextFormat },
-      }),
-      signal: controller.signal,
-    })
-  } catch (cause) {
-    const isAbort = cause instanceof Error && cause.name === "AbortError"
-    throw new ClassificationRouteError(
-      isAbort ? 504 : 503,
-      isAbort ? "TIMEOUT" : "UNAVAILABLE",
-      isAbort
-        ? "AI provider timed out while classifying the selected artifacts."
-        : "AI provider is unavailable for workspace classification.",
-      true,
-      { phase: "provider" },
-    )
-  } finally {
-    clearTimeout(timeout)
-  }
-
-  if (!response.ok) {
-    const providerBodyClass = classifyProviderBody(await response.text())
-    console.info("[workspace-classification] provider error", {
-      status: response.status,
-      bodyClass: providerBodyClass,
-    })
-
-    if (response.status === 429) {
-      throw new ClassificationRouteError(
-        429,
-        "RATE_LIMITED",
-        "AI provider rate limited workspace classification.",
-        true,
-        { phase: "provider", providerStatus: response.status, providerBodyClass },
-      )
-    }
-
-    if (response.status === 400 || response.status === 422) {
-      throw new ClassificationRouteError(
-        422,
-        "AI_PROVIDER_CONTRACT_ERROR",
-        "AI provider rejected the workspace classification contract.",
-        false,
-        { phase: "provider", providerStatus: response.status, providerBodyClass },
-      )
-    }
-
-    if (response.status === 401 || response.status === 403) {
-      throw new ClassificationRouteError(
-        502,
-        "AI_PROVIDER_AUTH_ERROR",
-        "OpenAI rejected the configured workspace classification credentials.",
-        false,
-        { phase: "provider", providerStatus: response.status, providerBodyClass },
-      )
-    }
-
-    throw new ClassificationRouteError(
-      response.status >= 500 ? 503 : 502,
-      response.status >= 500 ? "UNAVAILABLE" : "AI_PROVIDER_ERROR",
-      response.status >= 500
-        ? "AI provider is unavailable for workspace classification."
-        : "AI provider failed workspace classification.",
-      response.status >= 500,
-      { phase: "provider", providerStatus: response.status, providerBodyClass },
-    )
-  }
-
-  let payload: {
-    output_text?: string
-    status?: string
-    incomplete_details?: { reason?: string | null } | null
-    output?: Array<{
-      type?: string
-      content?: Array<{
-        type?: string
-        text?: string
-        refusal?: string
-      }>
-    }>
-    usage?: {
-      input_tokens?: number
-      output_tokens?: number
-      total_tokens?: number
-    }
-  }
-
-  try {
-    payload = await response.json()
-  } catch {
-    throw new ClassificationRouteError(
-      502,
-      "AI_RESPONSE_PARSE_FAILED",
-      "AI provider returned an invalid workspace classification response.",
-      true,
-      { phase: "parse", providerStatus: response.status },
-    )
-  }
-
-  if (payload.status === "incomplete") {
-    throw new ClassificationRouteError(
-      502,
-      "AI_RESPONSE_PARSE_FAILED",
-      "AI provider truncated the workspace classification response.",
-      true,
-      { phase: "parse", providerStatus: response.status },
-    )
-  }
-
-  const refusal = payload.output
-    ?.flatMap((item) => item.content ?? [])
-    .find((content) => content.type === "refusal")
-
-  if (refusal) {
-    throw new ClassificationRouteError(
-      502,
-      "AI_RESPONSE_REFUSED",
-      "OpenAI refused to classify the selected artifacts.",
-      false,
-      { phase: "parse", providerStatus: response.status },
-    )
-  }
-
-  const outputText = payload.output_text
-    ?? payload.output
-      ?.flatMap((item) => item.content ?? [])
-      .filter((content) => content.type === "output_text")
-      .map((content) => content.text ?? "")
-      .join("")
-  const text = outputText?.trim() ?? ""
-  if (!text) {
-    throw new ClassificationRouteError(
-      502,
-      "AI_RESPONSE_PARSE_FAILED",
-      "AI provider returned an empty workspace classification response.",
-      true,
-      { phase: "parse", providerStatus: response.status },
-    )
-  }
-
-  return {
-    text,
-    usage: {
-      promptTokens: payload.usage?.input_tokens ?? null,
-      completionTokens: payload.usage?.output_tokens ?? null,
-      totalTokens: payload.usage?.total_tokens ?? null,
-    },
-  }
+function routeErrorFromOpenAI(cause: WorkspaceOpenAIResponseError): ClassificationRouteError {
+  return new ClassificationRouteError(cause.status, cause.code, cause.message, cause.retryable, cause.details)
 }
 
 export async function POST(request: Request) {
@@ -273,34 +92,105 @@ export async function POST(request: Request) {
     return withCorsHeaders(jsonError(400, "INVALID_INPUT", "Could not read the workspace classification request."), request)
   }
 
+  const execution = normalizeWorkspaceExecutionContext(parsed.data.execution, {
+    action: "classification",
+    runtime: "cloud",
+  })
+  const initialReceipt = createWorkspaceExecutionReceipt(execution)
   const startedAt = Date.now()
+  let configuredModel: string | null = null
+
   try {
     let config: ReturnType<typeof getOpenAIWorkspaceProviderConfig>
     try {
       config = getOpenAIWorkspaceProviderConfig()
+      configuredModel = config.model
     } catch (cause) {
       throw new ClassificationRouteError(
         500,
         "MISSING_CONFIG",
         cause instanceof Error ? cause.message : "AI provider is not configured.",
         false,
-        { phase: "config" },
+        { phase: "config", receipt: withWorkspaceExecutionOutcome(initialReceipt, "provider-error") },
       )
     }
-    const response = await callClassificationModel({
-      config,
-      promptText: buildWorkspaceClassificationUserPrompt(parsed.data),
-    })
+
+    let response: Awaited<ReturnType<typeof callWorkspaceOpenAIResponse>>
+    try {
+      response = await callWorkspaceOpenAIResponse({
+        config,
+        execution,
+        systemPrompt: buildWorkspaceClassificationSystemPrompt(),
+        userPrompt: buildWorkspaceClassificationUserPrompt(parsed.data),
+        maxOutputTokens: Math.max(config.maxOutputTokens, 8_192),
+        timeoutMs: 45_000,
+        textFormat: workspaceClassificationTextFormat,
+        messages: {
+          unavailable: "AI provider is unavailable for workspace classification.",
+          timeout: "AI provider timed out while classifying the selected artifacts.",
+          rateLimited: "AI provider rate limited workspace classification.",
+          contractRejected: "AI provider rejected the workspace classification contract.",
+          authRejected: "OpenAI rejected the configured workspace classification credentials.",
+          providerFailed: "AI provider failed workspace classification.",
+          parseFailed: "AI provider returned an invalid workspace classification response.",
+        },
+      })
+    } catch (cause) {
+      if (cause instanceof WorkspaceOpenAIResponseError) throw routeErrorFromOpenAI(cause)
+      throw cause
+    }
+
+    const providerPayload = response.payload
+    if (providerPayload.status === "incomplete") {
+      throw new ClassificationRouteError(
+        502,
+        "AI_RESPONSE_PARSE_FAILED",
+        "AI provider truncated the workspace classification response.",
+        true,
+        { phase: "parse", receipt: withWorkspaceExecutionOutcome(response.receipt, "incomplete") },
+      )
+    }
+
+    const refusal = providerPayload.output
+      ?.flatMap((item) => item.content ?? [])
+      .find((content) => content.type === "refusal")
+    if (refusal) {
+      throw new ClassificationRouteError(
+        502,
+        "AI_RESPONSE_REFUSED",
+        "OpenAI refused to classify the selected artifacts.",
+        false,
+        { phase: "parse", receipt: withWorkspaceExecutionOutcome(response.receipt, "refused") },
+      )
+    }
+
+    const outputText = providerPayload.output_text
+      ?? providerPayload.output
+        ?.flatMap((item) => item.content ?? [])
+        .filter((content) => content.type === "output_text")
+        .map((content) => content.text ?? "")
+        .join("")
+    const text = outputText?.trim() ?? ""
+    if (!text) {
+      throw new ClassificationRouteError(
+        502,
+        "AI_RESPONSE_PARSE_FAILED",
+        "AI provider returned an empty workspace classification response.",
+        true,
+        { phase: "parse", receipt: withWorkspaceExecutionOutcome(response.receipt, "invalid-output") },
+      )
+    }
+
     let modelPayload: unknown
     try {
-      modelPayload = JSON.parse(extractJsonPayload(response.text))
+      modelPayload = JSON.parse(extractJsonPayload(text))
     } catch {
       throw new ClassificationRouteError(
         502,
         "AI_RESPONSE_PARSE_FAILED",
         "AI did not return valid workspace classification JSON.",
         true,
-        { phase: "parse" },
+        { phase: "parse", receipt: withWorkspaceExecutionOutcome(response.receipt, "invalid-output") },
       )
     }
 
@@ -311,18 +201,40 @@ export async function POST(request: Request) {
         "AI_RESPONSE_PARSE_FAILED",
         "AI did not return a valid workspace classification proposal.",
         true,
-        { phase: "parse" },
+        { phase: "parse", receipt: withWorkspaceExecutionOutcome(response.receipt, "invalid-output") },
       )
     }
 
+    const receipt = withWorkspaceExecutionOutcome(response.receipt, "validated")
     const data: WorkspaceClassificationApiPayload = {
       ...validated.data,
       model: config.model,
-      promptTokens: response.usage.promptTokens,
-      completionTokens: response.usage.completionTokens,
-      totalTokens: response.usage.totalTokens,
+      promptTokens: receipt.responses.at(-1)?.usage.promptTokens ?? null,
+      completionTokens: receipt.responses.at(-1)?.usage.completionTokens ?? null,
+      totalTokens: receipt.responses.at(-1)?.usage.totalTokens ?? null,
       latencyMs: Date.now() - startedAt,
+      executionReceipt: receipt,
     }
+
+    const latest = receipt.responses.at(-1)
+    console.info("[workspace-classification] response stored", {
+      userId,
+      invocationId: receipt.invocationId,
+      supportId: receipt.supportId,
+      action: receipt.action,
+      stage: receipt.stage,
+      runtime: receipt.runtime,
+      contextVersion: receipt.contextVersion,
+      responseIds: receipt.responses.map((item) => item.responseId).filter(Boolean),
+      model: latest?.model ?? config.model,
+      status: latest?.status ?? null,
+      providerStatus: receipt.providerStatus,
+      promptTokens: latest?.usage.promptTokens ?? null,
+      completionTokens: latest?.usage.completionTokens ?? null,
+      totalTokens: latest?.usage.totalTokens ?? null,
+      latencyMs: latest?.latencyMs ?? Date.now() - startedAt,
+      error: null,
+    })
 
     return withCorsHeaders(NextResponse.json({ data, error: null }), request)
   } catch (cause) {
@@ -333,17 +245,32 @@ export async function POST(request: Request) {
           "AI_REQUEST_FAILED",
           "Workspace classification could not be completed.",
           true,
-          { phase: "config" },
+          { phase: "config", receipt: withWorkspaceExecutionOutcome(initialReceipt, "provider-error") },
         )
+    const receipt = error.details.receipt ?? initialReceipt
+    const latest = receipt.responses.at(-1)
     console.error("[workspace-classification] request failed", {
       userId,
-      code: error.code,
+      invocationId: receipt.invocationId,
+      supportId: receipt.supportId,
+      action: receipt.action,
+      stage: receipt.stage,
+      runtime: receipt.runtime,
+      contextVersion: receipt.contextVersion,
+      responseIds: receipt.responses.map((item) => item.responseId).filter(Boolean),
+      model: latest?.model ?? configuredModel,
+      status: latest?.status ?? null,
+      providerStatus: error.details.providerStatus ?? receipt.providerStatus,
+      promptTokens: latest?.usage.promptTokens ?? null,
+      completionTokens: latest?.usage.completionTokens ?? null,
+      totalTokens: latest?.usage.totalTokens ?? null,
+      latencyMs: latest?.latencyMs ?? Date.now() - startedAt,
+      error: error.code,
       phase: error.details.phase,
-      providerStatus: error.details.providerStatus,
     })
     return withCorsHeaders(jsonError(error.status, error.code, error.message, {
       retryable: error.retryable,
-      details: error.details,
+      details: { ...error.details, receipt },
     }), request)
   }
 }

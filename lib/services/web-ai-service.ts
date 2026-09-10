@@ -21,6 +21,7 @@ import type {
   WorkspaceToolPresentationResult,
 } from "@/lib/services/contracts/ai-service"
 import type { ServiceError } from "@/lib/services/contracts/service-types"
+import type { WorkspaceExecutionReceipt } from "@/lib/ai/workspace-execution-receipt"
 import { err, ok, parseServiceEnvelope } from "@/lib/services/service-response"
 
 async function checkWritingLifecycleForRemoteAI(writingId: string): Promise<{ allowed: boolean; reason?: string }> {
@@ -66,6 +67,7 @@ type WorkspaceClassificationPayload = {
   completionTokens: number | null
   totalTokens: number | null
   latencyMs: number | null
+  executionReceipt?: WorkspaceExecutionReceipt | null
 }
 
 type WorkspaceAskPayload = {
@@ -78,6 +80,7 @@ type WorkspaceAskPayload = {
   completionTokens: number | null
   totalTokens: number | null
   latencyMs: number | null
+  executionReceipt?: WorkspaceExecutionReceipt | null
 }
 
 type WorkspaceToolPresentationPayload = {
@@ -87,6 +90,7 @@ type WorkspaceToolPresentationPayload = {
   completionTokens: number | null
   totalTokens: number | null
   latencyMs: number | null
+  executionReceipt?: WorkspaceExecutionReceipt | null
 }
 
 type LearnedWordsPayload = {
@@ -212,6 +216,7 @@ export const webAIService: AIService = {
           totalTokens: parsed.data.totalTokens,
           latencyMs: parsed.data.latencyMs,
         },
+        ...(parsed.data.executionReceipt ? { executionReceipt: parsed.data.executionReceipt } : {}),
       })
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not classify the selected artifacts right now.")
@@ -248,6 +253,7 @@ export const webAIService: AIService = {
           totalTokens: parsed.data.totalTokens,
           latencyMs: parsed.data.latencyMs,
         },
+        ...(parsed.data.executionReceipt ? { executionReceipt: parsed.data.executionReceipt } : {}),
       })
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not answer that question right now.")
@@ -281,6 +287,7 @@ export const webAIService: AIService = {
           totalTokens: parsed.data.totalTokens,
           latencyMs: parsed.data.latencyMs,
         },
+        ...(parsed.data.executionReceipt ? { executionReceipt: parsed.data.executionReceipt } : {}),
       })
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not phrase this result right now.")

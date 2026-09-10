@@ -15,6 +15,7 @@ import type {
   WorkspaceAgentService,
 } from "@/lib/services/workspace-agent-service"
 import type { MergeReviewToolResult } from "@/components/agent/workspace-agent-review-merge"
+import type { WorkspaceExecutionReceipt } from "@/lib/ai/workspace-execution-receipt"
 
 export type WorkspaceAgentContextAttachment = {
   kind: "file" | "folder"
@@ -80,6 +81,8 @@ export type AgentMessage = {
    * whichever Workspace happens to be current when the user clicks Approve.
    */
   executionService?: WorkspaceAgentService
+  /** Provider correlation receipt; in-memory only and safe to copy to support. */
+  executionReceipt?: WorkspaceExecutionReceipt | null
 }
 
 let messageSequence = 0
@@ -102,8 +105,9 @@ export function createToolResultMessage(
   id?: string,
   context?: WorkspaceAgentMessageContext,
   executionService?: WorkspaceAgentService,
+  executionReceipt?: WorkspaceExecutionReceipt | null,
 ): AgentMessage {
-  return { id: id ?? createAgentMessageId("agent"), role: "agent", text, toolResult, context, executionService }
+  return { id: id ?? createAgentMessageId("agent"), role: "agent", text, toolResult, context, executionService, executionReceipt }
 }
 
 export function createApproval(action: WorkspaceAgentAction, resource: string): WorkspaceAgentApproval {

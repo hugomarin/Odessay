@@ -101,7 +101,13 @@ describe("POST /api/ai/workspace-classification", () => {
       expect(_url).toBe("https://api.openai.com/v1/responses")
       expect(body.max_output_tokens).toBe(8_192)
       expect(body.reasoning).toEqual({ effort: "none" })
-      expect(body.store).toBe(false)
+      expect(body.store).toBe(true)
+      expect(body.metadata).toMatchObject({
+        action: "classification",
+        stage: "analysis",
+        runtime: "cloud",
+        context_version: "workspace-agent-v1",
+      })
       expect(body.text.format).toMatchObject({
         type: "json_schema",
         name: "WorkspaceClassificationResponse",
@@ -146,6 +152,13 @@ describe("POST /api/ai/workspace-classification", () => {
       promptTokens: 220,
       completionTokens: 160,
       totalTokens: 380,
+      executionReceipt: expect.objectContaining({
+        supportId: "resp_test",
+        invocationId: expect.any(String),
+        providerStatus: "completed",
+        productStatus: "validated",
+        responses: [expect.objectContaining({ responseId: "resp_test", status: "completed" })],
+      }),
       proposals: [expect.objectContaining({ documentId: "doc-1", decision: "keep" })],
     })
   })

@@ -68,6 +68,12 @@ import {
   type ContextArtifactStore,
   type ContextLedger,
 } from "@/lib/services/context"
+import {
+  createWorkspaceExecutionContext,
+  mergeWorkspaceExecutionReceipts,
+  type WorkspaceExecutionContext,
+  type WorkspaceExecutionReceipt,
+} from "@/lib/ai/workspace-execution-receipt"
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
@@ -220,6 +226,7 @@ export type WorkspaceAgentClassificationInput = {
   request?: string
   selection: readonly WorkspaceAgentSelection[]
   workflowReadApproval?: WorkspaceAgentApproval
+  execution?: WorkspaceExecutionContext | null
 }
 
 export type WorkspaceAgentClassificationRequestedDocument = {
@@ -234,6 +241,8 @@ export type WorkspaceAgentClassificationRun = {
   requestedDocumentIds: string[]
   requestedDocuments: WorkspaceAgentClassificationRequestedDocument[]
   targetDocumentIds: string[]
+  executionContext: WorkspaceExecutionContext
+  executionReceipt: WorkspaceExecutionReceipt | null
 }
 
 export type WorkspaceAgentAskInput = {
@@ -259,6 +268,7 @@ export type WorkspaceAgentAskInput = {
    * with its content included — never on every turn, only when asked for.
    */
   focusedDocumentId?: string | null
+  execution?: WorkspaceExecutionContext | null
 }
 
 export type WorkspaceAgentCitedDocument = {
@@ -282,6 +292,14 @@ export type WorkspaceAgentAskRun = {
    * available there to dispatch anything to.
    */
   suggestedAction: "workflow" | "broken-links" | "classification" | "archive" | "contradictions" | null
+  executionContext: WorkspaceExecutionContext
+  executionReceipt: WorkspaceExecutionReceipt | null
+}
+
+export type WorkspaceAgentPresentationRun = {
+  note: string
+  executionContext: WorkspaceExecutionContext
+  executionReceipt: WorkspaceExecutionReceipt | null
 }
 
 /**
@@ -298,6 +316,7 @@ export type WorkspaceAgentDocumentAskInput = {
   title: string | null
   markdown: string
   sessionContext?: readonly string[]
+  execution?: WorkspaceExecutionContext | null
 }
 
 /**
@@ -313,6 +332,7 @@ export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): P
   const documentId = input.documentId ?? EPHEMERAL_CONVERSATION_DOCUMENT_ID
   const title = input.title?.trim() || null
   const markdown = input.markdown.slice(0, MAX_WORKSPACE_ASK_DOCUMENT_CHARS)
+  const execution = input.execution ?? createWorkspaceExecutionContext("ask", "web")
 
   /**
    * The content is already in memory (the caller read it straight from the
@@ -347,7 +367,10 @@ export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): P
       recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
       focusedDocumentId: documentId,
     }
-    return getAIService().askWorkspace(aiRequest)
+    return getAIService().askWorkspace({
+      ...aiRequest,
+      execution: includeContent ? { ...execution, stage: "context-acquisition" } : execution,
+    })
   }
 
   let aiResult = await runRound(false)
@@ -359,11 +382,14 @@ export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): P
   // document it already knows about, so no "unrelated id" case to guard
   // against here the way the Workspace-backed retry does.
   let hasContent = false
+  const executionReceipts: WorkspaceExecutionReceipt[] = []
+  if (aiResult.data.executionReceipt) executionReceipts.push(aiResult.data.executionReceipt)
   if (aiResult.data.requestedDocumentIds.includes(documentId)) {
     const retry = await runRound(true)
     if (!retry.error && retry.data) {
       aiResult = retry
       hasContent = true
+      if (retry.data.executionReceipt) executionReceipts.push(retry.data.executionReceipt)
     }
     // A retry failure keeps round 1's already-valid answer.
   }
@@ -396,6 +422,8 @@ export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): P
     // No Workspace/service here to dispatch a predetermined action to, even
     // if the model still suggested one.
     suggestedAction: null,
+    executionContext: execution,
+    executionReceipt: mergeWorkspaceExecutionReceipts(executionReceipts),
   })
 }
 
@@ -914,7 +942,8 @@ export type WorkspaceAgentService = {
     kind: WorkspaceToolPresentationRequest["kind"],
     facts: readonly string[],
     sessionContext?: readonly string[],
-  ): Promise<string>
+    execution?: WorkspaceExecutionContext | null,
+  ): Promise<WorkspaceAgentPresentationRun>
   applyClassification(
     proposal: ClassificationProposal,
     approval: WorkspaceAgentApproval,
@@ -1205,6 +1234,7 @@ export async function createWorkspaceAgentService(
       })
     },
     async suggestClassification(input) {
+      const execution = input.execution ?? createWorkspaceExecutionContext("classification", "desktop")
       const requestedText = input.request?.trim() || DEFAULT_CLASSIFICATION_REQUEST
       const context = await getContextWithWorkflowInstructions(input.workflowReadApproval)
       if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentClassificationRun>
@@ -1249,6 +1279,7 @@ export async function createWorkspaceAgentService(
           descriptor: context.data.workflowDescriptor,
         },
         catalogTruncated,
+        execution,
       }
       const aiResult = await getAIService().classifyWorkspace(aiRequest)
       if (aiResult.error || !aiResult.data) {
@@ -1290,9 +1321,12 @@ export async function createWorkspaceAgentService(
         requestedDocumentIds,
         requestedDocuments,
         targetDocumentIds: selectedRecords.map((record) => record.id),
+        executionContext: execution,
+        executionReceipt: aiResult.data.executionReceipt ?? null,
       })
     },
     async askAgent(input) {
+      const execution = input.execution ?? createWorkspaceExecutionContext("ask", "desktop")
       const context = await getContextWithWorkflowInstructions(input.workflowReadApproval)
       if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentAskRun>
       const contextData = context.data
@@ -1306,6 +1340,7 @@ export async function createWorkspaceAgentService(
        */
       const runAskRound = async (
         selection: readonly WorkspaceAgentSelection[],
+        roundExecution: WorkspaceExecutionContext,
       ): Promise<ServiceResponse<{ prepared: PreparedDocumentEvidence; aiResult: WorkspaceAskResult }>> => {
         const prepared = await prepareDocumentEvidence(contextData, selection, tools, {
           maxTargets: MAX_WORKSPACE_ASK_TARGETS,
@@ -1354,6 +1389,7 @@ export async function createWorkspaceAgentService(
           catalogTruncated: prepared.data.catalogTruncated,
           recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
           focusedDocumentId: focusedDocumentIdForRequest,
+          execution: roundExecution,
         }
         const aiResult = await getAIService().askWorkspace(aiRequest)
         if (aiResult.error || !aiResult.data) {
@@ -1362,10 +1398,11 @@ export async function createWorkspaceAgentService(
         return ok({ prepared: prepared.data, aiResult: aiResult.data })
       }
 
-      const first = await runAskRound(input.selection)
+      const first = await runAskRound(input.selection, execution)
       if (first.error || !first.data) return first as ServiceResponse<WorkspaceAgentAskRun>
 
       let { prepared, aiResult } = first.data
+      let executionReceipt = aiResult.executionReceipt ?? null
 
       // Bounded, one-shot retry — only for a document the host already knows
       // is relevant without a new scope decision: the one the caller said the
@@ -1400,9 +1437,10 @@ export async function createWorkspaceAgentService(
         const uniqueRetrySelection = [...retryTargets, ...input.selection]
           .filter((entry, index, all) => all.findIndex((other) => retryKey(other) === retryKey(entry)) === index)
           .slice(0, MAX_WORKSPACE_ASK_TARGETS)
-        const retry = await runAskRound(uniqueRetrySelection)
+        const retry = await runAskRound(uniqueRetrySelection, { ...execution, stage: "context-acquisition" })
         if (!retry.error && retry.data) {
           ;({ prepared, aiResult } = retry.data)
+          executionReceipt = mergeWorkspaceExecutionReceipts([executionReceipt, aiResult.executionReceipt])
         }
       }
 
@@ -1444,18 +1482,26 @@ export async function createWorkspaceAgentService(
           path: record.binding?.relativePath ?? null,
         })),
         suggestedAction: aiResult.suggestedAction ?? null,
+        executionContext: execution,
+        executionReceipt,
       })
     },
-    async presentNote(kind, facts, sessionContext) {
+    async presentNote(kind, facts, sessionContext, requestedExecution) {
       const cleanFacts = facts.map((fact) => fact.trim()).filter(Boolean)
-      if (cleanFacts.length === 0) return ""
+      const execution = requestedExecution ?? createWorkspaceExecutionContext("presentation", "desktop", "presentation")
+      if (cleanFacts.length === 0) return { note: "", executionContext: execution, executionReceipt: null }
       const fallback = cleanFacts.join(" ")
       const result = await getAIService().presentToolResult({
         kind,
         facts: cleanFacts,
         recentSessionActions: sessionContext ? [...sessionContext] : undefined,
+        execution,
       })
-      return result.data?.note?.trim() || fallback
+      return {
+        note: result.data?.note?.trim() || fallback,
+        executionContext: execution,
+        executionReceipt: result.data?.executionReceipt ?? null,
+      }
     },
     async applyClassification(proposal, approval) {
       if (proposal.decision !== "change") {
