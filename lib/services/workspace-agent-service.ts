@@ -14,7 +14,6 @@ import {
 import {
   buildWorkflowDraft,
   detectBrokenDocumentReferences,
-  detectDocumentContradictions,
   findArchiveCandidates,
   removeBrokenDocumentReference,
   replaceBrokenDocumentReference,
@@ -28,7 +27,6 @@ import {
   type ContradictionProposal,
   type ContradictionResolution,
   type EvidenceCitation,
-  type WorkspaceAgentContentSnapshot,
   type WorkflowDraftProposal,
 } from "@/lib/agent/workspace-agent-analysis"
 import {
@@ -52,7 +50,6 @@ import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-ca
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import type {
   WorkspaceAgentApproval,
-  WorkspaceAgentDocument,
   WorkspaceAgentEvidence,
   WorkspaceAgentEvidenceReadInput,
   WorkspaceAgentEvidenceReadResult,
@@ -92,8 +89,13 @@ import {
 } from "@/lib/ai/workspace-semantic-tool-registry"
 import {
   buildWorkspaceDocumentRelationsRequest,
+  isResolvableSemanticContradiction,
   MAX_WORKSPACE_RELATION_DOCUMENTS,
   parseWorkspaceDocumentRelationsResult,
+  type WorkspaceDocumentRelation,
+  type WorkspaceDocumentRelationSource,
+  type WorkspaceRelationConfidence,
+  type WorkspaceRelationVerdict,
   type WorkspaceDocumentRelationsResult,
 } from "@/lib/ai/workspace-document-relations"
 
@@ -209,14 +211,154 @@ function annotationEvidence(documentId: string, markdown: string): WorkspaceClas
     }))
 }
 
-function contentSnapshot(document: WorkspaceAgentDocument): WorkspaceAgentContentSnapshot {
+function lineStartOffset(markdown: string, line: number): number {
+  if (line <= 1) return 0
+  const lines = markdown.split("\n")
+  return lines.slice(0, line - 1).reduce((total, value) => total + value.length + 1, 0)
+}
+
+function fragmentFromRelationEvidence(
+  source: WorkspaceDocumentRelationSource,
+  evidence: WorkspaceDocumentRelation["provenance"][number],
+): ContradictionProposal["left"]["fragment"] {
+  const expectedStart = lineStartOffset(source.markdown, evidence.lineStart)
+  const lineEnd = lineStartOffset(source.markdown, evidence.lineEnd + 1)
+  const foundStart = source.markdown.indexOf(evidence.text, expectedStart)
+  const start = foundStart >= expectedStart && foundStart < Math.max(lineEnd, expectedStart + evidence.text.length)
+    ? foundStart
+    : expectedStart
   return {
-    documentId: document.documentId,
-    title: document.title?.trim() || document.catalogRecord.title || document.documentId,
-    markdown: document.markdown,
-    updatedAt: new Date(document.catalogRecord.modifiedAt ?? Date.now()).toISOString(),
-    canonicalPath: document.canonicalPath,
+    text: evidence.text,
+    start,
+    end: start + evidence.text.length,
+    line: evidence.lineStart,
   }
+}
+
+export type WorkspaceAgentSemanticRelationSummary = {
+  relationId: string
+  verdict: WorkspaceRelationVerdict
+  confidence: WorkspaceRelationConfidence
+  rationale: string
+  evidenceIds: string[]
+  left: ContradictionProposal["left"]
+  right: ContradictionProposal["right"]
+  suggestedDocumentId: string | null
+  suggestedReason: string | null
+}
+
+export type WorkspaceAgentContradictionsRun = {
+  proposals: ContradictionProposal[]
+  /** Semantic relations that were valid but are intentionally non-actionable. */
+  nonActionable: WorkspaceAgentSemanticRelationSummary[]
+  review: WorkspaceDocumentRelationsResult
+}
+
+function relationSummary(
+  relation: WorkspaceDocumentRelation,
+  sourcesById: ReadonlyMap<string, WorkspaceDocumentRelationSource>,
+): WorkspaceAgentSemanticRelationSummary | null {
+  const leftEvidence = relation.provenance.find((item) => item.documentId === relation.leftDocumentId)
+  const rightEvidence = relation.provenance.find((item) => item.documentId === relation.rightDocumentId)
+  const leftSource = sourcesById.get(relation.leftDocumentId)
+  const rightSource = sourcesById.get(relation.rightDocumentId)
+  if (!leftEvidence || !rightEvidence || !leftSource || !rightSource) return null
+  return {
+    relationId: relation.relationId,
+    verdict: relation.verdict,
+    confidence: relation.confidence,
+    rationale: relation.rationale,
+    evidenceIds: relation.evidenceIds,
+    left: {
+      documentId: relation.leftDocumentId,
+      title: leftSource.title,
+      updatedAt: leftSource.updatedAt ?? "",
+      fragment: fragmentFromRelationEvidence(leftSource, leftEvidence),
+    },
+    right: {
+      documentId: relation.rightDocumentId,
+      title: rightSource.title,
+      updatedAt: rightSource.updatedAt ?? "",
+      fragment: fragmentFromRelationEvidence(rightSource, rightEvidence),
+    },
+    suggestedDocumentId: relation.suggestedDocumentId,
+    suggestedReason: relation.suggestedReason,
+  }
+}
+
+function semanticRelationTopic(summary: WorkspaceAgentSemanticRelationSummary): string {
+  const firstSentence = summary.rationale.split(/[.!?](?:\s|$)/, 1)[0]?.trim()
+  return (firstSentence || summary.left.fragment.text || "document claim").slice(0, 120)
+}
+
+function semanticProposal(
+  relation: WorkspaceDocumentRelation,
+  summary: WorkspaceAgentSemanticRelationSummary,
+  review: WorkspaceDocumentRelationsResult,
+): ContradictionProposal {
+  return {
+    id: summary.relationId,
+    topic: semanticRelationTopic(summary),
+    left: summary.left,
+    right: summary.right,
+    suggestedDocumentId: summary.suggestedDocumentId,
+    evidence: [
+      {
+        kind: "document",
+        sourceId: summary.left.documentId,
+        label: summary.left.title,
+        detail: `line ${summary.left.fragment.line} · evidence ${summary.evidenceIds.find((id) => relation.provenance.find((item) => item.evidenceId === id)?.documentId === summary.left.documentId) ?? "unknown"}`,
+        quote: summary.left.fragment.text,
+        line: summary.left.fragment.line,
+      },
+      {
+        kind: "document",
+        sourceId: summary.right.documentId,
+        label: summary.right.title,
+        detail: `line ${summary.right.fragment.line} · evidence ${summary.evidenceIds.find((id) => relation.provenance.find((item) => item.evidenceId === id)?.documentId === summary.right.documentId) ?? "unknown"}`,
+        quote: summary.right.fragment.text,
+        line: summary.right.fragment.line,
+      },
+      {
+        kind: "catalog",
+        sourceId: summary.relationId,
+        label: "Semantic review",
+        detail: `${summary.verdict} · ${summary.confidence} · evidence IDs: ${summary.evidenceIds.join(", ")} · coverage: ${review.coverage}`,
+        quote: summary.rationale,
+      },
+    ],
+    semanticVerdict: summary.verdict,
+    semanticConfidence: summary.confidence,
+    semanticRationale: summary.rationale,
+    semanticEvidenceIds: [...summary.evidenceIds],
+    semanticSuggestedReason: summary.suggestedReason,
+    semanticSourceSnapshots: Object.fromEntries([
+      [summary.left.documentId, {
+        documentVersion: relation.provenance.find((item) => item.documentId === summary.left.documentId)?.documentVersion ?? "",
+        contentHash: relation.provenance.find((item) => item.documentId === summary.left.documentId)?.contentHash ?? null,
+      }],
+      [summary.right.documentId, {
+        documentVersion: relation.provenance.find((item) => item.documentId === summary.right.documentId)?.documentVersion ?? "",
+        contentHash: relation.provenance.find((item) => item.documentId === summary.right.documentId)?.contentHash ?? null,
+      }],
+    ]),
+  }
+}
+
+function mapSemanticRelationsToContradictions(
+  review: WorkspaceDocumentRelationsResult,
+  sources: readonly WorkspaceDocumentRelationSource[],
+): Pick<WorkspaceAgentContradictionsRun, "proposals" | "nonActionable"> {
+  const sourcesById = new Map(sources.map((source) => [source.documentId, source]))
+  const proposals: ContradictionProposal[] = []
+  const nonActionable: WorkspaceAgentSemanticRelationSummary[] = []
+  for (const relation of review.relations) {
+    const summary = relationSummary(relation, sourcesById)
+    if (!summary) continue
+    if (isResolvableSemanticContradiction(relation)) proposals.push(semanticProposal(relation, summary, review))
+    else nonActionable.push(summary)
+  }
+  return { proposals, nonActionable }
 }
 
 type WorkspaceAgentContext = {
@@ -963,7 +1105,7 @@ export type WorkspaceAgentService = {
     documentIds: string[],
     readApprovals: Readonly<Record<string, WorkspaceAgentApproval>>,
     workflowReadApproval?: WorkspaceAgentApproval,
-  ): Promise<ServiceResponse<ContradictionProposal[]>>
+  ): Promise<ServiceResponse<WorkspaceAgentContradictionsRun>>
   resolveContradiction(
     proposal: ContradictionProposal,
     resolution: ContradictionResolution,
@@ -1233,6 +1375,70 @@ export async function createWorkspaceAgentService(
     })
   }
 
+  const runDocumentRelationReview = async (
+    documentIds: readonly string[],
+    readApprovals: Readonly<Record<string, WorkspaceAgentApproval>>,
+    execution?: WorkspaceExecutionContext | null,
+    signal?: AbortSignal,
+  ): Promise<ServiceResponse<{
+    sources: WorkspaceDocumentRelationSource[]
+    review: WorkspaceDocumentRelationsResult
+  }>> => {
+    const uniqueDocumentIds = [...new Set(documentIds.filter(Boolean))]
+    if (uniqueDocumentIds.length < 2 || uniqueDocumentIds.length > MAX_WORKSPACE_RELATION_DOCUMENTS) {
+      return error(
+        "INVALID_INPUT",
+        `Select between two and ${MAX_WORKSPACE_RELATION_DOCUMENTS} artifacts for semantic relation review.`,
+      )
+    }
+    for (const documentId of uniqueDocumentIds) {
+      if (!readApprovals[documentId]) {
+        return error("FORBIDDEN", `Reading document ${documentId} requires an explicit approval.`)
+      }
+    }
+
+    const sources: WorkspaceDocumentRelationSource[] = []
+    for (const documentId of uniqueDocumentIds) {
+      const read = await tools.read({ documentId, approval: readApprovals[documentId]! })
+      if (read.error || !read.data) {
+        return error(
+          read.error?.code ?? "NOT_FOUND",
+          read.error?.message ?? `Document ${documentId} could not be read.`,
+        )
+      }
+      const document = read.data.document
+      sources.push({
+        documentId: document.documentId,
+        title: document.title?.trim() || document.catalogRecord.title || document.documentId,
+        documentVersion: artifactVersionKey(document.catalogRecord),
+        contentHash: document.catalogRecord.binding?.contentHash ?? null,
+        updatedAt: typeof document.catalogRecord.modifiedAt === "number"
+          ? new Date(document.catalogRecord.modifiedAt).toISOString()
+          : null,
+        markdown: document.markdown,
+      })
+    }
+
+    const request = buildWorkspaceDocumentRelationsRequest(sources)
+    const reviewResponse = await runSemanticReview({
+      operation: "relations",
+      initialEvidence: request.initialEvidence,
+      initialInput: request.initialInput,
+      execution: execution ?? createWorkspaceExecutionContext("relations", "desktop", "semantic-review"),
+      signal,
+    })
+    if (reviewResponse.error || !reviewResponse.data) {
+      return error(
+        reviewResponse.error?.code ?? "AI_REQUEST_FAILED",
+        reviewResponse.error?.message ?? "Semantic relation review could not be completed.",
+      )
+    }
+    return ok({
+      sources,
+      review: parseWorkspaceDocumentRelationsResult(reviewResponse.data, request),
+    })
+  }
+
   return {
     tools,
     getContext,
@@ -1321,28 +1527,25 @@ export async function createWorkspaceAgentService(
     },
     async findContradictions(documentIds, readApprovals, workflowReadApproval) {
       const uniqueDocumentIds = [...new Set(documentIds.filter(Boolean))]
-      if (uniqueDocumentIds.length < 2) {
-        return error("INVALID_INPUT", "At least two documents are required to compare contradictions.")
-      }
-
-      for (const documentId of uniqueDocumentIds) {
-        if (!readApprovals[documentId]) {
-          return error("FORBIDDEN", `Reading document ${documentId} requires an explicit approval.`)
-        }
+      if (uniqueDocumentIds.length < 2 || uniqueDocumentIds.length > MAX_WORKSPACE_RELATION_DOCUMENTS) {
+        return error("INVALID_INPUT", `Select between two and ${MAX_WORKSPACE_RELATION_DOCUMENTS} artifacts to compare contradictions.`)
       }
 
       const context = await getContextWithWorkflow(workflowReadApproval)
-      if (context.error || !context.data) return context as ServiceResponse<ContradictionProposal[]>
+      if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentContradictionsRun>
 
-      const documents: WorkspaceAgentContentSnapshot[] = []
-      for (const documentId of uniqueDocumentIds) {
-        const approval = readApprovals[documentId]!
-        const read = await tools.read({ documentId, approval })
-        if (read.error || !read.data) return error("NOT_FOUND", read.error?.message ?? `Document ${documentId} could not be read.`)
-        documents.push(contentSnapshot(read.data.document))
+      const relationReview = await runDocumentRelationReview(uniqueDocumentIds, readApprovals)
+      if (relationReview.error || !relationReview.data) {
+        return error(
+          relationReview.error?.code ?? "AI_REQUEST_FAILED",
+          relationReview.error?.message ?? "Semantic contradiction review could not be completed.",
+        )
       }
-
-      return ok(detectDocumentContradictions(documents))
+      const mapped = mapSemanticRelationsToContradictions(relationReview.data.review, relationReview.data.sources)
+      return ok({
+        ...mapped,
+        review: relationReview.data.review,
+      })
     },
     async resolveContradiction(proposal, resolution, approvals) {
       if (resolution === "discard") {
@@ -1356,6 +1559,33 @@ export async function createWorkspaceAgentService(
       const target = resolution === "left" ? proposal.right : proposal.left
       const read = await tools.read({ documentId: target.documentId, approval: approvals.read })
       if (read.error || !read.data) return error("NOT_FOUND", read.error?.message ?? `Document ${target.documentId} could not be read.`)
+      const semanticSnapshots = proposal.semanticSourceSnapshots
+      if (semanticSnapshots) {
+        const targetSnapshot = semanticSnapshots[target.documentId]
+        if (targetSnapshot && (
+          artifactVersionKey(read.data.document.catalogRecord) !== targetSnapshot.documentVersion
+          || (targetSnapshot.contentHash !== null && (read.data.document.catalogRecord.binding?.contentHash ?? null) !== targetSnapshot.contentHash)
+        )) {
+          return error("CONFLICT", `The evidence in ${target.title} changed since this contradiction was proposed.`)
+        }
+
+        const selectedSnapshot = semanticSnapshots[selected.documentId]
+        if (selectedSnapshot) {
+          const selectedRead = await tools.read({
+            documentId: selected.documentId,
+            approval: createInternalReadApproval(selected.documentId),
+          })
+          if (selectedRead.error || !selectedRead.data) {
+            return error("CONFLICT", `The evidence in ${selected.title} is no longer available for this contradiction.`)
+          }
+          if (
+            artifactVersionKey(selectedRead.data.document.catalogRecord) !== selectedSnapshot.documentVersion
+            || (selectedSnapshot.contentHash !== null && (selectedRead.data.document.catalogRecord.binding?.contentHash ?? null) !== selectedSnapshot.contentHash)
+          ) {
+            return error("CONFLICT", `The evidence in ${selected.title} changed since this contradiction was proposed.`)
+          }
+        }
+      }
       const markdown = replaceContradictionFragment(read.data.document.markdown, target.fragment, selected.fragment.text)
       if (markdown === null) {
         return error("CONFLICT", `The evidence in ${target.title} changed since this contradiction was proposed.`)
@@ -1628,54 +1858,19 @@ export async function createWorkspaceAgentService(
       })
     },
     async reviewDocumentRelations(input) {
-      const uniqueDocumentIds = [...new Set(input.documentIds.filter(Boolean))]
-      if (uniqueDocumentIds.length < 2 || uniqueDocumentIds.length > MAX_WORKSPACE_RELATION_DOCUMENTS) {
+      const relationReview = await runDocumentRelationReview(
+        input.documentIds,
+        input.readApprovals,
+        input.execution,
+        input.signal,
+      )
+      if (relationReview.error || !relationReview.data) {
         return error(
-          "INVALID_INPUT",
-          `Select between two and ${MAX_WORKSPACE_RELATION_DOCUMENTS} artifacts for semantic relation review.`,
+          relationReview.error?.code ?? "AI_REQUEST_FAILED",
+          relationReview.error?.message ?? "Semantic relation review could not be completed.",
         )
       }
-      for (const documentId of uniqueDocumentIds) {
-        if (!input.readApprovals[documentId]) {
-          return error("FORBIDDEN", `Reading document ${documentId} requires an explicit approval.`)
-        }
-      }
-
-      const sources = []
-      for (const documentId of uniqueDocumentIds) {
-        const read = await tools.read({ documentId, approval: input.readApprovals[documentId]! })
-        if (read.error || !read.data) {
-          return error(
-            read.error?.code ?? "NOT_FOUND",
-            read.error?.message ?? `Document ${documentId} could not be read.`,
-          )
-        }
-        const document = read.data.document
-        sources.push({
-          documentId: document.documentId,
-          title: document.title?.trim() || document.catalogRecord.title || document.documentId,
-          documentVersion: artifactVersionKey(document.catalogRecord),
-          contentHash: document.catalogRecord.binding?.contentHash ?? null,
-          markdown: document.markdown,
-        })
-      }
-
-      const request = buildWorkspaceDocumentRelationsRequest(sources)
-      const execution = input.execution ?? createWorkspaceExecutionContext("relations", "desktop", "semantic-review")
-      const review = await runSemanticReview({
-        operation: "relations",
-        initialEvidence: request.initialEvidence,
-        initialInput: request.initialInput,
-        execution,
-        signal: input.signal,
-      })
-      if (review.error || !review.data) {
-        return error(
-          review.error?.code ?? "AI_REQUEST_FAILED",
-          review.error?.message ?? "Semantic relation review could not be completed.",
-        )
-      }
-      return ok(parseWorkspaceDocumentRelationsResult(review.data, request))
+      return ok(relationReview.data.review)
     },
     async presentNote(kind, facts, sessionContext, requestedExecution) {
       const cleanFacts = facts.map((fact) => fact.trim()).filter(Boolean)

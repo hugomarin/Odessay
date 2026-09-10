@@ -46,6 +46,8 @@ export type WorkspaceDocumentRelationSource = {
   title: string
   documentVersion: string
   contentHash: string | null
+  /** Application-only metadata used to build an existing proposal; never sent in the provider prompt. */
+  updatedAt?: string | null
   markdown: string
 }
 
@@ -94,6 +96,7 @@ export type WorkspaceDocumentRelation = {
 export type WorkspaceDocumentRelationsResult = {
   status: WorkspaceSemanticLoopStatus
   coverage: WorkspaceSemanticCoverage
+  rounds: number
   relations: WorkspaceDocumentRelation[]
   invalidItemCount: number
   candidateCount: number
@@ -408,6 +411,7 @@ export function parseWorkspaceDocumentRelationsResult(
     return {
       status: loop.status === "complete" ? "unable" : loop.status,
       coverage: loop.status === "complete" ? "unknown" : loop.coverage,
+      rounds: loop.rounds,
       relations: [],
       invalidItemCount: loop.status === "complete" ? 1 : 0,
       candidateCount: request.candidates.length,
@@ -477,7 +481,11 @@ export function parseWorkspaceDocumentRelationsResult(
     if (suggestedDocumentId === null) suggestedReason = null
     if (
       suggestedDocumentId !== null
-      && (!sourceIds.has(suggestedDocumentId) || !suggestedReason)
+      && (
+        !sourceIds.has(suggestedDocumentId)
+        || (suggestedDocumentId !== item.data.leftDocumentId && suggestedDocumentId !== item.data.rightDocumentId)
+        || !suggestedReason
+      )
     ) {
       // The semantic classification remains useful, but the invalid source
       // hint is discarded rather than becoming a hidden recency fallback.
@@ -524,6 +532,7 @@ export function parseWorkspaceDocumentRelationsResult(
   return {
     status,
     coverage,
+    rounds: loop.rounds,
     relations,
     invalidItemCount,
     candidateCount: request.candidates.length,

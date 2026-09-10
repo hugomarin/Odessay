@@ -12,6 +12,7 @@ import type {
 import type {
   WorkspaceAgentCitedDocument,
   WorkspaceAgentClassificationRequestedDocument,
+  WorkspaceAgentSemanticRelationSummary,
   WorkspaceAgentService,
 } from "@/lib/services/workspace-agent-service"
 import type { MergeReviewToolResult } from "@/components/agent/workspace-agent-review-merge"
@@ -48,7 +49,12 @@ export type ToolResult =
       requestedDocuments: WorkspaceAgentClassificationRequestedDocument[]
     }
   | { kind: "archive"; candidates: ArchiveCandidate[] }
-  | { kind: "contradictions"; proposals: ContradictionProposal[] }
+  | {
+      kind: "contradictions"
+      proposals: ContradictionProposal[]
+      /** Valid semantic relations intentionally excluded from the resolution queue. */
+      nonActionable?: WorkspaceAgentSemanticRelationSummary[]
+    }
   | { kind: "merge"; merge: MergeReviewToolResult }
 
 /**

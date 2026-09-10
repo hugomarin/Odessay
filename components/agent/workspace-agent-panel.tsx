@@ -66,6 +66,7 @@ import {
   type ToolResult,
   type WorkspaceAgentContextAttachment,
   type WorkspaceAgentMessageContext,
+  type WorkspaceAgentSemanticReviewState,
 } from "@/lib/agent/workspace-agent-chat"
 import {
   buildContextEnvelope,
@@ -456,7 +457,13 @@ function WorkspaceAgentPanelSession({
    * silently overwriting the previous one.
    */
   /** `generation` is the session generation active when the action that produced this note started (see sessionGenerationRef). */
-  const pushAgentNote = useCallback((text: string, generation: number, toolResult?: ToolResult, executionReceipt?: WorkspaceExecutionReceipt | null) => {
+  const pushAgentNote = useCallback((
+    text: string,
+    generation: number,
+    toolResult?: ToolResult,
+    executionReceipt?: WorkspaceExecutionReceipt | null,
+    semanticReview?: WorkspaceAgentSemanticReviewState | null,
+  ) => {
     const context = buildMessageContext(scope, scopeLabel, workspaceRootPath)
     // Frozen at the same moment as `context` — this message's review card
     // (if any) must always execute against the Workspace it was produced
@@ -464,7 +471,7 @@ function WorkspaceAgentPanelSession({
     const executionService = service ?? undefined
     setMessages((current) => {
       if (sessionGenerationRef.current !== generation) return current
-      return [...current, createToolResultMessage(text, toolResult, undefined, context, executionService, executionReceipt)]
+      return [...current, createToolResultMessage(text, toolResult, undefined, context, executionService, executionReceipt, semanticReview)]
     })
     if (sessionGenerationRef.current === generation) setFeedback(null)
   }, [scope, scopeLabel, service, workspaceRootPath])
@@ -477,8 +484,14 @@ function WorkspaceAgentPanelSession({
   }, [])
 
   /** Announces a predetermined action's outcome in chat and records it as session memory so later questions stay consistent with it. */
-  const announceToolResult = useCallback((text: string, generation: number, toolResult?: ToolResult, executionReceipt?: WorkspaceExecutionReceipt | null) => {
-    pushAgentNote(text, generation, toolResult, executionReceipt)
+  const announceToolResult = useCallback((
+    text: string,
+    generation: number,
+    toolResult?: ToolResult,
+    executionReceipt?: WorkspaceExecutionReceipt | null,
+    semanticReview?: WorkspaceAgentSemanticReviewState | null,
+  ) => {
+    pushAgentNote(text, generation, toolResult, executionReceipt, semanticReview)
     recordSessionAction(text, generation)
   }, [pushAgentNote, recordSessionAction])
 
@@ -732,13 +745,30 @@ function WorkspaceAgentPanelSession({
       setFeedback(response.error?.message ?? "Contradictions could not be compared.")
       return
     }
+    const run = response.data
+    const semanticReview: WorkspaceAgentSemanticReviewState = {
+      status: run.review.status,
+      coverage: run.review.coverage,
+      rounds: run.review.rounds,
+      evidence: run.review.evidence,
+      error: run.review.error,
+    }
+    const incomplete = run.review.status !== "complete" || run.review.coverage !== "complete"
     const contradictionFacts = [
-      response.data.length === 0
-        ? "No contradictions were found in the selected artifacts."
-        : `${response.data.length} contradiction(s) added to the review queue below.`,
+      incomplete
+        ? `Semantic contradiction review is ${run.review.coverage} and needs more context; no deterministic differences were promoted as confirmed conflicts.${run.proposals.length > 0 ? ` ${run.proposals.length} high-confidence conflict(s) remain available below.` : ""}`
+        : run.proposals.length === 0
+          ? `No material semantic contradictions were found.${run.nonActionable.length > 0 ? ` ${run.nonActionable.length} compatible or non-actionable relation(s) were excluded from the resolution queue.` : ""}`
+          : `${run.proposals.length} material contradiction(s) added to the review queue below.${run.nonActionable.length > 0 ? ` ${run.nonActionable.length} compatible or non-actionable relation(s) were excluded.` : ""}`,
     ]
     const note = await service.presentNote("contradictions", contradictionFacts, sessionActionLogRef.current)
-    announceToolResult(note.note, generation, { kind: "contradictions", proposals: response.data }, note.executionReceipt)
+    announceToolResult(
+      note.note,
+      generation,
+      { kind: "contradictions", proposals: run.proposals, nonActionable: run.nonActionable },
+      run.review.executionReceipt ?? note.executionReceipt,
+      semanticReview,
+    )
   }), [announceToolResult, attachments, getWorkflowReadApproval, runAction, scope, scopeLabel, service, workspaceRootPath])
 
   /**
@@ -1398,12 +1428,22 @@ function WorkspaceAgentPanelSession({
               <ReviewSummaryRow
                 toolResult={toolResult}
                 resolvedIds={resolvedIds}
+                semanticReview={message.semanticReview}
                 onOpen={() => { setReviewCursor(0); setActiveReviewMessageId(message.id) }}
               />
             ) : null}
           </div>
         )
       })}
+
+      {busyAction === "contradictions" ? (
+        <div className="flex items-start" data-testid="workspace-agent-semantic-loading" role="status" aria-live="polite">
+          <div className="flex items-center gap-2 rounded-[10px] border-[0.5px] border-border bg-bg px-3 py-2.5 text-[12px] text-ink-3">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-4" strokeWidth={1.7} />
+            <span>Analizando relaciones semánticas…</span>
+          </div>
+        </div>
+      ) : null}
 
       {busyAction === "ask" ? (
         <div className="flex items-start" data-testid="workspace-agent-thinking">
@@ -1670,10 +1710,12 @@ type ReviewCardSummary = {
 function ReviewSummaryRow({
   toolResult,
   resolvedIds,
+  semanticReview,
   onOpen,
 }: {
   toolResult: ToolResult
   resolvedIds: Set<string>
+  semanticReview?: WorkspaceAgentSemanticReviewState | null
   onOpen: () => void
 }) {
   const summary: ReviewCardSummary | null = (() => {
@@ -1717,12 +1759,22 @@ function ReviewSummaryRow({
         }
       case "contradictions": {
         const active = toolResult.proposals.filter((proposal) => !resolvedIds.has(proposal.id))
-        return active.length === 0 ? null : {
+        const reviewIncomplete = semanticReview && (semanticReview.status !== "complete" || semanticReview.coverage !== "complete")
+        if (active.length === 0 && !semanticReview) return null
+        return {
           icon: <GitCompareArrows className="h-[17px] w-[17px] shrink-0 text-cursor" strokeWidth={1.5} />,
           title: "Contradicciones",
-          subtitle: `${active.length} por revisar`,
+          subtitle: reviewIncomplete
+            ? "Necesita más contexto"
+            : `${active.length} por revisar`,
           testId: "workspace-agent-review-queue",
-          findings: active.map((proposal) => ({ value: proposal.topic, origin: `${proposal.left.title} vs ${proposal.right.title}` })),
+          findings: [
+            ...active.map((proposal) => ({ value: proposal.topic, origin: `${proposal.left.title} vs ${proposal.right.title}` })),
+            ...(toolResult.nonActionable ?? []).slice(0, 4).map((relation) => ({
+              value: relation.verdict,
+              origin: `${relation.left.title} vs ${relation.right.title} · no accionable`,
+            })),
+          ],
         }
       }
       case "merge":
@@ -1779,7 +1831,12 @@ function ReviewSummaryRow({
  * paged one-at-a-time so far (Fase C); the others still show a plain count
  * until their own redesign (Fases D–H) wires up real navigation.
  */
-function reviewShellCopy(toolResult: ToolResult, cursor: number): { pagerLabel: string; actionLabel: string } {
+function reviewShellCopy(
+  toolResult: ToolResult,
+  cursor: number,
+  semanticReview?: WorkspaceAgentSemanticReviewState | null,
+  resolvedIds: Set<string> = new Set(),
+): { pagerLabel: string; actionLabel: string } {
   switch (toolResult.kind) {
     case "workflow":
       return { pagerLabel: toolResult.proposal.existingDocumentId ? "Revisión" : "Borrador", actionLabel: "Revisión de workflow" }
@@ -1790,7 +1847,12 @@ function reviewShellCopy(toolResult: ToolResult, cursor: number): { pagerLabel: 
     case "archive":
       return { pagerLabel: `${toolResult.candidates.length} candidato(s)`, actionLabel: "Archive" }
     case "contradictions": {
-      return { pagerLabel: `${toolResult.proposals.length} conflicto(s)`, actionLabel: "Contradicciones" }
+      const incomplete = semanticReview && (semanticReview.status !== "complete" || semanticReview.coverage !== "complete")
+      const active = toolResult.proposals.filter((proposal) => !resolvedIds.has(proposal.id))
+      return {
+        pagerLabel: incomplete ? "Revisión incompleta" : `${active.length} conflicto(s)`,
+        actionLabel: "Contradicciones",
+      }
     }
     case "merge":
       return { pagerLabel: `${toolResult.merge.sections.length} secciones`, actionLabel: "Combinar" }
@@ -1853,7 +1915,7 @@ function WorkspaceAgentReviewModal({
 }) {
   const toolResult = message?.toolResult
   const open = Boolean(message && toolResult)
-  const copy = toolResult ? reviewShellCopy(toolResult, reviewCursor) : null
+  const copy = toolResult ? reviewShellCopy(toolResult, reviewCursor, message?.semanticReview, resolvedIds) : null
 
   const brokenLinksTotal = toolResult?.kind === "broken-links" ? toolResult.proposals.length : 0
   const brokenLinksCursor = Math.min(reviewCursor, Math.max(brokenLinksTotal - 1, 0))
@@ -1946,6 +2008,8 @@ function WorkspaceAgentReviewModal({
           {toolResult.kind === "contradictions" ? (
             <ContradictionReviewCard
               proposals={toolResult.proposals}
+              nonActionable={toolResult.nonActionable}
+              semanticReview={message.semanticReview}
               resolvedIds={resolvedIds}
               busy={busyAction === "resolve"}
               onResolve={onResolveContradiction}

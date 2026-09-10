@@ -1,4 +1,8 @@
 import type { CollectionSummary } from "@/lib/collections/collections"
+import type {
+  WorkspaceRelationConfidence,
+  WorkspaceRelationVerdict,
+} from "@/lib/ai/workspace-document-relations"
 import type { DocumentCatalogRecord, DocumentCatalogReference } from "@/lib/services/contracts/document-catalog"
 import type { VocabularyItem } from "@/lib/vocabulary/types"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
@@ -102,6 +106,11 @@ export type ContradictionFragment = {
   line: number
 }
 
+export type ContradictionSourceSnapshot = {
+  documentVersion: string
+  contentHash: string | null
+}
+
 export type ContradictionProposal = {
   id: string
   topic: string
@@ -119,6 +128,13 @@ export type ContradictionProposal = {
   }
   suggestedDocumentId: string | null
   evidence: EvidenceCitation[]
+  /** Present only for proposals admitted by semantic relation review. */
+  semanticVerdict?: WorkspaceRelationVerdict
+  semanticConfidence?: WorkspaceRelationConfidence
+  semanticRationale?: string
+  semanticEvidenceIds?: string[]
+  semanticSuggestedReason?: string | null
+  semanticSourceSnapshots?: Record<string, ContradictionSourceSnapshot>
 }
 
 export type ContradictionResolution = "left" | "right" | "discard"

@@ -66,6 +66,54 @@ function document(id: string, markdown: string, modifiedAt = 1_700_000_000_000, 
   }
 }
 
+function completeSemanticRelationsRound(input: { input: Array<{ content?: string }> }) {
+  const prompt = JSON.parse(input.input[0]?.content ?? "{}") as {
+    evidence?: Array<{ evidenceId: string; documentId: string; text: string }>
+    candidates?: Array<{
+      candidateId: string
+      leftDocumentId: string
+      rightDocumentId: string
+      leftEvidenceId: string
+      rightEvidenceId: string
+    }>
+  }
+  const evidenceById = new Map((prompt.evidence ?? []).map((item) => [item.evidenceId, item]))
+  const relations = (prompt.candidates ?? []).map((candidate) => {
+    const left = evidenceById.get(candidate.leftEvidenceId)?.text ?? ""
+    const right = evidenceById.get(candidate.rightEvidenceId)?.text ?? ""
+    const contradiction = (left.startsWith("Storage:") && right.startsWith("Storage:"))
+      || (left.startsWith("The editor") && right.startsWith("The editor"))
+    return {
+      candidateId: candidate.candidateId,
+      leftDocumentId: candidate.leftDocumentId,
+      rightDocumentId: candidate.rightDocumentId,
+      verdict: contradiction ? "contradictory" : "unrelated",
+      confidence: "high",
+      rationale: contradiction ? "The selected claims are incompatible." : "The selected claims do not address the same proposition.",
+      evidenceIds: [candidate.leftEvidenceId, candidate.rightEvidenceId],
+      suggestedDocumentId: null,
+      suggestedReason: null,
+    }
+  })
+  return {
+    data: {
+      responseId: "contradictions-resp-1",
+      previousResponseId: null,
+      status: "completed",
+      outputText: JSON.stringify({
+        coverage: "complete",
+        status: "complete",
+        payload: JSON.stringify({ coverage: "complete", relations }),
+      }),
+      toolCalls: [],
+      incompleteReason: null,
+      usage: null,
+      executionReceipt: null,
+    },
+    error: null,
+  }
+}
+
 describe("WorkspaceAgentService contradiction workflow", () => {
   beforeEach(() => {
     contextMocks.list.mockReset()
@@ -111,6 +159,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       move: vi.fn(),
       delete: vi.fn(),
     }
+    aiMocks.reviewWorkspaceDocumentRelations.mockImplementationOnce(completeSemanticRelationsRound)
     const service = await createWorkspaceAgentService("/workspace", tools)
 
     const found = await service.findContradictions(["left", "right"], {
@@ -119,10 +168,16 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     })
 
     expect(found.error).toBeNull()
-    expect(found.data).toHaveLength(1)
+    expect(found.data?.proposals).toHaveLength(1)
+    expect(found.data?.proposals[0]).toMatchObject({
+      semanticVerdict: "contradictory",
+      semanticConfidence: "high",
+      semanticEvidenceIds: expect.arrayContaining([expect.stringContaining("relation:left"), expect.stringContaining("relation:right")]),
+    })
+    expect(found.data?.nonActionable).toEqual([])
     expect(tools.read).toHaveBeenCalledTimes(2)
 
-    const resolved = await service.resolveContradiction(found.data![0], "right", {
+    const resolved = await service.resolveContradiction(found.data!.proposals[0]!, "right", {
       read: approval("read", "left"),
       edit: approval("edit", "left"),
     })
@@ -133,6 +188,41 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       documentId: "left",
       markdown: "Storage: IndexedDB.",
     }))
+  })
+
+  it("invalidates a semantic resolution when either source version changes", async () => {
+    const originalLeft = document("left", "Storage: SQLite.", 1_700_000_000_000)
+    const right = document("right", "Storage: IndexedDB.", 1_700_000_100_000)
+    const documents = new Map([[originalLeft.documentId, originalLeft], [right.documentId, right]])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      edit: vi.fn(),
+      write: vi.fn(),
+      move: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.reviewWorkspaceDocumentRelations.mockImplementationOnce(completeSemanticRelationsRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const found = await service.findContradictions(["left", "right"], {
+      left: approval("read", "left"),
+      right: approval("read", "right"),
+    })
+    expect(found.data?.proposals).toHaveLength(1)
+
+    documents.set("left", document("left", "Storage: Postgres.", 1_700_000_000_001))
+    const resolved = await service.resolveContradiction(found.data!.proposals[0]!, "right", {
+      read: approval("read", "left"),
+      edit: approval("edit", "left"),
+    })
+
+    expect(resolved.error?.code).toBe("CONFLICT")
+    expect(tools.edit).not.toHaveBeenCalled()
   })
 
   it("routes a semantic evidence request through the shared loop and read adapter", async () => {
@@ -306,6 +396,74 @@ describe("WorkspaceAgentService contradiction workflow", () => {
 
     expect(result.error?.code).toBe("FORBIDDEN")
     expect(tools.read).not.toHaveBeenCalled()
+  })
+
+  it("keeps valid non-actionable semantic relations out of the source-selection queue", async () => {
+    const documents = new Map([
+      ["left", document("left", "The sky is blue.")],
+      ["right", document("right", "The sky is blue.")],
+    ])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.reviewWorkspaceDocumentRelations.mockImplementationOnce(completeSemanticRelationsRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.findContradictions(["left", "right"], {
+      left: approval("read", "left"),
+      right: approval("read", "right"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.review).toMatchObject({ status: "complete", coverage: "complete" })
+    expect(result.data?.proposals).toEqual([])
+    expect(result.data?.nonActionable).toHaveLength(1)
+    expect(result.data?.nonActionable[0]).toMatchObject({ verdict: "unrelated", confidence: "high" })
+  })
+
+  it("keeps provider failures recoverable without promoting deterministic candidates", async () => {
+    const documents = new Map([
+      ["left", document("left", "Storage: SQLite.")],
+      ["right", document("right", "Storage: IndexedDB.")],
+    ])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.reviewWorkspaceDocumentRelations.mockResolvedValueOnce({
+      data: null,
+      error: { code: "AI_REQUEST_FAILED", message: "Provider unavailable.", retryable: true },
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.findContradictions(["left", "right"], {
+      left: approval("read", "left"),
+      right: approval("read", "right"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.review).toMatchObject({ status: "provider_error", coverage: "unknown" })
+    expect(result.data?.proposals).toEqual([])
+    expect(result.data?.nonActionable).toEqual([])
   })
 
   it("sends full target content and a separate workflow context through the semantic AI adapter", async () => {
@@ -1564,15 +1722,16 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       move: vi.fn(),
       delete: vi.fn(),
     }
+    aiMocks.reviewWorkspaceDocumentRelations.mockImplementationOnce(completeSemanticRelationsRound)
     const service = await createWorkspaceAgentService("/workspace", tools)
     const found = await service.findContradictions(["left", "right"], {
       left: approval("read", "left"),
       right: approval("read", "right"),
     })
 
-    expect(found.data).toHaveLength(2)
-    const first = found.data!.find((proposal) => proposal.left.fragment.text.startsWith("Storage:"))!
-    const second = found.data!.find((proposal) => proposal.left.fragment.text.startsWith("The editor"))!
+    expect(found.data?.proposals).toHaveLength(2)
+    const first = found.data!.proposals.find((proposal) => proposal.left.fragment.text.startsWith("Storage:"))!
+    const second = found.data!.proposals.find((proposal) => proposal.left.fragment.text.startsWith("The editor"))!
 
     const firstResolution = await service.resolveContradiction(first, "right", {
       read: approval("read", "left", "read-left-first"),

@@ -68,6 +68,27 @@ describe("createToolResultMessage (ODE-491 — message carries the tool's own st
     )
     expect(message.executionService).toBe(serviceA)
   })
+
+  it("carries semantic review status with the contradiction card so incomplete runs stay visible", () => {
+    const semanticReview = {
+      status: "insufficient_evidence" as const,
+      coverage: "partial" as const,
+      rounds: 2,
+      evidence: [],
+      error: { code: "AI_RESPONSE_PARSE_FAILED", message: "Missing relation evidence.", retryable: true },
+    }
+    const message = createToolResultMessage(
+      "The semantic review needs more context.",
+      { kind: "contradictions", proposals: [], nonActionable: [] },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      semanticReview,
+    )
+
+    expect(message.semanticReview).toEqual(semanticReview)
+  })
 })
 
 describe("resolveExecutionServiceById (ODE-502 follow-up — approving a proposal must not silently use whichever Workspace is now current)", () => {

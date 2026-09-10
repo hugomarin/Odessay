@@ -126,6 +126,33 @@ describe("Workspace semantic document relations", () => {
     expect(isResolvableSemanticContradiction(parsed.relations[0]!)).toBe(false)
   })
 
+  it("discards an explicit suggestion that is not one of the relation's two claims", () => {
+    const request = buildWorkspaceDocumentRelationsRequest([
+      source("left", "Storage: SQLite."),
+      source("right", "Storage: IndexedDB."),
+      source("other", "The editor uses local files."),
+    ])
+    const leftEvidence = request.initialEvidence.find((item) => item.documentId === "left")!
+    const rightEvidence = request.initialEvidence.find((item) => item.documentId === "right")!
+    const parsed = parseWorkspaceDocumentRelationsResult(loopResult({
+      coverage: "partial",
+      relations: [{
+        candidateId: null,
+        leftDocumentId: "left",
+        rightDocumentId: "right",
+        verdict: "contradictory",
+        confidence: "high",
+        rationale: "The claims conflict, but the suggested third document is not a source for this pair.",
+        evidenceIds: [leftEvidence.evidenceId, rightEvidence.evidenceId],
+        suggestedDocumentId: "other",
+        suggestedReason: "It is newer.",
+      }],
+    }, { evidence: request.initialEvidence }), request)
+
+    expect(parsed.relations[0]?.suggestedDocumentId).toBeNull()
+    expect(parsed.relations[0]?.suggestedReason).toBeNull()
+  })
+
   it("rejects a known candidate when its document or evidence pair is mismatched", () => {
     const request = buildWorkspaceDocumentRelationsRequest([
       source("left", "Storage: SQLite."),
