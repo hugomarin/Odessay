@@ -81,6 +81,7 @@ import { useWorkspaceAgentDropZone, type WorkspaceAgentDragPayload } from "@/com
 import {
   ReviewShellCancelButton,
   ReviewShellPrimaryButton,
+  WorkspaceAgentSemanticReviewNotice,
   WorkspaceAgentReviewShell,
 } from "@/components/agent/workspace-agent-review-shell"
 import { WorkflowReviewBody } from "@/components/agent/workspace-agent-review-workflow"
@@ -1383,6 +1384,16 @@ function WorkspaceAgentPanelSession({
 
             {message.executionReceipt ? <ExecutionReceiptNotice receipt={message.executionReceipt} /> : null}
 
+            {message.semanticReview && !toolResult ? (
+              <WorkspaceAgentSemanticReviewNotice status={{
+                status: message.semanticReview.status,
+                coverage: message.semanticReview.coverage,
+                rounds: message.semanticReview.rounds,
+                evidenceCount: message.semanticReview.evidence.length,
+                errorMessage: message.semanticReview.error?.message ?? null,
+              }} />
+            ) : null}
+
             {toolResult ? (
               <ReviewSummaryRow
                 toolResult={toolResult}
@@ -1865,6 +1876,13 @@ function WorkspaceAgentReviewModal({
       pill={toolResult?.kind === "merge" ? {
         icon: <SlidersHorizontal className="h-4 w-4" strokeWidth={1.5} />,
         label: `${toolResult.merge.sourceDocuments.length} documentos`,
+      } : undefined}
+      semanticStatus={message?.semanticReview ? {
+        status: message.semanticReview.status,
+        coverage: message.semanticReview.coverage,
+        rounds: message.semanticReview.rounds,
+        evidenceCount: message.semanticReview.evidence.length,
+        errorMessage: message.semanticReview.error?.message ?? null,
       } : undefined}
       footer={toolResult?.kind === "broken-links" && activeProposal ? (
         <>

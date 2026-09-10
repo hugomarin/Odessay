@@ -9,6 +9,8 @@ import type {
   WorkspaceAgentApproval,
   WorkspaceAgentDeleteInput,
   WorkspaceAgentDocument,
+  WorkspaceAgentEvidenceReadInput,
+  WorkspaceAgentEvidenceReadResult,
   WorkspaceAgentEditInput,
   WorkspaceAgentExecutionReceipt,
   WorkspaceAgentMoveInput,
@@ -128,6 +130,10 @@ function markdownFromWriting(writing: WritingRecord): string {
   } catch {
     return ""
   }
+}
+
+function semanticDocumentVersion(record: DocumentCatalogRecord): string {
+  return record.binding?.contentHash ?? `v${record.version ?? 0}@${record.modifiedAt ?? 0}`
 }
 
 function recordWithMarkdown(writing: WritingRecord, markdown: string, updatedAt: string): WritingRecord | ServiceError {
@@ -260,6 +266,67 @@ export class DesktopWorkspaceAgentToolsService implements WorkspaceAgentToolsSer
 
   async read(input: WorkspaceAgentReadInput): Promise<ServiceResponse<WorkspaceAgentReadResult>> {
     return this.readAuthorized(input.documentId, input.approval)
+  }
+
+  async readEvidence(input: WorkspaceAgentEvidenceReadInput): Promise<ServiceResponse<WorkspaceAgentEvidenceReadResult>> {
+    if (!Number.isInteger(input.lineStart) || !Number.isInteger(input.lineEnd) || input.lineStart < 1 || input.lineEnd < input.lineStart) {
+      return error("INVALID_INPUT", "A positive, ordered line range is required for semantic evidence.")
+    }
+    if (!Number.isInteger(input.maxChars) || input.maxChars < 1 || input.maxChars > 12_000) {
+      return error("INVALID_INPUT", "Semantic evidence must request between 1 and 12000 characters.")
+    }
+
+    const recordResult = await this.getRecord(input.documentId)
+    if (recordResult.error || !recordResult.data) return recordResult as ServiceResponse<WorkspaceAgentEvidenceReadResult>
+    const record = recordResult.data
+    const currentHash = record.binding?.contentHash ?? null
+    if (
+      semanticDocumentVersion(record) !== input.expectedDocumentVersion
+      || (input.expectedContentHash !== null && currentHash !== input.expectedContentHash)
+    ) {
+      return error("CONFLICT", "The requested semantic evidence is stale; review the document again.", {
+        documentId: input.documentId,
+      })
+    }
+
+    const approvalValidation = this.takeApproval("read", input.approval, input.documentId)
+    if (approvalValidation) return { data: null, error: approvalValidation }
+    const opened = await this.dependencies.documentService.openWriting(input.documentId)
+    if (opened.error || !opened.data) return error("NOT_FOUND", opened.error?.message ?? "Document could not be opened.")
+
+    const afterOpen = (await this.dependencies.catalog.getById(input.documentId)) ?? record
+    if (
+      semanticDocumentVersion(afterOpen) !== input.expectedDocumentVersion
+      || (input.expectedContentHash !== null && (afterOpen.binding?.contentHash ?? null) !== input.expectedContentHash)
+    ) {
+      return error("CONFLICT", "The document changed while semantic evidence was being read; review it again.", {
+        documentId: input.documentId,
+      })
+    }
+
+    const markdown = markdownFromWriting(opened.data)
+    const lines = markdown.split("\n")
+    if (input.lineStart > lines.length) {
+      return error("NOT_FOUND", "The requested semantic evidence range is not present in the document.", {
+        documentId: input.documentId,
+      })
+    }
+    const selected = lines.slice(input.lineStart - 1, Math.min(input.lineEnd, lines.length)).join("\n")
+    const text = selected.slice(0, input.maxChars)
+    const lineCount = Math.max(1, text.split("\n").length)
+    const lineEnd = Math.min(lines.length, input.lineStart + lineCount - 1)
+    return ok({
+      evidence: {
+        evidenceId: `${input.documentId}:${input.expectedDocumentVersion}:${input.lineStart}-${lineEnd}`,
+        documentId: input.documentId,
+        documentVersion: input.expectedDocumentVersion,
+        contentHash: currentHash,
+        lineStart: input.lineStart,
+        lineEnd,
+        text,
+      },
+      receipt: this.receipt("read", input.approval),
+    })
   }
 
   async write(input: WorkspaceAgentWriteInput): Promise<ServiceResponse<WorkspaceAgentMutationResult>> {

@@ -42,6 +42,9 @@ import type {
   WorkspaceClassificationDocument,
   WorkspaceClassificationRequest,
   WorkspaceClassificationResult,
+  WorkspaceSemanticInputItem,
+  WorkspaceSemanticOperation,
+  WorkspaceSemanticToolDescriptor,
   WorkspaceToolPresentationRequest,
 } from "@/lib/services/contracts/ai-service"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
@@ -49,6 +52,9 @@ import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/ser
 import type {
   WorkspaceAgentApproval,
   WorkspaceAgentDocument,
+  WorkspaceAgentEvidence,
+  WorkspaceAgentEvidenceReadInput,
+  WorkspaceAgentEvidenceReadResult,
   WorkspaceAgentEditInput,
   WorkspaceAgentMutationResult,
   WorkspaceAgentToolsService,
@@ -74,6 +80,15 @@ import {
   type WorkspaceExecutionContext,
   type WorkspaceExecutionReceipt,
 } from "@/lib/ai/workspace-execution-receipt"
+import {
+  runWorkspaceSemanticLoop,
+  type WorkspaceSemanticLoopCaps,
+  type WorkspaceSemanticLoopResult,
+} from "@/lib/ai/workspace-semantic-loop"
+import {
+  createWorkspaceSemanticToolRegistry,
+  type WorkspaceSemanticReadArguments,
+} from "@/lib/ai/workspace-semantic-tool-registry"
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
@@ -301,6 +316,20 @@ export type WorkspaceAgentPresentationRun = {
   executionContext: WorkspaceExecutionContext
   executionReceipt: WorkspaceExecutionReceipt | null
 }
+
+export type WorkspaceAgentSemanticReviewInput = {
+  operation: WorkspaceSemanticOperation
+  /** Evidence already admitted by the owning feature's context plan. */
+  initialEvidence: readonly WorkspaceAgentEvidence[]
+  /** Application-authored task/evidence messages; never a provider payload. */
+  initialInput: readonly WorkspaceSemanticInputItem[]
+  tools?: readonly WorkspaceSemanticToolDescriptor[]
+  execution?: WorkspaceExecutionContext | null
+  signal?: AbortSignal
+  caps?: WorkspaceSemanticLoopCaps
+}
+
+export type WorkspaceAgentSemanticReviewRun = WorkspaceSemanticLoopResult
 
 /**
  * Used only to correlate this one in-memory ask's request/response (target
@@ -930,6 +959,9 @@ export type WorkspaceAgentService = {
   askAgent(
     input: WorkspaceAgentAskInput,
   ): Promise<ServiceResponse<WorkspaceAgentAskRun>>
+  runSemanticReview(
+    input: WorkspaceAgentSemanticReviewInput,
+  ): Promise<ServiceResponse<WorkspaceAgentSemanticReviewRun>>
   /**
    * Presentation stage of the pipeline (ODE-491): phrases facts already
    * established by a predetermined action's deterministic result as one
@@ -1484,6 +1516,82 @@ export async function createWorkspaceAgentService(
         suggestedAction: aiResult.suggestedAction ?? null,
         executionContext: execution,
         executionReceipt,
+      })
+    },
+    async runSemanticReview(input) {
+      const execution = input.execution ?? createWorkspaceExecutionContext(
+        input.operation,
+        "desktop",
+        input.operation === "merge" ? "synthesis" : "semantic-review",
+      )
+      const knownDocuments = new Map(
+        input.initialEvidence.map((item) => [item.documentId, {
+          documentVersion: item.documentVersion,
+          contentHash: item.contentHash,
+        }] as const),
+      )
+
+      const readEvidence = async (
+        evidenceInput: WorkspaceSemanticReadArguments,
+      ): Promise<ServiceResponse<WorkspaceAgentEvidenceReadResult>> => {
+        const approval = createInternalReadApproval(evidenceInput.documentId)
+        const desktopInput: WorkspaceAgentEvidenceReadInput = {
+          ...evidenceInput,
+          approval,
+        }
+        if (tools.readEvidence) return tools.readEvidence(desktopInput)
+
+        // Compatibility path for older test/runtime adapters while the
+        // versioned evidence method rolls out. It still goes through the
+        // approval-gated read and rechecks the catalog snapshot before the
+        // result is admitted to the model-facing loop.
+        const read = await tools.read({ documentId: evidenceInput.documentId, approval })
+        if (read.error || !read.data) {
+          return error("NOT_FOUND", read.error?.message ?? "Document evidence could not be read.")
+        }
+        const record = read.data.document.catalogRecord
+        if (
+          artifactVersionKey(record) !== evidenceInput.expectedDocumentVersion
+          || (evidenceInput.expectedContentHash !== null && (record.binding?.contentHash ?? null) !== evidenceInput.expectedContentHash)
+        ) {
+          return error("CONFLICT", "The document changed before semantic evidence could be admitted.")
+        }
+        const lines = read.data.document.markdown.split("\n")
+        if (evidenceInput.lineStart > lines.length) {
+          return error("NOT_FOUND", "The requested semantic evidence range is not present in the document.")
+        }
+        const selected = lines.slice(evidenceInput.lineStart - 1, Math.min(evidenceInput.lineEnd, lines.length)).join("\n")
+        const text = selected.slice(0, evidenceInput.maxChars)
+        const lineEnd = Math.min(lines.length, evidenceInput.lineStart + Math.max(1, text.split("\n").length) - 1)
+        return ok({
+          evidence: {
+            evidenceId: `${evidenceInput.documentId}:${evidenceInput.expectedDocumentVersion}:${evidenceInput.lineStart}-${lineEnd}`,
+            documentId: evidenceInput.documentId,
+            documentVersion: evidenceInput.expectedDocumentVersion,
+            contentHash: record.binding?.contentHash ?? null,
+            lineStart: evidenceInput.lineStart,
+            lineEnd,
+            text,
+          },
+          receipt: read.data.receipt,
+        })
+      }
+
+      const registry = createWorkspaceSemanticToolRegistry({
+        knownDocuments,
+        allowedToolNames: input.tools?.map((tool) => tool.name),
+        readEvidence,
+      })
+      return runWorkspaceSemanticLoop({
+        operation: input.operation,
+        execution,
+        initialInput: [...input.initialInput],
+        initialEvidence: [...input.initialEvidence],
+        tools: registry.descriptors,
+        registry,
+        aiService: getAIService(),
+        signal: input.signal,
+        caps: input.caps,
       })
     },
     async presentNote(kind, facts, sessionContext, requestedExecution) {

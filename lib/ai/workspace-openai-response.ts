@@ -10,7 +10,7 @@ import { workspaceExecutionMetadata } from "@/lib/ai/workspace-execution-receipt
 
 export type WorkspaceOpenAIResponsePayload = {
   id?: string
-  previous_response_id?: string
+  previous_response_id?: string | null
   status?: string
   model?: string
   output_text?: string
@@ -78,6 +78,9 @@ export async function callWorkspaceOpenAIResponse({
   timeoutMs,
   textFormat,
   messages,
+  input,
+  tools,
+  previousResponseId,
 }: {
   config: ReturnType<typeof getOpenAIWorkspaceProviderConfig>
   execution: WorkspaceExecutionContext
@@ -85,8 +88,13 @@ export async function callWorkspaceOpenAIResponse({
   userPrompt: string
   maxOutputTokens: number
   timeoutMs: number
-  textFormat: Record<string, unknown>
+  textFormat: Record<string, unknown> | null
   messages: WorkspaceOpenAIResponseMessages
+  /** Optional provider-shaped Responses input used by the semantic loop. */
+  input?: unknown[]
+  /** Optional provider-shaped function tools used by the semantic loop. */
+  tools?: Array<Record<string, unknown>>
+  previousResponseId?: string | null
 }): Promise<{ payload: WorkspaceOpenAIResponsePayload; receipt: WorkspaceExecutionReceipt }> {
   let receipt = createWorkspaceExecutionReceipt(execution)
   const startedAt = Date.now()
@@ -95,6 +103,24 @@ export async function callWorkspaceOpenAIResponse({
 
   let response: Response
   try {
+    const requestBody: Record<string, unknown> = {
+      model: config.model,
+      input: input ?? [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      max_output_tokens: maxOutputTokens,
+      reasoning: { effort: config.reasoningEffort },
+      store: true,
+      metadata: workspaceExecutionMetadata(execution),
+    }
+    if (textFormat) requestBody.text = { format: textFormat }
+    if (tools && tools.length > 0) {
+      requestBody.tools = tools
+      requestBody.tool_choice = "auto"
+    }
+    if (previousResponseId) requestBody.previous_response_id = previousResponseId
+
     response = await fetch(config.responsesUrl, {
       method: "POST",
       headers: {
@@ -102,18 +128,7 @@ export async function callWorkspaceOpenAIResponse({
         "authorization": `Bearer ${config.apiKey}`,
         "user-agent": "Odessay/1.0",
       },
-      body: JSON.stringify({
-        model: config.model,
-        input: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        max_output_tokens: maxOutputTokens,
-        reasoning: { effort: config.reasoningEffort },
-        store: true,
-        metadata: workspaceExecutionMetadata(execution),
-        text: { format: textFormat },
-      }),
+      body: JSON.stringify(requestBody),
       signal: controller.signal,
     })
   } catch (cause) {

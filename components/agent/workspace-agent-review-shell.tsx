@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { ArrowLeft, ArrowRight, MoreHorizontal, X } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowRight, Check, Loader2, MoreHorizontal, X } from "lucide-react"
 
 import { DialogOverlay, DialogPortal } from "@/components/ui/dialog"
 import { useSingleModalGuard } from "@/components/ui/overlay-core"
@@ -12,6 +12,14 @@ export type WorkspaceAgentReviewPill = {
   icon: React.ReactNode
   label: string
   onClick?: () => void
+}
+
+export type WorkspaceAgentSemanticReviewStatus = {
+  status: "running" | "complete" | "insufficient_evidence" | "budget_exceeded" | "cancelled" | "provider_error" | "unable"
+  coverage: "complete" | "partial" | "unknown"
+  rounds: number
+  evidenceCount: number
+  errorMessage?: string | null
 }
 
 export type WorkspaceAgentReviewShellProps = {
@@ -31,6 +39,8 @@ export type WorkspaceAgentReviewShellProps = {
   footer?: React.ReactNode
   children: React.ReactNode
   testId?: string
+  /** Optional shared status strip for semantic review cards. */
+  semanticStatus?: WorkspaceAgentSemanticReviewStatus
 }
 
 /**
@@ -54,6 +64,7 @@ export function WorkspaceAgentReviewShell({
   footer,
   children,
   testId,
+  semanticStatus,
 }: WorkspaceAgentReviewShellProps) {
   useSingleModalGuard(open, `WorkspaceAgentReviewShell(${actionLabel})`)
 
@@ -117,6 +128,8 @@ export function WorkspaceAgentReviewShell({
             </DialogPrimitive.Close>
           </header>
 
+          {semanticStatus ? <WorkspaceAgentSemanticReviewNotice status={semanticStatus} /> : null}
+
           <div className="min-h-0 flex-1 overflow-hidden">
             {children}
           </div>
@@ -130,6 +143,41 @@ export function WorkspaceAgentReviewShell({
       </DialogPortal>
     </DialogPrimitive.Root>
   )
+}
+
+export function WorkspaceAgentSemanticReviewNotice({ status }: { status: WorkspaceAgentSemanticReviewStatus }) {
+  const copy = semanticReviewStatusCopy(status)
+  const Icon = status.status === "running" ? Loader2 : status.status === "complete" ? Check : AlertCircle
+  return (
+    <div
+      className="mx-4 mb-2 flex items-start gap-2 rounded-[9px] border-[0.5px] border-border bg-bg px-2.5 py-2 text-[11px] leading-[1.45] text-ink-3"
+      data-testid="workspace-agent-semantic-status"
+      role="status"
+      aria-live="polite"
+    >
+      <Icon className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", status.status === "running" && "animate-spin")} strokeWidth={1.7} />
+      <span className="min-w-0 flex-1">
+        <span className="font-medium text-ink">{copy.title}</span>
+        <span className="ml-1">{copy.detail}</span>
+        <span className="mt-0.5 block text-[10px] text-ink-5">
+          Cobertura: {status.coverage} · Evidencia: {status.evidenceCount} · Rondas: {status.rounds}
+        </span>
+        {status.errorMessage ? <span className="mt-0.5 block text-danger">{status.errorMessage}</span> : null}
+      </span>
+    </div>
+  )
+}
+
+function semanticReviewStatusCopy(status: WorkspaceAgentSemanticReviewStatus): { title: string; detail: string } {
+  switch (status.status) {
+    case "running": return { title: "Revisión semántica", detail: "solicitando evidencia acotada…" }
+    case "complete": return { title: "Revisión completa", detail: "resultado listo para revisar." }
+    case "insufficient_evidence": return { title: "Evidencia insuficiente", detail: "no se presenta como una conclusión definitiva." }
+    case "budget_exceeded": return { title: "Revisión acotada", detail: "alcanzó el límite de tiempo o evidencia." }
+    case "cancelled": return { title: "Revisión cancelada", detail: "el resultado tardío se descartó." }
+    case "provider_error": return { title: "Proveedor no disponible", detail: "puedes reintentar sin modificar documentos." }
+    case "unable": return { title: "Revisión no concluyente", detail: "el resultado requiere una nueva revisión." }
+  }
 }
 
 export function ReviewShellCancelButton({ onClick, label = "Cancelar" }: { onClick: () => void; label?: string }) {

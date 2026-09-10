@@ -79,8 +79,40 @@ export type WorkspaceAgentReadResult = {
   receipt: WorkspaceAgentExecutionReceipt
 }
 
+/**
+ * A bounded, read-only slice used by semantic review. It carries the
+ * catalog's version/hash proof and never exposes a canonical filesystem path
+ * to the model-facing layer.
+ */
+export type WorkspaceAgentEvidenceReadInput = {
+  documentId: string
+  expectedDocumentVersion: string
+  expectedContentHash: string | null
+  lineStart: number
+  lineEnd: number
+  maxChars: number
+  approval: WorkspaceAgentApproval
+}
+
+export type WorkspaceAgentEvidence = {
+  evidenceId: string
+  documentId: string
+  documentVersion: string
+  contentHash: string | null
+  lineStart: number
+  lineEnd: number
+  text: string
+}
+
+export type WorkspaceAgentEvidenceReadResult = {
+  evidence: WorkspaceAgentEvidence
+  receipt: WorkspaceAgentExecutionReceipt
+}
+
 export interface WorkspaceAgentToolsService {
   read(input: WorkspaceAgentReadInput): Promise<ServiceResponse<WorkspaceAgentReadResult>>
+  /** Optional during the adapter migration; desktop implements the versioned, bounded form. */
+  readEvidence?(input: WorkspaceAgentEvidenceReadInput): Promise<ServiceResponse<WorkspaceAgentEvidenceReadResult>>
   write(input: WorkspaceAgentWriteInput): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
   move(input: WorkspaceAgentMoveInput): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
   edit(input: WorkspaceAgentEditInput): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
@@ -101,16 +133,27 @@ export const WORKSPACE_AGENT_TOOLS_CONTRACT = {
     "UUID-to-path resolution always goes through DocumentCatalog before a filesystem adapter is called.",
     "The materialized .md remains the content authority and metadata is never written into frontmatter.",
     "Move and delete preserve the existing catalog identity and use the established desktop write path.",
+    "Semantic evidence reads are bounded by document UUID, catalog version/hash and line range; they are read-only and never accept a path as identity.",
   ],
   errorEnvelope: "ServiceResponse<T>",
-  operations: WORKSPACE_AGENT_ACTIONS.map((name) => ({
-    name,
-    kind: name === "read" ? "query" : "command",
-    summary: `${name} a workspace document after explicit approval for this action`,
-    input: ["action-specific WorkspaceAgentApproval"],
-    output: ["WorkspaceAgentDocument and execution receipt"],
-    errorCodes: ["CONFLICT", "FORBIDDEN", "INVALID_INPUT", "NOT_FOUND", "STORAGE_ERROR", "UNAVAILABLE"],
-  })),
+  operations: [
+    ...WORKSPACE_AGENT_ACTIONS.map((name) => ({
+      name,
+      kind: name === "read" ? "query" as const : "command" as const,
+      summary: `${name} a workspace document after explicit approval for this action`,
+      input: ["action-specific WorkspaceAgentApproval"],
+      output: ["WorkspaceAgentDocument and execution receipt"],
+      errorCodes: ["CONFLICT", "FORBIDDEN", "INVALID_INPUT", "NOT_FOUND", "STORAGE_ERROR", "UNAVAILABLE"] as const,
+    })),
+    {
+      name: "readEvidence",
+      kind: "query" as const,
+      summary: "Read a bounded, version-checked evidence slice for semantic review after a read approval.",
+      input: ["documentId", "expectedDocumentVersion", "expectedContentHash", "line range", "maxChars", "read approval"],
+      output: ["versioned evidence slice and execution receipt"],
+      errorCodes: ["CONFLICT", "FORBIDDEN", "INVALID_INPUT", "NOT_FOUND", "UNAVAILABLE"] as const,
+    },
+  ],
   hotspots: [{
     id: "workspace-agent-approval",
     summary: "Agent proposals are approved per action before the desktop adapter is invoked.",

@@ -16,6 +16,12 @@ import type {
 } from "@/lib/services/workspace-agent-service"
 import type { MergeReviewToolResult } from "@/components/agent/workspace-agent-review-merge"
 import type { WorkspaceExecutionReceipt } from "@/lib/ai/workspace-execution-receipt"
+import type { WorkspaceSemanticLoopResult } from "@/lib/ai/workspace-semantic-loop"
+
+export type WorkspaceAgentSemanticReviewState = Pick<
+  WorkspaceSemanticLoopResult,
+  "status" | "coverage" | "rounds" | "evidence" | "error"
+>
 
 export type WorkspaceAgentContextAttachment = {
   kind: "file" | "folder"
@@ -83,6 +89,8 @@ export type AgentMessage = {
   executionService?: WorkspaceAgentService
   /** Provider correlation receipt; in-memory only and safe to copy to support. */
   executionReceipt?: WorkspaceExecutionReceipt | null
+  /** Shared semantic-loop state for recoverable review/provenance UI. */
+  semanticReview?: WorkspaceAgentSemanticReviewState | null
 }
 
 let messageSequence = 0
@@ -106,8 +114,10 @@ export function createToolResultMessage(
   context?: WorkspaceAgentMessageContext,
   executionService?: WorkspaceAgentService,
   executionReceipt?: WorkspaceExecutionReceipt | null,
+  semanticReview?: WorkspaceAgentSemanticReviewState | null,
 ): AgentMessage {
-  return { id: id ?? createAgentMessageId("agent"), role: "agent", text, toolResult, context, executionService, executionReceipt }
+  const message: AgentMessage = { id: id ?? createAgentMessageId("agent"), role: "agent", text, toolResult, context, executionService, executionReceipt }
+  return semanticReview ? { ...message, semanticReview } : message
 }
 
 export function createApproval(action: WorkspaceAgentAction, resource: string): WorkspaceAgentApproval {

@@ -6,6 +6,7 @@ import type {
   WorkspaceAgentToolsService,
 } from "@/lib/services/contracts/workspace-agent"
 import { suggestArtifactClassification } from "@/lib/agent/workspace-agent-analysis"
+import { WORKSPACE_SEMANTIC_READ_TOOL_NAME } from "@/lib/ai/workspace-semantic-tool-registry"
 import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
 import { askAboutDocument, createWorkspaceAgentService } from "@/lib/services/workspace-agent-service"
 
@@ -18,6 +19,7 @@ const aiMocks = vi.hoisted(() => ({
   classifyWorkspace: vi.fn(),
   askWorkspace: vi.fn(),
   presentToolResult: vi.fn(),
+  runSemanticRound: vi.fn(),
 }))
 
 vi.mock("@/lib/services/document-catalog-factory", () => ({
@@ -78,6 +80,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       data: { answer: "No answer configured.", evidence: [], requestedDocumentIds: [], usage: null },
       error: null,
     })
+    aiMocks.runSemanticRound.mockReset()
   })
 
   it("reads only selected documents and applies a cited resolution through edit", async () => {
@@ -126,6 +129,86 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       documentId: "left",
       markdown: "Storage: IndexedDB.",
     }))
+  })
+
+  it("routes a semantic evidence request through the shared loop and read adapter", async () => {
+    const modifiedAt = 1_700_000_000_000
+    const selected = document("semantic-doc", "# Decision\n\nSQLite is canonical.", modifiedAt)
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async () => ({
+        data: {
+          document: selected,
+          receipt: { action: "read" as const, approvalId: "read:semantic-doc", executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.runSemanticRound
+      .mockResolvedValueOnce({
+        data: {
+          responseId: "semantic-resp-1",
+          previousResponseId: null,
+          status: "requires_tool",
+          outputText: null,
+          toolCalls: [{
+            callId: "semantic-call-1",
+            name: WORKSPACE_SEMANTIC_READ_TOOL_NAME,
+            arguments: {
+              documentId: "semantic-doc",
+              expectedDocumentVersion: `v1@${modifiedAt}`,
+              expectedContentHash: null,
+              lineStart: 1,
+              lineEnd: 3,
+              maxChars: 400,
+            },
+          }],
+          incompleteReason: null,
+          usage: null,
+          executionReceipt: null,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          responseId: "semantic-resp-2",
+          previousResponseId: "semantic-resp-1",
+          status: "completed",
+          outputText: JSON.stringify({ coverage: "complete", status: "complete", payload: "{}" }),
+          toolCalls: [],
+          incompleteReason: null,
+          usage: null,
+          executionReceipt: null,
+        },
+        error: null,
+      })
+
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const result = await service.runSemanticReview({
+      operation: "relations",
+      initialInput: [{ type: "message", role: "user", content: "Review this decision." }],
+      initialEvidence: [{
+        evidenceId: "initial-semantic",
+        documentId: "semantic-doc",
+        documentVersion: `v1@${modifiedAt}`,
+        contentHash: null,
+        lineStart: 1,
+        lineEnd: 1,
+        text: "# Decision",
+      }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data).toMatchObject({ status: "complete", coverage: "complete", rounds: 2 })
+    expect(tools.read).toHaveBeenCalledWith(expect.objectContaining({
+      documentId: "semantic-doc",
+      approval: expect.objectContaining({ action: "read", resource: "semantic-doc" }),
+    }))
+    expect(aiMocks.runSemanticRound).toHaveBeenCalledTimes(2)
+    expect(aiMocks.runSemanticRound.mock.calls[1][0].previousResponseId).toBe("semantic-resp-1")
   })
 
   it("refuses a comparison when a selected document has no approval", async () => {

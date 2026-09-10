@@ -17,6 +17,8 @@ import type {
   WorkspaceAskResult,
   WorkspaceClassificationRequest,
   WorkspaceClassificationResult,
+  WorkspaceSemanticRoundRequest,
+  WorkspaceSemanticRoundResult,
   WorkspaceToolPresentationRequest,
   WorkspaceToolPresentationResult,
 } from "@/lib/services/contracts/ai-service"
@@ -291,6 +293,32 @@ export const webAIService: AIService = {
       })
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not phrase this result right now.")
+    }
+  },
+
+  async runSemanticRound(input: WorkspaceSemanticRoundRequest) {
+    try {
+      const response = await fetch("/api/ai/workspace-semantic-round", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(input),
+      })
+
+      const parsed = await parseServiceEnvelope<WorkspaceSemanticRoundResult>(
+        response,
+        "AI_REQUEST_FAILED",
+        "Could not run the semantic workspace review right now.",
+      )
+
+      if (parsed.error) return parsed
+      return ok<WorkspaceSemanticRoundResult>({
+        ...parsed.data,
+        executionReceipt: parsed.data.executionReceipt ?? null,
+      })
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not run the semantic workspace review right now.")
     }
   },
 

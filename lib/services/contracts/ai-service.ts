@@ -182,6 +182,58 @@ export type WorkspaceExecutionReceipt = {
   responses: WorkspaceResponseTrace[]
 }
 
+/**
+ * Provider-neutral input items for the bounded semantic tool loop. The
+ * application owns the conversation and evidence policy; adapters translate
+ * these items to the provider's Responses input format.
+ */
+export type WorkspaceSemanticInputItem =
+  | {
+      type: "message"
+      role: "user" | "assistant"
+      content: string
+    }
+  | {
+      type: "function_call_output"
+      callId: string
+      output: string
+    }
+
+export type WorkspaceSemanticOperation = "relations" | "merge"
+
+export type WorkspaceSemanticToolDescriptor = {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+}
+
+export type WorkspaceSemanticToolCall = {
+  callId: string
+  name: string
+  arguments: Record<string, unknown>
+}
+
+export type WorkspaceSemanticRoundStatus = "completed" | "requires_tool" | "incomplete" | "refused" | "empty"
+
+export type WorkspaceSemanticRoundRequest = {
+  operation: WorkspaceSemanticOperation
+  input: WorkspaceSemanticInputItem[]
+  tools: WorkspaceSemanticToolDescriptor[]
+  previousResponseId?: string | null
+  execution?: WorkspaceExecutionContext | null
+}
+
+export type WorkspaceSemanticRoundResult = {
+  responseId: string | null
+  previousResponseId: string | null
+  status: WorkspaceSemanticRoundStatus
+  outputText: string | null
+  toolCalls: WorkspaceSemanticToolCall[]
+  incompleteReason: string | null
+  usage: AiUsage | null
+  executionReceipt: WorkspaceExecutionReceipt | null
+}
+
 export type PublicationReviewResult = {
   summary: string
   language: string
@@ -399,6 +451,7 @@ export interface AIService {
   classifyWorkspace(input: WorkspaceClassificationRequest): Promise<ServiceResponse<WorkspaceClassificationResult>>
   askWorkspace(input: WorkspaceAskRequest): Promise<ServiceResponse<WorkspaceAskResult>>
   presentToolResult(input: WorkspaceToolPresentationRequest): Promise<ServiceResponse<WorkspaceToolPresentationResult>>
+  runSemanticRound(input: WorkspaceSemanticRoundRequest): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
   hydrateCorrectionBlocks(writingId: string): Promise<ServiceResponse<PersistedCorrectionBlock[]>>
   persistCorrectionBlock(input: PersistCorrectionBlockInput): Promise<ServiceResponse<PersistCorrectionBlockResult>>
   listLearnedWords(input?: ListLearnedWordsInput): Promise<ServiceResponse<LearnedWordsPage>>
@@ -466,6 +519,14 @@ export const AI_SERVICE_CONTRACT = {
       summary: "Phrase an already-computed tool or workflow result as one short chat note in the conversation's language and tone, without adding, dropping, or verifying a finding.",
       input: ["action kind", "deterministic facts", "optional recent session memory"],
       output: ["WorkspaceToolPresentationResult"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
+    },
+    {
+      name: "runSemanticRound",
+      kind: "command",
+      summary: "Run one provider-neutral semantic review round with only bounded, read-only evidence tools.",
+      input: ["semantic operation", "bounded input items", "canonical read/evidence tool descriptors", "optional previous response id"],
+      output: ["WorkspaceSemanticRoundResult with normalized tool calls and execution receipt"],
       errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
     },
     {

@@ -124,6 +124,44 @@ describe("DesktopWorkspaceAgentToolsService", () => {
     expect(documentService.openWriting).toHaveBeenCalledWith(id)
   })
 
+  it("reads only a versioned, bounded semantic evidence slice", async () => {
+    const result = await service.readEvidence!({
+      documentId: id,
+      expectedDocumentVersion: "hash:before",
+      expectedContentHash: "hash:before",
+      lineStart: 1,
+      lineEnd: 3,
+      maxChars: 100,
+      approval: approval("read", id, "read-evidence-1"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.evidence).toMatchObject({
+      documentId: id,
+      documentVersion: "hash:before",
+      contentHash: "hash:before",
+      lineStart: 1,
+      lineEnd: 3,
+      text: "# Doc\n\nBefore.",
+    })
+    expect(documentService.saveWriting).not.toHaveBeenCalled()
+  })
+
+  it("rejects stale semantic evidence before consuming its read approval", async () => {
+    const result = await service.readEvidence!({
+      documentId: id,
+      expectedDocumentVersion: "hash:after",
+      expectedContentHash: "hash:after",
+      lineStart: 1,
+      lineEnd: 1,
+      maxChars: 100,
+      approval: approval("read", id, "read-evidence-stale"),
+    })
+
+    expect(result.error?.code).toBe("CONFLICT")
+    expect(documentService.openWriting).not.toHaveBeenCalled()
+  })
+
   it("writes an existing document through the canonical save path", async () => {
     const result = await service.write({
       target: { documentId: id },
