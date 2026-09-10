@@ -233,6 +233,21 @@ describe("DesktopWorkspaceAgentToolsService", () => {
     expect(result.data?.document.documentId).toBe(id)
   })
 
+  it("honors an expected-absent destination and never overwrites its resolved document", async () => {
+    const target = "/workspace/Doc.md"
+    const result = await service.write({
+      target: { canonicalPath: target },
+      markdown: "# Replacement",
+      approval: approval("write", target, "write-expected-absent"),
+      expectedAbsent: true,
+    })
+
+    expect(result.error?.code).toBe("CONFLICT")
+    expect(documentService.openWriting).not.toHaveBeenCalled()
+    expect(documentService.saveWriting).not.toHaveBeenCalled()
+    expect(importDocument).not.toHaveBeenCalled()
+  })
+
   it("canonicalizes traversal before consuming approval or reaching a desktop adapter", async () => {
     const target = "/workspace/../outside.md"
     const result = await service.write({

@@ -22,6 +22,7 @@ const aiMocks = vi.hoisted(() => ({
   presentToolResult: vi.fn(),
   runSemanticRound: vi.fn(),
   reviewWorkspaceDocumentRelations: vi.fn(),
+  reviewWorkspaceMerge: vi.fn(),
 }))
 
 vi.mock("@/lib/services/document-catalog-factory", () => ({
@@ -114,6 +115,41 @@ function completeSemanticRelationsRound(input: { input: Array<{ content?: string
   }
 }
 
+function completeSemanticMergeRound(input: { input: Array<{ content?: string }> }) {
+  const prompt = JSON.parse(input.input[0]?.content ?? "{}") as {
+    alignmentHints?: Array<{ sectionId: string; heading: string; headingLevel: 1 | 2 | 3; sourceEvidenceIds: string[] }>
+  }
+  const sections = (prompt.alignmentHints ?? []).map((section, index) => ({
+    sectionId: section.sectionId,
+    heading: section.heading,
+    headingLevel: section.headingLevel,
+    classification: index === 0 ? "contradictory" : "complementary",
+    unifiedText: index === 0 ? null : "A safe synthesis from the selected evidence.",
+    evidenceIds: section.sourceEvidenceIds,
+    rationale: index === 0 ? "The sources state incompatible claims." : "The sources add compatible context.",
+    confidence: "high",
+    suggestedSourceDocumentId: null,
+    suggestedSourceReason: null,
+  }))
+  return {
+    data: {
+      responseId: "merge-resp-1",
+      previousResponseId: null,
+      status: "completed",
+      outputText: JSON.stringify({
+        coverage: "complete",
+        status: "complete",
+        payload: JSON.stringify({ coverage: "complete", sections }),
+      }),
+      toolCalls: [],
+      incompleteReason: null,
+      usage: null,
+      executionReceipt: null,
+    },
+    error: null,
+  }
+}
+
 describe("WorkspaceAgentService contradiction workflow", () => {
   beforeEach(() => {
     contextMocks.list.mockReset()
@@ -132,6 +168,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     })
     aiMocks.runSemanticRound.mockReset()
     aiMocks.reviewWorkspaceDocumentRelations.mockReset()
+    aiMocks.reviewWorkspaceMerge.mockReset()
     aiMocks.reviewWorkspaceDocumentRelations.mockImplementation((input: unknown) => aiMocks.runSemanticRound(input))
   })
 
@@ -2232,5 +2269,148 @@ describe("WorkspaceAgentService hybrid workflow.md instructions (ODE-504)", () =
     expect(workflowEntries).toHaveLength(1)
     expect(workflowEntries[0].representation).toBe("instructions")
     expect(workflowEntries[0].tokens).toBeGreaterThan(0)
+  })
+})
+
+describe("WorkspaceAgentService merge workflow", () => {
+  beforeEach(() => {
+    contextMocks.list.mockReset()
+    contextMocks.loadCollections.mockReset()
+    contextMocks.loadCollections.mockResolvedValue({ collections: [], writingCollections: [] })
+    aiMocks.reviewWorkspaceMerge.mockReset()
+  })
+
+  function setupDocuments() {
+    const documents = new Map([
+      ["doc-a", document("doc-a", "# Scope\n\nThe project starts in May.\n\n# Notes\n\nKeep the checklist.", 1_700_000_000_000)],
+      ["doc-b", document("doc-b", "# Scope\n\nThe project starts in June.\n\n# Notes\n\nAsk the editor.", 1_700_000_100_000)],
+    ])
+    contextMocks.list.mockResolvedValue([...documents.values()].map((item) => item.catalogRecord))
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(async ({ target, markdown, approval }) => ({
+        data: {
+          document: document("merged", markdown, 1_700_000_300_000, typeof target === "object" && "canonicalPath" in target ? target.canonicalPath.split("/").pop() ?? "merged.md" : "merged.md"),
+          receipt: { action: "write" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    return { documents, tools }
+  }
+
+  it("uses the named merge adapter, maps provenance, and writes only after explicit review", async () => {
+    const { tools } = setupDocuments()
+    aiMocks.reviewWorkspaceMerge.mockImplementationOnce(completeSemanticMergeRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const reviewed = await service.reviewMerge(["doc-a", "doc-b"], {
+      "doc-a": approval("read", "doc-a"),
+      "doc-b": approval("read", "doc-b"),
+    })
+
+    expect(reviewed.error).toBeNull()
+    expect(reviewed.data).toMatchObject({ status: "complete", coverage: "complete", sourceDocuments: [{ documentId: "doc-a" }, { documentId: "doc-b" }] })
+    expect(reviewed.data?.sections).toHaveLength(2)
+    expect(reviewed.data?.sections[0]).toMatchObject({ status: "conflict", primarySourceDocumentId: null })
+    expect(reviewed.data?.sections[0]?.sources[0]).toEqual(expect.objectContaining({ evidenceId: expect.stringContaining("merge:doc-a") }))
+    expect(aiMocks.reviewWorkspaceMerge).toHaveBeenCalledTimes(1)
+    expect(aiMocks.reviewWorkspaceMerge.mock.calls[0]?.[0].input[0].content).not.toContain("/workspace")
+
+    const draft = reviewed.data!
+    const sections = draft.sections.map((section) => {
+      const source = section.sources[0]
+      return section.status === "conflict" && source
+        ? { id: section.id, body: source.quote, primarySourceDocumentId: source.documentId, acceptedUnresolved: false }
+        : { id: section.id, body: section.body, primarySourceDocumentId: null, acceptedUnresolved: false }
+    })
+    const created = await service.createMergedDocument({
+      draft,
+      destinationName: "combined.md",
+      sections,
+      approval: approval("write", "/workspace/combined.md"),
+    })
+
+    expect(created.error).toBeNull()
+    expect(created.data?.document.markdown).toContain("# Scope")
+    expect(tools.write).toHaveBeenCalledWith(expect.objectContaining({
+      target: { canonicalPath: "/workspace/combined.md" },
+      expectedAbsent: true,
+    }))
+    expect(tools.read).toHaveBeenCalledTimes(4)
+  })
+
+  it("rejects a merge write when any source snapshot is stale", async () => {
+    const { documents, tools } = setupDocuments()
+    aiMocks.reviewWorkspaceMerge.mockImplementationOnce(completeSemanticMergeRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const reviewed = await service.reviewMerge(["doc-a", "doc-b"], {
+      "doc-a": approval("read", "doc-a"),
+      "doc-b": approval("read", "doc-b"),
+    })
+    const draft = reviewed.data!
+    documents.set("doc-a", document("doc-a", "# Scope\n\nThe project starts in July.", 1_700_000_999_000))
+    const result = await service.createMergedDocument({
+      draft,
+      destinationName: "combined.md",
+      sections: draft.sections.map((section) => ({
+        id: section.id,
+        body: section.status === "conflict" ? section.sources[0]?.quote ?? "" : section.body,
+        primarySourceDocumentId: section.status === "conflict" ? section.sources[0]?.documentId ?? null : null,
+        acceptedUnresolved: false,
+      })),
+      approval: approval("write", "/workspace/combined.md"),
+    })
+    expect(result.error?.code).toBe("CONFLICT")
+    expect(result.error?.message).toContain("changed")
+    expect(tools.write).not.toHaveBeenCalled()
+  })
+
+  it("does not overwrite an existing destination and rejects unapproved writes", async () => {
+    const { tools } = setupDocuments()
+    aiMocks.reviewWorkspaceMerge.mockImplementationOnce(completeSemanticMergeRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const reviewed = await service.reviewMerge(["doc-a", "doc-b"], {
+      "doc-a": approval("read", "doc-a"),
+      "doc-b": approval("read", "doc-b"),
+    })
+    const draft = reviewed.data!
+    const sections = draft.sections.map((section) => ({
+      id: section.id,
+      body: section.status === "conflict" ? section.sources[0]?.quote ?? "" : section.body,
+      primarySourceDocumentId: section.status === "conflict" ? section.sources[0]?.documentId ?? null : null,
+      acceptedUnresolved: false,
+    }))
+
+    const denied = await service.createMergedDocument({
+      draft,
+      destinationName: "combined.md",
+      sections,
+      approval: approval("edit", "/workspace/combined.md"),
+    })
+    expect(denied.error?.code).toBe("FORBIDDEN")
+    expect(tools.write).not.toHaveBeenCalled()
+
+    contextMocks.list.mockResolvedValue([
+      ...["doc-a", "doc-b"].map((id) => document(id, "# Source\n\nContent.").catalogRecord),
+      document("existing", "# Existing", 1_700_000_400_000, "combined.md").catalogRecord,
+    ])
+    const existing = await service.createMergedDocument({
+      draft,
+      destinationName: "combined.md",
+      sections,
+      approval: approval("write", "/workspace/combined.md", "write:existing"),
+    })
+    expect(existing.error?.code).toBe("CONFLICT")
+    expect(tools.write).not.toHaveBeenCalled()
   })
 })

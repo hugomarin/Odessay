@@ -38,12 +38,14 @@ import {
   type WorkspaceAgentClassificationRun,
   type WorkspaceAgentSelection,
   type WorkspaceAgentService,
+  mergeDestinationPath,
 } from "@/lib/services/workspace-agent-service"
 import type {
   ArchiveCandidate,
   BrokenReferenceProposal,
   ClassificationProposal,
   ContradictionProposal,
+  MergeSection,
   WorkflowDraftProposal,
 } from "@/lib/agent/workspace-agent-analysis"
 import type {
@@ -93,7 +95,7 @@ import {
 import { ClassificationReviewBody } from "@/components/agent/workspace-agent-review-classify"
 import { ArchiveReviewBody } from "@/components/agent/workspace-agent-review-archive"
 import { ContradictionReviewCard } from "@/components/agent/workspace-agent-review-contradict"
-import { buildMergeMock, MergeReviewBody } from "@/components/agent/workspace-agent-review-merge"
+import { MergeReviewBody } from "@/components/agent/workspace-agent-review-merge"
 import { cn } from "@/lib/utils"
 
 const CHAT_TEXTAREA_MAX_HEIGHT = 160
@@ -771,13 +773,7 @@ function WorkspaceAgentPanelSession({
     )
   }), [announceToolResult, attachments, getWorkflowReadApproval, runAction, scope, scopeLabel, service, workspaceRootPath])
 
-  /**
-   * Merge (Fase H) — UI-only mock: reads the real markdown of the attached
-   * documents through the same approval-gated read tool other actions use,
-   * then builds the combined-document preview client-side (no merge tool
-   * exists on the backend yet). "Crear el documento" stays disabled in the
-   * body for that reason.
-   */
+  /** Merge (Fase H): the application service owns bounded reads, synthesis and provenance. */
   const runMerge = useCallback(() => runAction("merge", async (generation) => {
     if (!service) return
     const envelope = buildContextEnvelope({
@@ -799,31 +795,38 @@ function WorkspaceAgentPanelSession({
       setFeedback("Attach at least two artifacts to combine them.")
       return
     }
-    const targets = targetIds.slice(0, 4)
-    const sources: { documentId: string; title: string; markdown: string }[] = []
-    for (const documentId of targets) {
-      const response = await service.tools.read({ documentId, approval: createApproval("read", documentId) })
-      if (response.error || !response.data) {
-        setFeedback(response.error?.message ?? "One of the attached artifacts could not be read.")
-        return
-      }
-      sources.push({
-        documentId,
-        title: response.data.document.title?.trim() || response.data.document.canonicalPath.split("/").pop() || documentId,
-        markdown: response.data.document.markdown,
-      })
+    const readApprovals = Object.fromEntries(targetIds.map((documentId) => [documentId, createApproval("read", documentId)]))
+    const mergeResponse = await service.reviewMerge(
+      targetIds,
+      readApprovals,
+      createWorkspaceExecutionContext("merge", "desktop", "synthesis"),
+    )
+    if (mergeResponse.error || !mergeResponse.data) {
+      setFeedback(mergeResponse.error?.message ?? "One of the attached artifacts could not be reviewed.")
+      return
     }
-    const merge = buildMergeMock(sources)
-    const mergeFacts = [`Combined ${sources.length} artifacts into a ${merge.sections.length}-section draft (preview only).`]
+    const merge = mergeResponse.data
+    const conflictCount = merge.sections.filter((section) => section.status === "conflict").length
+    const insufficientCount = merge.sections.filter((section) => section.status === "insufficient_evidence").length
+    const mergeFacts = [
+      merge.status !== "complete" || merge.coverage !== "complete"
+        ? `La síntesis de ${merge.sourceDocuments.length} artifacts necesita más evidencia y no puede crear un documento todavía.`
+        : `${merge.sourceDocuments.length} artifacts fueron sintetizados en ${merge.sections.length} sección(es) con evidencia revisable.${conflictCount > 0 ? ` ${conflictCount} conflicto(s) material(es) requieren una decisión.` : ""}${insufficientCount > 0 ? ` ${insufficientCount} sección(es) necesitan contexto adicional.` : ""}`,
+    ]
     const note = await service.presentNote("merge", mergeFacts, sessionActionLogRef.current)
-    announceToolResult(note.note, generation, { kind: "merge", merge }, note.executionReceipt)
+    const semanticReview: WorkspaceAgentSemanticReviewState = {
+      status: merge.status,
+      coverage: merge.coverage,
+      rounds: merge.rounds,
+      evidence: merge.evidence,
+      error: merge.error,
+    }
+    announceToolResult(note.note, generation, { kind: "merge", merge }, merge.executionReceipt ?? note.executionReceipt, semanticReview)
   }), [announceToolResult, attachments, runAction, scope, scopeLabel, service, workspaceRootPath])
 
   /**
    * Data-driven catalog for the Actions popover — one entry per predetermined
-   * action, in the exact order/copy the design handoff specifies. "Merge" has
-   * no backend yet (mock-only, see workspace-agent-review-merge.tsx once
-   * built) so it stays disabled here until that lands.
+   * action, in the exact order/copy the design handoff specifies.
    */
   const agentActionCatalog = useMemo(() => ([
     {
@@ -894,6 +897,41 @@ function WorkspaceAgentPanelSession({
   const resolveExecutionService = useCallback((messageId: string): WorkspaceAgentService | null => (
     resolveExecutionServiceById(messages, messageId, service)
   ), [messages, service])
+
+  const createMergedDocument = useCallback((messageId: string, destinationName: string, sections: MergeSection[]) => runAction("create-merge", async (generation) => {
+    const executionService = resolveExecutionService(messageId)
+    const canonicalPath = mergeDestinationPath(workspaceRootPath ?? "", destinationName)
+    const messageToolResult = messages.find((message) => message.id === messageId)?.toolResult
+    if (!executionService || !canonicalPath || messageToolResult?.kind !== "merge") {
+      setFeedback("El nombre del documento combinado no es válido para este workspace.")
+      return
+    }
+    const response = await executionService.createMergedDocument({
+      // The review body only marks an unresolved conflict with the canonical
+      // acceptance header; the service still validates the exact body and
+      // every source snapshot before writing.
+      draft: messageToolResult.merge,
+      destinationName,
+      sections: sections.map((section) => ({
+        id: section.id,
+        body: section.body,
+        primarySourceDocumentId: section.primarySourceDocumentId,
+        acceptedUnresolved: section.status === "conflict"
+          && section.primarySourceDocumentId === null
+          && section.body.startsWith("Conflicto material aceptado sin resolver."),
+      })),
+      approval: createApproval("write", canonicalPath),
+    })
+    if (response.error || !response.data) {
+      setFeedback(response.error?.message ?? "El documento combinado no pudo crearse; revisa el borrador nuevamente.")
+      return
+    }
+    setActiveReviewMessageId(null)
+    const title = response.data.document.title ?? destinationName
+    const outcome = `Creado ${title} mediante el write aprobado; los documentos fuente permanecen intactos.`
+    setFeedback(outcome)
+    recordSessionAction(outcome, generation)
+  }), [messages, recordSessionAction, resolveExecutionService, runAction, workspaceRootPath])
 
   const applyWorkflow = useCallback((messageId: string, proposal: WorkflowDraftProposal) => runAction("apply-workflow", async (generation) => {
     const executionService = resolveExecutionService(messageId)
@@ -1436,11 +1474,11 @@ function WorkspaceAgentPanelSession({
         )
       })}
 
-      {busyAction === "contradictions" ? (
+      {busyAction === "contradictions" || busyAction === "merge" ? (
         <div className="flex items-start" data-testid="workspace-agent-semantic-loading" role="status" aria-live="polite">
           <div className="flex items-center gap-2 rounded-[10px] border-[0.5px] border-border bg-bg px-3 py-2.5 text-[12px] text-ink-3">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-4" strokeWidth={1.7} />
-            <span>Analizando relaciones semánticas…</span>
+            <span>{busyAction === "merge" ? "Sintetizando el documento combinado…" : "Analizando relaciones semánticas…"}</span>
           </div>
         </div>
       ) : null}
@@ -1631,6 +1669,7 @@ function WorkspaceAgentPanelSession({
       onApplyBrokenReference={applyBrokenReference}
       onRemoveBrokenReference={removeBrokenReference}
       onCreateDocumentForBrokenReference={createDocumentForBrokenReference}
+      onCreateMergedDocument={createMergedDocument}
       onResolveContradiction={(proposal, resolution) => void resolveContradiction(proposal, resolution)}
       onOpenDocument={onOpenDocument}
       reviewCursor={reviewCursor}
@@ -1778,14 +1817,20 @@ function ReviewSummaryRow({
         }
       }
       case "merge":
+        {
+          const conflicts = toolResult.merge.sections.filter((section) => section.status === "conflict").length
+          const incomplete = toolResult.merge.status !== "complete" || toolResult.merge.coverage !== "complete"
         return {
           icon: <MergeIcon className="h-[17px] w-[17px] shrink-0 text-cursor" strokeWidth={1.5} />,
-          title: "Documento combinado (vista previa)",
-          subtitle: `${toolResult.merge.sections.length} sección(es) · ${toolResult.merge.sourceDocuments.length} documentos`,
+          title: "Documento combinado",
+          subtitle: incomplete
+            ? "Síntesis incompleta — necesita más evidencia"
+            : `${toolResult.merge.sections.length} sección(es) · ${conflicts > 0 ? `${conflicts} conflicto(s)` : "lista para revisar"}`,
           testId: "workspace-agent-merge-review",
           findings: toolResult.merge.sections
             .filter((section) => section.status === "conflict")
-            .map((section) => ({ value: section.heading, origin: "elige una versión" })),
+            .map((section) => ({ value: section.heading, origin: "decisión requerida" })),
+        }
         }
     }
   })()
@@ -1883,6 +1928,7 @@ function WorkspaceAgentReviewModal({
   onApplyBrokenReference,
   onRemoveBrokenReference,
   onCreateDocumentForBrokenReference,
+  onCreateMergedDocument,
   onResolveContradiction,
   onOpenDocument,
   reviewCursor,
@@ -1906,6 +1952,7 @@ function WorkspaceAgentReviewModal({
   onApplyBrokenReference: (messageId: string, proposal: BrokenReferenceProposal) => void
   onRemoveBrokenReference: (messageId: string, proposal: BrokenReferenceProposal) => void
   onCreateDocumentForBrokenReference: (messageId: string, proposal: BrokenReferenceProposal) => void
+  onCreateMergedDocument: (messageId: string, destinationName: string, sections: MergeSection[]) => void
   onResolveContradiction: (proposal: ContradictionProposal, resolution: "left" | "right" | "discard") => void
   onOpenDocument?: (documentId: string) => void
   reviewCursor: number
@@ -2017,7 +2064,11 @@ function WorkspaceAgentReviewModal({
             />
           ) : null}
           {toolResult.kind === "merge" ? (
-            <MergeReviewBody toolResult={toolResult.merge} onCreate={() => {}} />
+            <MergeReviewBody
+              toolResult={toolResult.merge}
+              busy={busyAction === "create-merge"}
+              onCreate={(destinationName, sections) => onCreateMergedDocument(message.id, destinationName, sections)}
+            />
           ) : null}
         </div>
       ) : null}

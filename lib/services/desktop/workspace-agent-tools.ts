@@ -347,6 +347,11 @@ export class DesktopWorkspaceAgentToolsService implements WorkspaceAgentToolsSer
     const safePath = pathValidation.data.canonicalPath
     const resolved = await this.dependencies.catalog.resolvePath(safePath)
     if (resolved.kind === "resolved") {
+      if (input.expectedAbsent) {
+        return error("CONFLICT", "A document already exists at the requested destination.", {
+          canonicalPath: safePath,
+        })
+      }
       return this.writeExistingAfterApproval(resolved.record.id, input.markdown, input.approval, true)
     }
     const imported = await this.dependencies.importDocument(safePath, input.markdown)

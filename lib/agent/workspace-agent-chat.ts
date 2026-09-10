@@ -3,6 +3,7 @@ import type {
   BrokenReferenceProposal,
   ClassificationProposal,
   ContradictionProposal,
+  MergeReviewToolResult,
   WorkflowDraftProposal,
 } from "@/lib/agent/workspace-agent-analysis"
 import type {
@@ -15,7 +16,6 @@ import type {
   WorkspaceAgentSemanticRelationSummary,
   WorkspaceAgentService,
 } from "@/lib/services/workspace-agent-service"
-import type { MergeReviewToolResult } from "@/components/agent/workspace-agent-review-merge"
 import type { WorkspaceExecutionReceipt } from "@/lib/ai/workspace-execution-receipt"
 import type { WorkspaceSemanticLoopResult } from "@/lib/ai/workspace-semantic-loop"
 

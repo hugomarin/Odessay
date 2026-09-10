@@ -3,7 +3,17 @@ import type {
   WorkspaceRelationConfidence,
   WorkspaceRelationVerdict,
 } from "@/lib/ai/workspace-document-relations"
+import type {
+  AiUsage,
+  WorkspaceExecutionReceipt,
+} from "@/lib/services/contracts/ai-service"
+import type {
+  WorkspaceSemanticCoverage,
+  WorkspaceSemanticLoopError,
+  WorkspaceSemanticLoopStatus,
+} from "@/lib/ai/workspace-semantic-loop"
 import type { DocumentCatalogRecord, DocumentCatalogReference } from "@/lib/services/contracts/document-catalog"
+import type { WorkspaceAgentEvidence } from "@/lib/services/contracts/workspace-agent"
 import type { VocabularyItem } from "@/lib/vocabulary/types"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
 import type { WritingStatus } from "@/lib/writings/status"
@@ -138,6 +148,80 @@ export type ContradictionProposal = {
 }
 
 export type ContradictionResolution = "left" | "right" | "discard"
+
+export const MERGE_SECTION_CLASSIFICATIONS = [
+  "equivalent",
+  "style_only",
+  "complementary",
+  "contradictory",
+  "irrelevant",
+  "insufficient_evidence",
+] as const
+
+export type MergeSectionClassification = (typeof MERGE_SECTION_CLASSIFICATIONS)[number]
+export type MergeSectionStatus = "unified" | "complementary" | "conflict" | "irrelevant" | "insufficient_evidence"
+
+export type MergeSourceDocument = {
+  documentId: string
+  title: string
+  documentVersion: string
+  contentHash: string | null
+}
+
+export type MergeSectionSource = {
+  documentId: string
+  title: string
+  evidenceId: string
+  documentVersion: string
+  contentHash: string | null
+  lineRange: string
+  quote: string
+}
+
+export type MergeSection = {
+  id: string
+  heading: string
+  headingLevel: 1 | 2 | 3
+  status: MergeSectionStatus
+  body: string
+  provenance: string
+  primarySourceDocumentId: string | null
+  suggestedSourceDocumentId?: string | null
+  suggestedSourceReason?: string | null
+  rationale: string
+  confidence: WorkspaceRelationConfidence
+  evidenceIds: string[]
+  sources: MergeSectionSource[]
+  /** Compatible material the synthesis included without requiring source selection. */
+  complementary: MergeSectionSource[]
+}
+
+export type MergeSourceSnapshot = {
+  documentVersion: string
+  contentHash: string | null
+}
+
+export type MergeReviewToolResult = {
+  destinationName: string
+  sourceDocuments: MergeSourceDocument[]
+  sections: MergeSection[]
+  status: WorkspaceSemanticLoopStatus
+  coverage: WorkspaceSemanticCoverage
+  rounds: number
+  evidence: WorkspaceAgentEvidence[]
+  usage: AiUsage | null
+  executionReceipt: WorkspaceExecutionReceipt | null
+  error: WorkspaceSemanticLoopError | null
+  sourceSnapshots: Record<string, MergeSourceSnapshot>
+}
+
+/** Canonical explicit-acceptance representation used by the review UI and write gate. */
+export function buildAcceptedUnresolvedMergeBody(section: MergeSection): string {
+  const claims = section.sources
+    .filter((source, index, all) => all.findIndex((candidate) => candidate.documentId === source.documentId) === index)
+    .map((source) => `- ${source.title} (${source.lineRange}, ${source.evidenceId}): ${source.quote}`)
+  return ["Conflicto material aceptado sin resolver.", ...claims].join("\n")
+}
 
 function normalizePath(value: string): string {
   return value.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "")

@@ -18,6 +18,7 @@ import type {
   WorkspaceClassificationRequest,
   WorkspaceClassificationResult,
   WorkspaceDocumentRelationsRoundRequest,
+  WorkspaceMergeRoundRequest,
   WorkspaceSemanticRoundRequest,
   WorkspaceSemanticRoundResult,
   WorkspaceToolPresentationRequest,
@@ -346,6 +347,32 @@ export const webAIService: AIService = {
       })
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not review workspace document relations right now.")
+    }
+  },
+
+  async reviewWorkspaceMerge(input: WorkspaceMergeRoundRequest) {
+    try {
+      const response = await fetch("/api/ai/workspace-merge", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(input),
+      })
+
+      const parsed = await parseServiceEnvelope<WorkspaceSemanticRoundResult>(
+        response,
+        "AI_REQUEST_FAILED",
+        "Could not synthesize the workspace merge right now.",
+      )
+
+      if (parsed.error) return parsed
+      return ok<WorkspaceSemanticRoundResult>({
+        ...parsed.data,
+        executionReceipt: parsed.data.executionReceipt ?? null,
+      })
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not synthesize the workspace merge right now.")
     }
   },
 

@@ -168,7 +168,7 @@ Todavía no formaliza completamente:
 - Un Intent Router formal que clasifique la intención *antes* de decidir qué leer — hoy esa decisión lazy la toma el propio modelo dentro de la misma llamada de ask, no un paso previo separado y determinista.
 - registry común de tools/workflows;
 - `AgentResponse` reutilizable entre Card y Modal;
-- Workflow, Broken links y Archive no seleccionan documentos específicos — operan sobre todo el Workspace vía el servicio directamente, sin un `ContextEnvelope` que envolver. En el estado actual Contradictions y Merge sí seleccionan (documentos comparados/combinados) y cargan de inmediato; el contrato objetivo de ODE-515 devuelve esa evidencia a Responses y permite solicitar contexto adicional acotado antes del veredicto semántico.
+- Workflow, Broken links y Archive no seleccionan documentos específicos — operan sobre todo el Workspace vía el servicio directamente, sin un `ContextEnvelope` que envolver. En el estado actual Contradictions y Merge sí seleccionan (documentos comparados/combinados) y cargan de inmediato; ODE-515 y ODE-511 devuelven esa evidencia a Responses y permiten solicitar contexto adicional acotado antes del veredicto semántico o la síntesis.
 
 La migración debe introducir esos contratos sin ampliar el camino legacy basado únicamente en `workspaceRootPath`.
 

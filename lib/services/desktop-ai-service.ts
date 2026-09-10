@@ -19,6 +19,7 @@ import type {
   WorkspaceClassificationRequest,
   WorkspaceClassificationResult,
   WorkspaceDocumentRelationsRoundRequest,
+  WorkspaceMergeRoundRequest,
   WorkspaceSemanticRoundRequest,
   WorkspaceSemanticRoundResult,
   WorkspaceToolPresentationRequest,
@@ -417,6 +418,43 @@ export const desktopAIService: AIService = {
       })
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not review workspace document relations right now.")
+    }
+  },
+
+  async reviewWorkspaceMerge(input: WorkspaceMergeRoundRequest) {
+    const token = await getBearerToken()
+
+    if (!token) {
+      return err<WorkspaceSemanticRoundResult>({
+        code: "UNAUTHORIZED",
+        message: "No active session.",
+        retryable: false,
+      })
+    }
+
+    try {
+      const response = await fetch(`${getWebRuntimeBaseUrl()}/api/ai/workspace-merge`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(input),
+      })
+
+      const parsed = await parseServiceEnvelope<WorkspaceSemanticRoundResult>(
+        response,
+        "AI_REQUEST_FAILED",
+        "Could not synthesize the workspace merge right now.",
+      )
+
+      if (parsed.error) return parsed
+      return ok<WorkspaceSemanticRoundResult>({
+        ...parsed.data,
+        executionReceipt: parsed.data.executionReceipt ?? null,
+      })
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not synthesize the workspace merge right now.")
     }
   },
 

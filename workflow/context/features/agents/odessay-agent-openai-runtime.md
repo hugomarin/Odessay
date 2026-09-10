@@ -1,7 +1,7 @@
 # ODESSAY — OpenAI Responses: observabilidad y runtime
 
 - **Decisión de alcance:** aclarada por Hugo el 2026-09-08.
-- **Estado de implementación:** pendiente; diagnóstico sobre `89364b36`.
+- **Estado de implementación:** implementado en ODE-513, ODE-515, ODE-509, ODE-510 y ODE-511; diagnóstico inicial sobre `89364b36`.
 - **Scope:** Workspace Agent. Correcciones y títulos conservan su provider separado.
 - **Autoridad documental:** subordinado al ADR de identidad y al spec de `DocumentCatalog`.
 
@@ -34,7 +34,7 @@ Usar las capacidades nativas de Responses detrás de `AIService`. El adapter tra
 
 Responses usa Items distintos para mensajes y llamadas de herramientas; conservarlos en el adapter permite procesar la respuesta sin reducir el protocolo a texto. Las tools locales requieren que Odessay ejecute la operación y devuelva su resultado; OpenAI no recibe acceso implícito al filesystem. [Responses](https://developers.openai.com/api/docs/guides/migrate-to-responses).
 
-Cuando se incorporen tools semánticas, el flujo es el loop nativo de function calling de Responses: enviar intención/evidencia y schemas permitidos, recibir `function_call`, validar y ejecutar la lectura por `DocumentCatalog`, devolver `function_call_output` con el mismo `call_id` y continuar hasta un veredicto estructurado o una solicitud acotada de evidencia. La aplicación fija las rondas y el presupuesto. Un diff o matcher determinista puede iniciar el `EvidenceBundle`, pero no es la condición de completitud ni una conclusión del modelo.
+Para las tools semánticas incorporadas, el flujo es el loop nativo de function calling de Responses: enviar intención/evidencia y schemas permitidos, recibir `function_call`, validar y ejecutar la lectura por `DocumentCatalog`, devolver `function_call_output` con el mismo `call_id` y continuar hasta un veredicto estructurado o una solicitud acotada de evidencia. La aplicación fija las rondas y el presupuesto. Un diff o matcher determinista puede iniciar el `EvidenceBundle`, pero no es la condición de completitud ni una conclusión del modelo.
 
 Este ciclo sigue el patrón documentado de function calling —el modelo solicita una tool, la aplicación la ejecuta y devuelve su salida— y no requiere adoptar `@openai/agents`. [Function calling](https://developers.openai.com/api/docs/guides/function-calling).
 
@@ -49,7 +49,7 @@ Este ciclo sigue el patrón documentado de function calling —el modelo solicit
 5. Mantener receipt e historial de UI en memoria. No crear tablas, colas durables de AI ni historial de chat en Supabase, SQLite o IndexedDB.
 6. Probar una acción real y localizar su Response en el proyecto OpenAI correspondiente mediante su ID. Conversations y Agents SDK no son gates de cierre.
 
-La detección de Broken links/Archive es determinista, pero su presentación actual sí puede llamar OpenAI y debe registrarse como etapa `presentation`. Contradictions y Merge todavía no tienen análisis semántico real: sus notas no deben registrarse como si acreditaran ese análisis. Ask ya devuelve `suggestedAction` y puede solicitar evidencia; no es correcto afirmar que el LLM nunca decide acciones.
+La detección de Broken links/Archive es determinista, pero su presentación actual sí puede llamar OpenAI y debe registrarse como etapa `presentation`. Contradictions y Merge ya tienen análisis semántico real mediante el loop de Responses: sus veredictos, evidencia y cobertura se validan antes de entrar a la UI. Ask ya devuelve `suggestedAction` y puede solicitar evidencia; no es correcto afirmar que el LLM nunca decide acciones.
 
 ## Capacidades separadas del objetivo de logs
 
@@ -72,4 +72,4 @@ La detección de Broken links/Archive es determinista, pero su presentación act
 - **Invariantes:** evidencia acotada, aprobación por mutación, `.md` canónico, guardado `.md` atómico → manifest atómico → SQLite + enqueue → sync cloud. Auth habilita inferencia cloud, no existencia documental local.
 - **Required docs:** `odessay-adr-identidad.md`, `odessay-desktop-document-catalog.md`, `odessay-desktop-target-architecture.md` y los contratos de contexto/ejecución/cache de este directorio.
 
-ODE-509/510/511 siguen siendo los owners del cambio semántico; activar almacenamiento no cambia el resultado del matcher ni convierte el mock de Merge en síntesis real. La aceptación semántica usa OpenAI con el modelo configurado, evidencia y pruebas de outcome.
+ODE-509/510/511 son los owners del cambio semántico: ODE-509 produce el veredicto de relaciones, ODE-510 gobierna la cola de contradicciones y ODE-511 sintetiza un documento nuevo con revisión y aprobación explícitas. Activar almacenamiento no cambia el resultado del matcher ni sustituye la validación de evidencia. La aceptación semántica usa OpenAI con el modelo configurado, evidencia y pruebas de outcome.

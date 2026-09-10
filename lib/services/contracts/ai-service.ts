@@ -233,6 +233,15 @@ export type WorkspaceDocumentRelationsRoundRequest = Omit<WorkspaceSemanticRound
   operation: "relations"
 }
 
+/**
+ * Named Merge capability over the same provider-neutral semantic round. The
+ * application owns alignment, provenance and approval; adapters only route
+ * the bounded Responses round to the active provider.
+ */
+export type WorkspaceMergeRoundRequest = Omit<WorkspaceSemanticRoundRequest, "operation"> & {
+  operation: "merge"
+}
+
 export type WorkspaceSemanticRoundResult = {
   responseId: string | null
   previousResponseId: string | null
@@ -463,6 +472,7 @@ export interface AIService {
   presentToolResult(input: WorkspaceToolPresentationRequest): Promise<ServiceResponse<WorkspaceToolPresentationResult>>
   runSemanticRound(input: WorkspaceSemanticRoundRequest): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
   reviewWorkspaceDocumentRelations(input: WorkspaceDocumentRelationsRoundRequest): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
+  reviewWorkspaceMerge(input: WorkspaceMergeRoundRequest): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
   hydrateCorrectionBlocks(writingId: string): Promise<ServiceResponse<PersistedCorrectionBlock[]>>
   persistCorrectionBlock(input: PersistCorrectionBlockInput): Promise<ServiceResponse<PersistCorrectionBlockResult>>
   listLearnedWords(input?: ListLearnedWordsInput): Promise<ServiceResponse<LearnedWordsPage>>
@@ -546,6 +556,14 @@ export const AI_SERVICE_CONTRACT = {
       summary: "Run one named semantic relation-review round through the shared Responses tool-loop boundary.",
       input: ["bounded relation evidence", "canonical read/evidence tool descriptors", "optional previous response id"],
       output: ["WorkspaceSemanticRoundResult with normalized relation tool calls and execution receipt"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
+    },
+    {
+      name: "reviewWorkspaceMerge",
+      kind: "command",
+      summary: "Run one named semantic merge-synthesis round through the shared Responses tool-loop boundary.",
+      input: ["bounded merge evidence", "canonical read/evidence tool descriptors", "optional previous response id"],
+      output: ["WorkspaceSemanticRoundResult with normalized merge tool calls and execution receipt"],
       errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
     },
     {

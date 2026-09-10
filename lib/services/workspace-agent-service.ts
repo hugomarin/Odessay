@@ -27,6 +27,10 @@ import {
   type ContradictionProposal,
   type ContradictionResolution,
   type EvidenceCitation,
+  buildAcceptedUnresolvedMergeBody,
+  type MergeReviewToolResult,
+  type MergeSection,
+  type MergeSectionSource,
   type WorkflowDraftProposal,
 } from "@/lib/agent/workspace-agent-analysis"
 import {
@@ -98,6 +102,16 @@ import {
   type WorkspaceRelationVerdict,
   type WorkspaceDocumentRelationsResult,
 } from "@/lib/ai/workspace-document-relations"
+import {
+  buildWorkspaceMergeRequest,
+  lineRangeForMergeSource,
+  MAX_WORKSPACE_MERGE_MARKDOWN_CHARS,
+  MAX_WORKSPACE_MERGE_DOCUMENTS,
+  parseWorkspaceMergeResult,
+  type MergeAlignedSection,
+  type WorkspaceMergeReviewResult,
+  type WorkspaceMergeSource,
+} from "@/lib/ai/workspace-merge"
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
@@ -109,6 +123,31 @@ function error<T>(code: ServiceError["code"], message: string): ServiceResponse<
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/, "")
+}
+
+const MAX_MERGE_DESTINATION_NAME_CHARS = 160
+
+/** A merge destination is a filename in the confirmed BindingRoot, never a user-supplied subpath. */
+export function normalizeMergeDestinationName(value: string): string | null {
+  const trimmed = value.trim()
+  if (
+    !trimmed
+    || trimmed.length > MAX_MERGE_DESTINATION_NAME_CHARS
+    || trimmed === "."
+    || trimmed === ".."
+    || trimmed.includes("/")
+    || trimmed.includes("\\")
+    || trimmed.includes("..")
+    || /[\u0000-\u001f\u007f]/u.test(trimmed)
+  ) return null
+  return /\.md$/i.test(trimmed) ? trimmed : `${trimmed}.md`
+}
+
+export function mergeDestinationPath(workspaceRootPath: string, destinationName: string): string | null {
+  const name = normalizeMergeDestinationName(destinationName)
+  const root = normalizePath(workspaceRootPath.trim())
+  if (!name || !root || root === ".") return null
+  return `${root}/${name}`
 }
 
 const INTERNAL_WORKSPACE_DIR_NAMES = new Set([".odessay", [".ody", "ssey"].join("")])
@@ -488,6 +527,22 @@ export type WorkspaceAgentDocumentRelationsInput = {
 }
 
 export type WorkspaceAgentDocumentRelationsRun = WorkspaceDocumentRelationsResult
+
+export type WorkspaceAgentMergeReviewRun = MergeReviewToolResult
+
+export type WorkspaceAgentMergeSectionSelection = {
+  id: string
+  body: string
+  primarySourceDocumentId: string | null
+  acceptedUnresolved: boolean
+}
+
+export type WorkspaceAgentMergeCreateInput = {
+  draft: WorkspaceAgentMergeReviewRun
+  destinationName: string
+  sections: readonly WorkspaceAgentMergeSectionSelection[]
+  approval: WorkspaceAgentApproval
+}
 
 /**
  * Used only to correlate this one in-memory ask's request/response (target
@@ -1123,6 +1178,15 @@ export type WorkspaceAgentService = {
   reviewDocumentRelations(
     input: WorkspaceAgentDocumentRelationsInput,
   ): Promise<ServiceResponse<WorkspaceAgentDocumentRelationsRun>>
+  reviewMerge(
+    documentIds: readonly string[],
+    readApprovals: Readonly<Record<string, WorkspaceAgentApproval>>,
+    execution?: WorkspaceExecutionContext | null,
+    signal?: AbortSignal,
+  ): Promise<ServiceResponse<WorkspaceAgentMergeReviewRun>>
+  createMergedDocument(
+    input: WorkspaceAgentMergeCreateInput,
+  ): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
   /**
    * Presentation stage of the pipeline (ODE-491): phrases facts already
    * established by a predetermined action's deterministic result as one
@@ -1157,6 +1221,101 @@ export type ContradictionResolutionResult = {
   resolution: ContradictionResolution
   resolvedDocumentId: string | null
   mutation: WorkspaceAgentMutationResult | null
+}
+
+function mergeSectionStatus(classification: WorkspaceMergeReviewResult["sections"][number]["classification"]): MergeSection["status"] {
+  if (classification === "equivalent" || classification === "style_only") return "unified"
+  if (classification === "complementary") return "complementary"
+  if (classification === "contradictory") return "conflict"
+  if (classification === "irrelevant") return "irrelevant"
+  return "insufficient_evidence"
+}
+
+function defaultMergeDestinationName(sources: readonly WorkspaceMergeSource[]): string {
+  const prefix = sources
+    .slice(0, 2)
+    .map((source) => source.title.replace(/\.md$/i, "").split(/[\s_-]+/u)[0]?.replace(/[^\p{L}\p{N}]/gu, "") ?? "")
+    .filter(Boolean)
+    .join("-")
+    .toLocaleLowerCase()
+  return normalizeMergeDestinationName(`${prefix || "documento"}-unificado.md`) ?? "documento-unificado.md"
+}
+
+function mapMergeReview(
+  review: WorkspaceMergeReviewResult,
+  request: { sources: readonly WorkspaceMergeSource[]; boundedSections: readonly MergeAlignedSection[] },
+): MergeReviewToolResult {
+  const alignedById = new Map(request.boundedSections.map((section) => [section.sectionId, section]))
+  const sourceDocuments = request.sources.map((source) => ({
+    documentId: source.documentId,
+    title: source.title,
+    documentVersion: source.documentVersion,
+    contentHash: source.contentHash,
+  }))
+  const sections = review.sections.flatMap((result) => {
+    const aligned = alignedById.get(result.sectionId)
+    if (!aligned) return []
+    const sources: MergeSectionSource[] = aligned.sources.map((source) => ({
+      documentId: source.documentId,
+      title: source.title,
+      evidenceId: source.evidenceId,
+      documentVersion: source.documentVersion,
+      contentHash: source.contentHash,
+      lineRange: lineRangeForMergeSource(source),
+      quote: source.text,
+    }))
+    const status = mergeSectionStatus(result.classification)
+    const evidenceLabel = result.evidenceIds.length > 0 ? `evidence ${result.evidenceIds.join(", ")}` : "sin evidencia"
+    const sourceLabel = [...new Set(sources.map((source) => source.title))].join(", ")
+    return [{
+      id: result.sectionId,
+      heading: result.heading,
+      headingLevel: result.headingLevel,
+      status,
+      body: result.unifiedText ?? "",
+      provenance: `Síntesis ${result.classification} · ${sourceLabel} · ${evidenceLabel}`,
+      // A generated synthesis has no hidden winner. Conflicts are selected
+      // explicitly in the review card; safe sections show all provenance.
+      primarySourceDocumentId: null,
+      suggestedSourceDocumentId: result.suggestedSourceDocumentId,
+      suggestedSourceReason: result.suggestedSourceReason,
+      rationale: result.rationale,
+      confidence: result.confidence,
+      evidenceIds: result.evidenceIds,
+      sources,
+      complementary: [],
+    } satisfies MergeSection]
+  })
+  return {
+    destinationName: defaultMergeDestinationName(request.sources),
+    sourceDocuments,
+    sections,
+    status: review.status,
+    coverage: review.coverage,
+    rounds: review.rounds,
+    evidence: review.evidence,
+    usage: review.usage,
+    executionReceipt: review.executionReceipt,
+    error: review.error,
+    sourceSnapshots: Object.fromEntries(request.sources.map((source) => [source.documentId, {
+      documentVersion: source.documentVersion,
+      contentHash: source.contentHash,
+    }])),
+  }
+}
+
+export function buildMergedDocumentMarkdown(
+  sections: readonly MergeSection[],
+  selections: ReadonlyMap<string, WorkspaceAgentMergeSectionSelection>,
+): string {
+  const blocks = sections.flatMap((section) => {
+    if (section.status === "irrelevant") return []
+    const selection = selections.get(section.id)
+    const body = selection?.body.trim() ?? ""
+    if (!body || section.status === "insufficient_evidence") return []
+    return [`${"#".repeat(section.headingLevel)} ${section.heading.trim()}\n\n${body}`]
+  })
+  return blocks.join("\n\n")
 }
 
 export async function createWorkspaceAgentService(
@@ -1361,7 +1520,15 @@ export async function createWorkspaceAgentService(
             operation: "relations",
           }),
         }
-      : activeAIService
+      : input.operation === "merge"
+        && typeof activeAIService.reviewWorkspaceMerge === "function"
+        ? {
+            runSemanticRound: (request) => activeAIService.reviewWorkspaceMerge({
+              ...request,
+              operation: "merge",
+            }),
+          }
+        : activeAIService
     return runWorkspaceSemanticLoop({
       operation: input.operation,
       execution,
@@ -1871,6 +2038,190 @@ export async function createWorkspaceAgentService(
         )
       }
       return ok(relationReview.data.review)
+    },
+    async reviewMerge(documentIds, readApprovals, execution, signal) {
+      const uniqueDocumentIds = [...new Set(documentIds.filter(Boolean))]
+      if (uniqueDocumentIds.length < 2 || uniqueDocumentIds.length > MAX_WORKSPACE_MERGE_DOCUMENTS) {
+        return error(
+          "INVALID_INPUT",
+          `Select between two and ${MAX_WORKSPACE_MERGE_DOCUMENTS} artifacts to synthesize a merge.`,
+        )
+      }
+      for (const documentId of uniqueDocumentIds) {
+        if (!readApprovals[documentId]) {
+          return error("FORBIDDEN", `Reading document ${documentId} requires an explicit approval.`)
+        }
+      }
+
+      const context = await getContext()
+      if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentMergeReviewRun>
+      const activeIds = new Set(context.data.documents.filter((record) => !record.deletedAt).map((record) => record.id))
+      if (uniqueDocumentIds.some((documentId) => !activeIds.has(documentId))) {
+        return error("NOT_FOUND", "One or more selected artifacts are no longer available in the workspace catalog.")
+      }
+
+      const sources: WorkspaceMergeSource[] = []
+      for (const documentId of uniqueDocumentIds) {
+        const read = await tools.read({ documentId, approval: readApprovals[documentId]! })
+        if (read.error || !read.data) {
+          return error(
+            read.error?.code ?? "NOT_FOUND",
+            read.error?.message ?? `Document ${documentId} could not be read.`,
+          )
+        }
+        const document = read.data.document
+        sources.push({
+          documentId: document.documentId,
+          title: document.title?.trim() || document.catalogRecord.title || document.documentId,
+          documentVersion: artifactVersionKey(document.catalogRecord),
+          contentHash: document.catalogRecord.binding?.contentHash ?? null,
+          markdown: document.markdown,
+        })
+      }
+
+      const request = buildWorkspaceMergeRequest(sources)
+      const reviewResponse = await runSemanticReview({
+        operation: "merge",
+        initialEvidence: request.initialEvidence,
+        initialInput: request.initialInput,
+        execution: execution ?? createWorkspaceExecutionContext("merge", "desktop", "synthesis"),
+        signal,
+      })
+      if (reviewResponse.error || !reviewResponse.data) {
+        return error(
+          reviewResponse.error?.code ?? "AI_REQUEST_FAILED",
+          reviewResponse.error?.message ?? "Workspace merge synthesis could not be completed.",
+        )
+      }
+      const review = parseWorkspaceMergeResult(reviewResponse.data, request)
+      return ok(mapMergeReview(review, request))
+    },
+    async createMergedDocument(input) {
+      if (input.draft.status !== "complete" || input.draft.coverage !== "complete" || input.draft.error) {
+        return error("INVALID_INPUT", "The merge draft is not complete enough to create a document.")
+      }
+      const sourceIds = new Set(input.draft.sourceDocuments.map((source) => source.documentId))
+      if (
+        input.draft.sourceDocuments.length < 2
+        || input.draft.sourceDocuments.length > MAX_WORKSPACE_MERGE_DOCUMENTS
+        || sourceIds.size !== input.draft.sourceDocuments.length
+        || input.draft.sections.length === 0
+      ) {
+        return error("INVALID_INPUT", "The merge draft does not contain any creatable sections.")
+      }
+      const destinationName = normalizeMergeDestinationName(input.destinationName)
+      const canonicalPath = destinationName ? mergeDestinationPath(workspaceRootPath, destinationName) : null
+      if (!destinationName || !canonicalPath) {
+        return error("INVALID_INPUT", "Choose a valid .md filename in the current workspace root.")
+      }
+      if (input.approval.action !== "write" || input.approval.resource !== canonicalPath || !input.approval.approved) {
+        return error("FORBIDDEN", "Creating the merged document requires explicit write approval for the exact destination.")
+      }
+
+      const draftSectionsById = new Map(input.draft.sections.map((section) => [section.id, section]))
+      if (draftSectionsById.size !== input.draft.sections.length) {
+        return error("INVALID_INPUT", "The merge draft contains duplicate section identities.")
+      }
+      const sourceDocumentsById = new Map(input.draft.sourceDocuments.map((source) => [source.documentId, source]))
+      for (const section of input.draft.sections) {
+        const sourceEvidenceIds = new Set(section.sources.map((source) => source.evidenceId))
+        if (section.sources.length === 0 || section.sources.some((source) => {
+          const document = sourceDocumentsById.get(source.documentId)
+          return !document
+            || document.documentVersion !== source.documentVersion
+            || document.contentHash !== source.contentHash
+            || !input.draft.sourceSnapshots[source.documentId]
+        }) || section.evidenceIds.some((evidenceId) => !sourceEvidenceIds.has(evidenceId))) {
+          return error("INVALID_INPUT", `The provenance for “${section.heading}” is incomplete or outside the selected artifacts.`)
+        }
+      }
+      const selectionsById = new Map<string, WorkspaceAgentMergeSectionSelection>()
+      for (const selection of input.sections) {
+        if (selectionsById.has(selection.id) || !draftSectionsById.has(selection.id)) {
+          return error("INVALID_INPUT", "The merge review contains an unknown or duplicate section selection.")
+        }
+        if (typeof selection.body !== "string" || selection.body.length > 6_000) {
+          return error("INVALID_INPUT", "A merged section exceeds the allowed document size.")
+        }
+        selectionsById.set(selection.id, selection)
+      }
+      if (selectionsById.size !== input.draft.sections.length) {
+        return error("INVALID_INPUT", "Review every merge section before creating the document.")
+      }
+
+      for (const section of input.draft.sections) {
+        const selection = selectionsById.get(section.id)!
+        if (section.status === "insufficient_evidence") {
+          return error("INVALID_INPUT", `The section “${section.heading}” needs more evidence before it can be created.`)
+        }
+        if (section.status === "irrelevant") {
+          if (selection.body.trim() || selection.acceptedUnresolved) {
+            return error("INVALID_INPUT", `The irrelevant section “${section.heading}” cannot be included in the merge.`)
+          }
+          continue
+        }
+        if (section.status === "conflict") {
+          if (selection.acceptedUnresolved) {
+            if (selection.primarySourceDocumentId !== null || selection.body !== buildAcceptedUnresolvedMergeBody(section)) {
+              return error("INVALID_INPUT", `The unresolved conflict in “${section.heading}” must preserve its approved source claims.`)
+            }
+            continue
+          }
+          const chosen = section.sources.find((source) => source.documentId === selection.primarySourceDocumentId)
+          if (!chosen || selection.body !== chosen.quote) {
+            return error("INVALID_INPUT", `Choose one exact source version for “${section.heading}”, or explicitly accept it unresolved.`)
+          }
+          continue
+        }
+        if (
+          !selection.body.trim()
+          || selection.body.trim() !== section.body.trim()
+          || selection.acceptedUnresolved
+          || selection.primarySourceDocumentId !== null
+        ) {
+          return error("INVALID_INPUT", `The synthesized section “${section.heading}” was changed outside its approved review state.`)
+        }
+      }
+
+      for (const source of input.draft.sourceDocuments) {
+        const read = await tools.read({
+          documentId: source.documentId,
+          approval: createInternalReadApproval(source.documentId),
+        })
+        if (read.error || !read.data) {
+          return error("CONFLICT", `The source ${source.title} is no longer available; review the merge again.`)
+        }
+        const expected = input.draft.sourceSnapshots[source.documentId]
+        const current = read.data.document.catalogRecord
+        if (
+          !expected
+          || artifactVersionKey(current) !== expected.documentVersion
+          || (expected.contentHash !== null && (current.binding?.contentHash ?? null) !== expected.contentHash)
+        ) {
+          return error("CONFLICT", `The source ${source.title} changed since this merge was reviewed.`)
+        }
+      }
+
+      const context = await getContext()
+      if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentMutationResult>
+      if (context.data.documents.some((record) => (
+        !record.deletedAt
+        && normalizePath(record.binding?.canonicalPath ?? "") === normalizePath(canonicalPath)
+      ))) {
+        return error("CONFLICT", "A document already exists at the requested merge destination.")
+      }
+
+      const markdown = buildMergedDocumentMarkdown(input.draft.sections, selectionsById)
+      if (!markdown.trim()) return error("INVALID_INPUT", "The reviewed merge has no sections to write.")
+      if (markdown.length > MAX_WORKSPACE_MERGE_MARKDOWN_CHARS) {
+        return error("INVALID_INPUT", "The reviewed merge is too large to write as one bounded document.")
+      }
+      return tools.write({
+        target: { canonicalPath },
+        markdown,
+        approval: input.approval,
+        expectedAbsent: true,
+      })
     },
     async presentNote(kind, facts, sessionContext, requestedExecution) {
       const cleanFacts = facts.map((fact) => fact.trim()).filter(Boolean)

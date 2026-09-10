@@ -46,6 +46,8 @@ export type WorkspaceAgentWriteInput = {
   target: WorkspaceAgentDocumentTarget
   markdown: string
   approval: WorkspaceAgentApproval
+  /** When true, a path-targeted write must fail if the catalog already resolves it. */
+  expectedAbsent?: boolean
 }
 
 export type WorkspaceAgentMoveInput = {
