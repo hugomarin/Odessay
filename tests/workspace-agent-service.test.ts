@@ -7,6 +7,7 @@ import type {
 } from "@/lib/services/contracts/workspace-agent"
 import { suggestArtifactClassification } from "@/lib/agent/workspace-agent-analysis"
 import { WORKSPACE_SEMANTIC_READ_TOOL_NAME } from "@/lib/ai/workspace-semantic-tool-registry"
+import { isResolvableSemanticContradiction } from "@/lib/ai/workspace-document-relations"
 import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
 import { askAboutDocument, createWorkspaceAgentService } from "@/lib/services/workspace-agent-service"
 
@@ -20,6 +21,7 @@ const aiMocks = vi.hoisted(() => ({
   askWorkspace: vi.fn(),
   presentToolResult: vi.fn(),
   runSemanticRound: vi.fn(),
+  reviewWorkspaceDocumentRelations: vi.fn(),
 }))
 
 vi.mock("@/lib/services/document-catalog-factory", () => ({
@@ -81,6 +83,8 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       error: null,
     })
     aiMocks.runSemanticRound.mockReset()
+    aiMocks.reviewWorkspaceDocumentRelations.mockReset()
+    aiMocks.reviewWorkspaceDocumentRelations.mockImplementation((input: unknown) => aiMocks.runSemanticRound(input))
   })
 
   it("reads only selected documents and applies a cited resolution through edit", async () => {
@@ -209,6 +213,78 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     }))
     expect(aiMocks.runSemanticRound).toHaveBeenCalledTimes(2)
     expect(aiMocks.runSemanticRound.mock.calls[1][0].previousResponseId).toBe("semantic-resp-1")
+  })
+
+  it("reviews bounded document relations through the named semantic adapter", async () => {
+    const left = document("left", "Storage: SQLite.", 1_700_000_000_000)
+    const right = document("right", "Storage: IndexedDB.", 1_700_000_100_000)
+    const documents = new Map([[left.documentId, left], [right.documentId, right]])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.reviewWorkspaceDocumentRelations.mockImplementationOnce(async (roundInput: { input: Array<{ content?: string }> }) => {
+      const prompt = JSON.parse(roundInput.input[0]?.content ?? "{}") as {
+        evidence?: Array<{ evidenceId: string; documentId: string; lineStart: number; lineEnd: number }>
+        candidates?: Array<{ candidateId: string }>
+      }
+      const leftEvidence = prompt.evidence?.find((item) => item.documentId === "left")
+      const rightEvidence = prompt.evidence?.find((item) => item.documentId === "right")
+      const payload = {
+        coverage: "complete",
+        relations: [{
+          candidateId: prompt.candidates?.[0]?.candidateId ?? null,
+          leftDocumentId: "left",
+          rightDocumentId: "right",
+          verdict: "contradictory",
+          confidence: "high",
+          rationale: "The exact claims name incompatible storage authorities.",
+          evidenceIds: [leftEvidence?.evidenceId, rightEvidence?.evidenceId],
+          suggestedDocumentId: null,
+          suggestedReason: null,
+        }],
+      }
+      return {
+        data: {
+          responseId: "relations-resp-1",
+          previousResponseId: null,
+          status: "completed",
+          outputText: JSON.stringify({ coverage: "complete", status: "complete", payload: JSON.stringify(payload) }),
+          toolCalls: [],
+          incompleteReason: null,
+          usage: null,
+          executionReceipt: null,
+        },
+        error: null,
+      }
+    })
+
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const result = await service.reviewDocumentRelations({
+      documentIds: ["left", "right"],
+      readApprovals: {
+        left: approval("read", "left"),
+        right: approval("read", "right"),
+      },
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data).toMatchObject({ status: "complete", coverage: "complete", candidateCount: 1 })
+    expect(result.data?.relations).toHaveLength(1)
+    expect(result.data?.relations[0]?.suggestedDocumentId).toBeNull()
+    expect(isResolvableSemanticContradiction(result.data!.relations[0]!)).toBe(true)
+    expect(tools.read).toHaveBeenCalledTimes(2)
+    expect(aiMocks.reviewWorkspaceDocumentRelations).toHaveBeenCalledTimes(1)
+    expect(aiMocks.reviewWorkspaceDocumentRelations.mock.calls[0][0].input[0].content).not.toContain("/workspace")
   })
 
   it("refuses a comparison when a selected document has no approval", async () => {

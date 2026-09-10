@@ -35,6 +35,7 @@ import {
   splitWorkflowMarkdown,
 } from "@/lib/agent/workflow-instructions"
 import type {
+  AIService,
   WorkspaceAskEvidence,
   WorkspaceAskRequest,
   WorkspaceAskResult,
@@ -89,6 +90,12 @@ import {
   createWorkspaceSemanticToolRegistry,
   type WorkspaceSemanticReadArguments,
 } from "@/lib/ai/workspace-semantic-tool-registry"
+import {
+  buildWorkspaceDocumentRelationsRequest,
+  MAX_WORKSPACE_RELATION_DOCUMENTS,
+  parseWorkspaceDocumentRelationsResult,
+  type WorkspaceDocumentRelationsResult,
+} from "@/lib/ai/workspace-document-relations"
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
@@ -330,6 +337,15 @@ export type WorkspaceAgentSemanticReviewInput = {
 }
 
 export type WorkspaceAgentSemanticReviewRun = WorkspaceSemanticLoopResult
+
+export type WorkspaceAgentDocumentRelationsInput = {
+  documentIds: readonly string[]
+  readApprovals: Readonly<Record<string, WorkspaceAgentApproval>>
+  execution?: WorkspaceExecutionContext | null
+  signal?: AbortSignal
+}
+
+export type WorkspaceAgentDocumentRelationsRun = WorkspaceDocumentRelationsResult
 
 /**
  * Used only to correlate this one in-memory ask's request/response (target
@@ -962,6 +978,9 @@ export type WorkspaceAgentService = {
   runSemanticReview(
     input: WorkspaceAgentSemanticReviewInput,
   ): Promise<ServiceResponse<WorkspaceAgentSemanticReviewRun>>
+  reviewDocumentRelations(
+    input: WorkspaceAgentDocumentRelationsInput,
+  ): Promise<ServiceResponse<WorkspaceAgentDocumentRelationsRun>>
   /**
    * Presentation stage of the pipeline (ODE-491): phrases facts already
    * established by a predetermined action's deterministic result as one
@@ -1125,10 +1144,100 @@ export async function createWorkspaceAgentService(
     workflowReadApproval?: WorkspaceAgentApproval,
   ): Promise<ServiceResponse<WorkspaceAgentContext>> => withWorkflowInstructions(await getContext(), workflowReadApproval)
 
+  const runSemanticReview = async (
+    input: WorkspaceAgentSemanticReviewInput,
+  ): Promise<ServiceResponse<WorkspaceAgentSemanticReviewRun>> => {
+    const execution = input.execution ?? createWorkspaceExecutionContext(
+      input.operation,
+      "desktop",
+      input.operation === "merge" ? "synthesis" : "semantic-review",
+    )
+    const knownDocuments = new Map(
+      input.initialEvidence.map((item) => [item.documentId, {
+        documentVersion: item.documentVersion,
+        contentHash: item.contentHash,
+      }] as const),
+    )
+
+    const readEvidence = async (
+      evidenceInput: WorkspaceSemanticReadArguments,
+    ): Promise<ServiceResponse<WorkspaceAgentEvidenceReadResult>> => {
+      const approval = createInternalReadApproval(evidenceInput.documentId)
+      const desktopInput: WorkspaceAgentEvidenceReadInput = {
+        ...evidenceInput,
+        approval,
+      }
+      if (tools.readEvidence) return tools.readEvidence(desktopInput)
+
+      // Compatibility path for older test/runtime adapters while the
+      // versioned evidence method rolls out. It still goes through the
+      // approval-gated read and rechecks the catalog snapshot before the
+      // result is admitted to the model-facing loop.
+      const read = await tools.read({ documentId: evidenceInput.documentId, approval })
+      if (read.error || !read.data) {
+        return error("NOT_FOUND", read.error?.message ?? "Document evidence could not be read.")
+      }
+      const record = read.data.document.catalogRecord
+      if (
+        artifactVersionKey(record) !== evidenceInput.expectedDocumentVersion
+        || (evidenceInput.expectedContentHash !== null && (record.binding?.contentHash ?? null) !== evidenceInput.expectedContentHash)
+      ) {
+        return error("CONFLICT", "The document changed before semantic evidence could be admitted.")
+      }
+      const lines = read.data.document.markdown.split("\n")
+      if (evidenceInput.lineStart > lines.length) {
+        return error("NOT_FOUND", "The requested semantic evidence range is not present in the document.")
+      }
+      const selected = lines.slice(evidenceInput.lineStart - 1, Math.min(evidenceInput.lineEnd, lines.length)).join("\n")
+      const text = selected.slice(0, evidenceInput.maxChars)
+      const lineEnd = Math.min(lines.length, evidenceInput.lineStart + Math.max(1, text.split("\n").length) - 1)
+      return ok({
+        evidence: {
+          evidenceId: `${evidenceInput.documentId}:${evidenceInput.expectedDocumentVersion}:${evidenceInput.lineStart}-${lineEnd}`,
+          documentId: evidenceInput.documentId,
+          documentVersion: evidenceInput.expectedDocumentVersion,
+          contentHash: record.binding?.contentHash ?? null,
+          lineStart: evidenceInput.lineStart,
+          lineEnd,
+          text,
+        },
+        receipt: read.data.receipt,
+      })
+    }
+
+    const registry = createWorkspaceSemanticToolRegistry({
+      knownDocuments,
+      allowedToolNames: input.tools?.map((tool) => tool.name),
+      readEvidence,
+    })
+    const activeAIService = getAIService()
+    const semanticAIService: Pick<AIService, "runSemanticRound"> = input.operation === "relations"
+      && typeof activeAIService.reviewWorkspaceDocumentRelations === "function"
+      ? {
+          runSemanticRound: (request) => activeAIService.reviewWorkspaceDocumentRelations({
+            ...request,
+            operation: "relations",
+          }),
+        }
+      : activeAIService
+    return runWorkspaceSemanticLoop({
+      operation: input.operation,
+      execution,
+      initialInput: [...input.initialInput],
+      initialEvidence: [...input.initialEvidence],
+      tools: registry.descriptors,
+      registry,
+      aiService: semanticAIService,
+      signal: input.signal,
+      caps: input.caps,
+    })
+  }
+
   return {
     tools,
     getContext,
     contextLedger: contextLedger,
+    runSemanticReview,
     async proposeWorkflow(readApproval) {
       const context = await withWorkflowMarkdown(await getContext(), readApproval)
       if (context.error || !context.data) return context as ServiceResponse<WorkflowDraftProposal>
@@ -1518,81 +1627,55 @@ export async function createWorkspaceAgentService(
         executionReceipt,
       })
     },
-    async runSemanticReview(input) {
-      const execution = input.execution ?? createWorkspaceExecutionContext(
-        input.operation,
-        "desktop",
-        input.operation === "merge" ? "synthesis" : "semantic-review",
-      )
-      const knownDocuments = new Map(
-        input.initialEvidence.map((item) => [item.documentId, {
-          documentVersion: item.documentVersion,
-          contentHash: item.contentHash,
-        }] as const),
-      )
-
-      const readEvidence = async (
-        evidenceInput: WorkspaceSemanticReadArguments,
-      ): Promise<ServiceResponse<WorkspaceAgentEvidenceReadResult>> => {
-        const approval = createInternalReadApproval(evidenceInput.documentId)
-        const desktopInput: WorkspaceAgentEvidenceReadInput = {
-          ...evidenceInput,
-          approval,
+    async reviewDocumentRelations(input) {
+      const uniqueDocumentIds = [...new Set(input.documentIds.filter(Boolean))]
+      if (uniqueDocumentIds.length < 2 || uniqueDocumentIds.length > MAX_WORKSPACE_RELATION_DOCUMENTS) {
+        return error(
+          "INVALID_INPUT",
+          `Select between two and ${MAX_WORKSPACE_RELATION_DOCUMENTS} artifacts for semantic relation review.`,
+        )
+      }
+      for (const documentId of uniqueDocumentIds) {
+        if (!input.readApprovals[documentId]) {
+          return error("FORBIDDEN", `Reading document ${documentId} requires an explicit approval.`)
         }
-        if (tools.readEvidence) return tools.readEvidence(desktopInput)
+      }
 
-        // Compatibility path for older test/runtime adapters while the
-        // versioned evidence method rolls out. It still goes through the
-        // approval-gated read and rechecks the catalog snapshot before the
-        // result is admitted to the model-facing loop.
-        const read = await tools.read({ documentId: evidenceInput.documentId, approval })
+      const sources = []
+      for (const documentId of uniqueDocumentIds) {
+        const read = await tools.read({ documentId, approval: input.readApprovals[documentId]! })
         if (read.error || !read.data) {
-          return error("NOT_FOUND", read.error?.message ?? "Document evidence could not be read.")
+          return error(
+            read.error?.code ?? "NOT_FOUND",
+            read.error?.message ?? `Document ${documentId} could not be read.`,
+          )
         }
-        const record = read.data.document.catalogRecord
-        if (
-          artifactVersionKey(record) !== evidenceInput.expectedDocumentVersion
-          || (evidenceInput.expectedContentHash !== null && (record.binding?.contentHash ?? null) !== evidenceInput.expectedContentHash)
-        ) {
-          return error("CONFLICT", "The document changed before semantic evidence could be admitted.")
-        }
-        const lines = read.data.document.markdown.split("\n")
-        if (evidenceInput.lineStart > lines.length) {
-          return error("NOT_FOUND", "The requested semantic evidence range is not present in the document.")
-        }
-        const selected = lines.slice(evidenceInput.lineStart - 1, Math.min(evidenceInput.lineEnd, lines.length)).join("\n")
-        const text = selected.slice(0, evidenceInput.maxChars)
-        const lineEnd = Math.min(lines.length, evidenceInput.lineStart + Math.max(1, text.split("\n").length) - 1)
-        return ok({
-          evidence: {
-            evidenceId: `${evidenceInput.documentId}:${evidenceInput.expectedDocumentVersion}:${evidenceInput.lineStart}-${lineEnd}`,
-            documentId: evidenceInput.documentId,
-            documentVersion: evidenceInput.expectedDocumentVersion,
-            contentHash: record.binding?.contentHash ?? null,
-            lineStart: evidenceInput.lineStart,
-            lineEnd,
-            text,
-          },
-          receipt: read.data.receipt,
+        const document = read.data.document
+        sources.push({
+          documentId: document.documentId,
+          title: document.title?.trim() || document.catalogRecord.title || document.documentId,
+          documentVersion: artifactVersionKey(document.catalogRecord),
+          contentHash: document.catalogRecord.binding?.contentHash ?? null,
+          markdown: document.markdown,
         })
       }
 
-      const registry = createWorkspaceSemanticToolRegistry({
-        knownDocuments,
-        allowedToolNames: input.tools?.map((tool) => tool.name),
-        readEvidence,
-      })
-      return runWorkspaceSemanticLoop({
-        operation: input.operation,
+      const request = buildWorkspaceDocumentRelationsRequest(sources)
+      const execution = input.execution ?? createWorkspaceExecutionContext("relations", "desktop", "semantic-review")
+      const review = await runSemanticReview({
+        operation: "relations",
+        initialEvidence: request.initialEvidence,
+        initialInput: request.initialInput,
         execution,
-        initialInput: [...input.initialInput],
-        initialEvidence: [...input.initialEvidence],
-        tools: registry.descriptors,
-        registry,
-        aiService: getAIService(),
         signal: input.signal,
-        caps: input.caps,
       })
+      if (review.error || !review.data) {
+        return error(
+          review.error?.code ?? "AI_REQUEST_FAILED",
+          review.error?.message ?? "Semantic relation review could not be completed.",
+        )
+      }
+      return ok(parseWorkspaceDocumentRelationsResult(review.data, request))
     },
     async presentNote(kind, facts, sessionContext, requestedExecution) {
       const cleanFacts = facts.map((fact) => fact.trim()).filter(Boolean)

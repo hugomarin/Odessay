@@ -17,6 +17,7 @@ import type {
   WorkspaceAskResult,
   WorkspaceClassificationRequest,
   WorkspaceClassificationResult,
+  WorkspaceDocumentRelationsRoundRequest,
   WorkspaceSemanticRoundRequest,
   WorkspaceSemanticRoundResult,
   WorkspaceToolPresentationRequest,
@@ -319,6 +320,32 @@ export const webAIService: AIService = {
       })
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not run the semantic workspace review right now.")
+    }
+  },
+
+  async reviewWorkspaceDocumentRelations(input: WorkspaceDocumentRelationsRoundRequest) {
+    try {
+      const response = await fetch("/api/ai/workspace-document-relations", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(input),
+      })
+
+      const parsed = await parseServiceEnvelope<WorkspaceSemanticRoundResult>(
+        response,
+        "AI_REQUEST_FAILED",
+        "Could not review workspace document relations right now.",
+      )
+
+      if (parsed.error) return parsed
+      return ok<WorkspaceSemanticRoundResult>({
+        ...parsed.data,
+        executionReceipt: parsed.data.executionReceipt ?? null,
+      })
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not review workspace document relations right now.")
     }
   },
 

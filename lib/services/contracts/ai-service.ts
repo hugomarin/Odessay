@@ -223,6 +223,16 @@ export type WorkspaceSemanticRoundRequest = {
   execution?: WorkspaceExecutionContext | null
 }
 
+/**
+ * Relation review keeps a named AIService capability while reusing the same
+ * provider-neutral Responses round and loop as Merge. Adapters may route it
+ * through the relation-specific endpoint, but they must not create a second
+ * orchestration contract.
+ */
+export type WorkspaceDocumentRelationsRoundRequest = Omit<WorkspaceSemanticRoundRequest, "operation"> & {
+  operation: "relations"
+}
+
 export type WorkspaceSemanticRoundResult = {
   responseId: string | null
   previousResponseId: string | null
@@ -452,6 +462,7 @@ export interface AIService {
   askWorkspace(input: WorkspaceAskRequest): Promise<ServiceResponse<WorkspaceAskResult>>
   presentToolResult(input: WorkspaceToolPresentationRequest): Promise<ServiceResponse<WorkspaceToolPresentationResult>>
   runSemanticRound(input: WorkspaceSemanticRoundRequest): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
+  reviewWorkspaceDocumentRelations(input: WorkspaceDocumentRelationsRoundRequest): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
   hydrateCorrectionBlocks(writingId: string): Promise<ServiceResponse<PersistedCorrectionBlock[]>>
   persistCorrectionBlock(input: PersistCorrectionBlockInput): Promise<ServiceResponse<PersistCorrectionBlockResult>>
   listLearnedWords(input?: ListLearnedWordsInput): Promise<ServiceResponse<LearnedWordsPage>>
@@ -527,6 +538,14 @@ export const AI_SERVICE_CONTRACT = {
       summary: "Run one provider-neutral semantic review round with only bounded, read-only evidence tools.",
       input: ["semantic operation", "bounded input items", "canonical read/evidence tool descriptors", "optional previous response id"],
       output: ["WorkspaceSemanticRoundResult with normalized tool calls and execution receipt"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
+    },
+    {
+      name: "reviewWorkspaceDocumentRelations",
+      kind: "command",
+      summary: "Run one named semantic relation-review round through the shared Responses tool-loop boundary.",
+      input: ["bounded relation evidence", "canonical read/evidence tool descriptors", "optional previous response id"],
+      output: ["WorkspaceSemanticRoundResult with normalized relation tool calls and execution receipt"],
       errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
     },
     {

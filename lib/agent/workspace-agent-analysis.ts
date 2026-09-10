@@ -727,6 +727,19 @@ function statementSegments(markdown: string): StatementSegment[] {
   return segments
 }
 
+/**
+ * Returns the exact sentence fragments used as deterministic recall hints by
+ * semantic relation review. The matcher remains an evidence generator; this
+ * helper deliberately exposes fragments without exposing paths or deciding
+ * whether two claims conflict.
+ */
+export function extractDocumentStatementFragments(
+  markdown: string,
+  maxFragments = 24,
+): ContradictionFragment[] {
+  return statementSegments(markdown).slice(0, Math.max(0, maxFragments))
+}
+
 function statementWords(value: string): string[] {
   return value
     .toLocaleLowerCase()
