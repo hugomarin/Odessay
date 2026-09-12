@@ -11,15 +11,9 @@ description: Arquitectura e implementación backend de Odessay (API routes, lóg
 
 ## Principio rector
 
-El backend de Odessay es invisible para el usuario. Debe ser rápido, seguro y silencioso. El usuario nunca debería notar que existe.
+El backend de Odessay debe ser rápido, seguro y silencioso. La arquitectura transversal de performance —forma de carga, crecimiento, batching, deduplicación y evidencia— vive en `.agents/skills/skill-performance/SKILL.md`.
 
-**Rápido tiene cinco dimensiones, no una.** Ver el contrato fundacional en `workflow/context/core/odessay-stack.md §Velocidad multidimensional`. El backend es responsable directo de tres de ellas:
-
-- **Peso transferido** — cada endpoint devuelve la forma exacta del dato que el cliente va a usar, no la fila completa "por si acaso".
-- **Forma del waterfall** — cada endpoint cabe en un único viaje; rutas de bootstrap permiten que el cliente cargue una vista en ≤ 6 fetches.
-- **Tiempo a interactivo** — endpoints de bootstrap responden en ≤ 200 ms p95; nada de auth + dos joins + paginación implícita en la misma llamada.
-
-Las otras dos dimensiones (latencia de interacción y fan-out reactivo) viven en el frontend, pero el backend las habilita o las rompe con el diseño de sus respuestas.
+Backend conserva la responsabilidad específica de diseñar respuestas, queries y servicios que no obliguen al cliente a descargar o solicitar trabajo innecesario. Si una route agrega carga, bootstrap, enriquecimiento o procesamiento por elemento, debe activar `skill-performance` y declarar su estrategia de escala.
 
 ## Contexto documental obligatorio por tipo de trabajo
 
@@ -35,6 +29,7 @@ Regla:
 - No hardcodear modelo en rutas de negocio.
 - Resolver proveedor/modelo por env y mantener contrato de error explícito de configuración.
 - Si el cambio toca core vs adapter, runtime boundaries o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md` antes de decidir la forma del backend.
+- Si el cambio altera la forma de carga, el costo de crecimiento, batching, deduplicación o trabajo background, cargar también `.agents/skills/skill-performance/SKILL.md`.
 - Si ese contrato no declara `Layer`, `Runtime scope`, `Owner`, `Contracts touched` e `Invariants`, marcar `Context Gap` y no fijar arquitectura desde una route o helper server-side.
 
 ## Arquitectura multi-runtime — awareness obligatoria
@@ -91,11 +86,11 @@ Cada endpoint declara y respeta una clase de respuesta. La clase decide qué cam
 
 | Clase | Qué afirma | Presupuesto | Qué NO devuelve |
 |---|---|---|---|
-| **List** (`GET /api/{recurso}`) | Devuelve resumen suficiente para listar/filtrar/ordenar. | ≤ 50 kB ungzip total. | Columnas grandes: `body_json`, `body_text`, blobs, payloads anidados. |
-| **Detail** (`GET /api/{recurso}/:id`) | Devuelve el recurso completo. | Documentar p95 esperado en la cabecera del archivo de la route. | — |
+| **List** (`GET /api/{recurso}`) | Devuelve resumen suficiente para listar/filtrar/ordenar. | El presupuesto aplicable lo define `skill-performance` y el instrumento seleccionado. | Columnas grandes: `body_json`, `body_text`, blobs, payloads anidados. |
+| **Detail** (`GET /api/{recurso}/:id`) | Devuelve el recurso completo. | La evidencia y el comportamiento esperado los define el `Performance Architecture Contract` cuando el endpoint afecta un camino crítico. | — |
 | **Summary opcional** (`?include=body`) | Permite a un cliente específico pedir más, sin penalizar al caso general. | Opt-in explícito por query param. | — |
 
-**Instrumento de red.** Los presupuestos numericos de peso y waterfall se miden con `workflow/perf-budgets-network.json` y `npm run ops:network:gate -- --har <captura.har>`. Si un PR toca sync, bootstrap, listados o rutas que participan en arranque/navegacion, el proof of work debe incluir una captura Network o justificar por que el instrumento no aplica.
+**Instrumento de red.** Si `skill-performance` selecciona evidencia de red, usar el instrumento versionado disponible y justificar qué decisión arquitectónica prueba. No convertir una captura Network en requisito universal para toda route.
 
 **Afirmación positiva.** Un endpoint de lista es un índice, no un dump. Si una vista necesita el body de N writings al mismo tiempo, ese es síntoma de que la vista está mal modelada, no de que el endpoint deba devolver bodies.
 
@@ -111,10 +106,11 @@ type WritingListItem = Pick<
 
 // ✗ Incorrecto — list endpoint devuelve el documento entero
 const { data } = await supabase.from("writings").select("*").eq("author_id", user.id)
-// 50 writings × ~70 kB cada uno = 3.5 MB en un solo GET. Se carga 3-4 veces en bootstrap.
+// Un listado que devuelve el cuerpo completo de muchos writings multiplica
+// innecesariamente el payload y el trabajo de bootstrap.
 ```
 
-**Cómo decidir la clase al crear un endpoint nuevo.** En el comentario de cabecera de la route, escribir una línea: `// class: list | detail | summary(opt-in)`. Si la respuesta excede el presupuesto de su clase, se documenta el motivo o se cambia de clase. No hay clase "lista que también incluye el body".
+**Cómo decidir la clase al crear un endpoint nuevo.** En el comentario de cabecera de la route, escribir una línea: `// class: list | detail | summary(opt-in)`. La forma de respuesta debe corresponder al consumidor; si el contrato de performance selecciona evidencia o un límite operativo, documentar la decisión allí. No hay clase "lista que también incluye el body".
 
 ### Códigos HTTP
 
@@ -310,7 +306,7 @@ Si el provider devuelve un único objeto JSON (no NDJSON ni tool-call events), *
 
 ## Auto-save y sincronización
 
-El auto-save es local-first. Secuencia invariable: guardar en base local (inmediato, sin debounce) → enqueue sync remoto (background, debounce 1.5s, backoff exponencial en retry).
+El auto-save es local-first. Secuencia invariable: guardar en base local → enqueue sync remoto en background, con coalescing y backoff definidos por el contrato de sync.
 
 El endpoint de sync es idempotente. Estrategia de conflictos: **last-write-wins silencioso** — no se bloquean escrituras, no hay UI de resolución. El campo `version` se incrementa como auditoría, no como control de concurrencia.
 
@@ -370,9 +366,9 @@ Este checklist cubre lo específico de backend durante la implementación. Antes
 - [ ] ¿RLS cubre el acceso a datos?
 - [ ] ¿Errores manejados con mensajes amables?
 - [ ] ¿Cada endpoint nuevo declara su clase de respuesta (list / detail / summary opt-in) en la cabecera?
-- [ ] Si es `list`, ¿la respuesta queda ≤ 50 kB ungzip y no incluye `body_json` / `body_text` / blobs?
+- [ ] Si es `list`, ¿la respuesta evita `body_json` / `body_text` / blobs salvo que el contrato lo justifique?
 - [ ] Si la vista que consume este endpoint puede pedirlo varias veces durante bootstrap, ¿hay paginación / dedup / cache que evite repetir el viaje?
-- [ ] Si toca sync, bootstrap o listados, ¿hay captura HAR evaluada con `npm run ops:network:gate -- --har <captura.har>` o justificación explícita de no aplicabilidad?
+- [ ] Si el cambio activa `skill-performance`, ¿el `Performance Architecture Contract` y su evidencia están completos?
 - [ ] ¿Cada endpoint AI respeta su contrato por scope (AI editor residente vs AI writing assist)?
 - [ ] Si el issue toca rutas AI: ¿se leyó la documentación del proveedor para el modo de salida usado?
 - [ ] ¿`max_tokens` cubre el peor caso de output (mínimo 4096 para correcciones estructuradas)?

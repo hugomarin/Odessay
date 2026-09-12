@@ -91,7 +91,7 @@ Referencia: `workflow/context/features/odessay-editor.md`, `.agents/skills/skill
 **Implement auto-save — local-first** `[backend, database]`
 onUpdate de TipTap guarda inmediatamente en la base local (IndexedDB). Sync a Supabase en background con debounce de 1.5 segundos y reintentos silenciosos. Indicador visual mínimo en statusbar ("Saved" / "Saving..." en ink-4/ink-3, sin iconos). El usuario nunca espera — el save local es instantáneo. UUID generado en cliente para escrituras nuevas. Incrementar `version` en cada save.
 Dependencias: Implement TipTap editor, Implement local-first storage layer.
-Referencia: `workflow/context/features/odessay-sync.md`, `workflow/context/features/odessay-editor.md` (sección: Auto-save), `.agents/skills/skill-backend/SKILL.md` (sección: Auto-save).
+Referencia: `workflow/context/features/odessay-sync.md`, `workflow/context/features/odessay-editor.md` (sección: Auto-save), `.agents/skills/skill-backend/SKILL.md` (sección: Auto-save), `.agents/skills/skill-performance/SKILL.md` cuando el cambio altere la forma de carga, hydration, sync o trabajo background.
 
 **Build /desk — personal writing desk** `[frontend, backend]`
 Vista principal del autor. Tres secciones: Hero con cards horizontales deslizables de drafts activos (220px, scroll con snap), filter bar (All activity / Correspondence / With responses / Received), tabla de actividad agrupada por fecha (Today / This week / Earlier) con columnas Writing | State | With | Date. Datos se leen primero desde base local.

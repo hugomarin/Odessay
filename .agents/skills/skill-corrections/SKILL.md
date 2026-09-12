@@ -5,6 +5,12 @@ description: "Reglas del subsistema de correcciones AI de Odessay: identidad de 
 
 # Skill: Corrections (AI Writing Assist)
 
+Cuando un cambio de correcciones altera persistencia, hidratación, cache,
+batching, listeners o trabajo background, consultar también
+`.agents/skills/skill-performance/SKILL.md`. Este skill conserva las reglas de
+identidad y lifecycle de las sugerencias; no duplica budgets ni la política de
+crecimiento.
+
 El subsistema de correcciones es el módulo hecho en casa más complejo del producto: cola de análisis, cache en tres capas (memoria, IndexedDB, Supabase), decoraciones ProseMirror, diccionario de palabras aprendidas y memoria de decisiones — coordinados con LLM no determinista. Este skill fija las reglas que evitan su clase de bug característica. El contrato funcional completo vive en `workflow/context/features/odessay-ai-writing-assist.md`; este skill no lo duplica — fija las reglas de diseño que ese doc no puede hacer cumplir por sí solo.
 
 Origen: revisión 2026-07 (`docs/revision-correcciones-anotaciones-2026-07.md`) — 19 hallazgos, casi todos de cuatro familias que estas reglas cierran.

@@ -1,41 +1,19 @@
 # Specialist: Performance Review
 
-Checklist especializado para revisar performance. Aplicar contra el diff.
+Este especialista aplica `.agents/skills/skill-performance/SKILL.md`; no define una política paralela de métricas, budgets o instrumentos.
 
----
+## Revisión del diff
 
-## Critical Path — editor, auto-save, sync
+Si el issue activa `skill-performance`, verificar:
 
-Si el diff toca cualquiera de estos, aplicar con máxima rigor:
+- [ ] Existe el `Performance Architecture Contract` y describe el resultado sistémico, unidad de escala, camino crítico, consumidores existentes y riesgo de crecimiento.
+- [ ] La implementación conserva la forma de carga declarada: manifest, batch, snapshot/delta, cache, lazy u on-demand, según corresponda.
+- [ ] No introduce una operación, listener, render, hydration, payload o fuente de verdad por elemento sin justificación.
+- [ ] El owner de hydration, sync, discovery y eventos es único o la duplicación está explícitamente justificada.
+- [ ] La evidencia usa el mismo runtime, volumen, flags y artefacto que se entrega, y prueba la decisión arquitectónica relevante.
+- [ ] Si toca desktop o capabilities nativas, la validación distingue `tauri dev`, build local y bundle distribuible y no depende solo de mocks.
 
-- [ ] ¿Ningún keystroke dispara re-render fuera del editor island?
-- [ ] ¿No hay `useEffect` que escuche cambios de editor para actualizar store global?
-- [ ] ¿Sync remoto tiene debounce >= 1500ms?
-- [ ] ¿AI observaciones no bloquean el hilo principal?
-- [ ] ¿No se agregó dependencia de UI pesada sin presupuesto medido?
-- [ ] ¿Ningún `await` de datos remotos bloquea el primer render de una vista que tiene datos en `localDB`?
-
-## Queries y base de datos
-
-- [ ] ¿Nueva query tiene índice adecuado?
-- [ ] ¿Evita N+1 queries (especialmente en correspondences con árbol)?
-- [ ] ¿Evita N+1 fetches de enriquecimiento en el path de carga inicial (shares, metadata, estado de sync por item)?
-- [ ] ¿Paginación es cursor-based, no offset?
-- [ ] ¿No hay `select('*')` innecesario?
-
-## Frontend
-
-- [ ] ¿Nuevo componente usa lazy load si no es critical path?
-- [ ] ¿No hay `useState` que cause re-render en ancestros del editor?
-- [ ] ¿Imágenes/assets nuevos tienen tamaño razonable?
-- [ ] ¿No se importa toda una librería cuando solo se usa una función?
-
-## Presupuestos de performance
-
-Si el issue declara `Performance Contract: required`:
-- [ ] ¿Hay trace `before` en `artifacts/perf/`?
-- [ ] ¿Hay trace `after` en `artifacts/perf/`?
-- [ ] ¿`ops:perf:gate` pasa sin `required_failures`?
+Los detalles específicos del dominio siguen siendo responsabilidad de frontend, backend, database y arquitectura. Este especialista reporta únicamente hallazgos de forma de crecimiento, acumulación o evidencia insuficiente.
 
 ## Output esperado
 
@@ -46,7 +24,7 @@ Para cada finding:
 {"severity":"CRITICAL|HIGH|MEDIUM|LOW","confidence":N,"path":"file","line":N,"category":"performance/{categoria}","summary":"{descripción}","fix":"{recomendación}","specialist":"performance"}
 ```
 
-Categorías: `editor-island-violation`, `missing-debounce`, `n-plus-one`, `missing-index`, `heavy-dependency`, `no-lazy-load`, `local-first-violation`, `n-plus-one-enrichment`
+Categorías: `critical-path`, `n-plus-one`, `duplicate-owner`, `unbounded-growth`, `wrong-evidence`, `desktop-capability`
 
 Si no hay findings: output `NO FINDINGS` y nada más.
 Do not output anything else — no preamble, no summary, no commentary, no markdown blocks.

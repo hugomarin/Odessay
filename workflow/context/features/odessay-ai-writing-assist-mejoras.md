@@ -525,15 +525,6 @@ Opcional: agrupar por tipo (`spelling`, `grammar`, `punctuation`) con secciones 
 
 Cada mejora debe ser atómica: un PR por mejora, con tests y validación de no-regresión. No mezclar persistencia + batching + UI en el mismo PR.
 
-### Performance contract
-
-Cada mejora que toque el flujo de correcciones debe declarar impacto en las cinco dimensiones de velocidad (ver `odessay-stack.md §Velocidad multidimensional`):
-- **Latencia de interacción:** el plugin ProseMirror no debe cambiar; el debounce sí.
-- **Tiempo a interactivo:** persistencia reduce tiempo a sugerencias visibles en recarga.
-- **Peso transferido:** batching reduce número de requests pero aumenta tamaño de payload.
-- **Forma del waterfall:** batching reduce de ~12 requests a ~3.
-- **Fan-out reactivo:** persistencia añade lectura/escritura IndexedDB; debe ser async y no bloquear.
-
 ### QA obligatorio por mejora
 
 - Texto corto (20 palabras, 3 párrafos) con typos.

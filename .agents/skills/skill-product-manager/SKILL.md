@@ -17,6 +17,8 @@ Toda salida cerrada de `wf-define` debe incluir una `Execution Trace` explícita
 
 Cuando el issue deje de ser solo producto/scope y pase a involucrar runtime boundaries, shared core, save path, sync, parser/serializer o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md`.
 
+Cuando el issue introduzca datos, fetches, hydration, listeners, componentes en caminos críticos, procesos bulk, trabajo background o una capability de runtime, cargar también `.agents/skills/skill-performance/SKILL.md` antes de cerrar el brief.
+
 ---
 
 ## Modo de orquestación
@@ -30,6 +32,7 @@ Para `/wf-define`, el patrón correcto es:
 - este skill provee el marco principal de planning, secuenciación y calidad de briefs
 - `skill-audit-planning` está disponible para revisar la calidad del plan antes de cerrarlo o al preparar `wf-audit`
 - `skill-architecture` entra como segunda capa obligatoria cuando el problema toca desktop, multi-runtime o boundaries del sistema
+- `skill-performance` entra cuando el cambio puede alterar la forma de carga, el costo de crecimiento o la carga global del sistema
 - los skills técnicos del scope (`skill-frontend`, `skill-backend`, `skill-database`, `skill-corrections`, etc.) **no son consultivos opcionales**: todo brief pasa por la revisión de los skills de su scope antes de crear el issue (ver §Revisión por skills de dominio)
 
 Reglas:
@@ -48,6 +51,8 @@ Señal de mala orquestación:
 Eso produce planificación inflada y sin verdadero critical path. El agente de planeación debe cerrar esas tensiones antes de crear briefs o issues.
 
 Cuando existan dudas sobre cobertura del DoD, overlaps, huecos o secuencia entre issues, cargar además `.agents/skills/skill-audit-planning/SKILL.md`.
+
+Cuando existan dudas sobre acumulación de carga, duplicación de operaciones, escalabilidad o integración global, cargar además `.agents/skills/skill-performance/SKILL.md`.
 
 La `Execution Trace` mínima debe declarar:
 
@@ -352,52 +357,29 @@ Por cada operación async que el issue introduce o modifica, responder cuatro pr
 
 Formato: prosa corta por operación. `not required` exige justificación ("el issue no toca operaciones async porque...") — la omisión silenciosa es lo que este campo existe para evitar.
 
-## Performance Contract
+## Performance Architecture Review
 
-El contrato de performance no se reduce a la latencia del teclado. La velocidad de Odessay es multidimensional (ver `workflow/context/core/odessay-stack.md §Velocidad multidimensional`) y el brief lo refleja: el PM declara, por dimensión, si el issue la toca y qué evidencia se exige.
+La arquitectura de performance vive en `.agents/skills/skill-performance/SKILL.md`. Este skill no duplica sus tablas, umbrales ni patrones: decide cuándo debe consultarse y exige que el resultado forme parte del brief.
 
-**Cinco dimensiones, cada una con criterio explícito:**
+Cuando aplica, el brief debe incluir el `Performance Architecture Contract` del skill, con al menos:
 
-| Dimensión | Cuándo aplica al issue | Evidencia mínima |
-|---|---|---|
-| **Latencia de interacción** | Toca editor (`keydown`/`input`/`paste`), click en superficie de escritura, panel que se abre durante escritura, auto-save, sync o AI competiendo por main thread. | Trace + `check-performance-gate` + `ops:delivery:gate` con `OPS_PERF_TRACE_PATH`. Budgets en `workflow/perf-budgets.json`. |
-| **Tiempo a interactivo** | Toca `app/**/page.tsx`, layout, bootstrap de vista, hidratación inicial. | Medición navegacional en DevTools (`performance.timing` o `PerformanceNavigationTiming`) o snapshot Playwright. Editor < 1 s; Desk/Collections/Reading < 1.5 s. |
-| **Peso transferido** | Toca `app/api/**/route.ts` que devuelve listas, schemas Supabase con columnas grandes, o hidratación cliente. | Tamaño ungzip del response medido en DevTools Network. Lista ≤ 50 kB; detalle documenta p95. |
-| **Forma del waterfall** | Toca bootstrap de una vista, hidratación, fetch desde múltiples componentes hacia el mismo endpoint. | `npm run ops:network:gate -- --har <captura.har> --report <report.json> --metrics <metrics.json>` o `--resources <resource-timing.json>` con `required_failures = 0`. Si el input raw contiene sesión o datos sensibles, procesarlo localmente con `--redact` y adjuntar solo report/metrics sanitizados + output del gate. |
-| **Fan-out reactivo** | Toca `lib/local-db/*`, suscriptores a stores, listeners de cambios. | Test que demuestra que una operación bulk emite un único evento de cambio, y que los suscriptores hacen debounce. |
+- outcome sistémico;
+- unidad de escala y camino crítico;
+- consumidores existentes;
+- estrategia de carga y actualización;
+- forma de costo esperada;
+- riesgo de crecimiento;
+- capability/runtime involucrado;
+- evidencia proporcional;
+- enfoque descartado y por qué.
 
-**Formato del Performance Contract en el brief:**
-
-```
-Performance Contract:
-  Interaction latency:   required | not required — {justificación}
-  Time to interactive:   required | not required — {justificación}
-  Payload weight:        required | not required — {justificación}
-  Waterfall shape:       required | not required — {justificación}
-  Reactive fan-out:      required | not required — {justificación}
-
-Scope: [flujo/ruta concreta que se mide para las dimensiones marcadas como required]
-Evidence required in PR:
-  - {por dimensión, cómo se mide y qué artefacto se adjunta}
-
-Approval rule:
-  - Latencia: `required_failures = 0` en check-performance-gate.
-  - Resto: evidencia objetiva del navegador con número dentro de presupuesto.
-```
-
-**Regla de severidad.** No es válido marcar las cinco como `not required` sin justificación dimensión por dimensión. Pero tampoco es obligatorio expandir las cinco siempre: el default operativo es declarar solo las dimensiones que el diff realmente toca y marcar el resto `not required` con una justificación breve. Si el issue toca una `page.tsx`, peso/waterfall/time-to-interactive son `required` por defecto. Si toca una `route.ts` de lista, peso es `required` por defecto. La omisión por inercia es lo que produjo el caso ODE-58/ODE-138 (Desk con 70 s a interactivo); marcar `not required` requiere argumento, no silencio.
-
-**Defaults de activación automática (REVIEW debe verificar):**
-- Diff toca `app/api/**/route.ts` que devuelve lista → peso `required`.
-- Diff toca `app/(app)/**/page.tsx` o `layout.tsx` → tiempo a interactivo + waterfall `required`.
-- Diff toca `lib/sync/*`, `lib/local-db/*` o `lib/collections/*` → fan-out `required`.
-- Diff toca `components/editor/**` o `app/(app)/write/**` → latencia `required`.
+El PM no debe crear un issue que resuelva una necesidad local mientras agrega carga global no explicada. Si no se puede determinar la forma de carga o los consumidores existentes, el issue queda `needs-clarification` o `blocked` antes de BUILD.
 
 ## Visual / UX Contract
 
-Hay un Performance Contract de cinco dimensiones pero, históricamente, **ningún contrato visual** — y ese hueco dejó pasar superficies que funcionaban pero no se veían ni se comportaban como debían (p. ej. una tabla de Workspace que debía ser idéntica a la de Desk y salió con fondo, borde redondeado e ícono que Desk no tiene). "Se ve como X" no es aceptable como intención implícita: si no está escrito y es verificable, no se cumple.
+La arquitectura de performance y el contrato visual son contratos distintos. Históricamente, **ningún contrato visual** — y ese hueco dejó pasar superficies que funcionaban pero no se veían ni se comportaban como debían (p. ej. una tabla de Workspace que debía ser idéntica a la de Desk y salió con fondo, borde redondeado e ícono que Desk no tiene). "Se ve como X" no es aceptable como intención implícita: si no está escrito y es verificable, no se cumple.
 
-**Cuándo es `required`:** todo issue etiquetado `frontend`, o que toque `components/**`, `app/(app)/**/page.tsx`, o cualquier superficie visible al usuario. Como en el Performance Contract, marcar `not required` exige justificación; no es un default silencioso.
+**Cuándo es `required`:** todo issue etiquetado `frontend`, o que toque `components/**`, `app/(app)/**/page.tsx`, o cualquier superficie visible al usuario. Marcar `not required` exige justificación; no es un default silencioso.
 
 ```
 Visual / UX Contract:
@@ -435,6 +417,7 @@ Regla:
 - Cualquier issue con flujos de usuario → `workflow/context/core/odessay-flujos.md` (sección relevante)
 - Cualquier issue de frontend → `.agents/skills/skill-frontend/SKILL.md`
 - Cualquier issue de backend/API → `.agents/skills/skill-backend/SKILL.md`
+- Cualquier issue que introduzca o modifique carga, hydration, sync, listeners, procesos bulk, trabajo background o capabilities de runtime → `.agents/skills/skill-performance/SKILL.md`
 - Cualquier issue de base de datos → `.agents/skills/skill-database/SKILL.md` + `workflow/context/core/odessay-modelo-datos.md`
 - Issues que tocan un feature con doc propio → el doc de `workflow/context/features/` correspondiente
 - Issues que tocan tabs, filtros, o navegación interna del editor → `workflow/context/features/odessay-sync.md` + `workflow/context/core/odessay-arquitectura.md`
@@ -550,17 +533,12 @@ Pegar el output de estos tres comandos en la descripción del PR. Sin este outpu
 - El dueño acepta o rechaza sobre el resultado. Un rechazo de outcome devuelve el issue a `In Progress`, igual que un review de código rechazado.
 - Este gate es independiente del proof of work de código: typecheck/lint/tests verdes no sustituyen la aceptación del resultado.
 
-**Si `Performance Contract` es requerido:**
-- Captura trace reproducible (`node scripts/capture-editor-trace.mjs` o comando equivalente declarado en el brief).
-- Evalúa budgets (`node scripts/check-performance-gate.mjs --trace <trace>`).
-- Corre delivery gate con `OPS_PERF_TRACE_PATH=<trace>`.
-- Adjunta en PR output de ambos comandos + rutas de artefactos generados.
-
-**Si el issue toca sync, bootstrap, hidratación remota, listados de alto tráfico o listeners/subscriptions de runtime:**
-- Captura el waterfall real del flujo declarado en el brief y evalúalo con `npm run ops:network:gate`.
-- Si el HAR contiene tokens, cookies, IDs privados o URLs sensibles, no lo adjuntes al PR. Ejecuta el gate con `--redact`, conserva el HAR solo localmente y adjunta únicamente `report.json`, `metrics.json` y output de consola.
-- Si no se debe exportar HAR, usa `--resources <resource-timing.json> --redact` con un export local de Resource Timing; conserva ese input raw localmente cuando contenga URLs sensibles.
-- El brief debe declarar qué flujo se midió y qué artefactos sanitizados prueban `required_failures = 0`.
+**Si `skill-performance` fue activado:**
+- Verifica que el `Performance Architecture Contract` esté completo.
+- Ejecuta únicamente la evidencia que el skill haya seleccionado para el riesgo real del cambio.
+- Usa `ops:perf:gate`, `ops:network:gate`, fixtures de escala o evidencia de bundle desktop cuando el contrato los requiera; no los conviertas en una lista automática para todo issue.
+- Si se captura HAR, trace o Resource Timing con datos sensibles, procesa el input localmente con `--redact` y adjunta solo artefactos sanitizados.
+- El brief debe declarar qué decisión arquitectónica prueba cada artefacto.
 
 **Si el issue toca base de datos:**
 - Usa Supabase MCP para verificar que el schema resultante coincide con lo especificado.

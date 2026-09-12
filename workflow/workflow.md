@@ -116,7 +116,7 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 **Secuencia:**
 
 **Setup**
-1. Leer brief. Declarar Performance Contract y Presentation Contract solo para las dimensiones/superficies que realmente toca el issue. Si una dimensión o superficie no aplica, registrar `not required` con justificación breve en vez de expandir evidencia innecesaria.
+1. Leer brief. Si el cambio activa performance por carga, datos, hydration, sync, listeners, bootstrap, operaciones bulk, desktop o background work, consultar `.agents/skills/skill-performance/SKILL.md` y declarar el `Performance Architecture Contract`. Si no se activa, no crear una sección de performance artificial. Declarar `Presentation Contract` solo cuando la superficie realmente cambia.
    > _Presentation Contract: paridad cross-surface en `/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}` — `tables`, `pre/code` y URLs largas con wrap, contención y scroll equivalentes entre superficies._
    > _Architecture Contract: si el brief toca desktop/shared-core/runtime boundaries/save/sync/parser/services, BUILD debe operar dentro de `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants` y `Required docs` ya definidos. Si falta uno, o los docs requeridos no bastan para ejecutar sin inferir arquitectura desde el código, detenerse._
 2. Mover issue a `In Progress` en Linear. Verificar rama con `git branch --show-current` — si es `main`, crear `codex/{issue-id}-{descripcion}` antes de cualquier edición.
@@ -127,8 +127,8 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 4. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
 
 **Validación**
-5. `npm run typecheck` + `npm run lint` + `npm test`. Si Performance Contract es `required`, generar la evidencia indicada en el brief. Guardar outputs — van en el body del PR.
-6. `npm run ops:delivery:gate` (con `OPS_PERF_TRACE_PATH=...` si Performance Contract es required). Debe terminar en verde.
+5. `npm run typecheck` + `npm run lint` + `npm test`. Si el `Performance Architecture Contract` seleccionó evidencia ejecutable, generarla con el instrumento correspondiente. Guardar outputs — van en el body del PR.
+6. `npm run ops:delivery:gate` (con `OPS_PERF_TRACE_PATH=...` solo cuando el contrato seleccionó el gate del editor). Debe terminar en verde.
 
 **Entrega**
 7. `git push -u origin {rama}`. Abrir el PR con body completo (link al issue, qué se hizo, cómo testear, outputs del paso 5). Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`. Si falla, editar con `gh pr edit {n} --body "..."` antes de continuar.
@@ -153,14 +153,15 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 **Estado Linear:** no mueve issues. Es una auditoria periodica o post-milestone.
 
 **Contexto a cargar:**
-1. `workflow/perf-budgets-network.json` — presupuesto vigente de red/runtime.
-2. `docs/plan-mejoras-network-sync-2026-07.md` §Parte 4 — motivacion y criterio de interpretacion.
-3. `workflow/review-history.jsonl` — solo para append del evento final si la auditoria se ejecuta como mantenimiento, no desde una rama BUILD.
+1. `.agents/skills/skill-performance/references/instruments.md` — inventario y routing de instrumentos.
+2. `workflow/perf-budgets-network.json` — solo si el contrato de la auditoría selecciona el instrumento de red/runtime.
+3. `docs/plan-mejoras-network-sync-2026-07.md` §Parte 4 — motivacion y criterio de interpretacion.
+4. `workflow/review-history.jsonl` — solo para append del evento final si la auditoria se ejecuta como mantenimiento, no desde una rama BUILD.
 
 **Captura requerida:**
 1. Web dev: arrancar la app con sesion activa y capturar HAR del arranque + navegacion Desk → Studio → Write.
 2. Desktop dev: repetir la misma captura en `tauri dev` con DevTools Network habilitado.
-3. El primer tramo de cada HAR es el arranque; `workflow/perf-budgets-network.json.capture.startup_window_ms` define la ventana de arranque. Las entradas posteriores se interpretan como navegacion.
+3. El primer tramo de cada HAR es el arranque; `workflow/perf-budgets-network.json.capture.startup_window_ms` define la ventana de arranque cuando ese budget fue seleccionado. Las entradas posteriores se interpretan como navegacion.
 
 **Evaluacion:**
 1. Ejecutar el gate para cada HAR:
@@ -208,7 +209,7 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 1. El Issue Brief desde Linear.
 2. El diff del PR.
 3. `.agents/skills/skill-code-review/SKILL.md`.
-4. Si el brief tiene `Performance Contract` requerido: artefactos de performance del PR (trace + report + output de gate).
+4. Si el brief tiene `Performance Architecture Contract` activo: solo los artefactos que ese contrato seleccionó (trace, report o output de gate).
 5. Si el brief tiene `Presentation Contract` requerido: evidencia cross-mode (`write`, `preview`, `shared`, `public`) con foco en tablas, `pre/code`, URLs largas y overflow.
 6. Si el brief toca desktop/shared core/runtime boundaries/save path/sync/parser/serializer/servicios: `.agents/skills/skill-architecture/SKILL.md` + el `Architecture Contract` del brief.
 
@@ -221,13 +222,13 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 
 **Secuencia — si aprobado:**
 1. Verificar gate:
-   - `npm run ops:delivery:gate` debe terminar en verde (con `OPS_PERF_TRACE_PATH` cuando el contrato es requerido).
+   - `npm run ops:delivery:gate` debe terminar en verde (con `OPS_PERF_TRACE_PATH` solo cuando el contrato seleccionó el gate del editor).
    - CI `Traceability Gates` en SUCCESS.
    - Preview deploy (Vercel) en SUCCESS — un PR que toca código y no compila en preview no puede mergearse aunque el delivery gate local pase.
-   - **Excepción perf:** cuando el brief declara `Performance Contract: not required` con justificación válida, los fallos del perf gate por métricas no requeridas o por hardware de CI no bloquean aprobación; en ese caso el perf gate actúa como informativo. Además, para métricas requeridas con `grace_lte` en `workflow/perf-budgets.json`, un overrun pequeño dentro de la banda de gracia cuenta como `WARN`, no como `FAIL`. Lo que sí debe estar verde sin excepción es traceability, Vercel preview y typecheck/lint.
-2. Validar `Performance Contract` contra evidencia objetiva (solo si es required):
-   - existe trace reproducible;
-   - `node scripts/check-performance-gate.mjs --trace <trace>` no reporta `required_failures`;
+   - **Excepción perf:** si el cambio no activó `skill-performance`, no se exige evidencia de performance. Si lo activó, los resultados se interpretan según el contrato y el instrumento seleccionado; un budget no seleccionado no bloquea el PR.
+2. Validar el `Performance Architecture Contract` contra evidencia objetiva cuando esté activo:
+   - existe la evidencia seleccionada (diseño, escala, runtime o bundle) y corresponde al build, volumen y runtime entregados;
+   - el instrumento seleccionado, si existe, no reporta fallos en los criterios requeridos por el contrato;
    - la evidencia está adjunta en PR/issue.
 3. Validar `Architecture Contract` cuando aplica:
    - el diff respeta `Layer` declarado;
@@ -281,9 +282,8 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
      git switch -
      ```
 2. Rechazar automáticamente si se cumple cualquiera de estas condiciones:
-   - falta evidencia de performance cuando el contrato es requerido;
-   - hay `required_failures > 0` o métricas requeridas faltantes en `check-performance-gate`;
-   - no existe justificación explícita cuando el brief marcó `Performance Contract: not required`.
+   - falta evidencia seleccionada por un `Performance Architecture Contract` activo;
+   - el instrumento seleccionado falla en un criterio requerido por ese contrato;
    - falta evidencia de paridad cross-mode cuando `Presentation Contract` es requerido.
    - el issue requería `Architecture Contract` y este no existe, está incompleto o el diff lo contradice.
    - existe un **security finding** aplicable al diff sin parche aplicado: open redirect, XSS via `dangerouslySetInnerHTML` sin sanitizar, SSRF en URLs construidas con input externo, secrets en logs/cliente, validación faltante en boundary (route handler, API public, webhook).
@@ -338,7 +338,7 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 **Secuencia:**
 
 **Setup**
-1. Leer brief. Declarar Performance Contract y Presentation Contract solo para las dimensiones que realmente toca el issue.
+1. Leer brief. Si el cambio activa performance por carga, datos, hydration, sync, listeners, bootstrap, operaciones bulk, desktop o background work, consultar `.agents/skills/skill-performance/SKILL.md` y declarar el `Performance Architecture Contract`. Si no se activa, no crear una sección de performance artificial.
 2. Resolver la rama de trabajo:
    - Si se pasó `--branch <nombre>`: `git switch <nombre>` — la rama ya existe, no crear nada.
    - Si no se pasó `--branch` y la rama actual no es `main`: trabajar en la rama actual.
@@ -350,7 +350,7 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 5. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
 
 **Validación**
-6. `npm run typecheck` + `npm run lint` + `npx vitest run`. Si Performance Contract es `required`, generar la evidencia indicada en el brief. Guardar outputs.
+6. `npm run typecheck` + `npm run lint` + `npx vitest run`. Si el `Performance Architecture Contract` seleccionó evidencia ejecutable, generarla con el instrumento correspondiente. Guardar outputs.
 7. Ejecutar el delivery gate con el base ref correcto:
    - **Sin `--branch`** (rama propia del issue): `npm run ops:delivery:gate`
    - **Con `--branch`** (rama compartida con otros issues): `GITHUB_BASE_REF=origin/{branch} npm run ops:delivery:gate`
@@ -409,7 +409,7 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 1. El Issue Brief de cada ID desde Linear.
 2. El diff del PR correspondiente (`gh pr diff`).
 3. `.agents/skills/skill-code-review/SKILL.md`.
-4. Si algún brief tiene `Performance Contract` requerido: artefactos de performance del PR.
+4. Si algún brief tiene un `Performance Architecture Contract` activo: los artefactos seleccionados por cada contrato.
 5. Si algún brief tiene `Architecture Contract`: el contrato del brief.
 
 **Localizar el PR:**
@@ -445,7 +445,7 @@ Si no hay PR para un issue: marcar `SIN PR — skipped` y continuar con los dem�
 2. Para cada issue, contrastar sus commits (o el diff completo si no hay `--branch`) con su brief:
    - Correctness: ¿los commits del issue implementan lo que el brief pide?
    - Seguridad: aplica la misma política que wf-review — cualquier finding es bloqueante.
-   - Performance Contract: si es `required`, verificar que hay evidencia adjunta en el PR.
+   - Performance Architecture Contract: si está activo, verificar que la evidencia seleccionada está adjunta en el PR.
    - Architecture Contract: verificar que el diff respeta `Layer`, `Runtime scope`, `Owner` e `Invariants`.
 3. Emitir resultado por issue:
    - `SHIP REVIEW APROBADO [ODE-XXX]` — sin hallazgos bloqueantes.
@@ -455,7 +455,7 @@ Si no hay PR para un issue: marcar `SIN PR — skipped` y continuar con los dem�
    ```
    GateResult: PASS | FAIL
      - typecheck / lint / vitest / delivery gate: ✓ | ✗
-     - Performance Contract: cumplido | no requerido | falta evidencia
+     - Performance Architecture Contract: cumplido | no activado | falta evidencia
      - Architecture Contract: cumplido | no aplica | violación detectada
 
    QualityScore: <calidad técnica del diff>

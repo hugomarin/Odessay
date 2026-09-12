@@ -17,21 +17,25 @@ Este proyecto será construido principalmente por agentes de código (Claude Cod
 
 ---
 
-## Velocidad multidimensional (contrato fundacional)
+## Velocidad como criterio de arquitectura
 
-La velocidad de Odessay no es la latencia del teclado. Es el conjunto de cinco dimensiones que, juntas, deciden cómo se siente el producto. Cada decisión técnica — frontend, backend, producto, UX — vive bajo este contrato.
+La velocidad no es una tabla universal de umbrales ni un requisito que cada PR
+deba medir por defecto. Es una propiedad del diseño que debe permanecer
+sostenible cuando crecen los documentos, usuarios, componentes, eventos y
+operaciones.
 
-| Dimensión | Qué afirma | Umbral operativo |
-|---|---|---|
-| **Latencia de interacción** | El usuario actúa y la app responde sin demora. | Keystroke < 16 ms (60 fps). Click/paste dentro de presupuesto en `workflow/perf-budgets.json`. |
-| **Tiempo a interactivo** | Abrir una ruta y poder usarla casi de inmediato. | Editor editable < 1 s. Desk/Collections/Reading útiles < 1.5 s desde navegación. |
-| **Peso transferido** | La red carga lo justo, no la base de datos entera. | Endpoint de lista ≤ 50 kB ungzip, sin payloads de fila (body_json, body_text, blobs). Endpoint de detalle documenta su p95. |
-| **Forma del waterfall** | Cada fetch tiene un propósito y no se repite. | ≤ 6 fetch/XHR en los primeros 3 s de una vista. Cero requests duplicados (misma URL + params) en los primeros 5 s. |
-| **Fan-out reactivo** | Un cambio en localDB no dispara N efectos. | Operaciones bulk emiten un solo evento de cambio. Suscriptores que reaccionan a writes hacen debounce ≥ 50 ms. |
+La autoridad para activar el análisis, elegir el patrón de carga y seleccionar
+la evidencia es `.agents/skills/skill-performance/SKILL.md`. Ese skill se
+consulta desde planeación, arquitectura, frontend, backend, database, review y
+UX cuando el cambio toca carga, hydration, sync, listeners, bootstrap,
+operaciones bulk, desktop o trabajo background.
 
-**Por qué cinco y no una.** Optimizar solo el keystroke y olvidar las demás produce un editor instantáneo dentro de una app pesada — una contradicción que el usuario percibe aunque no la sepa nombrar. La sensación local-first se sostiene solo si las cinco dimensiones se respetan. Una sola en rojo hunde la experiencia completa.
-
-**Cómo se aplica.** Cada PR declara su impacto solo en las dimensiones que realmente toca (ver `Performance Contract` en `.agents/skills/skill-product-manager/SKILL.md`). Cada skill técnico (frontend, backend, UX) traduce este contrato a su superficie de trabajo. El gate `ops:delivery:gate` cubre la dimensión de interacción del editor; las dimensiones de peso, waterfall y tiempo a interactivo se validan con evidencia objetiva del navegador (DevTools Network, Performance API, Playwright snapshots) cuando el PR las toca. Overruns pequeños dentro de una banda de gracia explícita en `workflow/perf-budgets.json` se reportan como advertencia, no como bloqueo.
+Los budgets y gates existentes son instrumentos especializados, no un contrato
+global. Solo se invocan cuando el `Performance Architecture Contract` del issue
+identifica que representan el riesgo real. Las decisiones de dominio —por
+ejemplo un intervalo de sync o una forma de payload— permanecen en el documento
+de la feature correspondiente y no deben convertirse en umbrales
+transversales.
 
 **Local-first es velocidad del write path, no excusa para un read path lento.** Renderizar rápido desde IndexedDB mientras en background se bajan megabytes y se disparan cascadas de fetches viola el contrato aunque el "primer pintado" se sienta veloz. La velocidad se mide hasta que la página está completamente útil, no hasta el primer paint.
 

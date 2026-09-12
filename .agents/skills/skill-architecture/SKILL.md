@@ -18,6 +18,8 @@ No inventa arquitectura nueva. Opera sobre la arquitectura ya definida en:
 
 Si estos documentos no bastan, el problema es de contexto/documentación y debe hacerse explícito. No improvisar una arquitectura paralela dentro del skill. Una vez ejecutado el ADR (D1/D5), **no** elegir fuente de verdad por `canonical_path` ni "promediar" arquitecturas: el contrato es fijo (D1).
 
+Cuando la decisión arquitectónica pueda alterar la forma de carga, el fan-out, el bootstrap, el sync, el trabajo background o el costo al crecer, consultar también `.agents/skills/skill-performance/SKILL.md`. Architecture fija boundaries y ownership; `skill-performance` fija la forma sostenible de ejecución.
+
 ---
 
 ## Cuándo activar este skill
@@ -38,6 +40,7 @@ Actívalo si el prompt, issue o diff toca cualquiera de estas señales:
 - `body_json` vs Markdown
 - boundaries entre UI y servicios
 - refactors que cruzan frontend/backend/database
+- decisiones que introducen carga por elemento, hydration, listeners, procesos bulk o trabajo background
 
 Si la tarea cruza capas y no sabes si pertenece a frontend, backend o database, este skill aplica por default.
 
@@ -293,6 +296,15 @@ Cuando se use este skill, debe producir explícitamente algo como:
 - `...`
 
 Si no puedes producir este output, el contexto todavía no es suficiente.
+
+Si el cambio puede alterar carga o crecimiento, agregar:
+
+### Performance Architecture
+
+- Contract: `active | not activated`
+- Si está `active`: incluir el bloque definido por `.agents/skills/skill-performance/SKILL.md` y seleccionar evidencia proporcional al riesgo.
+- Si no está activado: no inventar un bloque ni adjuntar budgets por defecto.
+- No repetir aquí los patrones, budgets o criterios de evidencia del skill de performance
 
 ---
 
