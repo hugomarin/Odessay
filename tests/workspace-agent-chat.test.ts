@@ -41,8 +41,7 @@ describe("createToolResultMessage (ODE-491 — message carries the tool's own st
     const message = createToolResultMessage(
       "A workflow.md draft is ready to review below.",
       { kind: "archive", candidates: [] },
-      undefined,
-      { scopeKind: "document", scopeId: "doc-1", scopeLabel: "My Writing", workspaceRootPath: "/root" },
+      { context: { scopeKind: "document", scopeId: "doc-1", scopeLabel: "My Writing", workspaceRootPath: "/root" } },
     )
     expect(message.context).toEqual({
       scopeKind: "document",
@@ -62,9 +61,7 @@ describe("createToolResultMessage (ODE-491 — message carries the tool's own st
     const message = createToolResultMessage(
       "A workflow.md draft is ready to review below.",
       { kind: "archive", candidates: [] },
-      undefined,
-      undefined,
-      serviceA,
+      { executionService: serviceA },
     )
     expect(message.executionService).toBe(serviceA)
   })
@@ -80,11 +77,7 @@ describe("createToolResultMessage (ODE-491 — message carries the tool's own st
     const message = createToolResultMessage(
       "The semantic review needs more context.",
       { kind: "contradictions", proposals: [], nonActionable: [] },
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      semanticReview,
+      { semanticReview },
     )
 
     expect(message.semanticReview).toEqual(semanticReview)
@@ -96,7 +89,7 @@ describe("resolveExecutionServiceById (ODE-502 follow-up — approving a proposa
     const serviceA = fakeService()
     const serviceB = fakeService()
     const messages: AgentMessage[] = [
-      createToolResultMessage("Workflow ready", { kind: "workflow", proposal: {} as WorkflowDraftProposal }, "msg-1", undefined, serviceA),
+      createToolResultMessage("Workflow ready", { kind: "workflow", proposal: {} as WorkflowDraftProposal }, { id: "msg-1", executionService: serviceA }),
     ]
 
     const resolved = resolveExecutionServiceById(messages, "msg-1", serviceB)
@@ -126,7 +119,7 @@ describe("resolveExecutionServiceByProposal (ODE-502 follow-up — contradiction
     const serviceB = fakeService()
     const proposal = { id: "contradiction-1" } as unknown as ContradictionProposal
     const messages: AgentMessage[] = [
-      createToolResultMessage("Contradictions ready", { kind: "contradictions", proposals: [proposal] }, "msg-1", undefined, serviceA),
+      createToolResultMessage("Contradictions ready", { kind: "contradictions", proposals: [proposal] }, { id: "msg-1", executionService: serviceA }),
     ]
 
     expect(resolveExecutionServiceByProposal(messages, "contradiction-1", serviceB)).toBe(serviceA)

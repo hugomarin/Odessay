@@ -7,14 +7,16 @@ import {
   type WorkspaceDocumentRelationSource,
 } from "@/lib/ai/workspace-document-relations"
 import { createWorkspaceExecutionContext } from "@/lib/ai/workspace-execution-receipt"
+import { workspaceSemanticRoundRequestSchema } from "@/lib/ai/workspace-semantic-round"
+import { getWorkspaceSemanticToolDescriptors } from "@/lib/ai/workspace-semantic-tool-registry"
 import type { WorkspaceSemanticLoopResult } from "@/lib/ai/workspace-semantic-loop"
 
-function source(documentId: string, markdown: string): WorkspaceDocumentRelationSource {
+function source(documentId: string, markdown: string, documentVersion = "v1@1700000000000", contentHash: string | null = null): WorkspaceDocumentRelationSource {
   return {
     documentId,
     title: documentId,
-    documentVersion: "v1@1700000000000",
-    contentHash: null,
+    documentVersion,
+    contentHash,
     markdown,
   }
 }
@@ -59,6 +61,92 @@ describe("Workspace semantic document relations", () => {
     expect(Math.max(...request.initialEvidence.map((item) => item.text.length))).toBeLessThanOrEqual(720)
   })
 
+  it("sends complete content for every selected document in ordered chunks", () => {
+    const longBody = "# Scope\n\n" + "The complete relation claim. ".repeat(700)
+    const request = buildWorkspaceDocumentRelationsRequest([
+      source("left", longBody),
+      source("right", "# Notes\n\nThe second complete relation source."),
+    ])
+    const prompt = request.initialInput
+      .filter((item): item is Extract<typeof item, { type: "message" }> => item.type === "message")
+      .map((item) => item.content)
+      .join("\n")
+
+    expect(request.contextComplete).toBe(true)
+    expect((prompt.match(/The complete relation claim\./g) ?? []).length).toBeGreaterThanOrEqual(700)
+    expect(prompt).toContain("The second complete relation source.")
+    expect(request.initialInput.length).toBeGreaterThan(3)
+  })
+
+  it("detects two incompatible claims inside one selected document", () => {
+    const request = buildWorkspaceDocumentRelationsRequest([
+      source("single", "# Storage\n\nStorage: SQLite.\n\n# Migration\n\nStorage: IndexedDB."),
+    ])
+    const candidate = request.candidates.find((item) => item.leftDocumentId === "single" && item.rightDocumentId === "single")
+    expect(candidate).toBeDefined()
+    expect(candidate?.leftEvidenceId).not.toBe(candidate?.rightEvidenceId)
+
+    const parsed = parseWorkspaceDocumentRelationsResult(loopResult({
+      relations: [{
+        candidateId: candidate!.candidateId,
+        leftDocumentId: "single",
+        rightDocumentId: "single",
+        verdict: "contradictory",
+        confidence: "high",
+        rationale: "The selected document states two incompatible storage authorities.",
+        evidenceIds: [candidate!.leftEvidenceId, candidate!.rightEvidenceId],
+        suggestedDocumentId: null,
+        suggestedReason: null,
+      }],
+    }, { evidence: request.initialEvidence }), request)
+
+    expect(parsed.status).toBe("complete")
+    expect(parsed.relations).toHaveLength(1)
+    expect(parsed.relations[0]).toMatchObject({
+      leftDocumentId: "single",
+      rightDocumentId: "single",
+      evidenceIds: [candidate!.leftEvidenceId, candidate!.rightEvidenceId],
+    })
+    expect(isResolvableSemanticContradiction(parsed.relations[0]!)).toBe(true)
+  })
+
+  it("keeps oversized selected relation sources complete for provider staging", () => {
+    const oversized = "# Scope\n\n" + "A complete relation paragraph. ".repeat(3_000)
+    const request = buildWorkspaceDocumentRelationsRequest([
+      source("left", oversized),
+      source("right", oversized),
+    ])
+
+    expect(request.contextComplete).toBe(true)
+    expect(request.contextError).toBeNull()
+    expect(request.initialInput.map((item) => item.type === "message" ? item.content : "").join("\n"))
+      .toContain("A complete relation paragraph.")
+  })
+
+  it("retains a worst-case relation bundle and leaves capacity decisions to the provider", () => {
+    const statement = (index: number) => `Claim ${index}: ${"bounded semantic workspace evidence ".repeat(22).trim()}.`
+    const markdown = Array.from({ length: 12 }, (_, index) => statement(index + 1)).join("\n")
+    const sources = Array.from({ length: 4 }, (_, index) => source(
+      `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      markdown,
+      `version-${"v".repeat(240)}`,
+      `blake3:${"a".repeat(64)}`,
+    ))
+    const request = buildWorkspaceDocumentRelationsRequest(sources)
+    const messageItems = request.initialInput.filter((item): item is Extract<typeof item, { type: "message" }> => item.type === "message")
+
+    expect(messageItems.length).toBeGreaterThan(1)
+    expect(request.contextComplete).toBe(true)
+    expect(request.contextError).toBeNull()
+    expect(messageItems.reduce((total, item) => total + item.content.length, 0)).toBeGreaterThan(65_536)
+    expect(workspaceSemanticRoundRequestSchema.safeParse({
+      operation: "relations",
+      input: request.initialInput,
+      tools: getWorkspaceSemanticToolDescriptors(),
+      execution: createWorkspaceExecutionContext("relations", "desktop", "semantic-review"),
+    }).success).toBe(true)
+  })
+
   it("keeps valid relation items while downgrading invalid provenance to partial coverage", () => {
     const request = buildWorkspaceDocumentRelationsRequest([
       source("left", "Storage: SQLite."),
@@ -99,6 +187,114 @@ describe("Workspace semantic document relations", () => {
     expect(result.invalidItemCount).toBe(1)
     expect(result.relations).toHaveLength(1)
     expect(isResolvableSemanticContradiction(result.relations[0]!)).toBe(true)
+  })
+
+  it("uses the semantic envelope coverage when the operation payload omits the repeated field", () => {
+    const request = buildWorkspaceDocumentRelationsRequest([
+      source("left", "Storage: SQLite."),
+      source("right", "Storage: IndexedDB."),
+    ])
+    const result = parseWorkspaceDocumentRelationsResult(loopResult({
+      relations: request.candidates.map((candidate) => ({
+        candidateId: candidate.candidateId,
+        leftDocumentId: candidate.leftDocumentId,
+        rightDocumentId: candidate.rightDocumentId,
+        verdict: "unrelated",
+        confidence: "high",
+        rationale: "The provider returned a valid operation payload.",
+        evidenceIds: [candidate.leftEvidenceId, candidate.rightEvidenceId],
+        suggestedDocumentId: null,
+        suggestedReason: null,
+      })),
+    }, { evidence: request.initialEvidence }), request)
+
+    expect(result.status).toBe("complete")
+    expect(result.coverage).toBe("complete")
+    expect(result.invalidItemCount).toBe(0)
+  })
+
+  it("does not require every recall hint to be repeated in a complete review", () => {
+    const request = buildWorkspaceDocumentRelationsRequest([
+      source("left", "Storage: SQLite.\nCaching: filesystem."),
+      source("right", "Storage: IndexedDB.\nCaching: memory."),
+    ])
+    const candidate = request.candidates[0]!
+    const result = parseWorkspaceDocumentRelationsResult(loopResult({
+      relations: [{
+        candidateId: candidate.candidateId,
+        leftDocumentId: candidate.leftDocumentId,
+        rightDocumentId: candidate.rightDocumentId,
+        verdict: "complementary",
+        confidence: "high",
+        rationale: "The complete selected documents contain complementary storage claims.",
+        evidenceIds: [candidate.leftEvidenceId, candidate.rightEvidenceId],
+        suggestedDocumentId: null,
+        suggestedReason: null,
+      }],
+    }, { evidence: request.initialEvidence }), request)
+
+    expect(result.status).toBe("complete")
+    expect(result.coverage).toBe("complete")
+    expect(result.invalidItemCount).toBe(0)
+    expect(result.relations).toHaveLength(1)
+  })
+
+  it("normalizes the semicolon-delimited evidence format returned by Responses", () => {
+    const request = buildWorkspaceDocumentRelationsRequest([
+      source("left", "Storage: SQLite."),
+      source("right", "Storage: IndexedDB."),
+    ])
+    const result = parseWorkspaceDocumentRelationsResult(loopResult({
+      relations: request.candidates.map((candidate, index) => ({
+        candidateId: candidate.candidateId,
+        leftDocumentId: candidate.leftDocumentId,
+        rightDocumentId: candidate.rightDocumentId,
+        verdict: "unrelated",
+        confidence: "high",
+        rationale: "The provider returned valid evidence provenance.",
+        evidenceIds: index === 0
+          ? `${candidate.leftEvidenceId};${candidate.rightEvidenceId}`
+          : [candidate.leftEvidenceId, candidate.rightEvidenceId],
+        suggestedDocumentId: null,
+        suggestedReason: null,
+      })),
+    }, { evidence: request.initialEvidence }), request)
+
+    expect(result.status).toBe("complete")
+    expect(result.coverage).toBe("complete")
+    expect(result.invalidItemCount).toBe(0)
+    expect(result.relations[0]?.evidenceIds).toHaveLength(2)
+  })
+
+  it("does not force semantic provenance to reuse the deterministic candidate excerpts", () => {
+    const request = buildWorkspaceDocumentRelationsRequest([
+      source("left", "Storage: SQLite.\nCaching: filesystem.\nOwner: platform."),
+      source("right", "Storage: IndexedDB.\nCaching: memory.\nOwner: editor."),
+    ])
+    const candidate = request.candidates[0]!
+    const alternateLeft = request.initialEvidence.find(
+      (item) => item.documentId === candidate.leftDocumentId && item.evidenceId !== candidate.leftEvidenceId,
+    )!
+    const alternateRight = request.initialEvidence.find(
+      (item) => item.documentId === candidate.rightDocumentId && item.evidenceId !== candidate.rightEvidenceId,
+    )!
+    const result = parseWorkspaceDocumentRelationsResult(loopResult({
+      coverage: "partial",
+      relations: [{
+        candidateId: candidate.candidateId,
+        leftDocumentId: candidate.leftDocumentId,
+        rightDocumentId: candidate.rightDocumentId,
+        verdict: "contradictory",
+        confidence: "high",
+        rationale: "The selected excerpts provide valid evidence for the two claims.",
+        evidenceIds: [alternateLeft.evidenceId, alternateRight.evidenceId],
+        suggestedDocumentId: null,
+        suggestedReason: null,
+      }],
+    }, { evidence: request.initialEvidence }), request)
+
+    expect(result.relations).toHaveLength(1)
+    expect(result.relations[0]?.evidenceIds).toEqual([alternateLeft.evidenceId, alternateRight.evidenceId])
   })
 
   it("never derives a source suggestion from recency and requires high confidence for resolution", () => {

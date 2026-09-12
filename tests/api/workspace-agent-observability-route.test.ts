@@ -17,6 +17,7 @@ const askBody = {
   annotations: [],
   workflow: null,
   catalogTruncated: false,
+  scopeFingerprint: "scope:test",
 }
 
 const presentationBody = {
@@ -131,5 +132,161 @@ describe("Workspace agent Responses observability", () => {
       responses: [{ responseId: null, httpStatus: 502, errorCode: "AI_PROVIDER_ERROR" }],
     })
     expect(payload.error.message).not.toContain("provider secret")
+  })
+
+  it("pins server-owned execution stage and runtime metadata", async () => {
+    const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      const requestBody = JSON.parse(String(init?.body))
+      expect(requestBody.metadata).toMatchObject({
+        action: "ask",
+        stage: "analysis",
+        runtime: "cloud",
+      })
+      return providerResponse({
+        id: "resp-pinned-execution",
+        object: "response",
+        model: "gpt-5.6-luna",
+        status: "completed",
+        output: [{
+          id: "msg-1",
+          type: "message",
+          content: [{ type: "output_text", text: JSON.stringify({
+            answer: "The artifact is a storage decision.",
+            evidence: [],
+            requestedDocumentIds: [],
+            suggestedAction: null,
+          }) }],
+        }],
+        usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+      })
+    })
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await askPOST(new Request("https://app.odessay.com/api/ai/workspace-ask", {
+      method: "POST",
+      body: JSON.stringify({
+        ...askBody,
+        execution: {
+          invocationId: "client-invocation",
+          action: "ask",
+          stage: "synthesis",
+          runtime: "desktop",
+          contextVersion: "workspace-agent-v1",
+        },
+      }),
+    }))
+
+    expect(response.status).toBe(200)
+  })
+
+  it("continues Ask only when the previous response and explicit scope fingerprint match", async () => {
+    let callCount = 0
+    const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      callCount += 1
+      const requestBody = JSON.parse(String(init?.body))
+      if (callCount === 1) expect(requestBody.previous_response_id).toBeUndefined()
+      if (callCount === 2) expect(requestBody.previous_response_id).toBe("resp-ask-1")
+      expect(requestBody.input[0]).toMatchObject({ role: "system" })
+      return providerResponse({
+        id: `resp-ask-${callCount}`,
+        object: "response",
+        model: "gpt-5.6-luna",
+        status: "completed",
+        output: [{
+          id: `msg-${callCount}`,
+          type: "message",
+          content: [{ type: "output_text", text: JSON.stringify({
+            answer: callCount === 1 ? "The selected scope is ready." : "The prior scope remains in context.",
+            evidence: [],
+            requestedDocumentIds: [],
+            suggestedAction: null,
+            scopeStatus: "ready",
+          }) }],
+        }],
+        usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+      })
+    })
+    vi.stubGlobal("fetch", providerFetch)
+
+    const first = await askPOST(new Request("https://app.odessay.com/api/ai/workspace-ask", {
+      method: "POST",
+      body: JSON.stringify(askBody),
+    }))
+    const firstPayload = await first.json()
+    const second = await askPOST(new Request("https://app.odessay.com/api/ai/workspace-ask", {
+      method: "POST",
+      body: JSON.stringify({
+        ...askBody,
+        previousResponseId: firstPayload.data.responseId,
+        previousScopeFingerprint: firstPayload.data.scopeFingerprint,
+      }),
+    }))
+    const secondPayload = await second.json()
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    expect(secondPayload.data.responseId).toBe("resp-ask-2")
+    expect(secondPayload.data.scopeFingerprint).toBe("scope:test")
+    expect(providerFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it("drops a stale Ask response id when the explicit scope fingerprint changed", async () => {
+    const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      const requestBody = JSON.parse(String(init?.body))
+      expect(requestBody.previous_response_id).toBeUndefined()
+      return providerResponse({
+        id: "resp-fresh-scope",
+        object: "response",
+        model: "gpt-5.6-luna",
+        status: "completed",
+        output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({
+          answer: "Fresh scope.", evidence: [], requestedDocumentIds: [], suggestedAction: null, scopeStatus: "ready",
+        }) }] }],
+        usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+      })
+    })
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await askPOST(new Request("https://app.odessay.com/api/ai/workspace-ask", {
+      method: "POST",
+      body: JSON.stringify({
+        ...askBody,
+        scopeFingerprint: "scope:new",
+        previousResponseId: "resp-old-scope",
+        previousScopeFingerprint: "scope:old",
+      }),
+    }))
+
+    expect(response.status).toBe(200)
+    expect(providerFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not promote model-guessed documents or evidence when the request has no scope", async () => {
+    const providerFetch = vi.fn(async () => providerResponse({
+      id: "resp-no-scope",
+      object: "response",
+      model: "gpt-5.6-luna",
+      status: "completed",
+      output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({
+        answer: "I need the publication document to answer that.",
+        evidence: [{ documentId: "guessed-doc", quote: "invented quote", reason: "not authorized" }],
+        requestedDocumentIds: ["guessed-doc"],
+        suggestedAction: null,
+        scopeStatus: "ready",
+      }) }] }],
+      usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+    }))
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await askPOST(new Request("https://app.odessay.com/api/ai/workspace-ask", {
+      method: "POST",
+      body: JSON.stringify(askBody),
+    }))
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.data.evidence).toEqual([])
+    expect(payload.data.requestedDocumentIds).toEqual([])
+    expect(payload.data.scopeStatus).toBe("needs_scope")
   })
 })

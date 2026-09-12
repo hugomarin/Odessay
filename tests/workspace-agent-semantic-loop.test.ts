@@ -15,6 +15,7 @@ import {
 import type {
   WorkspaceSemanticRoundResult,
 } from "@/lib/services/contracts/ai-service"
+import type { ServiceResponse } from "@/lib/services/contracts/service-types"
 import type {
   WorkspaceAgentEvidenceReadResult,
 } from "@/lib/services/contracts/workspace-agent"
@@ -71,8 +72,9 @@ function evidenceRead(): { data: WorkspaceAgentEvidenceReadResult; error: null }
 }
 
 describe("Workspace semantic tool loop", () => {
-  it("completes a bounded tool round and carries the same invocation and call id forward", async () => {
+  it("completes a bounded tool round across the desktop-to-cloud adapter boundary", async () => {
     const execution = createWorkspaceExecutionContext("relations", "desktop", "semantic-review")
+    const providerExecution = { ...execution, runtime: "cloud" as const }
     const descriptors = getWorkspaceSemanticToolDescriptors()
     const readEvidence = vi.fn(async () => evidenceRead())
     const registry = makeRegistry(readEvidence)
@@ -93,7 +95,7 @@ describe("Workspace semantic tool loop", () => {
               maxChars: 500,
             },
           }],
-          executionReceipt: roundReceipt("resp-1", "completed", [{ type: "function_call", call_id: "call-1", name: WORKSPACE_SEMANTIC_READ_TOOL_NAME }], execution),
+          executionReceipt: roundReceipt("resp-1", "completed", [{ type: "function_call", call_id: "call-1", name: WORKSPACE_SEMANTIC_READ_TOOL_NAME }], providerExecution),
         }),
         error: null,
       })
@@ -103,7 +105,7 @@ describe("Workspace semantic tool loop", () => {
           previousResponseId: "resp-1",
           status: "completed",
           outputText: JSON.stringify({ coverage: "complete", status: "complete", payload: JSON.stringify({ relation: "complementary" }) }),
-          executionReceipt: roundReceipt("resp-2", "completed", [{ type: "message" }], execution),
+          executionReceipt: roundReceipt("resp-2", "completed", [{ type: "message" }], providerExecution),
         }),
         error: null,
       })
@@ -131,6 +133,7 @@ describe("Workspace semantic tool loop", () => {
       status: "complete",
       coverage: "complete",
       rounds: 2,
+      finalText: JSON.stringify({ relation: "complementary" }),
       toolCalls: [{ round: 1, callId: "call-1", name: WORKSPACE_SEMANTIC_READ_TOOL_NAME, outcome: "executed", evidenceId: "evidence-1" }],
       executionReceipt: expect.objectContaining({
         invocationId: execution.invocationId,
@@ -270,5 +273,69 @@ describe("Workspace semantic tool loop", () => {
 
     expect(pathIdentity.error?.code).toBe("INVALID_INPUT")
     expect(unknownDocument.error?.code).toBe("NOT_FOUND")
+  })
+
+  it("aborts an in-flight provider request when the semantic review is cancelled", async () => {
+    const execution = createWorkspaceExecutionContext("relations", "desktop", "semantic-review")
+    const registry = makeRegistry()
+    const controller = new AbortController()
+    let providerAborted = false
+    const runSemanticRound = vi.fn((
+      _request: unknown,
+      options?: { signal?: AbortSignal },
+    ) => new Promise<ServiceResponse<WorkspaceSemanticRoundResult>>((_resolve, _reject) => {
+      options?.signal?.addEventListener("abort", () => {
+        providerAborted = true
+      }, { once: true })
+    }))
+
+    const resultPromise = runWorkspaceSemanticLoop({
+      operation: "relations",
+      execution,
+      initialInput: [{ type: "message", role: "user", content: "Review." }],
+      initialEvidence: [{ evidenceId: "initial-1", documentId, documentVersion, contentHash, lineStart: 1, lineEnd: 1, text: "Evidence." }],
+      registry,
+      aiService: { runSemanticRound },
+      signal: controller.signal,
+    })
+
+    controller.abort()
+    const result = await resultPromise
+
+    expect(result.data).toMatchObject({
+      status: "cancelled",
+      error: { code: "CANCELLED" },
+    })
+    expect(providerAborted).toBe(true)
+  })
+
+  it("aborts the provider request when the wall-clock budget expires", async () => {
+    const execution = createWorkspaceExecutionContext("relations", "desktop", "semantic-review")
+    const registry = makeRegistry()
+    let providerAborted = false
+    const runSemanticRound = vi.fn((
+      _request: unknown,
+      options?: { signal?: AbortSignal },
+    ) => new Promise<ServiceResponse<WorkspaceSemanticRoundResult>>((_resolve, _reject) => {
+      options?.signal?.addEventListener("abort", () => {
+        providerAborted = true
+      }, { once: true })
+    }))
+
+    const result = await runWorkspaceSemanticLoop({
+      operation: "relations",
+      execution,
+      initialInput: [{ type: "message", role: "user", content: "Review." }],
+      initialEvidence: [{ evidenceId: "initial-1", documentId, documentVersion, contentHash, lineStart: 1, lineEnd: 1, text: "Evidence." }],
+      registry,
+      aiService: { runSemanticRound },
+      caps: { maxWallClockMs: 10 },
+    })
+
+    expect(result.data).toMatchObject({
+      status: "budget_exceeded",
+      error: { code: "DEADLINE_EXCEEDED" },
+    })
+    expect(providerAborted).toBe(true)
   })
 })

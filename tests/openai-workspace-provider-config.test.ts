@@ -18,7 +18,7 @@ describe("OpenAI Workspace provider configuration", () => {
       apiKey: "openai-test-key",
       model: OPENAI_WORKSPACE_DEFAULT_MODEL,
       responsesUrl: "https://api.openai.com/v1/responses",
-      maxOutputTokens: 8_192,
+      maxOutputTokens: 16_384,
       reasoningEffort: "none",
     })
   })

@@ -67,17 +67,45 @@ function document(id: string, markdown: string, modifiedAt = 1_700_000_000_000, 
   }
 }
 
+function relationPromptParts(input: { input: Array<{ content?: string }> }) {
+  const parts = input.input.flatMap((item) => {
+    try {
+      return [JSON.parse(item.content ?? "{}") as {
+        evidence?: Array<{ evidenceId: string; documentId: string; lineStart?: number; lineEnd?: number; text?: string }>
+        candidates?: Array<{
+          candidateId: string
+          leftEvidenceIndex?: number | null
+          rightEvidenceIndex?: number | null
+          leftDocumentId?: string
+          rightDocumentId?: string
+          leftEvidenceId?: string
+          rightEvidenceId?: string
+        }>
+      }]
+    } catch {
+      // Complete source-content messages are intentionally not JSON prompt
+      // metadata; ignore them in this semantic-round fixture adapter.
+      return []
+    }
+  })
+  const evidence = parts.flatMap((part) => part.evidence ?? [])
+  const evidenceByIndex = (index: number | null | undefined) => index && index > 0 ? evidence[index - 1] : undefined
+  const candidates = parts.flatMap((part) => part.candidates ?? []).map((candidate) => {
+    const left = evidenceByIndex(candidate.leftEvidenceIndex)
+    const right = evidenceByIndex(candidate.rightEvidenceIndex)
+    return {
+      ...candidate,
+      leftDocumentId: candidate.leftDocumentId ?? left?.documentId ?? "",
+      rightDocumentId: candidate.rightDocumentId ?? right?.documentId ?? "",
+      leftEvidenceId: candidate.leftEvidenceId ?? left?.evidenceId ?? "",
+      rightEvidenceId: candidate.rightEvidenceId ?? right?.evidenceId ?? "",
+    }
+  })
+  return { evidence, candidates }
+}
+
 function completeSemanticRelationsRound(input: { input: Array<{ content?: string }> }) {
-  const prompt = JSON.parse(input.input[0]?.content ?? "{}") as {
-    evidence?: Array<{ evidenceId: string; documentId: string; text: string }>
-    candidates?: Array<{
-      candidateId: string
-      leftDocumentId: string
-      rightDocumentId: string
-      leftEvidenceId: string
-      rightEvidenceId: string
-    }>
-  }
+  const prompt = relationPromptParts(input)
   const evidenceById = new Map((prompt.evidence ?? []).map((item) => [item.evidenceId, item]))
   const relations = (prompt.candidates ?? []).map((candidate) => {
     const left = evidenceById.get(candidate.leftEvidenceId)?.text ?? ""
@@ -213,6 +241,18 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     })
     expect(found.data?.nonActionable).toEqual([])
     expect(tools.read).toHaveBeenCalledTimes(2)
+
+    const rejected = await service.resolveContradiction({
+      ...found.data!.proposals[0]!,
+      semanticVerdict: "context_dependent",
+      semanticConfidence: "high",
+    }, "right", {
+      read: approval("read", "left", "read-left-rejected"),
+      edit: approval("edit", "left", "edit-left-rejected"),
+    })
+
+    expect(rejected.error?.code).toBe("INVALID_INPUT")
+    expect(tools.edit).not.toHaveBeenCalled()
 
     const resolved = await service.resolveContradiction(found.data!.proposals[0]!, "right", {
       read: approval("read", "left"),
@@ -360,10 +400,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       delete: vi.fn(),
     }
     aiMocks.reviewWorkspaceDocumentRelations.mockImplementationOnce(async (roundInput: { input: Array<{ content?: string }> }) => {
-      const prompt = JSON.parse(roundInput.input[0]?.content ?? "{}") as {
-        evidence?: Array<{ evidenceId: string; documentId: string; lineStart: number; lineEnd: number }>
-        candidates?: Array<{ candidateId: string }>
-      }
+      const prompt = relationPromptParts(roundInput)
       const leftEvidence = prompt.evidence?.find((item) => item.documentId === "left")
       const rightEvidence = prompt.evidence?.find((item) => item.documentId === "right")
       const payload = {
@@ -412,6 +449,44 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     expect(tools.read).toHaveBeenCalledTimes(2)
     expect(aiMocks.reviewWorkspaceDocumentRelations).toHaveBeenCalledTimes(1)
     expect(aiMocks.reviewWorkspaceDocumentRelations.mock.calls[0][0].input[0].content).not.toContain("/workspace")
+  })
+
+  it("rejects archived documents before semantic relation review reaches the provider", async () => {
+    const archived = {
+      ...document("archived", "Storage: SQLite."),
+      catalogRecord: {
+        ...document("archived", "Storage: SQLite.").catalogRecord,
+        deletedAt: "2026-01-02T00:00:00.000Z",
+      },
+    }
+    const active = document("active", "Storage: IndexedDB.")
+    const documents = new Map([[archived.documentId, archived], [active.documentId, active]])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.reviewDocumentRelations({
+      documentIds: ["archived", "active"],
+      readApprovals: {
+        archived: approval("read", "archived"),
+        active: approval("read", "active"),
+      },
+    })
+
+    expect(result.error?.code).toBe("NOT_FOUND")
+    expect(tools.read).toHaveBeenCalledTimes(2)
+    expect(aiMocks.reviewWorkspaceDocumentRelations).not.toHaveBeenCalled()
   })
 
   it("refuses a comparison when a selected document has no approval", async () => {
@@ -819,8 +894,32 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     }))
   })
 
-  describe("askAgent — lazy focused document + bounded retry (ODE-489 follow-up: 'el contexto solo se debe invocar en la medida que el usuario lo solicite')", () => {
-    it("does not read the focused document on the first round — only its metadata is offered, via focusedDocumentId", async () => {
+  it("requires explicit scope instead of guessing a named catalog document", async () => {
+    const publication = document("publication", "# Publication\n\nThe release process has three steps.")
+    contextMocks.list.mockResolvedValue([publication.catalogRecord])
+    const read = vi.fn(async ({ approval }) => ({
+      data: { document: publication, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
+      error: null,
+    }))
+    const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Please select publication.md so I can review it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({ question: "¿Qué dice publication.md sobre el proceso de release?", selection: [] })
+
+    expect(result.error).toBeNull()
+    expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+    expect(aiMocks.askWorkspace.mock.calls[0]?.[0].documents).toEqual([])
+    expect(read).not.toHaveBeenCalled()
+    expect(result.data?.scopeStatus).toBe("needs_scope")
+    expect(result.data?.requestedDocumentIds).toEqual([])
+  })
+
+  describe("askAgent — explicit scope only", () => {
+    it("does not read or expose a focused document until the user attaches it", async () => {
       const focused = document("focused", "Storage: SQLite. A long design rationale follows.")
       contextMocks.list.mockResolvedValue([focused.catalogRecord])
       const read = vi.fn(async ({ approval }) => ({
@@ -840,9 +939,9 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       expect(read).not.toHaveBeenCalled()
       expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
       expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
-        focusedDocumentId: "focused",
+        focusedDocumentId: null,
         targetDocumentIds: [],
-        documents: expect.arrayContaining([expect.objectContaining({ id: "focused", markdown: null })]),
+        documents: [],
       }))
     })
 
@@ -873,7 +972,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       }))
     })
 
-    it("performs one bounded extra round with the focused document's content when the model requests it, and returns the retried answer", async () => {
+    it("does not fetch a focused document merely because the model asks for it", async () => {
       const focused = document("focused", "Storage: SQLite.")
       contextMocks.list.mockResolvedValue([focused.catalogRecord])
       const read = vi.fn(async ({ approval }) => ({
@@ -900,10 +999,11 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       const result = await service.askAgent({ question: "What storage does this use?", selection: [], focusedDocumentId: "focused" })
 
       expect(result.error).toBeNull()
-      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
-      expect(read).toHaveBeenCalledTimes(1)
-      expect(result.data?.answer).toBe("This document decides to use SQLite for storage.")
-      expect(result.data?.evidence).toEqual([expect.objectContaining({ quote: "Storage: SQLite.", line: 1 })])
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+      expect(read).not.toHaveBeenCalled()
+      expect(result.data?.answer).toBe("I'd need to read it to answer that.")
+      expect(result.data?.evidence).toEqual([])
+      expect(result.data?.scopeStatus).toBe("needs_scope")
       expect(result.data?.requestedDocumentIds).toEqual([])
     })
 
@@ -930,43 +1030,37 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
     })
 
-    it("keeps the first round's answer when the second askWorkspace call itself fails (not just the evidence read before it)", async () => {
+    it("does not start a second provider round when scope was omitted", async () => {
       const focused = document("focused", "Storage: SQLite.")
       contextMocks.list.mockResolvedValue([focused.catalogRecord])
-      // Unlike the read-failure test above, evidence preparation for the
-      // retry succeeds every time — the failure is the provider call itself.
-      const read = vi.fn(async ({ approval }) => ({
-        data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
-        error: null,
-      }))
+      const read = vi.fn()
       const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
-      aiMocks.askWorkspace
-        .mockResolvedValueOnce({
-          data: { answer: "I don't have enough context yet, but here's what I can say generally.", evidence: [], requestedDocumentIds: ["focused"], usage: null },
-          error: null,
-        })
-        .mockResolvedValueOnce({ data: null, error: { code: "UNAVAILABLE", message: "AI provider is unavailable for the Workspace agent.", retryable: true } })
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "I don't have enough context yet, but here's what I can say generally.", evidence: [], requestedDocumentIds: ["focused"], usage: null },
+        error: null,
+      })
       const service = await createWorkspaceAgentService("/workspace", tools)
 
       const result = await service.askAgent({ question: "What storage does this use?", selection: [], focusedDocumentId: "focused" })
 
       expect(result.error).toBeNull()
-      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+      expect(read).not.toHaveBeenCalled()
       expect(result.data?.answer).toBe("I don't have enough context yet, but here's what I can say generally.")
-      expect(result.data?.requestedDocumentIds).toEqual(["focused"])
+      expect(result.data?.requestedDocumentIds).toEqual([])
     })
 
-    it("does not auto-fetch a requested id that isn't the focused document — that stays the existing manual 'note the user' path", async () => {
+    it("does not auto-fetch an active catalog document recognized from the question", async () => {
       const focused = document("focused", "Storage: SQLite.")
       const other = document("other-doc", "Some other content.")
       contextMocks.list.mockResolvedValue([focused.catalogRecord, other.catalogRecord])
-      const read = vi.fn(async ({ approval }) => ({
-        data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
+      const read = vi.fn(async ({ documentId, approval }) => ({
+        data: { document: documentId === "other-doc" ? other : focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
         error: null,
       }))
       const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
       aiMocks.askWorkspace.mockResolvedValueOnce({
-        data: { answer: "Might be related to another artifact.", evidence: [], requestedDocumentIds: ["other-doc"], usage: null },
+        data: { answer: "Please select the other artifact before I compare it.", evidence: [], requestedDocumentIds: [], usage: null },
         error: null,
       })
       const service = await createWorkspaceAgentService("/workspace", tools)
@@ -976,7 +1070,8 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       expect(result.error).toBeNull()
       expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
       expect(read).not.toHaveBeenCalled()
-      expect(result.data?.requestedDocumentIds).toEqual(["other-doc"])
+      expect(result.data?.answer).toContain("Please select")
+      expect(result.data?.requestedDocumentIds).toEqual([])
     })
 
     it("does not retry when the focused document was already part of the explicit selection", async () => {
@@ -1006,21 +1101,16 @@ describe("WorkspaceAgentService contradiction workflow", () => {
   })
 
   describe("askAboutDocument (ODE-490 — no Workspace, BindingRoot, or catalog needed)", () => {
-    it("offers only a reference on the first round — no content sent — then retries with content once the model asks for it back (ODE-489 follow-up)", async () => {
-      aiMocks.askWorkspace
-        .mockResolvedValueOnce({
-          data: { answer: "I'd need to read it to answer that.", evidence: [], requestedDocumentIds: ["draft-1"], usage: null },
-          error: null,
-        })
-        .mockResolvedValueOnce({
-          data: {
-            answer: "This document decides to use SQLite for storage.",
-            evidence: [{ documentId: "draft-1", quote: "Storage: SQLite.", reason: "States the storage decision." }],
-            requestedDocumentIds: [],
-            usage: null,
-          },
-          error: null,
-        })
+    it("sends the live document as explicit scope in the first provider round", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: {
+          answer: "This document decides to use SQLite for storage.",
+          evidence: [{ documentId: "draft-1", quote: "Storage: SQLite.", reason: "States the storage decision." }],
+          requestedDocumentIds: [],
+          usage: null,
+        },
+        error: null,
+      })
 
       const result = await askAboutDocument({
         question: "What storage does this use?",
@@ -1030,18 +1120,14 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       })
 
       expect(result.error).toBeNull()
-      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
-      expect(aiMocks.askWorkspace).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
         question: "What storage does this use?",
-        targetDocumentIds: [],
+        targetDocumentIds: ["draft-1"],
         focusedDocumentId: "draft-1",
-        documents: [expect.objectContaining({ id: "draft-1", title: "Untitled draft", markdown: null })],
+        documents: [expect.objectContaining({ id: "draft-1", title: "Untitled draft", markdown: "Storage: SQLite." })],
         collections: [],
         catalogTruncated: false,
-      }))
-      expect(aiMocks.askWorkspace).toHaveBeenNthCalledWith(2, expect.objectContaining({
-        targetDocumentIds: ["draft-1"],
-        documents: [expect.objectContaining({ id: "draft-1", markdown: "Storage: SQLite." })],
       }))
       expect(result.data).toMatchObject({
         answer: "This document decides to use SQLite for storage.",
@@ -1053,7 +1139,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       expect(contextMocks.list).not.toHaveBeenCalled()
     })
 
-    it("answers a purely conversational question against a blank, unmaterialized draft without ever sending its content", async () => {
+    it("keeps the live document in scope for a conversation started from that editor", async () => {
       aiMocks.askWorkspace.mockResolvedValueOnce({
         data: { answer: "¡Hola! ¿En qué te ayudo?", evidence: [], requestedDocumentIds: [], usage: null },
         error: null,
@@ -1070,9 +1156,9 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       expect(result.data?.answer).toBe("¡Hola! ¿En qué te ayudo?")
       expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
       expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
-        targetDocumentIds: [],
+        targetDocumentIds: ["draft-blank"],
         focusedDocumentId: "draft-blank",
-        documents: [expect.objectContaining({ id: "draft-blank", title: null, markdown: null })],
+        documents: [expect.objectContaining({ id: "draft-blank", title: null, markdown: "Some text the user already typed that a greeting has no reason to need." })],
       }))
     })
 
@@ -1095,18 +1181,16 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       // empty instead of pointing at a synthetic placeholder id.
       expect(result.data?.documents).toEqual([])
       expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
-        targetDocumentIds: [],
-        documents: [expect.objectContaining({ title: null, markdown: null })],
+        targetDocumentIds: ["conversation-draft"],
+        documents: [expect.objectContaining({ title: null, markdown: "" })],
       }))
     })
 
-    it("keeps the first round's answer when the retry itself fails, instead of erroring the turn", async () => {
-      aiMocks.askWorkspace
-        .mockResolvedValueOnce({
-          data: { answer: "I don't have enough context yet, but here's what I can say generally.", evidence: [], requestedDocumentIds: ["draft-1"], usage: null },
-          error: null,
-        })
-        .mockResolvedValueOnce({ data: null, error: { code: "AI_REQUEST_FAILED", message: "boom", retryable: true } })
+    it("does not need a second round when the live document was already supplied", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "I don't have enough context yet, but here's what I can say generally.", evidence: [], requestedDocumentIds: ["draft-1"], usage: null },
+        error: null,
+      })
 
       const result = await askAboutDocument({
         question: "What storage does this use?",
@@ -1117,7 +1201,7 @@ describe("WorkspaceAgentService contradiction workflow", () => {
 
       expect(result.error).toBeNull()
       expect(result.data?.answer).toBe("I don't have enough context yet, but here's what I can say generally.")
-      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
     })
 
     it("does not retry when the model doesn't ask for the document back — a single round is enough", async () => {
@@ -2077,45 +2161,35 @@ describe("WorkspaceAgentService hybrid workflow.md instructions (ODE-504)", () =
     expect(tools.read).toHaveBeenCalledTimes(1)
   })
 
-  it("materializes the full workflow.md in a second bounded round when the model explicitly requests it", async () => {
+  it("materializes the full workflow.md when the user explicitly selects it", async () => {
     const workflow = workflowFixture(`# Workspace workflow\n\n## Intent\nKeep everything discoverable.\n\n${DEFINITIONS_MARKER}\n\n## Workflow: publication\nSteps: review, export, archive.`)
     contextMocks.list.mockResolvedValue([workflow.catalogRecord])
     const tools = toolsFor(workflow)
-    aiMocks.askWorkspace
-      .mockResolvedValueOnce({
-        data: {
-          answer: "I need the workflow definitions.",
-          evidence: [],
-          requestedDocumentIds: ["workflow"],
-          usage: null,
-        },
-        error: null,
-      })
-      .mockResolvedValueOnce({
-        data: {
-          answer: "The publication workflow has three steps.",
-          evidence: [{ documentId: "workflow", quote: "Steps: review, export, archive.", reason: "Defines the steps." }],
-          requestedDocumentIds: [],
-          usage: null,
-        },
-        error: null,
-      })
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: {
+        answer: "The publication workflow has three steps.",
+        evidence: [{ documentId: "workflow", quote: "Steps: review, export, archive.", reason: "Defines the steps." }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
     const service = await createWorkspaceAgentService("/workspace", tools)
 
     const result = await service.askAgent({
       question: "¿Cómo ejecuto el workflow de publicación?",
-      selection: [],
+      selection: [{ kind: "file", documentId: "workflow" }],
       workflowReadApproval: approval("read", "workflow"),
     })
 
     expect(result.error).toBeNull()
     expect(result.data?.answer).toBe("The publication workflow has three steps.")
-    expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
-    // The second round must be served from the canonical artifact cache, not
-    // re-read the file whose full body round 1 already loaded (ODE-504).
+    expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+    // The selected full body is served from the canonical artifact cache
+    // after ambient workflow instructions already loaded it (ODE-504).
     expect(tools.read).toHaveBeenCalledTimes(1)
-    const secondRound = aiMocks.askWorkspace.mock.calls[1][0]
-    const workflowEntry = secondRound.documents.find((entry: { id: string }) => entry.id === "workflow")
+    const firstRound = aiMocks.askWorkspace.mock.calls[0][0]
+    const workflowEntry = firstRound.documents.find((entry: { id: string }) => entry.id === "workflow")
     expect(workflowEntry?.markdown).toContain("Steps: review, export, archive.")
   })
 
@@ -2199,9 +2273,9 @@ describe("WorkspaceAgentService hybrid workflow.md instructions (ODE-504)", () =
     }))
   })
 
-  it("prepends retry targets so a full selection cannot evict the requested workflow from the second round (review round 2 — P2)", async () => {
+  it("processes more than six explicitly selected documents without an application count cap", async () => {
     const workflow = workflowFixture(`# Workflow\n\n## Workflow: publication\nSteps: review, export, archive.`)
-    const selections = ["a", "b", "c", "d", "e", "f"].map((id) => ({ kind: "file" as const, documentId: id }))
+    const selections = [...["a", "b", "c", "d", "e", "f"].map((id) => ({ kind: "file" as const, documentId: id })), { kind: "file" as const, documentId: "workflow" }]
     const documents = new Map(selections.map(({ documentId: id }) => [id, document(id, `Content: ${id}.`)]))
     documents.set("workflow", workflow)
     contextMocks.list.mockResolvedValue([...documents.values()].map((doc) => doc.catalogRecord))
@@ -2218,20 +2292,15 @@ describe("WorkspaceAgentService hybrid workflow.md instructions (ODE-504)", () =
       edit: vi.fn(),
       delete: vi.fn(),
     }
-    aiMocks.askWorkspace
-      .mockResolvedValueOnce({
-        data: { answer: "I need the workflow definitions.", evidence: [], requestedDocumentIds: ["workflow"], usage: null },
-        error: null,
-      })
-      .mockResolvedValueOnce({
-        data: {
-          answer: "The publication workflow has three steps.",
-          evidence: [],
-          requestedDocumentIds: [],
-          usage: null,
-        },
-        error: null,
-      })
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: {
+        answer: "The publication workflow has three steps.",
+        evidence: [],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
     const service = await createWorkspaceAgentService("/workspace", tools)
 
     const result = await service.askAgent({
@@ -2242,10 +2311,11 @@ describe("WorkspaceAgentService hybrid workflow.md instructions (ODE-504)", () =
 
     expect(result.error).toBeNull()
     expect(result.data?.answer).toBe("The publication workflow has three steps.")
-    const secondRound = aiMocks.askWorkspace.mock.calls[1][0]
-    const workflowEntry = secondRound.documents.find((entry: { id: string }) => entry.id === "workflow")
+    const firstRound = aiMocks.askWorkspace.mock.calls[0][0]
+    const workflowEntry = firstRound.documents.find((entry: { id: string }) => entry.id === "workflow")
     expect(workflowEntry?.markdown).toContain("Steps: review, export, archive.")
-    expect(secondRound.targetDocumentIds).toContain("workflow")
+    expect(firstRound.targetDocumentIds).toContain("workflow")
+    expect(firstRound.targetDocumentIds).toHaveLength(7)
   })
 
   it("records only the incorporated instruction tokens in the ledger, never the full document's", async () => {
@@ -2324,7 +2394,10 @@ describe("WorkspaceAgentService merge workflow", () => {
     expect(reviewed.data?.sections[0]).toMatchObject({ status: "conflict", primarySourceDocumentId: null })
     expect(reviewed.data?.sections[0]?.sources[0]).toEqual(expect.objectContaining({ evidenceId: expect.stringContaining("merge:doc-a") }))
     expect(aiMocks.reviewWorkspaceMerge).toHaveBeenCalledTimes(1)
-    expect(aiMocks.reviewWorkspaceMerge.mock.calls[0]?.[0].input[0].content).not.toContain("/workspace")
+    const mergeInput = aiMocks.reviewWorkspaceMerge.mock.calls[0]?.[0].input as Array<{ content?: string }>
+    expect(mergeInput.map((item) => item.content ?? "").join("\n")).toContain("The project starts in May.")
+    expect(mergeInput.map((item) => item.content ?? "").join("\n")).toContain("Ask the editor.")
+    expect(mergeInput.map((item) => item.content ?? "").join("\n")).not.toContain("/workspace")
 
     const draft = reviewed.data!
     const sections = draft.sections.map((section) => {

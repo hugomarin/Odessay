@@ -59,6 +59,7 @@ describe("workspace merge alignment and output contract", () => {
   it("aligns only bounded heading blocks and does not choose a winner deterministically", () => {
     const request = buildWorkspaceMergeRequest(sources)
     expect(request.sources).toHaveLength(2)
+    expect(request.contextComplete).toBe(true)
     expect(request.boundedSections).toHaveLength(2)
     expect(request.boundedSections[0]?.sources.map((source) => source.documentId)).toEqual(["doc-a", "doc-b"])
     const prompt = request.initialInput[0]
@@ -66,6 +67,36 @@ describe("workspace merge alignment and output contract", () => {
     if (prompt?.type !== "message") throw new Error("merge request did not produce a message prompt")
     expect(prompt.content).toContain("Never choose a semantic winner by overlap, similarity, body length")
     expect(prompt.content).not.toContain("canonicalPath")
+  })
+
+  it("sends the complete content of every selected source, not only bounded section excerpts", () => {
+    const longBody = "# Scope\n\n" + "The complete source claim. ".repeat(700)
+    const request = buildWorkspaceMergeRequest([
+      { ...sources[0]!, markdown: longBody },
+      { ...sources[1]!, markdown: "# Other\n\nThe second complete source." },
+    ])
+    const prompt = request.initialInput
+      .filter((item): item is Extract<typeof item, { type: "message" }> => item.type === "message")
+      .map((item) => item.content)
+      .join("\n")
+
+    expect(request.contextComplete).toBe(true)
+    expect((prompt.match(/The complete source claim\./g) ?? []).length).toBeGreaterThanOrEqual(700)
+    expect(prompt).toContain("The second complete source.")
+    expect(request.initialInput.length).toBeGreaterThan(2)
+  })
+
+  it("keeps an oversized selected set complete for provider staging", () => {
+    const oversized = "# Scope\n\n" + "A complete source paragraph. ".repeat(3_000)
+    const request = buildWorkspaceMergeRequest([
+      { ...sources[0]!, markdown: oversized },
+      { ...sources[1]!, markdown: oversized },
+    ])
+
+    expect(request.contextComplete).toBe(true)
+    expect(request.contextError).toBeNull()
+    expect(request.initialInput.map((item) => item.type === "message" ? item.content : "").join("\n"))
+      .toContain("A complete source paragraph.")
   })
 
   it("maps equivalent, complementary and style-only sections to generated text", () => {
@@ -106,6 +137,65 @@ describe("workspace merge alignment and output contract", () => {
       { classification: "complementary", unifiedText: "The project has a planned start window in May or June, pending confirmation." },
       { classification: "style_only", unifiedText: "Keep the checklist and ask the editor." },
     ])
+  })
+
+  it("accepts valid supporting evidence from another aligned heading", () => {
+    const request = buildWorkspaceMergeRequest(sources)
+    const section = request.boundedSections[0]!
+    const supportingEvidence = request.initialEvidence.find((item) => item.text.includes("Keep the checklist"))!
+    const result = parseWorkspaceMergeResult(completeLoop({
+      coverage: "complete",
+      sections: [{
+        sectionId: section.sectionId,
+        heading: section.heading,
+        headingLevel: section.headingLevel,
+        classification: "complementary",
+        unifiedText: "The project starts in May, with the checklist retained for execution.",
+        evidenceIds: [section.sources[0]!.evidenceId, supportingEvidence.evidenceId],
+        rationale: "The selected documents provide complementary planning context.",
+        confidence: "high",
+        suggestedSourceDocumentId: null,
+        suggestedSourceReason: null,
+      }, ...request.boundedSections.slice(1).map((other) => ({
+        sectionId: other.sectionId,
+        heading: other.heading,
+        headingLevel: other.headingLevel,
+        classification: "irrelevant",
+        unifiedText: null,
+        evidenceIds: [other.sources[0]!.evidenceId],
+        rationale: "No material merge decision is required for this section.",
+        confidence: "high",
+        suggestedSourceDocumentId: null,
+        suggestedSourceReason: null,
+      }))],
+    }), request)
+
+    expect(result.status).toBe("complete")
+    expect(result.coverage).toBe("complete")
+    expect(result.invalidItemCount).toBe(0)
+    expect(result.sections[0]?.evidenceIds).toContain(supportingEvidence.evidenceId)
+  })
+
+  it("uses the semantic envelope coverage when the operation payload omits the repeated field", () => {
+    const request = buildWorkspaceMergeRequest(sources)
+    const result = parseWorkspaceMergeResult(completeLoop({
+      sections: request.boundedSections.map((section) => ({
+        sectionId: section.sectionId,
+        heading: section.heading,
+        headingLevel: section.headingLevel,
+        classification: "irrelevant",
+        unifiedText: null,
+        evidenceIds: [section.sources[0]!.evidenceId],
+        rationale: "The provider returned a valid operation payload.",
+        confidence: "high",
+        suggestedSourceDocumentId: null,
+        suggestedSourceReason: null,
+      })),
+    }), request)
+
+    expect(result.status).toBe("complete")
+    expect(result.coverage).toBe("complete")
+    expect(result.invalidItemCount).toBe(0)
   })
 
   it("keeps contradictory claims unresolved and requires evidence from both documents", () => {

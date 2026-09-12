@@ -124,6 +124,16 @@ describe("DesktopWorkspaceAgentToolsService", () => {
     expect(documentService.openWriting).toHaveBeenCalledWith(id)
   })
 
+  it("rejects archived documents before consuming a read approval", async () => {
+    record = { ...record, deletedAt: "2026-01-02T00:00:00.000Z" }
+    catalog.getById.mockResolvedValue(record)
+
+    const result = await service.read({ documentId: id, approval: approval("read", id, "read-archived") })
+
+    expect(result.error?.code).toBe("NOT_FOUND")
+    expect(documentService.openWriting).not.toHaveBeenCalled()
+  })
+
   it("reads only a versioned, bounded semantic evidence slice", async () => {
     const result = await service.readEvidence!({
       documentId: id,
