@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Odessay · Document Components Lab</title>
+    <link rel="icon" href="data:," />
     <style>
       :root {
         --bg: hsl(38 12% 98%);
@@ -748,6 +749,114 @@
 
       .configure-button { width: 100%; margin-top: 14px; }
 
+      .authoring-preview-wrap { padding: 20px 22px 24px; }
+
+      .authoring-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+
+      .authoring-preview-head strong { color: var(--ink); font-size: 13px; font-weight: 600; }
+
+      .authoring-preview-head span { display: block; margin-top: 4px; color: var(--ink-3); font-size: 11px; line-height: 1.45; }
+
+      .authoring-preview-mode { flex: 0 0 auto; padding: 5px 7px; border-radius: 6px; background: var(--success-tint); color: var(--success); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; }
+
+      .inline-authoring-canvas { overflow: hidden; border: 0.5px solid var(--border); border-radius: 10px; background: hsl(38 12% 97%); }
+
+      .inline-authoring-document { padding: 18px; background: var(--surface); }
+
+      .inline-authoring-context { margin-bottom: 10px; color: var(--ink-5); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; }
+
+      .inline-authoring-prose { margin: 0; color: var(--ink-2); font-family: var(--font-prose); font-size: 16px; line-height: 1.7; }
+
+      .inline-authoring-mark { padding: 1px 3px; border-radius: 3px; background: var(--highlight-active); }
+
+      .inline-authoring-mark.protected { border-bottom: 0.5px dashed var(--ink-4); background: var(--muted); }
+
+      .inline-authoring-mark.entity { border-bottom: 0.5px dotted var(--cursor); background: var(--cursor-soft); }
+
+      .inline-authoring-mark.annotation { border-bottom: 1.5px solid hsl(35 80% 55%); }
+
+      .inline-authoring-mark-label { margin-left: 5px; color: var(--cursor); font-family: var(--font-ui); font-size: 9px; font-weight: 600; text-transform: uppercase; white-space: nowrap; }
+
+      .inline-component-shell { overflow: hidden; border: 0.5px solid var(--border-strong); border-radius: 10px; background: var(--surface); }
+
+      .inline-component-shell.tip { border-left: 3px solid var(--cursor); }
+
+      .inline-component-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; border-bottom: 0.5px solid var(--border); background: hsl(38 12% 98%); color: var(--ink-3); font-size: 10px; }
+
+      .inline-component-toolbar strong { color: var(--ink); font-weight: 600; }
+
+      .inline-component-state { color: var(--ink-5); font-family: var(--font-mono); font-size: 9px; }
+
+      .inline-component-content { padding: 16px 18px 18px; }
+
+      .inline-field-label { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; color: var(--ink-5); font-size: 9px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; }
+
+      .inline-field-label span { color: var(--cursor); font-family: var(--font-mono); font-size: 8px; font-weight: 400; }
+
+      .inline-editable-field, .inline-editable-body { outline: none; }
+
+      .inline-editable-field:focus, .inline-editable-body:focus { box-shadow: 0 0 0 3px hsl(22 55% 38% / 0.08); }
+
+      .inline-card-title { min-height: 31px; padding: 4px 7px; border-radius: 5px; color: var(--ink); font-size: 18px; font-weight: 600; }
+
+      .inline-card-title.focused { border: 0.5px solid hsl(22 55% 38% / 0.35); background: var(--cursor-soft); }
+
+      .inline-placeholder { color: var(--ink-5); font-weight: 400; }
+
+      .inline-card-body { min-height: 45px; padding: 7px; color: var(--ink-3); font-family: var(--font-prose); font-size: 14px; line-height: 1.55; }
+
+      .inline-card-body.selection { border-left: 2px solid var(--cursor); background: hsl(22 55% 95% / 0.5); }
+
+      .inline-card-icon-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+
+      .inline-icon-token { display: inline-flex; align-items: center; gap: 7px; color: var(--cursor); font-family: var(--font-mono); font-size: 10px; }
+
+      .inline-icon-token::before { content: "✦"; font-family: var(--font-ui); font-size: 15px; }
+
+      .inline-property-button { padding: 5px 7px; border: 0.5px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--ink-3); font-size: 10px; }
+
+      .inline-property-button:hover { background: var(--muted); color: var(--ink); }
+
+      .inline-property-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 13px; padding-top: 11px; border-top: 0.5px solid var(--border); color: var(--ink-5); font-size: 10px; }
+
+      .inline-property-chip { padding: 4px 6px; border-radius: 5px; background: var(--muted); color: var(--ink-3); font-family: var(--font-mono); font-size: 9px; }
+
+      .inline-steps { display: grid; gap: 0; }
+
+      .inline-step-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 11px; position: relative; padding-bottom: 16px; }
+
+      .inline-step-row:last-child { padding-bottom: 0; }
+
+      .inline-step-row:not(:last-child)::before { content: ""; position: absolute; top: 25px; bottom: 0; left: 13px; width: 0.5px; background: var(--border-strong); }
+
+      .inline-step-number { width: 27px; height: 27px; display: grid; place-items: center; z-index: 1; border-radius: 50%; background: var(--muted); color: var(--ink); font-size: 11px; font-weight: 600; }
+
+      .inline-step-title { min-height: 25px; padding: 2px 5px; color: var(--ink); font-size: 14px; font-weight: 600; }
+
+      .inline-step-body { min-height: 26px; padding: 3px 5px; color: var(--ink-3); font-family: var(--font-prose); font-size: 13px; line-height: 1.5; }
+
+      .inline-add-control { margin-top: 9px; padding: 5px 7px; border-radius: 6px; background: var(--cursor-soft); color: var(--cursor); font-size: 10px; }
+
+      .inline-code-editor { overflow: hidden; border-radius: 8px; background: var(--code-bg); }
+
+      .inline-code-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: hsl(30 15% 17%); color: hsl(38 10% 64%); font-family: var(--font-mono); font-size: 9px; }
+
+      .inline-code-language { color: var(--code-ink); }
+
+      .inline-code-body { min-height: 92px; padding: 13px; color: var(--code-ink); font-family: var(--font-mono); font-size: 10px; line-height: 1.65; white-space: pre-wrap; }
+
+      .inline-mermaid-preview { margin-top: 10px; padding: 10px; border: 0.5px solid var(--border); border-radius: 7px; background: hsl(38 12% 99%); }
+
+      .authoring-syntax { margin: 12px 0 0; overflow: auto; padding: 12px 13px; border: 0.5px solid var(--border); border-radius: 8px; background: var(--code-bg); color: var(--code-ink); font-family: var(--font-mono); font-size: 10px; line-height: 1.65; white-space: pre-wrap; }
+
+      .authoring-use { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 12px; }
+
+      .authoring-use-step { min-height: 58px; padding: 9px; border: 0.5px solid var(--border); border-radius: 7px; background: var(--bg); }
+
+      .authoring-use-step strong { display: block; margin-bottom: 4px; color: var(--cursor); font-family: var(--font-mono); font-size: 9px; }
+
+      .authoring-use-step span { color: var(--ink-3); font-size: 10px; line-height: 1.4; }
+
       .config-overlay { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: hsl(25 18% 10% / 0.22); backdrop-filter: blur(4px); }
 
       .config-overlay[hidden] { display: none; }
@@ -883,6 +992,14 @@
                   <span class="shell-meta">how the user activates it</span>
                 </div>
                 <div class="invocation-lab" id="invocation-lab"></div>
+              </article>
+
+              <article class="card-shell">
+                <div class="shell-head">
+                  <div class="shell-title"><span>Inline authoring preview</span><span class="tag-label" id="authoring-preview-tag">insert → node</span></div>
+                  <span class="shell-meta">what the editor inserts</span>
+                </div>
+                <div class="authoring-preview-wrap" id="authoring-preview"></div>
               </article>
 
               <article class="card-shell">
@@ -1078,7 +1195,7 @@
           tag: "<Card>",
           source: '<Card title="Build a Server" icon="server" href="/docs/build-server" accent="terracotta">Create MCP servers.</Card>',
           properties: [["title", "Visible heading."], ["icon", "Icon name from the allowed icon map."], ["href", "Optional destination URL."], ["accent", "Optional presentation token."], ["body", "Markdown content inside the card."]],
-          insertion: ["Choose Card from the proposed Insert menu.", "Configure title, icon and URL in the card modal.", "Edit the body inline after insertion."],
+          insertion: ["Choose Card from the proposed Insert menu.", "The Card structure appears inline with focus in its title field.", "Edit title and body inline; use secondary properties for icon, URL or accent."],
           render(source) {
             const title = attr(source, "title", "Build a Server");
             const icon = attr(source, "icon", "server");
@@ -1394,10 +1511,10 @@
           surface: "Insert menu",
           entry: "Insert → Card",
           shortcut: "Not assigned · candidate",
-          overlay: "Card form modal",
-          configuration: "Yes · title + icon + href",
+          overlay: "Inline fields + properties popover",
+          configuration: "Light · title/body inline; icon + href secondary",
           selection: "Cursor or whole block selection",
-          note: "The Card body is prose; title, icon, URL and accent are presentation metadata edited through the card settings flow.",
+          note: "Insert the shell inline, focus the title, and keep the body in the document. A secondary properties surface handles icon, URL and accent.",
         },
         cardGroup: {
           status: "Proposed",
@@ -1405,10 +1522,10 @@
           surface: "Insert menu",
           entry: "Insert → Card group",
           shortcut: "Not assigned · candidate",
-          overlay: "Group setup modal + Card modal",
-          configuration: "Yes · columns + cards",
+          overlay: "Inline cards + group properties",
+          configuration: "Light · cards inline; columns secondary",
           selection: "Cursor between blocks",
-          note: "A modal prevents users from having to author title, icon, href and columns as fragile attributes. Cards remain individually editable after insertion.",
+          note: "Insert the container and first Card inline. Cards remain individually editable; a secondary properties surface handles columns and presentation metadata.",
         },
         steps: {
           status: "Proposed",
@@ -1702,27 +1819,27 @@
         card: {
           scope: "Rich component",
           defaultMode: "insert",
-          insert: "Insert → Card opens the card setup modal, then leaves the body ready for inline editing.",
-          selection: "Select a whole block → Card pre-fills the body and opens the same setup modal.",
-          body: "Write and format Markdown directly inside the Card body.",
+          insert: "Insert → Card inserts the shell inline and places the cursor in the title field.",
+          selection: "Select a whole block → Card wraps it as the body and focuses a new inline title.",
+          body: "Title and body are edited directly inside the Card node; selected content stays editable.",
           properties: "title · icon · href · optional accent",
           configure: "Configure Card properties",
-          configTitle: "Configure Card",
-          configDescription: "Configure the Card shell without mixing metadata into its editorial body.",
-          configHint: "Body copy remains editable in the document.",
+          configTitle: "Card properties",
+          configDescription: "Title and body stay inline. Use this secondary surface only for icon, URL or accent.",
+          configHint: "Writes presentation attributes; body text stays in the document.",
           selectionAvailable: true,
         },
         cardGroup: {
           scope: "Rich component",
           defaultMode: "insert",
-          insert: "Insert → Card group opens the group setup, then creates the first Card with its body ready to edit.",
+          insert: "Insert → Card group inserts the container and a first Card inline; columns can be adjusted afterward.",
           selection: "Select whole blocks → convert them into Cards (future). Do not treat an arbitrary text range as a complete Card.",
           body: "Each Card body is edited inline after its shell is created.",
           properties: "Group columns · Card title · icon · href · optional accent",
           configure: "Configure group and first Card",
           configTitle: "Configure Card group",
-          configDescription: "Set the group layout and the metadata of the first Card. Add more Cards from the group.",
-          configHint: "Body copy remains editable in the document.",
+          configDescription: "Use settings only for group layout and secondary Card properties. Add and edit Cards inline.",
+          configHint: "Writes structure metadata; body copy remains in the document.",
           selectionAvailable: true,
         },
         steps: {
@@ -1783,8 +1900,8 @@
       const invocationConfigSamples = {
         annotation: { kind: "composer", title: "Annotate selection", description: "Write a comment for the selected passage.", fields: [["Comment", "Este comentario queda vinculado a la selección."], ["Type", "Personal"]], action: "Add annotation" },
         entity: { kind: "modal", title: "Create entity", description: "Classify the current selection without changing its visible text.", fields: [["Selected text", "Aplyca"], ["Entity type", "Company / Compañía"]], action: "Create entity" },
-        card: { kind: "modal", title: "Create Card from selection", description: "The selected text becomes the body. Add the title as Card metadata.", bodyFromSelection: "Learn how to create your first MCP server.", fields: [["Title (required)", "Build a Server"], ["Icon (optional)", "server"], ["URL (optional)", "/docs/build-server"]], action: "Create Card" },
-        cardGroup: { kind: "modal", title: "Insert Card group", description: "Choose the group layout before adding cards.", fields: [["Columns", "2"], ["First Card", "Build a Server"], ["Icon", "server"]], action: "Insert group" },
+        card: { kind: "popover", title: "Card properties", description: "Title and body are edited inline. Configure only secondary presentation properties here.", fields: [["Icon (optional)", "server"], ["URL (optional)", "/docs/build-server"], ["Accent (optional)", "terracotta"]], action: "Apply properties" },
+        cardGroup: { kind: "popover", title: "Card group properties", description: "Cards are edited inline. Configure only the group layout and secondary properties here.", fields: [["Columns", "2"], ["Order", "Source order"]], action: "Apply properties" },
         codeGroup: { kind: "modal", title: "Insert Code group", description: "Set tab labels and languages; code stays opaque.", fields: [["Tab 1", "Discover Request · json"], ["Tab 2", "Discover Response · json"]], action: "Insert Code group" },
         codeBlock: { kind: "popover", title: "Code settings", description: "Language is fence metadata, not code content.", fields: [["Language / type", "json"], ["Preview", "Code"]], action: "Apply settings" },
         mermaid: { kind: "popover", title: "Mermaid settings", description: "Choose how the canonical Mermaid source is presented.", fields: [["Language", "mermaid"], ["View", "Code · diagram · split"]], action: "Apply settings" },
@@ -1869,6 +1986,81 @@
         invocationLab.innerHTML = '<div class="invocation-context"><div class="invocation-context-copy"><strong>' + esc(modeLabel) + '</strong><span>' + esc(invocation.entry) + '</span></div><span class="invocation-trigger-chip">' + esc(invocation.shortcut) + '</span></div><div class="invocation-surface-demo">' + (mode === "command" ? '' : renderInvocationToolbar(key, mode)) + (mode === "command" ? command : renderInvocationBubble(key, mode)) + '</div><div class="invocation-config-row"><span><strong>Configuration:</strong> ' + esc(invocation.overlay) + '</span>' + configButton + '</div>';
       }
 
+      function renderAuthoringGuide(steps) {
+        return '<div class="authoring-use">' + steps.map((step, index) => '<div class="authoring-use-step"><strong>' + String(index + 1).padStart(2, "0") + '</strong><span>' + esc(step) + '</span></div>').join("") + '</div>';
+      }
+
+      function renderAuthoringPreview() {
+        const key = state.selected;
+        const flow = authoringFlows[key];
+        const source = state.sources[key] || samples[key].source;
+        const mode = flow ? state.authoringModes[key] || flow.defaultMode : "insert";
+        const modeLabel = mode === "selection" ? "selection → inline node" : "insert → inline node";
+        const compactSource = String(source).trim().length > 520 ? String(source).trim().slice(0, 520) + "\n…" : String(source).trim();
+        let content = "";
+        let syntax = compactSource;
+        let guide = [];
+        let heading = flow ? "The node is visible while you write" : "Native Markdown stays in place";
+        let description = flow ? "The editor inserts the structure, then keeps editorial content inside the document." : "Formatting changes the current mark or block; there is no custom component shell.";
+
+        if (!flow) {
+          const nativeText = String(source).replace(/^```[\s\S]*?```$/, "Code content remains literal.").replace(/^#{1,3}\s*/, "").replace(/^>\s?/, "").trim();
+          content = '<div class="inline-authoring-document"><div class="inline-authoring-context">native Markdown · edit in place</div><p class="inline-authoring-prose">' + inlineMarkdown(nativeText || "Write directly in the current block.") + '</p></div>';
+          guide = ["Select text or place the cursor in a block.", "Use the current toolbar action or Markdown shortcut.", "Continue typing; no component properties are created."];
+        } else if (key === "annotation" || key === "protected" || key === "entity" || key === "highlight") {
+          const text = tagBody(source, key === "protected" ? "protected" : key) || selectedInvocationText(key);
+          const marker = key === "protected" ? "protected" : key === "entity" ? "entity" : key === "annotation" ? "annotation" : "highlight";
+          const label = key === "protected" ? "read-only" : key === "entity" ? entityTypeLabel(attr(source, "type", "company")) : key === "annotation" ? "comment attached" : "highlight";
+          content = '<div class="inline-authoring-document"><div class="inline-authoring-context">selection transform · inline mark</div><p class="inline-authoring-prose">Selecciona <span class="inline-authoring-mark ' + marker + '">' + esc(text) + '</span><span class="inline-authoring-mark-label">' + esc(label) + '</span> y continúa editando el resto del párrafo.</p></div>';
+          guide = key === "annotation"
+            ? ["Select the passage you want to discuss.", "Choose Annotate from the selection bubble.", "Write the comment in the attached composer; the passage stays inline."]
+            : key === "protected"
+              ? ["Select the passage that must not change.", "Choose Protect in the selection bubble.", "Protection applies immediately; unlocking is an explicit permission flow."]
+              : key === "entity"
+                ? ["Select the surface form, such as Aplyca.", "Choose Entity in the selection bubble.", "Pick Company / Compañía; the visible text stays the same."]
+                : ["Select the passage to emphasize.", "Choose Highlight in the selection bubble.", "The default color applies immediately; presentation settings remain secondary."];
+        } else if (key === "tip") {
+          const text = tagBody(source, "Tip") || "Escribe aquí el contenido del tip.";
+          content = '<div class="inline-component-shell tip"><div class="inline-component-toolbar"><strong>Tip</strong><span class="inline-component-state">block node · cursor in body</span></div><div class="inline-component-content"><div class="inline-field-label">Body <span>editable</span></div><div class="inline-editable-body" contenteditable="true" data-inline-field="tip-body" role="textbox" aria-label="Tip body">' + esc(text) + '</div><div class="inline-property-row"><span>Optional properties</span><span class="inline-property-chip">variant</span><span class="inline-property-chip">accent</span><button class="inline-property-button" type="button" data-inline-config>Properties</button></div></div></div>';
+          guide = ["Choose Insert → Tip from the toolbar.", "The empty block is inserted and the cursor lands in its body.", "Write normally; open Properties only if a variant or accent is needed."];
+        } else if (key === "card") {
+          const title = mode === "selection" ? "" : attr(source, "title", "Card title") || "Card title";
+          const icon = attr(source, "icon", "server") || "server";
+          const href = attr(source, "href", "/docs/build-server") || "/docs/build-server";
+          const body = mode === "selection" ? selectedInvocationText("card") : tagBody(source, "Card") || "Write your card description here.";
+          const titleDisplay = title ? esc(title) : '<span class="inline-placeholder">Add card title</span>';
+          if (mode === "selection") syntax = '<Card title="" icon="' + escapeSourceAttribute(icon) + '" href="' + escapeSourceAttribute(href) + '">\n  ' + body + '\n</Card>';
+          content = '<div class="inline-component-shell"><div class="inline-component-toolbar"><strong>Card</strong><span class="inline-component-state">block node · title + body inline</span></div><div class="inline-component-content"><div class="inline-card-icon-row"><span class="inline-icon-token">' + esc(icon) + '</span><button class="inline-property-button" type="button" data-inline-config>Properties</button></div><div class="inline-field-label">Title <span>editable · focused after insert</span></div><div class="inline-editable-field inline-card-title focused" contenteditable="true" data-inline-field="card-title" data-inline-index="0" role="textbox" aria-label="Card title">' + titleDisplay + '</div><div class="inline-field-label" style="margin-top: 13px">Body <span>' + (mode === "selection" ? "selection converted" : "editable") + '</span></div><div class="inline-editable-body inline-card-body ' + (mode === "selection" ? "selection" : "") + '" contenteditable="true" data-inline-field="card-body" data-inline-index="0" role="textbox" aria-label="Card body">' + esc(body) + '</div><div class="inline-property-row"><span>Secondary properties</span><span class="inline-property-chip">icon: ' + esc(icon) + '</span><span class="inline-property-chip">href: ' + esc(href) + '</span><span class="inline-property-chip">accent</span></div></div></div>';
+          guide = mode === "selection"
+            ? ["Select one or more complete blocks.", "Choose Card; the blocks become the editable body.", "Type the title inline, then use Properties for icon, URL or accent."]
+            : ["Choose Insert → Card from the toolbar.", "The Card shell appears with focus in the title field.", "Type title and body inline; use Properties only for icon, URL or accent."];
+        } else if (key === "cardGroup") {
+          content = '<div class="inline-component-shell"><div class="inline-component-toolbar"><strong>Card group</strong><span class="inline-component-state">container node · cards editable inline</span></div><div class="inline-component-content"><div class="inline-property-row" style="margin-top: 0; padding-top: 0; border-top: 0"><span>Layout</span><span class="inline-property-chip">columns: 2</span><button class="inline-property-button" type="button" data-inline-config>Properties</button></div><div class="card-grid" style="margin-top: 13px"><div class="doc-card"><div class="doc-card-icon">server</div><div class="inline-editable-field" contenteditable="true" data-inline-field="card-title" data-inline-index="0" role="textbox">Build a Server</div><div class="inline-editable-body" contenteditable="true" data-inline-field="card-body" data-inline-index="0" role="textbox">Create MCP servers.</div></div><div class="doc-card"><div class="doc-card-icon">computer</div><div class="inline-editable-field" contenteditable="true" data-inline-field="card-title" data-inline-index="1" role="textbox">Build a Client</div><div class="inline-editable-body" contenteditable="true" data-inline-field="card-body" data-inline-index="1" role="textbox">Connect to MCP servers.</div></div></div><button class="inline-add-control" type="button">+ Add card inline</button></div></div>';
+          guide = ["Choose Insert → Card group.", "The container and first Card are inserted together.", "Edit each Card inline; use Properties for columns and secondary metadata."];
+        } else if (key === "steps") {
+          content = '<div class="inline-component-shell"><div class="inline-component-toolbar"><strong>Steps</strong><span class="inline-component-state">container node · numbering derived</span></div><div class="inline-component-content"><div class="inline-steps"><div class="inline-step-row"><div class="inline-step-number">1</div><div><div class="inline-field-label">Step title <span>editable</span></div><div class="inline-editable-field inline-step-title" contenteditable="true" data-inline-field="step-title" data-inline-index="0" role="textbox">Discovery</div><div class="inline-editable-body inline-step-body" contenteditable="true" data-inline-field="step-body" data-inline-index="0" role="textbox">El cliente descubre las capacidades del servidor.</div></div></div></div><button class="inline-add-control" type="button">+ Add step inline</button></div></div>';
+          guide = mode === "selection"
+            ? ["Select consecutive complete blocks.", "Choose Steps to create ordered child steps.", "Edit titles and bodies inline; order creates the numbers."]
+            : ["Choose Insert → Steps from the toolbar.", "A container with one Step is inserted and focused.", "Edit the title/body and add more steps inline."];
+        } else if (key === "codeGroup") {
+          const blocks = parseFences(source);
+          const first = blocks[0] || { language: "json", title: "Discover Request", code: '{ "method": "server/discover" }' };
+          content = '<div class="inline-code-editor"><div class="tab-row"><button class="code-tab active" type="button">' + esc(first.title || first.language) + '</button><button class="code-tab" type="button">Discover Response</button></div><div class="inline-code-toolbar"><span class="inline-code-language">' + esc(first.language) + '</span><span>tab metadata · settings</span></div><div class="inline-code-body" contenteditable="true" data-inline-field="code-body" role="textbox" aria-label="Code group source">' + esc(first.code) + '</div></div>';
+          guide = ["Choose Insert → Code group.", "Add tabs and assign each language in the group settings.", "Edit the selected tab as literal code; its content is never reinterpreted."];
+        } else if (key === "codeBlock" || key === "mermaid") {
+          const block = parseFences(source)[0] || { language: key === "mermaid" ? "mermaid" : "json", code: key === "mermaid" ? "sequenceDiagram\\n    C->>M: MCP request" : '{ "resultType": "complete" }' };
+          const language = key === "mermaid" ? "mermaid" : block.language;
+          const diagram = key === "mermaid" ? '<div class="inline-mermaid-preview"><span class="diagram-title">diagram preview · optional</span><div class="diagram-track"><div class="diagram-row"><div class="participant">Client</div><div class="message"><span class="message-label">request</span></div><div class="participant">Server</div></div></div></div>' : '';
+          content = '<div class="inline-code-editor"><div class="inline-code-toolbar"><span class="inline-code-language">' + esc(language) + ' ▾</span><button class="inline-property-button" type="button" data-inline-config>Settings</button></div><div class="inline-code-body" contenteditable="true" data-inline-field="code-body" role="textbox" aria-label="Code block source">' + esc(block.code) + '</div></div>' + diagram;
+          guide = key === "mermaid"
+            ? ["Choose Text → Code from the toolbar.", "Set the language to Mermaid in the block settings.", "Edit the fenced source; toggle code, diagram or split view."]
+            : ["Choose Text → Code from the toolbar.", "Select the language in the block settings.", "Edit literal code inline; inner Markdown is not parsed."];
+        }
+
+        authoringPreviewTag.textContent = flow ? modeLabel : "native Markdown";
+        authoringPreview.innerHTML = '<div class="authoring-preview-head"><div><strong>' + esc(heading) + '</strong><span>' + esc(description) + '</span></div><span class="authoring-preview-mode">' + esc(flow ? modeLabel : "edit in place") + '</span></div><div class="inline-authoring-canvas">' + content + '</div><pre class="authoring-syntax">' + esc(syntax) + '</pre>' + renderAuthoringGuide(guide);
+      }
+
       const state = { selected: "annotation", sources: {}, notes: {}, authoringModes: {}, presentation: { invocationMenu: null, invocationConfig: false } };
       const list = document.getElementById("component-list");
       const markdownList = document.getElementById("markdown-list");
@@ -1887,6 +2079,8 @@
       const authoringSummary = document.getElementById("authoring-summary");
       const authoringBody = document.getElementById("authoring-body");
       const authoringProperties = document.getElementById("authoring-properties");
+      const authoringPreview = document.getElementById("authoring-preview");
+      const authoringPreviewTag = document.getElementById("authoring-preview-tag");
       const configureComponent = document.getElementById("configure-component");
       const configOverlay = document.getElementById("config-overlay");
       const configModalTitle = document.getElementById("config-modal-title");
@@ -1985,6 +2179,46 @@
         return String(source).replace(new RegExp(fence + "[^\\n]*\\n"), fence + info + "\n");
       }
 
+      function updateFirstTagBody(source, tag, value) {
+        return String(source).replace(new RegExp("(<" + tag + "\\b[^>]*>)[\\s\\S]*?(</" + tag + ">)", "i"), "$1" + String(value) + "$2");
+      }
+
+      function updateCardAttributeAt(source, index, name, value) {
+        let current = -1;
+        return String(source).replace(/<Card\b[^>]*>/gi, (openingTag) => {
+          current += 1;
+          return current === Number(index) ? updateOpeningTagAttribute(openingTag, name, value) : openingTag;
+        });
+      }
+
+      function updateCardBodyAt(source, index, value) {
+        let current = -1;
+        return String(source).replace(/(<Card\b[^>]*>)[\s\S]*?(<\/Card>)/gi, (whole, openingTag, closingTag) => {
+          current += 1;
+          return current === Number(index) ? openingTag + String(value) + closingTag : whole;
+        });
+      }
+
+      function updateStepAttributeAt(source, index, name, value) {
+        let current = -1;
+        return String(source).replace(/<Step\b[^>]*>/gi, (openingTag) => {
+          current += 1;
+          return current === Number(index) ? updateOpeningTagAttribute(openingTag, name, value) : openingTag;
+        });
+      }
+
+      function updateStepBodyAt(source, index, value) {
+        let current = -1;
+        return String(source).replace(/(<Step\b[^>]*>)[\s\S]*?(<\/Step>)/gi, (whole, openingTag, closingTag) => {
+          current += 1;
+          return current === Number(index) ? openingTag + String(value) + closingTag : whole;
+        });
+      }
+
+      function updateFirstFenceBody(source, value) {
+        return String(source).replace(new RegExp("(" + fence + "[^\\n]*\\n)[\\s\\S]*?(" + fence + ")"), "$1" + String(value) + "\n$2");
+      }
+
       function getConfigFields(key, source) {
         const cardOpeningTag = /<Card\b[^>]*>/i.exec(String(source))?.[0] || "";
         const firstFence = parseFences(source)[0] || { language: "json", title: "Discover Request" };
@@ -2012,7 +2246,6 @@
             ];
           case "card":
             return [
-              { key: "title", label: "Card title", kind: "text", value: attr(source, "title", ""), help: "Card metadata; the body stays inline." },
               { key: "icon", label: "Card icon", kind: "text", value: attr(source, "icon", ""), help: "Use an icon from the allowed icon map." },
               { key: "accent", label: "Card accent", kind: "select", value: attr(source, "accent", "terracotta"), options: ["terracotta", "amber", "blue"], help: "Proposal: presentation metadata for the icon and accent." },
               { key: "href", label: "Card URL", kind: "url", value: attr(source, "href", ""), help: "Optional destination for the card." },
@@ -2020,7 +2253,6 @@
           case "cardGroup":
             return [
               { key: "columns", label: "Columns", kind: "select", value: attr(source, "columns", "2"), options: ["1", "2", "3"], help: "Group-level layout setting." },
-              { key: "title", label: "First Card title", kind: "text", value: attr(cardOpeningTag, "title", ""), help: "Card metadata; the body stays inline." },
               { key: "icon", label: "First Card icon", kind: "text", value: attr(cardOpeningTag, "icon", ""), help: "Use an icon from the allowed icon map." },
               { key: "accent", label: "First Card accent", kind: "select", value: attr(cardOpeningTag, "accent", "terracotta"), options: ["terracotta", "amber", "blue"], help: "Proposal: presentation metadata for the icon and accent." },
               { key: "href", label: "First Card URL", kind: "url", value: attr(cardOpeningTag, "href", ""), help: "Optional destination for the card." },
@@ -2053,6 +2285,7 @@
           authoringSummary.innerHTML = "<strong>Use the current Artifact Studio command.</strong> The content is edited directly as native Markdown text, mark or block.";
           authoringBody.textContent = "Selected text or the current block, depending on the element.";
           authoringProperties.textContent = "No additional component properties.";
+          renderAuthoringPreview();
           return;
         }
 
@@ -2068,6 +2301,7 @@
         authoringProperties.textContent = flow.properties;
         configureComponent.textContent = flow.configure;
         configureComponent.disabled = Boolean(flow.noModal);
+        renderAuthoringPreview();
       }
 
       function openConfiguration() {
@@ -2110,16 +2344,16 @@
           source = updateTagAttribute(source, "Tip", "type", values.type);
           source = updateTagAttribute(source, "Tip", "color", values.color);
         } else if (key === "card") {
-          source = updateFirstCardAttribute(source, "title", values.title);
-          source = updateFirstCardAttribute(source, "icon", values.icon);
-          source = updateFirstCardAttribute(source, "accent", values.accent);
-          source = updateFirstCardAttribute(source, "href", values.href);
+          if (values.title !== undefined) source = updateFirstCardAttribute(source, "title", values.title);
+          if (values.icon !== undefined) source = updateFirstCardAttribute(source, "icon", values.icon);
+          if (values.accent !== undefined) source = updateFirstCardAttribute(source, "accent", values.accent);
+          if (values.href !== undefined) source = updateFirstCardAttribute(source, "href", values.href);
         } else if (key === "cardGroup") {
-          source = updateTagAttribute(source, "CardGroup", "columns", values.columns);
-          source = updateFirstCardAttribute(source, "title", values.title);
-          source = updateFirstCardAttribute(source, "icon", values.icon);
-          source = updateFirstCardAttribute(source, "accent", values.accent);
-          source = updateFirstCardAttribute(source, "href", values.href);
+          if (values.columns !== undefined) source = updateTagAttribute(source, "CardGroup", "columns", values.columns);
+          if (values.title !== undefined) source = updateFirstCardAttribute(source, "title", values.title);
+          if (values.icon !== undefined) source = updateFirstCardAttribute(source, "icon", values.icon);
+          if (values.accent !== undefined) source = updateFirstCardAttribute(source, "accent", values.accent);
+          if (values.href !== undefined) source = updateFirstCardAttribute(source, "href", values.href);
         } else if (key === "codeBlock") {
           const currentFence = parseFences(source)[0] || { title: "" };
           source = updateFirstFence(source, values.language, currentFence.title);
@@ -2192,6 +2426,7 @@
         state.presentation.invocationMenu = null;
         state.presentation.invocationConfig = false;
         closeInvocationPreview();
+        closeConfiguration();
         persist();
         render();
       }
@@ -2209,6 +2444,7 @@
           state.presentation.invocationMenu = null;
           state.presentation.invocationConfig = false;
           closeInvocationPreview();
+          closeConfiguration();
           persist();
           render();
           return;
@@ -2231,6 +2467,41 @@
         if (event.target.closest("[data-invocation-close]")) {
           closeInvocationPreview();
         }
+      });
+
+      authoringPreview.addEventListener("click", (event) => {
+        if (event.target.closest("[data-inline-config]")) openConfiguration();
+      });
+
+      authoringPreview.addEventListener("input", (event) => {
+        const field = event.target.closest("[data-inline-field]");
+        if (!field) return;
+        const value = field.innerText.replace(/\u00a0/g, " ").trim();
+        const fieldKey = field.dataset.inlineField;
+        const index = field.dataset.inlineIndex || 0;
+        let source = sourceEditor.value;
+
+        if (state.selected === "tip" && fieldKey === "tip-body") {
+          source = updateFirstTagBody(source, "Tip", value);
+        } else if ((state.selected === "card" || state.selected === "cardGroup") && fieldKey === "card-title") {
+          source = updateCardAttributeAt(source, index, "title", value);
+        } else if ((state.selected === "card" || state.selected === "cardGroup") && fieldKey === "card-body") {
+          source = updateCardBodyAt(source, index, value);
+        } else if (state.selected === "steps" && fieldKey === "step-title") {
+          source = updateStepAttributeAt(source, index, "title", value);
+        } else if (state.selected === "steps" && fieldKey === "step-body") {
+          source = updateStepBodyAt(source, index, value);
+        } else if ((state.selected === "codeGroup" || state.selected === "codeBlock" || state.selected === "mermaid") && fieldKey === "code-body") {
+          source = updateFirstFenceBody(source, value);
+        } else {
+          return;
+        }
+
+        state.sources[state.selected] = source;
+        sourceEditor.value = source;
+        previewCanvas.innerHTML = samples[state.selected].render(source);
+        persist();
+        bindCodeTabs();
       });
 
       invocationPreviewOverlay.addEventListener("click", (event) => {
@@ -2265,6 +2536,7 @@
         previewCanvas.innerHTML = samples[state.selected].render(sourceEditor.value);
         persist();
         bindCodeTabs();
+        renderAuthoringPreview();
       });
 
       decisionNotes.addEventListener("input", () => {
@@ -2284,6 +2556,7 @@
         state.presentation.invocationMenu = null;
         state.presentation.invocationConfig = false;
         closeInvocationPreview();
+        closeConfiguration();
         render();
         persist();
       });

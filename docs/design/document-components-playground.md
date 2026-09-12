@@ -6,7 +6,7 @@
 
 ## Cómo usar este laboratorio
 
-Abre [el playground visual](../../prototypes/document-components-playground.html) en el navegador. La columna izquierda permite editar la sintaxis; `Invocation preview` muestra visualmente si el elemento se activa desde el toolbar, un dropdown, el selection bubble o un modal/popover; el preview muestra el render propuesto y el inspector documenta los atributos y el flujo de inserción.
+Abre [el playground visual](../../prototypes/document-components-playground.html) en el navegador. La columna izquierda permite editar la sintaxis; `Invocation preview` muestra visualmente si el elemento se activa desde el toolbar, un dropdown, el selection bubble o un modal/popover; `Inline authoring preview` muestra la estructura que el editor inserta y dónde queda el cursor; el preview muestra el render propuesto y el inspector documenta los atributos y el flujo de inserción.
 
 La fuente de verdad de esta exploración debe ser este documento más las decisiones que se vayan cerrando en el playground.
 
@@ -161,7 +161,7 @@ La variante podría expresarse como `<Tip type="warning">`, si realmente necesit
 </CardGroup>
 ```
 
-El modal de `Card` configura título, icono, URL y contenido. El modal de `CardGroup` configura columnas y orden; las cards se pueden editar individualmente después.
+El título y el body de `Card` se editan inline. Un popover o modal ligero queda reservado para icono, URL y otras propiedades del shell; `CardGroup` puede usar la misma superficie secundaria para columnas y orden.
 
 ### Steps
 
@@ -229,21 +229,41 @@ Eso permite que el usuario nunca tenga que escribir manualmente `<Card icon="ser
 
 Un `Tip` o un `Card` son bloques. Por eso la conversión debe trabajar sobre párrafos/bloques completos, no sobre una selección arbitraria de media frase que produciría una estructura inválida. Si el usuario selecciona solo parte de un párrafo, el editor puede promover la operación al párrafo completo o deshabilitarla con una explicación clara.
 
+### La estructura se inserta inline
+
+La regla de interacción es que `Insert` crea la estructura y deja al usuario escribiendo dentro de ella. No se debe abrir un modal solo para pedir el texto que el editor puede recibir naturalmente como contenido:
+
+```mdx
+<Card title="Card title" icon="server" href="/docs/build-server">
+  Escribe aquí la descripción del recurso.
+</Card>
+```
+
+En Artifact Studio, el usuario no escribe esas etiquetas. El comando inserta el nodo estructurado, muestra sus campos editoriales y coloca el cursor en el campo correcto:
+
+1. `Insert → Card` inserta el shell del Card y enfoca `title`.
+2. El título y el body se escriben y formatean inline con TipTap.
+3. `Properties` queda disponible para `icon`, `href`, `accent` y otras propiedades no editoriales.
+
+La conversión desde una selección sigue el mismo patrón: `Select blocks → Card` conserva los bloques como body, inserta un título vacío y enfoca ese título. El body no se copia a un formulario ni se vuelve una cadena opaca.
+
+El playground contiene `Inline authoring preview` para revisar tres cosas por componente: la estructura visible durante edición, la sintaxis que se persistiría y los pasos concretos de uso. Los campos marcados como `editable` representan contenido TipTap; los chips y el botón `Properties` representan metadata del nodo. En la maqueta, editar esos campos también actualiza el source y el preview para probar el recorrido completo.
+
 ### Ejemplo: Tip
 
 - **Crear vacío:** `Insert → Tip` inserta `<Tip>`, pone el cursor dentro y permite escribir normalmente.
 - **Convertir contenido:** seleccionar uno o más párrafos completos y elegir `Tip`; el contenido pasa a ser el cuerpo del bloque.
 - **Editar después:** el cuerpo se modifica inline. Un botón de settings en el borde del bloque abre un popover o modal ligero para `variant`, color/acento y, si algún día existe, icono.
 
-La primera versión puede tener un único estilo y no abrir configuración. La capacidad de cambiar el color no debe obligar a editar el texto ni a tocar el Markdown; debe ser una propiedad del nodo.
+La primera versión puede tener un único estilo y no abrir configuración. La capacidad de cambiar el color no debe obligar a editar el texto ni a tocar el Markdown; debe ser una propiedad del nodo. Si más adelante aparecen variantes, `Properties` puede mostrar un popover o modal ligero sin sacar el body del documento.
 
 ### Ejemplo: Card y CardGroup
 
-- **Crear un Card:** `Insert → Card` abre un modal porque hay varios campos que no son cuerpo editorial: `title`, `icon`, `href` y, opcionalmente, color/acento. Al confirmar, el cuerpo queda listo para editar inline.
-- **Convertir contenido:** seleccionar bloques completos y elegir `Card`; el modal muestra el texto seleccionado como `Body from selection` y lo conserva como body editable del card.
-- **Agregar título:** en ese mismo modal, `Title` es un campo separado y requerido. El usuario lo escribe o ajusta ahí; no se intenta inferirlo del texto seleccionado. `Icon` y `URL` son propiedades opcionales del card.
-- **Crear un grupo:** `Insert → Card group` abre primero la configuración de `columns` y crea la primera card. Las siguientes se agregan desde `Add card`; cada una puede abrir su propio modal de propiedades.
-- **Editar después:** hacer click en la card deja el texto editable; `⋯` o `settings` abre la configuración de icono, URL, título y apariencia sin convertir esos datos en texto del cuerpo.
+- **Crear un Card:** `Insert → Card` inserta la estructura inline y coloca el cursor en `title`. El título no se pide en un modal: es un campo editorial visible dentro del Card.
+- **Convertir contenido:** seleccionar bloques completos y elegir `Card`; los bloques se convierten en el body editable y se crea un título vacío con foco. La selección no pasa por un formulario intermedio.
+- **Agregar propiedades:** `Properties` edita `icon`, `href` y color/acento. Son metadata del shell y pueden vivir en un popover o modal ligero porque no son texto editorial.
+- **Crear un grupo:** `Insert → Card group` inserta el contenedor y una primera Card. `Add card inline` agrega nuevas Cards; `columns` se puede ajustar desde las propiedades del grupo.
+- **Editar después:** hacer click en la card deja el título y el body editables; `Properties` cambia la presentación sin sacar el contenido del documento.
 
 En resumen: `Insert` crea la estructura; escribir modifica el contenido; `Configure` modifica la presentación. Esa misma regla se aplica a `CodeGroup`, Mermaid y los demás componentes.
 
@@ -256,7 +276,7 @@ El panel visual responde al componente seleccionado en la columna izquierda:
 - **Toolbar directo:** resalta `Bold`, `Italic`, `Strike` o `Inline code` cuando la acción es una marca inmediata.
 - **Dropdown del toolbar:** abre `List`, `H1`/`Text`/`Code` o `Insert` y marca el comando que corresponde al elemento actual.
 - **Selection bubble:** muestra `Highlight`, `AI`, `Footnote`, `Protect` y `Entity` sobre una selección simulada. `Protect` aplica una restricción; `Entity` continúa al siguiente paso de configuración.
-- **Modal o popover:** `Preview modal` / `Preview settings` permite ver la configuración que aparece después de invocar `Table`, `Link`, `Image`, `Entity`, `Card` o un bloque de código. Es una representación del flujo, no una mutación del documento real.
+- **Modal o popover:** `Preview modal` / `Preview settings` permite ver configuraciones que sí necesitan datos secundarios, como `Table`, `Link`, `Image`, `Entity` o lenguaje de código. En `Card`, la vista de propiedades es secundaria: el título y el body se muestran en `Inline authoring preview` y se editan inline.
 
 Al hacer click en un item del toolbar o del bubble, el laboratorio cambia al componente correspondiente. Así se puede recorrer la decisión completa —superficie de invocación, configuración y representación Markdown— sin tener que imaginar qué significa cada fila de la tabla.
 
@@ -304,13 +324,13 @@ Estos puntos de entrada todavía no existen en el toolbar actual. Son la propues
 | `protected` | Selection popup → `Protect` | No asignado; candidato | Ninguno; protección inmediata | Convierte la selección en texto de solo lectura; desbloquear es otro flujo |
 | `entity` | Selection popup → `Entity` | No asignado; candidato | Modal pequeño: tipo de entidad | Conserva `Aplyca` como texto y agrega `type="company"` |
 | `Tip` | `Insert → Tip` o convertir bloques completos | No asignado; candidato | Ninguno en v1; popover solo si aparecen variantes | Inserta bloque vacío o envuelve la selección de bloques |
-| `Card` | `Insert → Card` o convertir un bloque completo | No asignado; candidato | Modal: body seleccionado en preview + `title` requerido + `icon`/`href` opcionales | El body queda editable; el título queda como metadata |
-| `CardGroup` | `Insert → Card group` | No asignado; candidato | Modal de grupo: `columns` + orden; después modales de Card | Inserta contenedor y permite agregar/reordenar cards |
+| `Card` | `Insert → Card` o convertir bloques completos | No asignado; candidato | Inserción inline para título + body; `Properties` para `icon`/`href`/acento | El body y el título quedan editables dentro del nodo |
+| `CardGroup` | `Insert → Card group` | No asignado; candidato | Contenedor inline; `Properties` para `columns` y metadata secundaria | Inserta contenedor, primera Card y control `Add card inline` |
 | `Steps` / `Step` | `Insert → Steps` o convertir bloques consecutivos | No asignado; candidato | Controles inline; sin modal inicial | Inserta un primer step y permite agregar, eliminar y reordenar |
 | `CodeGroup` | `Insert → Code group` | No asignado; candidato | Modal de setup: títulos de pestaña + lenguajes | Cada pestaña conserva un bloque de código opaco |
 | Mermaid | `Text/Code → Code` → lenguaje `Mermaid` | Hereda `⌘⇧E` de Code block | Inspector/popover: lenguaje + code/diagram/split view | Continúa siendo un fenced code block; el código es canónico |
 
-La regla de producto queda así: usar una acción directa cuando el resultado no necesita datos adicionales; usar un dropdown para elegir una variante estructural; y abrir un modal solo cuando la inserción requiere varios atributos o una decisión que no cabe de forma natural en línea.
+La regla de producto queda así: usar una acción directa cuando el resultado no necesita datos adicionales; usar un dropdown para elegir una variante estructural; insertar inline todo contenido editorial; y abrir un modal o popover solo cuando la inserción requiere propiedades secundarias o una decisión que no cabe de forma natural en línea.
 
 Para las acciones sobre selección, el bubble funciona como una superficie de transformación: `Highlight` marca visualmente, `Protect` fija una restricción y `Entity` abre la configuración semántica. Un shortcut puede añadirse después de validar la frecuencia de uso; mientras no exista una combinación estable, el playground lo deja como candidato y no inventa un atajo que pueda colisionar con el editor.
 
