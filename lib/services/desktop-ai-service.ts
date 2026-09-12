@@ -3,6 +3,7 @@
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import type {
   AIService,
+  AIServiceRequestOptions,
   LearnedWordEntry,
   LearnedWordsPage,
   LearnWordInput,
@@ -93,6 +94,10 @@ type WorkspaceAskPayload = {
   evidence: WorkspaceAskResult["evidence"]
   requestedDocumentIds: string[]
   suggestedAction: WorkspaceAskResult["suggestedAction"]
+  scopeStatus?: WorkspaceAskResult["scopeStatus"]
+  responseId?: string | null
+  scopeFingerprint?: string | null
+  compactionCount?: number
   model: string
   promptTokens: number | null
   completionTokens: number | null
@@ -288,6 +293,10 @@ export const desktopAIService: AIService = {
         evidence: parsed.data.evidence,
         requestedDocumentIds: parsed.data.requestedDocumentIds,
         suggestedAction: parsed.data.suggestedAction,
+        scopeStatus: parsed.data.scopeStatus,
+        responseId: parsed.data.responseId ?? null,
+        scopeFingerprint: parsed.data.scopeFingerprint ?? null,
+        compactionCount: parsed.data.compactionCount ?? 0,
         usage: {
           model: parsed.data.model,
           promptTokens: parsed.data.promptTokens,
@@ -347,7 +356,7 @@ export const desktopAIService: AIService = {
     }
   },
 
-  async runSemanticRound(input: WorkspaceSemanticRoundRequest) {
+  async runSemanticRound(input: WorkspaceSemanticRoundRequest, options?: AIServiceRequestOptions) {
     const token = await getBearerToken()
 
     if (!token) {
@@ -365,6 +374,7 @@ export const desktopAIService: AIService = {
           "content-type": "application/json",
           "authorization": `Bearer ${token}`,
         },
+        signal: options?.signal,
         body: JSON.stringify(input),
       })
 
@@ -384,7 +394,7 @@ export const desktopAIService: AIService = {
     }
   },
 
-  async reviewWorkspaceDocumentRelations(input: WorkspaceDocumentRelationsRoundRequest) {
+  async reviewWorkspaceDocumentRelations(input: WorkspaceDocumentRelationsRoundRequest, options?: AIServiceRequestOptions) {
     const token = await getBearerToken()
 
     if (!token) {
@@ -402,6 +412,7 @@ export const desktopAIService: AIService = {
           "content-type": "application/json",
           "authorization": `Bearer ${token}`,
         },
+        signal: options?.signal,
         body: JSON.stringify(input),
       })
 
@@ -421,7 +432,7 @@ export const desktopAIService: AIService = {
     }
   },
 
-  async reviewWorkspaceMerge(input: WorkspaceMergeRoundRequest) {
+  async reviewWorkspaceMerge(input: WorkspaceMergeRoundRequest, options?: AIServiceRequestOptions) {
     const token = await getBearerToken()
 
     if (!token) {
@@ -439,6 +450,7 @@ export const desktopAIService: AIService = {
           "content-type": "application/json",
           "authorization": `Bearer ${token}`,
         },
+        signal: options?.signal,
         body: JSON.stringify(input),
       })
 

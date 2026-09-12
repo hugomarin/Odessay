@@ -6,9 +6,13 @@ import type {
 } from "@/lib/services/contracts/ai-service"
 import { MAX_WORKFLOW_SCOPE_HEADINGS } from "@/lib/agent/workflow-instructions"
 
+/** @deprecated Selection size is determined by the provider context window. */
 export const MAX_WORKSPACE_CLASSIFICATION_TARGETS = 6
+/** @deprecated Catalog metadata is never used as an implicit selection. */
 export const MAX_WORKSPACE_CLASSIFICATION_CATALOG_DOCUMENTS = 80
+/** @deprecated Document bodies are not truncated by this contract. */
 export const MAX_WORKSPACE_CLASSIFICATION_DOCUMENT_CHARS = 50_000
+/** @deprecated Provider capacity, not this application constant, owns this decision. */
 export const MAX_WORKSPACE_CLASSIFICATION_BODY_CHARS = 90_000
 export const MAX_WORKSPACE_CLASSIFICATION_REQUEST_CHARS = 2_000
 export const MAX_WORKSPACE_CLASSIFICATION_EVIDENCE_ITEMS = 4
@@ -40,13 +44,13 @@ const documentSchema = z.object({
   modifiedAt: z.number().int().nullable(),
   excerpt: z.string().max(4_000).nullable(),
   references: z.array(referenceSchema).max(100),
-  markdown: z.string().max(MAX_WORKSPACE_CLASSIFICATION_DOCUMENT_CHARS).nullable(),
+  markdown: z.string().nullable(),
 })
 
 export const workspaceClassificationRequestSchema = z.object({
   request: z.string().trim().min(1).max(MAX_WORKSPACE_CLASSIFICATION_REQUEST_CHARS),
-  targetDocumentIds: z.array(z.string().trim().min(1).max(200)).min(1).max(MAX_WORKSPACE_CLASSIFICATION_TARGETS),
-  documents: z.array(documentSchema).min(1).max(MAX_WORKSPACE_CLASSIFICATION_CATALOG_DOCUMENTS),
+  targetDocumentIds: z.array(z.string().trim().min(1).max(200)).min(1),
+  documents: z.array(documentSchema).min(1),
   collections: z.array(z.object({
     id: z.string().trim().min(1).max(200),
     name: z.string().trim().min(1).max(240),
@@ -65,7 +69,7 @@ export const workspaceClassificationRequestSchema = z.object({
     // Ambient operating instructions (ODE-504 hybrid model): authored by the
     // workspace owner, rendered as a dedicated trusted section — never inside
     // the untrusted evidence JSON.
-    instructions: z.string().max(MAX_WORKSPACE_CLASSIFICATION_DOCUMENT_CHARS).nullable(),
+    instructions: z.string().nullable(),
     descriptor: z.object({
       documentId: z.string().trim().min(1).max(200),
       version: z.string().trim().min(1).max(200),
@@ -88,16 +92,10 @@ export const workspaceClassificationRequestSchema = z.object({
     }
   }
 
-  const bodyChars = value.documents.reduce((total, document) => total + (document.markdown?.length ?? 0), 0)
-    + (value.workflow?.instructions?.length ?? 0)
-
-  if (bodyChars > MAX_WORKSPACE_CLASSIFICATION_BODY_CHARS) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: `The classification context exceeds the ${MAX_WORKSPACE_CLASSIFICATION_BODY_CHARS}-character content budget.`,
-      path: ["documents"],
-    })
-  }
+  // Full selected markdown is intentional. A deployment-specific context
+  // planner or the provider must decide whether to stage it; this request
+  // contract must never silently reject or slice user-selected documents.
+  void context
 })
 
 const evidenceSchema = {
@@ -188,8 +186,8 @@ export const workspaceClassificationResponseSchema = z.object({
       quote: z.string().trim().min(1).max(MAX_WORKSPACE_CLASSIFICATION_QUOTE_CHARS),
       reason: z.string().trim().min(1).max(600),
     })).max(MAX_WORKSPACE_CLASSIFICATION_EVIDENCE_ITEMS),
-  })).max(MAX_WORKSPACE_CLASSIFICATION_TARGETS),
-  requestedDocumentIds: z.array(z.string().trim().min(1).max(200)).max(MAX_WORKSPACE_CLASSIFICATION_ADDITIONAL_REQUESTS),
+  })),
+  requestedDocumentIds: z.array(z.string().trim().min(1).max(200)),
 })
 
 const outputShapeForPrompt = JSON.stringify({
@@ -221,7 +219,7 @@ export const buildWorkspaceClassificationSystemPrompt = () => [
   "Every proposal must explain a concrete change or explicitly explain why no change is recommended, the benefit, and relevant uncertainty.",
   "Evidence quotes must be exact contiguous text copied from the provided markdown. Do not invent quotes. Every proposal must include at least one quote from the target document; metadata-only documents cannot be cited with a quote.",
   "Do not return confidence percentages or numeric confidence scores.",
-  `If the evidence is insufficient, request at most ${MAX_WORKSPACE_CLASSIFICATION_ADDITIONAL_REQUESTS} document ids from the supplied catalog metadata in requestedDocumentIds; do not invent ids and do not conclude from missing content.`,
+  "If the evidence is insufficient, do not invent document ids or conclude from missing content. Ask the host/user to expand or confirm the explicit scope.",
   "workflow.descriptor, when present, describes the workspace's workflow.md: documentId, content version, and the executable definitions not loaded (definitionsChars plus scopeSummary naming them). The instructions section you received is the standing operating manual; the definitions behind the descriptor are lazy evidence.",
   `The JSON shape is:\n${outputShapeForPrompt}`,
 ].join("\n")

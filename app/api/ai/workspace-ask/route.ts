@@ -1,6 +1,6 @@
 // class: detail (bounded grounded Q&A; always returns an answer plus optional evidence and read requests)
 export const runtime = "nodejs"
-export const maxDuration = 60
+export const maxDuration = 240
 
 import { NextResponse } from "next/server"
 import {
@@ -15,12 +15,14 @@ import {
 import { getOpenAIWorkspaceProviderConfig } from "@/lib/ai/openai-workspace-provider-config"
 import {
   createWorkspaceExecutionReceipt,
+  countWorkspaceCompactionItems,
   normalizeWorkspaceExecutionContext,
   withWorkspaceExecutionOutcome,
   type WorkspaceExecutionReceipt,
 } from "@/lib/ai/workspace-execution-receipt"
 import {
-  callWorkspaceOpenAIResponse,
+  callWorkspaceOpenAIResponseStaged,
+  WORKSPACE_OPENAI_REQUEST_TIMEOUT_MS,
   WorkspaceOpenAIResponseError,
 } from "@/lib/ai/workspace-openai-response"
 import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors"
@@ -96,6 +98,7 @@ export async function POST(request: Request) {
   const execution = normalizeWorkspaceExecutionContext(parsed.data.execution, {
     action: "ask",
     runtime: "cloud",
+    stage: "analysis",
   })
   const initialReceipt = createWorkspaceExecutionReceipt(execution)
   const startedAt = Date.now()
@@ -116,16 +119,30 @@ export async function POST(request: Request) {
       )
     }
 
-    let response: Awaited<ReturnType<typeof callWorkspaceOpenAIResponse>>
+    let response: Awaited<ReturnType<typeof callWorkspaceOpenAIResponseStaged>>
     try {
-      response = await callWorkspaceOpenAIResponse({
+      const canContinueConversation = Boolean(
+        parsed.data.previousResponseId
+        && parsed.data.previousScopeFingerprint
+        && parsed.data.scopeFingerprint
+        && parsed.data.previousScopeFingerprint === parsed.data.scopeFingerprint,
+      )
+      response = await callWorkspaceOpenAIResponseStaged({
         config,
         execution,
         systemPrompt: buildWorkspaceAskSystemPrompt(),
         userPrompt: buildWorkspaceAskUserPrompt(parsed.data),
         maxOutputTokens: Math.max(config.maxOutputTokens, 8_192),
-        timeoutMs: 45_000,
+        timeoutMs: WORKSPACE_OPENAI_REQUEST_TIMEOUT_MS,
         textFormat: workspaceAskTextFormat,
+        previousResponseId: canContinueConversation ? parsed.data.previousResponseId : null,
+        contextManagement: config.compactionThresholdTokens
+          ? [{ type: "compaction", compact_threshold: config.compactionThresholdTokens }]
+          : undefined,
+        capacity: {
+          contextWindowTokens: config.contextWindowTokens ?? null,
+          reservedOutputTokens: Math.max(config.maxOutputTokens, 8_192),
+        },
         messages: {
           unavailable: "AI provider is unavailable for the Workspace agent.",
           timeout: "AI provider timed out while answering the question.",
@@ -208,8 +225,21 @@ export async function POST(request: Request) {
 
     const receipt = withWorkspaceExecutionOutcome(response.receipt, "validated")
     const latest = receipt.responses.at(-1)
+    const hasExplicitScope = parsed.data.targetDocumentIds.length > 0
+    const modelRequestedWithoutScope = !hasExplicitScope && validated.data.requestedDocumentIds.length > 0
     const data: WorkspaceAskApiPayload = {
       ...validated.data,
+      // A route caller cannot use a model-generated id or quote as an
+      // implicit catalog authorization. With no selected documents, discard
+      // those fields and make the missing scope explicit to the host.
+      evidence: hasExplicitScope ? validated.data.evidence : [],
+      requestedDocumentIds: hasExplicitScope ? validated.data.requestedDocumentIds : [],
+      scopeStatus: modelRequestedWithoutScope
+        ? "needs_scope"
+        : validated.data.scopeStatus ?? "ready",
+      responseId: providerPayload.id ?? null,
+      scopeFingerprint: parsed.data.scopeFingerprint ?? null,
+      compactionCount: countWorkspaceCompactionItems(receipt),
       model: config.model,
       promptTokens: latest?.usage.promptTokens ?? null,
       completionTokens: latest?.usage.completionTokens ?? null,
@@ -227,6 +257,7 @@ export async function POST(request: Request) {
       runtime: receipt.runtime,
       contextVersion: receipt.contextVersion,
       responseIds: receipt.responses.map((item) => item.responseId).filter(Boolean),
+      compactionCount: data.compactionCount,
       model: latest?.model ?? config.model,
       status: latest?.status ?? null,
       providerStatus: receipt.providerStatus,

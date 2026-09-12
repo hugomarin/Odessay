@@ -7,6 +7,7 @@ import type {
   WorkspaceAgentEvidenceReadResult,
 } from "@/lib/services/contracts/workspace-agent"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
+import { isRecord } from "@/lib/ai/workspace-semantic-utils"
 
 export const WORKSPACE_SEMANTIC_READ_TOOL_NAME = "read_document_evidence" as const
 export const WORKSPACE_SEMANTIC_MAX_EVIDENCE_CHARS = 12_000
@@ -32,8 +33,13 @@ export type WorkspaceSemanticToolResult = {
   output: string
 }
 
+export type WorkspaceSemanticToolExecutionOptions = {
+  signal?: AbortSignal
+}
+
 export type WorkspaceSemanticReadEvidenceHandler = (
   input: WorkspaceSemanticReadArguments,
+  options?: WorkspaceSemanticToolExecutionOptions,
 ) => Promise<ServiceResponse<WorkspaceAgentEvidenceReadResult>>
 
 export type WorkspaceSemanticValidatedToolCall = {
@@ -45,7 +51,7 @@ export type WorkspaceSemanticValidatedToolCall = {
 export type WorkspaceSemanticToolRegistry = {
   descriptors: WorkspaceSemanticToolDescriptor[]
   validateCall(call: WorkspaceSemanticToolCall): ServiceResponse<WorkspaceSemanticValidatedToolCall>
-  execute(call: WorkspaceSemanticToolCall): Promise<ServiceResponse<WorkspaceSemanticToolResult>>
+  execute(call: WorkspaceSemanticToolCall, options?: WorkspaceSemanticToolExecutionOptions): Promise<ServiceResponse<WorkspaceSemanticToolResult>>
 }
 
 const readDocumentEvidenceDescriptor: WorkspaceSemanticToolDescriptor = {
@@ -81,10 +87,6 @@ function error<T>(code: ServiceError["code"], message: string, details?: Record<
     data: null,
     error: { code, message, retryable: false, ...(details ? { details } : {}) },
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 function isPathLikeDocumentId(documentId: string): boolean {
@@ -234,11 +236,13 @@ export function createWorkspaceSemanticToolRegistry(input: {
   return {
     descriptors,
     validateCall,
-    async execute(call) {
+    async execute(call, options) {
+      if (options?.signal?.aborted) return error("CANCELLED", "Semantic evidence reading was cancelled.")
       const validated = validateCall(call)
       if (validated.error || !validated.data) return validated as ServiceResponse<WorkspaceSemanticToolResult>
       if (!input.readEvidence) return error("UNAVAILABLE", "Semantic evidence reading is unavailable in this runtime.")
-      const result = await input.readEvidence(validated.data.arguments)
+      const result = await input.readEvidence(validated.data.arguments, options)
+      if (options?.signal?.aborted) return error("CANCELLED", "Semantic evidence reading was cancelled.")
       if (result.error || !result.data) return result as ServiceResponse<WorkspaceSemanticToolResult>
       return {
         data: {

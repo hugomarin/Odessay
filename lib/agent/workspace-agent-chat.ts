@@ -99,6 +99,14 @@ export type AgentMessage = {
   semanticReview?: WorkspaceAgentSemanticReviewState | null
 }
 
+export type CreateToolResultMessageOptions = {
+  id?: string
+  context?: WorkspaceAgentMessageContext
+  executionService?: WorkspaceAgentService
+  executionReceipt?: WorkspaceExecutionReceipt | null
+  semanticReview?: WorkspaceAgentSemanticReviewState | null
+}
+
 let messageSequence = 0
 
 /**
@@ -116,14 +124,18 @@ export function createAgentMessageId(prefix: "user" | "agent"): string {
 export function createToolResultMessage(
   text: string,
   toolResult?: ToolResult,
-  id?: string,
-  context?: WorkspaceAgentMessageContext,
-  executionService?: WorkspaceAgentService,
-  executionReceipt?: WorkspaceExecutionReceipt | null,
-  semanticReview?: WorkspaceAgentSemanticReviewState | null,
+  options: CreateToolResultMessageOptions = {},
 ): AgentMessage {
-  const message: AgentMessage = { id: id ?? createAgentMessageId("agent"), role: "agent", text, toolResult, context, executionService, executionReceipt }
-  return semanticReview ? { ...message, semanticReview } : message
+  const message: AgentMessage = {
+    id: options.id ?? createAgentMessageId("agent"),
+    role: "agent",
+    text,
+    toolResult,
+    context: options.context,
+    executionService: options.executionService,
+    executionReceipt: options.executionReceipt,
+  }
+  return options.semanticReview ? { ...message, semanticReview: options.semanticReview } : message
 }
 
 export function createApproval(action: WorkspaceAgentAction, resource: string): WorkspaceAgentApproval {

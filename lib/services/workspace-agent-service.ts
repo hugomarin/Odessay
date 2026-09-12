@@ -1,17 +1,6 @@
 import type { CollectionSummary } from "@/lib/collections/collections"
 import { findInlineAnnotationMarkers } from "@/lib/editor/annotation-markdown"
 import {
-  MAX_WORKSPACE_CLASSIFICATION_BODY_CHARS,
-  MAX_WORKSPACE_CLASSIFICATION_CATALOG_DOCUMENTS,
-  MAX_WORKSPACE_CLASSIFICATION_TARGETS,
-} from "@/lib/ai/workspace-classification"
-import {
-  MAX_WORKSPACE_ASK_BODY_CHARS,
-  MAX_WORKSPACE_ASK_CATALOG_DOCUMENTS,
-  MAX_WORKSPACE_ASK_DOCUMENT_CHARS,
-  MAX_WORKSPACE_ASK_TARGETS,
-} from "@/lib/ai/workspace-ask"
-import {
   buildWorkflowDraft,
   detectBrokenDocumentReferences,
   findArchiveCandidates,
@@ -78,7 +67,6 @@ import {
 } from "@/lib/services/context"
 import {
   createWorkspaceExecutionContext,
-  mergeWorkspaceExecutionReceipts,
   type WorkspaceExecutionContext,
   type WorkspaceExecutionReceipt,
 } from "@/lib/ai/workspace-execution-receipt"
@@ -89,12 +77,13 @@ import {
 } from "@/lib/ai/workspace-semantic-loop"
 import {
   createWorkspaceSemanticToolRegistry,
+  type WorkspaceSemanticDocumentSnapshot,
   type WorkspaceSemanticReadArguments,
 } from "@/lib/ai/workspace-semantic-tool-registry"
+import { digest } from "@/lib/ai/workspace-semantic-utils"
 import {
   buildWorkspaceDocumentRelationsRequest,
   isResolvableSemanticContradiction,
-  MAX_WORKSPACE_RELATION_DOCUMENTS,
   parseWorkspaceDocumentRelationsResult,
   type WorkspaceDocumentRelation,
   type WorkspaceDocumentRelationSource,
@@ -105,8 +94,6 @@ import {
 import {
   buildWorkspaceMergeRequest,
   lineRangeForMergeSource,
-  MAX_WORKSPACE_MERGE_MARKDOWN_CHARS,
-  MAX_WORKSPACE_MERGE_DOCUMENTS,
   parseWorkspaceMergeResult,
   type MergeAlignedSection,
   type WorkspaceMergeReviewResult,
@@ -219,6 +206,27 @@ function artifactVersionKey(record: DocumentCatalogRecord): string {
   return record.binding?.contentHash ?? `v${record.version ?? 0}@${record.modifiedAt ?? 0}`
 }
 
+function scopeFingerprintFor(
+  workspaceRootPath: string,
+  action: string,
+  documents: readonly { documentId: string; documentVersion: string; contentHash: string | null }[],
+): string {
+  return `scope:${digest(JSON.stringify({
+    workspaceRootPath: normalizePath(workspaceRootPath),
+    action,
+    documents: [...documents]
+      .sort((left, right) => left.documentId.localeCompare(right.documentId)),
+  }))}`
+}
+
+function matchesDocumentSnapshot(
+  record: DocumentCatalogRecord,
+  expected: WorkspaceSemanticDocumentSnapshot,
+): boolean {
+  return artifactVersionKey(record) === expected.documentVersion
+    && (expected.contentHash === null || (record.binding?.contentHash ?? null) === expected.contentHash)
+}
+
 function createInternalReadApproval(documentId: string): WorkspaceAgentApproval {
   const approvalId = typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -297,8 +305,13 @@ function relationSummary(
   relation: WorkspaceDocumentRelation,
   sourcesById: ReadonlyMap<string, WorkspaceDocumentRelationSource>,
 ): WorkspaceAgentSemanticRelationSummary | null {
-  const leftEvidence = relation.provenance.find((item) => item.documentId === relation.leftDocumentId)
-  const rightEvidence = relation.provenance.find((item) => item.documentId === relation.rightDocumentId)
+  const firstEvidence = relation.provenance.find((item) => item.evidenceId === relation.evidenceIds[0])
+  const leftEvidence = relation.leftDocumentId === relation.rightDocumentId
+    ? firstEvidence
+    : relation.provenance.find((item) => item.documentId === relation.leftDocumentId)
+  const rightEvidence = relation.leftDocumentId === relation.rightDocumentId
+    ? relation.provenance.find((item) => item.evidenceId !== firstEvidence?.evidenceId)
+    : relation.provenance.find((item) => item.documentId === relation.rightDocumentId)
   const leftSource = sourcesById.get(relation.leftDocumentId)
   const rightSource = sourcesById.get(relation.rightDocumentId)
   if (!leftEvidence || !rightEvidence || !leftSource || !rightSource) return null
@@ -463,14 +476,13 @@ export type WorkspaceAgentAskInput = {
    */
   liveOverride?: { documentId: string; markdown: string }
   /**
-   * The id of the Writing currently open, referenced but not eagerly read
-   * (ODE-489 follow-up — "el contexto solo se debe invocar en la medida
-   * que el usuario lo solicite"). Not part of `selection`. `askAgent` tells
-   * the model this id exists; if the model requests it back via
-   * `requestedDocumentIds`, `askAgent` performs one bounded extra round
-   * with its content included — never on every turn, only when asked for.
+   * The id of the Writing currently open. It is informational unless the
+   * caller also includes it in `selection`; an open document is not an
+   * authorization to read or guess additional Workspace scope.
    */
   focusedDocumentId?: string | null
+  previousResponseId?: string | null
+  previousScopeFingerprint?: string | null
   execution?: WorkspaceExecutionContext | null
 }
 
@@ -495,6 +507,10 @@ export type WorkspaceAgentAskRun = {
    * available there to dispatch anything to.
    */
   suggestedAction: "workflow" | "broken-links" | "classification" | "archive" | "contradictions" | null
+  scopeStatus: "ready" | "needs_scope" | "staged" | "incomplete"
+  responseId: string | null
+  scopeFingerprint: string | null
+  compactionCount: number
   executionContext: WorkspaceExecutionContext
   executionReceipt: WorkspaceExecutionReceipt | null
 }
@@ -558,6 +574,8 @@ export type WorkspaceAgentDocumentAskInput = {
   title: string | null
   markdown: string
   sessionContext?: readonly string[]
+  previousResponseId?: string | null
+  previousScopeFingerprint?: string | null
   execution?: WorkspaceExecutionContext | null
 }
 
@@ -566,74 +584,53 @@ export type WorkspaceAgentDocumentAskInput = {
  * Writing currently open in the editor — without a Workspace, BindingRoot,
  * or DocumentCatalog. Nothing here touches the filesystem or the desktop
  * tools layer, so it works for an unmaterialized draft, a Writing outside
- * any visible Workspace, and on the web/cloud runtime alike (ODE-490):
- * `askWorkspace` only needs a bounded catalog slice, and one in-memory
- * document is a valid (if minimal) slice.
+ * any visible Workspace, and on the web/cloud runtime alike (ODE-490).
  */
 export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): Promise<ServiceResponse<WorkspaceAgentAskRun>> {
   const documentId = input.documentId ?? EPHEMERAL_CONVERSATION_DOCUMENT_ID
   const title = input.title?.trim() || null
-  const markdown = input.markdown.slice(0, MAX_WORKSPACE_ASK_DOCUMENT_CHARS)
+  const markdown = input.markdown
   const execution = input.execution ?? createWorkspaceExecutionContext("ask", "web")
+  const scopeFingerprint = scopeFingerprintFor("ephemeral-document", "ask", [{
+    documentId,
+    documentVersion: "live",
+    contentHash: digest(markdown),
+  }])
 
-  /**
-   * The content is already in memory (the caller read it straight from the
-   * live editor — no I/O to defer), but *sending* it to the model still
-   * costs real context-window tokens on every turn. Same lazy contract as
-   * the Workspace-backed path (ODE-489 follow-up): round 1 offers the
-   * artifact as a reference only; a second round with content included
-   * runs only if the model actually asks for it back.
-   */
-  const runRound = (includeContent: boolean) => {
-    const aiRequest: WorkspaceAskRequest = {
-      question: input.question.slice(0, 2_000),
-      targetDocumentIds: includeContent ? [documentId] : [],
-      documents: [{
-        id: documentId,
-        title,
-        relativePath: null,
-        currentArtifactType: null,
-        currentStatus: null,
-        visibility: null,
-        version: null,
-        modifiedAt: null,
-        excerpt: null,
-        references: [],
-        markdown: includeContent ? markdown : null,
-      }],
-      collections: [],
-      documentCollectionIds: {},
-      annotations: [],
-      workflow: null,
-      catalogTruncated: false,
-      recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
-      focusedDocumentId: documentId,
-    }
-    return getAIService().askWorkspace({
-      ...aiRequest,
-      execution: includeContent ? { ...execution, stage: "context-acquisition" } : execution,
-    })
-  }
-
-  let aiResult = await runRound(false)
+  // This path already has the live `.md`/editor content. It is explicit
+  // document scope, so the first provider request receives the full content;
+  // no metadata-only discovery round can guess or omit the source.
+  const aiResult = await getAIService().askWorkspace({
+    question: input.question.slice(0, 2_000),
+    targetDocumentIds: [documentId],
+    documents: [{
+      id: documentId,
+      title,
+      relativePath: null,
+      currentArtifactType: null,
+      currentStatus: null,
+      visibility: null,
+      version: null,
+      modifiedAt: null,
+      excerpt: null,
+      references: [],
+      markdown,
+    }],
+    collections: [],
+    documentCollectionIds: {},
+    annotations: [],
+    workflow: null,
+    catalogTruncated: false,
+    recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
+    focusedDocumentId: documentId,
+    previousResponseId: input.previousScopeFingerprint === scopeFingerprint
+      ? (input.previousResponseId ?? null)
+      : null,
+    scopeFingerprint,
+    execution: { ...execution, stage: "context-acquisition" },
+  })
   if (aiResult.error || !aiResult.data) {
     return error(aiResult.error?.code ?? "AI_REQUEST_FAILED", aiResult.error?.message ?? "The Workspace agent could not answer right now.")
-  }
-
-  // Bounded, one-shot — the only id this turn could ever request is the one
-  // document it already knows about, so no "unrelated id" case to guard
-  // against here the way the Workspace-backed retry does.
-  let hasContent = false
-  const executionReceipts: WorkspaceExecutionReceipt[] = []
-  if (aiResult.data.executionReceipt) executionReceipts.push(aiResult.data.executionReceipt)
-  if (aiResult.data.requestedDocumentIds.includes(documentId)) {
-    const retry = await runRound(true)
-    if (!retry.error && retry.data) {
-      aiResult = retry
-      hasContent = true
-      if (retry.data.executionReceipt) executionReceipts.push(retry.data.executionReceipt)
-    }
-    // A retry failure keeps round 1's already-valid answer.
   }
 
   const validEvidence = aiResult.data.evidence.filter((item) => item.documentId === documentId && markdown.includes(item.quote))
@@ -653,9 +650,9 @@ export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): P
   return ok({
     answer: aiResult.data.answer,
     evidence,
-    requestedDocumentIds: hasContent ? [] : aiResult.data.requestedDocumentIds,
+    requestedDocumentIds: aiResult.data.requestedDocumentIds,
     requestedDocuments: [],
-    targetDocumentIds: hasContent ? [documentId] : [],
+    targetDocumentIds: [documentId],
     // No real identity to cite back to when the draft is still unmaterialized
     // — an empty `documents` list means the panel won't turn any `` `name` ``
     // mention into a (broken) open-document link for a document that doesn't
@@ -664,8 +661,12 @@ export async function askAboutDocument(input: WorkspaceAgentDocumentAskInput): P
     // No Workspace/service here to dispatch a predetermined action to, even
     // if the model still suggested one.
     suggestedAction: null,
+    scopeStatus: aiResult.data.scopeStatus ?? "ready",
+    responseId: aiResult.data.responseId ?? null,
+    scopeFingerprint,
+    compactionCount: aiResult.data.compactionCount ?? 0,
     executionContext: execution,
-    executionReceipt: mergeWorkspaceExecutionReceipts(executionReceipts),
+    executionReceipt: aiResult.data.executionReceipt ?? null,
   })
 }
 
@@ -777,6 +778,22 @@ function documentForClassification(
   }
 }
 
+/**
+ * Ask needs a discoverable catalog, but metadata excerpts are not document
+ * evidence. Keeping only identity fields for unloaded records lets the model
+ * recognize a natural-language document reference without inviting it to
+ * answer from a stale/truncated excerpt.
+ */
+function documentForAsk(
+  record: DocumentCatalogRecord,
+  markdown: string | null,
+): WorkspaceClassificationDocument {
+  const document = documentForClassification(record, markdown)
+  return markdown === null
+    ? { ...document, excerpt: null, references: [] }
+    : document
+}
+
 type PreparedDocumentEvidence = {
   selectedRecords: DocumentCatalogRecord[]
   recordsById: Map<string, DocumentCatalogRecord>
@@ -793,19 +810,14 @@ type PreparedDocumentEvidence = {
  * Context Acquisition Plan / Evidence Bundle layer (ODE-501) — reusing a
  * cached artifact keyed by document id + version when one is valid, and
  * reading through the approved tools boundary only on a cache miss. The
- * combined budget mirrors the previous flat char limit (`maxBodyChars`,
- * net of any workflow.md already loaded) so behaviour for a single request
- * is unchanged; what changes is that a repeated question against the same
- * document version can now reuse the artifact instead of re-reading it.
+ * selected markdown is admitted in full; provider-capacity staging decides
+ * how a large set is delivered without turning it into a silent excerpt.
  */
 async function prepareDocumentEvidence(
   context: WorkspaceAgentContext,
   selection: readonly WorkspaceAgentSelection[],
   tools: WorkspaceAgentToolsService,
   options: {
-    maxTargets: number
-    maxCatalogDocuments: number
-    maxBodyChars: number
     noSelectionMessage: string
     contextPurpose: string
     /**
@@ -828,14 +840,7 @@ async function prepareDocumentEvidence(
      * moment the user keeps typing without saving.
      */
     liveOverrides?: ReadonlyMap<string, string>
-    /**
-     * Referenced but never read here (ODE-489 follow-up — "una etiqueta de
-     * dónde estás parado"): when the selection is otherwise empty, this
-     * record's metadata alone (never its markdown) is still offered in
-     * `promptRecords`, so the model knows the artifact exists and can
-     * request it — instead of the wider catalog, which stays withheld
-     * exactly as before.
-     */
+    /** Informational focused id; it does not authorize an implicit body read. */
     focusedDocumentId?: string | null
   },
   contextServices: { store: ContextArtifactStore; ledger: ContextLedger },
@@ -849,26 +854,21 @@ async function prepareDocumentEvidence(
   if (selectedIds.length === 0) {
     if (options.allowEmptySelection) {
       const recordsById = new Map(context.documents.map((record) => [record.id, record]))
-      const focusedRecord = options.focusedDocumentId ? recordsById.get(options.focusedDocumentId) : undefined
+      // An empty scope must not expose catalog metadata for the model to use
+      // as a guessing surface. The user must select or confirm documents.
+      const promptRecords: DocumentCatalogRecord[] = []
       return ok({
         selectedRecords: [],
         recordsById,
         currentRecordsById: new Map(recordsById),
         markdownById: new Map(),
         annotations: [],
-        promptRecords: focusedRecord && !focusedRecord.deletedAt ? [focusedRecord] : [],
+        promptRecords,
         catalogTruncated: false,
       })
     }
     return error("NOT_FOUND", options.noSelectionMessage)
   }
-  if (selectedIds.length > options.maxTargets) {
-    return error(
-      "INVALID_INPUT",
-      `Select at most ${options.maxTargets} artifacts at a time so the agent can read each one completely.`,
-    )
-  }
-
   const recordsById = new Map(context.documents.map((record) => [record.id, record]))
   const selectedRecords = selectedIds
     .map((documentId) => recordsById.get(documentId))
@@ -884,7 +884,6 @@ async function prepareDocumentEvidence(
   // Ambient instructions, not the full workflow body (ODE-504 hybrid model):
   // the definitions stay behind the descriptor and cost the model nothing
   // unless it explicitly asks for the document back.
-  const workflowChars = context.workflowInstructions?.length ?? 0
   const plan = buildContextAcquisitionPlan({
     intent: "understand",
     candidates: catalogRecords.map((record, index) => ({
@@ -896,9 +895,9 @@ async function prepareDocumentEvidence(
     })),
     budget: {
       maxInputTokens: Number.MAX_SAFE_INTEGER,
-      maxDocuments: options.maxTargets,
-      maxBytes: Math.max(0, options.maxBodyChars - workflowChars),
-      maxRetrievalRounds: 1,
+      maxDocuments: selectedIds.length,
+      maxBytes: Number.MAX_SAFE_INTEGER,
+      maxRetrievalRounds: Number.MAX_SAFE_INTEGER,
     },
   })
 
@@ -967,19 +966,9 @@ async function prepareDocumentEvidence(
     })
   }
 
-  const activeRecords = context.documents.filter((record) => !record.deletedAt)
-  const selectedRecordSet = new Set(selectedRecords.map((record) => record.id))
-  const remainingRecords = activeRecords
-    .filter((record) => !selectedRecordSet.has(record.id))
-    .sort((left, right) => {
-      const leftLabel = left.title?.trim() || left.binding?.relativePath || left.id
-      const rightLabel = right.title?.trim() || right.binding?.relativePath || right.id
-      return leftLabel.localeCompare(rightLabel)
-    })
-  const promptRecords = [
-    ...selectedRecords,
-    ...remainingRecords.slice(0, Math.max(0, options.maxCatalogDocuments - selectedRecords.length)),
-  ]
+  // Only explicitly selected records are sent to the model. A catalog slice
+  // is not an authorization to infer document scope.
+  const promptRecords = [...selectedRecords]
 
   return ok({
     selectedRecords,
@@ -988,7 +977,7 @@ async function prepareDocumentEvidence(
     markdownById,
     annotations,
     promptRecords,
-    catalogTruncated: promptRecords.length < activeRecords.length,
+    catalogTruncated: false,
   })
 }
 
@@ -997,10 +986,11 @@ function requestedDocumentsFrom(
   recordsById: ReadonlyMap<string, DocumentCatalogRecord>,
   selectedRecordSet: ReadonlySet<string>,
   markdownById: ReadonlyMap<string, string>,
+  availableRecordIds: ReadonlySet<string> = new Set(recordsById.keys()),
 ): { requestedDocumentIds: string[]; requestedDocuments: WorkspaceAgentClassificationRequestedDocument[] } {
   const filteredIds = [...new Set(requestedDocumentIds)].filter((documentId) => {
     const record = recordsById.get(documentId)
-    return Boolean(record && !record.deletedAt && !selectedRecordSet.has(documentId) && !markdownById.has(documentId))
+    return Boolean(availableRecordIds.has(documentId) && record && !record.deletedAt && !selectedRecordSet.has(documentId) && !markdownById.has(documentId))
   })
   const requestedDocuments = filteredIds.flatMap((documentId) => {
     const record = recordsById.get(documentId)
@@ -1329,6 +1319,13 @@ export async function createWorkspaceAgentService(
   const contextArtifactStore = createContextArtifactStore()
   const contextLedger = createContextLedger()
   const contextServices = { store: contextArtifactStore, ledger: contextLedger }
+  const readDocumentsInOrder = (
+    documentIds: readonly string[],
+    approvals: Readonly<Record<string, WorkspaceAgentApproval>>,
+  ) => Promise.all(documentIds.map(async (documentId) => ({
+    documentId,
+    read: await tools.read({ documentId, approval: approvals[documentId]! }),
+  })))
 
   /**
    * Shared read of the full workflow.md body, served through the session
@@ -1462,27 +1459,34 @@ export async function createWorkspaceAgentService(
 
     const readEvidence = async (
       evidenceInput: WorkspaceSemanticReadArguments,
+      options?: { signal?: AbortSignal },
     ): Promise<ServiceResponse<WorkspaceAgentEvidenceReadResult>> => {
+      if (options?.signal?.aborted) {
+        return error("CANCELLED", "Semantic evidence reading was cancelled.")
+      }
       const approval = createInternalReadApproval(evidenceInput.documentId)
       const desktopInput: WorkspaceAgentEvidenceReadInput = {
         ...evidenceInput,
         approval,
       }
-      if (tools.readEvidence) return tools.readEvidence(desktopInput)
+      if (tools.readEvidence) return tools.readEvidence(desktopInput, options)
 
       // Compatibility path for older test/runtime adapters while the
       // versioned evidence method rolls out. It still goes through the
       // approval-gated read and rechecks the catalog snapshot before the
       // result is admitted to the model-facing loop.
       const read = await tools.read({ documentId: evidenceInput.documentId, approval })
+      if (options?.signal?.aborted) {
+        return error("CANCELLED", "Semantic evidence reading was cancelled.")
+      }
       if (read.error || !read.data) {
         return error("NOT_FOUND", read.error?.message ?? "Document evidence could not be read.")
       }
       const record = read.data.document.catalogRecord
-      if (
-        artifactVersionKey(record) !== evidenceInput.expectedDocumentVersion
-        || (evidenceInput.expectedContentHash !== null && (record.binding?.contentHash ?? null) !== evidenceInput.expectedContentHash)
-      ) {
+      if (!matchesDocumentSnapshot(record, {
+        documentVersion: evidenceInput.expectedDocumentVersion,
+        contentHash: evidenceInput.expectedContentHash,
+      })) {
         return error("CONFLICT", "The document changed before semantic evidence could be admitted.")
       }
       const lines = read.data.document.markdown.split("\n")
@@ -1515,18 +1519,18 @@ export async function createWorkspaceAgentService(
     const semanticAIService: Pick<AIService, "runSemanticRound"> = input.operation === "relations"
       && typeof activeAIService.reviewWorkspaceDocumentRelations === "function"
       ? {
-          runSemanticRound: (request) => activeAIService.reviewWorkspaceDocumentRelations({
+          runSemanticRound: (request, options) => activeAIService.reviewWorkspaceDocumentRelations({
             ...request,
             operation: "relations",
-          }),
+          }, options),
         }
       : input.operation === "merge"
         && typeof activeAIService.reviewWorkspaceMerge === "function"
         ? {
-            runSemanticRound: (request) => activeAIService.reviewWorkspaceMerge({
+            runSemanticRound: (request, options) => activeAIService.reviewWorkspaceMerge({
               ...request,
               operation: "merge",
-            }),
+            }, options),
           }
         : activeAIService
     return runWorkspaceSemanticLoop({
@@ -1552,11 +1556,8 @@ export async function createWorkspaceAgentService(
     review: WorkspaceDocumentRelationsResult
   }>> => {
     const uniqueDocumentIds = [...new Set(documentIds.filter(Boolean))]
-    if (uniqueDocumentIds.length < 2 || uniqueDocumentIds.length > MAX_WORKSPACE_RELATION_DOCUMENTS) {
-      return error(
-        "INVALID_INPUT",
-        `Select between two and ${MAX_WORKSPACE_RELATION_DOCUMENTS} artifacts for semantic relation review.`,
-      )
+    if (uniqueDocumentIds.length < 1) {
+      return error("INVALID_INPUT", "Select at least one artifact for semantic relation review.")
     }
     for (const documentId of uniqueDocumentIds) {
       if (!readApprovals[documentId]) {
@@ -1565,8 +1566,8 @@ export async function createWorkspaceAgentService(
     }
 
     const sources: WorkspaceDocumentRelationSource[] = []
-    for (const documentId of uniqueDocumentIds) {
-      const read = await tools.read({ documentId, approval: readApprovals[documentId]! })
+    const reads = await readDocumentsInOrder(uniqueDocumentIds, readApprovals)
+    for (const { documentId, read } of reads) {
       if (read.error || !read.data) {
         return error(
           read.error?.code ?? "NOT_FOUND",
@@ -1574,6 +1575,9 @@ export async function createWorkspaceAgentService(
         )
       }
       const document = read.data.document
+      if (document.catalogRecord.deletedAt) {
+        return error("NOT_FOUND", `Document ${documentId} is no longer active in the workspace.`)
+      }
       sources.push({
         documentId: document.documentId,
         title: document.title?.trim() || document.catalogRecord.title || document.documentId,
@@ -1587,6 +1591,12 @@ export async function createWorkspaceAgentService(
     }
 
     const request = buildWorkspaceDocumentRelationsRequest(sources)
+    if (!request.contextComplete) {
+      return error(
+        "BUDGET_EXCEEDED",
+        request.contextError ?? "The selected documents do not fit in the bounded relation context.",
+      )
+    }
     const reviewResponse = await runSemanticReview({
       operation: "relations",
       initialEvidence: request.initialEvidence,
@@ -1694,8 +1704,8 @@ export async function createWorkspaceAgentService(
     },
     async findContradictions(documentIds, readApprovals, workflowReadApproval) {
       const uniqueDocumentIds = [...new Set(documentIds.filter(Boolean))]
-      if (uniqueDocumentIds.length < 2 || uniqueDocumentIds.length > MAX_WORKSPACE_RELATION_DOCUMENTS) {
-        return error("INVALID_INPUT", `Select between two and ${MAX_WORKSPACE_RELATION_DOCUMENTS} artifacts to compare contradictions.`)
+      if (uniqueDocumentIds.length < 1) {
+        return error("INVALID_INPUT", "Select at least one artifact to compare contradictions.")
       }
 
       const context = await getContextWithWorkflow(workflowReadApproval)
@@ -1718,40 +1728,39 @@ export async function createWorkspaceAgentService(
       if (resolution === "discard") {
         return ok({ proposal, resolution, resolvedDocumentId: null, mutation: null })
       }
+      if (proposal.semanticVerdict !== "contradictory" || proposal.semanticConfidence !== "high") {
+        return error("INVALID_INPUT", "Only high-confidence semantic contradictions can be resolved automatically.")
+      }
       if (!approvals) {
         return error("FORBIDDEN", "Resolving a contradiction requires read and edit approvals for the target document.")
       }
 
       const selected = resolution === "left" ? proposal.left : proposal.right
       const target = resolution === "left" ? proposal.right : proposal.left
+      const semanticSnapshots = proposal.semanticSourceSnapshots
+      if (
+        !semanticSnapshots
+        || !semanticSnapshots[selected.documentId]
+        || !semanticSnapshots[target.documentId]
+      ) {
+        return error("INVALID_INPUT", "The contradiction has no versioned semantic snapshots and must be reviewed again before resolution.")
+      }
       const read = await tools.read({ documentId: target.documentId, approval: approvals.read })
       if (read.error || !read.data) return error("NOT_FOUND", read.error?.message ?? `Document ${target.documentId} could not be read.`)
-      const semanticSnapshots = proposal.semanticSourceSnapshots
-      if (semanticSnapshots) {
-        const targetSnapshot = semanticSnapshots[target.documentId]
-        if (targetSnapshot && (
-          artifactVersionKey(read.data.document.catalogRecord) !== targetSnapshot.documentVersion
-          || (targetSnapshot.contentHash !== null && (read.data.document.catalogRecord.binding?.contentHash ?? null) !== targetSnapshot.contentHash)
-        )) {
-          return error("CONFLICT", `The evidence in ${target.title} changed since this contradiction was proposed.`)
-        }
+      const targetSnapshot = semanticSnapshots[target.documentId]
+      if (!matchesDocumentSnapshot(read.data.document.catalogRecord, targetSnapshot)) {
+        return error("CONFLICT", `The evidence in ${target.title} changed since this contradiction was proposed.`)
+      }
 
-        const selectedSnapshot = semanticSnapshots[selected.documentId]
-        if (selectedSnapshot) {
-          const selectedRead = await tools.read({
-            documentId: selected.documentId,
-            approval: createInternalReadApproval(selected.documentId),
-          })
-          if (selectedRead.error || !selectedRead.data) {
-            return error("CONFLICT", `The evidence in ${selected.title} is no longer available for this contradiction.`)
-          }
-          if (
-            artifactVersionKey(selectedRead.data.document.catalogRecord) !== selectedSnapshot.documentVersion
-            || (selectedSnapshot.contentHash !== null && (selectedRead.data.document.catalogRecord.binding?.contentHash ?? null) !== selectedSnapshot.contentHash)
-          ) {
-            return error("CONFLICT", `The evidence in ${selected.title} changed since this contradiction was proposed.`)
-          }
-        }
+      const selectedRead = await tools.read({
+        documentId: selected.documentId,
+        approval: createInternalReadApproval(selected.documentId),
+      })
+      if (selectedRead.error || !selectedRead.data) {
+        return error("CONFLICT", `The evidence in ${selected.title} is no longer available for this contradiction.`)
+      }
+      if (!matchesDocumentSnapshot(selectedRead.data.document.catalogRecord, semanticSnapshots[selected.documentId])) {
+        return error("CONFLICT", `The evidence in ${selected.title} changed since this contradiction was proposed.`)
       }
       const markdown = replaceContradictionFragment(read.data.document.markdown, target.fragment, selected.fragment.text)
       if (markdown === null) {
@@ -1778,9 +1787,6 @@ export async function createWorkspaceAgentService(
       if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentClassificationRun>
 
       const prepared = await prepareDocumentEvidence(context.data, input.selection, tools, {
-        maxTargets: MAX_WORKSPACE_CLASSIFICATION_TARGETS,
-        maxCatalogDocuments: MAX_WORKSPACE_CLASSIFICATION_CATALOG_DOCUMENTS,
-        maxBodyChars: MAX_WORKSPACE_CLASSIFICATION_BODY_CHARS,
         noSelectionMessage: "Select at least one local artifact before asking for a semantic classification.",
         contextPurpose: "classification-evidence",
       }, contextServices)
@@ -1851,6 +1857,7 @@ export async function createWorkspaceAgentService(
         recordsById,
         selectedRecordSet,
         markdownById,
+        new Set(promptRecords.map((record) => record.id)),
       )
 
       return ok({
@@ -1872,18 +1879,12 @@ export async function createWorkspaceAgentService(
       const liveOverrides = input.liveOverride ? new Map([[input.liveOverride.documentId, input.liveOverride.markdown]]) : undefined
       const focusedDocumentId = input.focusedDocumentId ?? null
 
-      /**
-       * One full round: prepare evidence for `selection`, then ask the
-       * model. Called twice at most — see the bounded retry below.
-       */
+      /** One full round: prepare evidence for the explicit selection, then ask the model. */
       const runAskRound = async (
         selection: readonly WorkspaceAgentSelection[],
         roundExecution: WorkspaceExecutionContext,
       ): Promise<ServiceResponse<{ prepared: PreparedDocumentEvidence; aiResult: WorkspaceAskResult }>> => {
         const prepared = await prepareDocumentEvidence(contextData, selection, tools, {
-          maxTargets: MAX_WORKSPACE_ASK_TARGETS,
-          maxCatalogDocuments: MAX_WORKSPACE_ASK_CATALOG_DOCUMENTS,
-          maxBodyChars: MAX_WORKSPACE_ASK_BODY_CHARS,
           noSelectionMessage: "Select at least one local artifact before asking the Workspace agent.",
           contextPurpose: "ask-evidence",
           allowEmptySelection: true,
@@ -1892,7 +1893,7 @@ export async function createWorkspaceAgentService(
         }, contextServices)
         if (prepared.error || !prepared.data) return prepared as ServiceResponse<{ prepared: PreparedDocumentEvidence; aiResult: WorkspaceAskResult }>
 
-        const documents = prepared.data.promptRecords.map((record) => documentForClassification(
+        const documents = prepared.data.promptRecords.map((record) => documentForAsk(
           prepared.data!.currentRecordsById.get(record.id) ?? record,
           prepared.data!.markdownById.get(record.id) ?? null,
         ))
@@ -1908,6 +1909,11 @@ export async function createWorkspaceAgentService(
           ? focusedDocumentId
           : null
 
+        const scopeFingerprint = scopeFingerprintFor(workspaceRootPath, "ask", prepared.data.selectedRecords.map((record) => ({
+          documentId: record.id,
+          documentVersion: artifactVersionKey(prepared.data!.currentRecordsById.get(record.id) ?? record),
+          contentHash: (prepared.data!.currentRecordsById.get(record.id) ?? record).binding?.contentHash ?? null,
+        })))
         const aiRequest: WorkspaceAskRequest = {
           question: input.question.slice(0, 2_000),
           targetDocumentIds: prepared.data.selectedRecords.map((record) => record.id),
@@ -1927,6 +1933,11 @@ export async function createWorkspaceAgentService(
           catalogTruncated: prepared.data.catalogTruncated,
           recentSessionActions: input.sessionContext ? [...input.sessionContext] : undefined,
           focusedDocumentId: focusedDocumentIdForRequest,
+          previousResponseId: input.previousScopeFingerprint === scopeFingerprint
+            ? (input.previousResponseId ?? null)
+            : null,
+          previousScopeFingerprint: input.previousScopeFingerprint ?? null,
+          scopeFingerprint,
           execution: roundExecution,
         }
         const aiResult = await getAIService().askWorkspace(aiRequest)
@@ -1939,50 +1950,10 @@ export async function createWorkspaceAgentService(
       const first = await runAskRound(input.selection, execution)
       if (first.error || !first.data) return first as ServiceResponse<WorkspaceAgentAskRun>
 
-      let { prepared, aiResult } = first.data
-      let executionReceipt = aiResult.executionReceipt ?? null
+      const { prepared, aiResult } = first.data
+      const executionReceipt = aiResult.executionReceipt ?? null
 
-      // Bounded, one-shot retry — only for a document the host already knows
-      // is relevant without a new scope decision: the one the caller said the
-      // model should treat as "currently open" (ODE-489 follow-up), or the
-      // workspace's own workflow.md whose lazy definitions the model
-      // explicitly asked for (ODE-504). Never for an arbitrary id the model
-      // merely guessed at from catalog metadata. If the retry itself fails
-      // for any reason, the first round's already-valid answer is kept
-      // rather than erroring the turn.
-      const workflowDocumentId = contextData.workflowDescriptor?.documentId ?? null
-      const alreadyHasFocus = prepared.selectedRecords.some((record) => record.id === focusedDocumentId)
-      const needsFocusRetry = Boolean(
-        focusedDocumentId && !alreadyHasFocus && aiResult.requestedDocumentIds.includes(focusedDocumentId),
-      )
-      const alreadyHasWorkflow = prepared.selectedRecords.some((record) => record.id === workflowDocumentId)
-      const needsWorkflowRetry = Boolean(
-        workflowDocumentId
-          && !alreadyHasWorkflow
-          && aiResult.requestedDocumentIds.includes(workflowDocumentId),
-      )
-      if (needsFocusRetry || needsWorkflowRetry) {
-        // Retry targets are prepended, not appended: under the schema's
-        // target cap, appending would let slice() silently drop the very
-        // document the model asked for and run a pointless second round
-        // without new evidence (ODE-504 review round 2). The targets the
-        // model explicitly requested this turn always fit; if the user's
-        // selection no longer does, the oldest trailing entries yield.
-        const retryTargets: WorkspaceAgentSelection[] = []
-        if (needsFocusRetry && focusedDocumentId) retryTargets.push({ kind: "file", documentId: focusedDocumentId })
-        if (needsWorkflowRetry && workflowDocumentId) retryTargets.push({ kind: "file", documentId: workflowDocumentId })
-        const retryKey = (entry: WorkspaceAgentSelection) => entry.kind === "file" ? `file:${entry.documentId}` : `folder:${entry.path ?? ""}`
-        const uniqueRetrySelection = [...retryTargets, ...input.selection]
-          .filter((entry, index, all) => all.findIndex((other) => retryKey(other) === retryKey(entry)) === index)
-          .slice(0, MAX_WORKSPACE_ASK_TARGETS)
-        const retry = await runAskRound(uniqueRetrySelection, { ...execution, stage: "context-acquisition" })
-        if (!retry.error && retry.data) {
-          ;({ prepared, aiResult } = retry.data)
-          executionReceipt = mergeWorkspaceExecutionReceipts([executionReceipt, aiResult.executionReceipt])
-        }
-      }
-
-      const { selectedRecords, recordsById, markdownById, promptRecords } = prepared
+      const { selectedRecords, recordsById, currentRecordsById, markdownById, promptRecords } = prepared
 
       const validEvidence: WorkspaceAskEvidence[] = aiResult.evidence.filter((item) => markdownById.get(item.documentId)?.includes(item.quote))
       const evidence: EvidenceCitation[] = validEvidence.flatMap((item) => {
@@ -2006,6 +1977,7 @@ export async function createWorkspaceAgentService(
         recordsById,
         selectedRecordSet,
         markdownById,
+        new Set(promptRecords.map((record) => record.id)),
       )
 
       return ok({
@@ -2020,6 +1992,14 @@ export async function createWorkspaceAgentService(
           path: record.binding?.relativePath ?? null,
         })),
         suggestedAction: aiResult.suggestedAction ?? null,
+        scopeStatus: aiResult.scopeStatus ?? (selectedRecords.length > 0 ? "ready" : "needs_scope"),
+        responseId: aiResult.responseId ?? null,
+        scopeFingerprint: scopeFingerprintFor(workspaceRootPath, "ask", selectedRecords.map((record) => ({
+          documentId: record.id,
+          documentVersion: artifactVersionKey(currentRecordsById.get(record.id) ?? record),
+          contentHash: (currentRecordsById.get(record.id) ?? record).binding?.contentHash ?? null,
+        }))),
+        compactionCount: aiResult.compactionCount ?? 0,
         executionContext: execution,
         executionReceipt,
       })
@@ -2041,11 +2021,8 @@ export async function createWorkspaceAgentService(
     },
     async reviewMerge(documentIds, readApprovals, execution, signal) {
       const uniqueDocumentIds = [...new Set(documentIds.filter(Boolean))]
-      if (uniqueDocumentIds.length < 2 || uniqueDocumentIds.length > MAX_WORKSPACE_MERGE_DOCUMENTS) {
-        return error(
-          "INVALID_INPUT",
-          `Select between two and ${MAX_WORKSPACE_MERGE_DOCUMENTS} artifacts to synthesize a merge.`,
-        )
+      if (uniqueDocumentIds.length < 2) {
+        return error("INVALID_INPUT", "Select at least two artifacts to synthesize a merge.")
       }
       for (const documentId of uniqueDocumentIds) {
         if (!readApprovals[documentId]) {
@@ -2061,8 +2038,8 @@ export async function createWorkspaceAgentService(
       }
 
       const sources: WorkspaceMergeSource[] = []
-      for (const documentId of uniqueDocumentIds) {
-        const read = await tools.read({ documentId, approval: readApprovals[documentId]! })
+      const reads = await readDocumentsInOrder(uniqueDocumentIds, readApprovals)
+      for (const { documentId, read } of reads) {
         if (read.error || !read.data) {
           return error(
             read.error?.code ?? "NOT_FOUND",
@@ -2080,6 +2057,12 @@ export async function createWorkspaceAgentService(
       }
 
       const request = buildWorkspaceMergeRequest(sources)
+      if (!request.contextComplete) {
+        return error(
+          "BUDGET_EXCEEDED",
+          request.contextError ?? "The selected documents do not fit in the bounded Merge context.",
+        )
+      }
       const reviewResponse = await runSemanticReview({
         operation: "merge",
         initialEvidence: request.initialEvidence,
@@ -2103,7 +2086,6 @@ export async function createWorkspaceAgentService(
       const sourceIds = new Set(input.draft.sourceDocuments.map((source) => source.documentId))
       if (
         input.draft.sourceDocuments.length < 2
-        || input.draft.sourceDocuments.length > MAX_WORKSPACE_MERGE_DOCUMENTS
         || sourceIds.size !== input.draft.sourceDocuments.length
         || input.draft.sections.length === 0
       ) {
@@ -2183,21 +2165,22 @@ export async function createWorkspaceAgentService(
         }
       }
 
-      for (const source of input.draft.sourceDocuments) {
-        const read = await tools.read({
-          documentId: source.documentId,
-          approval: createInternalReadApproval(source.documentId),
-        })
+      const sourceApprovals = Object.fromEntries(input.draft.sourceDocuments.map((source) => [
+        source.documentId,
+        createInternalReadApproval(source.documentId),
+      ])) satisfies Record<string, WorkspaceAgentApproval>
+      const reads = await readDocumentsInOrder(
+        input.draft.sourceDocuments.map((source) => source.documentId),
+        sourceApprovals,
+      )
+      for (const { documentId, read } of reads) {
+        const source = input.draft.sourceDocuments.find((candidate) => candidate.documentId === documentId)!
         if (read.error || !read.data) {
           return error("CONFLICT", `The source ${source.title} is no longer available; review the merge again.`)
         }
         const expected = input.draft.sourceSnapshots[source.documentId]
         const current = read.data.document.catalogRecord
-        if (
-          !expected
-          || artifactVersionKey(current) !== expected.documentVersion
-          || (expected.contentHash !== null && (current.binding?.contentHash ?? null) !== expected.contentHash)
-        ) {
+        if (!expected || !matchesDocumentSnapshot(current, expected)) {
           return error("CONFLICT", `The source ${source.title} changed since this merge was reviewed.`)
         }
       }
@@ -2213,9 +2196,6 @@ export async function createWorkspaceAgentService(
 
       const markdown = buildMergedDocumentMarkdown(input.draft.sections, selectionsById)
       if (!markdown.trim()) return error("INVALID_INPUT", "The reviewed merge has no sections to write.")
-      if (markdown.length > MAX_WORKSPACE_MERGE_MARKDOWN_CHARS) {
-        return error("INVALID_INPUT", "The reviewed merge is too large to write as one bounded document.")
-      }
       return tools.write({
         target: { canonicalPath },
         markdown,

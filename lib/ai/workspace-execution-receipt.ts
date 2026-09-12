@@ -100,8 +100,8 @@ export function normalizeWorkspaceExecutionContext(
   return {
     invocationId: boundedString(input?.invocationId, MAX_WORKSPACE_INVOCATION_ID_CHARS) ?? generated.invocationId,
     action: defaults.action,
-    stage: input?.stage ?? generated.stage,
-    runtime: input?.runtime ?? generated.runtime,
+    stage: defaults.stage ?? generated.stage,
+    runtime: defaults.runtime ?? generated.runtime,
     contextVersion: boundedString(input?.contextVersion, MAX_WORKSPACE_CONTEXT_VERSION_CHARS) ?? generated.contextVersion,
   }
 }
@@ -167,6 +167,24 @@ export function createWorkspaceExecutionReceipt(context: WorkspaceExecutionConte
     productStatus: "not-evaluated",
     responses: [],
   }
+}
+
+/**
+ * A desktop/web invocation may cross the cloud AI adapter boundary. The
+ * server-owned receipt correctly reports the provider runtime as `cloud`,
+ * while the application invocation keeps its originating runtime. All other
+ * identity fields must still match exactly.
+ */
+export function isWorkspaceExecutionReceiptCompatible(
+  context: WorkspaceExecutionContext,
+  receipt: WorkspaceExecutionReceipt,
+): boolean {
+  const runtimeCompatible = receipt.runtime === context.runtime
+    || (receipt.runtime === "cloud" && context.runtime !== "cloud")
+  return receipt.invocationId === context.invocationId
+    && receipt.action === context.action
+    && receipt.stage === context.stage
+    && runtimeCompatible
 }
 
 export function appendWorkspaceResponseTrace(
@@ -238,4 +256,12 @@ export function mergeWorkspaceExecutionReceipts(
     productStatus: valid.at(-1)?.productStatus ?? first.productStatus,
     responses,
   }
+}
+
+/** Counts provider compaction Items represented in the receipt summaries. */
+export function countWorkspaceCompactionItems(receipt: WorkspaceExecutionReceipt | null | undefined): number {
+  return receipt?.responses.reduce(
+    (total, response) => total + response.outputItems.filter((item) => item.type === "compaction").length,
+    0,
+  ) ?? 0
 }

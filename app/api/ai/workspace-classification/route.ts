@@ -1,6 +1,6 @@
 // class: detail (bounded semantic analysis; returns only selected proposals and optional read requests)
 export const runtime = "nodejs"
-export const maxDuration = 60
+export const maxDuration = 240
 
 import { NextResponse } from "next/server"
 import {
@@ -14,12 +14,14 @@ import {
 import { getOpenAIWorkspaceProviderConfig } from "@/lib/ai/openai-workspace-provider-config"
 import {
   createWorkspaceExecutionReceipt,
+  countWorkspaceCompactionItems,
   normalizeWorkspaceExecutionContext,
   withWorkspaceExecutionOutcome,
   type WorkspaceExecutionReceipt,
 } from "@/lib/ai/workspace-execution-receipt"
 import {
-  callWorkspaceOpenAIResponse,
+  callWorkspaceOpenAIResponseStaged,
+  WORKSPACE_OPENAI_REQUEST_TIMEOUT_MS,
   WorkspaceOpenAIResponseError,
 } from "@/lib/ai/workspace-openai-response"
 import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors"
@@ -95,6 +97,7 @@ export async function POST(request: Request) {
   const execution = normalizeWorkspaceExecutionContext(parsed.data.execution, {
     action: "classification",
     runtime: "cloud",
+    stage: "analysis",
   })
   const initialReceipt = createWorkspaceExecutionReceipt(execution)
   const startedAt = Date.now()
@@ -115,16 +118,23 @@ export async function POST(request: Request) {
       )
     }
 
-    let response: Awaited<ReturnType<typeof callWorkspaceOpenAIResponse>>
+    let response: Awaited<ReturnType<typeof callWorkspaceOpenAIResponseStaged>>
     try {
-      response = await callWorkspaceOpenAIResponse({
+      response = await callWorkspaceOpenAIResponseStaged({
         config,
         execution,
         systemPrompt: buildWorkspaceClassificationSystemPrompt(),
         userPrompt: buildWorkspaceClassificationUserPrompt(parsed.data),
         maxOutputTokens: Math.max(config.maxOutputTokens, 8_192),
-        timeoutMs: 45_000,
+        timeoutMs: WORKSPACE_OPENAI_REQUEST_TIMEOUT_MS,
         textFormat: workspaceClassificationTextFormat,
+        capacity: {
+          contextWindowTokens: config.contextWindowTokens ?? null,
+          reservedOutputTokens: Math.max(config.maxOutputTokens, 8_192),
+        },
+        contextManagement: config.compactionThresholdTokens
+          ? [{ type: "compaction", compact_threshold: config.compactionThresholdTokens }]
+          : undefined,
         messages: {
           unavailable: "AI provider is unavailable for workspace classification.",
           timeout: "AI provider timed out while classifying the selected artifacts.",
@@ -232,6 +242,7 @@ export async function POST(request: Request) {
       promptTokens: latest?.usage.promptTokens ?? null,
       completionTokens: latest?.usage.completionTokens ?? null,
       totalTokens: latest?.usage.totalTokens ?? null,
+      compactionCount: countWorkspaceCompactionItems(receipt),
       latencyMs: latest?.latencyMs ?? Date.now() - startedAt,
       error: null,
     })

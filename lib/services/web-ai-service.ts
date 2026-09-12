@@ -3,6 +3,7 @@
 import { localDB } from "@/lib/local-db"
 import type {
   AIService,
+  AIServiceRequestOptions,
   LearnedWordEntry,
   LearnWordInput,
   PersistCorrectionBlockInput,
@@ -79,6 +80,10 @@ type WorkspaceAskPayload = {
   evidence: WorkspaceAskResult["evidence"]
   requestedDocumentIds: string[]
   suggestedAction: WorkspaceAskResult["suggestedAction"]
+  scopeStatus?: WorkspaceAskResult["scopeStatus"]
+  responseId?: string | null
+  scopeFingerprint?: string | null
+  compactionCount?: number
   model: string
   promptTokens: number | null
   completionTokens: number | null
@@ -250,6 +255,10 @@ export const webAIService: AIService = {
         evidence: parsed.data.evidence,
         requestedDocumentIds: parsed.data.requestedDocumentIds,
         suggestedAction: parsed.data.suggestedAction,
+        scopeStatus: parsed.data.scopeStatus,
+        responseId: parsed.data.responseId ?? null,
+        scopeFingerprint: parsed.data.scopeFingerprint ?? null,
+        compactionCount: parsed.data.compactionCount ?? 0,
         usage: {
           model: parsed.data.model,
           promptTokens: parsed.data.promptTokens,
@@ -298,13 +307,14 @@ export const webAIService: AIService = {
     }
   },
 
-  async runSemanticRound(input: WorkspaceSemanticRoundRequest) {
+  async runSemanticRound(input: WorkspaceSemanticRoundRequest, options?: AIServiceRequestOptions) {
     try {
       const response = await fetch("/api/ai/workspace-semantic-round", {
         method: "POST",
         headers: {
           "content-type": "application/json",
         },
+        signal: options?.signal,
         body: JSON.stringify(input),
       })
 
@@ -324,13 +334,14 @@ export const webAIService: AIService = {
     }
   },
 
-  async reviewWorkspaceDocumentRelations(input: WorkspaceDocumentRelationsRoundRequest) {
+  async reviewWorkspaceDocumentRelations(input: WorkspaceDocumentRelationsRoundRequest, options?: AIServiceRequestOptions) {
     try {
       const response = await fetch("/api/ai/workspace-document-relations", {
         method: "POST",
         headers: {
           "content-type": "application/json",
         },
+        signal: options?.signal,
         body: JSON.stringify(input),
       })
 
@@ -350,13 +361,14 @@ export const webAIService: AIService = {
     }
   },
 
-  async reviewWorkspaceMerge(input: WorkspaceMergeRoundRequest) {
+  async reviewWorkspaceMerge(input: WorkspaceMergeRoundRequest, options?: AIServiceRequestOptions) {
     try {
       const response = await fetch("/api/ai/workspace-merge", {
         method: "POST",
         headers: {
           "content-type": "application/json",
         },
+        signal: options?.signal,
         body: JSON.stringify(input),
       })
 

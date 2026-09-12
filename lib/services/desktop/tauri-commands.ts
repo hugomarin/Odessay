@@ -100,6 +100,13 @@ export async function tauriCreateFile(dir: string, filename: string): Promise<st
   return path
 }
 
+/** Create a fully persisted file without replacing an existing destination. */
+export async function tauriWriteNewFile(path: string, content: string): Promise<void> {
+  markOdessaySelfWritePath(path)
+  await invoke<void>("write_new_file", { path, content })
+  markOdessaySelfWritePath(path)
+}
+
 export async function tauriWriteFile(path: string, content: string): Promise<void> {
   // `write_file` (Rust) writes to `${path}.tmp` then renames it onto `path` —
   // the watcher reports a `create` and a `rename` for the .tmp sibling before

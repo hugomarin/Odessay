@@ -52,8 +52,7 @@ import type {
   WorkspaceAgentApproval,
 } from "@/lib/services/contracts/workspace-agent"
 import type { WorkspaceExecutionReceipt } from "@/lib/ai/workspace-execution-receipt"
-import { MAX_WORKSPACE_CLASSIFICATION_TARGETS } from "@/lib/ai/workspace-classification"
-import { MAX_WORKSPACE_ASK_TARGETS, MAX_WORKSPACE_ASK_SESSION_ACTION_CHARS } from "@/lib/ai/workspace-ask"
+import { MAX_WORKSPACE_ASK_SESSION_ACTION_CHARS } from "@/lib/ai/workspace-ask"
 import { createWorkspaceExecutionContext } from "@/lib/ai/workspace-execution-receipt"
 import { mergeWorkspaceExecutionReceipts } from "@/lib/ai/workspace-execution-receipt"
 import {
@@ -123,6 +122,8 @@ export type WorkspaceAgentPanelProps = {
   scope: WorkspaceAgentScope
   workspaceRootPath?: string | null
   scopeLabel?: string
+  /** Documents selected in the owning Workspace list. They are explicit agent context, just like an attachment. */
+  selectedDocumentIds?: readonly string[]
   open?: boolean
   onOpenChange?: (open: boolean) => void
   /** Opens a document by id (e.g. in a preview) when the user clicks a file the agent cited in chat. */
@@ -136,6 +137,28 @@ export type WorkspaceAgentPanelProps = {
    * real Workspace `service` and stay disabled without one.
    */
   getDocumentSnapshot?: () => WorkspaceAgentDocumentSnapshot | null
+}
+
+export function buildWorkspaceAgentContextAttachments(
+  attachments: readonly WorkspaceAgentContextAttachment[],
+  selectedDocumentIds: readonly string[],
+): WorkspaceAgentContextAttachment[] {
+  const attachedIds = new Set(
+    attachments
+      .filter((attachment) => attachment.kind === "file" && attachment.id)
+      .map((attachment) => attachment.id as string),
+  )
+  const selected = selectedDocumentIds
+    .filter((documentId) => documentId.trim().length > 0 && !attachedIds.has(documentId))
+    .map((documentId) => ({
+      kind: "file" as const,
+      id: documentId,
+      // The service resolves the document by id. An empty path prevents a
+      // UI selection from being mistaken for an untrusted filesystem path.
+      path: "",
+      label: "Selected Workspace artifact",
+    }))
+  return [...attachments, ...selected]
 }
 
 export type { ToolResult, AgentMessage }
@@ -194,6 +217,35 @@ function askChatMessage(run: WorkspaceAgentAskRun): string {
   return `${run.answer}${additionalContext}`
 }
 
+const EXPLICIT_ACTION_TERMS: Record<NonNullable<WorkspaceAgentAskRun["suggestedAction"]>, RegExp> = {
+  classification: /\b(classif|clasif|tipo y estado|status)\b/,
+  workflow: /\bworkflow\b|plan de trabajo|coordina(?:r)? los documentos/,
+  "broken-links": /broken links|enlaces? rotos|referencias? rotas|vínculos? rotos/,
+  archive: /\barchive\b|archiv(?:a|ar|o|e)|stale|inactiv(?:os?|as?)/,
+  contradictions: /contradic|conflict|contrapos|inconsisten/,
+}
+
+const EXPLICIT_ACTION_VERBS = /\b(haz|hacer|ejecuta?r?|corre?r?|revisa?r?|comprueba?r?|genera?r?|crea?r?|construye?r?|combina?r?|fusiona?r?|propone?r?|find|check|run|draft|merge|classif(?:y|ica(?:r)?)?|archive)\b/
+
+/**
+ * The model may suggest a predetermined action, but it cannot turn an
+ * ordinary factual question into a write-adjacent command. An explicit
+ * action term plus an action verb (or the bare action name) is required.
+ */
+export function isExplicitWorkspaceAgentActionRequest(
+  request: string,
+  action: NonNullable<WorkspaceAgentAskRun["suggestedAction"]>,
+): boolean {
+  const normalized = request
+    .trim()
+    .toLocaleLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+  if (!EXPLICIT_ACTION_TERMS[action].test(normalized)) return false
+  const bareAction = normalized.replace(/[¿?!.,\s]+/g, "") === action.replace("-", "")
+  return bareAction || EXPLICIT_ACTION_VERBS.test(normalized)
+}
+
 function ExecutionReceiptNotice({ receipt }: { receipt: WorkspaceExecutionReceipt }) {
   const [copied, setCopied] = useState(false)
 
@@ -225,54 +277,23 @@ function ExecutionReceiptNotice({ receipt }: { receipt: WorkspaceExecutionReceip
 }
 
 /**
- * Free-text chat and the Classify action both need a bounded document
- * selection to ground the model. The envelope's own `availableSources`
- * (explicit attachment / focused Writing, per `deriveAvailableSources`) is
- * tried first; when it's empty and the scope is the whole workspace (not a
- * single open document), `envelope.policies.autoSelectRecent` decides what
- * happens next:
- * - Classify sets it `true` — falls back to the most recently updated
- *   artifacts instead of dead-ending the request; classifying *something*
- *   is the point of the action.
- * - Free-text ask sets it `false` — auto-reading recent artifacts on every
- *   plain "Hola" was ODE-489's documented "Context Gap conocido"
- *   (conversation must produce a plan with zero document reads). Returns an
- *   empty, still-`ok` selection instead, so askAgent can answer
- *   conversationally with no forced read.
+ * Free-text chat and the Classify action both use the envelope's explicit
+ * sources. An empty Workspace selection stays empty; the model can answer a
+ * conversational message, but a document-dependent request must return
+ * `needs_scope` and ask the user to attach or confirm documents.
  */
 async function resolveChatSelection(
   envelope: ContextEnvelope,
-  service: WorkspaceAgentService,
-  maxTargets: number,
 ): Promise<
   | { ok: true; selection: WorkspaceAgentSelection[]; autoSelectedNotice: string | null }
   | { ok: false; message: string }
 > {
   const selection = selectionFromEnvelope(envelope)
   if (selection.length > 0) return { ok: true, selection, autoSelectedNotice: null }
-  if (!envelope.policies.autoSelectRecent) {
-    return { ok: true, selection: [], autoSelectedNotice: null }
-  }
-  if (envelope.invocation.location.surface !== "workspace") {
-    return { ok: false, message: "Attach an artifact or open a document before asking the Workspace agent." }
-  }
-
-  const context = await service.getContext()
-  if (context.error || !context.data) {
-    return { ok: false, message: context.error?.message ?? "Workspace context could not be loaded." }
-  }
-  const recent = context.data.documents
-    .filter((document) => !document.deletedAt && document.id !== context.data.existingWorkflow?.id)
-    .sort((left, right) => (right.modifiedAt ?? 0) - (left.modifiedAt ?? 0))
-    .slice(0, maxTargets)
-  if (recent.length === 0) {
-    return { ok: false, message: "This workspace has no artifacts yet to review." }
-  }
-  return {
-    ok: true,
-    selection: recent.map((document) => ({ kind: "file" as const, documentId: document.id })),
-    autoSelectedNotice: `No artifact was attached, so I used the ${recent.length} most recently updated artifact(s): ${recent.map((document) => document.title?.trim() || document.binding?.relativePath || document.id).join(", ")}.`,
-  }
+  // A missing scope is a valid conversational state. Never use recent
+  // catalog entries as an implicit scope; the agent must ask the user to
+  // select or confirm documents.
+  return { ok: true, selection: [], autoSelectedNotice: null }
 }
 
 function archiveCandidatesFacts(candidates: ArchiveCandidate[]): string[] {
@@ -330,6 +351,7 @@ function WorkspaceAgentPanelSession({
   scope,
   workspaceRootPath,
   scopeLabel,
+  selectedDocumentIds = [],
   open = true,
   onOpenChange,
   onOpenDocument,
@@ -367,6 +389,33 @@ function WorkspaceAgentPanelSession({
    * the moment each append actually happens.
    */
   const sessionGenerationRef = useRef(0)
+  /** Provider-side head for the current explicit document scope. */
+  const askResponseIdRef = useRef<string | null>(null)
+  const askScopeFingerprintRef = useRef<string | null>(null)
+  const askScopeKeyRef = useRef<string | null>(null)
+
+  // Workspace list selection is a separate UI concern from composer
+  // attachments, but both are explicit user-selected agent context. Keep
+  // the durable composer chips independent so removing a chip never mutates
+  // the Workspace's bulk-selection state.
+  const contextAttachments = useMemo(
+    () => buildWorkspaceAgentContextAttachments(attachments, selectedDocumentIds),
+    [attachments, selectedDocumentIds],
+  )
+
+  const askScopeKey = useMemo(() => JSON.stringify({
+    scope,
+    sources: contextAttachments
+      .map((attachment) => ({ kind: attachment.kind, id: attachment.id ?? null, path: attachment.path }))
+      .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
+  }), [contextAttachments, scope])
+
+  useEffect(() => {
+    if (askScopeKeyRef.current === askScopeKey) return
+    askScopeKeyRef.current = askScopeKey
+    askResponseIdRef.current = null
+    askScopeFingerprintRef.current = null
+  }, [askScopeKey])
 
   const storageKey = `odessay.workspace-agent.resolved.${scope.kind}.${scope.kind === "workspace" ? scope.rootId : scope.id}`
   const dockStorageKey = "odessay.workspace-agent.dock-mode"
@@ -445,11 +494,13 @@ function WorkspaceAgentPanelSession({
   }, [open, workspaceRootPath])
 
   const documentIds = useMemo(
-    () => documentIdsFromSources(deriveAvailableSources(scope, attachments)),
-    [attachments, scope],
+    () => documentIdsFromSources(deriveAvailableSources(scope, contextAttachments)),
+    [contextAttachments, scope],
   )
-  const canCompare = Boolean(service) && documentIds.length >= 2
-  const canClassify = Boolean(service)
+  // Every document-dependent action needs explicit scope. Contradictions
+  // accepts one document because a document can contradict itself.
+  const canCompare = Boolean(service) && documentIds.length >= 1
+  const canClassify = Boolean(service) && documentIds.length >= 1
 
   /**
    * A predetermined action (Workflow, Broken links, ...) carries its
@@ -473,7 +524,12 @@ function WorkspaceAgentPanelSession({
     const executionService = service ?? undefined
     setMessages((current) => {
       if (sessionGenerationRef.current !== generation) return current
-      return [...current, createToolResultMessage(text, toolResult, undefined, context, executionService, executionReceipt, semanticReview)]
+      return [...current, createToolResultMessage(text, toolResult, {
+        context,
+        executionService,
+        executionReceipt,
+        semanticReview,
+      })]
     })
     if (sessionGenerationRef.current === generation) setFeedback(null)
   }, [scope, scopeLabel, service, workspaceRootPath])
@@ -581,14 +637,14 @@ function WorkspaceAgentPanelSession({
       scope,
       scopeLabel,
       workspaceRootPath,
-      attachments,
+      attachments: contextAttachments,
       hasService: true,
       recentSessionActions: sessionActionLogRef.current,
-      // Classify always reads what it classifies — there's no "defer and
-      // ask again" for the thing the action exists to evaluate.
-      policies: { autoSelectRecent: true, eagerlyLoadFocusedDocument: true },
+      // Classification reads exactly the documents explicitly selected for
+      // this action. The action must not infer a scope from recent artifacts.
+      policies: { autoSelectRecent: false, eagerlyLoadFocusedDocument: true },
     })
-    const resolved = await resolveChatSelection(envelope, service, MAX_WORKSPACE_CLASSIFICATION_TARGETS)
+    const resolved = await resolveChatSelection(envelope)
     if (!resolved.ok) {
       setFeedback(resolved.message)
       return null
@@ -629,7 +685,7 @@ function WorkspaceAgentPanelSession({
       setFeedback("The agent needs more document evidence before it can make a firmer classification.")
     }
     return run
-  }, [announceToolResult, attachments, getWorkflowReadApproval, scope, scopeLabel, service, workspaceRootPath])
+  }, [announceToolResult, contextAttachments, getWorkflowReadApproval, scope, scopeLabel, service, workspaceRootPath])
 
   const executeAsk = useCallback(async (question: string): Promise<AskOutcome> => {
     if (!service) {
@@ -647,6 +703,8 @@ function WorkspaceAgentPanelSession({
         title: snapshot.title,
         markdown: snapshot.markdown,
         sessionContext: sessionActionLogRef.current.slice(-MAX_SESSION_ACTIONS_CONTEXT),
+        previousResponseId: askScopeKeyRef.current === askScopeKey ? askResponseIdRef.current : null,
+        previousScopeFingerprint: askScopeKeyRef.current === askScopeKey ? askScopeFingerprintRef.current : null,
         execution: createWorkspaceExecutionContext("ask", "web"),
       })
       if (response.error || !response.data) {
@@ -654,28 +712,22 @@ function WorkspaceAgentPanelSession({
       }
       return { ok: true, run: response.data, autoSelectedNotice: null }
     }
-    // Frozen once, read three ways below: the selection to ground in
-    // (envelope.availableSources, with the focused document excluded per
-    // eagerlyLoadFocusedDocument: false below — it's referenced, not
-    // loaded, until askAgent's own bounded retry fetches it on request);
-    // the live override (liveOverrideFromEnvelope), only when it actually
-    // belongs to the document being asked about; and the focused
-    // document's bare id, so the model knows it exists without having its
-    // content pushed on every single turn (ODE-489/490 follow-up — a plain
-    // "Hola" must cost zero document reads, not just zero *extra* ones).
+    // Compose one explicit scope for this turn. An empty selection remains
+    // empty; the model may answer conversationally, but a document-dependent
+    // question must ask the user to attach or confirm documents.
     const envelope = buildContextEnvelope({
       text: question,
       source: "chat",
       scope,
       scopeLabel,
       workspaceRootPath,
-      attachments,
+      attachments: contextAttachments,
       liveSnapshot: getDocumentSnapshot?.() ?? null,
       hasService: true,
       recentSessionActions: sessionActionLogRef.current,
       policies: { autoSelectRecent: false, eagerlyLoadFocusedDocument: false },
     })
-    const resolved = await resolveChatSelection(envelope, service, MAX_WORKSPACE_ASK_TARGETS)
+    const resolved = await resolveChatSelection(envelope)
     if (!resolved.ok) {
       return { ok: false, message: resolved.message }
     }
@@ -690,6 +742,8 @@ function WorkspaceAgentPanelSession({
       sessionContext: sessionActionLogRef.current.slice(-MAX_SESSION_ACTIONS_CONTEXT),
       liveOverride: liveOverrideFromEnvelope(envelope),
       focusedDocumentId: envelope.invocation.location.focusedDocument?.documentId ?? null,
+      previousResponseId: askScopeKeyRef.current === askScopeKey ? askResponseIdRef.current : null,
+      previousScopeFingerprint: askScopeKeyRef.current === askScopeKey ? askScopeFingerprintRef.current : null,
       execution: createWorkspaceExecutionContext("ask", envelope.invocation.runtime.kind),
     })
     if (response.error || !response.data) {
@@ -698,7 +752,7 @@ function WorkspaceAgentPanelSession({
     const autoSelectedNotice = hasShownAutoSelectNotice.current ? null : resolved.autoSelectedNotice
     if (resolved.autoSelectedNotice) hasShownAutoSelectNotice.current = true
     return { ok: true, run: response.data, autoSelectedNotice }
-  }, [attachments, getDocumentSnapshot, getWorkflowReadApproval, scope, scopeLabel, service, workspaceRootPath])
+  }, [askScopeKey, contextAttachments, getDocumentSnapshot, getWorkflowReadApproval, scope, scopeLabel, service, workspaceRootPath])
 
   const runClassification = useCallback(() => runAction("classification", async (generation) => {
     await executeClassification("Review these artifacts and propose their type and status with evidence.", generation)
@@ -725,7 +779,7 @@ function WorkspaceAgentPanelSession({
       scope,
       scopeLabel,
       workspaceRootPath,
-      attachments,
+      attachments: contextAttachments,
       hasService: true,
       recentSessionActions: sessionActionLogRef.current,
       // Comparing documents requires reading them — there's no "defer and
@@ -735,8 +789,8 @@ function WorkspaceAgentPanelSession({
       policies: { autoSelectRecent: false, eagerlyLoadFocusedDocument: true },
     })
     const targetIds = documentIdsFromSources(envelope.availableSources)
-    if (targetIds.length < 2) {
-      setFeedback("Attach at least two artifacts to compare their claims.")
+    if (targetIds.length < 1) {
+      setFeedback("Selecciona al menos un artifact para revisar sus contradicciones.")
       return
     }
     const readApprovals = Object.fromEntries(targetIds.map((documentId) => [documentId, createApproval("read", documentId)]))
@@ -771,7 +825,7 @@ function WorkspaceAgentPanelSession({
       run.review.executionReceipt ?? note.executionReceipt,
       semanticReview,
     )
-  }), [announceToolResult, attachments, getWorkflowReadApproval, runAction, scope, scopeLabel, service, workspaceRootPath])
+  }), [announceToolResult, contextAttachments, getWorkflowReadApproval, runAction, scope, scopeLabel, service, workspaceRootPath])
 
   /** Merge (Fase H): the application service owns bounded reads, synthesis and provenance. */
   const runMerge = useCallback(() => runAction("merge", async (generation) => {
@@ -782,7 +836,7 @@ function WorkspaceAgentPanelSession({
       scope,
       scopeLabel,
       workspaceRootPath,
-      attachments,
+      attachments: contextAttachments,
       hasService: true,
       recentSessionActions: sessionActionLogRef.current,
       // Same reasoning as Contradictions: merging requires reading every
@@ -822,7 +876,7 @@ function WorkspaceAgentPanelSession({
       error: merge.error,
     }
     announceToolResult(note.note, generation, { kind: "merge", merge }, merge.executionReceipt ?? note.executionReceipt, semanticReview)
-  }), [announceToolResult, attachments, runAction, scope, scopeLabel, service, workspaceRootPath])
+  }), [announceToolResult, contextAttachments, runAction, scope, scopeLabel, service, workspaceRootPath])
 
   /**
    * Data-driven catalog for the Actions popover — one entry per predetermined
@@ -1210,7 +1264,10 @@ function WorkspaceAgentPanelSession({
     setReviewCursor(0)
     setActionsOpen(false)
     sessionActionLogRef.current = []
-  }, [])
+    askResponseIdRef.current = null
+    askScopeFingerprintRef.current = null
+    askScopeKeyRef.current = askScopeKey
+  }, [askScopeKey])
 
   /**
    * Hands a free-text turn off to the same tool/workflow path the
@@ -1248,7 +1305,8 @@ function WorkspaceAgentPanelSession({
   const submitChat = useCallback(() => {
     const text = chatDraft.trim()
     if (!text) return
-    const messageAttachments = attachments.map((attachment) => ({ ...attachment }))
+    const messageAttachments = buildWorkspaceAgentContextAttachments(attachments, selectedDocumentIds)
+      .map((attachment) => ({ ...attachment }))
     const messageTimestamp = Date.now()
     // Frozen at submit time — the turn stays anchored to the Writing/Workspace
     // the question was actually asked from, even if the user switches tabs
@@ -1272,7 +1330,7 @@ function WorkspaceAgentPanelSession({
       } catch (thrown) {
         outcome = { ok: false, message: thrown instanceof Error ? thrown.message : "The Workspace agent could not answer right now." }
       }
-      if (outcome.ok && outcome.run.suggestedAction) {
+      if (outcome.ok && outcome.run.suggestedAction && isExplicitWorkspaceAgentActionRequest(text, outcome.run.suggestedAction)) {
         // A "New conversation" in flight during the ask must suppress the
         // dispatch entirely, the same way the plain-answer branch below
         // drops a stale append. Workflow/Broken links/Archive/Contradictions
@@ -1286,6 +1344,10 @@ function WorkspaceAgentPanelSession({
         // message (or, for the ones with no result, its own explanation).
         await dispatchSuggestedAction(outcome.run.suggestedAction, text, generation)
         return
+      }
+      if (outcome.ok && sessionGenerationRef.current === generation && askScopeKeyRef.current === askScopeKey) {
+        askResponseIdRef.current = outcome.run.responseId ?? null
+        askScopeFingerprintRef.current = outcome.run.scopeFingerprint ?? null
       }
       setMessages((current) => {
         if (sessionGenerationRef.current !== generation) return current
@@ -1314,7 +1376,7 @@ function WorkspaceAgentPanelSession({
         recordSessionAction(`Q: ${text}\nA: ${outcome.run.answer}`, generation)
       }
     })
-  }, [attachments, chatDraft, dispatchSuggestedAction, executeAsk, recordSessionAction, runAction, scope, scopeLabel, workspaceRootPath])
+  }, [askScopeKey, attachments, chatDraft, dispatchSuggestedAction, executeAsk, recordSessionAction, runAction, scope, scopeLabel, selectedDocumentIds, workspaceRootPath])
 
   if (!open) {
     return (

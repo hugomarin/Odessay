@@ -111,10 +111,14 @@ export type WorkspaceAgentEvidenceReadResult = {
   receipt: WorkspaceAgentExecutionReceipt
 }
 
+export type WorkspaceAgentToolCallOptions = {
+  signal?: AbortSignal
+}
+
 export interface WorkspaceAgentToolsService {
   read(input: WorkspaceAgentReadInput): Promise<ServiceResponse<WorkspaceAgentReadResult>>
   /** Optional during the adapter migration; desktop implements the versioned, bounded form. */
-  readEvidence?(input: WorkspaceAgentEvidenceReadInput): Promise<ServiceResponse<WorkspaceAgentEvidenceReadResult>>
+  readEvidence?(input: WorkspaceAgentEvidenceReadInput, options?: WorkspaceAgentToolCallOptions): Promise<ServiceResponse<WorkspaceAgentEvidenceReadResult>>
   write(input: WorkspaceAgentWriteInput): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
   move(input: WorkspaceAgentMoveInput): Promise<ServiceResponse<WorkspaceAgentMutationResult>>
   edit(input: WorkspaceAgentEditInput): Promise<ServiceResponse<WorkspaceAgentMutationResult>>

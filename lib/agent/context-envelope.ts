@@ -15,16 +15,11 @@ import type { WorkspaceAgentSelection } from "@/lib/services/workspace-agent-ser
  * What this module intentionally does NOT do:
  * - It does not read document bodies, ever — `availableSources` are
  *   references only. Whether a reference actually gets read is decided by
- *   `policies.eagerlyLoadFocusedDocument` (via `selectionFromEnvelope`)
- *   plus askAgent's own bounded retry-on-request — this module only
- *   composes the references and the policy, not the acquisition itself
- *   (lib/services/context/, unchanged by this file).
- * - It does not implement the full target precedence
- *   (explicit reference > live text > focused document > visible Workspace
- *   > session). The pre-existing logic this replaces put the focused
- *   Writing ahead of explicit attachments in `availableSources`, and this
- *   module preserves that order deliberately rather than silently
- *   reordering it mid-refactor — see `deriveAvailableSources` below.
+ *   explicit selection and the host action; this module only composes the
+ *   references and policy, not the acquisition itself.
+ * - It does not infer a target from recency, catalog order, or an ambiguous
+ *   name. `availableSources` contains only the focused/attached references
+ *   supplied by the host; body acquisition remains an explicit action.
  * - `RuntimeContext.capabilities` mirrors the single real signal the
  *   codebase tracks today (whether a Workspace `service` exists at all),
  *   not per-capability flags from an actual runtime adapter. Documented as
@@ -104,20 +99,12 @@ export type AgentInvocation = {
 }
 
 export type ContextPolicies = {
-  /** Whether an empty explicit selection may fall back to the Workspace's most recently updated artifacts. */
+  /** @deprecated Kept for host compatibility; empty scope never falls back to recent artifacts. */
   autoSelectRecent: boolean
   /**
-   * Whether the focused Writing's body is read immediately, or only
-   * referenced (id known, content deferred) until the model explicitly
-   * asks for it via `requestedDocumentIds` (ODE-489 follow-up — "el
-   * contexto solo se debe invocar en la medida que el usuario lo
-   * solicite"). `true` for Classify (there's nothing to classify without
-   * reading it). `false` for free-text ask — the focused document is
-   * "where the user is standing", not automatically evidence: a plain
-   * "Hola" must not read it, but "resume this" can still request it and
-   * get it in a bounded second round (see `askAgent`'s auto-retry).
-   * Explicit attachments are never affected by this — attaching something
-   * on purpose is already unambiguous intent to use it.
+   * Whether a focused Writing is included when the host action builds its
+   * explicit selection. This does not authorize the model to expand scope;
+   * an empty selection remains empty.
    */
   eagerlyLoadFocusedDocument: boolean
 }
@@ -134,9 +121,8 @@ export type ContextEnvelope = {
 /**
  * The composition step shared by chat, Classify, and the comparison-style
  * actions (Contradictions, Merge): the focused Writing (if any) first, then
- * explicit attachments, deduped by nothing (an attachment matching the
- * focused document is legitimately listed once each — callers that need a
- * bare id list should use `documentIdsFromSources`, which dedupes).
+ * explicit attachments. Callers that need a bare id list should use
+ * `documentIdsFromSources`, which dedupes.
  */
 export function deriveAvailableSources(
   scope: WorkspaceAgentScope,
@@ -239,12 +225,10 @@ export function buildContextEnvelope(input: {
 }
 
 /**
- * The bounded selection to hand to askAgent/suggestClassification —
- * envelope sources translated to the service's own selection shape.
- * Excludes the focused-document source when
- * `policies.eagerlyLoadFocusedDocument` is false: it's still `available`
- * (findable via `envelope.focus`/`invocation.location.focusedDocument`),
- * just not eagerly read. Explicit attachments are never excluded here.
+ * The explicit selection to hand to askAgent/suggestClassification —
+ * envelope sources translated to the service's own selection shape. A
+ * focused source is included only when the host action opts into it; no
+ * catalog fallback is added here.
  */
 export function selectionFromEnvelope(envelope: ContextEnvelope): WorkspaceAgentSelection[] {
   return envelope.availableSources

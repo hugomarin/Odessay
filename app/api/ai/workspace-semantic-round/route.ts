@@ -1,6 +1,6 @@
 // class: detail (one bounded semantic Responses round; orchestration stays in shared application code)
 export const runtime = "nodejs"
-export const maxDuration = 60
+export const maxDuration = 240
 
 import { NextResponse } from "next/server"
 import {
@@ -14,12 +14,19 @@ import {
 import { getOpenAIWorkspaceProviderConfig } from "@/lib/ai/openai-workspace-provider-config"
 import {
   createWorkspaceExecutionReceipt,
+  countWorkspaceCompactionItems,
+  mergeWorkspaceExecutionReceipts,
   normalizeWorkspaceExecutionContext,
   withWorkspaceExecutionOutcome,
   type WorkspaceExecutionReceipt,
 } from "@/lib/ai/workspace-execution-receipt"
 import {
+  estimateWorkspaceTokens,
+  planWorkspaceSemanticBatches,
+} from "@/lib/ai/workspace-context-capacity"
+import {
   callWorkspaceOpenAIResponse,
+  WORKSPACE_OPENAI_REQUEST_TIMEOUT_MS,
   WorkspaceOpenAIResponseError,
 } from "@/lib/ai/workspace-openai-response"
 import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors"
@@ -114,20 +121,10 @@ export async function POST(request: Request) {
 
     let response: Awaited<ReturnType<typeof callWorkspaceOpenAIResponse>>
     try {
-      response = await callWorkspaceOpenAIResponse({
-        config,
-        execution,
-        systemPrompt: buildWorkspaceSemanticSystemPrompt(),
-        userPrompt: "",
-        input: [
-          { role: "system", content: buildWorkspaceSemanticSystemPrompt() },
-          ...toWorkspaceSemanticProviderInput(parsed.data.input),
-        ],
-        tools: toWorkspaceSemanticProviderTools(parsed.data.tools),
-        previousResponseId: parsed.data.previousResponseId ?? null,
-        maxOutputTokens: Math.max(config.maxOutputTokens, 8_192),
-        timeoutMs: 45_000,
-        textFormat: {
+      const systemPrompt = buildWorkspaceSemanticSystemPrompt()
+      const maxOutputTokens = Math.max(config.maxOutputTokens, 8_192)
+      const providerTools = toWorkspaceSemanticProviderTools(parsed.data.tools)
+      const finalTextFormat = {
           type: "json_schema",
           name: "WorkspaceSemanticFinalEnvelope",
           description: "Final semantic review status. Use only when no more evidence is needed.",
@@ -141,18 +138,72 @@ export async function POST(request: Request) {
             required: ["coverage", "status", "payload"],
             additionalProperties: false,
           },
-          strict: true,
-        },
-        messages: {
-          unavailable: "AI provider is unavailable for semantic workspace review.",
-          timeout: "AI provider timed out during semantic workspace review.",
-          rateLimited: "AI provider rate limited semantic workspace review.",
-          contractRejected: "AI provider rejected the semantic workspace review contract.",
-          authRejected: "OpenAI rejected the configured semantic workspace review credentials.",
-          providerFailed: "AI provider failed semantic workspace review.",
-          parseFailed: "AI provider returned an invalid semantic workspace review response.",
-        },
+            strict: true,
+      } as const
+      const batchPlan = planWorkspaceSemanticBatches(parsed.data.input, {
+        contextWindowTokens: config.contextWindowTokens ?? null,
+        reservedOutputTokens: maxOutputTokens,
+        overheadTokens: estimateWorkspaceTokens(systemPrompt) + estimateWorkspaceTokens(JSON.stringify(providerTools)),
       })
+      const batches = batchPlan.batches.length > 0 ? batchPlan.batches : [parsed.data.input]
+      const receipts: WorkspaceExecutionReceipt[] = []
+      let previousResponseId = parsed.data.previousResponseId ?? null
+      let lastResponse: Awaited<ReturnType<typeof callWorkspaceOpenAIResponse>> | null = null
+
+      for (const [index, batch] of batches.entries()) {
+        const finalBatch = index === batches.length - 1
+        const stageInstruction = finalBatch
+          ? "All staged evidence has now been supplied. Produce the final semantic envelope now."
+          : "This is one staged portion of the selected evidence. Do not finalize yet; acknowledge internally and wait for the next staged portion."
+        const stagedInput = [
+          { role: "system", content: systemPrompt },
+          ...toWorkspaceSemanticProviderInput(batch),
+          { role: "user", content: stageInstruction },
+        ]
+        lastResponse = await callWorkspaceOpenAIResponse({
+          config,
+          execution,
+          systemPrompt,
+          userPrompt: "",
+          input: stagedInput,
+          // Intermediate ingestion calls must not produce tool calls that we
+          // could not answer before the next staged source chunk arrives.
+          tools: finalBatch ? providerTools : [],
+          previousResponseId,
+          maxOutputTokens: finalBatch ? maxOutputTokens : Math.min(1_024, maxOutputTokens),
+          timeoutMs: WORKSPACE_OPENAI_REQUEST_TIMEOUT_MS,
+          textFormat: finalBatch ? finalTextFormat : null,
+          contextManagement: config.compactionThresholdTokens
+            ? [{ type: "compaction", compact_threshold: config.compactionThresholdTokens }]
+            : undefined,
+          truncation: "disabled",
+          messages: {
+            unavailable: "AI provider is unavailable for semantic workspace review.",
+            timeout: "AI provider timed out during semantic workspace review.",
+            rateLimited: "AI provider rate limited semantic workspace review.",
+            contractRejected: "AI provider rejected the semantic workspace review contract.",
+            authRejected: "OpenAI rejected the configured semantic workspace review credentials.",
+            providerFailed: "AI provider failed semantic workspace review.",
+            parseFailed: "AI provider returned an invalid semantic workspace review response.",
+          },
+        })
+        receipts.push(lastResponse.receipt)
+        previousResponseId = lastResponse.payload.id ?? null
+        if (!finalBatch && !previousResponseId) {
+          throw new SemanticRoundRouteError(
+            502,
+            "AI_RESPONSE_PARSE_FAILED",
+            "OpenAI did not return a response id for staged semantic context.",
+            true,
+            { phase: "parse", receipt: lastResponse.receipt },
+          )
+        }
+      }
+      if (!lastResponse) throw new Error("Semantic provider returned no response.")
+      response = {
+        payload: lastResponse.payload,
+        receipt: mergeWorkspaceExecutionReceipts(receipts) ?? lastResponse.receipt,
+      }
     } catch (cause) {
       if (cause instanceof WorkspaceOpenAIResponseError) throw routeErrorFromOpenAI(cause)
       throw cause
@@ -199,9 +250,12 @@ export async function POST(request: Request) {
       contextVersion: receipt.contextVersion,
       responseIds: receipt.responses.map((item) => item.responseId).filter(Boolean),
       model: latest?.model ?? config.model,
-      status: latest?.status ?? null,
+      providerStatus: latest?.status ?? null,
+      semanticStatus: normalized.status,
+      productStatus: receipt.productStatus,
       outputItems: latest?.outputItems.length ?? 0,
       toolCalls: normalized.toolCalls.length,
+      compactionCount: countWorkspaceCompactionItems(receipt),
       latencyMs: Date.now() - startedAt,
       error: null,
     })

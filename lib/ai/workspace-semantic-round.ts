@@ -13,8 +13,11 @@ import {
   isCanonicalWorkspaceSemanticToolDescriptor,
 } from "@/lib/ai/workspace-semantic-tool-registry"
 
+/** @deprecated Transport validation no longer imposes a product-sized context. */
 export const MAX_WORKSPACE_SEMANTIC_INPUT_ITEMS = 16
+/** @deprecated Transport validation no longer imposes a product-sized context. */
 export const MAX_WORKSPACE_SEMANTIC_INPUT_ITEM_CHARS = 16_000
+/** @deprecated Provider capacity/staging owns this decision. */
 export const MAX_WORKSPACE_SEMANTIC_INPUT_BYTES = 65_536
 export const MAX_WORKSPACE_SEMANTIC_TOOLS = 4
 export const MAX_WORKSPACE_SEMANTIC_OUTPUT_TEXT_CHARS = 32_000
@@ -23,12 +26,12 @@ const semanticInputItemSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("message"),
     role: z.enum(["user", "assistant"]),
-    content: z.string().trim().min(1).max(MAX_WORKSPACE_SEMANTIC_INPUT_ITEM_CHARS),
+    content: z.string().trim().min(1),
   }).strict(),
   z.object({
     type: z.literal("function_call_output"),
     callId: z.string().trim().min(1).max(128),
-    output: z.string().min(1).max(MAX_WORKSPACE_SEMANTIC_INPUT_ITEM_CHARS),
+    output: z.string().min(1),
   }).strict(),
 ])
 
@@ -40,15 +43,11 @@ const semanticToolDescriptorSchema = z.object({
 
 export const workspaceSemanticRoundRequestSchema = z.object({
   operation: z.enum(["relations", "merge"]),
-  input: z.array(semanticInputItemSchema).min(1).max(MAX_WORKSPACE_SEMANTIC_INPUT_ITEMS),
+  input: z.array(semanticInputItemSchema).min(1),
   tools: z.array(semanticToolDescriptorSchema).max(MAX_WORKSPACE_SEMANTIC_TOOLS),
   previousResponseId: z.string().trim().max(256).nullable().optional(),
   execution: workspaceExecutionContextSchema.nullable().optional(),
 }).strict().superRefine((value, context) => {
-  const totalChars = value.input.reduce((total, item) => total + (item.type === "message" ? item.content.length : item.output.length), 0)
-  if (totalChars > MAX_WORKSPACE_SEMANTIC_INPUT_BYTES) {
-    context.addIssue({ code: "custom", path: ["input"], message: "Semantic round input exceeds the bounded context budget." })
-  }
   const names = new Set<string>()
   for (const [index, tool] of value.tools.entries()) {
     if (names.has(tool.name)) {
@@ -153,7 +152,7 @@ function outputTextFrom(payload: WorkspaceOpenAIResponsePayload): string | null 
       .map((content) => content.text ?? "")
       .join("")
   const text = outputText?.trim() ?? ""
-  return text ? text.slice(0, MAX_WORKSPACE_SEMANTIC_OUTPUT_TEXT_CHARS) : null
+  return text || null
 }
 
 export function normalizeWorkspaceSemanticProviderResponse(

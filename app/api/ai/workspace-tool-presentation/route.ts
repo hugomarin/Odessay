@@ -93,11 +93,8 @@ export async function POST(request: Request) {
     return withCorsHeaders(jsonError(400, "INVALID_INPUT", "Could not read the Workspace agent presentation request."), request)
   }
 
-  const execution = normalizeWorkspaceExecutionContext(parsed.data.execution ? {
-    ...parsed.data.execution,
-    stage: "presentation",
-  } : undefined, {
-    action: parsed.data.execution?.action ?? "presentation",
+  const execution = normalizeWorkspaceExecutionContext(parsed.data.execution, {
+    action: "presentation",
     runtime: "cloud",
     stage: "presentation",
   })

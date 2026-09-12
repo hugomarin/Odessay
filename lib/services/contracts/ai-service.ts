@@ -223,6 +223,11 @@ export type WorkspaceSemanticRoundRequest = {
   execution?: WorkspaceExecutionContext | null
 }
 
+/** Transport controls stay outside the JSON request body. */
+export type AIServiceRequestOptions = {
+  signal?: AbortSignal
+}
+
 /**
  * Relation review keeps a named AIService capability while reusing the same
  * provider-neutral Responses round and loop as Merge. Adapters may route it
@@ -355,7 +360,7 @@ export type WorkspaceClassificationModelProposal = {
 export type WorkspaceClassificationResult = {
   summary: string
   proposals: WorkspaceClassificationModelProposal[]
-  /** At most a few catalog ids that need an explicit second read. */
+  /** Catalog ids that the model explicitly requested after reviewing the selected scope. */
   requestedDocumentIds: string[]
   usage: AiUsage | null
   executionReceipt?: WorkspaceExecutionReceipt | null
@@ -386,13 +391,19 @@ export type WorkspaceAskRequest = {
    * in `requestedDocumentIds` rather than answering as if you'd read it.
    */
   focusedDocumentId?: string | null
+  /** Latest OpenAI Responses id for this Ask conversation. Reset when scope changes. */
+  previousResponseId?: string | null
+  /** Scope fingerprint associated with previousResponseId; the server drops the chain when it changed. */
+  previousScopeFingerprint?: string | null
+  /** Deterministic identity of the explicit document/version/hash scope. */
+  scopeFingerprint?: string | null
   execution?: WorkspaceExecutionContext | null
 }
 
 export type WorkspaceAskResult = {
   answer: string
   evidence: WorkspaceAskEvidence[]
-  /** At most a few catalog ids that need an explicit second read. */
+  /** Catalog ids that the model explicitly requested after reviewing the selected scope. */
   requestedDocumentIds: string[]
   /**
    * Set only when the user explicitly asked to run one of Odessay's
@@ -402,6 +413,14 @@ export type WorkspaceAskResult = {
    * `answer` above is a fallback if it isn't dispatched.
    */
   suggestedAction: "workflow" | "broken-links" | "classification" | "archive" | "contradictions" | null
+  /** How completely the explicitly selected scope was admitted to the model. */
+  scopeStatus?: "ready" | "needs_scope" | "staged" | "incomplete"
+  /** Provider response id that becomes the head of the next Ask turn. */
+  responseId?: string | null
+  /** Fingerprint of the explicit document/version/hash scope used for this response. */
+  scopeFingerprint?: string | null
+  /** Number of compaction Items observed in the provider response. */
+  compactionCount?: number
   usage: AiUsage | null
   executionReceipt?: WorkspaceExecutionReceipt | null
 }
@@ -470,9 +489,9 @@ export interface AIService {
   classifyWorkspace(input: WorkspaceClassificationRequest): Promise<ServiceResponse<WorkspaceClassificationResult>>
   askWorkspace(input: WorkspaceAskRequest): Promise<ServiceResponse<WorkspaceAskResult>>
   presentToolResult(input: WorkspaceToolPresentationRequest): Promise<ServiceResponse<WorkspaceToolPresentationResult>>
-  runSemanticRound(input: WorkspaceSemanticRoundRequest): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
-  reviewWorkspaceDocumentRelations(input: WorkspaceDocumentRelationsRoundRequest): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
-  reviewWorkspaceMerge(input: WorkspaceMergeRoundRequest): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
+  runSemanticRound(input: WorkspaceSemanticRoundRequest, options?: AIServiceRequestOptions): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
+  reviewWorkspaceDocumentRelations(input: WorkspaceDocumentRelationsRoundRequest, options?: AIServiceRequestOptions): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
+  reviewWorkspaceMerge(input: WorkspaceMergeRoundRequest, options?: AIServiceRequestOptions): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
   hydrateCorrectionBlocks(writingId: string): Promise<ServiceResponse<PersistedCorrectionBlock[]>>
   persistCorrectionBlock(input: PersistCorrectionBlockInput): Promise<ServiceResponse<PersistCorrectionBlockResult>>
   listLearnedWords(input?: ListLearnedWordsInput): Promise<ServiceResponse<LearnedWordsPage>>

@@ -2,11 +2,23 @@ import type { getOpenAIWorkspaceProviderConfig } from "@/lib/ai/openai-workspace
 import {
   appendWorkspaceResponseTrace,
   createWorkspaceExecutionReceipt,
+  mergeWorkspaceExecutionReceipts,
   withWorkspaceExecutionOutcome,
   type WorkspaceExecutionContext,
   type WorkspaceExecutionReceipt,
 } from "@/lib/ai/workspace-execution-receipt"
 import { workspaceExecutionMetadata } from "@/lib/ai/workspace-execution-receipt"
+import {
+  planWorkspaceTextBatches,
+  type WorkspaceContextCapacity,
+} from "@/lib/ai/workspace-context-capacity"
+
+/**
+ * Full multi-document synthesis can take longer than a short chat turn.
+ * Keep provider calls bounded while leaving the route enough time for auth,
+ * parsing and receipt persistence around the request.
+ */
+export const WORKSPACE_OPENAI_REQUEST_TIMEOUT_MS = 180_000
 
 export type WorkspaceOpenAIResponsePayload = {
   id?: string
@@ -79,8 +91,10 @@ export async function callWorkspaceOpenAIResponse({
   textFormat,
   messages,
   input,
-  tools,
-  previousResponseId,
+    tools,
+    previousResponseId,
+    contextManagement,
+    truncation = "disabled",
 }: {
   config: ReturnType<typeof getOpenAIWorkspaceProviderConfig>
   execution: WorkspaceExecutionContext
@@ -95,6 +109,10 @@ export async function callWorkspaceOpenAIResponse({
   /** Optional provider-shaped function tools used by the semantic loop. */
   tools?: Array<Record<string, unknown>>
   previousResponseId?: string | null
+  /** Optional Responses API context management configuration. */
+  contextManagement?: Array<Record<string, unknown>>
+  /** Workspace must never silently drop the beginning of a document context. */
+  truncation?: "disabled" | "auto"
 }): Promise<{ payload: WorkspaceOpenAIResponsePayload; receipt: WorkspaceExecutionReceipt }> {
   let receipt = createWorkspaceExecutionReceipt(execution)
   const startedAt = Date.now()
@@ -112,6 +130,7 @@ export async function callWorkspaceOpenAIResponse({
       max_output_tokens: maxOutputTokens,
       reasoning: { effort: config.reasoningEffort },
       store: true,
+      truncation,
       metadata: workspaceExecutionMetadata(execution),
     }
     if (textFormat) requestBody.text = { format: textFormat }
@@ -120,6 +139,7 @@ export async function callWorkspaceOpenAIResponse({
       requestBody.tool_choice = "auto"
     }
     if (previousResponseId) requestBody.previous_response_id = previousResponseId
+    if (contextManagement && contextManagement.length > 0) requestBody.context_management = contextManagement
 
     response = await fetch(config.responsesUrl, {
       method: "POST",
@@ -209,4 +229,87 @@ export async function callWorkspaceOpenAIResponse({
     httpStatus: response.status,
   })
   return { payload, receipt }
+}
+
+/**
+ * Sends a large direct Ask/Classification prompt in ordered stages. Every
+ * stage is chained through `previous_response_id`; no text is truncated and
+ * the final stage is the only one asked to satisfy the structured output
+ * contract. This is intentionally provider-level orchestration so all
+ * actions share the same compaction and receipt behavior.
+ */
+export async function callWorkspaceOpenAIResponseStaged({
+  config,
+  execution,
+  systemPrompt,
+  userPrompt,
+  maxOutputTokens,
+  timeoutMs,
+  textFormat,
+  messages,
+  previousResponseId,
+  contextManagement,
+  capacity,
+}: Omit<Parameters<typeof callWorkspaceOpenAIResponse>[0], "input" | "tools" | "truncation"> & {
+  capacity: WorkspaceContextCapacity
+}): Promise<{ payload: WorkspaceOpenAIResponsePayload; receipt: WorkspaceExecutionReceipt; staged: boolean }> {
+  const plan = planWorkspaceTextBatches(userPrompt, {
+    ...capacity,
+    // Include the system prompt and the small protocol envelope in the
+    // capacity calculation. These are provider input tokens, not a product
+    // limit; omitting them makes the final staged request fail at the edge of
+    // the real model window.
+    overheadTokens: (capacity.overheadTokens ?? 0)
+      + Math.ceil(systemPrompt.length / 4)
+      + Math.ceil("Staged context part. Preserve this content as evidence in the current scope. All staged context is now available. Return the final structured answer.".length / 4),
+  })
+  let head = previousResponseId ?? null
+  let last: { payload: WorkspaceOpenAIResponsePayload; receipt: WorkspaceExecutionReceipt } | null = null
+  const receipts: WorkspaceExecutionReceipt[] = []
+
+  for (const [index, part] of plan.batches.entries()) {
+    const finalStage = index === plan.batches.length - 1
+    const stagePrompt = [
+      `Staged context part ${index + 1}/${plan.batches.length}. Preserve this content as evidence in the current scope.`,
+      part,
+      finalStage
+        ? "All staged context is now available. Return the final structured answer."
+        : "Do not finalize yet. Wait for the next staged context part.",
+    ].join("\n\n")
+    last = await callWorkspaceOpenAIResponse({
+      config,
+      execution,
+      systemPrompt,
+      userPrompt: "",
+      input: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: stagePrompt },
+      ],
+      previousResponseId: head,
+      maxOutputTokens: finalStage ? maxOutputTokens : Math.min(1_024, maxOutputTokens),
+      timeoutMs,
+      textFormat: finalStage ? textFormat : null,
+      contextManagement,
+      truncation: "disabled",
+      messages,
+    })
+    receipts.push(last.receipt)
+    head = last.payload.id ?? null
+    if (!finalStage && !head) {
+      throw new WorkspaceOpenAIResponseError(
+        502,
+        "AI_RESPONSE_PARSE_FAILED",
+        "OpenAI did not return a response id for staged workspace context.",
+        true,
+        { phase: "parse", receipt: last.receipt },
+      )
+    }
+  }
+
+  if (!last) throw new Error("Workspace provider returned no response.")
+  return {
+    payload: last.payload,
+    receipt: mergeWorkspaceExecutionReceipts(receipts) ?? last.receipt,
+    staged: plan.staged,
+  }
 }

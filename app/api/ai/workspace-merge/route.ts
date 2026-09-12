@@ -1,6 +1,6 @@
 // class: detail (named merge-synthesis adapter over the shared semantic round)
 export const runtime = "nodejs"
-export const maxDuration = 60
+export const maxDuration = 240
 
 import { OPTIONS as semanticRoundOptions, POST as semanticRoundPost } from "@/app/api/ai/workspace-semantic-round/route"
 

@@ -17,6 +17,7 @@ import type {
   WorkspaceAgentMutationResult,
   WorkspaceAgentReadInput,
   WorkspaceAgentReadResult,
+  WorkspaceAgentToolCallOptions,
   WorkspaceAgentToolsService,
   WorkspaceAgentWriteInput,
 } from "@/lib/services/contracts/workspace-agent"
@@ -232,6 +233,7 @@ export class DesktopWorkspaceAgentToolsService implements WorkspaceAgentToolsSer
   private async getRecord(documentId: string): Promise<ServiceResponse<DocumentCatalogRecord>> {
     const record = await this.dependencies.catalog.getById(documentId)
     if (!record) return error("NOT_FOUND", `Document ${documentId} was not found in the catalog.`)
+    if (record.deletedAt) return error("NOT_FOUND", `Document ${documentId} is archived and unavailable to the Workspace agent.`)
     if (!record.binding?.canonicalPath) return error("NOT_FOUND", `Document ${documentId} has no local binding.`)
     const pathValidation = await this.validateWorkspacePath(record.binding.canonicalPath, true)
     if (pathValidation.error || !pathValidation.data) return pathValidation as ServiceResponse<DocumentCatalogRecord>
@@ -268,7 +270,8 @@ export class DesktopWorkspaceAgentToolsService implements WorkspaceAgentToolsSer
     return this.readAuthorized(input.documentId, input.approval)
   }
 
-  async readEvidence(input: WorkspaceAgentEvidenceReadInput): Promise<ServiceResponse<WorkspaceAgentEvidenceReadResult>> {
+  async readEvidence(input: WorkspaceAgentEvidenceReadInput, options?: WorkspaceAgentToolCallOptions): Promise<ServiceResponse<WorkspaceAgentEvidenceReadResult>> {
+    if (options?.signal?.aborted) return error("CANCELLED", "Semantic evidence reading was cancelled.")
     if (!Number.isInteger(input.lineStart) || !Number.isInteger(input.lineEnd) || input.lineStart < 1 || input.lineEnd < input.lineStart) {
       return error("INVALID_INPUT", "A positive, ordered line range is required for semantic evidence.")
     }
@@ -292,6 +295,7 @@ export class DesktopWorkspaceAgentToolsService implements WorkspaceAgentToolsSer
     const approvalValidation = this.takeApproval("read", input.approval, input.documentId)
     if (approvalValidation) return { data: null, error: approvalValidation }
     const opened = await this.dependencies.documentService.openWriting(input.documentId)
+    if (options?.signal?.aborted) return error("CANCELLED", "Semantic evidence reading was cancelled.")
     if (opened.error || !opened.data) return error("NOT_FOUND", opened.error?.message ?? "Document could not be opened.")
 
     const afterOpen = (await this.dependencies.catalog.getById(input.documentId)) ?? record

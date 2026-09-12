@@ -269,6 +269,7 @@ pub fn run() {
             commands::document::open_file,
             commands::document::allow_watch_path,
             commands::document::create_file,
+            commands::document::write_new_file,
             commands::document::write_file,
             commands::document::write_binary_file,
             commands::document::rename_file,

@@ -10,11 +10,13 @@ import type {
 } from "@/lib/services/contracts/ai-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import {
+  isWorkspaceExecutionReceiptCompatible,
   mergeWorkspaceExecutionReceipts,
   withWorkspaceExecutionOutcome,
 } from "@/lib/ai/workspace-execution-receipt"
 import {
   type WorkspaceSemanticToolRegistry,
+  type WorkspaceSemanticToolExecutionOptions,
   type WorkspaceSemanticToolResult,
 } from "@/lib/ai/workspace-semantic-tool-registry"
 import type { WorkspaceAgentEvidence } from "@/lib/services/contracts/workspace-agent"
@@ -23,7 +25,7 @@ export const WORKSPACE_SEMANTIC_MAX_ROUNDS = 3
 export const WORKSPACE_SEMANTIC_MAX_TOOL_CALLS = 8
 export const WORKSPACE_SEMANTIC_MAX_EVIDENCE_REFS_PER_FOLLOW_UP = 4
 export const WORKSPACE_SEMANTIC_MAX_TOOL_OUTPUT_BYTES = 65_536
-export const WORKSPACE_SEMANTIC_MAX_WALL_CLOCK_MS = 45_000
+export const WORKSPACE_SEMANTIC_MAX_WALL_CLOCK_MS = 90_000
 
 export type WorkspaceSemanticLoopStatus =
   | "complete"
@@ -82,6 +84,7 @@ export type WorkspaceSemanticLoopInput = {
 }
 
 const DEADLINE = Symbol("workspace-semantic-deadline")
+const CANCELLED = Symbol("workspace-semantic-cancelled")
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
@@ -115,7 +118,7 @@ function mergeReceipt(
   return merged ? withWorkspaceExecutionOutcome(merged, productStatusFor(status)) : null
 }
 
-function parseFinalEnvelope(text: string): { coverage: WorkspaceSemanticCoverage; status: "complete" | "insufficient_evidence" } | null {
+function parseFinalEnvelope(text: string): { coverage: WorkspaceSemanticCoverage; status: "complete" | "insufficient_evidence"; payload: string } | null {
   let parsed: unknown
   try {
     const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]
@@ -138,7 +141,7 @@ function parseFinalEnvelope(text: string): { coverage: WorkspaceSemanticCoverage
     : record.status === "insufficient_evidence" || record.coverage !== "complete"
       ? "insufficient_evidence"
       : null
-  return status ? { coverage: record.coverage, status } : null
+  return status ? { coverage: record.coverage, status, payload: record.payload } : null
 }
 
 function resultBase(input: WorkspaceSemanticLoopInput, overrides: Partial<WorkspaceSemanticLoopResult> = {}): WorkspaceSemanticLoopResult {
@@ -179,16 +182,38 @@ async function callWithDeadline(
   aiService: Pick<AIService, "runSemanticRound">,
   request: Parameters<AIService["runSemanticRound"]>[0],
   remainingMs: number,
-): Promise<ServiceResponse<WorkspaceSemanticRoundResult> | typeof DEADLINE> {
+  parentSignal?: AbortSignal,
+): Promise<ServiceResponse<WorkspaceSemanticRoundResult> | typeof DEADLINE | typeof CANCELLED> {
+  if (parentSignal?.aborted) return CANCELLED
   if (remainingMs <= 0) return DEADLINE
+  const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<typeof DEADLINE>((resolve) => {
-    timer = setTimeout(() => resolve(DEADLINE), remainingMs)
+    timer = setTimeout(() => {
+      controller.abort()
+      resolve(DEADLINE)
+    }, remainingMs)
   })
+  let resolveCancelled: ((value: typeof CANCELLED) => void) | undefined
+  const cancelled = new Promise<typeof CANCELLED>((resolve) => {
+    resolveCancelled = resolve
+  })
+  const onAbort = () => {
+    controller.abort()
+    resolveCancelled?.(CANCELLED)
+  }
+  parentSignal?.addEventListener("abort", onAbort, { once: true })
   try {
-    return await Promise.race([aiService.runSemanticRound(request), timeout])
+    const providerRequest = Promise.resolve(aiService.runSemanticRound(request, { signal: controller.signal }))
+    // Aborting the controller is cooperative. The underlying promise may
+    // still reject after the race has already returned; consume that late
+    // rejection so a timed-out semantic round cannot surface as an
+    // unhandled-rejection or keep a detached provider error alive.
+    void providerRequest.catch(() => undefined)
+    return await Promise.race([providerRequest, timeout, cancelled])
   } finally {
     if (timer) clearTimeout(timer)
+    parentSignal?.removeEventListener("abort", onAbort)
   }
 }
 
@@ -196,16 +221,34 @@ async function executeToolWithDeadline(
   registry: WorkspaceSemanticToolRegistry,
   call: WorkspaceSemanticToolCall,
   remainingMs: number,
-): Promise<ServiceResponse<WorkspaceSemanticToolResult> | typeof DEADLINE> {
+  parentSignal?: AbortSignal,
+): Promise<ServiceResponse<WorkspaceSemanticToolResult> | typeof DEADLINE | typeof CANCELLED> {
+  if (parentSignal?.aborted) return CANCELLED
   if (remainingMs <= 0) return DEADLINE
+  const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<typeof DEADLINE>((resolve) => {
-    timer = setTimeout(() => resolve(DEADLINE), remainingMs)
+    timer = setTimeout(() => {
+      controller.abort()
+      resolve(DEADLINE)
+    }, remainingMs)
   })
+  let resolveCancelled: ((value: typeof CANCELLED) => void) | undefined
+  const cancelled = new Promise<typeof CANCELLED>((resolve) => {
+    resolveCancelled = resolve
+  })
+  const onAbort = () => {
+    controller.abort()
+    resolveCancelled?.(CANCELLED)
+  }
+  parentSignal?.addEventListener("abort", onAbort, { once: true })
   try {
-    return await Promise.race([registry.execute(call), timeout])
+    const toolRequest = Promise.resolve(registry.execute(call, { signal: controller.signal } satisfies WorkspaceSemanticToolExecutionOptions))
+    void toolRequest.catch(() => undefined)
+    return await Promise.race([toolRequest, timeout, cancelled])
   } finally {
     if (timer) clearTimeout(timer)
+    parentSignal?.removeEventListener("abort", onAbort)
   }
 }
 
@@ -232,7 +275,6 @@ export async function runWorkspaceSemanticLoop(
     maxWallClockMs: Math.max(0, Math.min(input.caps?.maxWallClockMs ?? WORKSPACE_SEMANTIC_MAX_WALL_CLOCK_MS, WORKSPACE_SEMANTIC_MAX_WALL_CLOCK_MS)),
   }
   const tools = [...(input.tools ?? input.registry.descriptors)]
-  const initialInputBytes = input.initialInput.reduce((total, item) => total + bytes(item.type === "message" ? item.content : item.output), 0)
   const startedAt = Date.now()
   const receipts: Array<WorkspaceExecutionReceipt | null> = []
   const traces: WorkspaceSemanticToolCallTrace[] = []
@@ -248,7 +290,12 @@ export async function runWorkspaceSemanticLoop(
     overrides: Partial<WorkspaceSemanticLoopResult> = {},
   ) => finish(input, receipts, status, rounds, traces, evidence, overrides)
 
-  if (tools.length > 4 || initialInputBytes > WORKSPACE_SEMANTIC_MAX_TOOL_OUTPUT_BYTES || aggregateToolOutputBytes > WORKSPACE_SEMANTIC_MAX_TOOL_OUTPUT_BYTES) {
+  // The selected `.md` bodies are complete application evidence. Their size
+  // is handled by the provider route's capability-aware staging/compaction;
+  // this loop must not reintroduce a fixed byte ceiling before the request
+  // reaches that layer. Tool output remains bounded separately because it is
+  // model-requested follow-up evidence, not the selected source set.
+  if (tools.length > 4 || aggregateToolOutputBytes > WORKSPACE_SEMANTIC_MAX_TOOL_OUTPUT_BYTES) {
     return stop("budget_exceeded", {
       error: { code: "BUDGET_EXCEEDED", message: "Semantic input or evidence exceeded the bounded context budget.", retryable: false },
     })
@@ -262,7 +309,7 @@ export async function runWorkspaceSemanticLoop(
     }
 
     rounds += 1
-    let response: ServiceResponse<WorkspaceSemanticRoundResult> | typeof DEADLINE
+    let response: ServiceResponse<WorkspaceSemanticRoundResult> | typeof DEADLINE | typeof CANCELLED
     try {
       response = await callWithDeadline(input.aiService, {
         operation: input.operation,
@@ -270,10 +317,14 @@ export async function runWorkspaceSemanticLoop(
         tools,
         previousResponseId,
         execution: input.execution,
-      }, remaining)
+      }, remaining, input.signal)
     } catch (cause) {
+      if (input.signal?.aborted) return stop("cancelled", { error: { code: "CANCELLED", message: "Semantic review was cancelled.", retryable: false } })
       const message = cause instanceof Error ? cause.message : "Semantic provider request failed."
       return stop("provider_error", { error: { code: "AI_REQUEST_FAILED", message, retryable: true } })
+    }
+    if (response === CANCELLED) {
+      return stop("cancelled", { error: { code: "CANCELLED", message: "Semantic review was cancelled.", retryable: false } })
     }
     if (response === DEADLINE) {
       return stop("budget_exceeded", { error: { code: "DEADLINE_EXCEEDED", message: "Semantic review reached its time budget.", retryable: false } })
@@ -290,12 +341,7 @@ export async function runWorkspaceSemanticLoop(
 
     if (
       response.data.executionReceipt
-      && (
-        response.data.executionReceipt.invocationId !== input.execution.invocationId
-        || response.data.executionReceipt.action !== input.execution.action
-        || response.data.executionReceipt.stage !== input.execution.stage
-        || response.data.executionReceipt.runtime !== input.execution.runtime
-      )
+      && !isWorkspaceExecutionReceiptCompatible(input.execution, response.data.executionReceipt)
     ) {
       receipts.push(response.data.executionReceipt)
       return stop("unable", {
@@ -331,7 +377,7 @@ export async function runWorkspaceSemanticLoop(
           error: { code: "AI_RESPONSE_PARSE_FAILED", message: "Semantic provider returned an invalid final result envelope.", retryable: true },
         })
       }
-      return stop(final.status, { coverage: final.coverage, finalText: round.outputText })
+      return stop(final.status, { coverage: final.coverage, finalText: final.payload })
     }
 
     if (!round.responseId) {
@@ -368,10 +414,11 @@ export async function runWorkspaceSemanticLoop(
         })
       }
 
-      let toolResult: ServiceResponse<WorkspaceSemanticToolResult> | typeof DEADLINE
+      let toolResult: ServiceResponse<WorkspaceSemanticToolResult> | typeof DEADLINE | typeof CANCELLED
       try {
-        toolResult = await executeToolWithDeadline(input.registry, call, callRemaining)
+        toolResult = await executeToolWithDeadline(input.registry, call, callRemaining, input.signal)
       } catch (cause) {
+        if (input.signal?.aborted) return stop("cancelled", { error: { code: "CANCELLED", message: "Semantic review was cancelled.", retryable: false } })
         traces.push({ ...label, round: rounds, outcome: "rejected", evidenceId: null })
         return stop("unable", {
           error: {
@@ -380,6 +427,9 @@ export async function runWorkspaceSemanticLoop(
             retryable: true,
           },
         })
+      }
+      if (toolResult === CANCELLED || input.signal?.aborted) {
+        return stop("cancelled", { error: { code: "CANCELLED", message: "Semantic review was cancelled.", retryable: false } })
       }
       if (toolResult === DEADLINE) {
         return stop("budget_exceeded", { error: { code: "DEADLINE_EXCEEDED", message: "Semantic review reached its time budget.", retryable: false } })
