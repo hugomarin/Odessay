@@ -122,6 +122,137 @@ export type AiUsage = {
   latencyMs: number | null
 }
 
+export type WorkspaceExecutionAction = "classification" | "ask" | "presentation" | "relations" | "merge"
+export type WorkspaceExecutionStage = "analysis" | "context-acquisition" | "presentation" | "semantic-review" | "synthesis"
+export type WorkspaceExecutionRuntime = "web" | "desktop" | "cloud"
+
+export type WorkspaceExecutionContext = {
+  invocationId: string
+  action: WorkspaceExecutionAction
+  stage: WorkspaceExecutionStage
+  runtime: WorkspaceExecutionRuntime
+  contextVersion?: string | null
+}
+
+export type WorkspaceResponseItemSummary = {
+  id: string | null
+  type: string
+  status: string | null
+  callId: string | null
+  name: string | null
+  hasArguments: boolean
+  hasOutput: boolean
+  hasText: boolean
+}
+
+export type WorkspaceResponseTrace = {
+  action: WorkspaceExecutionAction
+  stage: WorkspaceExecutionStage
+  runtime: WorkspaceExecutionRuntime
+  contextVersion: string
+  responseId: string | null
+  previousResponseId: string | null
+  status: string | null
+  model: string | null
+  httpStatus: number | null
+  usage: AiUsage
+  latencyMs: number | null
+  outputItems: WorkspaceResponseItemSummary[]
+  outputItemsTruncated: boolean
+  errorCode: string | null
+}
+
+export type WorkspaceExecutionProductStatus =
+  | "not-evaluated"
+  | "validated"
+  | "invalid-output"
+  | "refused"
+  | "incomplete"
+  | "provider-error"
+
+export type WorkspaceExecutionReceipt = {
+  invocationId: string
+  supportId: string
+  action: WorkspaceExecutionAction
+  stage: WorkspaceExecutionStage
+  runtime: WorkspaceExecutionRuntime
+  contextVersion: string
+  providerStatus: string | null
+  productStatus: WorkspaceExecutionProductStatus
+  responses: WorkspaceResponseTrace[]
+}
+
+/**
+ * Provider-neutral input items for the bounded semantic tool loop. The
+ * application owns the conversation and evidence policy; adapters translate
+ * these items to the provider's Responses input format.
+ */
+export type WorkspaceSemanticInputItem =
+  | {
+      type: "message"
+      role: "user" | "assistant"
+      content: string
+    }
+  | {
+      type: "function_call_output"
+      callId: string
+      output: string
+    }
+
+export type WorkspaceSemanticOperation = "relations" | "merge"
+
+export type WorkspaceSemanticToolDescriptor = {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+}
+
+export type WorkspaceSemanticToolCall = {
+  callId: string
+  name: string
+  arguments: Record<string, unknown>
+}
+
+export type WorkspaceSemanticRoundStatus = "completed" | "requires_tool" | "incomplete" | "refused" | "empty"
+
+export type WorkspaceSemanticRoundRequest = {
+  operation: WorkspaceSemanticOperation
+  input: WorkspaceSemanticInputItem[]
+  tools: WorkspaceSemanticToolDescriptor[]
+  previousResponseId?: string | null
+  execution?: WorkspaceExecutionContext | null
+}
+
+/**
+ * Relation review keeps a named AIService capability while reusing the same
+ * provider-neutral Responses round and loop as Merge. Adapters may route it
+ * through the relation-specific endpoint, but they must not create a second
+ * orchestration contract.
+ */
+export type WorkspaceDocumentRelationsRoundRequest = Omit<WorkspaceSemanticRoundRequest, "operation"> & {
+  operation: "relations"
+}
+
+/**
+ * Named Merge capability over the same provider-neutral semantic round. The
+ * application owns alignment, provenance and approval; adapters only route
+ * the bounded Responses round to the active provider.
+ */
+export type WorkspaceMergeRoundRequest = Omit<WorkspaceSemanticRoundRequest, "operation"> & {
+  operation: "merge"
+}
+
+export type WorkspaceSemanticRoundResult = {
+  responseId: string | null
+  previousResponseId: string | null
+  status: WorkspaceSemanticRoundStatus
+  outputText: string | null
+  toolCalls: WorkspaceSemanticToolCall[]
+  incompleteReason: string | null
+  usage: AiUsage | null
+  executionReceipt: WorkspaceExecutionReceipt | null
+}
+
 export type PublicationReviewResult = {
   summary: string
   language: string
@@ -129,6 +260,170 @@ export type PublicationReviewResult = {
   uncertain: MechanicalUncertainNote[]
   usage: AiUsage | null
   engineRevision?: string | null
+}
+
+export type WorkspaceClassificationVocabularyItem = {
+  kind: "type" | "status"
+  key: string
+  name: string
+  description: string
+  isRequired: boolean
+}
+
+export type WorkspaceClassificationDocument = {
+  id: string
+  title: string | null
+  relativePath: string | null
+  currentArtifactType: string | null
+  currentStatus: string | null
+  visibility: string | null
+  version: number | null
+  modifiedAt: number | null
+  excerpt: string | null
+  references: Array<{
+    value: string
+    kind: "path" | "slug"
+  }>
+  /** Full content is present only for explicitly selected and approved artifacts. */
+  markdown: string | null
+}
+
+export type WorkspaceClassificationCollection = {
+  id: string
+  name: string
+  description: string | null
+  writingsCount: number
+}
+
+export type WorkspaceClassificationAnnotation = {
+  documentId: string
+  type: string
+  anchorText: string
+  note: string
+}
+
+/**
+ * Hybrid workflow.md model (ODE-504): the instructions section rides every
+ * agent invocation as ambient context; the executable definitions stay
+ * evidence-on-demand and are only described by the descriptor.
+ */
+export type WorkspaceAmbientWorkflowDescriptor = {
+  documentId: string
+  version: string
+  instructionsTruncated: boolean
+  definitionsChars: number
+  /** Bounded names of the workflows/capabilities behind the descriptor — lets the model decide whether a bounded second round is worth it. */
+  scopeSummary: string[]
+}
+
+export type WorkspaceAmbientWorkflow = {
+  instructions: string | null
+  descriptor: WorkspaceAmbientWorkflowDescriptor | null
+}
+
+export type WorkspaceClassificationRequest = {
+  request: string
+  targetDocumentIds: string[]
+  documents: WorkspaceClassificationDocument[]
+  collections: WorkspaceClassificationCollection[]
+  documentCollectionIds: Record<string, string[]>
+  annotations: WorkspaceClassificationAnnotation[]
+  vocabulary: WorkspaceClassificationVocabularyItem[]
+  workflow: WorkspaceAmbientWorkflow | null
+  catalogTruncated: boolean
+  execution?: WorkspaceExecutionContext | null
+}
+
+export type WorkspaceClassificationEvidence = {
+  documentId: string
+  quote: string
+  reason: string
+}
+
+export type WorkspaceClassificationModelProposal = {
+  documentId: string
+  decision: "change" | "keep" | "needs-review"
+  proposedArtifactType: string | null
+  proposedStatus: string | null
+  change: string
+  rationale: string
+  benefit: string
+  uncertainty: string | null
+  evidence: WorkspaceClassificationEvidence[]
+}
+
+export type WorkspaceClassificationResult = {
+  summary: string
+  proposals: WorkspaceClassificationModelProposal[]
+  /** At most a few catalog ids that need an explicit second read. */
+  requestedDocumentIds: string[]
+  usage: AiUsage | null
+  executionReceipt?: WorkspaceExecutionReceipt | null
+}
+
+export type WorkspaceAskEvidence = {
+  documentId: string
+  quote: string
+  reason: string
+}
+
+export type WorkspaceAskRequest = {
+  question: string
+  targetDocumentIds: string[]
+  documents: WorkspaceClassificationDocument[]
+  collections: WorkspaceClassificationCollection[]
+  documentCollectionIds: Record<string, string[]>
+  annotations: WorkspaceClassificationAnnotation[]
+  workflow: WorkspaceAmbientWorkflow | null
+  catalogTruncated: boolean
+  /** Short summaries of what happened earlier in this chat session (actions run, prior Q&A), most recent last. */
+  recentSessionActions?: string[]
+  /**
+   * The artifact the user currently has open, if any — a reference only
+   * (ODE-489 follow-up: "el contexto solo se debe invocar en la medida que
+   * el usuario lo solicite"). Its entry in `documents` may have
+   * `markdown: null`; if the question needs its content, request it by id
+   * in `requestedDocumentIds` rather than answering as if you'd read it.
+   */
+  focusedDocumentId?: string | null
+  execution?: WorkspaceExecutionContext | null
+}
+
+export type WorkspaceAskResult = {
+  answer: string
+  evidence: WorkspaceAskEvidence[]
+  /** At most a few catalog ids that need an explicit second read. */
+  requestedDocumentIds: string[]
+  /**
+   * Set only when the user explicitly asked to run one of Odessay's
+   * predetermined actions rather than just discuss it (ODE-489/491
+   * follow-up — free text otherwise never reaches these, only the
+   * dedicated buttons did). The host runs the actual action separately;
+   * `answer` above is a fallback if it isn't dispatched.
+   */
+  suggestedAction: "workflow" | "broken-links" | "classification" | "archive" | "contradictions" | null
+  usage: AiUsage | null
+  executionReceipt?: WorkspaceExecutionReceipt | null
+}
+
+/**
+ * The presentation stage of the Workspace agent pipeline (ODE-491):
+ * `facts` are already-established, deterministic facts computed by a tool
+ * or workflow — this call only decides how they are phrased in the chat,
+ * matching the conversation's language and tone. It never adds a finding.
+ */
+export type WorkspaceToolPresentationRequest = {
+  kind: "workflow" | "broken-links" | "classification" | "archive" | "contradictions" | "merge"
+  facts: string[]
+  /** Short summaries of what happened earlier in this chat session, most recent last, for language/tone continuity only. */
+  recentSessionActions?: string[]
+  execution?: WorkspaceExecutionContext | null
+}
+
+export type WorkspaceToolPresentationResult = {
+  note: string
+  usage: AiUsage | null
+  executionReceipt?: WorkspaceExecutionReceipt | null
 }
 
 export type PersistedCorrectionBlock = {
@@ -172,6 +467,12 @@ export type LearnWordInput = {
 export interface AIService {
   suggestTitle(input: TitleSuggestionRequest): Promise<ServiceResponse<TitleSuggestion>>
   reviewPublication(input: PublicationReviewRequest): Promise<ServiceResponse<PublicationReviewResult>>
+  classifyWorkspace(input: WorkspaceClassificationRequest): Promise<ServiceResponse<WorkspaceClassificationResult>>
+  askWorkspace(input: WorkspaceAskRequest): Promise<ServiceResponse<WorkspaceAskResult>>
+  presentToolResult(input: WorkspaceToolPresentationRequest): Promise<ServiceResponse<WorkspaceToolPresentationResult>>
+  runSemanticRound(input: WorkspaceSemanticRoundRequest): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
+  reviewWorkspaceDocumentRelations(input: WorkspaceDocumentRelationsRoundRequest): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
+  reviewWorkspaceMerge(input: WorkspaceMergeRoundRequest): Promise<ServiceResponse<WorkspaceSemanticRoundResult>>
   hydrateCorrectionBlocks(writingId: string): Promise<ServiceResponse<PersistedCorrectionBlock[]>>
   persistCorrectionBlock(input: PersistCorrectionBlockInput): Promise<ServiceResponse<PersistCorrectionBlockResult>>
   listLearnedWords(input?: ListLearnedWordsInput): Promise<ServiceResponse<LearnedWordsPage>>
@@ -182,11 +483,13 @@ export interface AIService {
 export const AI_SERVICE_CONTRACT = {
   name: "AIService",
   summary:
-    "Remote capability boundary for title suggestions, publication review, and correction-block persistence without exposing provider URLs, HTTP payloads, or session mechanics to the product layer.",
+    "Remote capability boundary for semantic workspace analysis, title suggestions, publication review, and correction-block persistence without exposing provider URLs, HTTP payloads, or session mechanics to the product layer.",
   responsibilities: [
     "Treat AI as a capability contract, not as direct route-handler code or provider-specific fetch logic.",
     "Keep model usage, structured output, and correction memory explicit in the contract so adapters can vary by runtime.",
     "Isolate correction hydration and persistence as part of the same AI capability boundary used by publication review flows.",
+    "Let the model make semantic workspace decisions from bounded document evidence while adapters keep provider transport and output validation private.",
+    "Return a bounded in-memory execution receipt so stored Responses can be correlated without creating product chat persistence.",
   ],
   layer: ["application", "adapter"],
   runtimeScope: ["shared-core", "web", "cloud", "desktop"],
@@ -195,6 +498,7 @@ export const AI_SERVICE_CONTRACT = {
     "AIService can be unavailable or remote-only, but that optionality must be represented through ServiceResponse rather than hidden fetch failures.",
     "Provider endpoints, API keys, and structured-output quirks belong to adapters, not to shared core callers.",
     "Correction persistence is a capability concern adjacent to AI review and must not leak local cache or HTTP route details into the contract.",
+    "Provider status, usage, latency, refusal, incomplete output, and product validation remain separate receipt fields; no response id is invented on failure.",
   ],
   errorEnvelope: SERVICE_RESPONSE_ENVELOPE,
   operations: [
@@ -213,6 +517,54 @@ export const AI_SERVICE_CONTRACT = {
       input: ["PublicationReviewRequest including correctionBlocks, correction memory, and optional stream flag"],
       output: ["PublicationReviewResult"],
       errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED"],
+    },
+    {
+      name: "classifyWorkspace",
+      kind: "command",
+      summary: "Interpret selected document content against the active vocabulary and return evidence-backed type/status proposals.",
+      input: ["user request", "selected document bodies", "catalog metadata", "workflow", "collections", "annotations", "active vocabulary definitions"],
+      output: ["WorkspaceClassificationResult"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
+    },
+    {
+      name: "askWorkspace",
+      kind: "command",
+      summary: "Answer a free-form question grounded in selected (or auto-selected recent) document content, always returning a helpful answer rather than a hard requirement for a specific action.",
+      input: ["user question", "selected document bodies", "catalog metadata", "workflow", "collections", "annotations"],
+      output: ["WorkspaceAskResult"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
+    },
+    {
+      name: "presentToolResult",
+      kind: "command",
+      summary: "Phrase an already-computed tool or workflow result as one short chat note in the conversation's language and tone, without adding, dropping, or verifying a finding.",
+      input: ["action kind", "deterministic facts", "optional recent session memory"],
+      output: ["WorkspaceToolPresentationResult"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
+    },
+    {
+      name: "runSemanticRound",
+      kind: "command",
+      summary: "Run one provider-neutral semantic review round with only bounded, read-only evidence tools.",
+      input: ["semantic operation", "bounded input items", "canonical read/evidence tool descriptors", "optional previous response id"],
+      output: ["WorkspaceSemanticRoundResult with normalized tool calls and execution receipt"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
+    },
+    {
+      name: "reviewWorkspaceDocumentRelations",
+      kind: "command",
+      summary: "Run one named semantic relation-review round through the shared Responses tool-loop boundary.",
+      input: ["bounded relation evidence", "canonical read/evidence tool descriptors", "optional previous response id"],
+      output: ["WorkspaceSemanticRoundResult with normalized relation tool calls and execution receipt"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
+    },
+    {
+      name: "reviewWorkspaceMerge",
+      kind: "command",
+      summary: "Run one named semantic merge-synthesis round through the shared Responses tool-loop boundary.",
+      input: ["bounded merge evidence", "canonical read/evidence tool descriptors", "optional previous response id"],
+      output: ["WorkspaceSemanticRoundResult with normalized merge tool calls and execution receipt"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED", "UNAVAILABLE"],
     },
     {
       name: "hydrateCorrectionBlocks",

@@ -1163,6 +1163,16 @@
     -webkit-user-select: none !important;
   }
 
+  /* Same lock for the Workspace agent's pointer-based drag (workspace-agent-drag.ts)
+     — dragging a tree/list row into the agent composer must never turn into
+     page-wide text selection. */
+  html.od-workspace-agent-dragging,
+  html.od-workspace-agent-dragging body,
+  html.od-workspace-agent-dragging body * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+  }
+
   .prose-odessay ::selection {
     background: hsl(var(--ink) / 0.12);
     color: hsl(var(--ink));

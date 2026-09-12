@@ -313,6 +313,7 @@ pub fn run() {
             commands::settings::settings_delete,
             commands::settings::settings_list_keys,
             commands::workspace::workspace_create,
+            commands::workspace::workspace_agent_validate_path,
             commands::workspace::workspace_inspect,
             commands::workspace::workspace_repair_manifest_bindings,
             commands::workspace::workspace_unbound_paths,

@@ -31,8 +31,14 @@ const builtIssues = built
   .filter((issue) => typeof issue === "string");
 const builtIssueSet = new Set(builtIssues);
 
-const duplicates = builtIssues.filter(
-  (issue, index) => builtIssues.indexOf(issue) !== index,
+// The ignored-issue exceptions exist precisely because a historical git
+// identifier can collide with a current Linear issue across the archive and
+// the active ledger (ODE-502: an old merged corrections-contract entry vs.
+// the Fase 11 AgentSession issue). Honoring the exception here prevents the
+// archive/current collision from being reported as a duplicate forever.
+const duplicateCandidates = builtIssues.filter((issue) => !ignoredIssues.has(issue));
+const duplicates = duplicateCandidates.filter(
+  (issue, index) => duplicateCandidates.indexOf(issue) !== index,
 );
 
 // Drift describes the accepted baseline, not the mutable branch currently

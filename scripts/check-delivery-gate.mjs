@@ -2,6 +2,7 @@
 
 import { execFileSync } from "node:child_process";
 import { resolveTraceabilityRange } from "./lib/traceability-refs.mjs";
+import { githubCompareCommitSubjects } from "./lib/traceability-github.mjs";
 
 function fail(message) {
   console.error(`[ops:delivery:gate] ${message}`);
@@ -49,44 +50,62 @@ if (issueIds.length === 0) {
 }
 const baseRef = range.base;
 const headRef = range.head;
-console.log(`[ops:delivery:gate] Comparing ${baseRef}..${headRef}.`);
+const prHead = process.env.TRACEABILITY_PR_HEAD_SHA?.trim() ?? "";
+const prBranchPoint = process.env.TRACEABILITY_PR_BRANCH_POINT_SHA?.trim() ?? "";
+const commitBaseRef =
+  range.source === "pinned-environment" && prHead && prBranchPoint
+    ? prBranchPoint
+    : baseRef;
+const commitHeadRef =
+  range.source === "pinned-environment" && prHead && prBranchPoint
+    ? prHead
+    : headRef;
+console.log(
+  `[ops:delivery:gate] Comparing ${commitBaseRef}..${commitHeadRef} for commit traceability (immutable range ${baseRef}..${headRef}).`,
+);
+// Runner-side diagnostics: if CI's graph evaluation disagrees with every
+// local clone, these numbers make it visible instead of a mystery list.
+const mergeBaseCheck = execFileSync(
+  "git",
+  ["merge-base", commitBaseRef, commitHeadRef],
+  { encoding: "utf8" },
+).trim();
+const rangeCount = execFileSync(
+  "git",
+  ["rev-list", "--count", `${commitBaseRef}..${commitHeadRef}`],
+  { encoding: "utf8" },
+).trim();
+console.log(
+  `[ops:delivery:gate] Diagnostics: merge-base(${commitBaseRef.slice(0, 8)}, ${commitHeadRef.slice(0, 8)})=${mergeBaseCheck.slice(0, 8)} | rev-list --count=${rangeCount}`,
+);
 async function githubPullRequestCommitSubjects() {
   const repository = process.env.GITHUB_REPOSITORY?.trim();
-  if (
-    process.env.GITHUB_ACTIONS !== "true" ||
-    !repository ||
-    range.source !== "pull-request-event"
-  ) {
+  if (process.env.GITHUB_ACTIONS !== "true" || !repository) {
     return null;
   }
-
-  const response = await fetch(
-    `https://api.github.com/repos/${repository}/compare/${baseRef}...${headRef}`,
-    {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "User-Agent": "odessay-delivery-gate",
-        ...(process.env.GITHUB_TOKEN
-          ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
-          : {}),
-      },
-    },
-  );
-  if (!response.ok) {
-    fail(`GitHub compare API failed with ${response.status}.`);
+  try {
+    const subjects = await githubCompareCommitSubjects({
+      repository,
+      base: commitBaseRef,
+      head: commitHeadRef,
+      token: process.env.GITHUB_TOKEN?.trim(),
+    });
+    console.log(
+      `[ops:delivery:gate] Using GitHub's immutable comparison (${subjects.length} commits) for CI traceability.`,
+    );
+    return subjects;
+  } catch (error) {
+    fail(error instanceof Error ? error.message : "GitHub compare API failed.");
   }
-  const comparison = await response.json();
-  if (!Array.isArray(comparison.commits)) {
-    fail("GitHub compare API returned no commit list.");
-  }
-  return comparison.commits.map((entry) => entry.commit.message.split("\n")[0]);
 }
 
-// A pinned CI merge range is intentionally evaluated from local immutable
-// objects. Event-only fallback may use GitHub compare; local runs use git.
+// CI evaluates the pinned branch-point..PR-head range through GitHub's
+// immutable comparison API. This avoids trusting a synthetic runner checkout
+// whose revision walk may be inconsistent after a force-push. Local runs use
+// the equivalent git range.
 const commitSubjects = (
   (await githubPullRequestCommitSubjects()) ??
-  execFileSync("git", ["log", "--pretty=%s", `${baseRef}..${headRef}`], {
+  execFileSync("git", ["log", "--pretty=%s", `${commitBaseRef}..${commitHeadRef}`], {
     encoding: "utf8",
   }).split("\n")
 )

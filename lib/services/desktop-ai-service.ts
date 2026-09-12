@@ -14,8 +14,19 @@ import type {
   ListLearnedWordsInput,
   TitleSuggestion,
   TitleSuggestionRequest,
+  WorkspaceAskRequest,
+  WorkspaceAskResult,
+  WorkspaceClassificationRequest,
+  WorkspaceClassificationResult,
+  WorkspaceDocumentRelationsRoundRequest,
+  WorkspaceMergeRoundRequest,
+  WorkspaceSemanticRoundRequest,
+  WorkspaceSemanticRoundResult,
+  WorkspaceToolPresentationRequest,
+  WorkspaceToolPresentationResult,
 } from "@/lib/services/contracts/ai-service"
 import type { ServiceError } from "@/lib/services/contracts/service-types"
+import type { WorkspaceExecutionReceipt } from "@/lib/ai/workspace-execution-receipt"
 import { err, ok, parseServiceEnvelope } from "@/lib/services/service-response"
 
 function getWebRuntimeBaseUrl(): string {
@@ -63,6 +74,41 @@ type PublicationReviewPayload = {
   completionTokens?: number | null
   totalTokens?: number | null
   engineRevision?: string | null
+}
+
+type WorkspaceClassificationPayload = {
+  summary: string
+  proposals: WorkspaceClassificationResult["proposals"]
+  requestedDocumentIds: string[]
+  model: string
+  promptTokens: number | null
+  completionTokens: number | null
+  totalTokens: number | null
+  latencyMs: number | null
+  executionReceipt?: WorkspaceExecutionReceipt | null
+}
+
+type WorkspaceAskPayload = {
+  answer: string
+  evidence: WorkspaceAskResult["evidence"]
+  requestedDocumentIds: string[]
+  suggestedAction: WorkspaceAskResult["suggestedAction"]
+  model: string
+  promptTokens: number | null
+  completionTokens: number | null
+  totalTokens: number | null
+  latencyMs: number | null
+  executionReceipt?: WorkspaceExecutionReceipt | null
+}
+
+type WorkspaceToolPresentationPayload = {
+  note: string
+  model: string
+  promptTokens: number | null
+  completionTokens: number | null
+  totalTokens: number | null
+  latencyMs: number | null
+  executionReceipt?: WorkspaceExecutionReceipt | null
 }
 
 type LearnedWordsPayload = {
@@ -158,6 +204,257 @@ export const desktopAIService: AIService = {
       })
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not review this text right now.")
+    }
+  },
+
+  async classifyWorkspace(input: WorkspaceClassificationRequest) {
+    const token = await getBearerToken()
+
+    if (!token) {
+      return err<WorkspaceClassificationResult>({
+        code: "UNAUTHORIZED",
+        message: "No active session.",
+        retryable: false,
+      })
+    }
+
+    try {
+      const response = await fetch(`${getWebRuntimeBaseUrl()}/api/ai/workspace-classification`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(input),
+      })
+
+      const parsed = await parseServiceEnvelope<WorkspaceClassificationPayload>(
+        response,
+        "AI_REQUEST_FAILED",
+        "Could not classify the selected artifacts right now.",
+      )
+
+      if (parsed.error) return parsed
+
+      return ok<WorkspaceClassificationResult>({
+        summary: parsed.data.summary,
+        proposals: parsed.data.proposals,
+        requestedDocumentIds: parsed.data.requestedDocumentIds,
+        usage: {
+          model: parsed.data.model,
+          promptTokens: parsed.data.promptTokens,
+          completionTokens: parsed.data.completionTokens,
+          totalTokens: parsed.data.totalTokens,
+          latencyMs: parsed.data.latencyMs,
+        },
+        ...(parsed.data.executionReceipt ? { executionReceipt: parsed.data.executionReceipt } : {}),
+      })
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not classify the selected artifacts right now.")
+    }
+  },
+
+  async askWorkspace(input: WorkspaceAskRequest) {
+    const token = await getBearerToken()
+
+    if (!token) {
+      return err<WorkspaceAskResult>({
+        code: "UNAUTHORIZED",
+        message: "No active session.",
+        retryable: false,
+      })
+    }
+
+    try {
+      const response = await fetch(`${getWebRuntimeBaseUrl()}/api/ai/workspace-ask`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(input),
+      })
+
+      const parsed = await parseServiceEnvelope<WorkspaceAskPayload>(
+        response,
+        "AI_REQUEST_FAILED",
+        "Could not answer that question right now.",
+      )
+
+      if (parsed.error) return parsed
+
+      return ok<WorkspaceAskResult>({
+        answer: parsed.data.answer,
+        evidence: parsed.data.evidence,
+        requestedDocumentIds: parsed.data.requestedDocumentIds,
+        suggestedAction: parsed.data.suggestedAction,
+        usage: {
+          model: parsed.data.model,
+          promptTokens: parsed.data.promptTokens,
+          completionTokens: parsed.data.completionTokens,
+          totalTokens: parsed.data.totalTokens,
+          latencyMs: parsed.data.latencyMs,
+        },
+        ...(parsed.data.executionReceipt ? { executionReceipt: parsed.data.executionReceipt } : {}),
+      })
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not answer that question right now.")
+    }
+  },
+
+  async presentToolResult(input: WorkspaceToolPresentationRequest) {
+    const token = await getBearerToken()
+
+    if (!token) {
+      return err<WorkspaceToolPresentationResult>({
+        code: "UNAUTHORIZED",
+        message: "No active session.",
+        retryable: false,
+      })
+    }
+
+    try {
+      const response = await fetch(`${getWebRuntimeBaseUrl()}/api/ai/workspace-tool-presentation`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(input),
+      })
+
+      const parsed = await parseServiceEnvelope<WorkspaceToolPresentationPayload>(
+        response,
+        "AI_REQUEST_FAILED",
+        "Could not phrase this result right now.",
+      )
+
+      if (parsed.error) return parsed
+
+      return ok<WorkspaceToolPresentationResult>({
+        note: parsed.data.note,
+        usage: {
+          model: parsed.data.model,
+          promptTokens: parsed.data.promptTokens,
+          completionTokens: parsed.data.completionTokens,
+          totalTokens: parsed.data.totalTokens,
+          latencyMs: parsed.data.latencyMs,
+        },
+        ...(parsed.data.executionReceipt ? { executionReceipt: parsed.data.executionReceipt } : {}),
+      })
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not phrase this result right now.")
+    }
+  },
+
+  async runSemanticRound(input: WorkspaceSemanticRoundRequest) {
+    const token = await getBearerToken()
+
+    if (!token) {
+      return err<WorkspaceSemanticRoundResult>({
+        code: "UNAUTHORIZED",
+        message: "No active session.",
+        retryable: false,
+      })
+    }
+
+    try {
+      const response = await fetch(`${getWebRuntimeBaseUrl()}/api/ai/workspace-semantic-round`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(input),
+      })
+
+      const parsed = await parseServiceEnvelope<WorkspaceSemanticRoundResult>(
+        response,
+        "AI_REQUEST_FAILED",
+        "Could not run the semantic workspace review right now.",
+      )
+
+      if (parsed.error) return parsed
+      return ok<WorkspaceSemanticRoundResult>({
+        ...parsed.data,
+        executionReceipt: parsed.data.executionReceipt ?? null,
+      })
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not run the semantic workspace review right now.")
+    }
+  },
+
+  async reviewWorkspaceDocumentRelations(input: WorkspaceDocumentRelationsRoundRequest) {
+    const token = await getBearerToken()
+
+    if (!token) {
+      return err<WorkspaceSemanticRoundResult>({
+        code: "UNAUTHORIZED",
+        message: "No active session.",
+        retryable: false,
+      })
+    }
+
+    try {
+      const response = await fetch(`${getWebRuntimeBaseUrl()}/api/ai/workspace-document-relations`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(input),
+      })
+
+      const parsed = await parseServiceEnvelope<WorkspaceSemanticRoundResult>(
+        response,
+        "AI_REQUEST_FAILED",
+        "Could not review workspace document relations right now.",
+      )
+
+      if (parsed.error) return parsed
+      return ok<WorkspaceSemanticRoundResult>({
+        ...parsed.data,
+        executionReceipt: parsed.data.executionReceipt ?? null,
+      })
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not review workspace document relations right now.")
+    }
+  },
+
+  async reviewWorkspaceMerge(input: WorkspaceMergeRoundRequest) {
+    const token = await getBearerToken()
+
+    if (!token) {
+      return err<WorkspaceSemanticRoundResult>({
+        code: "UNAUTHORIZED",
+        message: "No active session.",
+        retryable: false,
+      })
+    }
+
+    try {
+      const response = await fetch(`${getWebRuntimeBaseUrl()}/api/ai/workspace-merge`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(input),
+      })
+
+      const parsed = await parseServiceEnvelope<WorkspaceSemanticRoundResult>(
+        response,
+        "AI_REQUEST_FAILED",
+        "Could not synthesize the workspace merge right now.",
+      )
+
+      if (parsed.error) return parsed
+      return ok<WorkspaceSemanticRoundResult>({
+        ...parsed.data,
+        executionReceipt: parsed.data.executionReceipt ?? null,
+      })
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not synthesize the workspace merge right now.")
     }
   },
 

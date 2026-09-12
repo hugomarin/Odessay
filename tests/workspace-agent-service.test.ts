@@ -1,0 +1,2416 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
+import type {
+  WorkspaceAgentApproval,
+  WorkspaceAgentDocument,
+  WorkspaceAgentToolsService,
+} from "@/lib/services/contracts/workspace-agent"
+import { suggestArtifactClassification } from "@/lib/agent/workspace-agent-analysis"
+import { WORKSPACE_SEMANTIC_READ_TOOL_NAME } from "@/lib/ai/workspace-semantic-tool-registry"
+import { isResolvableSemanticContradiction } from "@/lib/ai/workspace-document-relations"
+import { getVocabularyCatalogSnapshot } from "@/lib/vocabulary/catalog"
+import { askAboutDocument, createWorkspaceAgentService } from "@/lib/services/workspace-agent-service"
+
+const contextMocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  loadCollections: vi.fn(),
+}))
+
+const aiMocks = vi.hoisted(() => ({
+  classifyWorkspace: vi.fn(),
+  askWorkspace: vi.fn(),
+  presentToolResult: vi.fn(),
+  runSemanticRound: vi.fn(),
+  reviewWorkspaceDocumentRelations: vi.fn(),
+  reviewWorkspaceMerge: vi.fn(),
+}))
+
+vi.mock("@/lib/services/document-catalog-factory", () => ({
+  getDocumentCatalog: vi.fn(async () => ({ list: contextMocks.list })),
+}))
+
+vi.mock("@/lib/services/desktop/desktop-collection-service", () => ({
+  loadDesktopCollections: contextMocks.loadCollections,
+}))
+
+vi.mock("@/lib/services/ai-service-factory", () => ({
+  getAIService: () => aiMocks,
+}))
+
+function approval(action: WorkspaceAgentApproval["action"], resource: string, approvalId = `${action}:${resource}`): WorkspaceAgentApproval {
+  return {
+    action,
+    approvalId,
+    approved: true,
+    approvedAt: "2026-01-01T00:00:00.000Z",
+    resource,
+  }
+}
+
+function document(id: string, markdown: string, modifiedAt = 1_700_000_000_000, relativePath = `${id}.md`): WorkspaceAgentDocument {
+  const catalogRecord = {
+    id,
+    artifactType: "general",
+    status: "draft",
+    visibility: "private",
+    version: 1,
+    title: id,
+    modifiedAt,
+    binding: { canonicalPath: `/workspace/${relativePath}`, relativePath },
+  } as DocumentCatalogRecord
+  return {
+    documentId: id,
+    canonicalPath: `/workspace/${id}.md`,
+    title: id,
+    markdown,
+    catalogRecord,
+  }
+}
+
+function completeSemanticRelationsRound(input: { input: Array<{ content?: string }> }) {
+  const prompt = JSON.parse(input.input[0]?.content ?? "{}") as {
+    evidence?: Array<{ evidenceId: string; documentId: string; text: string }>
+    candidates?: Array<{
+      candidateId: string
+      leftDocumentId: string
+      rightDocumentId: string
+      leftEvidenceId: string
+      rightEvidenceId: string
+    }>
+  }
+  const evidenceById = new Map((prompt.evidence ?? []).map((item) => [item.evidenceId, item]))
+  const relations = (prompt.candidates ?? []).map((candidate) => {
+    const left = evidenceById.get(candidate.leftEvidenceId)?.text ?? ""
+    const right = evidenceById.get(candidate.rightEvidenceId)?.text ?? ""
+    const contradiction = (left.startsWith("Storage:") && right.startsWith("Storage:"))
+      || (left.startsWith("The editor") && right.startsWith("The editor"))
+    return {
+      candidateId: candidate.candidateId,
+      leftDocumentId: candidate.leftDocumentId,
+      rightDocumentId: candidate.rightDocumentId,
+      verdict: contradiction ? "contradictory" : "unrelated",
+      confidence: "high",
+      rationale: contradiction ? "The selected claims are incompatible." : "The selected claims do not address the same proposition.",
+      evidenceIds: [candidate.leftEvidenceId, candidate.rightEvidenceId],
+      suggestedDocumentId: null,
+      suggestedReason: null,
+    }
+  })
+  return {
+    data: {
+      responseId: "contradictions-resp-1",
+      previousResponseId: null,
+      status: "completed",
+      outputText: JSON.stringify({
+        coverage: "complete",
+        status: "complete",
+        payload: JSON.stringify({ coverage: "complete", relations }),
+      }),
+      toolCalls: [],
+      incompleteReason: null,
+      usage: null,
+      executionReceipt: null,
+    },
+    error: null,
+  }
+}
+
+function completeSemanticMergeRound(input: { input: Array<{ content?: string }> }) {
+  const prompt = JSON.parse(input.input[0]?.content ?? "{}") as {
+    alignmentHints?: Array<{ sectionId: string; heading: string; headingLevel: 1 | 2 | 3; sourceEvidenceIds: string[] }>
+  }
+  const sections = (prompt.alignmentHints ?? []).map((section, index) => ({
+    sectionId: section.sectionId,
+    heading: section.heading,
+    headingLevel: section.headingLevel,
+    classification: index === 0 ? "contradictory" : "complementary",
+    unifiedText: index === 0 ? null : "A safe synthesis from the selected evidence.",
+    evidenceIds: section.sourceEvidenceIds,
+    rationale: index === 0 ? "The sources state incompatible claims." : "The sources add compatible context.",
+    confidence: "high",
+    suggestedSourceDocumentId: null,
+    suggestedSourceReason: null,
+  }))
+  return {
+    data: {
+      responseId: "merge-resp-1",
+      previousResponseId: null,
+      status: "completed",
+      outputText: JSON.stringify({
+        coverage: "complete",
+        status: "complete",
+        payload: JSON.stringify({ coverage: "complete", sections }),
+      }),
+      toolCalls: [],
+      incompleteReason: null,
+      usage: null,
+      executionReceipt: null,
+    },
+    error: null,
+  }
+}
+
+describe("WorkspaceAgentService contradiction workflow", () => {
+  beforeEach(() => {
+    contextMocks.list.mockReset()
+    contextMocks.list.mockResolvedValue([])
+    contextMocks.loadCollections.mockReset()
+    contextMocks.loadCollections.mockResolvedValue({ collections: [], writingCollections: [] })
+    aiMocks.classifyWorkspace.mockReset()
+    aiMocks.classifyWorkspace.mockResolvedValue({
+      data: { summary: "No change.", proposals: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    aiMocks.askWorkspace.mockReset()
+    aiMocks.askWorkspace.mockResolvedValue({
+      data: { answer: "No answer configured.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    aiMocks.runSemanticRound.mockReset()
+    aiMocks.reviewWorkspaceDocumentRelations.mockReset()
+    aiMocks.reviewWorkspaceMerge.mockReset()
+    aiMocks.reviewWorkspaceDocumentRelations.mockImplementation((input: unknown) => aiMocks.runSemanticRound(input))
+  })
+
+  it("reads only selected documents and applies a cited resolution through edit", async () => {
+    const documents = new Map([
+      ["left", document("left", "Storage: SQLite.", 1_700_000_000_000)],
+      ["right", document("right", "Storage: IndexedDB.", 1_700_000_100_000)],
+    ])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: `read:${documentId}`, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      edit: vi.fn(async ({ documentId, markdown, approval }) => ({
+        data: {
+          document: document(documentId, markdown ?? ""),
+          receipt: { action: "edit" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.reviewWorkspaceDocumentRelations.mockImplementationOnce(completeSemanticRelationsRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const found = await service.findContradictions(["left", "right"], {
+      left: approval("read", "left"),
+      right: approval("read", "right"),
+    })
+
+    expect(found.error).toBeNull()
+    expect(found.data?.proposals).toHaveLength(1)
+    expect(found.data?.proposals[0]).toMatchObject({
+      semanticVerdict: "contradictory",
+      semanticConfidence: "high",
+      semanticEvidenceIds: expect.arrayContaining([expect.stringContaining("relation:left"), expect.stringContaining("relation:right")]),
+    })
+    expect(found.data?.nonActionable).toEqual([])
+    expect(tools.read).toHaveBeenCalledTimes(2)
+
+    const resolved = await service.resolveContradiction(found.data!.proposals[0]!, "right", {
+      read: approval("read", "left"),
+      edit: approval("edit", "left"),
+    })
+
+    expect(resolved.error).toBeNull()
+    expect(resolved.data?.resolvedDocumentId).toBe("left")
+    expect(tools.edit).toHaveBeenCalledWith(expect.objectContaining({
+      documentId: "left",
+      markdown: "Storage: IndexedDB.",
+    }))
+  })
+
+  it("invalidates a semantic resolution when either source version changes", async () => {
+    const originalLeft = document("left", "Storage: SQLite.", 1_700_000_000_000)
+    const right = document("right", "Storage: IndexedDB.", 1_700_000_100_000)
+    const documents = new Map([[originalLeft.documentId, originalLeft], [right.documentId, right]])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      edit: vi.fn(),
+      write: vi.fn(),
+      move: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.reviewWorkspaceDocumentRelations.mockImplementationOnce(completeSemanticRelationsRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const found = await service.findContradictions(["left", "right"], {
+      left: approval("read", "left"),
+      right: approval("read", "right"),
+    })
+    expect(found.data?.proposals).toHaveLength(1)
+
+    documents.set("left", document("left", "Storage: Postgres.", 1_700_000_000_001))
+    const resolved = await service.resolveContradiction(found.data!.proposals[0]!, "right", {
+      read: approval("read", "left"),
+      edit: approval("edit", "left"),
+    })
+
+    expect(resolved.error?.code).toBe("CONFLICT")
+    expect(tools.edit).not.toHaveBeenCalled()
+  })
+
+  it("routes a semantic evidence request through the shared loop and read adapter", async () => {
+    const modifiedAt = 1_700_000_000_000
+    const selected = document("semantic-doc", "# Decision\n\nSQLite is canonical.", modifiedAt)
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async () => ({
+        data: {
+          document: selected,
+          receipt: { action: "read" as const, approvalId: "read:semantic-doc", executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.runSemanticRound
+      .mockResolvedValueOnce({
+        data: {
+          responseId: "semantic-resp-1",
+          previousResponseId: null,
+          status: "requires_tool",
+          outputText: null,
+          toolCalls: [{
+            callId: "semantic-call-1",
+            name: WORKSPACE_SEMANTIC_READ_TOOL_NAME,
+            arguments: {
+              documentId: "semantic-doc",
+              expectedDocumentVersion: `v1@${modifiedAt}`,
+              expectedContentHash: null,
+              lineStart: 1,
+              lineEnd: 3,
+              maxChars: 400,
+            },
+          }],
+          incompleteReason: null,
+          usage: null,
+          executionReceipt: null,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          responseId: "semantic-resp-2",
+          previousResponseId: "semantic-resp-1",
+          status: "completed",
+          outputText: JSON.stringify({ coverage: "complete", status: "complete", payload: "{}" }),
+          toolCalls: [],
+          incompleteReason: null,
+          usage: null,
+          executionReceipt: null,
+        },
+        error: null,
+      })
+
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const result = await service.runSemanticReview({
+      operation: "relations",
+      initialInput: [{ type: "message", role: "user", content: "Review this decision." }],
+      initialEvidence: [{
+        evidenceId: "initial-semantic",
+        documentId: "semantic-doc",
+        documentVersion: `v1@${modifiedAt}`,
+        contentHash: null,
+        lineStart: 1,
+        lineEnd: 1,
+        text: "# Decision",
+      }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data).toMatchObject({ status: "complete", coverage: "complete", rounds: 2 })
+    expect(tools.read).toHaveBeenCalledWith(expect.objectContaining({
+      documentId: "semantic-doc",
+      approval: expect.objectContaining({ action: "read", resource: "semantic-doc" }),
+    }))
+    expect(aiMocks.runSemanticRound).toHaveBeenCalledTimes(2)
+    expect(aiMocks.runSemanticRound.mock.calls[1][0].previousResponseId).toBe("semantic-resp-1")
+  })
+
+  it("reviews bounded document relations through the named semantic adapter", async () => {
+    const left = document("left", "Storage: SQLite.", 1_700_000_000_000)
+    const right = document("right", "Storage: IndexedDB.", 1_700_000_100_000)
+    const documents = new Map([[left.documentId, left], [right.documentId, right]])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.reviewWorkspaceDocumentRelations.mockImplementationOnce(async (roundInput: { input: Array<{ content?: string }> }) => {
+      const prompt = JSON.parse(roundInput.input[0]?.content ?? "{}") as {
+        evidence?: Array<{ evidenceId: string; documentId: string; lineStart: number; lineEnd: number }>
+        candidates?: Array<{ candidateId: string }>
+      }
+      const leftEvidence = prompt.evidence?.find((item) => item.documentId === "left")
+      const rightEvidence = prompt.evidence?.find((item) => item.documentId === "right")
+      const payload = {
+        coverage: "complete",
+        relations: [{
+          candidateId: prompt.candidates?.[0]?.candidateId ?? null,
+          leftDocumentId: "left",
+          rightDocumentId: "right",
+          verdict: "contradictory",
+          confidence: "high",
+          rationale: "The exact claims name incompatible storage authorities.",
+          evidenceIds: [leftEvidence?.evidenceId, rightEvidence?.evidenceId],
+          suggestedDocumentId: null,
+          suggestedReason: null,
+        }],
+      }
+      return {
+        data: {
+          responseId: "relations-resp-1",
+          previousResponseId: null,
+          status: "completed",
+          outputText: JSON.stringify({ coverage: "complete", status: "complete", payload: JSON.stringify(payload) }),
+          toolCalls: [],
+          incompleteReason: null,
+          usage: null,
+          executionReceipt: null,
+        },
+        error: null,
+      }
+    })
+
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const result = await service.reviewDocumentRelations({
+      documentIds: ["left", "right"],
+      readApprovals: {
+        left: approval("read", "left"),
+        right: approval("read", "right"),
+      },
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data).toMatchObject({ status: "complete", coverage: "complete", candidateCount: 1 })
+    expect(result.data?.relations).toHaveLength(1)
+    expect(result.data?.relations[0]?.suggestedDocumentId).toBeNull()
+    expect(isResolvableSemanticContradiction(result.data!.relations[0]!)).toBe(true)
+    expect(tools.read).toHaveBeenCalledTimes(2)
+    expect(aiMocks.reviewWorkspaceDocumentRelations).toHaveBeenCalledTimes(1)
+    expect(aiMocks.reviewWorkspaceDocumentRelations.mock.calls[0][0].input[0].content).not.toContain("/workspace")
+  })
+
+  it("refuses a comparison when a selected document has no approval", async () => {
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId }) => ({
+        data: {
+          document: document(documentId, "Storage: SQLite."),
+          receipt: { action: "read" as const, approvalId: `read:${documentId}`, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const result = await service.findContradictions(["left", "right"], { left: approval("read", "left") })
+
+    expect(result.error?.code).toBe("FORBIDDEN")
+    expect(tools.read).not.toHaveBeenCalled()
+  })
+
+  it("keeps valid non-actionable semantic relations out of the source-selection queue", async () => {
+    const documents = new Map([
+      ["left", document("left", "The sky is blue.")],
+      ["right", document("right", "The sky is blue.")],
+    ])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.reviewWorkspaceDocumentRelations.mockImplementationOnce(completeSemanticRelationsRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.findContradictions(["left", "right"], {
+      left: approval("read", "left"),
+      right: approval("read", "right"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.review).toMatchObject({ status: "complete", coverage: "complete" })
+    expect(result.data?.proposals).toEqual([])
+    expect(result.data?.nonActionable).toHaveLength(1)
+    expect(result.data?.nonActionable[0]).toMatchObject({ verdict: "unrelated", confidence: "high" })
+  })
+
+  it("keeps provider failures recoverable without promoting deterministic candidates", async () => {
+    const documents = new Map([
+      ["left", document("left", "Storage: SQLite.")],
+      ["right", document("right", "Storage: IndexedDB.")],
+    ])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.reviewWorkspaceDocumentRelations.mockResolvedValueOnce({
+      data: null,
+      error: { code: "AI_REQUEST_FAILED", message: "Provider unavailable.", retryable: true },
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.findContradictions(["left", "right"], {
+      left: approval("read", "left"),
+      right: approval("read", "right"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.review).toMatchObject({ status: "provider_error", coverage: "unknown" })
+    expect(result.data?.proposals).toEqual([])
+    expect(result.data?.nonActionable).toEqual([])
+  })
+
+  it("sends full target content and a separate workflow context through the semantic AI adapter", async () => {
+    const workflow = document("workflow", "# Existing workflow")
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord, target.catalogRecord])
+    contextMocks.loadCollections.mockResolvedValue({ collections: [], writingCollections: [] })
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documentId === "workflow" ? workflow : target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    aiMocks.classifyWorkspace.mockResolvedValueOnce({
+      data: {
+        summary: "The artifact is a general draft.",
+        proposals: [{
+          documentId: "target",
+          decision: "keep",
+          proposedArtifactType: "general",
+          proposedStatus: "draft",
+          change: "Keep the current type and status.",
+          rationale: "The document states a concrete storage decision and is readable end to end.",
+          benefit: "Avoids changing metadata without a user-visible improvement.",
+          uncertainty: null,
+          evidence: [{ documentId: "target", quote: "Storage: SQLite.", reason: "This is the document's concrete subject." }],
+        }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+
+    const result = await service.suggestClassification({
+      request: "Review this document and keep metadata when no improvement is justified.",
+      selection: [{ kind: "file", documentId: "target" }],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(tools.read).toHaveBeenCalledWith(expect.objectContaining({ documentId: "workflow", approval: approval("read", "workflow") }))
+    expect(tools.read).toHaveBeenCalledWith(expect.objectContaining({ documentId: "target", approval: expect.objectContaining({ action: "read", resource: "target" }) }))
+    expect(aiMocks.classifyWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      request: "Review this document and keep metadata when no improvement is justified.",
+      targetDocumentIds: ["target"],
+      workflow: expect.objectContaining({ instructions: "# Existing workflow" }),
+      documents: expect.arrayContaining([
+        expect.objectContaining({ id: "target", markdown: "Storage: SQLite.", currentStatus: "draft" }),
+      ]),
+      vocabulary: expect.arrayContaining([
+        expect.objectContaining({ kind: "type", key: "general", description: expect.any(String) }),
+        expect.objectContaining({ kind: "status", key: "draft", description: expect.any(String) }),
+      ]),
+    }))
+    expect(result.data?.proposals[0]).toMatchObject({
+      documentId: "target",
+      documentTitle: "target",
+      decision: "keep",
+      evidence: [expect.objectContaining({ quote: "Storage: SQLite.", line: 1 })],
+    })
+  })
+
+  it("askAgent answers a free-form question grounded in the selected document, without requiring metadata classification", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: {
+        answer: "This document decides to use SQLite for storage.",
+        evidence: [{ documentId: "target", quote: "Storage: SQLite.", reason: "States the storage decision." }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "What storage does this artifact use?",
+      selection: [{ kind: "file", documentId: "target" }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      question: "What storage does this artifact use?",
+      targetDocumentIds: ["target"],
+    }))
+    expect(result.data).toMatchObject({
+      answer: "This document decides to use SQLite for storage.",
+      evidence: [expect.objectContaining({ quote: "Storage: SQLite.", line: 1 })],
+    })
+    expect(result.data?.documents).toEqual([{ documentId: "target", title: "target", path: "target.md" }])
+  })
+
+  it("askAgent threads the model's suggestedAction through unchanged (ODE-489/491 follow-up — lets the panel dispatch to a real tool/workflow instead of only ever answering in prose)", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Sure, let me classify it.", evidence: [], requestedDocumentIds: [], suggestedAction: "classification", usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "Classify this document and propose its status.",
+      selection: [{ kind: "file", documentId: "target" }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.suggestedAction).toBe("classification")
+  })
+
+  it("askAgent defaults suggestedAction to null when the AI service omits it (older mocks, or a provider response the schema already normalized)", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Hi.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "Hola",
+      selection: [{ kind: "file", documentId: "target" }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.suggestedAction).toBeNull()
+  })
+
+  it("askAgent grounds the answer in a live override instead of the last-persisted read (ODE-489/490 follow-up — unsaved edits must not be silently ignored)", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const read = vi.fn(async ({ approval }) => ({
+      data: {
+        document: target,
+        receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+      },
+      error: null,
+    }))
+    const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: {
+        answer: "This document now decides to use Postgres.",
+        evidence: [{ documentId: "target", quote: "Storage: Postgres.", reason: "States the storage decision." }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "What storage does this artifact use?",
+      selection: [{ kind: "file", documentId: "target" }],
+      liveOverride: { documentId: "target", markdown: "Storage: Postgres." },
+    })
+
+    expect(result.error).toBeNull()
+    // The catalog's persisted body ("SQLite") is never read — the live
+    // override bypasses the tools/cache path entirely for this document.
+    expect(read).not.toHaveBeenCalled()
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      documents: [expect.objectContaining({ id: "target", markdown: "Storage: Postgres." })],
+    }))
+    expect(result.data?.evidence).toEqual([expect.objectContaining({ quote: "Storage: Postgres.", line: 1 })])
+  })
+
+  it("askAgent forwards the session's recent actions as memory for the model, so later answers stay consistent with earlier ones", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: {
+        answer: "As before, this document uses SQLite.",
+        evidence: [],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({
+      question: "And in Spanish, what storage does it use?",
+      selection: [{ kind: "file", documentId: "target" }],
+      sessionContext: ["Q: What storage does this artifact use?\nA: This document decides to use SQLite for storage."],
+    })
+
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      recentSessionActions: ["Q: What storage does this artifact use?\nA: This document decides to use SQLite for storage."],
+    }))
+  })
+
+  it("askAgent drops evidence whose quote no longer appears in the current document content", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: {
+        answer: "This document mentions PostgreSQL.",
+        evidence: [{ documentId: "target", quote: "Storage: PostgreSQL.", reason: "Hallucinated quote not present in the source." }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "What storage does this artifact use?",
+      selection: [{ kind: "file", documentId: "target" }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.evidence).toEqual([])
+  })
+
+  it("askAgent answers a conversational question with an empty selection without reading any document (ODE-489's documented Context Gap: 'Hola' must not force a read)", async () => {
+    const other = document("other", "Some unrelated artifact body.")
+    contextMocks.list.mockResolvedValue([other.catalogRecord])
+    const read = vi.fn()
+    const tools: WorkspaceAgentToolsService = {
+      read,
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Hi! How can I help?", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({ question: "Hola", selection: [] })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.answer).toBe("Hi! How can I help?")
+    expect(read).not.toHaveBeenCalled()
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      question: "Hola",
+      targetDocumentIds: [],
+      documents: [],
+    }))
+  })
+
+  describe("askAgent — lazy focused document + bounded retry (ODE-489 follow-up: 'el contexto solo se debe invocar en la medida que el usuario lo solicite')", () => {
+    it("does not read the focused document on the first round — only its metadata is offered, via focusedDocumentId", async () => {
+      const focused = document("focused", "Storage: SQLite. A long design rationale follows.")
+      contextMocks.list.mockResolvedValue([focused.catalogRecord])
+      const read = vi.fn(async ({ approval }) => ({
+        data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
+        error: null,
+      }))
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "Hi! How can I help?", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({ question: "Hola", selection: [], focusedDocumentId: "focused" })
+
+      expect(result.error).toBeNull()
+      expect(read).not.toHaveBeenCalled()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+        focusedDocumentId: "focused",
+        targetDocumentIds: [],
+        documents: expect.arrayContaining([expect.objectContaining({ id: "focused", markdown: null })]),
+      }))
+    })
+
+    it("drops focusedDocumentId from the request instead of sending a self-inconsistent hint when the catalog doesn't have that record (e.g. a stale read right after a mutation)", async () => {
+      const other = document("other", "Unrelated artifact.")
+      // The catalog snapshot this turn resolves against does not include
+      // "focused" at all — simulating a stale read right after the record
+      // was mutated elsewhere. The schema requires focusedDocumentId to name
+      // one of `documents`, so sending it anyway would make the server
+      // reject the whole turn before the model is even called.
+      contextMocks.list.mockResolvedValue([other.catalogRecord])
+      const read = vi.fn()
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "Here's a general answer.", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({ question: "What's this about?", selection: [], focusedDocumentId: "focused" })
+
+      expect(result.error).toBeNull()
+      expect(read).not.toHaveBeenCalled()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+        focusedDocumentId: null,
+        documents: [],
+      }))
+    })
+
+    it("performs one bounded extra round with the focused document's content when the model requests it, and returns the retried answer", async () => {
+      const focused = document("focused", "Storage: SQLite.")
+      contextMocks.list.mockResolvedValue([focused.catalogRecord])
+      const read = vi.fn(async ({ approval }) => ({
+        data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
+        error: null,
+      }))
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace
+        .mockResolvedValueOnce({
+          data: { answer: "I'd need to read it to answer that.", evidence: [], requestedDocumentIds: ["focused"], usage: null },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: {
+            answer: "This document decides to use SQLite for storage.",
+            evidence: [{ documentId: "focused", quote: "Storage: SQLite.", reason: "States the storage decision." }],
+            requestedDocumentIds: [],
+            usage: null,
+          },
+          error: null,
+        })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({ question: "What storage does this use?", selection: [], focusedDocumentId: "focused" })
+
+      expect(result.error).toBeNull()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+      expect(read).toHaveBeenCalledTimes(1)
+      expect(result.data?.answer).toBe("This document decides to use SQLite for storage.")
+      expect(result.data?.evidence).toEqual([expect.objectContaining({ quote: "Storage: SQLite.", line: 1 })])
+      expect(result.data?.requestedDocumentIds).toEqual([])
+    })
+
+    it("keeps the first round's answer when the retry itself fails, instead of erroring the whole turn", async () => {
+      const focused = document("focused", "Storage: SQLite.")
+      contextMocks.list.mockResolvedValue([focused.catalogRecord])
+      let callCount = 0
+      const read = vi.fn(async ({ approval }) => {
+        callCount += 1
+        if (callCount === 1) return { data: null, error: { code: "UNAVAILABLE" as const, message: "boom", retryable: true } }
+        return { data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } }, error: null }
+      })
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "I don't have enough context yet, but here's what I can say generally.", evidence: [], requestedDocumentIds: ["focused"], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({ question: "What storage does this use?", selection: [], focusedDocumentId: "focused" })
+
+      expect(result.error).toBeNull()
+      expect(result.data?.answer).toBe("I don't have enough context yet, but here's what I can say generally.")
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+    })
+
+    it("keeps the first round's answer when the second askWorkspace call itself fails (not just the evidence read before it)", async () => {
+      const focused = document("focused", "Storage: SQLite.")
+      contextMocks.list.mockResolvedValue([focused.catalogRecord])
+      // Unlike the read-failure test above, evidence preparation for the
+      // retry succeeds every time — the failure is the provider call itself.
+      const read = vi.fn(async ({ approval }) => ({
+        data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
+        error: null,
+      }))
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace
+        .mockResolvedValueOnce({
+          data: { answer: "I don't have enough context yet, but here's what I can say generally.", evidence: [], requestedDocumentIds: ["focused"], usage: null },
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: null, error: { code: "UNAVAILABLE", message: "AI provider is unavailable for the Workspace agent.", retryable: true } })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({ question: "What storage does this use?", selection: [], focusedDocumentId: "focused" })
+
+      expect(result.error).toBeNull()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+      expect(result.data?.answer).toBe("I don't have enough context yet, but here's what I can say generally.")
+      expect(result.data?.requestedDocumentIds).toEqual(["focused"])
+    })
+
+    it("does not auto-fetch a requested id that isn't the focused document — that stays the existing manual 'note the user' path", async () => {
+      const focused = document("focused", "Storage: SQLite.")
+      const other = document("other-doc", "Some other content.")
+      contextMocks.list.mockResolvedValue([focused.catalogRecord, other.catalogRecord])
+      const read = vi.fn(async ({ approval }) => ({
+        data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
+        error: null,
+      }))
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "Might be related to another artifact.", evidence: [], requestedDocumentIds: ["other-doc"], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({ question: "Is this related to anything else?", selection: [], focusedDocumentId: "focused" })
+
+      expect(result.error).toBeNull()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+      expect(read).not.toHaveBeenCalled()
+      expect(result.data?.requestedDocumentIds).toEqual(["other-doc"])
+    })
+
+    it("does not retry when the focused document was already part of the explicit selection", async () => {
+      const focused = document("focused", "Storage: SQLite.")
+      contextMocks.list.mockResolvedValue([focused.catalogRecord])
+      const read = vi.fn(async ({ approval }) => ({
+        data: { document: focused, receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" } },
+        error: null,
+      }))
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "Answer.", evidence: [], requestedDocumentIds: ["focused"], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const result = await service.askAgent({
+        question: "q",
+        selection: [{ kind: "file", documentId: "focused" }],
+        focusedDocumentId: "focused",
+      })
+
+      expect(result.error).toBeNull()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+      expect(read).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe("askAboutDocument (ODE-490 — no Workspace, BindingRoot, or catalog needed)", () => {
+    it("offers only a reference on the first round — no content sent — then retries with content once the model asks for it back (ODE-489 follow-up)", async () => {
+      aiMocks.askWorkspace
+        .mockResolvedValueOnce({
+          data: { answer: "I'd need to read it to answer that.", evidence: [], requestedDocumentIds: ["draft-1"], usage: null },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: {
+            answer: "This document decides to use SQLite for storage.",
+            evidence: [{ documentId: "draft-1", quote: "Storage: SQLite.", reason: "States the storage decision." }],
+            requestedDocumentIds: [],
+            usage: null,
+          },
+          error: null,
+        })
+
+      const result = await askAboutDocument({
+        question: "What storage does this use?",
+        documentId: "draft-1",
+        title: "Untitled draft",
+        markdown: "Storage: SQLite.",
+      })
+
+      expect(result.error).toBeNull()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+      expect(aiMocks.askWorkspace).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        question: "What storage does this use?",
+        targetDocumentIds: [],
+        focusedDocumentId: "draft-1",
+        documents: [expect.objectContaining({ id: "draft-1", title: "Untitled draft", markdown: null })],
+        collections: [],
+        catalogTruncated: false,
+      }))
+      expect(aiMocks.askWorkspace).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        targetDocumentIds: ["draft-1"],
+        documents: [expect.objectContaining({ id: "draft-1", markdown: "Storage: SQLite." })],
+      }))
+      expect(result.data).toMatchObject({
+        answer: "This document decides to use SQLite for storage.",
+        evidence: [expect.objectContaining({ quote: "Storage: SQLite.", line: 1 })],
+        documents: [{ documentId: "draft-1", title: "Untitled draft", path: null }],
+      })
+      // Nothing here goes through the desktop tools layer or the document
+      // catalog — an empty conversational exchange creates no side effect.
+      expect(contextMocks.list).not.toHaveBeenCalled()
+    })
+
+    it("answers a purely conversational question against a blank, unmaterialized draft without ever sending its content", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "¡Hola! ¿En qué te ayudo?", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+
+      const result = await askAboutDocument({
+        question: "hola",
+        documentId: "draft-blank",
+        title: null,
+        markdown: "Some text the user already typed that a greeting has no reason to need.",
+      })
+
+      expect(result.error).toBeNull()
+      expect(result.data?.answer).toBe("¡Hola! ¿En qué te ayudo?")
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+        targetDocumentIds: [],
+        focusedDocumentId: "draft-blank",
+        documents: [expect.objectContaining({ id: "draft-blank", title: null, markdown: null })],
+      }))
+    })
+
+    it("answers a still-blank draft with no id at all yet (ODE-490 follow-up — a document identity must not gate a plain 'Hola')", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "¡Hola!", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+
+      const result = await askAboutDocument({
+        question: "hola",
+        documentId: null,
+        title: null,
+        markdown: "",
+      })
+
+      expect(result.error).toBeNull()
+      expect(result.data?.answer).toBe("¡Hola!")
+      // No real identity to cite back to — the citation-document list stays
+      // empty instead of pointing at a synthetic placeholder id.
+      expect(result.data?.documents).toEqual([])
+      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+        targetDocumentIds: [],
+        documents: [expect.objectContaining({ title: null, markdown: null })],
+      }))
+    })
+
+    it("keeps the first round's answer when the retry itself fails, instead of erroring the turn", async () => {
+      aiMocks.askWorkspace
+        .mockResolvedValueOnce({
+          data: { answer: "I don't have enough context yet, but here's what I can say generally.", evidence: [], requestedDocumentIds: ["draft-1"], usage: null },
+          error: null,
+        })
+        .mockResolvedValueOnce({ data: null, error: { code: "AI_REQUEST_FAILED", message: "boom", retryable: true } })
+
+      const result = await askAboutDocument({
+        question: "What storage does this use?",
+        documentId: "draft-1",
+        title: "Draft",
+        markdown: "Storage: SQLite.",
+      })
+
+      expect(result.error).toBeNull()
+      expect(result.data?.answer).toBe("I don't have enough context yet, but here's what I can say generally.")
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+    })
+
+    it("does not retry when the model doesn't ask for the document back — a single round is enough", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "General commentary needing no evidence.", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+
+      const result = await askAboutDocument({
+        question: "What do you think of writing in general?",
+        documentId: "draft-1",
+        title: "Draft",
+        markdown: "Storage: SQLite.",
+      })
+
+      expect(result.error).toBeNull()
+      expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(1)
+    })
+
+    it("drops evidence whose quote isn't actually present in the document", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: {
+          answer: "This document mentions PostgreSQL.",
+          evidence: [{ documentId: "draft-1", quote: "Storage: PostgreSQL.", reason: "Hallucinated quote." }],
+          requestedDocumentIds: [],
+          usage: null,
+        },
+        error: null,
+      })
+
+      const result = await askAboutDocument({
+        question: "What storage does this use?",
+        documentId: "draft-1",
+        title: "Draft",
+        markdown: "Storage: SQLite.",
+      })
+
+      expect(result.error).toBeNull()
+      expect(result.data?.evidence).toEqual([])
+    })
+
+    it("forwards recent session actions as memory, same as the Workspace-backed ask", async () => {
+      aiMocks.askWorkspace.mockResolvedValueOnce({
+        data: { answer: "As before.", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+
+      await askAboutDocument({
+        question: "And in Spanish?",
+        documentId: "draft-1",
+        title: "Draft",
+        markdown: "Storage: SQLite.",
+        sessionContext: ["Q: What storage does this use?\nA: SQLite."],
+      })
+
+      expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+        recentSessionActions: ["Q: What storage does this use?\nA: SQLite."],
+      }))
+    })
+  })
+
+  it("uses a workflow-specific read approval only when proposing an existing workflow", async () => {
+    const workflow = document("workflow", "# Existing workflow")
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord, target.catalogRecord])
+    contextMocks.loadCollections.mockResolvedValue({ collections: [], writingCollections: [] })
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: workflow,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.proposeWorkflow(approval("read", "workflow"))
+
+    expect(result.error).toBeNull()
+    expect(tools.read).toHaveBeenCalledWith(expect.objectContaining({ documentId: "workflow", approval: approval("read", "workflow") }))
+  })
+
+  it("expands a selected folder through the catalog and reads each selected artifact completely", async () => {
+    const first = document("first", "# First\n\nA reusable prompt.", 1_700_000_000_000, "notes/first.md")
+    const second = document("second", "# Second\n\nA reusable template.", 1_700_000_100_000, "notes/second.md")
+    contextMocks.list.mockResolvedValue([first.catalogRecord, second.catalogRecord])
+    const documents = new Map([["first", first], ["second", second]])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.classifyWorkspace.mockResolvedValueOnce({
+      data: {
+        summary: "Both selected artifacts were reviewed from their full content.",
+        proposals: [
+          {
+            documentId: "first",
+            decision: "change",
+            proposedArtifactType: "prompt",
+            proposedStatus: "draft",
+            change: "Classify as Prompt / Draft.",
+            rationale: "The heading and body describe a reusable request.",
+            benefit: "Makes the artifact easier to find as a reusable prompt.",
+            uncertainty: null,
+            evidence: [{ documentId: "first", quote: "A reusable prompt.", reason: "States the artifact's purpose." }],
+          },
+          {
+            documentId: "second",
+            decision: "change",
+            proposedArtifactType: "template",
+            proposedStatus: "draft",
+            change: "Classify as Template / Draft.",
+            rationale: "The body identifies a reusable starting shape.",
+            benefit: "Makes the artifact easier to reuse consistently.",
+            uncertainty: null,
+            evidence: [{ documentId: "second", quote: "A reusable template.", reason: "States the artifact's purpose." }],
+          },
+        ],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.suggestClassification({
+      request: "Review the notes folder.",
+      selection: [{ kind: "folder", path: "/workspace/notes" }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(tools.read).toHaveBeenCalledTimes(2)
+    expect(aiMocks.classifyWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      targetDocumentIds: ["first", "second"],
+      documents: expect.arrayContaining([
+        expect.objectContaining({ id: "first", markdown: "# First\n\nA reusable prompt." }),
+        expect.objectContaining({ id: "second", markdown: "# Second\n\nA reusable template." }),
+      ]),
+    }))
+    expect(result.data?.proposals.map((proposal) => proposal.artifactType)).toEqual(["prompt", "template"])
+  })
+
+  it("keeps the model decision authoritative instead of copying a similar catalog peer", async () => {
+    const target = document("target", "# Reusable prompt\n\nAsk the user for the missing context.")
+    const peer = document("peer", "# Reusable prompt\n\nAsk the user for the missing context.")
+    target.catalogRecord.title = "Reusable prompt"
+    target.catalogRecord.excerpt = "Ask the user for the missing context."
+    peer.catalogRecord.title = "Reusable prompt"
+    peer.catalogRecord.excerpt = "Ask the user for the missing context."
+    peer.catalogRecord.artifactType = "template"
+    peer.catalogRecord.status = "done"
+    contextMocks.list.mockResolvedValue([target.catalogRecord, peer.catalogRecord])
+    const heuristic = suggestArtifactClassification(
+      target.catalogRecord,
+      [target.catalogRecord, peer.catalogRecord],
+      getVocabularyCatalogSnapshot(),
+    )
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.classifyWorkspace.mockResolvedValueOnce({
+      data: {
+        summary: "The body is a reusable prompt, not a template.",
+        proposals: [{
+          documentId: "target",
+          decision: "change",
+          proposedArtifactType: "prompt",
+          proposedStatus: "draft",
+          change: "Change the type to Prompt.",
+          rationale: "The document directly asks an agent to ask the user for context.",
+          benefit: "Makes the artifact discoverable as a reusable prompt.",
+          uncertainty: null,
+          evidence: [{ documentId: "target", quote: "Ask the user for the missing context.", reason: "The instruction defines the reusable prompt behavior." }],
+        }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.suggestClassification({
+      request: "Classify this artifact by its purpose, not by a similar peer.",
+      selection: [{ kind: "file", documentId: "target" }],
+    })
+
+    expect(heuristic.artifactType).toBe("template")
+    expect(result.data?.proposals[0]).toMatchObject({ artifactType: "prompt", status: "draft", decision: "change" })
+  })
+
+  it("creates a review-only proposal when the model omits a selected artifact", async () => {
+    const first = document("first", "# First\n\nA complete note.")
+    const second = document("second", "# Second\n\nAnother complete note.")
+    contextMocks.list.mockResolvedValue([first.catalogRecord, second.catalogRecord])
+    const documents = new Map([["first", first], ["second", second]])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.classifyWorkspace.mockResolvedValueOnce({
+      data: {
+        summary: "Only one selected artifact was classified.",
+        proposals: [{
+          documentId: "first",
+          decision: "keep",
+          proposedArtifactType: "general",
+          proposedStatus: "draft",
+          change: "Keep the current values.",
+          rationale: "The note is complete and its metadata remains accurate.",
+          benefit: "Avoids unnecessary metadata churn.",
+          uncertainty: null,
+          evidence: [{ documentId: "first", quote: "A complete note.", reason: "The body supports the current classification." }],
+        }],
+        requestedDocumentIds: [],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.suggestClassification({
+      request: "Review both artifacts.",
+      selection: [{ kind: "file", documentId: "first" }, { kind: "file", documentId: "second" }],
+    })
+
+    expect(result.data?.proposals).toHaveLength(2)
+    expect(result.data?.proposals[1]).toMatchObject({
+      documentId: "second",
+      decision: "needs-review",
+      change: "No semantic decision was returned for this artifact.",
+    })
+    expect(tools.edit).not.toHaveBeenCalled()
+  })
+
+  it("downgrades unverifiable evidence and inactive vocabulary to review-only output", async () => {
+    const target = document("target", "The body contains the evidence.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.classifyWorkspace.mockResolvedValueOnce({
+      data: {
+        summary: "The model returned an unsupported type and a non-existent quote.",
+        proposals: [{
+          documentId: "target",
+          decision: "change",
+          proposedArtifactType: "not-active",
+          proposedStatus: "draft",
+          change: "Change the type.",
+          rationale: "The evidence suggests a different purpose.",
+          benefit: "Would improve discovery if verified.",
+          uncertainty: null,
+          evidence: [{ documentId: "target", quote: "This sentence is not present.", reason: "Unverified claim." }],
+        }],
+        requestedDocumentIds: ["unknown", "target"],
+        usage: null,
+      },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.suggestClassification({
+      request: "Classify this artifact.",
+      selection: [{ kind: "file", documentId: "target" }],
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.proposals[0]).toMatchObject({ decision: "needs-review", artifactType: null, status: "draft" })
+    expect(result.data?.proposals[0]?.uncertainty).toEqual(expect.stringContaining("not active"))
+    expect(result.data?.proposals[0]?.evidence).toEqual([])
+    expect(result.data?.requestedDocumentIds).toEqual([])
+  })
+
+  it("rejects a metadata approval when the classification evidence is stale", async () => {
+    const target = document("target", "A skill.")
+    target.catalogRecord = {
+      ...target.catalogRecord,
+      binding: {
+        ...target.catalogRecord.binding!,
+        contentHash: "current-hash",
+      },
+    }
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.applyClassification({
+      documentId: "target",
+      documentTitle: "target",
+      documentPath: "target.md",
+      currentArtifactType: "general",
+      currentStatus: "draft",
+      artifactType: "skill",
+      status: "draft",
+      decision: "change",
+      change: "Change type to Skill.",
+      benefit: "Improves discovery.",
+      uncertainty: null,
+      sourceContentHash: "old-hash",
+      sourceVersion: 1,
+      sourceModifiedAt: 1_700_000_000_000,
+      evidenceSources: [{
+        documentId: "target",
+        contentHash: "old-hash",
+        version: 1,
+        modifiedAt: 1_700_000_000_000,
+      }],
+      evidence: [],
+      reason: "The body describes a reusable procedure.",
+    }, approval("edit", "target"))
+
+    expect(result.error?.code).toBe("CONFLICT")
+    expect(tools.edit).not.toHaveBeenCalled()
+  })
+
+  it("revalidates the target quote and active vocabulary before applying approved metadata", async () => {
+    const target = document("target", "# Prompt\n\nAsk for context.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const updated = document("target", target.markdown)
+    updated.catalogRecord.artifactType = "prompt"
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(async ({ approval, metadata }) => ({
+        data: {
+          document: { ...updated, catalogRecord: { ...updated.catalogRecord, artifactType: metadata?.artifactType ?? updated.catalogRecord.artifactType } },
+          receipt: { action: "edit" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.applyClassification({
+      documentId: "target",
+      documentTitle: "target",
+      documentPath: "target.md",
+      currentArtifactType: "general",
+      currentStatus: "draft",
+      artifactType: "prompt",
+      status: "draft",
+      decision: "change",
+      change: "Change type to Prompt.",
+      benefit: "Makes the reusable instruction easier to find.",
+      uncertainty: null,
+      sourceContentHash: null,
+      sourceVersion: 1,
+      sourceModifiedAt: 1_700_000_000_000,
+      evidenceSources: [{
+        documentId: "target",
+        contentHash: null,
+        version: 1,
+        modifiedAt: 1_700_000_000_000,
+      }],
+      evidence: [{
+        kind: "document",
+        sourceId: "target",
+        label: "target",
+        detail: "line 3: The instruction defines the purpose.",
+        quote: "Ask for context.",
+        line: 3,
+      }],
+      reason: "The body is written as a reusable instruction.",
+    }, approval("edit", "target"))
+
+    expect(result.error).toBeNull()
+    expect(result.data?.document.catalogRecord.artifactType).toBe("prompt")
+    expect(tools.edit).toHaveBeenCalledWith(expect.objectContaining({
+      documentId: "target",
+      metadata: { artifactType: "prompt" },
+    }))
+  })
+
+  it("requires the workflow-specific approval before proposing an existing workflow", async () => {
+    const workflow = document("workflow", "# Existing workflow")
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord, target.catalogRecord])
+    contextMocks.loadCollections.mockResolvedValue({ collections: [], writingCollections: [] })
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.proposeWorkflow()
+
+    expect(result.error?.code).toBe("FORBIDDEN")
+    expect(tools.read).not.toHaveBeenCalled()
+  })
+
+  it("reads, edits and records an approved broken-reference fix", async () => {
+    const source = document("source", "See [missing](missing.md).")
+    const proposal = {
+      sourceDocumentId: "source",
+      sourceTitle: "Source",
+      reference: "missing.md",
+      referenceKind: "path" as const,
+      candidateDocumentId: "target",
+      candidateTitle: "Target",
+      suggestedReference: "target.md",
+      evidence: [],
+    }
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async () => ({
+        data: {
+          document: source,
+          receipt: { action: "read" as const, approvalId: "read:source", executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      edit: vi.fn(async ({ markdown, approval }) => ({
+        data: {
+          document: document("source", markdown ?? ""),
+          receipt: { action: "edit" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.applyBrokenReference(proposal, "target.md", {
+      read: approval("read", "source"),
+      edit: approval("edit", "source"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(tools.read).toHaveBeenCalledWith(expect.objectContaining({ documentId: "source", approval: approval("read", "source") }))
+    expect(tools.edit).toHaveBeenCalledWith(expect.objectContaining({ documentId: "source", markdown: "See [missing](target.md).", approval: approval("edit", "source") }))
+  })
+
+  it("removeBrokenReference deletes the mention instead of repointing it", async () => {
+    const source = document("source", "See [missing](missing.md) for details.")
+    const proposal = {
+      sourceDocumentId: "source",
+      sourceTitle: "Source",
+      reference: "missing.md",
+      referenceKind: "path" as const,
+      candidateDocumentId: null,
+      candidateTitle: null,
+      suggestedReference: null,
+      evidence: [],
+    }
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async () => ({
+        data: {
+          document: source,
+          receipt: { action: "read" as const, approvalId: "read:source", executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      edit: vi.fn(async ({ markdown, approval: approvalArg }) => ({
+        data: {
+          document: document("source", markdown ?? ""),
+          receipt: { action: "edit" as const, approvalId: approvalArg.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.removeBrokenReference(proposal, {
+      read: approval("read", "source"),
+      edit: approval("edit", "source"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(tools.edit).toHaveBeenCalledWith(expect.objectContaining({ documentId: "source", markdown: "See missing for details." }))
+  })
+
+  it("createDocumentForBrokenReference writes a new stub document at the exact path the link expects", async () => {
+    const sourceRecord = {
+      id: "source",
+      artifactType: "general",
+      status: "draft",
+      visibility: "private",
+      version: 1,
+      title: "Source",
+      modifiedAt: 1_700_000_000_000,
+      deletedAt: null,
+      binding: { canonicalPath: "/workspace/notes/source.md", relativePath: "notes/source.md" },
+    } as DocumentCatalogRecord
+    contextMocks.list.mockResolvedValue([sourceRecord])
+    const proposal = {
+      sourceDocumentId: "source",
+      sourceTitle: "Source",
+      reference: "../presupuesto-detallado.md",
+      referenceKind: "path" as const,
+      candidateDocumentId: null,
+      candidateTitle: null,
+      suggestedReference: null,
+      evidence: [],
+    }
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(),
+      edit: vi.fn(),
+      write: vi.fn(async ({ markdown, approval: approvalArg }) => ({
+        data: {
+          document: document("presupuesto-detallado", markdown, 1_700_000_000_000, "presupuesto-detallado.md"),
+          receipt: { action: "write" as const, approvalId: approvalArg.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      move: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.createDocumentForBrokenReference(proposal, approval("write", "presupuesto-detallado.md"))
+
+    expect(result.error).toBeNull()
+    expect(tools.write).toHaveBeenCalledWith(expect.objectContaining({
+      target: { canonicalPath: "/workspace/presupuesto-detallado.md" },
+      markdown: "# presupuesto-detallado\n",
+    }))
+  })
+
+  it("createDocumentForBrokenReference rejects a slug reference — there is no filesystem path to create", async () => {
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(),
+      edit: vi.fn(),
+      write: vi.fn(),
+      move: vi.fn(),
+      delete: vi.fn(),
+    }
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.createDocumentForBrokenReference({
+      sourceDocumentId: "source",
+      sourceTitle: "Source",
+      reference: "missing-slug",
+      referenceKind: "slug",
+      candidateDocumentId: null,
+      candidateTitle: null,
+      suggestedReference: null,
+      evidence: [],
+    }, approval("write", "missing-slug"))
+
+    expect(result.error?.code).toBe("INVALID_INPUT")
+    expect(tools.write).not.toHaveBeenCalled()
+  })
+
+  it("rebases the next queued contradiction after a length-changing resolution", async () => {
+    const documents = new Map([
+      ["left", document("left", "Storage: SQLite.\nThe editor uses local files.", 1_700_000_000_000)],
+      ["right", document("right", "Storage: IndexedDB.\nThe editor does not use local files.", 1_700_000_100_000)],
+    ])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: `read:${documentId}`, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      edit: vi.fn(async ({ documentId, markdown, approval }) => {
+        const next = document(documentId, markdown ?? "")
+        documents.set(documentId, next)
+        return {
+          data: {
+            document: next,
+            receipt: { action: "edit" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+          },
+          error: null,
+        }
+      }),
+      write: vi.fn(),
+      move: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.reviewWorkspaceDocumentRelations.mockImplementationOnce(completeSemanticRelationsRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const found = await service.findContradictions(["left", "right"], {
+      left: approval("read", "left"),
+      right: approval("read", "right"),
+    })
+
+    expect(found.data?.proposals).toHaveLength(2)
+    const first = found.data!.proposals.find((proposal) => proposal.left.fragment.text.startsWith("Storage:"))!
+    const second = found.data!.proposals.find((proposal) => proposal.left.fragment.text.startsWith("The editor"))!
+
+    const firstResolution = await service.resolveContradiction(first, "right", {
+      read: approval("read", "left", "read-left-first"),
+      edit: approval("edit", "left", "edit-left-first"),
+    })
+    const secondResolution = await service.resolveContradiction(second, "right", {
+      read: approval("read", "left", "read-left-second"),
+      edit: approval("edit", "left", "edit-left-second"),
+    })
+
+    expect(firstResolution.error).toBeNull()
+    expect(secondResolution.error).toBeNull()
+    expect(documents.get("left")?.markdown).toBe("Storage: IndexedDB.\nThe editor does not use local files.")
+    expect(tools.edit).toHaveBeenCalledTimes(2)
+  })
+
+  describe("context acquisition cache (ODE-501)", () => {
+    it("reuses the cached artifact for a repeated question against the same document version, without a second read", async () => {
+      const target = document("target", "Storage: SQLite.")
+      contextMocks.list.mockResolvedValue([target.catalogRecord])
+      const tools: WorkspaceAgentToolsService = {
+        read: vi.fn(async ({ approval }) => ({
+          data: {
+            document: target,
+            receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+          },
+          error: null,
+        })),
+        write: vi.fn(),
+        move: vi.fn(),
+        edit: vi.fn(),
+        delete: vi.fn(),
+      }
+      aiMocks.askWorkspace.mockResolvedValue({
+        data: { answer: "This document decides to use SQLite for storage.", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const first = await service.askAgent({
+        question: "What storage does this artifact use?",
+        selection: [{ kind: "file", documentId: "target" }],
+      })
+      const second = await service.askAgent({
+        question: "Say it again in Spanish.",
+        selection: [{ kind: "file", documentId: "target" }],
+      })
+
+      expect(first.error).toBeNull()
+      expect(second.error).toBeNull()
+      expect(tools.read).toHaveBeenCalledTimes(1)
+    })
+
+    it("reads the document again after its content changes, instead of serving the stale cached artifact", async () => {
+      const documents = new Map([["target", document("target", "Storage: SQLite.", 1_700_000_000_000)]])
+      contextMocks.list.mockResolvedValue([documents.get("target")!.catalogRecord])
+      const tools: WorkspaceAgentToolsService = {
+        read: vi.fn(async ({ approval }) => ({
+          data: {
+            document: documents.get("target")!,
+            receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+          },
+          error: null,
+        })),
+        write: vi.fn(),
+        move: vi.fn(),
+        edit: vi.fn(),
+        delete: vi.fn(),
+      }
+      aiMocks.askWorkspace.mockResolvedValue({
+        data: { answer: "answer", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      await service.askAgent({ question: "q1", selection: [{ kind: "file", documentId: "target" }] })
+
+      // Content changes: a new version/modifiedAt, as a real edit would produce.
+      documents.set("target", document("target", "Storage: PostgreSQL now.", 1_700_000_200_000))
+      contextMocks.list.mockResolvedValue([documents.get("target")!.catalogRecord])
+
+      await service.askAgent({ question: "q2", selection: [{ kind: "file", documentId: "target" }] })
+
+      expect(tools.read).toHaveBeenCalledTimes(2)
+      expect(aiMocks.askWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({
+        documents: expect.arrayContaining([expect.objectContaining({ markdown: "Storage: PostgreSQL now." })]),
+      }))
+    })
+
+    it("serves fresh catalog metadata on a cache hit instead of the stale record captured when the body was cached (ODE-501 follow-up)", async () => {
+      const target = document("target", "Storage: SQLite.")
+      target.catalogRecord = {
+        ...target.catalogRecord,
+        status: "draft",
+        version: 1,
+        binding: { ...target.catalogRecord.binding!, contentHash: "same-content-hash" },
+      }
+      contextMocks.list.mockResolvedValue([target.catalogRecord])
+      const read = vi.fn(async ({ approval }) => ({
+        data: {
+          document: target,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      }))
+      const tools: WorkspaceAgentToolsService = { read, write: vi.fn(), move: vi.fn(), edit: vi.fn(), delete: vi.fn() }
+      aiMocks.askWorkspace.mockResolvedValue({
+        data: { answer: "answer", evidence: [], requestedDocumentIds: [], usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      await service.askAgent({ question: "q1", selection: [{ kind: "file", documentId: "target" }] })
+
+      // A metadata-only change: same content (same contentHash), so the
+      // cache key doesn't change — but status/version did, e.g. a
+      // classification approval that ran between the two questions.
+      contextMocks.list.mockResolvedValue([{
+        ...target.catalogRecord,
+        status: "published",
+        version: 2,
+      }])
+
+      await service.askAgent({ question: "q2", selection: [{ kind: "file", documentId: "target" }] })
+
+      // The body is still reused from cache — this isn't about re-reading content.
+      expect(read).toHaveBeenCalledTimes(1)
+      expect(aiMocks.askWorkspace).toHaveBeenLastCalledWith(expect.objectContaining({
+        documents: expect.arrayContaining([expect.objectContaining({
+          id: "target",
+          currentStatus: "published",
+          version: 2,
+        })]),
+      }))
+    })
+  })
+
+  describe("presentNote (ODE-491 — presentation stage of the pipeline)", () => {
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+
+    beforeEach(() => {
+      aiMocks.presentToolResult.mockReset()
+    })
+
+    it("phrases the given facts using the AI-authored note", async () => {
+      aiMocks.presentToolResult.mockResolvedValueOnce({
+        data: { note: "3 referencias rotas necesitan revisión.", usage: null },
+        error: null,
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const note = await service.presentNote("broken-links", ["3 broken reference(s) need review below."], ["¿Qué encontraste?"])
+
+      expect(note.note).toBe("3 referencias rotas necesitan revisión.")
+      expect(aiMocks.presentToolResult).toHaveBeenCalledWith(expect.objectContaining({
+        kind: "broken-links",
+        facts: ["3 broken reference(s) need review below."],
+        recentSessionActions: ["¿Qué encontraste?"],
+        execution: expect.objectContaining({
+          action: "presentation",
+          stage: "presentation",
+          runtime: "desktop",
+        }),
+      }))
+    })
+
+    it("falls back to a plain join of the facts when the AI call fails, so the chat never goes silent", async () => {
+      aiMocks.presentToolResult.mockResolvedValueOnce({
+        data: null,
+        error: { code: "AI_REQUEST_FAILED", message: "unavailable", retryable: true },
+      })
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const note = await service.presentNote("archive", ["No stale or duplicate artifacts were found."])
+
+      expect(note.note).toBe("No stale or duplicate artifacts were found.")
+    })
+
+    it("never calls the AI adapter when there are no facts to present", async () => {
+      const service = await createWorkspaceAgentService("/workspace", tools)
+
+      const note = await service.presentNote("merge", [])
+
+      expect(note.note).toBe("")
+      expect(aiMocks.presentToolResult).not.toHaveBeenCalled()
+    })
+  })
+})
+
+describe("WorkspaceAgentService hybrid workflow.md instructions (ODE-504)", () => {
+  const DEFINITIONS_MARKER = "<!-- workflow-definitions -->"
+
+  beforeEach(() => {
+    contextMocks.list.mockReset()
+    contextMocks.list.mockResolvedValue([])
+    contextMocks.loadCollections.mockReset()
+    contextMocks.loadCollections.mockResolvedValue({ collections: [], writingCollections: [] })
+    aiMocks.classifyWorkspace.mockReset()
+    aiMocks.classifyWorkspace.mockResolvedValue({
+      data: { summary: "No change.", proposals: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    aiMocks.askWorkspace.mockReset()
+    aiMocks.askWorkspace.mockResolvedValue({
+      data: { answer: "No answer configured.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+  })
+
+  function workflowFixture(markdown: string): WorkspaceAgentDocument {
+    return document("workflow", markdown)
+  }
+
+  function toolsFor(workflow: WorkspaceAgentDocument): WorkspaceAgentToolsService {
+    return {
+      read: vi.fn(async ({ approval }) => ({
+        data: {
+          document: workflow,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+  }
+
+  it("splits the workflow body: instructions ride ambiently, definitions stay behind the descriptor", async () => {
+    const workflow = workflowFixture(`# Workspace workflow\n\n## Intent\nKeep everything discoverable.\n\n${DEFINITIONS_MARKER}\n\n## Workflow: publication\nSteps: review, export, archive.`)
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "Hola",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      workflow: {
+        instructions: "# Workspace workflow\n\n## Intent\nKeep everything discoverable.",
+        descriptor: expect.objectContaining({
+          documentId: "workflow",
+          instructionsTruncated: false,
+          definitionsChars: "\n\n## Workflow: publication\nSteps: review, export, archive.".length,
+          scopeSummary: ["Workflow: publication"],
+        }),
+      },
+    }))
+    const request = aiMocks.askWorkspace.mock.calls[0][0]
+    expect(request.workflow.instructions).not.toContain("Steps: review")
+  })
+
+  it("treats a workflow.md without the marker as entirely instructions, so generated drafts keep their intent riding every ask", async () => {
+    const workflow = workflowFixture("# Workspace workflow\n\n## Intent\nKeep everything discoverable.")
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({
+      question: "Hola",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      workflow: expect.objectContaining({
+        instructions: "# Workspace workflow\n\n## Intent\nKeep everything discoverable.",
+      }),
+    }))
+    const request = aiMocks.askWorkspace.mock.calls[0][0]
+    expect(request.workflow.descriptor.definitionsChars).toBe(0)
+  })
+
+  it("does not re-read workflow.md on the second ask of the same session (artifact cache hit)", async () => {
+    const workflow = workflowFixture("# Workspace workflow\n\n## Intent\nKeep everything discoverable.")
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValue({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({ question: "Uno", selection: [], workflowReadApproval: approval("read", "workflow") })
+    await service.askAgent({ question: "Dos", selection: [], workflowReadApproval: approval("read", "workflow") })
+
+    expect(tools.read).toHaveBeenCalledTimes(1)
+  })
+
+  it("materializes the full workflow.md in a second bounded round when the model explicitly requests it", async () => {
+    const workflow = workflowFixture(`# Workspace workflow\n\n## Intent\nKeep everything discoverable.\n\n${DEFINITIONS_MARKER}\n\n## Workflow: publication\nSteps: review, export, archive.`)
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace
+      .mockResolvedValueOnce({
+        data: {
+          answer: "I need the workflow definitions.",
+          evidence: [],
+          requestedDocumentIds: ["workflow"],
+          usage: null,
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          answer: "The publication workflow has three steps.",
+          evidence: [{ documentId: "workflow", quote: "Steps: review, export, archive.", reason: "Defines the steps." }],
+          requestedDocumentIds: [],
+          usage: null,
+        },
+        error: null,
+      })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "¿Cómo ejecuto el workflow de publicación?",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.answer).toBe("The publication workflow has three steps.")
+    expect(aiMocks.askWorkspace).toHaveBeenCalledTimes(2)
+    // The second round must be served from the canonical artifact cache, not
+    // re-read the file whose full body round 1 already loaded (ODE-504).
+    expect(tools.read).toHaveBeenCalledTimes(1)
+    const secondRound = aiMocks.askWorkspace.mock.calls[1][0]
+    const workflowEntry = secondRound.documents.find((entry: { id: string }) => entry.id === "workflow")
+    expect(workflowEntry?.markdown).toContain("Steps: review, export, archive.")
+  })
+
+  it("keeps a legacy short marker-less workflow's definitions out of the ambient instructions (review round 2 — P1)", async () => {
+    const workflow = workflowFixture("# Workflow\n\n## Workflow: publication\nSteps: review, export, archive.")
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({
+      question: "Hola",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    expect(aiMocks.askWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      workflow: expect.objectContaining({
+        instructions: "# Workflow",
+        descriptor: expect.objectContaining({
+          documentId: "workflow",
+          definitionsChars: "## Workflow: publication\nSteps: review, export, archive.".length,
+          scopeSummary: ["Workflow: publication"],
+        }),
+      }),
+    }))
+    const request = aiMocks.askWorkspace.mock.calls[0][0]
+    expect(request.workflow.instructions).not.toContain("Steps: review")
+  })
+
+  it("does not promote the executable body of a legacy first-H1 workflow into ambient instructions", async () => {
+    const workflow = workflowFixture("# Publish release\n\n1. Review\n2. Export\n3. Archive")
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({
+      question: "Hola",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    const request = aiMocks.askWorkspace.mock.calls[0][0]
+    expect(request.workflow.instructions).toBe("# Publish release")
+    expect(request.workflow.instructions).not.toContain("1. Review")
+    expect(request.workflow.descriptor).toEqual(expect.objectContaining({
+      definitionsChars: "1. Review\n2. Export\n3. Archive".length,
+      scopeSummary: ["Definitions without heading: Review"],
+    }))
+  })
+
+  it("keeps a fully unheaded legacy workflow out of ambient instructions while advertising its scope", async () => {
+    const markdown = "Run this process:\n1. Review\n2. Export\n3. Archive"
+    const workflow = workflowFixture(markdown)
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({
+      question: "Hola",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    const request = aiMocks.askWorkspace.mock.calls[0][0]
+    expect(request.workflow.instructions).toBeNull()
+    expect(request.workflow.descriptor).toEqual(expect.objectContaining({
+      definitionsChars: markdown.length,
+      scopeSummary: ["Definitions without heading: Run this process:"],
+    }))
+  })
+
+  it("prepends retry targets so a full selection cannot evict the requested workflow from the second round (review round 2 — P2)", async () => {
+    const workflow = workflowFixture(`# Workflow\n\n## Workflow: publication\nSteps: review, export, archive.`)
+    const selections = ["a", "b", "c", "d", "e", "f"].map((id) => ({ kind: "file" as const, documentId: id }))
+    const documents = new Map(selections.map(({ documentId: id }) => [id, document(id, `Content: ${id}.`)]))
+    documents.set("workflow", workflow)
+    contextMocks.list.mockResolvedValue([...documents.values()].map((doc) => doc.catalogRecord))
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    aiMocks.askWorkspace
+      .mockResolvedValueOnce({
+        data: { answer: "I need the workflow definitions.", evidence: [], requestedDocumentIds: ["workflow"], usage: null },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          answer: "The publication workflow has three steps.",
+          evidence: [],
+          requestedDocumentIds: [],
+          usage: null,
+        },
+        error: null,
+      })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const result = await service.askAgent({
+      question: "¿Cómo ejecuto el workflow de publicación?",
+      selection: selections,
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.answer).toBe("The publication workflow has three steps.")
+    const secondRound = aiMocks.askWorkspace.mock.calls[1][0]
+    const workflowEntry = secondRound.documents.find((entry: { id: string }) => entry.id === "workflow")
+    expect(workflowEntry?.markdown).toContain("Steps: review, export, archive.")
+    expect(secondRound.targetDocumentIds).toContain("workflow")
+  })
+
+  it("records only the incorporated instruction tokens in the ledger, never the full document's", async () => {
+    const workflow = workflowFixture(`# Workspace workflow\n\n## Intent\nKeep everything discoverable.\n\n${DEFINITIONS_MARKER}\n\n## Workflow: publication\nSteps: review, export, archive.`)
+    contextMocks.list.mockResolvedValue([workflow.catalogRecord])
+    const tools = toolsFor(workflow)
+    aiMocks.askWorkspace.mockResolvedValueOnce({
+      data: { answer: "Got it.", evidence: [], requestedDocumentIds: [], usage: null },
+      error: null,
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    await service.askAgent({
+      question: "Hola",
+      selection: [],
+      workflowReadApproval: approval("read", "workflow"),
+    })
+
+    const ledger = service.contextLedger.entries()
+    const workflowEntries = ledger.filter((entry: { documentId: string }) => entry.documentId === "workflow")
+    expect(workflowEntries).toHaveLength(1)
+    expect(workflowEntries[0].representation).toBe("instructions")
+    expect(workflowEntries[0].tokens).toBeGreaterThan(0)
+  })
+})
+
+describe("WorkspaceAgentService merge workflow", () => {
+  beforeEach(() => {
+    contextMocks.list.mockReset()
+    contextMocks.loadCollections.mockReset()
+    contextMocks.loadCollections.mockResolvedValue({ collections: [], writingCollections: [] })
+    aiMocks.reviewWorkspaceMerge.mockReset()
+  })
+
+  function setupDocuments() {
+    const documents = new Map([
+      ["doc-a", document("doc-a", "# Scope\n\nThe project starts in May.\n\n# Notes\n\nKeep the checklist.", 1_700_000_000_000)],
+      ["doc-b", document("doc-b", "# Scope\n\nThe project starts in June.\n\n# Notes\n\nAsk the editor.", 1_700_000_100_000)],
+    ])
+    contextMocks.list.mockResolvedValue([...documents.values()].map((item) => item.catalogRecord))
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(async ({ documentId, approval }) => ({
+        data: {
+          document: documents.get(documentId)!,
+          receipt: { action: "read" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      write: vi.fn(async ({ target, markdown, approval }) => ({
+        data: {
+          document: document("merged", markdown, 1_700_000_300_000, typeof target === "object" && "canonicalPath" in target ? target.canonicalPath.split("/").pop() ?? "merged.md" : "merged.md"),
+          receipt: { action: "write" as const, approvalId: approval.approvalId, executedAt: "2026-01-01T00:00:00.000Z" },
+        },
+        error: null,
+      })),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    return { documents, tools }
+  }
+
+  it("uses the named merge adapter, maps provenance, and writes only after explicit review", async () => {
+    const { tools } = setupDocuments()
+    aiMocks.reviewWorkspaceMerge.mockImplementationOnce(completeSemanticMergeRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const reviewed = await service.reviewMerge(["doc-a", "doc-b"], {
+      "doc-a": approval("read", "doc-a"),
+      "doc-b": approval("read", "doc-b"),
+    })
+
+    expect(reviewed.error).toBeNull()
+    expect(reviewed.data).toMatchObject({ status: "complete", coverage: "complete", sourceDocuments: [{ documentId: "doc-a" }, { documentId: "doc-b" }] })
+    expect(reviewed.data?.sections).toHaveLength(2)
+    expect(reviewed.data?.sections[0]).toMatchObject({ status: "conflict", primarySourceDocumentId: null })
+    expect(reviewed.data?.sections[0]?.sources[0]).toEqual(expect.objectContaining({ evidenceId: expect.stringContaining("merge:doc-a") }))
+    expect(aiMocks.reviewWorkspaceMerge).toHaveBeenCalledTimes(1)
+    expect(aiMocks.reviewWorkspaceMerge.mock.calls[0]?.[0].input[0].content).not.toContain("/workspace")
+
+    const draft = reviewed.data!
+    const sections = draft.sections.map((section) => {
+      const source = section.sources[0]
+      return section.status === "conflict" && source
+        ? { id: section.id, body: source.quote, primarySourceDocumentId: source.documentId, acceptedUnresolved: false }
+        : { id: section.id, body: section.body, primarySourceDocumentId: null, acceptedUnresolved: false }
+    })
+    const created = await service.createMergedDocument({
+      draft,
+      destinationName: "combined.md",
+      sections,
+      approval: approval("write", "/workspace/combined.md"),
+    })
+
+    expect(created.error).toBeNull()
+    expect(created.data?.document.markdown).toContain("# Scope")
+    expect(tools.write).toHaveBeenCalledWith(expect.objectContaining({
+      target: { canonicalPath: "/workspace/combined.md" },
+      expectedAbsent: true,
+    }))
+    expect(tools.read).toHaveBeenCalledTimes(4)
+  })
+
+  it("rejects a merge write when any source snapshot is stale", async () => {
+    const { documents, tools } = setupDocuments()
+    aiMocks.reviewWorkspaceMerge.mockImplementationOnce(completeSemanticMergeRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const reviewed = await service.reviewMerge(["doc-a", "doc-b"], {
+      "doc-a": approval("read", "doc-a"),
+      "doc-b": approval("read", "doc-b"),
+    })
+    const draft = reviewed.data!
+    documents.set("doc-a", document("doc-a", "# Scope\n\nThe project starts in July.", 1_700_000_999_000))
+    const result = await service.createMergedDocument({
+      draft,
+      destinationName: "combined.md",
+      sections: draft.sections.map((section) => ({
+        id: section.id,
+        body: section.status === "conflict" ? section.sources[0]?.quote ?? "" : section.body,
+        primarySourceDocumentId: section.status === "conflict" ? section.sources[0]?.documentId ?? null : null,
+        acceptedUnresolved: false,
+      })),
+      approval: approval("write", "/workspace/combined.md"),
+    })
+    expect(result.error?.code).toBe("CONFLICT")
+    expect(result.error?.message).toContain("changed")
+    expect(tools.write).not.toHaveBeenCalled()
+  })
+
+  it("does not overwrite an existing destination and rejects unapproved writes", async () => {
+    const { tools } = setupDocuments()
+    aiMocks.reviewWorkspaceMerge.mockImplementationOnce(completeSemanticMergeRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const reviewed = await service.reviewMerge(["doc-a", "doc-b"], {
+      "doc-a": approval("read", "doc-a"),
+      "doc-b": approval("read", "doc-b"),
+    })
+    const draft = reviewed.data!
+    const sections = draft.sections.map((section) => ({
+      id: section.id,
+      body: section.status === "conflict" ? section.sources[0]?.quote ?? "" : section.body,
+      primarySourceDocumentId: section.status === "conflict" ? section.sources[0]?.documentId ?? null : null,
+      acceptedUnresolved: false,
+    }))
+
+    const denied = await service.createMergedDocument({
+      draft,
+      destinationName: "combined.md",
+      sections,
+      approval: approval("edit", "/workspace/combined.md"),
+    })
+    expect(denied.error?.code).toBe("FORBIDDEN")
+    expect(tools.write).not.toHaveBeenCalled()
+
+    contextMocks.list.mockResolvedValue([
+      ...["doc-a", "doc-b"].map((id) => document(id, "# Source\n\nContent.").catalogRecord),
+      document("existing", "# Existing", 1_700_000_400_000, "combined.md").catalogRecord,
+    ])
+    const existing = await service.createMergedDocument({
+      draft,
+      destinationName: "combined.md",
+      sections,
+      approval: approval("write", "/workspace/combined.md", "write:existing"),
+    })
+    expect(existing.error?.code).toBe("CONFLICT")
+    expect(tools.write).not.toHaveBeenCalled()
+  })
+})

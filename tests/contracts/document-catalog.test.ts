@@ -99,6 +99,30 @@ describe("DocumentCatalog contract", () => {
     unsubscribe()
   })
 
+  it("projects the native reference targets into the catalog contract", async () => {
+    mocks.catalogGet.mockResolvedValueOnce({
+      ...nativeRow,
+      referenceTargets: [{ value: "notes/target.md", kind: "path" }],
+      referenceTargetsContentHash: "blake3:abc",
+    })
+
+    const record = await new SqliteDocumentCatalog("/tmp/catalog-references.db").getById("doc-1")
+
+    expect(record?.referenceTargets).toEqual([{ value: "notes/target.md", kind: "path" }])
+  })
+
+  it("treats an empty native reference projection as authoritative", async () => {
+    mocks.catalogGet.mockResolvedValueOnce({
+      ...nativeRow,
+      referenceTargets: null,
+      referenceTargetsContentHash: "blake3:abc",
+    })
+
+    const record = await new SqliteDocumentCatalog("/tmp/catalog-empty-references.db").getById("doc-1")
+
+    expect(record?.referenceTargets).toBeNull()
+  })
+
   it("emits one bulk CatalogChange for N metadata commits", async () => {
     const catalog = new SqliteDocumentCatalog("/tmp/catalog-bulk.db")
     const changes: Array<{ documentIds: string[]; reason: string }> = []
