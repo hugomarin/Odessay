@@ -37,7 +37,19 @@ const PREFERRED_RECORDER_MIME_TYPES = [
 ]
 
 function isPermissionDeniedError(error: unknown) {
-  return error instanceof DOMException && error.name === "NotAllowedError"
+  if (error instanceof DOMException) {
+    return error.name === "NotAllowedError"
+  }
+
+  // WKWebView can surface a DOMException-like object from a different realm.
+  // Check the public error shape as well so the UI records the real failure
+  // without depending on instanceof across WebView boundaries.
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name?: unknown }).name === "NotAllowedError"
+  )
 }
 
 export function getPreferredRecorderMimeType() {
@@ -295,6 +307,17 @@ export function useVoiceRecorder() {
       setWaveformData([])
       setDuration(0)
 
+      const mediaError =
+        typeof error === "object" && error !== null
+          ? (error as { name?: unknown; message?: unknown })
+          : null
+      console.error("[voice-recorder] microphone capture failed", {
+        name: typeof mediaError?.name === "string" ? mediaError.name : "UnknownError",
+        message: typeof mediaError?.message === "string" ? mediaError.message : String(error),
+        origin: window.location.origin,
+        secureContext: window.isSecureContext,
+      })
+
       if (isPermissionDeniedError(error)) {
         setPermissionDenied(true)
         setErrorMessage("Microphone permission was denied.")
@@ -317,33 +340,10 @@ export function useVoiceRecorder() {
     }
   }, [releaseMediaResources])
 
-  useEffect(() => {
-    if (typeof navigator === "undefined" || !navigator.permissions?.query) return
-
-    let cancelled = false
-    let permissionStatus: PermissionStatus | null = null
-
-    void navigator.permissions
-      .query({ name: "microphone" as PermissionName })
-      .then((status) => {
-        if (cancelled) return
-
-        permissionStatus = status
-        setPermissionDenied(status.state === "denied")
-        status.onchange = () => {
-          if (!cancelled) {
-            setPermissionDenied(status.state === "denied")
-          }
-        }
-      })
-      .catch(() => undefined)
-
-    return () => {
-      cancelled = true
-      if (permissionStatus) permissionStatus.onchange = null
-    }
-  }, [])
-
+  // Do not preflight microphone access with navigator.permissions.query here.
+  // WKWebView can report a stale or incorrect microphone state even when the
+  // macOS application permission is enabled. getUserMedia() is the authority;
+  // its actual NotAllowedError is handled in start().
   return {
     state,
     start,

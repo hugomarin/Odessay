@@ -83,7 +83,7 @@ Because the app is **not signed with an Apple Developer ID**, macOS Gatekeeper w
 The user runs this command in Terminal **once** after receiving the DMG and installing the app:
 
 ```bash
-xattr -d com.apple.quarantine /Applications/Odessay.app
+xattr -d com.apple.quarantine "/Applications/Artifact Studio.app"
 ```
 
 Then launch the app normally. After this one-time step, Gatekeeper no longer blocks it.
@@ -99,7 +99,7 @@ Odessay stores authentication tokens in a local JSON file managed by `tauri-plug
 The store file lives in the app data directory:
 
 ```
-~/Library/Application Support/com.odessay.app/secure.dat
+~/Library/Application Support/com.z9ne.odessay/secure.dat
 ```
 
 No system dialog is shown on first sign-in. The file is created automatically when the user signs in for the first time.
@@ -115,7 +115,7 @@ When formal code signing is added (Apple Developer ID), migration to Keychain is
 If a user wants to force a clean sign-in state, delete the store file:
 
 ```bash
-rm ~/Library/Application\ Support/com.odessay.app/secure.dat
+rm ~/Library/Application\ Support/com.z9ne.odessay/secure.dat
 ```
 
 Or sign out from within the app — this calls `removeItem` on the stored tokens and clears the file automatically.
@@ -139,7 +139,64 @@ the quarantine attribute once:
 xattr -dr com.apple.quarantine "/Applications/Artifact Studio.app"
 ```
 
-Do not combine ad-hoc signing with the repository's App Sandbox entitlements.
+### Current packaging profile
+
+The installed bundle is the compatibility boundary. The current profile is:
+
+- stable bundle identifier: `com.z9ne.odessay`;
+- ad-hoc signing through `signingIdentity: "-"`;
+- direct filesystem architecture, without App Sandbox;
+- `src-tauri/Info.plist` includes `NSMicrophoneUsageDescription` because voice
+  annotations use the microphone;
+- `src-tauri/entitlements-audio.plist` is the only entitlement profile
+  referenced by the current bundle and contains audio input only.
+
+The audio entitlement and the privacy declaration solve different layers:
+`NSMicrophoneUsageDescription` is the macOS privacy declaration, while
+`com.apple.security.device.audio-input` is the native audio capability embedded
+in the signed bundle. The profile is intentionally separate from the legacy
+Sandbox plist. See Apple's [Audio Input Entitlement](https://developer.apple.com/documentation/BundleResources/Entitlements/com.apple.security.device.audio-input)
+and [`NSMicrophoneUsageDescription`](https://developer.apple.com/documentation/bundleresources/information-property-list/nsmicrophoneusagedescription).
+
+Never reference `src-tauri/entitlements.plist` in this profile. It contains
+`com.apple.security.app-sandbox` plus file-scope permissions intended for a
+different architecture. Enabling it changes the storage and filesystem
+boundary, so a successful `tauri dev` run is not evidence that the packaged
+bundle is compatible.
+
+If the project later adopts Developer ID signing or App Sandbox, create a
+separate, explicit distribution profile with its own migration and
+security-scoped bookmark design. Do not add capabilities to the current plist
+by accumulation, and do not mix direct filesystem access with App Sandbox.
+
+### Filesystem and folder permission contract
+
+The app bundle and `Contents/Resources` are read-only distribution inputs. The
+runtime must never use the bundle, resources directory, current working
+directory, or a relative path as a writable data location.
+
+- Settings, the desktop catalog, and durable app state use the Tauri app-data
+  directory for the stable bundle identifier.
+- Markdown content is materialized inside the managed `BindingRoot` or inside
+  a user-confirmed external `BindingRoot`; its `.odessay/index.json` remains the
+  durable binding ledger.
+- Saving is a write to a temporary sibling followed by a rename. Therefore a
+  folder needs the permissions required to read the source, create/write the
+  temporary file, and rename it—not only permission to read the document.
+- A user-selected folder may be readable, writable, read-only, missing,
+  unmounted, or revoked after selection. The UI must expose the resulting state
+  and offer retry/reconnect. It must never interpret an unreadable folder as a
+  deletion, silently copy the document to another root, or create a draft as an
+  open failure fallback.
+- The managed root is created by the app in app data. An external root is
+  registered only after the user confirms its folder; the confirmation grants
+  runtime access for that root and does not turn it into a Workspace
+  automatically.
+
+The release must exercise these states on the installed DMG: open and save in a
+writable folder, open from a read-only folder, fail clearly when write/rename is
+denied, and recover after a selected folder is disconnected and reconnected.
+
 The sandbox moves Tauri's config directory to:
 
 ```
@@ -148,9 +205,8 @@ The sandbox moves Tauri's config directory to:
 
 That creates a second settings store and makes existing Workspaces appear to be
 missing. It can also block moves from the managed document root to a selected
-user folder. For the current direct-filesystem desktop architecture, the
-entitlements file must not be referenced by `tauri.conf.json` until a proper
-sandbox migration with security-scoped bookmarks is implemented.
+user folder. This is why the current bundle uses a dedicated audio-only profile
+and keeps App Sandbox unreferenced.
 
 #### 0.7.0 release incident
 
@@ -158,14 +214,15 @@ Release `0.7.0` exposed two separate packaging failures:
 
 1. The first DMG had an inconsistent linker-only signature and macOS reported
    the app as damaged.
-2. Re-signing it with `signingIdentity: "-"` while still referencing
-   `entitlements.plist` activated App Sandbox. The app then used a new container
-   store, so previous Workspaces and settings were not visible and document
-   relocation failed.
+2. Re-signing it with `signingIdentity: "-"` while still referencing the
+   Sandbox `entitlements.plist` activated App Sandbox. The app then used a new
+   container store, so previous Workspaces and settings were not visible and
+   document relocation failed.
 
-Release `0.7.1` removed the entitlements reference, kept ad-hoc signing, and
-   restored the historical data path. This is the required combination until
-   Apple Developer ID signing and notarization are available.
+Release `0.7.1` kept ad-hoc signing and the historical data path, and moved the
+   microphone capability into the separate audio-only profile. This is the
+   required combination until Apple Developer ID signing and notarization are
+   available.
 
 When signing is added (future issue), the changes will be:
 - Add `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` environment variables to the build environment.
@@ -208,6 +265,10 @@ directly before treating the result as release evidence.
 This validates:
 - DMG exists and mounts correctly
 - `.app` bundle structure (binary, resources, `Info.plist`)
+- Bundle identifier matches `src-tauri/tauri.conf.json`
+- `NSMicrophoneUsageDescription` is present in the packaged `Info.plist`
+- The effective bundle has the audio capability and does not enable App Sandbox
+- Tauri capabilities retain document access and runtime watcher scope
 - Build-time version alignment (`package.json` ↔ `tauri.conf.json`)
 - CSP includes `ipc:` / `http://ipc.localhost` (required for Tauri IPC in the bundle)
 - `Cargo.toml` has `features = ["devtools"]` (Fase 7 requirement)
@@ -215,6 +276,17 @@ This validates:
 - Static export artifacts exist (`dist/index.html`)
 - No obvious baked-in server redirects that break in the DMG
 - Quarantine / code-signing state
+
+To keep release evidence attached to a specific artifact, write a JSON report
+for the freshly generated bundle:
+
+```bash
+npm run validate:desktop -- --dmg "dist/releases/Odessay-{version}-aarch64.dmg" \
+  --report "evidence/desktop-bundle-{version}.json"
+```
+
+The report records the artifact, version, bundle identifier, and each automated
+finding. It does not replace the installed-DMG capability smoke test below.
 
 If automated checks pass, proceed to the manual smoke-test checklist below.
 
@@ -226,46 +298,66 @@ If automated checks pass, proceed to the manual smoke-test checklist below.
 
 #### Installation & launch
 1. **Mount DMG** — double-click `Odessay-{version}-aarch64.dmg`, drag to `/Applications`.
-2. **Gatekeeper bypass** — run `xattr -d com.apple.quarantine /Applications/Odessay.app`.
-3. **First launch** — open from `/Applications`. App starts without crash. Splash / loading state resolves within 5s.
+2. **Gatekeeper bypass** — run `xattr -d com.apple.quarantine "/Applications/Artifact Studio.app"`.
+3. **First launch** — open from `/Applications`. App starts without crash and
+   reaches the first usable interaction. Record observed `time to operable` for
+   the release; this is evidence for regressions, not a substitute for fixing
+   blocking startup work.
 4. **DevTools** — right-click → Inspect (or `Cmd+Option+I`) opens DevTools (required for Fase 7 diagnostics).
 
 #### Auth & session persistence
 5. **Sign in** — complete OAuth/email flow. User lands in workspace.
 6. **Close and reopen** — `Cmd+Q`, relaunch app. Session is restored without re-prompting login.
-7. **Token invalidation recovery** — manually corrupt `~/Library/Application Support/com.odessay.app/secure.dat` (e.g., insert invalid JSON), relaunch. App detects invalid token, shows sign-in screen, and recovers cleanly after re-authentication.
+7. **Token invalidation recovery** — manually corrupt `~/Library/Application Support/com.z9ne.odessay/secure.dat` (e.g., insert invalid JSON), relaunch. App detects invalid token, shows sign-in screen, and recovers cleanly after re-authentication.
 8. **Sign out** — use in-app Sign Out. Token file is removed. App returns to auth screen. No hang or freeze.
 
+#### Installed DMG capabilities
+9. **Writable folder** — create/open a Markdown document in the managed root and
+   save it. Confirm the `.md`, `.tmp` cleanup, manifest, and catalog remain
+   consistent after restarting the app.
+10. **External folder read/write** — select an external folder as a BindingRoot,
+   open an existing `.md`, edit it, save it, rename it, and move it. Confirm the
+   folder is still available after relaunch.
+11. **Read-only or denied folder** — remove write access or select a folder that
+   cannot be written. Opening an existing file may remain possible, but save and
+   rename must show an actionable error and must not create a draft elsewhere.
+12. **Permission or mount recovery** — disconnect/unmount or revoke access to a
+   selected folder, relaunch/reconnect it, and confirm the catalog preserves the
+   prior binding rather than treating the temporary failure as deletion.
+13. **Microphone** — from the installed DMG, record a real voice annotation,
+   stop it, save it, and retry after stopping/revoking access. Confirm the
+   permission error is actionable and the control is not permanently deadlocked.
+
 #### Local file I/O (offline-first)
-9. **Create writing** — create a new document, add Markdown content (headings, bold, list, code block). Save.
-10. **Close and reopen** — `Cmd+Q`, relaunch. The new writing appears in recents and opens with content intact.
-11. **Edit in Source mode** — switch to Source mode, edit raw `.md`, switch back to Rich mode. Changes are preserved.
-12. **Open existing `.md` file** — use File → Open (or `Cmd+O`) to open a `.md` from the filesystem. Content renders correctly.
-13. **Offline save** — disconnect Wi-Fi, edit a document, save. No error dialogs. Reconnect Wi-Fi; sync resumes without data loss.
+14. **Create writing** — create a new document, add Markdown content (headings, bold, list, code block). Save.
+15. **Close and reopen** — `Cmd+Q`, relaunch. The new writing appears in recents and opens with content intact.
+16. **Edit in Source mode** — switch to Source mode, edit raw `.md`, switch back to Rich mode. Changes are preserved.
+17. **Open existing `.md` file** — use File → Open (or `Cmd+O`) to open a `.md` from the filesystem. Content renders correctly.
+18. **Offline save** — disconnect Wi-Fi, edit a document, save. No error dialogs. Reconnect Wi-Fi; sync resumes without data loss.
 
 #### Sync & web parity
-14. **Sync to web** — with network on, edit a document in desktop. Open the same document in web. Content matches.
-15. **Sync from web** — edit in web, refresh desktop. Changes appear in desktop.
-16. **Correspondence / collections** — if correspondence features are active, verify that desktop and web show consistent collection trees.
+19. **Sync to web** — with network on, edit a document in desktop. Open the same document in web. Content matches.
+20. **Sync from web** — edit in web, refresh desktop. Changes appear in desktop.
+21. **Correspondence / collections** — if correspondence features are active, verify that desktop and web show consistent collection trees.
 
 #### AI capabilities (desktop → web AI proxy)
-17. **AI title suggestions** — open a document, request AI title suggestions. Response arrives within 10s.
-18. **AI publication review** — run publication review on a document. No "network error" due to missing auth token in desktop context.
+22. **AI title suggestions** — open a document, request AI title suggestions. Response arrives within 10s.
+23. **AI publication review** — run publication review on a document. No "network error" due to missing auth token in desktop context.
 
 #### Native menus & shortcuts
-19. **App menu** — Odessay menu shows version and native items (Hide, Quit).
-20. **File menu** — New, Open, Save, Save As work as expected.
-21. **Edit menu** — Undo, Redo, Cut, Copy, Paste work in the editor.
-22. **View menu** — Toggle Rich/Source mode, Toggle Sidebar.
-23. **Window menu** — Minimize, Full Screen, Close window.
-24. **Keyboard shortcuts** — `Cmd+N`, `Cmd+O`, `Cmd+S`, `Cmd+Shift+S`, `Cmd+Z`, `Cmd+Shift+Z`, `Cmd+,` (Settings) respond correctly.
+24. **App menu** — Odessay menu shows version and native items (Hide, Quit).
+25. **File menu** — New, Open, Save, Save As work as expected.
+26. **Edit menu** — Undo, Redo, Cut, Copy, Paste work in the editor.
+27. **View menu** — Toggle Rich/Source mode, Toggle Sidebar.
+28. **Window menu** — Minimize, Full Screen, Close window.
+29. **Keyboard shortcuts** — `Cmd+N`, `Cmd+O`, `Cmd+S`, `Cmd+Shift+S`, `Cmd+Z`, `Cmd+Shift+Z`, `Cmd+,` (Settings) respond correctly.
 
 #### Settings
-25. **Settings persistence** — change a setting (e.g., font size), close app, reopen. Setting is restored.
-26. **Settings parity** — desktop settings reflect the same options as web settings where applicable.
+30. **Settings persistence** — change a setting (e.g., font size), close app, reopen. Setting is restored.
+31. **Settings parity** — desktop settings reflect the same options as web settings where applicable.
 
 #### Cleanup
-27. **Uninstall** — drag `Odessay.app` from `/Applications` to Trash. No residual background processes.
+32. **Uninstall** — drag `Artifact Studio.app` from `/Applications` to Trash. No residual background processes.
 
 ---
 

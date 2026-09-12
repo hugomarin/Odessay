@@ -59,6 +59,7 @@
       "frameworks": [],
       "minimumSystemVersion": "10.15",
       "signingIdentity": "-",
+      "entitlements": "./entitlements-audio.plist",
       "infoPlist": "./Info.plist"
     }
   }
