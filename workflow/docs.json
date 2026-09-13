@@ -72,6 +72,48 @@
       "description": "El AI editor residente: qué es (editor literario con criterio propio, no generador de texto), cuándo habla, qué observa, tipos de respuesta posibles y regla de SILENCIO."
     },
     {
+      "path": "workflow/context/features/agents/README.md",
+      "type": "feature",
+      "scope": "agent-platform-index",
+      "state": "architecture-proposal-2026-09-06",
+      "description": "Índice y frontera de la documentación de agentes: Workspace Agent, contexto, ejecución, tools, workflows, cache, runtime OpenAI Responses y relación con el AI Editor residente y AI Writing Assist."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-architecture.md",
+      "type": "feature",
+      "scope": "workspace-agent-target-architecture",
+      "state": "architecture-proposal-2026-09-07",
+      "description": "Arquitectura objetivo del Workspace Agent: capas, ownership, runtimes, Agent Application, tools, workflows, AgentResponse, Card/Modal y boundaries con DocumentCatalog y adapters. 'Estado actual frente al objetivo' distingue lo ya implementado (ContextEnvelope, cache, adquisición lazy del documento enfocado) de lo pendiente (Intent Router, registry, AgentResponse compartido)."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-context.md",
+      "type": "feature",
+      "scope": "workspace-agent-context-contract",
+      "state": "partially-implemented-2026-09-07",
+      "description": "Contrato de AgentInvocation, RuntimeContext, LocationContext, ContextEnvelope, composición, precedencia, adquisición lazy, reconstrucción e invalidación del contexto. ContextEnvelope y la adquisición lazy del documento enfocado ya son código real (lib/agent/context-envelope.ts); Intent Router formal y precedencia completa siguen pendientes."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-execution.md",
+      "type": "feature",
+      "scope": "workspace-agent-execution-contract",
+      "state": "partially-implemented-2026-09-07",
+      "description": "Routing por intención, diferencia entre consultas libres, tools y workflows, registry, validación, propuestas, aprobación, mutaciones y presentación de AgentResponse. suggestedAction (askWorkspace) es una implementación real y acotada de los kinds tool/workflow para las 5 acciones predeterminadas; no hay AgentIntent formal, Router separado, registry ni AgentResponse compartido."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-context-cache.md",
+      "type": "feature",
+      "scope": "workspace-agent-context-cost-cache",
+      "state": "implemented-2026-09-07",
+      "description": "Artifacts de contexto versionados, cache semántica, presupuesto de tokens, costo, ledger de consumo, invalidación y ownership de los adapters de cache y AI provider. ContextArtifactStore/ContextLedger son código real desde ODE-501; solo el registro explícito de los workflows predeterminados a través de ContextEnvelope sigue pendiente."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-openai-runtime.md",
+      "type": "feature",
+      "scope": "workspace-agent-openai-runtime-observability",
+      "state": "scope-clarified-implementation-pending-2026-09-08",
+      "description": "Decisión de alcance: OpenAI Responses almacenadas para logs y trazabilidad, chat efímero sin base de datos, causas del Context Gap y uso de capacidades nativas del API. Delimita observabilidad ODE-513, background nativo ODE-514 y semántica ODE-509/510/511."
+    },
+    {
       "path": "workflow/context/features/odessay-ai-writing-assist.md",
       "type": "feature",
       "description": "Contrato operativo del AI assist del editor: correcciones mecánicas vía endpoint JSON request/response, learned words, persistencia de correction blocks, guardrails de matching/admisión, memoria de reject/manual-fix, stale handling y sugerencia de título con invocación explícita."

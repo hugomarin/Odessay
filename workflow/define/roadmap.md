@@ -644,7 +644,7 @@ El agente resuelve enlaces rotos, sugiere tipo/estatus, señala candidatos a arc
 
 - con autorización explícita del usuario, el agente puede leer, escribir, mover, editar y eliminar documentos del workspace, y cada una de esas operaciones requiere aprobación por acción individual, nunca una autorización global de sesión;
 - el agente lee anotaciones, vocabulary, collections y learned words tal como existen hoy, sin duplicar ninguno en un almacén paralelo;
-- `workflow.md` puede ser redactado por el propio agente a partir del contexto existente del workspace, y una vez que existe se carga como contexto de cualquier otra acción sobre ese workspace;
+- `workflow.md` puede ser redactado por el propio agente a partir del contexto existente del workspace y funciona como el manual de operación del agente (análogo a un CLAUDE.md): sus instrucciones de operación e intención del workspace acompañan siempre la invocación del agente — validadas por versión/hash y con techo del presupuesto de contexto —, mientras que el contenido ejecutable de workflows se carga mediante evidencia bajo demanda cuando la intención lo requiere (ejecutar el workflow debe validar y leer lo necesario antes de proponer una mutación);
 - cada acción individual (enlaces rotos, tipo/estatus, archivar, contradicciones) cita evidencia real antes de ofrecer una escritura, y ninguna se ejecuta sin que el usuario la vea primero;
 - revisar un hallazgo ensancha el panel del agente en el lugar — nunca aparece un modal o sheet que cubra Desk, Studio o Workspace detrás;
 - el mismo componente se monta en Studio (`editor-right-panel-tabs.tsx`) y en Workspace (`workspace-detail.tsx`), diferenciado solo por scope;

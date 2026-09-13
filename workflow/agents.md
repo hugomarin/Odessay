@@ -31,6 +31,8 @@ Esa secuencia de cuatro documentos es la ruta normativa. `odessay-desktop-docs-c
 
 Si además la pregunta es “dónde debe vivir esto” o “qué capa toca”, carga también `.agents/skills/skill-architecture/SKILL.md` antes de decidir si el trabajo cae en frontend, backend o database.
 
+Si el prompt o task habla del Workspace Agent, su chat, `askWorkspace`/`askAgent`, `ContextEnvelope`, o las acciones predeterminadas (Classify, Workflow, Broken links, Archive, Contradictions, Merge), empieza por `workflow/context/features/agents/README.md` y sigue su orden de lectura. Esos documentos declaran explícitamente su propio estado (`architecture-proposal` / `partially-implemented` / `implemented`, con fecha) en cada sección "Estado actual" — no asumir que describen el código vigente sin leer esa sección primero.
+
 ## Guardrail no negociable — catálogo e identidad documental desktop
 
 Para cualquier trabajo que toque desktop, Desk, Workspace, Open Document, watcher, filesystem, SQLite, IndexedDB, sync/hydration, identidad o apertura documental, la carga mínima obligatoria es:

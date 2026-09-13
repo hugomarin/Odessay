@@ -34,6 +34,7 @@ jobs:
 
           MERGE_SHA="$(git rev-parse HEAD)"
           MERGE_BASE_SHA="$(git merge-base "${MERGE_SHA}" "${PR_BASE_SHA}")"
+          PR_BRANCH_POINT_SHA="$(git merge-base "${PR_BASE_SHA}" "${PR_HEAD_SHA}")"
           # `grep -oE` exits 1 when the title has no ODE-XXX (e.g. a pure
           # docs/process PR) — under `set -e` that silently kills this step
           # with no visible error. `|| true` keeps ISSUE_IDS legitimately
@@ -50,6 +51,7 @@ jobs:
             echo "TRACEABILITY_PR_HEAD_SHA=${PR_HEAD_SHA}"
             echo "TRACEABILITY_HEAD_SHA=${MERGE_SHA}"
             echo "TRACEABILITY_MERGE_SHA=${MERGE_SHA}"
+            echo "TRACEABILITY_PR_BRANCH_POINT_SHA=${PR_BRANCH_POINT_SHA}"
             echo "TRACEABILITY_ISSUE_IDS=${ISSUE_IDS}"
           } >> "${GITHUB_ENV}"
 
