@@ -289,6 +289,20 @@ export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<T
     return { state: "revoked" }
   }
 
+  // ODE-520: the admin client bypasses RLS, so this is the enforcement point
+  // for a forged/historical invitation row whose inviter never owned the
+  // writing it points at — the database-level fix (RLS ownership check on
+  // INSERT/UPDATE) only stops new rows, not ones that already exist. Denying
+  // as "not-found" (not "revoked") keeps this indistinguishable from a token
+  // that never existed at all.
+  if (writing.author_id !== activeInvitation.inviter_id) {
+    console.warn("[sharing:test-link-access:ownership-mismatch]", {
+      tokenFingerprint: hashForLog(token),
+      writingRef: sanitizeIdForLog(writing.id),
+    })
+    return { state: "not-found" }
+  }
+
   const { data: authorProfile, error: authorProfileError } = await supabase
     .from("profiles")
     .select("display_name, username")

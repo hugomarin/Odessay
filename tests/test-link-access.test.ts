@@ -1,6 +1,31 @@
-import { afterEach, describe, expect, it } from "vitest"
-import { getTestLinkInvitationState, normalizeTestLinkToken, renderPreviewBodyHtml } from "@/lib/sharing/test-link-access"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  getPreviewWritingFromTestLink,
+  getTestLinkInvitationState,
+  normalizeTestLinkToken,
+  renderPreviewBodyHtml,
+} from "@/lib/sharing/test-link-access"
 import { getTestLinkEmail } from "@/lib/sharing/test-link"
+
+type TableResponse = { data: unknown; error: { message: string } | null }
+
+const tableResponses = vi.hoisted(() => new Map<string, TableResponse>())
+
+function makeChain(table: string) {
+  const chain: Record<string, unknown> = {
+    select: () => chain,
+    eq: () => chain,
+    is: () => chain,
+    maybeSingle: async () => tableResponses.get(table) ?? { data: null, error: null },
+  }
+  return chain
+}
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    from: (table: string) => makeChain(table),
+  }),
+}))
 
 describe("test link access guards", () => {
   afterEach(() => {
@@ -140,5 +165,84 @@ describe("test link access guards", () => {
     expect(rendered.bodyHtml).toContain("&lt;script&gt;")
     expect(rendered.bodyHtml).toContain("next line")
     expect(errors).toEqual(["window is not defined"])
+  })
+})
+
+describe("getPreviewWritingFromTestLink (ODE-520)", () => {
+  const token = "ownershipCheckToken0001"
+  const markerEmail = getTestLinkEmail("writing-owned-by-a")
+
+  beforeEach(() => {
+    tableResponses.clear()
+  })
+
+  it("denies a forged historical row whose inviter does not own the writing, as not-found", async () => {
+    tableResponses.set("invitations", {
+      data: {
+        id: "invitation-1",
+        inviter_id: "attacker-b",
+        writing_id: "writing-owned-by-a",
+        email: markerEmail,
+        status: "pending",
+      },
+      error: null,
+    })
+    tableResponses.set("writings", {
+      data: {
+        id: "writing-owned-by-a",
+        author_id: "owner-a",
+        title: "A's writing",
+        body_json: {},
+        body_text: "",
+        status: "draft",
+        visibility: "private",
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+      },
+      error: null,
+    })
+
+    const result = await getPreviewWritingFromTestLink(token)
+
+    expect(result.state).toBe("not-found")
+  })
+
+  it("resolves the writing when the inviter genuinely owns it", async () => {
+    tableResponses.set("invitations", {
+      data: {
+        id: "invitation-2",
+        inviter_id: "owner-a",
+        writing_id: "writing-owned-by-a",
+        email: markerEmail,
+        status: "pending",
+      },
+      error: null,
+    })
+    tableResponses.set("writings", {
+      data: {
+        id: "writing-owned-by-a",
+        author_id: "owner-a",
+        title: "A's writing",
+        body_json: {},
+        body_text: "",
+        status: "draft",
+        visibility: "private",
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+      },
+      error: null,
+    })
+    tableResponses.set("profiles", {
+      data: { display_name: "Owner A", username: "ownera" },
+      error: null,
+    })
+
+    const result = await getPreviewWritingFromTestLink(token)
+
+    expect(result.state).toBe("ok")
+    if (result.state === "ok") {
+      expect(result.writing.id).toBe("writing-owned-by-a")
+      expect(result.writing.author.id).toBe("owner-a")
+    }
   })
 })
