@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
-import { syncMarginsFromBodyJson } from "@/lib/margins/margins";
+import { MarginOwnershipConflictError, syncMarginsFromBodyJson } from "@/lib/margins/margins";
 import { normalizeWritingStatus } from "@/lib/writings/status";
 import { validateVocabularyValue } from "@/lib/vocabulary/server";
 
@@ -50,6 +50,33 @@ const jsonError = (status: number, code: string, message: string) =>
     },
     { status },
   );
+
+/**
+ * ODE-521: syncMarginsFromBodyJson is fire-and-forget for most failures (the
+ * margins table is a derived projection, not canonical), but an ownership
+ * conflict is a security-relevant rejection the client must be told about,
+ * not a transient sync hiccup to swallow. Everything else keeps the existing
+ * log-and-continue behavior below.
+ */
+async function syncMarginsOrConflict(
+  supabase: ReturnType<typeof createAdminClient>,
+  params: { bodyJson: Record<string, unknown>; writingId: string; readerId: string },
+) {
+  try {
+    await syncMarginsFromBodyJson(supabase, params);
+    return null;
+  } catch (error) {
+    if (error instanceof MarginOwnershipConflictError) {
+      return jsonError(409, "MARGIN_OWNERSHIP_CONFLICT", "One of the annotations in this document could not be saved.");
+    }
+    console.error("[writings:patch:sync-margins]", {
+      writingId: params.writingId,
+      userId: params.readerId,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+    return null;
+  }
+}
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   const { userId } = await getCurrentUserFromRequest(request);
@@ -144,17 +171,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   if (updatedWriting) {
     if (parsed.data.body_json != null) {
-      await syncMarginsFromBodyJson(supabase, {
+      const conflict = await syncMarginsOrConflict(supabase, {
         bodyJson: parsed.data.body_json,
         writingId: id,
         readerId: userId,
-      }).catch((error: { message?: string }) => {
-        console.error("[writings:patch:sync-margins]", {
-          writingId: id,
-          userId,
-          error: error.message ?? "Unknown error",
-        })
-      })
+      });
+      if (conflict) return conflict;
     }
     return NextResponse.json({ data: updatedWriting, error: null }, { status: 200 });
   }
@@ -185,17 +207,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       }
 
       if (parsed.data.body_json != null) {
-        await syncMarginsFromBodyJson(supabase, {
+        const conflict = await syncMarginsOrConflict(supabase, {
           bodyJson: parsed.data.body_json,
           writingId: id,
           readerId: userId,
-        }).catch((error: { message?: string }) => {
-          console.error("[writings:patch:sync-margins]", {
-            writingId: id,
-            userId,
-            error: error.message ?? "Unknown error",
-          })
-        })
+        });
+        if (conflict) return conflict;
       }
 
       return NextResponse.json({ data: retriedWriting, error: null }, { status: 200 });
@@ -205,17 +222,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   if (parsed.data.body_json != null) {
-    await syncMarginsFromBodyJson(supabase, {
+    const conflict = await syncMarginsOrConflict(supabase, {
       bodyJson: parsed.data.body_json,
       writingId: id,
       readerId: userId,
-    }).catch((error: { message?: string }) => {
-      console.error("[writings:patch:sync-margins]", {
-        writingId: id,
-        userId,
-        error: error.message ?? "Unknown error",
-      })
-    })
+    });
+    if (conflict) return conflict;
   }
 
   return NextResponse.json({ data: insertedWriting, error: null }, { status: 200 });

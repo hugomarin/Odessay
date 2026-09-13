@@ -31,6 +31,7 @@ import {
   syncMarginsFromBodyJson,
   isLegacyMarginsSchemaError,
   normalizeMarginRecord,
+  MarginOwnershipConflictError,
 } from "@/lib/margins/margins"
 
 const VALID_UUID = "550e8400-e29b-41d4-a716-446655440000"
@@ -482,5 +483,87 @@ describe("legacy margins schema compatibility", () => {
         note: "Legacy note",
       }),
     ])
+  })
+})
+
+// ─── ODE-521 — cross-owner margin ownership conflict ──────────────────────────
+
+describe("syncMarginsFromBodyJson surfaces an ownership conflict distinctly", () => {
+  const bodyJsonWithOneAnnotation = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "annotationReference",
+            attrs: { id: "hijacked-margin-id", type: "highlight", index: 1, text: "hostile content" },
+          },
+        ],
+      },
+    ],
+  }
+
+  it("throws MarginOwnershipConflictError when the modern upsert hits the DB trigger", async () => {
+    const conflictError = { message: "MARGIN_OWNERSHIP_CONFLICT: annotation hijacked-margin-id is already associated with a different reader or writing" }
+
+    const supabase = {
+      from: () => ({
+        upsert: async () => ({ error: conflictError }),
+      }),
+    }
+
+    await expect(
+      syncMarginsFromBodyJson(supabase as unknown as Parameters<typeof syncMarginsFromBodyJson>[0], {
+        bodyJson: bodyJsonWithOneAnnotation,
+        writingId: VALID_UUID,
+        readerId: VALID_UUID,
+      }),
+    ).rejects.toBeInstanceOf(MarginOwnershipConflictError)
+  })
+
+  it("throws MarginOwnershipConflictError when only the legacy fallback upsert hits the trigger", async () => {
+    const missingColumnsError = {
+      message: "column margins.type does not exist",
+      details: "Could not find the type column on public.margins",
+    }
+    const conflictError = { message: "MARGIN_OWNERSHIP_CONFLICT: annotation hijacked-margin-id is already associated with a different reader or writing" }
+
+    let upsertCallCount = 0
+    const supabase = {
+      from: () => ({
+        upsert: async () => {
+          upsertCallCount += 1
+          return upsertCallCount === 1 ? { error: missingColumnsError } : { error: conflictError }
+        },
+      }),
+    }
+
+    await expect(
+      syncMarginsFromBodyJson(supabase as unknown as Parameters<typeof syncMarginsFromBodyJson>[0], {
+        bodyJson: bodyJsonWithOneAnnotation,
+        writingId: VALID_UUID,
+        readerId: VALID_UUID,
+      }),
+    ).rejects.toBeInstanceOf(MarginOwnershipConflictError)
+    expect(upsertCallCount).toBe(2)
+  })
+
+  it("still rethrows unrelated upsert errors as-is", async () => {
+    const unrelatedError = { message: "connection reset" }
+
+    const supabase = {
+      from: () => ({
+        upsert: async () => ({ error: unrelatedError }),
+      }),
+    }
+
+    await expect(
+      syncMarginsFromBodyJson(supabase as unknown as Parameters<typeof syncMarginsFromBodyJson>[0], {
+        bodyJson: bodyJsonWithOneAnnotation,
+        writingId: VALID_UUID,
+        readerId: VALID_UUID,
+      }),
+    ).rejects.toBe(unrelatedError)
   })
 })
