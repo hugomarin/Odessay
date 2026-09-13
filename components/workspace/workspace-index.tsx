@@ -37,6 +37,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { AddWorkspaceFlow } from "@/components/workspace/add-workspace-flow";
 import { NoWorkspaceEmptyState } from "@/components/shared/view-empty-states";
+import { STARTER_WORKSPACE_DISPLAY_NAME } from "@/lib/services/desktop/starter-documents";
 import {
   WorkspaceFilterBar,
   type WorkspaceFilterBarSort,
@@ -310,14 +311,11 @@ export function WorkspaceIndex() {
             State 3 of docs/design/views/empty-states.md. It lives inside the
             sheet, under the view header that still carries "Add workspace", so
             it is never a dead end: the rail — and Settings with it — stays.
-
-            The starter-workspace footnote is omitted because no starter
-            documents exist to point at. Naming a workspace that is not there
-            would be worse than staying quiet. Context Gap on ODE-438.
           */
           <NoWorkspaceEmptyState
             onUseExistingFolder={() => openAddWorkspace("existing")}
             onCreateFromScratch={() => openAddWorkspace("scratch")}
+            starterWorkspaceName={STARTER_WORKSPACE_DISPLAY_NAME}
           />
         ) : layout === "grid" ? (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
