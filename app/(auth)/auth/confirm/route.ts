@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
+import { sanitizeAuthRedirectPath } from "@/lib/auth/redirect"
 import { createClient } from "@/lib/supabase/server"
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
+  const { searchParams, origin } = new URL(request.url)
   const token_hash = searchParams.get("token_hash")
   const type = searchParams.get("type") as
     | "email"
@@ -12,8 +13,7 @@ export async function GET(request: NextRequest) {
     | "magiclink"
     | "signup"
     | null
-  const rawNext = searchParams.get("next") ?? "/"
-  const safeNext = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/"
+  const safeNext = sanitizeAuthRedirectPath(searchParams.get("next"), origin, "/")
 
   if (!token_hash || !type) {
     return NextResponse.redirect(

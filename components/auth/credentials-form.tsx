@@ -20,11 +20,11 @@ import {
   LocalOnlyRow,
   passwordHint
 } from "@/components/auth/auth-card"
+import { sanitizeAuthRedirectPath } from "@/lib/auth/redirect"
 import {
   isUsernameFormatValid,
   normalizeEmail,
   normalizeUsername,
-  sanitizeRedirectPath,
   toFriendlyAuthError,
   validateLoginValues,
   validateSignupValues,
@@ -80,7 +80,16 @@ export function CredentialsForm({ initialMode }: { initialMode: CredentialsMode 
   }, [])
   const params = useMemo(() => new URLSearchParams(search), [search])
 
-  const redirectTo = useMemo(() => sanitizeRedirectPath(params.get("next")), [params])
+  // `window` is unavailable during SSR/static-export prerendering; `params`
+  // is empty at that point anyway (see the effect above), so falling back
+  // here changes nothing observable once the client-side render replaces it.
+  const redirectTo = useMemo(
+    () =>
+      typeof window === "undefined"
+        ? "/desk"
+        : sanitizeAuthRedirectPath(params.get("next"), window.location.origin),
+    [params],
+  )
   const needsEmailConfirmation = params.get("checkEmail") === "1"
   const lockEmail = params.get("lockEmail") === "1"
 
