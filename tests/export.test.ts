@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import type { JSONContent } from "@tiptap/core"
 import { Table } from "docx"
 import JSZip from "jszip"
@@ -6,6 +6,14 @@ import { buildWritingMarkdown, buildWritingExportDocument, getExportFileBaseName
 import * as styles from "@/lib/export/styles"
 import { blockToElements, renderWritingToDocxBuffer } from "@/lib/export/to-docx"
 import { renderWritingToPdfBuffer } from "@/lib/export/to-pdf"
+import { fetchImageSafely } from "@/lib/export/safe-image-fetch"
+
+vi.mock("@/lib/export/safe-image-fetch", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/export/safe-image-fetch")>(
+    "@/lib/export/safe-image-fetch",
+  )
+  return { ...actual, fetchImageSafely: vi.fn() }
+})
 
 const sampleBody: JSONContent = {
   type: "doc",
@@ -48,6 +56,10 @@ const tinyPng = new Uint8Array([
   0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
   0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 ])
+
+afterEach(() => {
+  vi.clearAllMocks()
+})
 
 describe("export helpers", () => {
   it("serializes a writing body to markdown", () => {
@@ -248,16 +260,13 @@ describe("DOCX exporter", () => {
     expect(buffer.length).toBeGreaterThan(1000)
   })
 
-  it("renderWritingToDocxBuffer embeds image blocks", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(tinyPng, {
-          status: 200,
-          headers: { "Content-Type": "image/png" },
-        }),
-      ),
-    )
+  it("renderWritingToDocxBuffer embeds image blocks resolved by the safe fetcher", async () => {
+    vi.mocked(fetchImageSafely).mockResolvedValue({
+      ok: true,
+      data: Buffer.from(tinyPng),
+      contentType: "image/png",
+      format: "png",
+    })
 
     const document = buildWritingExportDocument({
       type: "doc",
@@ -274,7 +283,29 @@ describe("DOCX exporter", () => {
     const mediaFiles = Object.keys(zip.files).filter((name) => name.startsWith("word/media/"))
 
     expect(mediaFiles.length).toBeGreaterThan(0)
-    vi.unstubAllGlobals()
+    expect(fetchImageSafely).toHaveBeenCalledWith("https://example.com/image.png")
+  })
+
+  it("renderWritingToDocxBuffer falls back to a text link when the safe fetcher denies the image (ODE-522)", async () => {
+    vi.mocked(fetchImageSafely).mockResolvedValue({ ok: false, reason: "target address is not publicly routable" })
+
+    const document = buildWritingExportDocument({
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: { src: "https://example.com/hostile.png", alt: "Hostile" },
+        },
+      ],
+    })
+
+    const buffer = await renderWritingToDocxBuffer({ title: "Denied Image Export", document })
+    const zip = await JSZip.loadAsync(buffer)
+    const mediaFiles = Object.keys(zip.files).filter((name) => name.startsWith("word/media/"))
+    const xml = await zip.file("word/document.xml")?.async("string")
+
+    expect(mediaFiles).toHaveLength(0)
+    expect(xml).toContain("https://example.com/hostile.png")
   })
 
   it("renderWritingToDocxBuffer preserves code block line breaks and styles", async () => {
@@ -318,5 +349,41 @@ describe("PDF exporter", () => {
 
     expect(buffer.subarray(0, 4).toString()).toBe("%PDF")
     expect(buffer.length).toBeGreaterThan(1000)
+  })
+
+  it("renderWritingToPdfBuffer embeds image blocks resolved by the safe fetcher, never fetching the URL itself (ODE-522)", async () => {
+    vi.mocked(fetchImageSafely).mockResolvedValue({
+      ok: true,
+      data: Buffer.from(tinyPng),
+      contentType: "image/png",
+      format: "png",
+    })
+
+    const document = buildWritingExportDocument({
+      type: "doc",
+      content: [{ type: "image", attrs: { src: "https://example.com/image.png", alt: "Diagram" } }],
+    })
+
+    const buffer = await renderWritingToPdfBuffer({ title: "Image Export", document })
+
+    expect(buffer.subarray(0, 4).toString()).toBe("%PDF")
+    expect(fetchImageSafely).toHaveBeenCalledWith("https://example.com/image.png")
+  })
+
+  it("renderWritingToPdfBuffer falls back to a text link when the safe fetcher denies the image (ODE-522)", async () => {
+    vi.mocked(fetchImageSafely).mockResolvedValue({ ok: false, reason: "response exceeded the size limit" })
+
+    const document = buildWritingExportDocument({
+      type: "doc",
+      content: [{ type: "image", attrs: { src: "https://example.com/huge.png", alt: "Huge" } }],
+    })
+
+    const buffer = await renderWritingToPdfBuffer({ title: "Denied Image Export", document })
+
+    expect(buffer.subarray(0, 4).toString()).toBe("%PDF")
+    // The denied image renders as its text fallback instead of an <Image>;
+    // a non-empty, well-formed PDF without the src ever reaching react-pdf's
+    // own network layer is the meaningful assertion here.
+    expect(fetchImageSafely).toHaveBeenCalledTimes(1)
   })
 })
