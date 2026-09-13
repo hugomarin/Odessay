@@ -25,6 +25,7 @@ import { getAIProviderConfig } from "@/lib/ai/provider-config";
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors";
 import { createLearnedWordSet } from "@/lib/corrections/learned-words";
+import { releaseAiAdmission, tryAcquireAiAdmission } from "@/lib/ai/admission";
 
 const memoryEntrySchema = z.object({
   fingerprint: z.string().trim().min(1),
@@ -165,7 +166,7 @@ const jsonError = (
   status: number,
   code: string,
   message: string,
-  options: { retryable?: boolean; details?: CorrectionRouteErrorDetails } = {},
+  options: { retryable?: boolean; details?: CorrectionRouteErrorDetails; headers?: HeadersInit } = {},
 ) =>
   NextResponse.json(
     {
@@ -177,7 +178,7 @@ const jsonError = (
         ...(options.details ? { details: options.details } : {}),
       },
     },
-    { status },
+    { status, headers: options.headers },
   );
 
 const extractJsonPayload = (value: string) => {
@@ -635,6 +636,19 @@ export async function POST(request: Request) {
     }), request);
   }
 
+  const admission = await tryAcquireAiAdmission({ accountId: userId, routeKey: "publication-review" });
+  if (!admission.admitted) {
+    return withCorsHeaders(
+      jsonError(
+        429,
+        admission.reason === "rate_limited" ? "RATE_LIMITED" : "CONCURRENCY_LIMITED",
+        "Too many AI requests right now. Try again shortly.",
+        { retryable: true, headers: { "Retry-After": String(admission.retryAfterSeconds) } },
+      ),
+      request,
+    );
+  }
+
   try {
     const result = await requestCorrections(parsedRequest.data);
     const tEnd = Date.now();
@@ -682,6 +696,8 @@ export async function POST(request: Request) {
       }),
       request,
     );
+  } finally {
+    await releaseAiAdmission(admission.leaseId);
   }
 }
 
