@@ -8,7 +8,6 @@ import {
   FirstRunEmptyState,
   NoArtifactsEmptyState,
   NoWorkspaceEmptyState,
-  STARTER_DOCUMENTS_UNAVAILABLE,
 } from "@/components/shared/view-empty-states"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -123,15 +122,17 @@ describe("Connected but empty", () => {
 
     await click(buttons[0])
     expect(onCreate).toHaveBeenCalledTimes(1)
+
+    await click(buttons[1])
+    expect(onRestore).toHaveBeenCalledTimes(1)
   })
 
-  it("states why restoring is unavailable instead of leaving the reason blank", async () => {
-    await render(<NoArtifactsEmptyState restoreDisabledReason={STARTER_DOCUMENTS_UNAVAILABLE} />)
+  it("restore is always enabled — there is no unavailable state (ODE-449)", async () => {
+    await render(<NoArtifactsEmptyState />)
     const restore = container.querySelector<HTMLButtonElement>(
       '[data-testid="empty-state-restore-starters"]',
     )
-    expect(restore?.disabled).toBe(true)
-    expect(restore?.getAttribute("title")).toBe(STARTER_DOCUMENTS_UNAVAILABLE)
+    expect(restore?.disabled).toBe(false)
   })
 
   it("reports a restore failure on the state itself", async () => {

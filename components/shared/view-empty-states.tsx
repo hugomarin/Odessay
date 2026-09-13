@@ -76,18 +76,6 @@ export function EmptyStateOptionRow({
   )
 }
 
-/**
- * Why "Restore starter documents" is inert.
- *
- * The repo has no starter-document seeding: nothing writes them, so there is
- * nothing to restore. Requirement 7 (idempotent restore) presumes a mechanism
- * that does not exist yet — raised as a Context Gap on ODE-438. Stating the
- * reason in `title` is the rule this phase already applies to every disabled
- * control.
- */
-export const STARTER_DOCUMENTS_UNAVAILABLE =
-  "There are no starter documents to restore yet."
-
 /* ------------------------------------------------------------------ buttons */
 
 const PRIMARY_CLASS =
@@ -178,13 +166,10 @@ export function FirstRunEmptyState({
 export function NoArtifactsEmptyState({
   onCreate,
   onRestoreStarters,
-  restoreDisabledReason,
   status,
 }: {
   onCreate?: () => void
   onRestoreStarters?: () => void
-  /** When set, "Restore starter documents" is inert and says why in `title`. */
-  restoreDisabledReason?: string
   /** Result or failure of the last restore, rendered under the actions. */
   status?: { tone: "info" | "error"; message: string } | null
 }) {
@@ -209,8 +194,6 @@ export function NoArtifactsEmptyState({
         <button
           type="button"
           onClick={onRestoreStarters}
-          disabled={Boolean(restoreDisabledReason)}
-          title={restoreDisabledReason}
           data-testid="empty-state-restore-starters"
           className={GHOST_CLASS}
         >

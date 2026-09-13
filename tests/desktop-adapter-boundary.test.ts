@@ -47,6 +47,8 @@ const allowedImports = new Set([
   "@/lib/services/desktop/runtime-detection",
   "@/lib/services/desktop/sqlite-document-catalog",
   "@/lib/services/desktop/open-document-desktop",
+  // ODE-449 — starter document seeding, imported by desktop-workspace-reconciler
+  "@/lib/services/desktop/starter-documents",
   "@/lib/services/document-service-factory",
   // ODE-375 — unified opener application use case (pure shared-core module)
   "@/lib/services/open-document",

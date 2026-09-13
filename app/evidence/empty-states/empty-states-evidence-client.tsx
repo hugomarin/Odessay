@@ -10,15 +10,13 @@ import {
   FirstRunEmptyState,
   NoArtifactsEmptyState,
   NoWorkspaceEmptyState,
-  STARTER_DOCUMENTS_UNAVAILABLE,
   type StarterArtifact,
 } from "@/components/shared/view-empty-states"
 
 /**
- * The two starter artifacts the prototype seeds. They are fixtures here: the
- * repo has no starter-document mechanism, which is the Context Gap raised on
- * ODE-438. Their copy is the prototype's, translated to the English the prose
- * carries.
+ * The two starter artifacts the prototype seeds, as fixtures for this static
+ * evidence page. The real seeding mechanism lives in
+ * `lib/services/desktop/starter-documents.ts` (ODE-449).
  */
 const STARTER_ARTIFACTS: StarterArtifact[] = [
   {
@@ -64,7 +62,7 @@ export function EmptyStatesEvidenceClient() {
           {state === "first-run" ? (
             <FirstRunEmptyState artifacts={STARTER_ARTIFACTS} />
           ) : state === "no-artifacts" ? (
-            <NoArtifactsEmptyState restoreDisabledReason={STARTER_DOCUMENTS_UNAVAILABLE} />
+            <NoArtifactsEmptyState />
           ) : (
             <NoWorkspaceEmptyState starterWorkspaceName="Artifact Studio" />
           )}

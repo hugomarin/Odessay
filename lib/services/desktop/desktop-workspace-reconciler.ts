@@ -25,6 +25,7 @@ import {
   type UnwatchFn,
 } from "@/lib/services/desktop/tauri-fs-watch"
 import { tauriWorkspaceSync } from "@/lib/services/desktop/tauri-commands"
+import { seedStarterDocuments } from "@/lib/services/desktop/starter-documents"
 import {
   createWorkspaceReconciler,
   type KnownBinding,
@@ -199,6 +200,13 @@ async function buildRuntime(): Promise<Runtime | null> {
   )
 
   await recoverInterruptedWorkspaceRemovals(settings, catalog)
+
+  // First run (ODE-449): the managed root must exist before anything can be
+  // written into it. Seeding is idempotent and cheap when both starter
+  // documents already exist, so it runs unconditionally on every app launch
+  // rather than behind its own one-time flag.
+  await settings.ensureManagedRoot(await join(configDir, MANAGED_ROOT_DIRNAME))
+  void seedStarterDocuments()
 
   const loadRoots = async (): Promise<ReconcilerRoot[]> => {
     const managedPath = await join(configDir, MANAGED_ROOT_DIRNAME)
