@@ -18,6 +18,7 @@ No define un runtime nuevo ni reemplaza las decisiones documentales de desktop. 
 3. `odessay-agent-execution.md` — intents, tools, workflows, propuestas y UI de decisión.
 4. `odessay-agent-context-cache.md` — artifacts, cache, presupuesto, costo e invalidación.
 5. `odessay-agent-openai-runtime.md` — decisión de alcance 2026-09-08: logs nativos de Responses, chat efímero, causas del Context Gap y reparto OpenAI/Odessay.
+6. `odessay-agent-conversation-compaction.md` — contrato operativo vigente: alcance explícito, cuerpos completos, continuidad por turnos, compactación, capacidad física, cargas grandes y aceptación con OpenAI real.
 
 ## Frontera con los sistemas AI existentes
 
@@ -31,6 +32,6 @@ Una implementación no puede usar este directorio para relajar los límites del 
 
 ## Estado del contrato
 
-Estos documentos consolidan la arquitectura objetivo que se está definiendo alrededor de ODE-489 y ODE-490. Mientras no exista una decisión posterior que los eleve a contrato aceptado, no autorizan por sí solos una contradicción con el ADR de identidad ni con el spec del `DocumentCatalog`.
+Estos documentos consolidan la arquitectura objetivo alrededor de ODE-489 y ODE-490. El documento `odessay-agent-conversation-compaction.md` es el contrato operativo vigente para el alcance documental, la continuidad y la capacidad del Workspace Agent; no autoriza por sí solo una contradicción con el ADR de identidad ni con el spec del `DocumentCatalog`.
 
 La palabra **disponible** significa que el agente tiene una referencia y permiso potencial para solicitar una fuente. No significa que la fuente ya se haya leído ni que se haya enviado al modelo.

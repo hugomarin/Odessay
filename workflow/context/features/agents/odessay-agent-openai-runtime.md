@@ -1,7 +1,7 @@
 # ODESSAY — OpenAI Responses: observabilidad y runtime
 
 - **Decisión de alcance:** aclarada por Hugo el 2026-09-08.
-- **Estado de implementación:** implementado en ODE-513, ODE-515, ODE-509, ODE-510 y ODE-511; diagnóstico inicial sobre `89364b36`.
+- **Estado de implementación:** implementado en ODE-513, ODE-515, ODE-509, ODE-510 y ODE-511; continuidad por turnos y compactación actualizadas el 2026-09-13.
 - **Scope:** Workspace Agent. Correcciones y títulos conservan su provider separado.
 - **Autoridad documental:** subordinado al ADR de identidad y al spec de `DocumentCatalog`.
 
@@ -53,10 +53,10 @@ La detección de Broken links/Archive es determinista, pero su presentación act
 
 ## Capacidades separadas del objetivo de logs
 
-- **Continuidad:** no es prerrequisito de ODE-513. Si se incorpora, conservar `AgentSession` al navegar (ODE-502), asociar cada ejecución a su contexto original y distinguir navegación de cambios reales de evidencia. No resetear la sesión visible por cambiar de Writing.
+- **Continuidad:** Ask conserva en memoria el `previous_response_id` y lo usa solo si coincide el `scopeFingerprint` del alcance documental. Cambiar selección, Workspace, acción, versión o hash inicia una cadena nueva; no se persiste el transcript en la base de datos.
 - **Background:** ODE-514 describe generación remota asíncrona. La app puede consultar y cancelar mientras conserva el ID en su sesión; cerrar la app no cancela implícitamente la generación remota. La recuperación automática del chat o de trabajos después de reload/restart queda fuera del alcance actual. No se necesita una cola propia para habilitar los logs.
 - **Retención de background:** la guía vigente permite `store: false` con almacenamiento temporal y describe ventanas de aproximadamente diez minutos según política. Para inspección remota, mantener `store: true` explícito y verificar la política real del proyecto. [Background mode](https://developers.openai.com/api/docs/guides/background).
-- **Compaction:** capacidad futura, sin implementación exigida por 513/514. Usar la ventana devuelta sin podar ni reinterpretar sus Items opacos; no convertirla en evidencia documental. [Compaction](https://developers.openai.com/api/docs/guides/compaction).
+- **Compaction:** capacidad activa cuando el deployment declara `OPENAI_WORKSPACE_COMPACTION_THRESHOLD_TOKENS`. Puede repetirse en una cadena, se cuentan sus Items y se conserva el `response.id`; los Items compactados no sustituyen la evidencia `.md`. [Compaction](https://developers.openai.com/api/docs/guides/compaction).
 - **Agents SDK y Steering:** no necesarios para logs de Responses. Su adopción requiere una necesidad concreta y soporte del modelo/transporte; no forma parte de esta corrección de alcance.
 
 ## Contrato arquitectónico
@@ -73,3 +73,9 @@ La detección de Broken links/Archive es determinista, pero su presentación act
 - **Required docs:** `odessay-adr-identidad.md`, `odessay-desktop-document-catalog.md`, `odessay-desktop-target-architecture.md` y los contratos de contexto/ejecución/cache de este directorio.
 
 ODE-509/510/511 son los owners del cambio semántico: ODE-509 produce el veredicto de relaciones, ODE-510 gobierna la cola de contradicciones y ODE-511 sintetiza un documento nuevo con revisión y aprobación explícitas. Activar almacenamiento no cambia el resultado del matcher ni sustituye la validación de evidencia. La aceptación semántica usa OpenAI con el modelo configurado, evidencia y pruebas de outcome.
+
+## Actualización de alcance — 2026-09-13
+
+La documentación histórica de este issue hablaba de compaction y continuidad como capacidades futuras. La implementación vigente las usa para el Workspace Agent: `previous_response_id` conserva los turnos de Ask y `context_management` permite compactaciones repetidas cuando el deployment lo configura.
+
+El alcance de las operaciones semánticas tampoco se define por un máximo fijo de documentos ni por extractos de 720 caracteres. Contradictions y Merge reciben el markdown completo de los documentos explícitamente seleccionados; los chunks solo dividen el transporte. La ventana real del modelo y el planner de capacidad determinan el procesamiento directo o staged. El contrato detallado y los criterios de aceptación viven en `odessay-agent-conversation-compaction.md`.

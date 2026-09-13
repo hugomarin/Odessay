@@ -177,6 +177,8 @@ intención + descriptor + evidencia inicial
 
 El ciclo termina con un resultado `complete`, `insufficient_evidence`, `budget_exceeded` o `cancelled`. La cobertura (`complete | partial | unknown`) forma parte del resultado; una cobertura parcial nunca se presenta como “sin conflictos”. Las tools de `write`, `edit`, `move` y `delete` no se exponen como escrituras implícitas del modelo: solo reciben una propuesta validada y la aprobación existente.
 
+La entrada de una acción semántica contiene todos los documentos explícitamente seleccionados. Los extractos y candidatos deterministas son señales auxiliares; el markdown completo viaja en mensajes ordenados y puede dividirse por capacidad sin truncarlo. Un límite de ventana se comunica como `budget_exceeded` o se resuelve con etapas declaradas, nunca como análisis parcial silencioso.
+
 ODE-515 implementa este contrato para Contradictions y Merge. ODE-509 define el veredicto semántico, ODE-510/511 sus consumidores y ODE-512 las pruebas. ODE-513 conserva los Response IDs, Items y `call_id` en los logs de OpenAI; no convierte el chat efímero en historial local.
 
 ## Consultas libres
@@ -206,7 +208,11 @@ Esto cubre parcialmente los kinds `tool`/`workflow` — solo para las cinco acci
 
 Sigue sin existir: un `Registry` de `AgentCapabilityDescriptor` consultable (la validación de cada tool/workflow vive dispersa en su propio código, no en un registry central); un `PlanValidator` formal único; un `AgentResponse` compartido que alimente tanto Chat Card como Decision Modal.
 
-El ciclo semántico de múltiples rondas ya existe para Contradictions y Merge a través de `runWorkspaceSemanticLoop`: las tools de evidencia devuelven observaciones acotadas a Responses y el modelo puede pedir contexto adicional dentro de los límites de rondas, llamadas, bytes y tiempo. Sigue abierto formalizar un Router separado y un `AgentResponse` común; esos son gaps distintos y no bloquean estos dos workflows.
+El ciclo semántico de múltiples rondas ya existe para Contradictions y Merge a través de `runWorkspaceSemanticLoop`: el loop recibe los cuerpos completos de las fuentes seleccionadas, puede consumir evidencia adicional por rangos versionados y usa `previous_response_id` entre las etapas. Sigue abierto formalizar un Router separado y un `AgentResponse` común; esos son gaps distintos y no bloquean estos dos workflows.
+
+## Corrección de alcance conversacional — 2026-09-13
+
+La conversación libre conserva su cadena de Responses por turno mientras el `scopeFingerprint` no cambie. Sin documentos explícitos, el agente puede responder preguntas generales; si la pregunta requiere evidencia documental, devuelve `needs_scope` y solicita selección. No puede adivinar documentos por recencia ni usar una referencia natural para ampliar el alcance sin confirmación.
 
 ## Clasificación arquitectónica
 

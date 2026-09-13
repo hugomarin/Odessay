@@ -163,12 +163,14 @@ El código actual ya tiene una capa de tools autorizadas, selección acotada, le
 - Cache semántica y ledger de consumo — `lib/services/context/` (ODE-501).
 - Selección lazy del documento enfocado: no se lee su cuerpo por defecto; se ofrece como referencia (`focusedDocumentId`) y solo se materializa en una segunda ronda acotada si el modelo la solicita explícitamente (`lib/services/workspace-agent-service.ts`, `askAgent` y `askAboutDocument`). Cubre el caso más frecuente (Writing enfocado, con o sin Workspace visible), no una clasificación de intención general.
 
+La implementación semántica vigente agrega una regla distinta para el alcance explícito: cuando la persona selecciona o adjunta documentos para una acción, el servicio lee y envía el markdown completo de cada fuente. Los extractos iniciales solo ayudan a generar candidatos y provenance; no sustituyen el cuerpo. El planner de capacidad puede dividir ese conjunto en etapas sin descartar contenido.
+
 Todavía no formaliza completamente:
 
 - Un Intent Router formal que clasifique la intención *antes* de decidir qué leer — hoy esa decisión lazy la toma el propio modelo dentro de la misma llamada de ask, no un paso previo separado y determinista.
 - registry común de tools/workflows;
 - `AgentResponse` reutilizable entre Card y Modal;
-- Workflow, Broken links y Archive no seleccionan documentos específicos — operan sobre todo el Workspace vía el servicio directamente, sin un `ContextEnvelope` que envolver. En el estado actual Contradictions y Merge sí seleccionan (documentos comparados/combinados) y cargan de inmediato; ODE-515 y ODE-511 devuelven esa evidencia a Responses y permiten solicitar contexto adicional acotado antes del veredicto semántico o la síntesis.
+- Workflow, Broken links y Archive no seleccionan documentos específicos — operan sobre todo el Workspace vía el servicio directamente, sin un `ContextEnvelope` que envolver. Contradictions y Merge sí seleccionan documentos y cargan de inmediato el cuerpo completo de cada fuente; ODE-515 y ODE-511 lo entregan a Responses mediante el loop común y pueden pedir evidencia adicional versionada para confirmar rangos, sin convertir esa lectura adicional en una sustitución del contexto inicial.
 
 La migración debe introducir esos contratos sin ampliar el camino legacy basado únicamente en `workspaceRootPath`.
 

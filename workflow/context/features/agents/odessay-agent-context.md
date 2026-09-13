@@ -277,6 +277,12 @@ Gaps que siguen abiertos, sin resolver:
 - El resto del catálogo del Workspace (documentos que no son ni el enfocado ni un adjunto) sigue sin exponerse en absoluto durante una pregunta de chat libre, ni siquiera como referencia — solo Classify ve una porción amplia del catálogo.
 - De los cinco workflows predeterminados, solo dos seleccionan documentos específicos: en el estado actual Contradictions y Merge construyen y consumen `ContextEnvelope` (`policies.eagerlyLoadFocusedDocument: true`), por lo que comparar o combinar carga de inmediato el material explícitamente seleccionado. ODE-515 y ODE-511 implementan el contrato en el que esa primera evidencia vuelve a Responses y el modelo puede pedir fragmentos adicionales acotados antes de emitir un veredicto o una síntesis. Workflow, Broken links y Archive no tienen selección de documentos que envolver — operan sobre todo el Workspace vía el servicio directamente (`service.proposeWorkflow`/`findBrokenReferences`/`findArchiveCandidates`), así que `ContextEnvelope` no aplica de la misma forma; envolverlos solo para etiquetar `source`/sesión sería un cambio cosmético sin efecto funcional, y no se hizo.
 
+## Corrección de alcance y capacidad — 2026-09-13
+
+La regla anterior de “primera evidencia” no debe interpretarse como que Contradictions o Merge envían solo extractos. Para una selección explícita, ambas acciones incorporan el markdown completo de cada documento; `ContextEnvelope`/evidence fragments son índices de provenance y recall. `workspace-document-relations.ts` y `workspace-merge.ts` parten el cuerpo en chunks ordenados únicamente para transporte y dejan la decisión de procesamiento directo o staged al planner de capacidad.
+
+No existe un máximo de producto de cuatro o seis documentos. Contradictions puede revisar un documento contra sí mismo o varios documentos; Merge necesita al menos dos fuentes distintas. Si la carga no cabe en la ventana física, la operación pide dividir o procesa por etapas y síntesis, pero nunca analiza silenciosamente un subconjunto.
+
 ## Clasificación arquitectónica
 
 - **Layer dominante:** `Application`.

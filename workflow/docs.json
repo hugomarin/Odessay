@@ -110,8 +110,15 @@
       "path": "workflow/context/features/agents/odessay-agent-openai-runtime.md",
       "type": "feature",
       "scope": "workspace-agent-openai-runtime-observability",
-      "state": "scope-clarified-implementation-pending-2026-09-08",
-      "description": "Decisión de alcance: OpenAI Responses almacenadas para logs y trazabilidad, chat efímero sin base de datos, causas del Context Gap y uso de capacidades nativas del API. Delimita observabilidad ODE-513, background nativo ODE-514 y semántica ODE-509/510/511."
+      "state": "implemented-with-context-continuity-2026-09-13",
+      "description": "Decisión de alcance y runtime implementados: OpenAI Responses almacenadas para trazabilidad, chat efímero con previous_response_id, contexto explícito de documentos, loop semántico y compactación nativa. Delimita observabilidad ODE-513, background nativo ODE-514 y semántica ODE-509/510/511."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-conversation-compaction.md",
+      "type": "feature",
+      "scope": "workspace-agent-conversation-compaction-and-evidence",
+      "state": "canonical-implemented-2026-09-13",
+      "description": "Contrato operativo del Workspace Agent: alcance explícito, contenido completo de documentos, continuidad por turnos, compactación repetible, capacidad física de la ventana de contexto, cargas staged y criterios de aceptación con respuestas reales de OpenAI y DMG."
     },
     {
       "path": "workflow/context/features/odessay-ai-writing-assist.md",
