@@ -322,6 +322,11 @@
       "description": "Plan de trabajo para reconciliar el corpus de documentación (context, specs, skills) con el ADR de identidad (odessay-adr-identidad.md): inventario de docs a corregir, secuencia, reglas de la pasada y criterio de cierre. No es el plan de implementación de código."
     },
     {
+      "path": "workflow/define/validation-prompt-workspace-agent-context-drift.md",
+      "type": "ops",
+      "description": "Prompt reusable para auditar con un modelo independiente el drift entre Workflow, DoD, Linear, código y evidencia del Workspace Agent: alcance explícito, cuerpos completos, capacidad staged, contradicciones intra/inter-documento, continuidad, compactación, ownership y gaps de pruebas."
+    },
+    {
       "path": "workflow/define/dod-fase-1.md",
       "type": "ops",
       "description": "Gate de cierre de Fase 1 — Escribir: checklist de editor core, sidebar, persistencia local-first y criterios técnicos mínimos que deben estar cumplidos para considerar la fase terminada."
