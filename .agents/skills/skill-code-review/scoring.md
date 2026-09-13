@@ -61,7 +61,7 @@ Redondeado a 1 decimal = __/10
 ### Overrides de gate (se reportan fuera de QualityScore)
 
 - Si hay **algún P0 activo**: `GateResult=FAIL`.
-- Si `required_failures > 0` en performance gate requerido: `GateResult=FAIL`.
+- Si falla el `Performance Architecture Contract` requerido o la evidencia que este seleccionó: `GateResult=FAIL`.
 - Si falta proof of work (typecheck/lint/tests): `GateResult=FAIL`.
 - Si PR no está OPEN/CI requerido en rojo/evidencia contractual faltante: `GateResult=FAIL`.
 - **Findings investigados y descartados:** Si durante el review se investiga un finding y se determina que es un falso positivo (ej. se revisa el diff y el cambio es legítimo), ese finding NO se cuenta en el score. Eliminarlo del bloque de cálculo. Solo contar findings que el revisor considera válidos al momento del veredicto.

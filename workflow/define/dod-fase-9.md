@@ -77,7 +77,7 @@ Referencias:
 - Corrupción de manifest no provoca acuñación masiva; falla de watcher muestra catálogo `stale` y reintenta/rescanea.
 - Operaciones bulk de scan, migración, hidratación y watcher emiten una actualización lógica, no N refetches visibles.
 - Se emiten eventos estructurados de rebuild, binding, manifest, transacción y apertura sin contenido, tokens ni rutas completas en telemetría remota.
-- Hay evidencia de arranque, fan-out y consultas de catálogo dentro de los presupuestos definidos; el DMG/release desktop, no solo `tauri dev`, pasa los flujos críticos.
+- Cuando un issue activa `skill-performance`, hay evidencia proporcional de arranque, fan-out y consultas de catálogo según su `Performance Architecture Contract`; el DMG/release desktop, no solo `tauri dev`, pasa los flujos críticos cuando el contrato toca esa superficie.
 
 ## 8) Evidencia de aceptación
 
@@ -86,7 +86,7 @@ Referencias:
 - E2E DMG: Open Document fuera de root → confirmación → mismo UUID/estado en Desk y Workspace.
 - E2E DMG: offline open/save/restart → contenido y binding sobreviven → sync posterior converge.
 - E2E DMG: cloud-only se materializa en el root managed antes de editar; conflicto/hash ambiguo no se resuelve en silencio.
-- Typecheck, lint, tests, Cargo tests, `validate-workflow-json`, performance/network gates aplicables y `ops:delivery:gate` verdes.
+- Typecheck, lint, tests, Cargo tests, `validate-workflow-json`, los gates de performance/network seleccionados por `skill-performance` y `ops:delivery:gate` verdes.
 - El dueño acepta el outcome completo antes del cierre de fase.
 
 ## Gate de cierre de fase

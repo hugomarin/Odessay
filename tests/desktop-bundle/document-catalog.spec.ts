@@ -59,8 +59,19 @@ describe("desktop bundle — unified document catalog", () => {
     expect(release).toContain("tauri build")
     expect(release).toContain("dist/releases")
     expect(validator).toContain("--dmg")
+    expect(validator).toContain("--report")
+    expect(validator).toContain("NSMicrophoneUsageDescription")
+    expect(validator).toContain("com.apple.security.app-sandbox")
+    expect(validator).toContain("com.apple.security.device.audio-input")
+    expect(validator).toContain("fs:allow-watch")
     expect(validator).toContain("hdiutil attach")
     expect(config).toContain("Artifact Studio")
+    expect(config).toContain("entitlements-audio.plist")
+    expect(read("src-tauri/entitlements-audio.plist")).toContain(
+      "com.apple.security.device.audio-input",
+    )
+    expect(read("docs/desktop-distribution.md")).toContain("BindingRoot")
+    expect(read("docs/desktop-distribution.md")).toContain("time to operable")
   })
 
   it("does not mistake the absence of an exact packaged artifact for a pass", () => {

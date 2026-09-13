@@ -7,6 +7,7 @@ description: Guía de base de datos de Odessay para migraciones, RLS, triggers, 
 
 **Consulta este skill antes de cualquier trabajo con migraciones, queries, RLS, o triggers.**
 **Usa Supabase MCP para consultar el schema vivo y validar contra el estado real de la DB.**
+Si el cambio puede modificar la forma de carga, el fan-out de queries, la paginación, la hidratación, el trabajo bulk o el costo al crecer, consulta también `.agents/skills/skill-performance/SKILL.md`. Database define schema, índices, RLS y consultas; `skill-performance` define la forma sostenible de ejecutarlas.
 
 ---
 
@@ -83,6 +84,7 @@ Antes de cualquier operación, lee `workflow/context/core/odessay-modelo-datos.m
   - Writings compartidos conmigo.
   - Árbol de una correspondencia (recursive query por `parent_id`).
   - Lookup de writing por `author_id + slug` (URL pública).
+- Para listas, árboles o sincronizaciones que puedan crecer, el brief debe declarar el patrón de carga, el límite de fan-out, el owner de paginación/batching y cómo se evita una query por elemento. Si se activa `skill-performance`, ese contrato prevalece sobre cualquier checklist local de este skill.
 
 ## Supabase MCP
 
@@ -109,5 +111,6 @@ Este checklist cubre lo específico de base de datos durante la implementación.
 - [ ] ¿RLS cubre todos los casos (private/shared/public)?
 - [ ] ¿Los triggers funcionan en staging?
 - [ ] ¿Los índices necesarios están creados?
+- [ ] Si la consulta cambia la forma de carga o puede crecer, ¿existe el `Performance Architecture Contract` y la evidencia proporcional requerida?
 - [ ] ¿El schema en `odessay-modelo-datos.md` está actualizado si hubo cambios?
 - [ ] ¿No se modificó producción directamente?

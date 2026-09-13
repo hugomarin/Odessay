@@ -17,10 +17,16 @@
  *   1 = one or more automated checks failed
  *   2 = runtime error / bad arguments
  */
-import { readFileSync, existsSync, readdirSync, statSync } from "node:fs"
+import {
+  readFileSync,
+  existsSync,
+  readdirSync,
+  statSync,
+  mkdirSync,
+  writeFileSync,
+} from "node:fs"
 import { execSync } from "node:child_process"
-import { join, resolve, basename } from "node:path"
-import { fileURLToPath } from "node:url"
+import { join, resolve, basename, dirname } from "node:path"
 import {
   collectFrontendAssets,
   evaluateEmbeddedRuntimeHost,
@@ -32,26 +38,32 @@ import {
 const RELEASES_DIR = "dist/releases"
 const TAURI_CONF = "src-tauri/tauri.conf.json"
 const CARGO_TOML = "src-tauri/Cargo.toml"
+const CAPABILITIES_JSON = "src-tauri/capabilities/default.json"
 
 let failures = 0
 let warnings = 0
+const checks = []
 
 function fail(message) {
+  checks.push({ status: "FAIL", message })
   console.error(`  ✖ ${message}`)
   failures++
 }
 
 function warn(message) {
+  checks.push({ status: "WARN", message })
   console.warn(`  ⚠ ${message}`)
   warnings++
 }
 
 function ok(message) {
+  checks.push({ status: "PASS", message })
   console.log(`  ✓ ${message}`)
 }
 
 /** Context that is neither a pass nor a finding — never affects the exit code. */
 function info(message) {
+  checks.push({ status: "INFO", message })
   console.log(`  · ${message}`)
 }
 
@@ -63,10 +75,12 @@ function section(title) {
 const args = process.argv.slice(2)
 let dmgPath = ""
 let appPath = ""
+let reportPath = ""
 const allowLocalhost = args.includes("--allow-localhost")
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--dmg" && args[i + 1]) dmgPath = resolve(args[i + 1])
   if (args[i] === "--app" && args[i + 1]) appPath = resolve(args[i + 1])
+  if (args[i] === "--report" && args[i + 1]) reportPath = resolve(args[i + 1])
 }
 
 const root = process.cwd()
@@ -105,6 +119,12 @@ function appResourcesPath(app) {
   return join(app, "Contents", "Resources")
 }
 
+function readPlistValue(path, key) {
+  return execSync(`plutil -extract ${key} raw -o - "${path}"`, {
+    encoding: "utf8",
+  }).trim()
+}
+
 /* ═══════════════════════════════════════
    1. DMG / App discovery
    ═══════════════════════════════════════ */
@@ -114,6 +134,7 @@ let targetDmg = dmgPath
 let mountedApp = null
 let mountedPoint = null
 let unmountOnExit = false
+let packagedBundleIdentifier = ""
 
 if (appPath) {
   if (!existsSync(appPath)) {
@@ -188,9 +209,8 @@ const infoPlistPath = join(mountedApp, "Contents", "Info.plist")
 if (existsSync(infoPlistPath)) {
   ok(`Info.plist exists`)
   try {
-    const plist = execSync(`plutil -extract CFBundleIdentifier raw -o - "${infoPlistPath}"`, {
-      encoding: "utf8",
-    }).trim()
+    const plist = readPlistValue(infoPlistPath, "CFBundleIdentifier")
+    packagedBundleIdentifier = plist
     if (plist && plist.length > 0) {
       ok(`CFBundleIdentifier: ${plist}`)
     } else {
@@ -201,14 +221,23 @@ if (existsSync(infoPlistPath)) {
   }
 
   try {
-    const version = execSync(`plutil -extract CFBundleShortVersionString raw -o - "${infoPlistPath}"`, {
-      encoding: "utf8",
-    }).trim()
+    const version = readPlistValue(infoPlistPath, "CFBundleShortVersionString")
     if (version) {
       ok(`CFBundleShortVersionString: ${version}`)
     }
   } catch {
     warn("Could not read CFBundleShortVersionString from Info.plist")
+  }
+
+  try {
+    const microphoneUsage = readPlistValue(infoPlistPath, "NSMicrophoneUsageDescription")
+    if (microphoneUsage) {
+      ok("NSMicrophoneUsageDescription is present")
+    } else {
+      fail("NSMicrophoneUsageDescription is empty in the packaged Info.plist")
+    }
+  } catch {
+    fail("NSMicrophoneUsageDescription is missing from the packaged Info.plist")
   }
 } else {
   fail(`Info.plist missing: ${infoPlistPath}`)
@@ -239,6 +268,41 @@ if (existsSync(TAURI_CONF)) {
   } else {
     warn("CSP does not explicitly define connect-src")
   }
+
+  if (packagedBundleIdentifier && packagedBundleIdentifier === tauriConf.identifier) {
+    ok(`Bundle identifier matches tauri.conf.json: ${tauriConf.identifier}`)
+  } else if (packagedBundleIdentifier) {
+    fail(
+      `Bundle identifier drift: Info.plist=${packagedBundleIdentifier} vs tauri.conf.json=${tauriConf.identifier}`,
+    )
+  } else {
+    fail("Could not compare the packaged bundle identifier with tauri.conf.json")
+  }
+
+  const configuredEntitlements = tauriConf?.bundle?.macOS?.entitlements
+  if (typeof configuredEntitlements !== "string" || configuredEntitlements.length === 0) {
+    fail("macOS bundle does not reference a dedicated entitlement profile")
+  } else if (basename(configuredEntitlements) === "entitlements.plist") {
+    fail("macOS bundle references the legacy App Sandbox entitlements.plist")
+  } else {
+    const entitlementPath = resolve(dirname(TAURI_CONF), configuredEntitlements)
+    if (!existsSync(entitlementPath)) {
+      fail(`Configured entitlement profile does not exist: ${entitlementPath}`)
+    } else {
+      const entitlementSource = readFileSync(entitlementPath, "utf8")
+      if (entitlementSource.includes("com.apple.security.app-sandbox")) {
+        fail("Configured entitlement profile enables App Sandbox in the direct-filesystem profile")
+      } else {
+        ok(`Configured entitlement profile is not sandboxed: ${basename(entitlementPath)}`)
+      }
+
+      if (entitlementSource.includes("com.apple.security.device.audio-input")) {
+        ok("Configured entitlement profile declares audio input")
+      } else {
+        fail("Configured entitlement profile is missing com.apple.security.device.audio-input")
+      }
+    }
+  }
 } else {
   fail(`tauri.conf.json not found at ${TAURI_CONF}`)
 }
@@ -257,7 +321,25 @@ if (existsSync(CARGO_TOML)) {
   fail(`Cargo.toml not found at ${CARGO_TOML}`)
 }
 
-// 3c. Version alignment
+// 3c. Filesystem capability contract used by external BindingRoots/watchers.
+if (existsSync(CAPABILITIES_JSON)) {
+  const capabilities = JSON.stringify(readJson(CAPABILITIES_JSON))
+  if (capabilities.includes("fs:allow-watch")) {
+    ok("Tauri capabilities allow runtime watcher scopes")
+  } else {
+    fail("Tauri capabilities are missing fs:allow-watch")
+  }
+
+  if (capabilities.includes("$DOCUMENT/**")) {
+    ok("Tauri capabilities retain the document filesystem scope")
+  } else {
+    fail("Tauri capabilities are missing the $DOCUMENT/** filesystem scope")
+  }
+} else {
+  fail(`Tauri capabilities not found at ${CAPABILITIES_JSON}`)
+}
+
+// 3d. Version alignment
 const pkg = readJson(join(root, "package.json"))
 const tauriConf = readJson(join(root, TAURI_CONF))
 if (pkg.version === tauriConf.version) {
@@ -266,7 +348,7 @@ if (pkg.version === tauriConf.version) {
   fail(`Version drift: package.json=${pkg.version} vs tauri.conf.json=${tauriConf.version}`)
 }
 
-// 3d. NEXT_PUBLIC_APP_URL must not be localhost in a release build
+// 3e. NEXT_PUBLIC_APP_URL must not be localhost in a release build
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || pkg?.config?.appUrl || ""
 if (appUrl && findLocalRuntimeHosts(appUrl).length > 0) {
   if (allowLocalhost) {
@@ -283,7 +365,7 @@ if (appUrl && findLocalRuntimeHosts(appUrl).length > 0) {
   info("NEXT_PUBLIC_APP_URL not set in this shell — the embedded host check below is authoritative")
 }
 
-// 3e. The host actually embedded in the shipped frontend (ODE-409). The env var
+// 3f. The host actually embedded in the shipped frontend (ODE-409). The env var
 // above describes the intended build; this reads what the artifact will really
 // call at runtime, which is what the writer experiences.
 const candidateDirs = [appResourcesPath(mountedApp), join(root, "dist")]
@@ -375,6 +457,26 @@ try {
   warn("Could not verify code signature")
 }
 
+try {
+  const embeddedEntitlements = execSync(
+    `codesign -d --entitlements :- "${mountedApp}" 2>&1 || true`,
+    { encoding: "utf8" },
+  )
+  if (embeddedEntitlements.includes("com.apple.security.app-sandbox")) {
+    fail("App Sandbox entitlement is embedded in the direct-filesystem distribution")
+  } else {
+    ok("App Sandbox entitlement is absent from the effective bundle")
+  }
+
+  if (embeddedEntitlements.includes("com.apple.security.device.audio-input")) {
+    ok("Audio input entitlement is embedded in the effective bundle")
+  } else {
+    fail("Audio input entitlement is missing from the effective bundle")
+  }
+} catch {
+  fail("Could not inspect effective bundle entitlements")
+}
+
 /* ═══════════════════════════════════════
    Cleanup
    ═══════════════════════════════════════ */
@@ -385,6 +487,30 @@ if (unmountOnExit && mountedPoint) {
   } catch {
     warn(`Failed to unmount ${mountedPoint} — you may need to run: hdiutil detach "${mountedPoint}"`)
   }
+}
+
+if (reportPath) {
+  mkdirSync(dirname(reportPath), { recursive: true })
+  writeFileSync(
+    reportPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        artifact: {
+          dmg: targetDmg || null,
+          app: mountedApp,
+          version: pkg?.version ?? null,
+          bundleIdentifier: packagedBundleIdentifier || tauriConf?.identifier || null,
+        },
+        checks,
+        summary: { failures, warnings },
+      },
+      null,
+      2,
+    )}\n`,
+  )
+  console.log(`\n[validate:desktop] Report written to ${reportPath}`)
 }
 
 /* ═══════════════════════════════════════

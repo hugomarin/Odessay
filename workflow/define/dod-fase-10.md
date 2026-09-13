@@ -120,12 +120,12 @@ ver el propio archivo de evidencia para el detalle y los pasos que faltan.
 - La home migra a `app/(marketing)/page.tsx` conservando `DesktopStartupRedirect` como primer hijo; el desktop sigue redirigiendo al arranque de la app y `/login` y `/signup` no cambian.
 - Las decisiones abiertas del dueño (destinos de nav, testimonios, tarjeta de version history, destinos de los CTA) quedan resueltas por escrito antes del cierre, no inferidas.
 
-## 9) Performance y no-regresión están evidenciados
+## 9) Performance y no-regresión están evidenciados cuando aplica
 
 - Ninguna ruta de app carga una capa de fuente adicional por culpa del marketing; se verifica en el panel de red de `/desk`.
-- Las vistas rediseñadas conservan sus presupuestos: latencia de interacción en Studio, tiempo a interactivo en Desk/Workspace, y peso/waterfall donde el issue toque `page.tsx` o rutas de lista.
+- Las vistas rediseñadas conservan su arquitectura de carga. Cuando un issue toca `page.tsx`, rutas de lista o el camino crítico, `skill-performance` selecciona la evidencia adecuada; no se exige un budget universal por el solo hecho de modificar una vista.
 - Las capturas de una ruta de app no modificada antes/después prueban que ningún issue de marketing movió un píxel del producto.
-- Typecheck, lint, Vitest, tests de Rust cuando apliquen, `validate-workflow-json` y `ops:delivery:gate` en verde en cada entrega.
+- Typecheck, lint, Vitest, tests de Rust cuando apliquen, `validate-workflow-json` y los gates seleccionados por el contrato en verde en cada entrega.
 
 ## 10) Evidencia de aceptación
 

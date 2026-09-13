@@ -189,25 +189,17 @@ Overlap conocido:
 
 ---
 
-### 4) Scripts Playwright orientados a performance
+### 4) Instrumentos Playwright orientados a performance
 
-Estos no son tests de producto general. Son scripts operativos para captura de traces:
+La captura de performance no es una familia de tests funcionales. El routing
+canónico está en `.agents/skills/skill-performance/references/instruments.md`.
+El punto de entrada vigente para el trace del editor es:
 
 - [scripts/capture-editor-trace.mjs](scripts/capture-editor-trace.mjs)
-- [scripts/capture-editor-image-trace.mjs](scripts/capture-editor-image-trace.mjs)
-- [scripts/capture-tab-switch-trace.mjs](scripts/capture-tab-switch-trace.mjs)
-- [scripts/capture-reading-trace.mjs](scripts/capture-reading-trace.mjs)
-- [scripts/capture-collections-trace.mjs](scripts/capture-collections-trace.mjs)
 
-Clasificación:
-
-- `usable as-is` para evidencia de performance
-- `avoid for new product-validation flows`
-
-Regla:
-
-- si el objetivo es aceptación funcional, no uses estos scripts como base
-- si el objetivo es `Performance Contract`, estos son el punto de entrada correcto
+Los scripts históricos por superficie no se deben usar para nuevos briefs hasta
+que tengan un consumidor explícito, un escenario reproducible y una razón para
+no consolidarse en el instrumento canónico.
 
 ---
 
@@ -252,7 +244,7 @@ Qué cubren:
   y en Workspace;
 - **descubrimiento por watcher:** un burst de cambio del catálogo actualiza Desk
   sin navegar a Workspace;
-- **Performance Contract (automatable):** un burst de N cambios coalescen en un
+- **Performance Architecture Contract (automatable):** un burst de N cambios coalescen en un
   solo reload (reactive fan-out = 1); Desk renderiza el catálogo local sin esperar
   la hidratación cloud (local-first / TTI);
 - derivación única de estado desde `DocumentCatalogRecord` (local-only, synced,
@@ -284,7 +276,9 @@ Evidencia que NO corre en esta suite (paso de hardware/app viva):
   WorkspaceReconciler además viven en el runtime Tauri (el `webServer` de
   `playwright.config.ts` levanta `npm run dev` web, no el DMG). La evidencia visual
   side-by-side Desk/Workspace y el flujo desktop se capturan sobre el DMG
-  empaquetado. Ver `workflow/testing/ode-373-desktop-capture.md`.
+  empaquetado. La evidencia de runtime y bundle se selecciona desde
+  `.agents/skills/skill-performance`, no desde una checklist específica de un
+  issue histórico.
 
 ---
 

@@ -435,6 +435,27 @@ desktop. IndexedDB permanece sin cambios como adapter local-first de web.
 | `redirect("/login")` server-side | Funciona correctamente | Se bake en el RSC payload — redirige en toda visita aunque haya sesión |
 | Supabase storage (`localStorage`, cookies) | Funciona con `document.cookie` normal | Cookies no persisten en custom protocol; storage custom requerido |
 | DevTools | Siempre disponible | Requiere `features = ["devtools"]` en `Cargo.toml` (obligatorio en Fase 7) |
+| Identidad y firma del bundle | La app corre con la identidad del entorno de desarrollo | El `CFBundleIdentifier`, la firma y el perfil de entitlements son los del artefacto instalado |
+| Privacidad del micrófono | El navegador/WebView de desarrollo puede pedir o conservar permiso | El bundle necesita `NSMicrophoneUsageDescription` y la capacidad nativa de audio de su perfil de distribución |
+| App Sandbox | No representa el límite de filesystem usado durante el desarrollo | Si se activa accidentalmente cambia `appDataDir`, los roots visibles y las operaciones sobre carpetas |
+| Bundle y recursos | El proceso puede leer el checkout y el servidor local | `Contents/Resources` y el bundle son inputs de solo lectura; ningún dato durable puede depender de ellos |
+| Carpeta externa | El proceso de desarrollo suele heredar acceso del usuario y del proceso lanzador | El DMG debe probar la carpeta como `BindingRoot`: lectura, escritura temporal + rename, watcher, revocación y reconexión |
+| App data / catálogo | El estado puede sobrevivir por el entorno local del desarrollador | Settings, SQLite y ledger gestionado deben resolver al app-data de la identidad empaquetada, no a una ruta de desarrollo |
+
+La diferencia no es solo de transporte del frontend. Una capability nativa tiene
+tres dueños que deben coincidir antes de distribuir: el código que la solicita,
+el perfil de empaquetamiento que la declara y el flujo de recuperación que la
+presenta cuando macOS o el filesystem la rechazan. El perfil actual es directo
+al filesystem, ad-hoc y sin App Sandbox; el entitlement de audio es separado
+del plist de Sandbox. El detalle normativo vive en `docs/desktop-distribution.md`.
+
+Para carpetas, la autorización no se modela como un booleano permanente. Un
+`BindingRoot` puede perder observabilidad porque la carpeta es de solo lectura,
+fue revocada, se desmontó o ya no puede crear el temporal de guardado. Ese
+estado debe conservar el binding y permitir reintentar; nunca debe convertirse
+en una eliminación, una copia silenciosa a otro root o un draft nuevo. La
+apertura de un archivo fuera de un root sigue requiriendo confirmar su carpeta y
+registrar el ledger `.odessay/index.json`.
 
 ### Consecuencias para el desarrollo
 
@@ -445,14 +466,19 @@ desktop. IndexedDB permanece sin cambios como adapter local-first de web.
 - Storage adapters custom ignorados por wrappers SSR (ver `odessay-desktop-target-architecture.md §Storage de tokens`)
 - Keyring sin features declarados (mock backend silencioso)
 - Rutas dynamic (`/write/[id]`) para UUIDs no declarados en `generateStaticParams`
+- `NSMicrophoneUsageDescription` o el entitlement de audio ausentes del bundle
+- App Sandbox activado junto con la arquitectura de filesystem directo
+- Escrituras dirigidas al bundle/recursos o a una ruta de desarrollo
+- Permisos de carpeta que permiten leer pero no crear el temporal o hacer rename
 
 ### Checklist antes de marcar un issue desktop como Done
 
 1. ¿Se corrió `npm run desktop:release` y se instaló el DMG resultante?
-2. ¿El CSP del bundle incluye `ipc:` y `http://ipc.localhost` en `connect-src`?
-3. ¿Toda página `(app)` nueva con server auth tiene bifurcación `isTauriBuild`?
-4. ¿DevTools está habilitado en el bundle (`features = ["devtools"]`) para poder diagnosticar?
-5. ¿El flow completo (signin → navegar → cerrar → reabrir) fue probado en el DMG real?
+2. ¿El validador confirmó identidad, Info.plist, entitlements efectivos y ausencia de App Sandbox accidental?
+3. ¿El CSP del bundle incluye `ipc:` y `http://ipc.localhost` en `connect-src`?
+4. ¿Toda página `(app)` nueva con server auth tiene bifurcación `isTauriBuild`?
+5. ¿DevTools está habilitado en el bundle (`features = ["devtools"]`) para poder diagnosticar?
+6. ¿El flow completo (signin → navegar → cerrar → reabrir) y los escenarios de carpeta/micrófono fueron probados en el DMG real?
 
 ---
 

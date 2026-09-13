@@ -237,10 +237,16 @@ export function AnnotationBubble({
     void runTranscription(blob, type === "ai" ? "apply-to-note" : "confirm")
   }
 
-  const isMicDisabled = !isSupported || permissionDenied
+  // A real NotAllowedError is useful feedback, but it must not create a dead
+  // end in Tauri: WKWebView can reject one request while macOS already grants
+  // the app access. Keep retry available; only unsupported runtimes disable the
+  // control.
+  const isMicDisabled = !isSupported
   const micTooltipMessage = !isSupported
-    ? "Voice recording is not supported in this browser."
-    : "Microphone permission denied. Enable it in your browser settings."
+    ? "Voice recording is not supported in this app."
+    : permissionDenied
+      ? "Microphone access was rejected. Try again or check the macOS microphone setting for Artifact Studio."
+      : "Microphone permission denied. Check your app or browser settings and try again."
 
   const micButton = (
     <button
@@ -362,7 +368,7 @@ export function AnnotationBubble({
           Cancel
         </button>
         {supportsVoice && !isVoiceMode ? (
-          isMicDisabled ? (
+          isMicDisabled || permissionDenied ? (
             <TooltipProvider delayDuration={120}>
               <Tooltip>
                 <TooltipTrigger asChild>

@@ -147,17 +147,9 @@ Estas reglas no son optimizaciones opcionales. Son criterios de corrección del 
 
 ### La velocidad de Odessay es multidimensional
 
-El frontend defiende cinco dimensiones de velocidad. El editor protege la primera; el resto del árbol React protege las otras cuatro. Si una sola está en rojo, el producto se siente lento aunque las demás estén perfectas. Esta es la versión frontend del contrato fundacional en `workflow/context/core/odessay-stack.md`.
+La arquitectura transversal de performance vive en `.agents/skills/skill-performance/SKILL.md`. Frontend conserva únicamente sus invariantes de implementación: editor aislado, datos locales primero cuando aplique, componentes secundarios fuera del camino crítico, hydration con owner claro y listeners coalescidos.
 
-| Dimensión | Cómo se defiende en frontend |
-|---|---|
-| **Latencia de interacción** | El editor es una isla. Keystroke < 16 ms, sin re-render del shell. Ver `El editor es una isla`. |
-| **Tiempo a interactivo** | Cada ruta renderiza desde `localDB` antes de esperar red. El primer paint útil llega < 1 s en editor, < 1.5 s en Desk/Collections/Reading. |
-| **Peso transferido** | El cliente nunca pide más de lo que va a mostrar. Si un componente solo necesita títulos, su query no trae `body_json`. |
-| **Forma del waterfall** | Las cargas iniciales se deduplican entre llamadores. Un mismo fetch caro se comparte (in-flight promise / TanStack Query) en lugar de repetirse por componente. |
-| **Fan-out reactivo** | Los suscriptores a `localDB`/stores hacen debounce si la operación que los dispara puede ser bulk (hidratación, import, sync). |
-
-Todo PR que toque vistas, hidratación, suscriptores a stores o fetches de bootstrap declara su impacto en estas cinco dimensiones en el `Performance Contract`. No hace falta convertir las cinco en evidencia pesada si no aplican; el punto es identificar con precisión cuáles sí cambia el diff y cuáles quedan `not required` con justificación breve. No basta con "el editor sigue rápido": hay que mostrar que el waterfall, el peso y el fan-out no empeoraron cuando el cambio sí los toca.
+Si el cambio toca vistas, hydration, suscriptores, fetches de bootstrap o componentes en un camino crítico, cargar `skill-performance` y completar su `Performance Architecture Contract`. Este skill no redefine sus dimensiones, budgets ni niveles de evidencia.
 
 ### El editor es una isla
 
@@ -278,13 +270,13 @@ useEffect(() => { void doHydrate() }, [])
 **El cliente pide la forma del dato que va a mostrar, no más.**
 Una vista de lista pide la lista resumida; una vista de detalle pide el detalle. Si el endpoint actual devuelve más de lo necesario, el remedio es ampliar el contrato del endpoint (ver `skill-backend/SKILL.md §Peso de respuesta`), no aceptarlo como dado.
 
-**Los suscriptores reactivos hacen debounce cuando la fuente puede ser bulk.**
-`subscribeToLocalDBChanges`, store listeners, `onSnapshot` y similares se montan asumiendo que la operación que los dispara puede ser una hidratación de N filas. Coalescer múltiples eventos en uno (debounce 50–150 ms) es la postura por defecto, no una optimización.
+**Los suscriptores reactivos coalescen cuando la fuente puede ser bulk.**
+`subscribeToLocalDBChanges`, store listeners, `onSnapshot` y similares se montan asumiendo que la operación que los dispara puede ser una hidratación de N filas. Muchos eventos físicos deben producir una actualización lógica; la ventana concreta la define el contrato de performance o el contrato de dominio que corresponda.
 
 ```ts
 // ✓ Correcto — un burst de 30 writes emite UNA refetch
 const debouncedRefetch = useMemo(
-  () => debounce(loadRecipientPreviewsAsync, 100),
+  () => debounce(loadRecipientPreviewsAsync, COALESCING_WINDOW),
   [loadRecipientPreviewsAsync],
 )
 useEffect(() => subscribeToLocalDBChanges(debouncedRefetch), [debouncedRefetch])
@@ -293,62 +285,11 @@ useEffect(() => subscribeToLocalDBChanges(debouncedRefetch), [debouncedRefetch])
 useEffect(() => subscribeToLocalDBChanges(loadRecipientPreviewsAsync), [loadRecipientPreviewsAsync])
 ```
 
-### Perceived performance — métricas que importan
+### Evidencia del camino crítico
 
-No optimizar solo para benchmarks. Optimizar para lo que el usuario siente. Estas métricas cubren las cinco dimensiones del contrato, no solo el editor:
+El tipo de evidencia depende del `Performance Architecture Contract`. No todo cambio de frontend requiere el mismo trace.
 
-| Métrica | Objetivo | Dimensión |
-|---|---|---|
-| Latencia de keystroke en editor | < 16 ms (60 fps) | Latencia de interacción |
-| Tiempo hasta editable (editor) | < 1 s | Tiempo a interactivo |
-| Tiempo hasta vista útil (Desk/Collections/Reading) | < 1.5 s desde click hasta poder operar | Tiempo a interactivo |
-| Apertura de panel secundario | < 200 ms | Latencia de interacción |
-| Respuesta de AI visible | Streaming, primeros tokens < 800 ms | Latencia de interacción |
-| Auto-save (local) | Invisible — nunca bloquea | Latencia de interacción |
-| Payload XHR acumulado en primer render | ≤ 200 kB en los primeros 3 s | Peso transferido |
-| Fetch/XHR distintos en bootstrap de una vista | ≤ 6 en los primeros 3 s | Forma del waterfall |
-| Requests duplicados (misma URL + params) | 0 en los primeros 5 s | Forma del waterfall |
-| Eventos de cambio emitidos por una operación bulk en `localDB` | 1 (no N) | Fan-out reactivo |
-
-Medir desde el inicio. No al final. Cuando una vista se siente lenta, abrir DevTools Network y leer estas filas antes de tocar código — el cuello rara vez es donde se intuye.
-
-```tsx
-// Medir tiempo hasta editable en desarrollo
-if (process.env.NODE_ENV === 'development') {
-  performance.mark('editor-mount-start')
-  // ... en el editor, cuando está listo:
-  performance.mark('editor-ready')
-  performance.measure('time-to-editable', 'editor-mount-start', 'editor-ready')
-}
-```
-
-### Protocolo operativo de performance (critical path)
-
-Aplica siempre que el issue toque interacción de escritura o lectura activa:
-- editor TipTap (`keydown`, `input`, `paste`);
-- acciones de selección/click dentro del documento;
-- paneles que se abren durante escritura;
-- auto-save, sync, o observaciones AI que compiten por main thread.
-
-Si el issue toca alguno de estos puntos, no se implementa "a ciegas". Se mide before/after.
-
-1. Capturar baseline del issue (before):
-
-```bash
-npm run ops:perf:capture -- --output artifacts/perf/editor-before.json.gz
-npm run ops:perf:gate -- --trace artifacts/perf/editor-before.json.gz --report artifacts/perf/editor-before-report.json --metrics artifacts/perf/editor-before-metrics.json
-```
-
-2. Implementar el cambio.
-3. Capturar trace final (after):
-
-```bash
-npm run ops:perf:capture -- --output artifacts/perf/editor-after.json.gz
-npm run ops:perf:gate -- --trace artifacts/perf/editor-after.json.gz --report artifacts/perf/editor-after-report.json --metrics artifacts/perf/editor-after-metrics.json
-```
-
-4. Evaluar diff before/after contra `workflow/perf-budgets.json`.
-5. Si `required_failures > 0`, el cambio no está listo para PR.
+Cuando el contrato seleccione una prueba de interacción, usar los instrumentos existentes y adjuntar el resultado real. Cuando seleccione escala, probar el consumidor con volúmenes representativos. Cuando no aplique, justificarlo en el brief.
 
 ### Anti-patterns de performance (bloqueantes)
 
@@ -359,8 +300,6 @@ npm run ops:perf:gate -- --trace artifacts/perf/editor-after.json.gz --report ar
 - Cálculos de word count/derivados fuera de TipTap en cada tecla.
 - Ejecutar lógica AI síncrona en el camino de interacción del editor.
 - Introducir dependencias de UI pesadas sin presupuesto de impacto medido.
-- **Await de datos remotos antes de renderizar datos de `localDB`.** La vista debe mostrar lo que tiene localmente de inmediato; el enriquecimiento remoto (shares, metadata, estado de sync) ocurre en background.
-- **N+1 fetches en el path de carga inicial de una vista.** Cada item de una lista no debe disparar su propia petición remota. Enriquecer en batch o en background, nunca secuencialmente durante el primer render.
 
 ### Navegación interna vs Navegación de página
 
@@ -370,11 +309,10 @@ Las pestañas del editor son **estado interno**, no rutas. El contenido ya está
 
 ```tsx
 // ✗ INCORRECTO — dispara RSC fetch, re-render completo, re-hidratación
-// Cuesta 750-1350ms en producción
 router.push(`/write/${writingId}`)
 
 // ✓ CORRECTO — cambio de estado local, lectura de localDB, URL como espejo
-// Cuesta < 200ms
+// Mantiene la transición local fuera de una navegación y una hidratación completas.
 setActiveWritingId(writingId)  // estado local del editor
 // Opcional: actualizar URL sin disparar navegación
 window.history.replaceState(null, '', `/write/${writingId}`)
@@ -477,7 +415,7 @@ function handlePaste(e) {
   const id = crypto.randomUUID()      // bloquea el hilo principal
   localDB.writings.save({ id, ... })  // IndexedDB transaction en paste
   setWritingId(id)
-  // El usuario ve un freeze de 50-200ms en el paste.
+  // El usuario puede percibir un bloqueo durante el paste.
 }
 
 // ✓ CORRECTO — identidad creada antes de que el usuario interactúe
@@ -741,13 +679,13 @@ const editor = useEditor({
   onUpdate: ({ editor }) => {
     // 1. Guarda local primero — inmediato, sin debounce
     saveToLocal({ body_json: editor.getJSON(), body_text: editor.getText() })
-    // 2. Encola sync remoto — background, debounce 1500ms
-    debouncedSyncRemote(1500)
+    // 2. Encola sync remoto — background, con la política del contrato de sync
+    debouncedSyncRemote()
   }
 })
 ```
 
-Auto-save local: inmediato. Sync remoto: debounce 1500ms. Sin indicador agresivo — solo estado sutil en statusbar.
+Auto-save local: inmediato. Sync remoto: background y coalescido según `odessay-sync.md`. Sin indicador agresivo — solo estado sutil en statusbar.
 
 **Extensión excluida intencionalmente:** `Underline` (Markdown no lo soporta — rompería el round-trip). `Strike`, `Highlight` y `Table` están activas (con shortcuts de teclado deshabilitados en Strike/Highlight). El inventario canónico de extensiones es `lib/editor/extensions.ts` — este listado y el de `odessay-prosemirror-tiptap.md` deben coincidir con él. No agregar ni quitar extensiones sin revisar `odessay-editor.md`.
 
@@ -929,10 +867,8 @@ Este checklist cubre lo específico de frontend durante la implementación. Ante
 - [ ] ¿El estado está segmentado en documento / UI / sync / AI?
 - [ ] ¿Los paneles secundarios se cargan con lazy load?
 - [ ] ¿Ninguna operación de AI bloquea el flujo de escritura?
-- [ ] Si el issue toca el critical path, ¿hay trace before/after en `artifacts/perf/`?
-- [ ] ¿`npm run ops:perf:gate` pasa para el trace `after` sin `required_failures`?
-- [ ] ¿La vista renderiza desde `localDB` antes de cualquier `await` remoto?
-- [ ] ¿El enriquecimiento de datos (shares, metadata, estado de sync) ocurre en background después del render inicial?
+- [ ] Si el issue activa performance, ¿incluye el `Performance Architecture Contract` y la evidencia que ese contrato seleccionó?
+- [ ] ¿La implementación conserva el owner de hydration y no agrega fetches/listeners duplicados?
 
 ### Nomenclatura
 - [ ] Cada módulo tiene `id`, `data-page`, `data-section`, `data-testid`

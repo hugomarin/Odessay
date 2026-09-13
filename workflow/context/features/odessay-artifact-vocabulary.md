@@ -335,7 +335,7 @@ documentado en `ODE-474`/`ODE-475`/`ODE-476`): persistencia a través de
 reinicio/rehidratación, la matriz de paridad web/desktop ejecutada en vivo
 (se argumenta paridad estática por contrato compartido + suites espejadas,
 no por una sesión lado a lado), las capturas de aceptación por superficie a
-1440/1100/768, y la captura del Performance Contract
+1440/1100/768, y la evidencia seleccionada por el `Performance Architecture Contract`
 (`capture-editor-trace.mjs`, `ops:network:gate`). El archivo de evidencia
 detalla los pasos exactos que le faltan a un humano con sesión real.
 

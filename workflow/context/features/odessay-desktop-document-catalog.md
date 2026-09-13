@@ -585,7 +585,7 @@ Nunca registrar contenido del documento, tokens ni rutas completas en telemetrí
 4. El DMG de producción se valida; `tauri dev` no basta.
 5. No se elimina IndexedDB desktop mientras existan mutaciones pendientes no cosechadas.
 6. No se elimina `.odessay/index.json` ni se reclasifica como caché reconstruible de UUID local-only.
-7. Performance Contract requerido para watcher fan-out, arranque y consultas del catálogo.
+7. Los cambios de watcher fan-out, arranque o consultas del catálogo consultan `.agents/skills/skill-performance`; este documento conserva únicamente los invariantes del catálogo y no define budgets ni evidencia transversal.
 8. UX Contract requerido para confirmación de BindingRoot, estados rebuilding/ambiguous/conflict y paridad Desk/Workspace.
 
 ## Criterios de aceptación

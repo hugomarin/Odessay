@@ -29,7 +29,7 @@ async function withTimeout<T>(
  * Used exclusively in the desktop runtime (Tauri). Supabase's createClient
  * accepts async storage adapters, so every auth token write/read/delete goes through
  * the native store instead of localStorage. Entries are persisted to
- * `$APPDATA/odessay/secure.dat`.
+ * `$APPDATA/com.z9ne.odessay/secure.dat` for the current bundle identifier.
  *
  * Invariants (per ODE-219 Architecture Contract):
  *   - tokens are NEVER written to localStorage or any plain-text disk location

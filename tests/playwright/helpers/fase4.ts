@@ -24,8 +24,6 @@ export const FASE4_PLAYWRIGHT_ASSET_INVENTORY = {
   ],
   discardForClosureFlow: [
     "tests/playwright/ode-126-new-writing-fix.e2e.ts",
-    "scripts/capture-editor-trace.mjs",
-    "scripts/capture-reading-trace.mjs",
   ],
 } as const
 

@@ -50,11 +50,13 @@ El audit de planning debe revisar, como mínimo:
 5. Si la fase toca desktop, multi-runtime, shared core, save path, sync, parser/serializer o services:
    - `.agents/skills/skill-architecture/SKILL.md`
    - la secuencia `odessay-desktop-*`
+6. Si los issues introducen datos, fetches, hydration, listeners, procesos bulk, trabajo background o cambios de carga:
+   - `.agents/skills/skill-performance/SKILL.md`
 
 Si ya existen issues o briefs en Linear, cargar también:
 
-6. los issues de la fase
-7. sus Issue Briefs completos
+7. los issues de la fase
+8. sus Issue Briefs completos
 
 ---
 
@@ -101,6 +103,16 @@ Por cada issue:
 - ¿El `Proof of Work`/acceptance está alineado con el DoD?
 - ¿Incluye `Architecture Contract` cuando aplica?
 - ¿Incluye `Presentation Contract` cuando aplica?
+- ¿Incluye `Performance Architecture Contract` cuando el issue puede alterar carga o costo de crecimiento?
+
+### 7. Acumulación sistémica
+
+- ¿El issue agrega una operación que ya existe en otro consumidor?
+- ¿El costo crece por documento, fila, componente o evento sin una razón explícita?
+- ¿La fase está agregando funcionalidades que individualmente parecen pequeñas pero juntas cargan el mismo camino crítico?
+- ¿El issue llega a una superficie global o queda aislado en helpers, servicios o tests?
+- ¿Existe un owner único para hydration, discovery, sync o suscripciones?
+- ¿La estrategia de batch, snapshot, delta, cache o coalescing está definida antes de BUILD?
 
 ---
 
@@ -114,6 +126,7 @@ Un audit debe marcar `FAIL` si ocurre cualquiera de estas condiciones:
 - un issue arquitectónico no tiene `Architecture Contract`
 - la secuencia obliga a BUILD a improvisar contracts o boundaries
 - hay huecos críticos que moverían decisiones estructurales a mitad de BUILD
+- un issue activado por performance no tiene `Performance Architecture Contract` o deja sin resolver su impacto global
 
 ---
 

@@ -485,7 +485,7 @@ Implementaciones:
 
 macOS Keychain asocia los ACL de cada entry con la code signature del proceso que lo creó. Las apps ad-hoc no tienen identidad verificable entre ejecuciones: el write funciona y el entry aparece en Keychain Access, pero el read desde el siguiente proceso falla silenciosamente (devuelve `NoEntry`).
 
-**Solución para distribución ad-hoc:** `tauri-plugin-store` — JSON file en el app data dir (`$APPDATA/odessay/secure.dat`). No es secure storage del SO, pero persiste confiablemente sin depender de ACL. Mantiene el mismo contrato de adapter (`getItem/setItem/removeItem`) para que el switch a Keychain sea drop-in cuando llegue el Developer ID.
+**Solución para distribución ad-hoc:** `tauri-plugin-store` — JSON file en el app data dir (`$APPDATA/com.z9ne.odessay/secure.dat`, según el bundle identifier actual). No es secure storage del SO, pero persiste confiablemente sin depender de ACL. Mantiene el mismo contrato de adapter (`getItem/setItem/removeItem`) para que el switch a Keychain sea drop-in cuando llegue el Developer ID.
 
 #### Apps firmadas con Apple Developer ID
 

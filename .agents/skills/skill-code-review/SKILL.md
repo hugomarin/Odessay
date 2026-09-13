@@ -46,39 +46,19 @@ Sin estos tres outputs en el PR, el review no empieza.
 
 ---
 
-## Contrato de performance — criterio bloqueante
+## Performance Architecture — criterio bloqueante cuando aplica
 
-Todo PR debe declarar el estado del contrato de performance del issue:
+La fuente de reglas de performance es `.agents/skills/skill-performance/SKILL.md`. El review no repite sus patrones, umbrales ni niveles de evidencia.
 
-- `required`: toca el critical path de interacción (editor/input/click/paste, auto-save, sync o AI en escritura).
-- `not required`: no toca runtime de interacción. Debe incluir justificación explícita.
+Si el cambio activa ese skill, el revisor debe verificar:
 
-Si el contrato es `required`, el PR debe adjuntar evidencia obligatoria:
+- existe un `Performance Architecture Contract` con outcome sistémico, unidad de escala, consumidores, estrategia de carga, costo esperado y riesgo de crecimiento;
+- la implementación conserva el patrón elegido y no introduce trabajo por elemento, hydration, listener, query o fuente de verdad duplicada sin justificación;
+- la evidencia adjunta corresponde al riesgo real y al mismo runtime, volumen, flags y artefacto que se entrega;
+- cuando el contrato selecciona un instrumento (`ops:perf:gate`, `ops:network:gate`, fixture de escala o bundle desktop), su resultado está presente y es interpretable;
+- una capability desktop no se considera validada solo por `tauri dev` o mocks del navegador.
 
-```bash
-npm run ops:perf:capture -- --output artifacts/perf/editor-trace.json.gz
-npm run ops:perf:gate -- --trace artifacts/perf/editor-trace.json.gz
-OPS_PERF_TRACE_PATH=artifacts/perf/editor-trace.json.gz npm run ops:delivery:gate
-```
-
-Mínimo esperado en la descripción del PR:
-- output de `ops:perf:gate` con `required_failures: 0`;
-- output de `ops:delivery:gate` usando `OPS_PERF_TRACE_PATH`;
-- rutas de artefactos generados en `artifacts/perf/` (trace, metrics, report).
-
-Si el contrato es `not required`, el PR debe incluir una sección corta: "Performance contract: not required — {justificación}".
-
-### Proof of work de red
-
-Si el PR toca sync, bootstrap, hidratacion remota, listados de alto trafico o listeners/subscriptions de runtime, debe incluir evidencia de waterfall con el instrumento versionado:
-
-```bash
-npm run ops:network:gate -- --har artifacts/perf/network.har --report artifacts/perf/network-report.json --metrics artifacts/perf/network-metrics.json
-```
-
-El revisor debe exigir `required_failures: 0` en el reporte cuando el issue declare presupuesto de red requerido. Si el PR declara que no aplica, la justificacion debe explicar por que el cambio no puede alterar requests, bytes, duplicados o listener churn.
-
-Los HAR crudos pueden contener cookies, tokens, IDs privados o URLs sensibles. Si la captura no es segura para adjuntar, el PR debe procesarla localmente con `--redact` y adjuntar solo `report.json`, `metrics.json` y output de consola sanitizados. Si no se debe exportar HAR, el PR puede usar `--resources <resource-timing.json> --redact` con un export local de Resource Timing. El revisor no debe exigir el HAR crudo ni el resource export raw cuando los artefactos sanitizados prueban `required_failures: 0`.
+Si el cambio no activa el skill, no exigir una sección de performance artificial. Si lo activa y falta el contrato, el review se bloquea.
 
 ---
 
@@ -143,10 +123,9 @@ Si el issue requería ese contrato y no existe, está incompleto o el diff lo co
 - [ ] ¿No se agregaron dependencias pesadas sin justificación?
 - [ ] ¿Los paneles secundarios nuevos se cargan con lazy load?
 - [ ] ¿La app puede abrir y editar documentos sin conexión a red?
-- [ ] Si el PR toca sync/bootstrap/listados/listeners, ¿adjunta HAR + output de `ops:network:gate` o justifica no aplicabilidad?
-- [ ] ¿El PR declara `Performance Contract` (`required` o `not required`) con justificación?
-- [ ] Si es `required`, ¿hay trace + gate report + delivery gate con `OPS_PERF_TRACE_PATH`?
-- [ ] Si es `required`, ¿`required_failures` es `0` y no hay métricas requeridas faltantes?
+- [ ] Si el cambio activa `skill-performance`, ¿el `Performance Architecture Contract` está completo?
+- [ ] ¿El review considera consumidores existentes, forma de carga, crecimiento y acumulación global?
+- [ ] ¿La evidencia seleccionada por el contrato corresponde al riesgo y al runtime entregado?
 
 ### Consistencia transicional — verificar tercero (si el PR toca transiciones críticas)
 - [ ] ¿Cada transición crítica tiene un único owner? No hay `router.push()` + `setState` simultáneos para el mismo cambio.
@@ -240,9 +219,9 @@ Si alguno de estos checks falla → **rechazar**. Son bloqueantes porque los bug
 - Se alteró el contrato tipográfico sin actualizar/verificar `.agents/skills/skill-design/tipografia.md`.
 - Se rompió el overflow interno de tablas grandes.
 - Se agregaron dependencias pesadas sin justificación.
-- El issue exige `Performance Contract: required` y no hay trace/evidencia objetiva.
-- `check-performance-gate` reporta `required_failures > 0`.
-- Se marcó `Performance Contract: not required` sin justificación explícita.
+- El issue activa `skill-performance` y no tiene `Performance Architecture Contract`.
+- La evidencia no corresponde al patrón de carga, volumen, flags, runtime o artefacto entregado.
+- Se usa una métrica o gate que no representa el riesgo arquitectónico principal como sustituto de una revisión de performance.
 - No hay descripción del PR o no referencia el issue.
 - Se operó contra producción.
 - Usar `router.push()` para cambios de estado interno dentro de una vista funcional (tabs, filtros, paneles).
@@ -369,7 +348,7 @@ El score del veredicto debe coincidir exactamente con este cálculo. Si no se mu
 **Ajustes especiales:**
 - P0 activo → score máximo 4.0 (rechazado).
 - P1 en critical path del editor → score máximo 6.9 (cambios requeridos).
-- Performance gate con `required_failures > 0` → score máximo 5.0.
+- El contrato de performance requerido o la evidencia seleccionada por `skill-performance` falla → score máximo 5.0.
 - Sin proof of work (typecheck/lint/tests) → score = 0.0.
 - Findings investigados y descartados como falso positivo → NO contar en el score.
 
@@ -427,14 +406,13 @@ Antes de hacer cualquier cosa, el agente debe leer el estado del issue en Linear
 
 Si falta alguno de los tres → **rechazar**. No hay nada que revisar sin proof of work.
 
-**2. Contrato de performance resuelto**
-- ¿El issue/PR declara `Performance Contract` como `required` o `not required`?
-- Si es `required`: ¿existe trace reproducible (`artifacts/perf/*.json.gz`)?
-- Si es `required`: ¿`npm run ops:perf:gate -- --trace <trace>` pasa sin `required_failures`?
-- Si es `required`: ¿`OPS_PERF_TRACE_PATH=<trace> npm run ops:delivery:gate` está en verde?
-- Si es `not required`: ¿la justificación está escrita y es coherente con el scope?
+**2. Performance Architecture resuelta cuando aplica**
+- ¿El issue activa `.agents/skills/skill-performance/SKILL.md`?
+- Si aplica: ¿existe el `Performance Architecture Contract`?
+- ¿La solución evita duplicación y tiene una forma de costo justificada al crecer?
+- ¿La evidencia seleccionada por el contrato está adjunta y corresponde al cambio real?
 
-Si falla cualquiera de estos puntos → **rechazar**.
+Si aplica y falta cualquiera de estos puntos → **rechazar**.
 
 **3. Trazabilidad Linear ↔ GitHub**
 - ¿El issue en Linear tiene un comentario del agente implementador con: link al PR + commit SHA + resultado de validaciones?
