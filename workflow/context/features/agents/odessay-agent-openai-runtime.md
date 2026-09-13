@@ -28,9 +28,9 @@ Usar las capacidades nativas de Responses detrás de `AIService`. El adapter tra
 | Inspeccionar llamadas | `store: true`, Response ID y Logs → Responses | Correlacionar acción, etapa e invocación con cada respuesta |
 | Salidas estructuradas | Structured Outputs e Items de Responses | Validar schema, referencias de evidencia y resultado de producto |
 | Solicitudes de tools cuando se incorporen | `function_call` / `function_call_output` y `call_id` | Validar capacidades y aprobaciones; ejecutar la tool local autorizada |
-| Continuidad explícita de Ask, si se implementa | `previous_response_id` o Conversations | Mantener el identificador en la sesión en memoria y renovar contexto pertinente |
+| Continuidad explícita de Ask | `previous_response_id` | Mantener el identificador en la sesión en memoria y reenviar el System Prompt/contexto pertinente; invalidar la cadena si cambia el alcance |
 | Generación larga, ODE-514 | `background: true`, retrieve y cancel | Solicitar/consultar por el ID conocido, mostrar estado y validar el resultado |
-| Contexto prolongado, si llega a necesitarse | Compaction nativa | Preservar su ventana de Items opacos; resolver evidencia vigente desde el catálogo |
+| Contexto prolongado | `context_management` + `compact_threshold` nativos | Preservar su ventana de Items opacos; resolver evidencia vigente desde el catálogo |
 
 Responses usa Items distintos para mensajes y llamadas de herramientas; conservarlos en el adapter permite procesar la respuesta sin reducir el protocolo a texto. Las tools locales requieren que Odessay ejecute la operación y devuelva su resultado; OpenAI no recibe acceso implícito al filesystem. [Responses](https://developers.openai.com/api/docs/guides/migrate-to-responses).
 
@@ -69,13 +69,13 @@ La detección de Broken links/Archive es determinista, pero su presentación act
 - **Contracts touched:** `AIService`, resultado/usage del Workspace Agent y receipt AI en memoria. El receipt de tools aprobadas conserva su significado y se correlaciona, no se sustituye.
 - **Allowed dependencies:** UI → servicios de aplicación → `AIService` → adapter OpenAI; tools → `DocumentService`/`DocumentCatalog`.
 - **Forbidden dependencies:** UI → OpenAI directo; proveedor → filesystem; historial remoto → identidad o contenido canónico.
-- **Invariantes:** evidencia acotada, aprobación por mutación, `.md` canónico, guardado `.md` atómico → manifest atómico → SQLite + enqueue → sync cloud. Auth habilita inferencia cloud, no existencia documental local.
+- **Invariantes:** alcance explícito, body completo de cada fuente confirmada, aprobación por mutación, `.md` canónico, guardado `.md` atómico → manifest atómico → SQLite + enqueue → sync cloud. Auth habilita inferencia cloud, no existencia documental local.
 - **Required docs:** `odessay-adr-identidad.md`, `odessay-desktop-document-catalog.md`, `odessay-desktop-target-architecture.md` y los contratos de contexto/ejecución/cache de este directorio.
 
 ODE-509/510/511 son los owners del cambio semántico: ODE-509 produce el veredicto de relaciones, ODE-510 gobierna la cola de contradicciones y ODE-511 sintetiza un documento nuevo con revisión y aprobación explícitas. Activar almacenamiento no cambia el resultado del matcher ni sustituye la validación de evidencia. La aceptación semántica usa OpenAI con el modelo configurado, evidencia y pruebas de outcome.
 
 ## Actualización de alcance — 2026-09-13
 
-La documentación histórica de este issue hablaba de compaction y continuidad como capacidades futuras. La implementación vigente las usa para el Workspace Agent: `previous_response_id` conserva los turnos de Ask y `context_management` permite compactaciones repetidas cuando el deployment lo configura.
+La documentación histórica de este issue hablaba de compaction y continuidad como capacidades futuras. La implementación vigente las usa para el Workspace Agent: `previous_response_id` conserva los turnos de Ask y `context_management` permite compactaciones repetidas cuando el deployment lo configura. `/responses/compact` queda como opción para futuros flujos stateless donde Odessay sea dueño del input completo; no es un requisito adicional del alcance actual.
 
 El alcance de las operaciones semánticas tampoco se define por un máximo fijo de documentos ni por extractos de 720 caracteres. Contradictions y Merge reciben el markdown completo de los documentos explícitamente seleccionados; los chunks solo dividen el transporte. La ventana real del modelo y el planner de capacidad determinan el procesamiento directo o staged. El contrato detallado y los criterios de aceptación viven en `odessay-agent-conversation-compaction.md`.

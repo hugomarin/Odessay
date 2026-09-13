@@ -157,11 +157,11 @@ Abrir un documento citado es navegación/preview de la UI. No es una mutation to
 
 ## Estado actual frente al objetivo
 
-El código actual ya tiene una capa de tools autorizadas, selección acotada, lectura de evidencia y respuestas de chat. Ya formalizados como código real (no solo diseño):
+El código actual ya tiene una capa de tools autorizadas, selección explícita, lectura de evidencia y respuestas de chat. Ya formalizados como código real (no solo diseño):
 
 - `AgentInvocation`, `RuntimeContext`, `LocationContext` y `ContextEnvelope` como contratos compartidos — `lib/agent/context-envelope.ts`, consumidos por `askAgent`/`suggestClassification` en el panel.
 - Cache semántica y ledger de consumo — `lib/services/context/` (ODE-501).
-- Selección lazy del documento enfocado: no se lee su cuerpo por defecto; se ofrece como referencia (`focusedDocumentId`) y solo se materializa en una segunda ronda acotada si el modelo la solicita explícitamente (`lib/services/workspace-agent-service.ts`, `askAgent` y `askAboutDocument`). Cubre el caso más frecuente (Writing enfocado, con o sin Workspace visible), no una clasificación de intención general.
+- Selección lazy del documento enfocado: no se lee su cuerpo por defecto; se ofrece como referencia (`focusedDocumentId`) y solo se materializa después de que la persona lo confirme como alcance (`lib/services/workspace-agent-service.ts`, `askAgent` y `askAboutDocument`). El foco es una señal de ubicación, no permiso para incorporar una fuente nueva.
 
 La implementación semántica vigente agrega una regla distinta para el alcance explícito: cuando la persona selecciona o adjunta documentos para una acción, el servicio lee y envía el markdown completo de cada fuente. Los extractos iniciales solo ayudan a generar candidatos y provenance; no sustituyen el cuerpo. El planner de capacidad puede dividir ese conjunto en etapas sin descartar contenido.
 
@@ -170,7 +170,7 @@ Todavía no formaliza completamente:
 - Un Intent Router formal que clasifique la intención *antes* de decidir qué leer — hoy esa decisión lazy la toma el propio modelo dentro de la misma llamada de ask, no un paso previo separado y determinista.
 - registry común de tools/workflows;
 - `AgentResponse` reutilizable entre Card y Modal;
-- Workflow, Broken links y Archive no seleccionan documentos específicos — operan sobre todo el Workspace vía el servicio directamente, sin un `ContextEnvelope` que envolver. Contradictions y Merge sí seleccionan documentos y cargan de inmediato el cuerpo completo de cada fuente; ODE-515 y ODE-511 lo entregan a Responses mediante el loop común y pueden pedir evidencia adicional versionada para confirmar rangos, sin convertir esa lectura adicional en una sustitución del contexto inicial.
+- Workflow, Broken links y Archive no seleccionan documentos específicos — operan sobre todo el Workspace vía el servicio directamente, sin un `ContextEnvelope` semántico que envolver. Contradictions, Merge y Classification sí exigen selección/confirmación y cargan el cuerpo completo de cada fuente; ODE-515 y ODE-511 lo entregan a Responses mediante el loop común y pueden pedir rangos adicionales solo dentro de fuentes ya confirmadas, sin convertir esa lectura en una sustitución del contexto inicial. Las etapas staged se calculan por capacidad física, no por un máximo fijo de documentos.
 
 La migración debe introducir esos contratos sin ampliar el camino legacy basado únicamente en `workspaceRootPath`.
 

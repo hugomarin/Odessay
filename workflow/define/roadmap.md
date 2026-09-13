@@ -567,7 +567,7 @@ Referencia: `workflow/define/dod-fase-9.md`, `workflow/context/features/odessay-
 
 ## Fase 10 — Artifact Studio: la superficie
 
-Al terminar esta fase: el producto se ve, se nombra y se comporta como Artifact Studio. Dos capas visuales explícitas —producto y marketing— con tokens separados por scope, un shell de dos capas, un inventario cerrado de overlays, una marca regenerada y un solo vocabulario. La arquitectura documental cerrada en Fase 9 no se mueve: esta fase toca presentación.
+Al terminar esta fase: el producto se ve, se nombra y se comporta como Artifact Studio. Dos capas visuales explícitas —producto y marketing— con tokens separados por scope, un shell de dos capas, un inventario cerrado de overlays, una marca regenerada y un solo vocabulario. La arquitectura documental cerrada en Fase 9 no se mueve. Antes del gate, la fase cierra también los ocho hallazgos bloqueantes de la revisión de seguridad del 2026-09-05.
 
 DoD formal: `workflow/define/dod-fase-10.md`.
 
@@ -588,6 +588,7 @@ Artifact Studio tiene una identidad visual única y verificable en todas sus sup
 - los tipos y estados son vocabulario del usuario, no listas cerradas en el código: se crean, se editan, se ocultan, se propagan sin recargar, sobreviven al reinicio en web y desktop, y ningún componente tiene una versión local del catálogo;
 - la landing existe en `app/(marketing)` y argumenta el problema antes que la solución;
 - ninguna ruta de app paga por la capa de marketing —ni una fuente, ni un token, ni un píxel.
+- no quedan abiertos los ocho hallazgos de seguridad confirmados el 2026-09-05: previews e invitaciones sin autorización suficiente, IDOR de anotaciones, SSRF de exportación, assets archivados accesibles, consumo AI sin cuota, open redirect y dependencias vulnerables.
 
 **Temas que entran en esta fase**
 
@@ -600,6 +601,7 @@ Artifact Studio tiene una identidad visual única y verificable en todas sus sup
 - Settings › Workflows, precedido de un design pass que responda sus preguntas abiertas;
 - conversión de artifact types y writing statuses en vocabularios configurables por el usuario: un modelo de persistencia y un servicio compartidos, un solo catálogo en el cliente, y Settings encendido;
 - capa de marketing completa: tokens scoped, primitivas, once secciones, gráficos y cutover de la home.
+- hardening de seguridad de adapters web/cloud, políticas RLS y dependencias, sin cambiar el contrato documental de Fase 9.
 
 **Temas que no son objetivo de esta fase**
 
@@ -621,7 +623,8 @@ Artifact Studio tiene una identidad visual única y verificable en todas sus sup
 8. **M7 — cierre de producto:** estados vacíos, barrido de vocabulario, design pass de Workflows y su implementación.
 9. **M8 — marketing:** tokens scoped y grupo de rutas, primitivas, secciones estáticas, gráficos y cutover de la home.
 10. **M10 — vocabulario configurable:** esquema y servicio (`ODE-472`), persistencia y reconciliación desktop (`ODE-473`), catálogo único en el cliente (`ODE-474`), Settings encendido (`ODE-475`), consumidores repintados (`ODE-476`) y matriz de evidencia cross-runtime (`ODE-477`). Corre en paralelo a M8; `ODE-474` es `critical-path` de todo lo visible del bloque.
-11. **M9 — gate:** matriz de evidencia del DoD y aceptación explícita del dueño.
+11. **M11 — cierre de seguridad:** corregir los ocho hallazgos confirmados el 2026-09-05, convertir sus pruebas adversariales en regresiones y validar ACL reales en staging.
+12. **M9 — gate:** matriz de evidencia del DoD y aceptación explícita del dueño; permanece bloqueado hasta cerrar M11.
 
 Fase 10 corre en paralelo al cierre de Fase 9: `ODE-372` sigue siendo el gate DoD de esa fase y no se absorbe aquí.
 
@@ -631,7 +634,7 @@ Referencia: `workflow/define/dod-fase-10.md`, `docs/design/migration-plan.md`, `
 
 ## Fase 11 — Artifact Studio: Agente de Workspace
 
-Al terminar esta fase: Artifact Studio tiene un agente invocado bajo demanda que expone la capa de contexto ya construida en fases anteriores —catálogo, anotaciones, vocabulary configurable, collections, learned words— y que, con autorización explícita del usuario, puede leer, escribir, mover, editar y eliminar documentos del workspace. Vive en el entorno local; esta fase no construye ni depende de una versión web/cloud del agente. Fase 10 no se toca: el vocabulario y el shell visual que esa fase entregó son insumo de esta, no se rediseñan.
+Al terminar esta fase: Artifact Studio tiene un agente invocado bajo demanda que expone la capa de contexto ya construida en fases anteriores —catálogo, anotaciones, vocabulary configurable, collections, learned words— y que, con autorización explícita del usuario, puede leer, escribir, mover, editar y eliminar documentos del workspace. Vive en el entorno local y usa OpenAI Responses como adapter de inferencia; esta fase no construye un agente web/cloud independiente. El alcance documental es explícito: los documentos seleccionados o adjuntos confirmados se envían con su `.md` completo; los documentos mencionados fuera del alcance requieren confirmación. Fase 10 no se toca: el vocabulario y el shell visual que esa fase entregó son insumo de esta, no se rediseñan.
 
 DoD formal: `workflow/define/dod-fase-11.md`.
 
@@ -646,6 +649,9 @@ El agente resuelve enlaces rotos, sugiere tipo/estatus, señala candidatos a arc
 - el agente lee anotaciones, vocabulary, collections y learned words tal como existen hoy, sin duplicar ninguno en un almacén paralelo;
 - `workflow.md` puede ser redactado por el propio agente a partir del contexto existente del workspace y funciona como el manual de operación del agente (análogo a un CLAUDE.md): sus instrucciones de operación e intención del workspace acompañan siempre la invocación del agente — validadas por versión/hash y con techo del presupuesto de contexto —, mientras que el contenido ejecutable de workflows se carga mediante evidencia bajo demanda cuando la intención lo requiere (ejecutar el workflow debe validar y leer lo necesario antes de proponer una mutación);
 - cada acción individual (enlaces rotos, tipo/estatus, archivar, contradicciones) cita evidencia real antes de ofrecer una escritura, y ninguna se ejecuta sin que el usuario la vea primero;
+- Ask conserva continuidad por turnos con `previous_response_id` únicamente cuando no cambian workspace, acción, selección, versión ni hash; el System Prompt se reenvía y las compactaciones preservan Items opacos;
+- Contradictions puede detectar contradicciones internas de un documento y entre documentos. Merge requiere al menos dos fuentes distintas, no un máximo fijo de cuatro o seis;
+- cuando el alcance excede la ventana física, el agente calcula etapas lossless o propone dividir la carga. Nunca analiza silenciosamente un subconjunto ni usa extractos como sustituto del `.md` completo;
 - revisar un hallazgo ensancha el panel del agente en el lugar — nunca aparece un modal o sheet que cubra Desk, Studio o Workspace detrás;
 - el mismo componente se monta en Studio (`editor-right-panel-tabs.tsx`) y en Workspace (`workspace-detail.tsx`), diferenciado solo por scope;
 - arrastrar un archivo o una carpeta hacia el panel del agente lo acumula como contexto adjunto antes de enviar;
@@ -660,6 +666,7 @@ El agente resuelve enlaces rotos, sugiere tipo/estatus, señala candidatos a arc
 - acción "sugerir tipo y estatus" contra el catálogo de vocabulary vigente;
 - acción "candidatos a archivar" con razón explícita citada;
 - acción "contradicciones y fusión", incluyendo el patrón de cola cuando hay más de un hallazgo;
+- contrato transversal de conversación, selección explícita, `ContextLedger`, compactación y procesamiento staged para cargas grandes;
 - montaje dual del panel del agente en Studio y Workspace, con drag-and-drop de archivos y carpetas como contexto adjunto;
 - traducción del wireframe interactivo a los tokens, tipografía e iconografía reales de Artifact Studio.
 

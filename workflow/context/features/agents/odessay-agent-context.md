@@ -17,9 +17,9 @@ Evidence Bundle
   = qué contexto se consumió realmente
 ```
 
-Tener cien documentos disponibles en un Workspace no implica enviar cien documentos al LLM. La adquisición debe ser lazy y depender de la intención de la solicitud.
+Tener cien documentos disponibles en un Workspace no implica enviar cien documentos al LLM. La adquisición debe ser explícita para la acción y proporcional a la intención de la solicitud. La selección o adjunto autoriza los cuerpos de esos documentos; la disponibilidad del catálogo, el foco y la similitud solo sirven para explicar opciones y nunca autorizan una lectura implícita.
 
-Ser lazy puede costar una ronda adicional al modelo en el turno puntual que sí necesita evidencia — que quien decide si hace falta esa ronda sea el propio consumidor (el modelo, viendo la pregunta) y no un clasificador previo que corra siempre, es la razón de que el costo agregado de una sesión baje: la mayoría de los turnos no necesitan evidencia y no pagan nada, en vez de que todos paguen el costo completo por si acaso.
+La adquisición bajo demanda sigue siendo útil para una pregunta sin alcance documental: permite pedir primero el alcance sin leer cuerpos. No significa enviar extractos como sustituto de los documentos seleccionados ni dejar que el modelo incorpore fuentes nuevas por su cuenta. Si una fuente adicional hace falta, la aplicación pide confirmación y reconstruye el contexto con ese nuevo alcance.
 
 **Excepción a lazy — instrucciones de operación de `workflow.md` (ODE-504):** el archivo cumple la función de manual de operación del agente (análogo a un CLAUDE.md). Su sección de instrucciones — cómo debe operar el agente y la intención del workspace — es contexto ambiental de la invocación y no se adquiere bajo demanda: viaja siempre con su descriptor (versión/hash) para validar frescura y consume presupuesto de contexto de ODE-501 como cualquier fuente. El resto del cuerpo (contenido ejecutable de workflows) sí sigue siendo evidencia bajo demanda.
 
@@ -111,7 +111,7 @@ No todo el envelope se envía al modelo. El contexto operativo sirve para resolv
 
 ```mermaid
 flowchart TD
-  EXPLICIT["1. Referencias explícitas<br/>adjuntos y documentos mencionados"] --> COMPOSE
+  EXPLICIT["1. Selección explícita<br/>adjuntos y documentos confirmados"] --> COMPOSE
   LIVE["2. Selección y texto vivo<br/>liveSnapshot"] --> COMPOSE
   FOCUS["3. Documento enfocado<br/>Writing actual"] --> COMPOSE
   WORKSPACE["4. Workspace visible<br/>contexto contenedor"] --> COMPOSE
@@ -143,7 +143,7 @@ Ejemplos:
 - En un Writing sin Workspace visible pero con `BindingRoot`, el documento puede seguir teniendo contexto local operativo.
 - Un adjunto explícito tiene prioridad sobre el foco vivo.
 
-**Contradicción conocida entre este orden y el código actual:** `deriveAvailableSources` (`lib/agent/context-envelope.ts`) sigue listando el documento enfocado *antes* que los adjuntos explícitos — el orden inverso al declarado arriba. Para `ask` esto dejó de importar en la práctica: el documento enfocado no compite por ese orden porque se excluye por completo de la lectura inmediata (ver "Estado de la adquisición lazy" abajo). Para Classify, donde el documento enfocado sí se lee de inmediato junto con los adjuntos, el orden real sigue siendo el incorrecto — no se corrigió deliberadamente, para no cambiar comportamiento de producción sin poder probarlo en un entorno con IA en vivo. Sigue siendo una discrepancia real entre este documento y el código para ese caso.
+El documento enfocado es información de ubicación, no una autorización adicional. `deriveAvailableSources` puede exponerlo como referencia útil, pero la aplicación debe resolver primero la selección/adjuntos confirmados y negar cualquier body de una fuente no confirmada. Si el foco está incluido explícitamente, se procesa como parte del alcance; si no, no compite por prioridad ni entra al request.
 
 ## Adquisición bajo demanda
 
@@ -178,15 +178,16 @@ type ContextAcquisitionPlan = {
 }
 ```
 
-Orden por defecto:
+Orden de resolución para una acción documental:
 
 1. texto explícito de la pregunta;
-2. selección actual;
-3. documento enfocado;
-4. metadata de documentos;
-5. secciones o chunks relevantes;
-6. otros documentos del Workspace;
-7. recuperación adicional limitada.
+2. selección o adjuntos confirmados;
+3. snapshot/version/hash de esas fuentes;
+4. cuerpos `.md` completos, en directo o por etapas según capacidad;
+5. rangos adicionales únicamente dentro de fuentes ya confirmadas;
+6. metadata del catálogo para explicar una solicitud de alcance o una ambigüedad.
+
+Una fuente nueva mencionada en lenguaje natural no pasa automáticamente del catálogo al body: primero se muestra la posible coincidencia y se solicita confirmación.
 
 No todos los turnos avanzan hasta el último nivel.
 
@@ -197,12 +198,12 @@ No todos los turnos avanzan hasta el último nivel.
 | `Hola` | conversación directa | 0 |
 | `Explícame esta idea` con la idea en el mensaje | generación/conversación | 0 |
 | `Ayúdame a redactar un párrafo` sobre la selección actual | generación con `liveSnapshot` | 0 cuerpos externos |
-| `Resúmeme este documento` | lectura del documento enfocado o adjunto | 1, salvo ampliación |
-| `¿Qué temas se repiten en este Workspace?` | lectura escalonada y comparación | según plan y presupuesto |
+| `Resúmeme este documento` | confirmar el documento si no está seleccionado; después leer su `.md` completo | 1 fuente confirmada |
+| `¿Qué temas se repiten en este Workspace?` | pedir alcance o usar la selección confirmada y procesarla por etapas | según capacidad física |
 
 Para `Hola`, el agente puede saber que está en un Workspace y que corre en desktop, pero no debe inicializar ni leer documentos solo para responder.
 
-Para `Resúmeme este documento`, la fila dice "1" documento consumido — eso describe el resultado final, no la mecánica: cuando el documento en cuestión es el enfocado (no un adjunto explícito), la implementación actual hace 1 llamada de referencia sin cuerpo y, si el modelo lo pide de vuelta, 1 llamada adicional con el cuerpo — 2 llamadas al modelo por 1 documento consumido, nunca más. Ver "Estado de la adquisición lazy" arriba.
+Para `Resúmeme este documento`, la aplicación confirma el alcance si la frase no identifica de forma inequívoca una selección existente. Una vez confirmado, la fuente completa forma parte del `ContextLedger`; si no cabe en una sola llamada, se procesa por etapas lossless. No se presenta un resumen basado únicamente en metadata o extractos parciales.
 
 ## Reconstrucción e invalidación
 
@@ -255,27 +256,19 @@ No debe:
 - tratar una ruta como identidad;
 - convertir un Workspace visible en un `BindingRoot` sin el contrato de catálogo.
 
-## Estado de la adquisición lazy (ODE-489, resuelto parcialmente)
+## Estado de la adquisición y selección confirmada — ODE-489, ODE-515
 
-`ContextEnvelope`/`AgentInvocation`/`RuntimeContext`/`LocationContext` ya existen como código real, no solo como este documento: `lib/agent/context-envelope.ts`. El documento enfocado (`LocationContext.focusedDocument`) ya sigue el contrato lazy — implementado, no solo diseñado.
+`ContextEnvelope`/`AgentInvocation`/`RuntimeContext`/`LocationContext` existen como código real en `lib/agent/context-envelope.ts`, pero el envelope no concede permiso para leer cuerpos. La autorización de contexto nace en la selección o adjunto confirmado para esa acción.
 
-Mecanismo implementado — más simple que el pipeline Router → Planner → Resolver dibujado arriba; no hay una etapa de clasificación de intención separada:
+El comportamiento vigente es:
 
-1. El documento enfocado se manda como referencia (`focusedDocumentId`, metadata con `markdown: null`) en la primera llamada a `askWorkspace`, nunca su cuerpo.
-2. El propio modelo, dentro de esa misma llamada, decide si necesita el contenido y lo pide de vuelta mediante el campo ya existente `requestedDocumentIds`.
-3. Si lo pide, corre como máximo **una** ronda adicional con el cuerpo incluido — nunca más de una, y nunca para un id que no sea el documento enfocado (pedir cualquier otro id sigue el camino manual existente: se lo indica al usuario, no se auto-ejecuta).
-4. Si esa segunda ronda falla (error de red, del provider, lo que sea), se conserva la respuesta de la primera ronda en vez de fallar el turno completo. El chat nunca debe quedar en silencio — ni por el mecanismo lazy ni por ningún otro motivo.
+1. Ask sin documentos seleccionados puede responder conversación general. Si la pregunta necesita evidencia documental, devuelve una solicitud de alcance y no envía cuerpos recientes, enfocados o adivinados.
+2. Ask, Classification, Contradictions y Merge reciben el conjunto seleccionado/confirmado con snapshot, versión y hash. Las fuentes semánticas se leen completas y se incorporan al ledger.
+3. Una mención de un documento fuera del alcance actual se puede desambiguar con metadata, pero requiere confirmación antes de leer o enviar su body. La confirmación inicia un nuevo fingerprint de alcance.
+4. Si la selección completa no cabe en una llamada, el planner la divide en etapas o solicita dividirla. Los chunks son de transporte y no una reducción silenciosa de contenido.
+5. Un turno posterior reutiliza continuidad solo si workspace, acción, selección, versión y hash siguen iguales. Una compactación o un fallo de continuidad no autoriza a sustituir la evidencia: el resolver vuelve al `.md` canónico.
 
-Con esto, un `Hola` con cualquier Writing abierto ya no lee ni envía ningún cuerpo documental — antes sí lo hacía siempre, sin importar la intención de la pregunta. Cubre ambos runtimes: `askAgent` (con Workspace) y `askAboutDocument` (sin Workspace, borrador sin materializar).
-
-**Por qué una ronda adicional ocasional es más barato, no más caro:** antes, el 100% de los turnos de `ask` pagaban el costo completo del documento enfocado, en cada mensaje, sin importar la intención. Ahora, un turno puramente conversacional paga prácticamente cero, y solo el turno que de verdad necesita el documento paga la ronda extra. El costo agregado de una sesión baja, aunque un turno individual — el que sí necesita el documento — cueste dos llamadas en vez de una.
-
-Gaps que siguen abiertos, sin resolver:
-
-- No hay un Intent Router formal que clasifique la intención *antes* de la llamada al modelo — la decisión "necesito el documento" la toma el modelo dentro de la misma llamada de ask, reactivamente, no un paso previo separado y determinista.
-- Los adjuntos explícitos y la selección auto-elegida de Workspace (Classify) no pasan por este contrato lazy — se leen de inmediato, sin diferir, igual que antes. El contrato lazy solo cubre el documento enfocado implícito, no el resto de fuentes.
-- El resto del catálogo del Workspace (documentos que no son ni el enfocado ni un adjunto) sigue sin exponerse en absoluto durante una pregunta de chat libre, ni siquiera como referencia — solo Classify ve una porción amplia del catálogo.
-- De los cinco workflows predeterminados, solo dos seleccionan documentos específicos: en el estado actual Contradictions y Merge construyen y consumen `ContextEnvelope` (`policies.eagerlyLoadFocusedDocument: true`), por lo que comparar o combinar carga de inmediato el material explícitamente seleccionado. ODE-515 y ODE-511 implementan el contrato en el que esa primera evidencia vuelve a Responses y el modelo puede pedir fragmentos adicionales acotados antes de emitir un veredicto o una síntesis. Workflow, Broken links y Archive no tienen selección de documentos que envolver — operan sobre todo el Workspace vía el servicio directamente (`service.proposeWorkflow`/`findBrokenReferences`/`findArchiveCandidates`), así que `ContextEnvelope` no aplica de la misma forma; envolverlos solo para etiquetar `source`/sesión sería un cambio cosmético sin efecto funcional, y no se hizo.
+Workflow, Broken links y Archive siguen siendo acciones deterministas de workspace y no necesitan el mismo bundle semántico que Contradictions, Merge o Classification. Cuando una de esas acciones presente una explicación generada, debe conservar provenance de la lectura que la originó; esa unificación de receipt es un follow-up de aplicación, no una autorización para leer documentos no seleccionados.
 
 ## Corrección de alcance y capacidad — 2026-09-13
 

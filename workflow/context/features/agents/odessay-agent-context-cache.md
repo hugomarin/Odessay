@@ -57,17 +57,17 @@ Ejemplos:
 - `summary`: resumen compacto de una versión;
 - `facts`: afirmaciones con citas;
 - `chunks`: secciones relevantes;
-- `full`: contenido completo limitado por presupuesto;
+- `full`: contenido completo de la fuente confirmada; si no cabe en una llamada, se procesa por etapas lossless o se devuelve `budget_exceeded`, nunca se recorta silenciosamente;
 - `instructions` (ODE-504): la sección de instrucciones de operación de `workflow.md` que acompaña toda invocación del agente — el ledger contabiliza los tokens incorporados por esa sección, nunca los del documento completo.
 
 Un resumen de la versión `A@v17` no es automáticamente válido para `A@v18`.
 
 ## Presupuesto
 
-El `ContextBudgetManager` pertenece a `Application`. Controla:
+El `ContextBudgetManager` pertenece a `Application`. Calcula la capacidad física disponible y controla:
 
 - tokens de entrada y salida;
-- cantidad de documentos;
+- cantidad de documentos como dato de planificación, no como máximo de producto;
 - bytes leídos;
 - costo estimado;
 - número de rondas de recuperación;
@@ -78,13 +78,13 @@ El `ContextBudgetManager` pertenece a `Application`. Controla:
 type ContextBudget = {
   maxInputTokens: number
   maxOutputTokens: number
-  maxDocuments: number
+  maxDocuments: number // capacidad estimada de esta etapa, no límite de selección
   maxBytes: number
   maxRetrievalRounds: number
 }
 ```
 
-El LLM puede pedir más evidencia, pero la solicitud pasa nuevamente por el planner y el presupuesto. No puede expandir el Workspace sin límite.
+El LLM puede pedir rangos adicionales únicamente dentro de documentos ya seleccionados o confirmados; la solicitud pasa nuevamente por el planner y el presupuesto. Una fuente nueva requiere confirmación de la persona. El sistema no expande el Workspace por inferencia ni convierte `maxDocuments` en un límite arbitrario de cuatro o seis documentos.
 
 ## Ledger de consumo
 
@@ -177,9 +177,9 @@ Turno 4: A cambia a v18
 - la UI no accede directamente al store — solo `WorkspaceAgentService` lo consulta;
 - un cache *hit* ya no deja que su metadata de catálogo capturada en el momento del caché pise la metadata fresca del mismo request (corregido — antes un cambio de status/version sin cambiar contenido podía servirse obsoleto indefinidamente).
 
-`maxInputTokens` existe en el tipo `ContextBudget`, pero en `askAgent`/`suggestClassification` se pasa como `Number.MAX_SAFE_INTEGER` — no es el control real. El control real es `maxBytes` (tope de caracteres) combinado con la decisión de *si* una fuente entra siquiera al plan — ver "Estado de la adquisición lazy" en `odessay-agent-context.md`. Sumarle un tope de tokens no es la corrección pendiente; ya se decidió que el problema es arquitectónico (qué se carga, no cuánto se recorta después de cargarlo).
+`maxInputTokens` existe en el tipo `ContextBudget`, pero la capacidad efectiva de una invocación debe derivarse de la ventana del deployment menos instrucciones, schemas/tools, historial, razonamiento y salida reservada. `maxBytes`, rondas y tiempo son controles operativos de una etapa, no límites de producto. Si una etapa no puede admitir el body completo, debe declarar `budget_exceeded`, replanificar por etapas o solicitar dividir la carga; no puede cortar caracteres ni analizar un subconjunto sin declararlo.
 
-Pendiente real: los workflows predeterminados (Workflow, Broken links, Archive, Contradictions, Merge) no pasan por `ContextArtifactStore`/`ContextLedger` de forma explícita vía `ContextEnvelope` — siguen su propio camino de lectura directa.
+Las operaciones semánticas seleccionadas (Ask con fuentes, Classification, Contradictions y Merge) registran la evidencia en `ContextLedger`. Workflow, Broken links y Archive son escaneos deterministas de workspace; sus receipts deben conservar provenance de sus lecturas, y la unificación completa del ledger es un follow-up de aplicación que no cambia la regla de selección explícita.
 
 ## Clasificación arquitectónica
 
@@ -187,4 +187,3 @@ Pendiente real: los workflows predeterminados (Workflow, Broken links, Archive, 
 - **Secundarios:** `Domain` para versionado/provenance; `Adapter` para storage y AI provider.
 - **Runtime scope:** `shared-core`, con storage adapters por runtime.
 - **Owner:** `architecture-first`.
-

@@ -101,6 +101,14 @@ La compactación es una capacidad esperada de conversaciones largas:
 5. Si el contexto compactado no contiene una evidencia necesaria, el resolver vuelve al `.md` canónico usando la versión/hash esperados.
 6. Una compactación nunca cambia el alcance ni convierte un resumen en autorización de escritura.
 
+## Política adoptada y ownership
+
+La política de compactación del Workspace Agent es una responsabilidad lógica de Application, aunque no exige una clase con un nombre concreto. Las rutas Ask y semantic staged usan la compactación server-side nativa de Responses (`context_management` con `compact_threshold`) cuando el deployment la configura. Así, OpenAI conserva la ventana operativa y Odessay conserva el `response.id`, los Items opacos y el alcance/evidencia versionados.
+
+`/responses/compact` queda reservado para un flujo explícitamente stateless en el que la aplicación sea dueña del `input` completo y necesite compactarlo fuera de una respuesta normal. No es un requisito adicional para cerrar Ask, Contradictions o Merge, ni se debe implementar un segundo orquestador que recorte o reconstruya manualmente la conversación. La ventana devuelta por ese endpoint, si se adopta en un flujo futuro, se debe pasar como fue devuelta y complementar con evidencia fresca del `.md` cuando una cita lo requiera.
+
+Esta decisión permite varias rondas de compactación sin convertir la compactación en una fuente de verdad documental: la continuidad del proveedor vive en Responses, mientras que el contenido canónico, el snapshot y el `ContextLedger` siguen gobernados por Odessay.
+
 ## Pipeline común de una acción
 
 ```text
@@ -181,6 +189,7 @@ npm run validate:desktop -- --dmg "src-tauri/target/release/bundle/dmg/Artifact 
 - Suite completa: `262 passed | 1 skipped` y `2101 passed | 2 skipped` en las corridas registradas.
 - Suite semántica focalizada: `35 passed`.
 - Build: PASS; solo warnings preexistentes del editor.
+- `ops:delivery:gate`: BLOCKED por la regla de trazabilidad del branch, que compara `origin/main..HEAD` contra ODE-479..ODE-483 aunque esta cadena contiene los issues posteriores ODE-504/509/510/511/513/515. Es un gap del validador/proceso de entrega, no evidencia de fallo semántico; debe resolverse antes del cierre formal.
 - Ask real con OpenAI: PASS, dos Responses encadenadas.
 - Compactación real: PASS, al menos dos Items de compactación.
 - DMG local: PASS para Ask de dos turnos, Contradictions, Classification y Merge con dos documentos seleccionados.
