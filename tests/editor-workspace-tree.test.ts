@@ -10,6 +10,8 @@ describe("editor Workspace worktree", () => {
         relativePath: "Letters/2026/First.md",
         state: "synced",
         status: "draft",
+        excerpt: null,
+        modifiedAt: 0,
         openable: true,
       },
       {
@@ -18,6 +20,8 @@ describe("editor Workspace worktree", () => {
         relativePath: "Letters/Ambiguous.md",
         state: "ambiguous",
         status: "draft",
+        excerpt: null,
+        modifiedAt: 0,
         openable: false,
       },
       {
@@ -26,6 +30,8 @@ describe("editor Workspace worktree", () => {
         relativePath: "Root.md",
         state: "local-only",
         status: "draft",
+        excerpt: null,
+        modifiedAt: 0,
         openable: true,
       },
     ]);
@@ -35,6 +41,8 @@ describe("editor Workspace worktree", () => {
     expect(tree.folders[0]?.folders[0]?.documents[0]?.id).toBe("a");
     expect(tree.folders[0]?.documents[0]).toMatchObject({
       id: null,
+      excerpt: null,
+      modifiedAt: 0,
       openable: false,
     });
   });
@@ -47,6 +55,8 @@ describe("editor Workspace worktree", () => {
         relativePath: "Folder\\Draft.md",
         state: "pending",
         status: "draft",
+        excerpt: null,
+        modifiedAt: 0,
         openable: true,
       },
     ]);

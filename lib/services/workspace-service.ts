@@ -192,6 +192,8 @@ export async function loadContextualWorkspace(
           relativePath: file.relativePath,
           state: document?.state ?? "rebuilding",
           status: document?.status ?? null,
+          excerpt: document?.excerpt ?? null,
+          modifiedAt: file.modifiedAt,
           openable: Boolean(document?.id),
         }
       }),
@@ -245,7 +247,10 @@ export async function refreshContextualWorkspaceDocuments(
 
   const root = record.rootPath.replace(/[\\/]+$/, "")
   const documentJoin = await loadWorkspaceDocumentJoin(record.rootPath)
-  const byId = new Map<string, { relativePath: string; state: DocumentState; status: WritingStatus }>()
+  const byId = new Map<
+    string,
+    { relativePath: string; state: DocumentState; status: WritingStatus; excerpt: string | null }
+  >()
   for (const [canonicalPath, info] of documentJoin) {
     const normalized = canonicalPath.replace(/\\/g, "/")
     byId.set(info.id, {
@@ -254,6 +259,7 @@ export async function refreshContextualWorkspaceDocuments(
         : normalized,
       state: info.state,
       status: info.status,
+      excerpt: info.excerpt,
     })
   }
 
@@ -276,6 +282,11 @@ export async function refreshContextualWorkspaceDocuments(
       relativePath: entry.relativePath,
       state: entry.state,
       status: entry.status,
+      excerpt: entry.excerpt,
+      // Not worth a filesystem stat for a one-document patch — this path only
+      // runs right after a catalog change, so "now" is accurate enough for
+      // the preview modal's date label.
+      modifiedAt: Date.now(),
       openable: true,
     })
   }
@@ -290,6 +301,8 @@ export async function refreshContextualWorkspaceDocuments(
       relativePath: entry.relativePath,
       state: entry.state,
       status: entry.status,
+      excerpt: entry.excerpt,
+      modifiedAt: Date.now(),
       openable: true,
     })
   }

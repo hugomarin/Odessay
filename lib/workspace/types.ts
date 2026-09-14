@@ -51,6 +51,10 @@ export type ContextualWorkspaceDocument = {
   relativePath: string
   state: DocumentState
   status: WritingStatus | null
+  /** Plain-text excerpt for the preview modal; null when the catalog has none yet. */
+  excerpt: string | null
+  /** Filesystem mtime (ms) — drives the preview modal's date label. */
+  modifiedAt: number
   openable: boolean
 }
 

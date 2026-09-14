@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, FileText, Folder, FolderOpen, Home } from "lucide-react";
+import { ChevronDown, Eye, FileText, Folder, FolderOpen, Home } from "lucide-react";
 import { buildWorkspaceFolderTree } from "@/lib/workspace/folder-tree";
 import type { WorkspaceFolderTreeNode } from "@/lib/workspace/folder-tree";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
@@ -39,6 +39,8 @@ export type WorkspaceTreeProps = {
   /** When true, only folders are shown in the tree (no files inside folders). */
   foldersOnly?: boolean;
   onOpenFile?: (id: string) => void;
+  /** Shows a hover-revealed eye button on file rows that opens the quick-look preview. */
+  onPreviewFile?: (id: string) => void;
   onSelectFolder?: (path: string) => void;
   onCountChange?: (count?: number) => void;
   emptyState?: React.ReactNode;
@@ -72,6 +74,7 @@ function TreeRow({
   foldersOnly,
   onToggleFolder,
   onOpenFile,
+  onPreviewFile,
   onSelectFolder,
 }: {
   depth: number;
@@ -85,6 +88,7 @@ function TreeRow({
   foldersOnly?: boolean;
   onToggleFolder: (path: string) => void;
   onOpenFile?: (id: string) => void;
+  onPreviewFile?: (id: string) => void;
   onSelectFolder?: (path: string) => void;
 }) {
   if (node.kind === "file") {
@@ -93,8 +97,9 @@ function TreeRow({
     const active = fileId === activeId;
     const disabled = !onOpenFile || !fileId;
     const status = statusByRelativePath.get(node.path);
+    const previewLabel = node.name.replace(/\.md$/i, "");
     return (
-      <li>
+      <li className="group relative">
         <button
           type="button"
           role="treeitem"
@@ -104,7 +109,7 @@ function TreeRow({
           onClick={() => onOpenFile?.(fileId)}
           style={{ paddingLeft: `${8 + depth * 18}px` }}
           className={cn(
-            "group relative flex h-8 w-full items-center gap-1.5 rounded-[6px] pr-2 text-left text-[11px] text-ink-3 transition-colors",
+            "relative flex h-8 w-full items-center gap-1.5 rounded-[6px] pr-2 text-left text-[11px] text-ink-3 transition-colors",
             "hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50",
             active && "bg-muted text-ink",
           )}
@@ -120,10 +125,21 @@ function TreeRow({
           ) : (
             <FileText className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
           )}
-          <span className="flex-1 truncate">
-            {node.name.replace(/\.md$/i, "")}
-          </span>
+          <span className="flex-1 truncate">{previewLabel}</span>
         </button>
+        {onPreviewFile && !disabled ? (
+          <button
+            type="button"
+            aria-label={`Preview ${previewLabel}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onPreviewFile(fileId);
+            }}
+            className="absolute right-1 top-1/2 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded-[5px] bg-muted text-ink-3 opacity-0 transition-opacity hover:text-ink group-hover:flex group-hover:opacity-100"
+          >
+            <Eye className="h-[13px] w-[13px]" strokeWidth={1.5} />
+          </button>
+        ) : null}
       </li>
     );
   }
@@ -196,6 +212,7 @@ function TreeRow({
               foldersOnly={foldersOnly}
               onToggleFolder={onToggleFolder}
               onOpenFile={onOpenFile}
+              onPreviewFile={onPreviewFile}
               onSelectFolder={onSelectFolder}
             />
           ))}
@@ -216,6 +233,7 @@ export function WorkspaceTree({
   rootCount,
   foldersOnly,
   onOpenFile,
+  onPreviewFile,
   onSelectFolder,
   onCountChange,
   emptyState,
@@ -390,6 +408,7 @@ export function WorkspaceTree({
             foldersOnly={foldersOnly}
             onToggleFolder={handleToggleFolder}
             onOpenFile={onOpenFile}
+            onPreviewFile={onPreviewFile}
             onSelectFolder={onSelectFolder}
           />
         ))}

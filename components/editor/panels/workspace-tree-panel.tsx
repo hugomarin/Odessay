@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { WorkspaceTree } from "@/components/workspace/workspace-tree";
+import { WritingPreviewModal } from "@/components/desk/writing-preview-modal";
 import {
   loadContextualWorkspace,
   refreshContextualWorkspaceDocuments,
@@ -13,6 +14,35 @@ import type {
   ContextualWorkspaceDocument,
   ContextualWorkspaceOutcome,
 } from "@/lib/workspace/types";
+import type { DeskActivityRow } from "@/lib/queries/desk-activity";
+import {
+  getLocalDBScope,
+  loadCollectionState,
+} from "@/lib/queries/desk-catalog-source";
+import {
+  buildCollectionOptions,
+  type CollectionOption,
+} from "@/lib/collections/collections";
+import {
+  changeWritingArtifactType,
+  changeWritingStatus,
+  createAndAssignCollection,
+  deleteWriting,
+  renameWriting,
+  toggleWritingCollection as toggleWritingCollectionMutation,
+} from "@/lib/queries/writing-mutations";
+import type { LocalWritingCollection } from "@/lib/local-db/schema";
+import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status";
+import { buildWritingRouteHref } from "@/lib/writings/writing-route";
+
+function formatFileTimestamp(timestamp: number) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
 
 export type WorkspaceTreeFolder = {
   name: string;
@@ -70,6 +100,11 @@ export function WorkspaceTreePanel({
   const workspaceRef = useRef<ContextualWorkspace | null>(null);
   const activeWritingIdRef = useRef(activeWritingId);
   const [retryToken, setRetryToken] = useState(0);
+  const [previewWritingId, setPreviewWritingId] = useState<string | null>(null);
+  const [collectionOptions, setCollectionOptions] = useState<CollectionOption[]>([]);
+  const [collectionIdsByWritingId, setCollectionIdsByWritingId] = useState<
+    Record<string, string[]>
+  >({});
 
   const workspace = outcome?.kind === "workspace" ? outcome.workspace : null;
   workspaceRef.current = workspace;
@@ -89,6 +124,45 @@ export function WorkspaceTreePanel({
       );
     },
     [onCountChange],
+  );
+
+  // Collections are user-wide, not workspace-scoped — loaded once and
+  // refreshed after a mutation from the preview modal, the same shape
+  // `workspace-detail.tsx` uses for the same modal.
+  const loadCollections = useCallback(async () => {
+    try {
+      const collectionState = await loadCollectionState();
+      const idsByWritingId: Record<string, string[]> = {};
+      for (const assignment of collectionState.writingCollections) {
+        idsByWritingId[assignment.writing_id] = [
+          ...(idsByWritingId[assignment.writing_id] ?? []),
+          assignment.collection_id,
+        ];
+      }
+      setCollectionOptions(buildCollectionOptions(collectionState.collections));
+      setCollectionIdsByWritingId(idsByWritingId);
+    } catch {
+      // The preview modal's collection picker just stays empty — it is not
+      // this panel's job to surface a collections-service outage.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCollections();
+  }, [loadCollections]);
+
+  const writingCollections = useMemo<LocalWritingCollection[]>(
+    () =>
+      Object.entries(collectionIdsByWritingId).flatMap(([writingId, ids]) =>
+        ids.map((collectionId, index) => ({
+          id: `${writingId}-${collectionId}-${index}`,
+          writing_id: writingId,
+          collection_id: collectionId,
+          added_at: "",
+          local_updated_at: 0,
+        })),
+      ),
+    [collectionIdsByWritingId],
   );
 
   // A catalog notification never resolves through the scanning loader: the
@@ -210,6 +284,47 @@ export function WorkspaceTreePanel({
     }).length;
   }, [workspace]);
 
+  // Feeds the same WritingPreviewModal Desk and the full Workspace view use —
+  // built from this panel's own already-loaded documents rather than a
+  // second query.
+  const previewRows = useMemo<DeskActivityRow[]>(
+    () =>
+      (workspace?.documents ?? [])
+        .filter((document): document is ContextualWorkspaceDocument & { id: string } =>
+          Boolean(document.id),
+        )
+        .map((document) => {
+          const status = document.status ?? "draft";
+          return {
+            id: document.id,
+            title: document.name.replace(/\.(md|mdx)$/i, ""),
+            excerpt: document.excerpt ?? "",
+            localPath: document.relativePath,
+            stateLabel: getWritingStatusLabel(status),
+            stateTone: normalizeWritingStatus(status),
+            documentState: document.state,
+            recipientPreviews: [],
+            dateLabel: formatFileTimestamp(document.modifiedAt),
+            isNew: false,
+            destinationHref: buildWritingRouteHref("/write", {
+              id: document.id,
+              slug: null,
+            }),
+            workspaceSlug: workspace?.slug ?? null,
+            workspaceName: workspace?.name ?? null,
+          };
+        }),
+    [workspace],
+  );
+
+  const previewIndex = useMemo(
+    () =>
+      previewWritingId === null
+        ? null
+        : previewRows.findIndex((row) => row.id === previewWritingId),
+    [previewRows, previewWritingId],
+  );
+
   const handleOpen = async (id: string) => {
     setOpenError(null);
     try {
@@ -288,6 +403,52 @@ export function WorkspaceTreePanel({
         rootIcon="home"
         rootCount={rootDocumentCount}
         onOpenFile={(id) => void handleOpen(id)}
+        onPreviewFile={(id) => setPreviewWritingId(id)}
+      />
+      <WritingPreviewModal
+        open={previewWritingId !== null && previewIndex !== null && previewIndex !== -1}
+        rows={previewRows}
+        currentIndex={previewIndex ?? 0}
+        collectionOptions={collectionOptions}
+        collectionIdsByWritingId={collectionIdsByWritingId}
+        onOpenChange={(open) => {
+          if (!open) setPreviewWritingId(null);
+        }}
+        onIndexChange={(index) => {
+          const nextRow = previewRows[index];
+          if (nextRow) setPreviewWritingId(nextRow.id);
+        }}
+        onToggleCollection={async (writingId, collectionId) => {
+          await toggleWritingCollectionMutation(writingId, collectionId, writingCollections);
+          await loadCollections();
+        }}
+        onCreateCollection={async (writingId, name) => {
+          const ownerId = getLocalDBScope();
+          await createAndAssignCollection(
+            writingId,
+            name,
+            ownerId === "anonymous" ? null : ownerId,
+            writingCollections,
+          );
+          await loadCollections();
+        }}
+        onStatusChange={async (writingId, status) => {
+          await changeWritingStatus(writingId, status);
+        }}
+        onArtifactTypeChange={async (writingId, artifactType) => {
+          await changeWritingArtifactType(writingId, artifactType);
+        }}
+        onTitleChange={async (writingId, title) => {
+          await renameWriting(writingId, title);
+        }}
+        onOpenFullWriting={(writingId) => {
+          setPreviewWritingId(null);
+          void handleOpen(writingId);
+        }}
+        onDelete={async (writingId) => {
+          await deleteWriting(writingId);
+          setPreviewWritingId(null);
+        }}
       />
     </div>
   );

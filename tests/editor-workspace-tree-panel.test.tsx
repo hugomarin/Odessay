@@ -26,6 +26,14 @@ vi.mock("@/lib/services/workspace-service", () => ({
   },
 }));
 
+// The preview modal's collections plumbing (loaded on mount) is out of scope
+// for these tree-rendering tests — stub it so the panel doesn't reach for
+// IndexedDB in happy-dom.
+vi.mock("@/lib/queries/desk-catalog-source", () => ({
+  loadCollectionState: async () => ({ collections: [], writingCollections: [] }),
+  getLocalDBScope: () => "anonymous",
+}));
+
 /** Emit a catalog change the way the SQLite catalog does after a save. */
 function emitCatalogChange(
   documentIds: string[],
@@ -77,6 +85,8 @@ const activeDocument = {
   relativePath: "03-analisis/aplyca-analisis.md",
   state: "synced" as const,
   status: "draft" as const,
+  excerpt: null,
+  modifiedAt: 0,
   openable: true,
 };
 
@@ -86,6 +96,8 @@ const siblingDocument = {
   relativePath: "04-sesiones/sesion.md",
   state: "synced" as const,
   status: "draft" as const,
+  excerpt: null,
+  modifiedAt: 0,
   openable: true,
 };
 
@@ -375,6 +387,8 @@ describe("WorkspaceTreePanel", () => {
           relativePath: "nuevo.md",
           state: "synced" as const,
           status: "draft" as const,
+          excerpt: null,
+          modifiedAt: 0,
           openable: true,
         },
       ]),
