@@ -52,11 +52,14 @@ describe("editor frame height contract", () => {
       "components/editor/panels/editor-navigation-sidebar.tsx",
     )
     // ODE-433 turned the panel into a column of the band; the invariant it has
-    // to keep is the same one: clipped, and its wheel gesture contained.
+    // to keep is the same one: clipped, and its wheel gesture contained. Its
+    // width is now drag-resizable (own feature pass) rather than the fixed
+    // `--size-panel-left`, but it must still stay bounded between a min/max
+    // rather than becoming an unconstrained overlay.
     const scroller = source.match(/className="(od-scroll min-h-0 flex-1 overflow-y-auto[^"]*)"/)
 
     expect(source).toContain("overflow-hidden")
-    expect(source).toContain("w-[var(--size-panel-left)]")
+    expect(source).toContain("clampPanelWidth")
     expect(scroller?.[1]).toContain("overscroll-contain")
   })
 })
