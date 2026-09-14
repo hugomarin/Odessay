@@ -200,6 +200,33 @@ describe("Workspace semantic tool loop", () => {
     expect(readEvidence).not.toHaveBeenCalled()
   })
 
+  it("preserves capacity_unknown as a planning terminal state instead of reporting a provider outage", async () => {
+    const execution = createWorkspaceExecutionContext("relations", "desktop", "semantic-review")
+    const runSemanticRound = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        code: "CAPACITY_UNKNOWN",
+        message: "Configure the context window for this model.",
+        retryable: false,
+      },
+    })
+
+    const result = await runWorkspaceSemanticLoop({
+      operation: "relations",
+      execution,
+      initialInput: [{ type: "message", role: "user", content: "Review." }],
+      initialEvidence: [{ evidenceId: "initial-1", documentId, documentVersion, contentHash, lineStart: 1, lineEnd: 1, text: "Evidence." }],
+      registry: makeRegistry(),
+      aiService: { runSemanticRound },
+    })
+
+    expect(result.data).toMatchObject({
+      status: "capacity_unknown",
+      coverage: "unknown",
+      error: { code: "CAPACITY_UNKNOWN", retryable: false },
+    })
+  })
+
   it("does not execute more than four evidence references in one follow-up", async () => {
     const readEvidence = vi.fn(async () => evidenceRead())
     const registry = makeRegistry(readEvidence)

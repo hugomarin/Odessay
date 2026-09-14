@@ -1,13 +1,24 @@
 import { expect, test } from "@playwright/test"
 import { mkdir, writeFile } from "node:fs/promises"
 
+/**
+ * @contract ODE-512 — Workspace Agent session continuity in the web harness
+ * @doc workflow/context/features/agents/odessay-agent-execution.md
+ * @service WorkspaceAgentService (web boundary; not desktop mutation acceptance)
+ */
 test("opens the agent independently, preserves dropped context in chat, and reopens from its rail", async ({ page }) => {
   await page.goto("/perf/write-new-harness")
+  const writingArea = page.getByTestId("editor-writing-area")
   const newFromEmptyState = page.getByTestId("editor-empty-state").getByRole("button", { name: "New Artifact" })
-  if (await newFromEmptyState.isVisible().catch(() => false)) {
-    await newFromEmptyState.click()
+  if (!await writingArea.isVisible().catch(() => false) && await newFromEmptyState.isVisible().catch(() => false)) {
+    // The harness can finish restoring its transient draft between the
+    // visibility check and the click. A detached empty-state button is fine if
+    // the writing area has become the stable destination.
+    await newFromEmptyState.click({ timeout: 1_500 }).catch(async (cause: unknown) => {
+      if (!await writingArea.isVisible().catch(() => false)) throw cause
+    })
   }
-  await expect(page.getByTestId("editor-writing-area")).toBeVisible()
+  await expect(writingArea).toBeVisible()
 
   const agentToggle = page.locator('button[aria-label="Workspace agent"]')
   const openStartedAt = await page.evaluate(() => performance.now())
@@ -21,21 +32,22 @@ test("opens the agent independently, preserves dropped context in chat, and reop
   await mkdir("output/playwright/ode-486", { recursive: true })
   await page.screenshot({ path: "output/playwright/ode-486/agent-independent-panel.png" })
 
-  await panel.evaluate((element) => {
-    const dataTransfer = new DataTransfer()
-    dataTransfer.setData("application/x-odessay-agent-context", JSON.stringify({
-      kind: "file",
-      id: "context-document",
-      path: "/workspace/context.md",
-      label: "context.md",
+  await panel.locator("[data-workspace-agent-dropzone]").evaluate((element) => {
+    element.dispatchEvent(new CustomEvent("workspace-agent-drop", {
+      bubbles: true,
+      detail: {
+        kind: "file",
+        id: "context-document",
+        path: "/workspace/context.md",
+        label: "context.md",
+      },
     }))
-    element.dispatchEvent(new DragEvent("drop", { bubbles: true, dataTransfer }))
   })
   await expect(page.getByTestId("workspace-agent-context")).toContainText("context.md")
 
   const draft = page.getByLabel("Message Workspace agent")
   await draft.fill("Summarize this context")
-  await page.getByRole("button", { name: "Send message" }).click()
+  await draft.press("Enter")
   await expect(page.getByTestId("workspace-agent-chat")).toContainText("Summarize this context")
   await expect(page.getByTestId("workspace-agent-message-context")).toContainText("context.md")
   await expect(page.getByTestId("workspace-agent-chat")).toHaveCSS("overflow-y", "auto")
@@ -82,11 +94,13 @@ test("opens the agent independently, preserves dropped context in chat, and reop
 
   // The prior turn's message keeps the label of the Writing it was actually
   // asked from, now that we're grounded somewhere else.
-  await expect(page.getByTestId("workspace-agent-message-scope")).toBeVisible()
+  await expect(page.getByTestId("workspace-agent-message-scope").first()).toBeVisible()
 
   // "New conversation" is the only thing that resets the session.
   await page.getByTestId("workspace-agent-new-conversation").click()
-  await expect(page.getByTestId("workspace-agent-chat")).toHaveCount(0)
+  await expect(page.getByTestId("workspace-agent-chat")).not.toContainText("Summarize this context")
+  await expect(page.getByTestId("workspace-agent-chat")).toContainText("Ask anything about this workspace or the open artifact.")
+  await expect(page.getByTestId("workspace-agent-thinking")).toHaveCount(0)
   await expect(page.getByTestId("workspace-agent-context")).toHaveCount(0)
   await page.screenshot({ path: "output/playwright/ode-502/agent-new-conversation.png" })
 

@@ -44,6 +44,10 @@ describe("Workspace agent Responses observability", () => {
       responsesUrl: "https://api.openai.com/v1/responses",
       maxOutputTokens: 8_192,
       reasoningEffort: "none",
+      contextWindowTokens: 1_050_000,
+      historyReserveTokens: 0,
+      reasoningReserveTokens: 0,
+      safetyMarginTokens: 8_192,
     })
   })
 
@@ -132,6 +136,37 @@ describe("Workspace agent Responses observability", () => {
       responses: [{ responseId: null, httpStatus: 502, errorCode: "AI_PROVIDER_ERROR" }],
     })
     expect(payload.error.message).not.toContain("provider secret")
+  })
+
+  it("returns capacity_unknown without calling OpenAI for an unregistered model without an override", async () => {
+    providerMock.getOpenAIWorkspaceProviderConfig.mockReturnValueOnce({
+      provider: "openai",
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "test-key",
+      model: "custom-unregistered-model",
+      responsesUrl: "https://api.openai.com/v1/responses",
+      maxOutputTokens: 8_192,
+      reasoningEffort: "none",
+      contextWindowTokens: null,
+      contextCapacitySource: "capacity_unknown",
+      contextCapacityStatus: "capacity_unknown",
+      historyReserveTokens: 0,
+      reasoningReserveTokens: 0,
+      safetyMarginTokens: 8_192,
+    })
+    const providerFetch = vi.fn()
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await askPOST(new Request("https://app.odessay.com/api/ai/workspace-ask", {
+      method: "POST",
+      body: JSON.stringify(askBody),
+    }))
+    const payload = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(payload.error).toMatchObject({ code: "CAPACITY_UNKNOWN", retryable: false })
+    expect(payload.error.details.receipt).toMatchObject({ productStatus: "not-evaluated", responses: [] })
+    expect(providerFetch).not.toHaveBeenCalled()
   })
 
   it("pins server-owned execution stage and runtime metadata", async () => {

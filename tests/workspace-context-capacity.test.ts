@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  assertWorkspaceContextPlanCapacity,
   availableWorkspaceInputTokens,
   estimateWorkspaceInputTokens,
   planWorkspaceSemanticBatches,
@@ -18,9 +19,11 @@ describe("Workspace provider context capacity", () => {
     })
 
     expect(availableWorkspaceInputTokens({ contextWindowTokens: null, reservedOutputTokens: 1_000 })).toBeNull()
+    expect(plan.status).toBe("capacity_unknown")
     expect(plan.staged).toBe(false)
-    expect(plan.batches).toEqual([input])
-    expect(estimateWorkspaceInputTokens(plan.batches.flat())).toBeGreaterThan(0)
+    expect(plan.batches).toEqual([])
+    expect(plan.estimatedInputTokens).toBe(estimateWorkspaceInputTokens(input))
+    expect(() => assertWorkspaceContextPlanCapacity(plan)).toThrowError(expect.objectContaining({ code: "CAPACITY_UNKNOWN" }))
   })
 
   it("stages ordered semantic items without truncating any item", () => {
@@ -35,6 +38,7 @@ describe("Workspace provider context capacity", () => {
     })
 
     expect(plan.staged).toBe(true)
+    expect(plan.status).toBe("staged")
     expect(plan.batches.flat()).toEqual(input)
     expect(plan.batches.every((batch) => batch.length > 0)).toBe(true)
   })
@@ -68,5 +72,29 @@ describe("Workspace provider context capacity", () => {
       reservedOutputTokens: 200,
       overheadTokens: 100,
     }, 7)).toBe(100)
+  })
+
+  it("subtracts every named provider reserve before admitting document input", () => {
+    expect(availableWorkspaceInputTokens({
+      contextWindowTokens: 1_000,
+      reservedOutputTokens: 100,
+      systemPromptTokens: 50,
+      schemaAndToolTokens: 40,
+      historyTokens: 30,
+      reasoningTokens: 20,
+      safetyMarginTokens: 10,
+      overheadTokens: 5,
+    })).toBe(745)
+  })
+
+  it("returns budget_exceeded when reserves consume the physical window", () => {
+    const plan = planWorkspaceTextBatches("complete selected evidence", {
+      contextWindowTokens: 100,
+      reservedOutputTokens: 80,
+      safetyMarginTokens: 20,
+    })
+
+    expect(plan).toMatchObject({ status: "budget_exceeded", batches: [], availableInputTokens: 0 })
+    expect(() => assertWorkspaceContextPlanCapacity(plan)).toThrowError(expect.objectContaining({ code: "BUDGET_EXCEEDED" }))
   })
 })

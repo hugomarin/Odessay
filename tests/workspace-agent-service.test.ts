@@ -237,6 +237,8 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     expect(found.data?.proposals[0]).toMatchObject({
       semanticVerdict: "contradictory",
       semanticConfidence: "high",
+      semanticReviewStatus: "complete",
+      semanticCoverage: "complete",
       semanticEvidenceIds: expect.arrayContaining([expect.stringContaining("relation:left"), expect.stringContaining("relation:right")]),
     })
     expect(found.data?.nonActionable).toEqual([])
@@ -254,14 +256,41 @@ describe("WorkspaceAgentService contradiction workflow", () => {
     expect(rejected.error?.code).toBe("INVALID_INPUT")
     expect(tools.edit).not.toHaveBeenCalled()
 
+    const partial = await service.resolveContradiction({
+      ...found.data!.proposals[0]!,
+      semanticReviewStatus: "insufficient_evidence",
+      semanticCoverage: "partial",
+    }, "right", {
+      read: approval("read", "left", "read-left-partial"),
+      edit: approval("edit", "left", "edit-left-partial"),
+    })
+
+    expect(partial.error?.code).toBe("INVALID_INPUT")
+    expect(tools.edit).not.toHaveBeenCalled()
+
+    vi.mocked(tools.edit).mockResolvedValueOnce({
+      data: null,
+      error: {
+        code: "STORAGE_ERROR",
+        message: "The local content commit could not be verified.",
+        retryable: false,
+      },
+    })
+    const failed = await service.resolveContradiction(found.data!.proposals[0]!, "right", {
+      read: approval("read", "left", "read-left-failed"),
+      edit: approval("edit", "left", "edit-left-failed"),
+    })
+
+    expect(failed.error?.code).toBe("STORAGE_ERROR")
+
     const resolved = await service.resolveContradiction(found.data!.proposals[0]!, "right", {
-      read: approval("read", "left"),
-      edit: approval("edit", "left"),
+      read: approval("read", "left", "read-left-retry"),
+      edit: approval("edit", "left", "edit-left-retry"),
     })
 
     expect(resolved.error).toBeNull()
     expect(resolved.data?.resolvedDocumentId).toBe("left")
-    expect(tools.edit).toHaveBeenCalledWith(expect.objectContaining({
+    expect(tools.edit).toHaveBeenLastCalledWith(expect.objectContaining({
       documentId: "left",
       markdown: "Storage: IndexedDB.",
     }))
@@ -789,6 +818,59 @@ describe("WorkspaceAgentService contradiction workflow", () => {
       documents: [expect.objectContaining({ id: "target", markdown: "Storage: Postgres." })],
     }))
     expect(result.data?.evidence).toEqual([expect.objectContaining({ quote: "Storage: Postgres.", line: 1 })])
+  })
+
+  it("changes the Ask scope fingerprint with unsaved body edits and drops stale Responses continuity", async () => {
+    const target = document("target", "Storage: SQLite.")
+    contextMocks.list.mockResolvedValue([target.catalogRecord])
+    const tools: WorkspaceAgentToolsService = {
+      read: vi.fn(),
+      write: vi.fn(),
+      move: vi.fn(),
+      edit: vi.fn(),
+      delete: vi.fn(),
+    }
+    let responseNumber = 0
+    aiMocks.askWorkspace.mockImplementation(async () => {
+      responseNumber += 1
+      return {
+        data: {
+          answer: "answer",
+          evidence: [],
+          requestedDocumentIds: [],
+          responseId: `resp-${responseNumber}`,
+          usage: null,
+        },
+        error: null,
+      }
+    })
+    const service = await createWorkspaceAgentService("/workspace", tools)
+
+    const first = await service.askAgent({
+      question: "What storage?",
+      selection: [{ kind: "file", documentId: "target" }],
+      liveOverride: { documentId: "target", markdown: "Storage: Postgres." },
+    })
+    const second = await service.askAgent({
+      question: "Repeat it.",
+      selection: [{ kind: "file", documentId: "target" }],
+      liveOverride: { documentId: "target", markdown: "Storage: Postgres." },
+      previousResponseId: first.data?.responseId,
+      previousScopeFingerprint: first.data?.scopeFingerprint,
+    })
+    const third = await service.askAgent({
+      question: "What storage now?",
+      selection: [{ kind: "file", documentId: "target" }],
+      liveOverride: { documentId: "target", markdown: "Storage: DuckDB." },
+      previousResponseId: second.data?.responseId,
+      previousScopeFingerprint: second.data?.scopeFingerprint,
+    })
+
+    expect(first.data?.scopeFingerprint).toBe(second.data?.scopeFingerprint)
+    expect(third.data?.scopeFingerprint).not.toBe(second.data?.scopeFingerprint)
+    expect(aiMocks.askWorkspace.mock.calls[1][0].previousResponseId).toBe("resp-1")
+    expect(aiMocks.askWorkspace.mock.calls[2][0].previousResponseId).toBeNull()
+    expect(tools.read).not.toHaveBeenCalled()
   })
 
   it("askAgent forwards the session's recent actions as memory for the model, so later answers stay consistent with earlier ones", async () => {
@@ -2379,7 +2461,11 @@ describe("WorkspaceAgentService merge workflow", () => {
   }
 
   it("uses the named merge adapter, maps provenance, and writes only after explicit review", async () => {
-    const { tools } = setupDocuments()
+    const { documents, tools } = setupDocuments()
+    const sourceHashesBefore = new Map([...documents].map(([documentId, item]) => [
+      documentId,
+      item.catalogRecord.binding?.contentHash ?? null,
+    ]))
     aiMocks.reviewWorkspaceMerge.mockImplementationOnce(completeSemanticMergeRound)
     const service = await createWorkspaceAgentService("/workspace", tools)
 
@@ -2419,7 +2505,12 @@ describe("WorkspaceAgentService merge workflow", () => {
       target: { canonicalPath: "/workspace/combined.md" },
       expectedAbsent: true,
     }))
+    expect(tools.write).toHaveBeenCalledTimes(1)
     expect(tools.read).toHaveBeenCalledTimes(4)
+    expect(new Map([...documents].map(([documentId, item]) => [
+      documentId,
+      item.catalogRecord.binding?.contentHash ?? null,
+    ]))).toEqual(sourceHashesBefore)
   })
 
   it("rejects a merge write when any source snapshot is stale", async () => {
@@ -2445,6 +2536,107 @@ describe("WorkspaceAgentService merge workflow", () => {
     })
     expect(result.error?.code).toBe("CONFLICT")
     expect(result.error?.message).toContain("changed")
+    expect(tools.write).not.toHaveBeenCalled()
+  })
+
+  it("keeps an admitted merge draft retryable when its approved write fails", async () => {
+    const { tools } = setupDocuments()
+    aiMocks.reviewWorkspaceMerge.mockImplementationOnce(completeSemanticMergeRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const reviewed = await service.reviewMerge(["doc-a", "doc-b"], {
+      "doc-a": approval("read", "doc-a"),
+      "doc-b": approval("read", "doc-b"),
+    })
+    const draft = reviewed.data!
+    const sections = draft.sections.map((section) => ({
+      id: section.id,
+      body: section.status === "conflict" ? section.sources[0]?.quote ?? "" : section.body,
+      primarySourceDocumentId: section.status === "conflict" ? section.sources[0]?.documentId ?? null : null,
+      acceptedUnresolved: false,
+    }))
+    vi.mocked(tools.write).mockResolvedValueOnce({
+      data: null,
+      error: { code: "STORAGE_ERROR", message: "Destination could not be committed.", retryable: true },
+    })
+
+    const failed = await service.createMergedDocument({
+      draft,
+      destinationName: "combined.md",
+      sections,
+      approval: approval("write", "/workspace/combined.md", "write:failed"),
+    })
+    const retried = await service.createMergedDocument({
+      draft,
+      destinationName: "combined.md",
+      sections,
+      approval: approval("write", "/workspace/combined.md", "write:retry"),
+    })
+
+    expect(failed.error?.code).toBe("STORAGE_ERROR")
+    expect(retried.error).toBeNull()
+    expect(tools.write).toHaveBeenCalledTimes(2)
+  })
+
+  it("rejects a merge write when a source was soft-deleted after review", async () => {
+    const { documents, tools } = setupDocuments()
+    aiMocks.reviewWorkspaceMerge.mockImplementationOnce(completeSemanticMergeRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const reviewed = await service.reviewMerge(["doc-a", "doc-b"], {
+      "doc-a": approval("read", "doc-a"),
+      "doc-b": approval("read", "doc-b"),
+    })
+    const draft = reviewed.data!
+    const deleted = documents.get("doc-a")!
+    documents.set("doc-a", {
+      ...deleted,
+      catalogRecord: { ...deleted.catalogRecord, deletedAt: "2026-09-13T20:00:00.000Z" },
+    })
+
+    const result = await service.createMergedDocument({
+      draft,
+      destinationName: "combined.md",
+      sections: draft.sections.map((section) => ({
+        id: section.id,
+        body: section.status === "conflict" ? section.sources[0]?.quote ?? "" : section.body,
+        primarySourceDocumentId: section.status === "conflict" ? section.sources[0]?.documentId ?? null : null,
+        acceptedUnresolved: false,
+      })),
+      approval: approval("write", "/workspace/combined.md"),
+    })
+
+    expect(result.error?.code).toBe("CONFLICT")
+    expect(tools.write).not.toHaveBeenCalled()
+  })
+
+  it("rejects a forged complete merge draft that was not admitted by the semantic review", async () => {
+    const { tools } = setupDocuments()
+    aiMocks.reviewWorkspaceMerge.mockImplementationOnce(completeSemanticMergeRound)
+    const service = await createWorkspaceAgentService("/workspace", tools)
+    const reviewed = await service.reviewMerge(["doc-a", "doc-b"], {
+      "doc-a": approval("read", "doc-a"),
+      "doc-b": approval("read", "doc-b"),
+    })
+    const original = reviewed.data!
+    const forged = {
+      ...original,
+      sections: original.sections.map((section, index) => index === 1
+        ? { ...section, body: "Fabricated synthesis not returned by the admitted review." }
+        : section),
+    }
+
+    const result = await service.createMergedDocument({
+      draft: forged,
+      destinationName: "combined.md",
+      sections: forged.sections.map((section) => ({
+        id: section.id,
+        body: section.status === "conflict" ? section.sources[0]?.quote ?? "" : section.body,
+        primarySourceDocumentId: section.status === "conflict" ? section.sources[0]?.documentId ?? null : null,
+        acceptedUnresolved: false,
+      })),
+      approval: approval("write", "/workspace/combined.md"),
+    })
+
+    expect(result.error?.code).toBe("INVALID_INPUT")
     expect(tools.write).not.toHaveBeenCalled()
   })
 

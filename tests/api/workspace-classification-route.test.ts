@@ -92,6 +92,10 @@ describe("POST /api/ai/workspace-classification", () => {
       responsesUrl: "https://api.openai.com/v1/responses",
       maxOutputTokens: 8_192,
       reasoningEffort: "none",
+      contextWindowTokens: 1_050_000,
+      historyReserveTokens: 0,
+      reasoningReserveTokens: 0,
+      safetyMarginTokens: 8_192,
     })
   })
 

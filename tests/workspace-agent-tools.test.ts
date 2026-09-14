@@ -72,6 +72,7 @@ describe("DesktopWorkspaceAgentToolsService", () => {
   }
   let importDocument: ReturnType<typeof vi.fn>
   let relocateDocument: ReturnType<typeof vi.fn>
+  let reconcileWorkspace: ReturnType<typeof vi.fn<() => Promise<void>>>
   let service: DesktopWorkspaceAgentToolsService
 
   beforeEach(() => {
@@ -87,6 +88,7 @@ describe("DesktopWorkspaceAgentToolsService", () => {
       deleteWriting: vi.fn().mockResolvedValue({ data: { ...writing, deletedAt: "2026-01-02T00:00:00.000Z" }, error: null }),
     }
     importDocument = vi.fn().mockResolvedValue({ data: { ...writing, id }, error: null })
+    reconcileWorkspace = vi.fn().mockResolvedValue(undefined)
     relocateDocument = vi.fn().mockImplementation(async () => {
       record = makeRecord("/workspace/archive/Doc.md")
       catalog.getById.mockResolvedValue(record)
@@ -98,6 +100,7 @@ describe("DesktopWorkspaceAgentToolsService", () => {
       importDocument: importDocument as unknown as (path: string, content: string) => Promise<ServiceResponse<WritingRecord>>,
       relocateDocument: relocateDocument as unknown as (id: string, requestedPath: string, content?: string) => Promise<RelocateDesktopWritingResult>,
       validatePath: async (rootPath, candidatePath) => ({ canonicalRoot: rootPath, canonicalPath: candidatePath }),
+      reconcileWorkspace,
       now: () => new Date("2026-01-02T00:00:00.000Z"),
     })
   })
@@ -182,6 +185,7 @@ describe("DesktopWorkspaceAgentToolsService", () => {
     expect(result.error).toBeNull()
     expect(documentService.saveWriting).toHaveBeenCalledTimes(1)
     expect(result.data?.document.documentId).toBe(id)
+    expect(result.data?.persistence).toEqual({ localContent: "committed", projection: "committed" })
   })
 
   it("edits metadata through DocumentService while keeping the document UUID", async () => {
@@ -194,6 +198,71 @@ describe("DesktopWorkspaceAgentToolsService", () => {
     expect(result.error).toBeNull()
     expect(documentService.updateWritingMetadata).toHaveBeenCalledWith(expect.objectContaining({ writingId: id, status: "in_review", artifactType: "agent" }))
     expect(result.data?.document.documentId).toBe(id)
+  })
+
+  it("rejects a mixed content-and-metadata edit before opening the document", async () => {
+    const result = await service.edit({
+      documentId: id,
+      markdown: "# Changed",
+      metadata: { status: "in_review" },
+      approval: approval("edit", id, "edit-mixed"),
+    })
+
+    expect(result.error?.code).toBe("INVALID_INPUT")
+    expect(documentService.openWriting).not.toHaveBeenCalled()
+    expect(documentService.saveWriting).not.toHaveBeenCalled()
+    expect(documentService.updateWritingMetadata).not.toHaveBeenCalled()
+  })
+
+  it("completes an edit when the canonical markdown committed before projection failed", async () => {
+    const committed: WritingRecord = {
+      ...writing,
+      content: {
+        markdown: "# Doc\n\nAfter.",
+        richText: null,
+        plainText: "Doc\n\nAfter.",
+        canonicalSource: "markdown",
+      },
+    }
+    documentService.saveWriting.mockResolvedValueOnce({
+      data: null,
+      error: { code: "DB_ERROR", message: "catalog unavailable", retryable: true },
+    })
+    documentService.openWriting
+      .mockResolvedValueOnce({ data: writing, error: null })
+      .mockResolvedValueOnce({ data: committed, error: null })
+    reconcileWorkspace.mockRejectedValueOnce(new Error("catalog still unavailable"))
+
+    const result = await service.edit({
+      documentId: id,
+      markdown: "# Doc\n\nAfter.",
+      approval: approval("edit", id, "edit-recovered"),
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.document.markdown).toBe("# Doc\n\nAfter.")
+    expect(result.data?.persistence).toEqual({ localContent: "committed", projection: "pending" })
+    expect(reconcileWorkspace).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps an unresolved edit as an error when the canonical markdown cannot be verified", async () => {
+    documentService.saveWriting.mockResolvedValueOnce({
+      data: null,
+      error: { code: "DB_ERROR", message: "catalog unavailable", retryable: true },
+    })
+    documentService.openWriting
+      .mockResolvedValueOnce({ data: writing, error: null })
+      .mockResolvedValueOnce({ data: writing, error: null })
+
+    const result = await service.edit({
+      documentId: id,
+      markdown: "# Doc\n\nAfter.",
+      approval: approval("edit", id, "edit-unverified"),
+    })
+
+    expect(result.error?.code).toBe("STORAGE_ERROR")
+    expect(result.error?.details).toEqual({ localContent: "unverified", projection: "unverified" })
+    expect(reconcileWorkspace).not.toHaveBeenCalled()
   })
 
   it("moves through the existing relocate primitive and preserves UUID", async () => {

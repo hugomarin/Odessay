@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-14T01:43:34.336Z",
+  "artifact": {
+    "dmg": "/Users/hugomarin/Documents/App/Odessay/dist/releases/ArtifactStudio-0.7.1-aarch64.dmg",
+    "app": "/Volumes/Artifact Studio/Artifact Studio.app",
+    "version": "0.7.1",
+    "bundleIdentifier": "com.z9ne.odessay"
+  },
+  "checks": [
+    {
+      "status": "PASS",
+      "message": "DMG found: ArtifactStudio-0.7.1-aarch64.dmg"
+    },
+    {
+      "status": "PASS",
+      "message": "DMG mounted at: /Volumes/Artifact Studio"
+    },
+    {
+      "status": "PASS",
+      "message": "App bundle inside DMG: Artifact Studio.app"
+    },
+    {
+      "status": "PASS",
+      "message": "Binary exists: /Volumes/Artifact Studio/Artifact Studio.app/Contents/MacOS/odessay"
+    },
+    {
+      "status": "PASS",
+      "message": "Resources directory exists"
+    },
+    {
+      "status": "PASS",
+      "message": "Info.plist exists"
+    },
+    {
+      "status": "PASS",
+      "message": "CFBundleIdentifier: com.z9ne.odessay"
+    },
+    {
+      "status": "PASS",
+      "message": "CFBundleShortVersionString: 0.7.1"
+    },
+    {
+      "status": "PASS",
+      "message": "NSMicrophoneUsageDescription is present"
+    },
+    {
+      "status": "PASS",
+      "message": "CSP includes ipc: or http://ipc.localhost"
+    },
+    {
+      "status": "PASS",
+      "message": "CSP defines connect-src"
+    },
+    {
+      "status": "PASS",
+      "message": "Bundle identifier matches tauri.conf.json: com.z9ne.odessay"
+    },
+    {
+      "status": "PASS",
+      "message": "Configured entitlement profile is not sandboxed: entitlements-audio.plist"
+    },
+    {
+      "status": "PASS",
+      "message": "Configured entitlement profile declares audio input"
+    },
+    {
+      "status": "PASS",
+      "message": "Cargo.toml has features = [\"devtools\"]"
+    },
+    {
+      "status": "PASS",
+      "message": "Tauri capabilities allow runtime watcher scopes"
+    },
+    {
+      "status": "PASS",
+      "message": "Tauri capabilities retain the document filesystem scope"
+    },
+    {
+      "status": "PASS",
+      "message": "Version aligned: 0.7.1"
+    },
+    {
+      "status": "PASS",
+      "message": "NEXT_PUBLIC_APP_URL is remote: https://odessay.vercel.app"
+    },
+    {
+      "status": "PASS",
+      "message": "Embedded runtime host is remote: https://odessay.vercel.app (found in 12 of 144 asset(s) from /Users/hugomarin/Documents/App/Odessay/dist)"
+    },
+    {
+      "status": "PASS",
+      "message": "dist/index.html exists (static export produced)"
+    },
+    {
+      "status": "PASS",
+      "message": "No obvious baked-in server redirects detected in static export"
+    },
+    {
+      "status": "PASS",
+      "message": "No quarantine attribute — app may already be trusted"
+    },
+    {
+      "status": "PASS",
+      "message": "Ad-hoc signature detected (expected without Apple Developer ID)"
+    },
+    {
+      "status": "PASS",
+      "message": "App Sandbox entitlement is absent from the effective bundle"
+    },
+    {
+      "status": "PASS",
+      "message": "Audio input entitlement is embedded in the effective bundle"
+    }
+  ],
+  "summary": {
+    "failures": 0,
+    "warnings": 0
+  }
+}

@@ -1,0 +1,544 @@
+{
+  "generatedAt": "2026-09-14T14:26:12.409Z",
+  "provider": "openai",
+  "model": "gpt-5.6-luna",
+  "contract": "Workspace Agent real Responses smoke",
+  "storesPromptOrDocumentContent": false,
+  "scenarios": {
+    "short_continuity": {
+      "documentWordCount": 12,
+      "schema": "workspaceAskResponseSchema",
+      "responseTraces": [
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_065017c20cd31714006aa80400bdb087d1997df3faf7534ec1",
+          "previousResponseId": null,
+          "status": "completed",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 1179,
+            "completionTokens": 76,
+            "totalTokens": 1255,
+            "latencyMs": 2107
+          },
+          "latencyMs": 2107,
+          "outputItems": [
+            {
+              "id": "msg_065017c20cd31714006aa8040181a487d1a802287a129e37c8",
+              "type": "message",
+              "status": "completed",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        },
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_065017c20cd31714006aa80402975087d196bbe7d6caefc46b",
+          "previousResponseId": "resp_065017c20cd31714006aa80400bdb087d1997df3faf7534ec1",
+          "status": "completed",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 2054,
+            "completionTokens": 73,
+            "totalTokens": 2127,
+            "latencyMs": 1982
+          },
+          "latencyMs": 1982,
+          "outputItems": [
+            {
+              "id": "msg_065017c20cd31714006aa80403534c87d19c5a0c1699e9c168",
+              "type": "message",
+              "status": "completed",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        }
+      ],
+      "assertions": {
+        "structuredOutputValid": true,
+        "answerGroundedInSelectedDocument": true,
+        "responseIdsDistinct": true,
+        "previousResponseIdMatched": true
+      }
+    },
+    "long_document": {
+      "documentWordCount": 344,
+      "schema": "workspaceAskResponseSchema",
+      "responseTraces": [
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_042f8ae84a4e2fa3006aa8040493a487d19fddaf47cea2cc55",
+          "previousResponseId": null,
+          "status": "completed",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 1864,
+            "completionTokens": 87,
+            "totalTokens": 1951,
+            "latencyMs": 2279
+          },
+          "latencyMs": 2279,
+          "outputItems": [
+            {
+              "id": "msg_042f8ae84a4e2fa3006aa80405aa6c87d1b38ccd48f9479f07",
+              "type": "message",
+              "status": "completed",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        }
+      ],
+      "assertions": {
+        "structuredOutputValid": true,
+        "answerGroundedInFinalDocumentSection": true,
+        "providerCompleted": true,
+        "usageRecorded": true,
+        "latencyRecorded": true
+      }
+    },
+    "native_compaction": {
+      "schema": null,
+      "responseTraces": [
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_017f2e16af0a556c006aa80447a70c87d1aa16efbe3a96db54",
+          "previousResponseId": null,
+          "status": "incomplete",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 1434,
+            "completionTokens": 512,
+            "totalTokens": 1946,
+            "latencyMs": 4871
+          },
+          "latencyMs": 4871,
+          "outputItems": [
+            {
+              "id": "msg_017f2e16af0a556c006aa804484a4487d1a50d1910c8c9a750",
+              "type": "message",
+              "status": "incomplete",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        },
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_017f2e16af0a556c006aa8044c876087d19a9fb28ce7652a3a",
+          "previousResponseId": "resp_017f2e16af0a556c006aa80447a70c87d1aa16efbe3a96db54",
+          "status": "incomplete",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 3381,
+            "completionTokens": 512,
+            "totalTokens": 3893,
+            "latencyMs": 5376
+          },
+          "latencyMs": 5376,
+          "outputItems": [
+            {
+              "id": "msg_017f2e16af0a556c006aa8044d91a487d1a146f3740ab282bf",
+              "type": "message",
+              "status": "incomplete",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        },
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_017f2e16af0a556c006aa80451c24087d1956560fff8b88de4",
+          "previousResponseId": "resp_017f2e16af0a556c006aa8044c876087d19a9fb28ce7652a3a",
+          "status": "incomplete",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 5328,
+            "completionTokens": 512,
+            "totalTokens": 5840,
+            "latencyMs": 5763
+          },
+          "latencyMs": 5763,
+          "outputItems": [
+            {
+              "id": "msg_017f2e16af0a556c006aa80452904487d1acb1c5f55e075e9a",
+              "type": "message",
+              "status": "incomplete",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        },
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_017f2e16af0a556c006aa804579f6487d1af790861a81bb45c",
+          "previousResponseId": "resp_017f2e16af0a556c006aa80451c24087d1956560fff8b88de4",
+          "status": "incomplete",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 7275,
+            "completionTokens": 512,
+            "totalTokens": 7787,
+            "latencyMs": 5081
+          },
+          "latencyMs": 5081,
+          "outputItems": [
+            {
+              "id": "msg_017f2e16af0a556c006aa804589bc887d1a3805ead5ce4b79e",
+              "type": "message",
+              "status": "incomplete",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        },
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_017f2e16af0a556c006aa8045ca05c87d1bab217bc896f4b3d",
+          "previousResponseId": "resp_017f2e16af0a556c006aa804579f6487d1af790861a81bb45c",
+          "status": "incomplete",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 9222,
+            "completionTokens": 512,
+            "totalTokens": 9734,
+            "latencyMs": 5249
+          },
+          "latencyMs": 5249,
+          "outputItems": [
+            {
+              "id": "msg_017f2e16af0a556c006aa8045d74c487d1a952ec0cae31df34",
+              "type": "message",
+              "status": "incomplete",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        },
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_017f2e16af0a556c006aa80461e98087d198c033a79c0f9459",
+          "previousResponseId": "resp_017f2e16af0a556c006aa8045ca05c87d1bab217bc896f4b3d",
+          "status": "completed",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 11425,
+            "completionTokens": 270,
+            "totalTokens": 11695,
+            "latencyMs": 3531
+          },
+          "latencyMs": 3531,
+          "outputItems": [
+            {
+              "id": "cmp_017f2e16af0a556c006aa80464378087d19addb976a88fc2e2",
+              "type": "compaction",
+              "status": null,
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": false,
+              "hasText": false
+            },
+            {
+              "id": "msg_017f2e16af0a556c006aa80464a08c87d1bd8f0152db81059e",
+              "type": "message",
+              "status": "completed",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        },
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_017f2e16af0a556c006aa80465b73c87d19709e50a26f5a978",
+          "previousResponseId": "resp_017f2e16af0a556c006aa80461e98087d198c033a79c0f9459",
+          "status": "completed",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 10456,
+            "completionTokens": 579,
+            "totalTokens": 11035,
+            "latencyMs": 5384
+          },
+          "latencyMs": 5384,
+          "outputItems": [
+            {
+              "id": "cmp_017f2e16af0a556c006aa80468558c87d197f722af518bdbcc",
+              "type": "compaction",
+              "status": null,
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": false,
+              "hasText": false
+            },
+            {
+              "id": "msg_017f2e16af0a556c006aa80468d4d487d1b9486e1e19341d03",
+              "type": "message",
+              "status": "completed",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            },
+            {
+              "id": "cmp_017f2e16af0a556c006aa80468f02487d1a80236c45506485a",
+              "type": "compaction",
+              "status": null,
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": false,
+              "hasText": false
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        },
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_017f2e16af0a556c006aa8046ac26c87d18f880d9bbecda749",
+          "previousResponseId": "resp_017f2e16af0a556c006aa80465b73c87d19709e50a26f5a978",
+          "status": "completed",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 11822,
+            "completionTokens": 437,
+            "totalTokens": 12259,
+            "latencyMs": 3885
+          },
+          "latencyMs": 3885,
+          "outputItems": [
+            {
+              "id": "cmp_017f2e16af0a556c006aa8046c22c487d198a2425cc50457af",
+              "type": "compaction",
+              "status": null,
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": false,
+              "hasText": false
+            },
+            {
+              "id": "msg_017f2e16af0a556c006aa8046c8f9c87d1b272b62c60543ad7",
+              "type": "message",
+              "status": "completed",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            },
+            {
+              "id": "cmp_017f2e16af0a556c006aa8046c9fdc87d1adc83e4e6a756391",
+              "type": "compaction",
+              "status": null,
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": false,
+              "hasText": false
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        }
+      ],
+      "assertions": {
+        "atLeastTwoCompactionItems": true,
+        "responseChainPreserved": true
+      }
+    },
+    "provider_incomplete": {
+      "schema": null,
+      "responseTraces": [
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_01e728d6a449cd65006aa804c28fe887d19cb99f7de12dc4b0",
+          "previousResponseId": null,
+          "status": "incomplete",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 33,
+            "completionTokens": 16,
+            "totalTokens": 49,
+            "latencyMs": 1565
+          },
+          "latencyMs": 1565,
+          "outputItems": [
+            {
+              "id": "msg_01e728d6a449cd65006aa804c3605487d187ef8bc20384465d",
+              "type": "message",
+              "status": "incomplete",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        }
+      ],
+      "assertions": {
+        "providerReturnedIncomplete": true,
+        "incompleteReasonWasOutputBudget": true,
+        "receiptPreservedIncompleteStatus": true
+      }
+    },
+    "whole_workspace_over_six": {
+      "documentCount": 8,
+      "schema": "workspaceAskResponseSchema",
+      "responseTraces": [
+        {
+          "action": "ask",
+          "stage": "analysis",
+          "runtime": "cloud",
+          "contextVersion": "workspace-agent-v1",
+          "responseId": "resp_059fba98adc90ae3006aa804d91f6087d18c3ce5379ede81da",
+          "previousResponseId": null,
+          "status": "completed",
+          "model": "gpt-5.6-luna",
+          "httpStatus": 200,
+          "usage": {
+            "model": "gpt-5.6-luna",
+            "promptTokens": 2125,
+            "completionTokens": 189,
+            "totalTokens": 2314,
+            "latencyMs": 2507
+          },
+          "latencyMs": 2507,
+          "outputItems": [
+            {
+              "id": "msg_059fba98adc90ae3006aa804d9a3cc87d19403cfc7f721d517",
+              "type": "message",
+              "status": "completed",
+              "callId": null,
+              "name": null,
+              "hasArguments": false,
+              "hasOutput": true,
+              "hasText": true
+            }
+          ],
+          "outputItemsTruncated": false,
+          "errorCode": null
+        }
+      ],
+      "assertions": {
+        "structuredOutputValid": true,
+        "explicitScopeContainedEightDocuments": true,
+        "firstAndLastDocumentsGrounded": true,
+        "scopeReady": true
+      }
+    }
+  }
+}

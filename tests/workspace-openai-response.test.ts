@@ -11,6 +11,11 @@ const config = {
   maxOutputTokens: 512,
   reasoningEffort: "none" as const,
   contextWindowTokens: 180,
+  contextCapacitySource: "deployment_override" as const,
+  contextCapacityStatus: "known" as const,
+  historyReserveTokens: 0,
+  reasoningReserveTokens: 0,
+  safetyMarginTokens: 0,
   compactionThresholdTokens: 120,
 }
 
@@ -86,5 +91,31 @@ describe("Workspace OpenAI staged Responses adapter", () => {
       bodies.map((_body, index) => `resp-stage-${index + 1}`),
     )
     expect(countWorkspaceCompactionItems(response.receipt)).toBe(0)
+  })
+
+  it("returns budget_exceeded before provider I/O when staged continuity has no compaction policy", async () => {
+    const providerFetch = vi.fn()
+    vi.stubGlobal("fetch", providerFetch)
+
+    await expect(callWorkspaceOpenAIResponseStaged({
+      config,
+      execution: createWorkspaceExecutionContext("ask", "cloud"),
+      systemPrompt: "You are the Workspace agent.",
+      userPrompt: "Selected evidence: " + "full markdown. ".repeat(200),
+      maxOutputTokens: config.maxOutputTokens,
+      timeoutMs: 5_000,
+      textFormat: { type: "json_schema", name: "Answer", schema: {} },
+      capacity: { contextWindowTokens: config.contextWindowTokens, reservedOutputTokens: 40 },
+      messages: {
+        unavailable: "unavailable",
+        timeout: "timeout",
+        rateLimited: "rate limited",
+        contractRejected: "contract rejected",
+        authRejected: "auth rejected",
+        providerFailed: "provider failed",
+        parseFailed: "parse failed",
+      },
+    })).rejects.toMatchObject({ code: "BUDGET_EXCEEDED" })
+    expect(providerFetch).not.toHaveBeenCalled()
   })
 })

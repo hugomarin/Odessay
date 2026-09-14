@@ -110,6 +110,31 @@ describe("Workspace semantic document relations", () => {
     expect(isResolvableSemanticContradiction(parsed.relations[0]!)).toBe(true)
   })
 
+  it("rejects an intra-document contradiction that cites the same range twice", () => {
+    const request = buildWorkspaceDocumentRelationsRequest([
+      source("single", "# Storage\n\nStorage: SQLite.\n\n# Migration\n\nStorage: IndexedDB."),
+    ])
+    const first = request.initialEvidence[0]!
+    const duplicateRange = { ...first, evidenceId: `${first.evidenceId}:duplicate` }
+    const parsed = parseWorkspaceDocumentRelationsResult(loopResult({
+      coverage: "complete",
+      relations: [{
+        candidateId: null,
+        leftDocumentId: "single",
+        rightDocumentId: "single",
+        verdict: "contradictory",
+        confidence: "high",
+        rationale: "The same passage was cited twice.",
+        evidenceIds: [first.evidenceId, duplicateRange.evidenceId],
+        suggestedDocumentId: null,
+        suggestedReason: null,
+      }],
+    }, { evidence: [first, duplicateRange] }), request)
+
+    expect(parsed).toMatchObject({ status: "insufficient_evidence", coverage: "partial", invalidItemCount: 1 })
+    expect(parsed.relations).toEqual([])
+  })
+
   it("keeps oversized selected relation sources complete for provider staging", () => {
     const oversized = "# Scope\n\n" + "A complete relation paragraph. ".repeat(3_000)
     const request = buildWorkspaceDocumentRelationsRequest([
