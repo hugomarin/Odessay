@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, FileText, Folder, Home } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, FileText, Folder, FolderOpen, Home } from "lucide-react";
 import { buildWorkspaceFolderTree } from "@/lib/workspace/folder-tree";
 import type { WorkspaceFolderTreeNode } from "@/lib/workspace/folder-tree";
+import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
+import type { WritingStatus } from "@/lib/writings/status";
 import { cn } from "@/lib/utils";
 
 export type WorkspaceTreeItem = {
@@ -13,6 +15,8 @@ export type WorkspaceTreeItem = {
   kind: "folder" | "file";
   count?: number;
   openable?: boolean;
+  /** Drives the file row's status icon. Undefined/null falls back to a plain document icon. */
+  status?: WritingStatus | null;
 };
 
 export type WorkspaceTreeMode = "studio" | "detail";
@@ -46,6 +50,16 @@ function totalFileCount(items: WorkspaceTreeItem[]): number {
   return items.filter((item) => item.kind === "file").length;
 }
 
+function collectFolderPaths(nodes: WorkspaceFolderTreeNode[]): string[] {
+  const paths: string[] = [];
+  for (const node of nodes) {
+    if (node.kind !== "folder") continue;
+    paths.push(node.path);
+    paths.push(...collectFolderPaths(node.children));
+  }
+  return paths;
+}
+
 function TreeRow({
   depth,
   node,
@@ -54,6 +68,7 @@ function TreeRow({
   selectedFolderPath,
   collapsedPaths,
   idByRelativePath,
+  statusByRelativePath,
   foldersOnly,
   onToggleFolder,
   onOpenFile,
@@ -66,6 +81,7 @@ function TreeRow({
   selectedFolderPath: string | null;
   collapsedPaths: ReadonlySet<string>;
   idByRelativePath: ReadonlyMap<string, string>;
+  statusByRelativePath: ReadonlyMap<string, WritingStatus | null | undefined>;
   foldersOnly?: boolean;
   onToggleFolder: (path: string) => void;
   onOpenFile?: (id: string) => void;
@@ -76,6 +92,7 @@ function TreeRow({
     const fileId = idByRelativePath.get(node.path) ?? node.path;
     const active = fileId === activeId;
     const disabled = !onOpenFile || !fileId;
+    const status = statusByRelativePath.get(node.path);
     return (
       <li>
         <button
@@ -98,7 +115,11 @@ function TreeRow({
               aria-hidden="true"
             />
           ) : null}
-          <FileText className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+          {status ? (
+            <WritingStatusIcon status={status} className="h-[14px] w-[14px] shrink-0" />
+          ) : (
+            <FileText className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+          )}
           <span className="flex-1 truncate">
             {node.name.replace(/\.md$/i, "")}
           </span>
@@ -147,7 +168,11 @@ function TreeRow({
         ) : (
           <span className="h-[13px] w-[13px] shrink-0" aria-hidden="true" />
         )}
-        <Folder className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+        {expanded ? (
+          <FolderOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+        ) : (
+          <Folder className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+        )}
         <span className="flex-1 truncate">{node.name}</span>
         {typeof node.fileCount === "number" ? (
           <span className="font-mono text-[11px] text-ink-4">
@@ -167,6 +192,7 @@ function TreeRow({
               selectedFolderPath={selectedFolderPath}
               collapsedPaths={collapsedPaths}
               idByRelativePath={idByRelativePath}
+              statusByRelativePath={statusByRelativePath}
               foldersOnly={foldersOnly}
               onToggleFolder={onToggleFolder}
               onOpenFile={onOpenFile}
@@ -218,8 +244,25 @@ export function WorkspaceTree({
     );
   }, [items]);
 
+  // Studio's Workspace tab opens collapsed rather than fully expanded — but
+  // only on the tree's first real load. Once seeded, later rebuilds (an
+  // autosave patch, or switching to another document in the same Workspace,
+  // both of which replace `items` without remounting this component) must
+  // not re-collapse whatever the author has since opened.
+  const hasSeededCollapse = useRef(false);
+  useEffect(() => {
+    if (mode !== "studio" || hasSeededCollapse.current || tree.length === 0) return;
+    hasSeededCollapse.current = true;
+    setCollapsedPaths(new Set(collectFolderPaths(tree)));
+  }, [mode, tree]);
+
   const idByRelativePath = useMemo(
     () => new Map(items.map((item) => [item.relativePath, item.id])),
+    [items],
+  );
+
+  const statusByRelativePath = useMemo(
+    () => new Map(items.map((item) => [item.relativePath, item.status])),
     [items],
   );
 
@@ -343,6 +386,7 @@ export function WorkspaceTree({
             selectedFolderPath={effectiveSelectedFolder}
             collapsedPaths={collapsedPaths}
             idByRelativePath={idByRelativePath}
+            statusByRelativePath={statusByRelativePath}
             foldersOnly={foldersOnly}
             onToggleFolder={handleToggleFolder}
             onOpenFile={onOpenFile}

@@ -197,6 +197,7 @@ export function WorkspaceTreePanel({
         relativePath: document.relativePath,
         kind: "file" as const,
         openable: document.openable,
+        status: document.status,
       })),
     [workspace],
   );
@@ -278,6 +279,7 @@ export function WorkspaceTreePanel({
           wired to a handler — and it pushed the home row out of first place
           (owner review). */}
       <WorkspaceTree
+        key={workspace.slug}
         aria-label={`${workspace.name} documents`}
         mode="studio"
         items={treeItems}

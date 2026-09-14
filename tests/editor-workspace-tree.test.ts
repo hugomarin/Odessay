@@ -9,6 +9,7 @@ describe("editor Workspace worktree", () => {
         name: "First.md",
         relativePath: "Letters/2026/First.md",
         state: "synced",
+        status: "draft",
         openable: true,
       },
       {
@@ -16,6 +17,7 @@ describe("editor Workspace worktree", () => {
         name: "Ambiguous.md",
         relativePath: "Letters/Ambiguous.md",
         state: "ambiguous",
+        status: "draft",
         openable: false,
       },
       {
@@ -23,6 +25,7 @@ describe("editor Workspace worktree", () => {
         name: "Root.md",
         relativePath: "Root.md",
         state: "local-only",
+        status: "draft",
         openable: true,
       },
     ]);
@@ -43,6 +46,7 @@ describe("editor Workspace worktree", () => {
         name: "Draft.md",
         relativePath: "Folder\\Draft.md",
         state: "pending",
+        status: "draft",
         openable: true,
       },
     ]);

@@ -1,4 +1,5 @@
 import type { DocumentState } from "@/lib/writings/document-state"
+import type { WritingStatus } from "@/lib/writings/status"
 
 export type WorkspaceLayout = "grid" | "list"
 
@@ -49,6 +50,7 @@ export type ContextualWorkspaceDocument = {
   name: string
   relativePath: string
   state: DocumentState
+  status: WritingStatus | null
   openable: boolean
 }
 

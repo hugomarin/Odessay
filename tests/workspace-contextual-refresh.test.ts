@@ -49,6 +49,7 @@ const workspace: ContextualWorkspace = {
       name: "analisis.md",
       relativePath: "03-analisis/analisis.md",
       state: "synced",
+      status: "draft",
       openable: true,
     },
     {
@@ -56,6 +57,7 @@ const workspace: ContextualWorkspace = {
       name: "sesion.md",
       relativePath: "04-sesiones/sesion.md",
       state: "synced",
+      status: "draft",
       openable: true,
     },
     // Discovered on disk but not reconciled into the catalog yet.
@@ -64,6 +66,7 @@ const workspace: ContextualWorkspace = {
       name: "borrador.md",
       relativePath: "borrador.md",
       state: "rebuilding",
+      status: null,
       openable: false,
     },
   ],
