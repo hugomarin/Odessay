@@ -31,6 +31,7 @@ type DesktopWorkspaceAgentDependencies = {
   importDocument: typeof importDesktopWritingFile
   relocateDocument: typeof relocateDesktopWriting
   validatePath: WorkspaceAgentPathValidator
+  reconcileWorkspace?: () => Promise<void>
   now?: () => Date
 }
 
@@ -390,11 +391,49 @@ export class DesktopWorkspaceAgentToolsService implements WorkspaceAgentToolsSer
     return ok({
       document: this.toAgentDocument(after, markdownFromWriting(saved.data)),
       receipt: this.receipt("write", approval),
+      persistence: { localContent: "committed", projection: "committed" },
+    })
+  }
+
+  /**
+   * The desktop save contract commits the `.md` before manifest + SQLite. If
+   * that later projection reports an error, verify the content authority
+   * directly through DocumentService and ask the global reconciler to finish
+   * the projection. This is recovery, not a second persistence path.
+   */
+  private async recoverVerifiedContentCommit(
+    documentId: string,
+    expectedMarkdown: string,
+    approval: WorkspaceAgentApproval,
+    recordBefore: DocumentCatalogRecord,
+  ): Promise<ServiceResponse<WorkspaceAgentMutationResult> | null> {
+    const verified = await this.dependencies.documentService.openWriting(documentId)
+    if (verified.error || !verified.data || markdownFromWriting(verified.data) !== expectedMarkdown) return null
+
+    let projection: "committed" | "pending" = "pending"
+    if (this.dependencies.reconcileWorkspace) {
+      try {
+        await this.dependencies.reconcileWorkspace()
+        projection = "committed"
+      } catch {
+        // The `.md` is already the durable content authority. The app-lifetime
+        // reconciler retries stale roots on its normal recovery paths.
+      }
+    }
+    const after = (await this.dependencies.catalog.getById(documentId))
+    if (after?.deletedAt) return null
+    return ok({
+      document: this.toAgentDocument(after ?? recordBefore, expectedMarkdown),
+      receipt: this.receipt("edit", approval),
+      persistence: { localContent: "committed", projection },
     })
   }
 
   async edit(input: WorkspaceAgentEditInput): Promise<ServiceResponse<WorkspaceAgentMutationResult>> {
     if (input.markdown === undefined && !input.metadata) return error("INVALID_INPUT", "edit requires markdown or metadata.")
+    if (input.markdown !== undefined && input.metadata) {
+      return error("INVALID_INPUT", "edit accepts content or metadata in one approved action, not both.")
+    }
     const recordResult = await this.getRecord(input.documentId)
     if (recordResult.error || !recordResult.data) return recordResult as ServiceResponse<WorkspaceAgentMutationResult>
     const approvalValidation = this.takeApproval("edit", input.approval, input.documentId)
@@ -406,8 +445,21 @@ export class DesktopWorkspaceAgentToolsService implements WorkspaceAgentToolsSer
     if (input.markdown !== undefined) {
       const next = recordWithMarkdown(current, input.markdown, this.now().toISOString())
       if ("code" in next) return { data: null, error: next }
+      const expectedMarkdown = markdownFromWriting(next)
       const saved = await this.dependencies.documentService.saveWriting({ writing: next })
-      if (saved.error || !saved.data) return error("STORAGE_ERROR", saved.error?.message ?? "Document could not be edited.")
+      if (saved.error || !saved.data) {
+        const recovered = await this.recoverVerifiedContentCommit(
+          input.documentId,
+          expectedMarkdown,
+          input.approval,
+          recordResult.data,
+        )
+        if (recovered) return recovered
+        return error("STORAGE_ERROR", saved.error?.message ?? "Document could not be edited.", {
+          localContent: "unverified",
+          projection: "unverified",
+        })
+      }
       current = saved.data
     }
     if (input.metadata) {
@@ -425,6 +477,7 @@ export class DesktopWorkspaceAgentToolsService implements WorkspaceAgentToolsSer
     return ok({
       document: this.toAgentDocument(after, markdownFromWriting(current)),
       receipt: this.receipt("edit", input.approval),
+      persistence: { localContent: "committed", projection: "committed" },
     })
   }
 

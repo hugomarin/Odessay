@@ -577,7 +577,7 @@ function WorkspaceAgentPanelSession({
         setFeedback(error instanceof Error ? error.message : "The agent action could not be completed.")
       }
     } finally {
-      setBusyAction(null)
+      if (sessionGenerationRef.current === generation) setBusyAction(null)
     }
   }, [])
 
@@ -1195,7 +1195,11 @@ function WorkspaceAgentPanelSession({
     const next = new Set(resolvedIds)
     next.add(proposal.id)
     persistResolvedIds(next)
-    const outcome = resolution === "discard" ? "Finding discarded from this review queue." : "The selected evidence was applied to the target artifact."
+    const outcome = resolution === "discard"
+      ? "Finding discarded from this review queue."
+      : response.data.mutation?.persistence?.projection === "pending"
+        ? "The selected evidence was saved locally; catalog reconciliation is pending."
+        : "The selected evidence was applied to the target artifact."
     setFeedback(outcome)
     recordSessionAction(outcome, generation)
   }), [messages, persistResolvedIds, recordSessionAction, resolvedIds, runAction, service])
@@ -1255,6 +1259,7 @@ function WorkspaceAgentPanelSession({
     // Bumped first: any action already in flight checks this ref (not a
     // stale closure) at the moment it would otherwise append its answer.
     sessionGenerationRef.current += 1
+    setBusyAction(null)
     setMessages([])
     setChatDraft("")
     setAttachments([])

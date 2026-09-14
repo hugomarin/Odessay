@@ -1,13 +1,21 @@
 import type { WorkspaceSemanticInputItem } from "@/lib/services/contracts/ai-service"
 
+export type WorkspaceContextCapacityStatus = "ready" | "staged" | "capacity_unknown" | "budget_exceeded"
+
 /**
  * Context capacity is a deployment/model capability, never a product
- * selection rule. When the capability is unknown we leave the provider in
- * charge instead of guessing a window and dropping user-selected content.
+ * selection rule. Every named reserve is explicit so callers cannot mistake
+ * the physical model window for usable document space.
  */
 export type WorkspaceContextCapacity = {
   contextWindowTokens: number | null
   reservedOutputTokens: number
+  systemPromptTokens?: number
+  schemaAndToolTokens?: number
+  historyTokens?: number
+  reasoningTokens?: number
+  safetyMarginTokens?: number
+  /** Additional provider-envelope reserve not covered by the named fields. */
   overheadTokens?: number
 }
 
@@ -16,12 +24,33 @@ export type WorkspaceContextBatchPlan = {
   estimatedInputTokens: number
   availableInputTokens: number | null
   staged: boolean
+  status: WorkspaceContextCapacityStatus
+}
+
+export class WorkspaceContextCapacityError extends Error {
+  constructor(
+    readonly code: "CAPACITY_UNKNOWN" | "BUDGET_EXCEEDED",
+    message: string,
+  ) {
+    super(message)
+    this.name = "WorkspaceContextCapacityError"
+  }
+}
+
+function reservedWorkspaceContextTokens(capacity: WorkspaceContextCapacity): number {
+  return capacity.reservedOutputTokens
+    + (capacity.systemPromptTokens ?? 0)
+    + (capacity.schemaAndToolTokens ?? 0)
+    + (capacity.historyTokens ?? 0)
+    + (capacity.reasoningTokens ?? 0)
+    + (capacity.safetyMarginTokens ?? 0)
+    + (capacity.overheadTokens ?? 0)
 }
 
 export function availableWorkspaceInputTokens(capacity: WorkspaceContextCapacity): number | null {
   return capacity.contextWindowTokens == null
     ? null
-    : Math.max(1, capacity.contextWindowTokens - capacity.reservedOutputTokens - (capacity.overheadTokens ?? 0))
+    : Math.max(0, capacity.contextWindowTokens - reservedWorkspaceContextTokens(capacity))
 }
 
 export function estimateWorkspaceTokens(value: string): number {
@@ -47,12 +76,33 @@ export function planWorkspaceSemanticBatches(
   const estimatedInputTokens = estimateWorkspaceInputTokens(input)
   const availableInputTokens = availableWorkspaceInputTokens(capacity)
 
-  if (availableInputTokens === null || estimatedInputTokens <= availableInputTokens) {
+  if (availableInputTokens === null) {
+    return {
+      batches: [],
+      estimatedInputTokens,
+      availableInputTokens,
+      staged: false,
+      status: "capacity_unknown",
+    }
+  }
+
+  if (availableInputTokens === 0) {
+    return {
+      batches: [],
+      estimatedInputTokens,
+      availableInputTokens,
+      staged: false,
+      status: "budget_exceeded",
+    }
+  }
+
+  if (estimatedInputTokens <= availableInputTokens) {
     return {
       batches: [ [...input] ],
       estimatedInputTokens,
       availableInputTokens,
       staged: false,
+      status: "ready",
     }
   }
 
@@ -89,24 +139,30 @@ export function planWorkspaceSemanticBatches(
   }
   if (current.length > 0) batches.push(current)
 
-  return { batches, estimatedInputTokens, availableInputTokens, staged: batches.length > 1 }
+  return { batches, estimatedInputTokens, availableInputTokens, staged: batches.length > 1, status: "staged" }
 }
 
 /** Splits a prompt into ordered, lossless text batches for staged Responses calls. */
 export function planWorkspaceTextBatches(
   text: string,
   capacity: WorkspaceContextCapacity,
-): { batches: string[]; staged: boolean; availableInputTokens: number | null } {
+): { batches: string[]; staged: boolean; availableInputTokens: number | null; status: WorkspaceContextCapacityStatus } {
   const availableInputTokens = availableWorkspaceInputTokens(capacity)
-  if (availableInputTokens === null || estimateWorkspaceTokens(text) <= availableInputTokens) {
-    return { batches: [text], staged: false, availableInputTokens }
+  if (availableInputTokens === null) {
+    return { batches: [], staged: false, availableInputTokens, status: "capacity_unknown" }
+  }
+  if (availableInputTokens === 0) {
+    return { batches: [], staged: false, availableInputTokens, status: "budget_exceeded" }
+  }
+  if (estimateWorkspaceTokens(text) <= availableInputTokens) {
+    return { batches: [text], staged: false, availableInputTokens, status: "ready" }
   }
   const maxChars = Math.max(1, availableInputTokens * 4)
   const batches: string[] = []
   for (let offset = 0; offset < text.length; offset += maxChars) {
     batches.push(text.slice(offset, offset + maxChars))
   }
-  return { batches, staged: batches.length > 1, availableInputTokens }
+  return { batches, staged: batches.length > 1, availableInputTokens, status: "staged" }
 }
 
 export function recommendedDocumentTokenBudget(
@@ -114,6 +170,23 @@ export function recommendedDocumentTokenBudget(
   documentCount: number,
 ): number | null {
   if (capacity.contextWindowTokens == null || documentCount <= 0) return null
-  const available = Math.max(0, capacity.contextWindowTokens - capacity.reservedOutputTokens - (capacity.overheadTokens ?? 0))
+  const available = Math.max(0, capacity.contextWindowTokens - reservedWorkspaceContextTokens(capacity))
   return Math.floor(available / documentCount)
+}
+
+export function assertWorkspaceContextPlanCapacity(
+  plan: Pick<WorkspaceContextBatchPlan, "status"> | { status: WorkspaceContextCapacityStatus },
+): void {
+  if (plan.status === "capacity_unknown") {
+    throw new WorkspaceContextCapacityError(
+      "CAPACITY_UNKNOWN",
+      "Workspace context capacity is unknown for the configured model. Configure OPENAI_WORKSPACE_CONTEXT_WINDOW_TOKENS or use a registered model.",
+    )
+  }
+  if (plan.status === "budget_exceeded") {
+    throw new WorkspaceContextCapacityError(
+      "BUDGET_EXCEEDED",
+      "Workspace context reserves leave no capacity for selected evidence. Reduce the configured reserves or use a larger model window.",
+    )
+  }
 }

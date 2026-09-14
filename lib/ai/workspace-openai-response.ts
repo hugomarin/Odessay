@@ -9,7 +9,10 @@ import {
 } from "@/lib/ai/workspace-execution-receipt"
 import { workspaceExecutionMetadata } from "@/lib/ai/workspace-execution-receipt"
 import {
+  assertWorkspaceContextPlanCapacity,
+  estimateWorkspaceTokens,
   planWorkspaceTextBatches,
+  WorkspaceContextCapacityError,
   type WorkspaceContextCapacity,
 } from "@/lib/ai/workspace-context-capacity"
 
@@ -255,14 +258,21 @@ export async function callWorkspaceOpenAIResponseStaged({
 }): Promise<{ payload: WorkspaceOpenAIResponsePayload; receipt: WorkspaceExecutionReceipt; staged: boolean }> {
   const plan = planWorkspaceTextBatches(userPrompt, {
     ...capacity,
-    // Include the system prompt and the small protocol envelope in the
-    // capacity calculation. These are provider input tokens, not a product
-    // limit; omitting them makes the final staged request fail at the edge of
-    // the real model window.
-    overheadTokens: (capacity.overheadTokens ?? 0)
-      + Math.ceil(systemPrompt.length / 4)
-      + Math.ceil("Staged context part. Preserve this content as evidence in the current scope. All staged context is now available. Return the final structured answer.".length / 4),
+    // Include provider-owned inputs explicitly. These are not product limits;
+    // omitting them makes the final stage fail at the edge of the real model
+    // window even when the selected markdown itself appears to fit.
+    systemPromptTokens: (capacity.systemPromptTokens ?? 0) + estimateWorkspaceTokens(systemPrompt),
+    schemaAndToolTokens: (capacity.schemaAndToolTokens ?? 0)
+      + estimateWorkspaceTokens(JSON.stringify(textFormat ?? {}))
+      + estimateWorkspaceTokens("Staged context part. Preserve this content as evidence in the current scope. All staged context is now available. Return the final structured answer."),
   })
+  assertWorkspaceContextPlanCapacity(plan)
+  if (plan.staged && !contextManagement?.some((item) => item.type === "compaction")) {
+    throw new WorkspaceContextCapacityError(
+      "BUDGET_EXCEEDED",
+      "The selected evidence requires staged processing, but native context compaction is not configured for this deployment.",
+    )
+  }
   let head = previousResponseId ?? null
   let last: { payload: WorkspaceOpenAIResponsePayload; receipt: WorkspaceExecutionReceipt } | null = null
   const receipts: WorkspaceExecutionReceipt[] = []

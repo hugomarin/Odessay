@@ -348,6 +348,11 @@ function semanticProposal(
   summary: WorkspaceAgentSemanticRelationSummary,
   review: WorkspaceDocumentRelationsResult,
 ): ContradictionProposal {
+  const evidenceIdFor = (side: ContradictionProposal["left"]) => relation.provenance.find((item) => (
+    item.documentId === side.documentId
+    && item.lineStart === side.fragment.line
+    && item.text === side.fragment.text
+  ))?.evidenceId ?? "unknown"
   return {
     id: summary.relationId,
     topic: semanticRelationTopic(summary),
@@ -359,7 +364,7 @@ function semanticProposal(
         kind: "document",
         sourceId: summary.left.documentId,
         label: summary.left.title,
-        detail: `line ${summary.left.fragment.line} · evidence ${summary.evidenceIds.find((id) => relation.provenance.find((item) => item.evidenceId === id)?.documentId === summary.left.documentId) ?? "unknown"}`,
+        detail: `line ${summary.left.fragment.line} · evidence ${evidenceIdFor(summary.left)}`,
         quote: summary.left.fragment.text,
         line: summary.left.fragment.line,
       },
@@ -367,7 +372,7 @@ function semanticProposal(
         kind: "document",
         sourceId: summary.right.documentId,
         label: summary.right.title,
-        detail: `line ${summary.right.fragment.line} · evidence ${summary.evidenceIds.find((id) => relation.provenance.find((item) => item.evidenceId === id)?.documentId === summary.right.documentId) ?? "unknown"}`,
+        detail: `line ${summary.right.fragment.line} · evidence ${evidenceIdFor(summary.right)}`,
         quote: summary.right.fragment.text,
         line: summary.right.fragment.line,
       },
@@ -394,6 +399,8 @@ function semanticProposal(
         contentHash: relation.provenance.find((item) => item.documentId === summary.right.documentId)?.contentHash ?? null,
       }],
     ]),
+    semanticReviewStatus: review.status,
+    semanticCoverage: review.coverage,
   }
 }
 
@@ -799,9 +806,32 @@ type PreparedDocumentEvidence = {
   recordsById: Map<string, DocumentCatalogRecord>
   currentRecordsById: Map<string, DocumentCatalogRecord>
   markdownById: Map<string, string>
+  liveDocumentIds: Set<string>
   annotations: WorkspaceClassificationAnnotation[]
   promptRecords: DocumentCatalogRecord[]
   catalogTruncated: boolean
+}
+
+function askScopeSnapshot(prepared: PreparedDocumentEvidence) {
+  return prepared.selectedRecords.map((record) => {
+    const current = prepared.currentRecordsById.get(record.id) ?? record
+    if (prepared.liveDocumentIds.has(record.id)) {
+      const markdown = prepared.markdownById.get(record.id) ?? ""
+      return {
+        documentId: record.id,
+        // Keep the catalog generation visible while making the live body
+        // digest the actual continuity boundary. Unsaved editor text must
+        // never inherit a previous_response_id from the persisted body.
+        documentVersion: `live@${artifactVersionKey(current)}`,
+        contentHash: digest(markdown),
+      }
+    }
+    return {
+      documentId: record.id,
+      documentVersion: artifactVersionKey(current),
+      contentHash: current.binding?.contentHash ?? null,
+    }
+  })
 }
 
 /**
@@ -862,6 +892,7 @@ async function prepareDocumentEvidence(
         recordsById,
         currentRecordsById: new Map(recordsById),
         markdownById: new Map(),
+        liveDocumentIds: new Set(),
         annotations: [],
         promptRecords,
         catalogTruncated: false,
@@ -975,6 +1006,7 @@ async function prepareDocumentEvidence(
     recordsById,
     currentRecordsById,
     markdownById,
+    liveDocumentIds: new Set(overriddenRecords.map((record) => record.id)),
     annotations,
     promptRecords,
     catalogTruncated: false,
@@ -1319,6 +1351,11 @@ export async function createWorkspaceAgentService(
   const contextArtifactStore = createContextArtifactStore()
   const contextLedger = createContextLedger()
   const contextServices = { store: contextArtifactStore, ledger: contextLedger }
+  // Invocation results stay application-owned. The UI may present a
+  // proposal, but it cannot turn a partial or forged object into mutation
+  // authority by sending semantic fields back to the service.
+  const admittedContradictionProposals = new Map<string, ContradictionProposal>()
+  let admittedMergeDraft: MergeReviewToolResult | null = null
   const readDocumentsInOrder = (
     documentIds: readonly string[],
     approvals: Readonly<Record<string, WorkspaceAgentApproval>>,
@@ -1707,6 +1744,7 @@ export async function createWorkspaceAgentService(
       if (uniqueDocumentIds.length < 1) {
         return error("INVALID_INPUT", "Select at least one artifact to compare contradictions.")
       }
+      admittedContradictionProposals.clear()
 
       const context = await getContextWithWorkflow(workflowReadApproval)
       if (context.error || !context.data) return context as ServiceResponse<WorkspaceAgentContradictionsRun>
@@ -1719,6 +1757,9 @@ export async function createWorkspaceAgentService(
         )
       }
       const mapped = mapSemanticRelationsToContradictions(relationReview.data.review, relationReview.data.sources)
+      if (relationReview.data.review.status === "complete" && relationReview.data.review.coverage === "complete") {
+        for (const proposal of mapped.proposals) admittedContradictionProposals.set(proposal.id, proposal)
+      }
       return ok({
         ...mapped,
         review: relationReview.data.review,
@@ -1726,18 +1767,27 @@ export async function createWorkspaceAgentService(
     },
     async resolveContradiction(proposal, resolution, approvals) {
       if (resolution === "discard") {
+        admittedContradictionProposals.delete(proposal.id)
         return ok({ proposal, resolution, resolvedDocumentId: null, mutation: null })
       }
-      if (proposal.semanticVerdict !== "contradictory" || proposal.semanticConfidence !== "high") {
-        return error("INVALID_INPUT", "Only high-confidence semantic contradictions can be resolved automatically.")
+      const admittedProposal = admittedContradictionProposals.get(proposal.id)
+      if (
+        !admittedProposal
+        || JSON.stringify(proposal) !== JSON.stringify(admittedProposal)
+        || admittedProposal.semanticVerdict !== "contradictory"
+        || admittedProposal.semanticConfidence !== "high"
+        || admittedProposal.semanticReviewStatus !== "complete"
+        || admittedProposal.semanticCoverage !== "complete"
+      ) {
+        return error("INVALID_INPUT", "Only complete, high-confidence semantic contradictions can be resolved automatically.")
       }
       if (!approvals) {
         return error("FORBIDDEN", "Resolving a contradiction requires read and edit approvals for the target document.")
       }
 
-      const selected = resolution === "left" ? proposal.left : proposal.right
-      const target = resolution === "left" ? proposal.right : proposal.left
-      const semanticSnapshots = proposal.semanticSourceSnapshots
+      const selected = resolution === "left" ? admittedProposal.left : admittedProposal.right
+      const target = resolution === "left" ? admittedProposal.right : admittedProposal.left
+      const semanticSnapshots = admittedProposal.semanticSourceSnapshots
       if (
         !semanticSnapshots
         || !semanticSnapshots[selected.documentId]
@@ -1773,8 +1823,9 @@ export async function createWorkspaceAgentService(
         approval: approvals.edit,
       })
       if (mutation.error || !mutation.data) return mutation as ServiceResponse<ContradictionResolutionResult>
+      admittedContradictionProposals.delete(admittedProposal.id)
       return ok({
-        proposal,
+        proposal: admittedProposal,
         resolution,
         resolvedDocumentId: target.documentId,
         mutation: mutation.data,
@@ -1909,11 +1960,7 @@ export async function createWorkspaceAgentService(
           ? focusedDocumentId
           : null
 
-        const scopeFingerprint = scopeFingerprintFor(workspaceRootPath, "ask", prepared.data.selectedRecords.map((record) => ({
-          documentId: record.id,
-          documentVersion: artifactVersionKey(prepared.data!.currentRecordsById.get(record.id) ?? record),
-          contentHash: (prepared.data!.currentRecordsById.get(record.id) ?? record).binding?.contentHash ?? null,
-        })))
+        const scopeFingerprint = scopeFingerprintFor(workspaceRootPath, "ask", askScopeSnapshot(prepared.data))
         const aiRequest: WorkspaceAskRequest = {
           question: input.question.slice(0, 2_000),
           targetDocumentIds: prepared.data.selectedRecords.map((record) => record.id),
@@ -1953,7 +2000,7 @@ export async function createWorkspaceAgentService(
       const { prepared, aiResult } = first.data
       const executionReceipt = aiResult.executionReceipt ?? null
 
-      const { selectedRecords, recordsById, currentRecordsById, markdownById, promptRecords } = prepared
+      const { selectedRecords, recordsById, markdownById, promptRecords } = prepared
 
       const validEvidence: WorkspaceAskEvidence[] = aiResult.evidence.filter((item) => markdownById.get(item.documentId)?.includes(item.quote))
       const evidence: EvidenceCitation[] = validEvidence.flatMap((item) => {
@@ -1994,11 +2041,7 @@ export async function createWorkspaceAgentService(
         suggestedAction: aiResult.suggestedAction ?? null,
         scopeStatus: aiResult.scopeStatus ?? (selectedRecords.length > 0 ? "ready" : "needs_scope"),
         responseId: aiResult.responseId ?? null,
-        scopeFingerprint: scopeFingerprintFor(workspaceRootPath, "ask", selectedRecords.map((record) => ({
-          documentId: record.id,
-          documentVersion: artifactVersionKey(currentRecordsById.get(record.id) ?? record),
-          contentHash: (currentRecordsById.get(record.id) ?? record).binding?.contentHash ?? null,
-        }))),
+        scopeFingerprint: scopeFingerprintFor(workspaceRootPath, "ask", askScopeSnapshot(prepared)),
         compactionCount: aiResult.compactionCount ?? 0,
         executionContext: execution,
         executionReceipt,
@@ -2024,6 +2067,7 @@ export async function createWorkspaceAgentService(
       if (uniqueDocumentIds.length < 2) {
         return error("INVALID_INPUT", "Select at least two artifacts to synthesize a merge.")
       }
+      admittedMergeDraft = null
       for (const documentId of uniqueDocumentIds) {
         if (!readApprovals[documentId]) {
           return error("FORBIDDEN", `Reading document ${documentId} requires an explicit approval.`)
@@ -2047,6 +2091,9 @@ export async function createWorkspaceAgentService(
           )
         }
         const document = read.data.document
+        if (document.catalogRecord.deletedAt) {
+          return error("NOT_FOUND", `Document ${documentId} is no longer active in the workspace catalog.`)
+        }
         sources.push({
           documentId: document.documentId,
           title: document.title?.trim() || document.catalogRecord.title || document.documentId,
@@ -2077,17 +2124,28 @@ export async function createWorkspaceAgentService(
         )
       }
       const review = parseWorkspaceMergeResult(reviewResponse.data, request)
-      return ok(mapMergeReview(review, request))
+      const mapped = mapMergeReview(review, request)
+      if (mapped.status === "complete" && mapped.coverage === "complete" && !mapped.error) {
+        admittedMergeDraft = mapped
+      }
+      return ok(mapped)
     },
     async createMergedDocument(input) {
-      if (input.draft.status !== "complete" || input.draft.coverage !== "complete" || input.draft.error) {
+      if (
+        !admittedMergeDraft
+        || JSON.stringify(input.draft) !== JSON.stringify(admittedMergeDraft)
+        || admittedMergeDraft.status !== "complete"
+        || admittedMergeDraft.coverage !== "complete"
+        || admittedMergeDraft.error
+      ) {
         return error("INVALID_INPUT", "The merge draft is not complete enough to create a document.")
       }
-      const sourceIds = new Set(input.draft.sourceDocuments.map((source) => source.documentId))
+      const draft = admittedMergeDraft
+      const sourceIds = new Set(draft.sourceDocuments.map((source) => source.documentId))
       if (
-        input.draft.sourceDocuments.length < 2
-        || sourceIds.size !== input.draft.sourceDocuments.length
-        || input.draft.sections.length === 0
+        draft.sourceDocuments.length < 2
+        || sourceIds.size !== draft.sourceDocuments.length
+        || draft.sections.length === 0
       ) {
         return error("INVALID_INPUT", "The merge draft does not contain any creatable sections.")
       }
@@ -2100,19 +2158,19 @@ export async function createWorkspaceAgentService(
         return error("FORBIDDEN", "Creating the merged document requires explicit write approval for the exact destination.")
       }
 
-      const draftSectionsById = new Map(input.draft.sections.map((section) => [section.id, section]))
-      if (draftSectionsById.size !== input.draft.sections.length) {
+      const draftSectionsById = new Map(draft.sections.map((section) => [section.id, section]))
+      if (draftSectionsById.size !== draft.sections.length) {
         return error("INVALID_INPUT", "The merge draft contains duplicate section identities.")
       }
-      const sourceDocumentsById = new Map(input.draft.sourceDocuments.map((source) => [source.documentId, source]))
-      for (const section of input.draft.sections) {
+      const sourceDocumentsById = new Map(draft.sourceDocuments.map((source) => [source.documentId, source]))
+      for (const section of draft.sections) {
         const sourceEvidenceIds = new Set(section.sources.map((source) => source.evidenceId))
         if (section.sources.length === 0 || section.sources.some((source) => {
           const document = sourceDocumentsById.get(source.documentId)
           return !document
             || document.documentVersion !== source.documentVersion
             || document.contentHash !== source.contentHash
-            || !input.draft.sourceSnapshots[source.documentId]
+            || !draft.sourceSnapshots[source.documentId]
         }) || section.evidenceIds.some((evidenceId) => !sourceEvidenceIds.has(evidenceId))) {
           return error("INVALID_INPUT", `The provenance for “${section.heading}” is incomplete or outside the selected artifacts.`)
         }
@@ -2127,11 +2185,11 @@ export async function createWorkspaceAgentService(
         }
         selectionsById.set(selection.id, selection)
       }
-      if (selectionsById.size !== input.draft.sections.length) {
+      if (selectionsById.size !== draft.sections.length) {
         return error("INVALID_INPUT", "Review every merge section before creating the document.")
       }
 
-      for (const section of input.draft.sections) {
+      for (const section of draft.sections) {
         const selection = selectionsById.get(section.id)!
         if (section.status === "insufficient_evidence") {
           return error("INVALID_INPUT", `The section “${section.heading}” needs more evidence before it can be created.`)
@@ -2165,22 +2223,22 @@ export async function createWorkspaceAgentService(
         }
       }
 
-      const sourceApprovals = Object.fromEntries(input.draft.sourceDocuments.map((source) => [
+      const sourceApprovals = Object.fromEntries(draft.sourceDocuments.map((source) => [
         source.documentId,
         createInternalReadApproval(source.documentId),
       ])) satisfies Record<string, WorkspaceAgentApproval>
       const reads = await readDocumentsInOrder(
-        input.draft.sourceDocuments.map((source) => source.documentId),
+        draft.sourceDocuments.map((source) => source.documentId),
         sourceApprovals,
       )
       for (const { documentId, read } of reads) {
-        const source = input.draft.sourceDocuments.find((candidate) => candidate.documentId === documentId)!
+        const source = draft.sourceDocuments.find((candidate) => candidate.documentId === documentId)!
         if (read.error || !read.data) {
           return error("CONFLICT", `The source ${source.title} is no longer available; review the merge again.`)
         }
-        const expected = input.draft.sourceSnapshots[source.documentId]
+        const expected = draft.sourceSnapshots[source.documentId]
         const current = read.data.document.catalogRecord
-        if (!expected || !matchesDocumentSnapshot(current, expected)) {
+        if (current.deletedAt || !expected || !matchesDocumentSnapshot(current, expected)) {
           return error("CONFLICT", `The source ${source.title} changed since this merge was reviewed.`)
         }
       }
@@ -2194,14 +2252,16 @@ export async function createWorkspaceAgentService(
         return error("CONFLICT", "A document already exists at the requested merge destination.")
       }
 
-      const markdown = buildMergedDocumentMarkdown(input.draft.sections, selectionsById)
+      const markdown = buildMergedDocumentMarkdown(draft.sections, selectionsById)
       if (!markdown.trim()) return error("INVALID_INPUT", "The reviewed merge has no sections to write.")
-      return tools.write({
+      const written = await tools.write({
         target: { canonicalPath },
         markdown,
         approval: input.approval,
         expectedAbsent: true,
       })
+      if (!written.error && written.data) admittedMergeDraft = null
+      return written
     },
     async presentNote(kind, facts, sessionContext, requestedExecution) {
       const cleanFacts = facts.map((fact) => fact.trim()).filter(Boolean)

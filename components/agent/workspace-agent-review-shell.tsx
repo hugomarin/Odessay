@@ -15,7 +15,7 @@ export type WorkspaceAgentReviewPill = {
 }
 
 export type WorkspaceAgentSemanticReviewStatus = {
-  status: "running" | "complete" | "insufficient_evidence" | "budget_exceeded" | "cancelled" | "provider_error" | "unable"
+  status: "running" | "complete" | "insufficient_evidence" | "capacity_unknown" | "budget_exceeded" | "cancelled" | "provider_error" | "unable"
   coverage: "complete" | "partial" | "unknown"
   rounds: number
   evidenceCount: number
@@ -173,6 +173,7 @@ function semanticReviewStatusCopy(status: WorkspaceAgentSemanticReviewStatus): {
     case "running": return { title: "Revisión semántica", detail: "solicitando evidencia acotada…" }
     case "complete": return { title: "Revisión completa", detail: "resultado listo para revisar." }
     case "insufficient_evidence": return { title: "Evidencia insuficiente", detail: "no se presenta como una conclusión definitiva." }
+    case "capacity_unknown": return { title: "Capacidad sin configurar", detail: "define la ventana del modelo antes de revisar este alcance." }
     case "budget_exceeded": return { title: "Revisión acotada", detail: "alcanzó el límite de tiempo o evidencia." }
     case "cancelled": return { title: "Revisión cancelada", detail: "el resultado tardío se descartó." }
     case "provider_error": return { title: "Proveedor no disponible", detail: "puedes reintentar sin modificar documentos." }

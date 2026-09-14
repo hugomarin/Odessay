@@ -6,6 +6,7 @@ import {
 } from "@/lib/services/document-service-factory"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { tauriValidateWorkspaceAgentPath } from "@/lib/services/desktop/tauri-commands"
+import { refreshWorkspaceReconcilerRoots } from "@/lib/services/desktop/desktop-workspace-reconciler"
 import {
   createDesktopWorkspaceAgentToolsService,
   type DesktopWorkspaceAgentToolsService,
@@ -29,6 +30,7 @@ export async function getWorkspaceAgentToolsService(
       importDocument: importDesktopWritingFile,
       relocateDocument: relocateDesktopWriting,
       validatePath: tauriValidateWorkspaceAgentPath,
+      reconcileWorkspace: refreshWorkspaceReconcilerRoots,
     }),
     error: null,
   }

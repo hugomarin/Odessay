@@ -440,6 +440,20 @@ function relationId(
   ].join("|"))}`
 }
 
+function hasDistinctIntraDocumentRanges(
+  leftDocumentId: string,
+  rightDocumentId: string,
+  provenance: readonly WorkspaceDocumentRelationEvidenceRef[],
+): boolean {
+  if (leftDocumentId !== rightDocumentId) return true
+  const ranges = new Set(
+    provenance
+      .filter((entry) => entry.documentId === leftDocumentId)
+      .map((entry) => `${entry.lineStart}:${entry.lineEnd}`),
+  )
+  return ranges.size >= 2
+}
+
 export function parseWorkspaceDocumentRelationsResult(
   loop: WorkspaceSemanticLoopResult,
   request: WorkspaceDocumentRelationsRequest,
@@ -505,6 +519,7 @@ export function parseWorkspaceDocumentRelationsResult(
       || provenance.length < 2
       || !provenanceDocumentIds.has(item.data.leftDocumentId)
       || !provenanceDocumentIds.has(item.data.rightDocumentId)
+      || !hasDistinctIntraDocumentRanges(item.data.leftDocumentId, item.data.rightDocumentId, provenance)
       || (candidate !== null && (
         candidate === undefined
         || candidate.leftDocumentId !== item.data.leftDocumentId
@@ -579,4 +594,5 @@ export function isResolvableSemanticContradiction(
   return relation.verdict === "contradictory"
     && relation.confidence === WORKSPACE_RELATION_CONTRADICTION_MIN_CONFIDENCE
     && relation.provenance.length >= 2
+    && hasDistinctIntraDocumentRanges(relation.leftDocumentId, relation.rightDocumentId, relation.provenance)
 }

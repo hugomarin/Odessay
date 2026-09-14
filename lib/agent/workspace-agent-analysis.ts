@@ -145,6 +145,8 @@ export type ContradictionProposal = {
   semanticEvidenceIds?: string[]
   semanticSuggestedReason?: string | null
   semanticSourceSnapshots?: Record<string, ContradictionSourceSnapshot>
+  semanticReviewStatus?: WorkspaceSemanticLoopStatus
+  semanticCoverage?: WorkspaceSemanticCoverage
 }
 
 export type ContradictionResolution = "left" | "right" | "discard"

@@ -30,6 +30,7 @@ export const WORKSPACE_SEMANTIC_MAX_WALL_CLOCK_MS = 90_000
 export type WorkspaceSemanticLoopStatus =
   | "complete"
   | "insufficient_evidence"
+  | "capacity_unknown"
   | "budget_exceeded"
   | "cancelled"
   | "provider_error"
@@ -332,7 +333,12 @@ export async function runWorkspaceSemanticLoop(
 
     if (response.error || !response.data) {
       if (response.error) receipts.push(receiptFromError(response.error))
-      return stop("provider_error", { error: response.error ? serviceError(response.error) : {
+      const status: WorkspaceSemanticLoopStatus = response.error?.code === "CAPACITY_UNKNOWN"
+        ? "capacity_unknown"
+        : response.error?.code === "BUDGET_EXCEEDED"
+          ? "budget_exceeded"
+          : "provider_error"
+      return stop(status, { error: response.error ? serviceError(response.error) : {
         code: "AI_REQUEST_FAILED",
         message: "Semantic provider returned no response.",
         retryable: true,

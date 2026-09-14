@@ -103,8 +103,10 @@ function ContradictionCard({
     : suggestedTitle
       ? `Sugiero ${suggestedTitle}: se actualizó más recientemente que el otro documento.`
       : null
-  const canResolve = !proposal.semanticVerdict
-    || (proposal.semanticVerdict === "contradictory" && proposal.semanticConfidence === "high")
+  const canResolve = proposal.semanticVerdict === "contradictory"
+    && proposal.semanticConfidence === "high"
+    && proposal.semanticReviewStatus === "complete"
+    && proposal.semanticCoverage === "complete"
 
   return (
     <div className="mb-3 rounded-[12px] bg-sb px-[18px] py-4 shadow-[0_1px_2px_rgba(35,24,15,0.06)] last:mb-0">

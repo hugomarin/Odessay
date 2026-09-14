@@ -74,6 +74,15 @@ export type WorkspaceAgentDeleteInput = {
 export type WorkspaceAgentMutationResult = {
   document: WorkspaceAgentDocument
   receipt: WorkspaceAgentExecutionReceipt
+  /**
+   * Desktop content commits before manifest/catalog projection. A verified
+   * local commit may therefore complete with projection queued for the global
+   * reconciler instead of pretending that the content write was lost.
+   */
+  persistence?: {
+    localContent: "committed"
+    projection: "committed" | "pending"
+  }
 }
 
 export type WorkspaceAgentReadResult = {
@@ -139,6 +148,7 @@ export const WORKSPACE_AGENT_TOOLS_CONTRACT = {
     "UUID-to-path resolution always goes through DocumentCatalog before a filesystem adapter is called.",
     "The materialized .md remains the content authority and metadata is never written into frontmatter.",
     "Move and delete preserve the existing catalog identity and use the established desktop write path.",
+    "An edit is one atomic intent (content or metadata); a content edit advances only after the canonical markdown is committed or re-read as committed, with any pending catalog projection reported explicitly.",
     "Semantic evidence reads are bounded by document UUID, catalog version/hash and line range; they are read-only and never accept a path as identity.",
   ],
   errorEnvelope: "ServiceResponse<T>",

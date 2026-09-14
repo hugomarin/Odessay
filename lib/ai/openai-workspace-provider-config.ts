@@ -8,6 +8,18 @@
  */
 
 export const OPENAI_WORKSPACE_DEFAULT_MODEL = "gpt-5.6-luna"
+export const OPENAI_WORKSPACE_MODEL_CAPACITY_REGISTRY_VERSION = "2026-09-13"
+export const OPENAI_WORKSPACE_MODEL_CAPACITY_REGISTRY: Readonly<Record<string, number>> = Object.freeze({
+  // Exact model IDs/aliases only. Unknown deployment aliases must provide an
+  // override instead of inheriting a window from a similarly named model.
+  "gpt-6-astra": 1_050_000,
+  "gpt-5.6": 1_050_000,
+  "gpt-5.6-sol": 1_050_000,
+  "gpt-5.6-terra": 1_050_000,
+  "gpt-5.6-luna": 1_050_000,
+  "gpt-5.5": 1_050_000,
+})
+export const OPENAI_WORKSPACE_DEFAULT_SAFETY_MARGIN_TOKENS = 8_192
 // Merge and contradiction results can contain one evidence-backed item per
 // aligned section. 8k was not enough for a real two-document Merge: OpenAI
 // returned an incomplete JSON envelope at max_output_tokens. This is an
@@ -52,6 +64,31 @@ function readOptionalPositiveInteger(name: string): number | null {
   return Math.floor(configured)
 }
 
+export function resolveOpenAIWorkspaceContextCapacity(model: string, deploymentOverride: number | null) {
+  if (deploymentOverride !== null) {
+    return {
+      contextWindowTokens: deploymentOverride,
+      contextCapacitySource: "deployment_override" as const,
+      contextCapacityStatus: "known" as const,
+    }
+  }
+
+  const registered = OPENAI_WORKSPACE_MODEL_CAPACITY_REGISTRY[model]
+  if (registered) {
+    return {
+      contextWindowTokens: registered,
+      contextCapacitySource: "model_registry" as const,
+      contextCapacityStatus: "known" as const,
+    }
+  }
+
+  return {
+    contextWindowTokens: null,
+    contextCapacitySource: "capacity_unknown" as const,
+    contextCapacityStatus: "capacity_unknown" as const,
+  }
+}
+
 export function getOpenAIWorkspaceProviderConfig() {
   const apiKey = process.env.OPENAI_API_KEY?.trim() ?? ""
 
@@ -59,19 +96,31 @@ export function getOpenAIWorkspaceProviderConfig() {
     throw new Error("Missing OPENAI_API_KEY environment variable.")
   }
 
-  const contextWindowTokens = readOptionalPositiveInteger("OPENAI_WORKSPACE_CONTEXT_WINDOW_TOKENS")
+  const model = process.env.OPENAI_WORKSPACE_MODEL?.trim() || OPENAI_WORKSPACE_DEFAULT_MODEL
+  const contextCapacity = resolveOpenAIWorkspaceContextCapacity(
+    model,
+    readOptionalPositiveInteger("OPENAI_WORKSPACE_CONTEXT_WINDOW_TOKENS"),
+  )
   const compactionThresholdTokens = readOptionalPositiveInteger("OPENAI_WORKSPACE_COMPACTION_THRESHOLD_TOKENS")
+  const historyReserveTokens = readOptionalPositiveInteger("OPENAI_WORKSPACE_HISTORY_RESERVE_TOKENS") ?? 0
+  const reasoningReserveTokens = readOptionalPositiveInteger("OPENAI_WORKSPACE_REASONING_RESERVE_TOKENS") ?? 0
+  const safetyMarginTokens = readOptionalPositiveInteger("OPENAI_WORKSPACE_SAFETY_MARGIN_TOKENS")
+    ?? OPENAI_WORKSPACE_DEFAULT_SAFETY_MARGIN_TOKENS
   return {
     provider: "openai" as const,
     baseUrl: BASE_URL,
     apiKey,
-    model: process.env.OPENAI_WORKSPACE_MODEL?.trim() || OPENAI_WORKSPACE_DEFAULT_MODEL,
+    model,
     responsesUrl: `${BASE_URL}/responses`,
     maxOutputTokens: readOutputTokenBudget(),
     reasoningEffort: readReasoningEffort(),
-    // These values are deployment capabilities, not product limits. We do
-    // not guess a context window for a model that has not declared one.
-    ...(contextWindowTokens ? { contextWindowTokens } : {}),
+    // These values are deployment capabilities and operational reserves,
+    // not document-count product limits. A deployment override wins over
+    // the versioned exact-ID registry; unknown aliases stay explicit.
+    ...contextCapacity,
+    historyReserveTokens,
+    reasoningReserveTokens,
+    safetyMarginTokens,
     ...(compactionThresholdTokens ? { compactionThresholdTokens } : {}),
   }
 }

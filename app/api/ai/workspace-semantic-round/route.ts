@@ -21,8 +21,10 @@ import {
   type WorkspaceExecutionReceipt,
 } from "@/lib/ai/workspace-execution-receipt"
 import {
+  assertWorkspaceContextPlanCapacity,
   estimateWorkspaceTokens,
   planWorkspaceSemanticBatches,
+  WorkspaceContextCapacityError,
 } from "@/lib/ai/workspace-context-capacity"
 import {
   callWorkspaceOpenAIResponse,
@@ -143,9 +145,21 @@ export async function POST(request: Request) {
       const batchPlan = planWorkspaceSemanticBatches(parsed.data.input, {
         contextWindowTokens: config.contextWindowTokens ?? null,
         reservedOutputTokens: maxOutputTokens,
-        overheadTokens: estimateWorkspaceTokens(systemPrompt) + estimateWorkspaceTokens(JSON.stringify(providerTools)),
+        systemPromptTokens: estimateWorkspaceTokens(systemPrompt),
+        schemaAndToolTokens: estimateWorkspaceTokens(JSON.stringify(providerTools))
+          + estimateWorkspaceTokens(JSON.stringify(finalTextFormat)),
+        historyTokens: parsed.data.previousResponseId ? config.historyReserveTokens : 0,
+        reasoningTokens: config.reasoningReserveTokens,
+        safetyMarginTokens: config.safetyMarginTokens,
       })
-      const batches = batchPlan.batches.length > 0 ? batchPlan.batches : [parsed.data.input]
+      assertWorkspaceContextPlanCapacity(batchPlan)
+      if (batchPlan.staged && !config.compactionThresholdTokens) {
+        throw new WorkspaceContextCapacityError(
+          "BUDGET_EXCEEDED",
+          "The selected evidence requires staged processing, but native context compaction is not configured for this deployment.",
+        )
+      }
+      const batches = batchPlan.batches
       const receipts: WorkspaceExecutionReceipt[] = []
       let previousResponseId = parsed.data.previousResponseId ?? null
       let lastResponse: Awaited<ReturnType<typeof callWorkspaceOpenAIResponse>> | null = null
@@ -206,6 +220,15 @@ export async function POST(request: Request) {
       }
     } catch (cause) {
       if (cause instanceof WorkspaceOpenAIResponseError) throw routeErrorFromOpenAI(cause)
+      if (cause instanceof WorkspaceContextCapacityError) {
+        throw new SemanticRoundRouteError(
+          cause.code === "CAPACITY_UNKNOWN" ? 503 : 413,
+          cause.code,
+          cause.message,
+          false,
+          { phase: "config", receipt: initialReceipt },
+        )
+      }
       throw cause
     }
 

@@ -12,6 +12,7 @@ import {
   type WorkspaceClassificationApiPayload,
 } from "@/lib/ai/workspace-classification"
 import { getOpenAIWorkspaceProviderConfig } from "@/lib/ai/openai-workspace-provider-config"
+import { WorkspaceContextCapacityError } from "@/lib/ai/workspace-context-capacity"
 import {
   createWorkspaceExecutionReceipt,
   countWorkspaceCompactionItems,
@@ -131,6 +132,9 @@ export async function POST(request: Request) {
         capacity: {
           contextWindowTokens: config.contextWindowTokens ?? null,
           reservedOutputTokens: Math.max(config.maxOutputTokens, 8_192),
+          historyTokens: 0,
+          reasoningTokens: config.reasoningReserveTokens,
+          safetyMarginTokens: config.safetyMarginTokens,
         },
         contextManagement: config.compactionThresholdTokens
           ? [{ type: "compaction", compact_threshold: config.compactionThresholdTokens }]
@@ -147,6 +151,15 @@ export async function POST(request: Request) {
       })
     } catch (cause) {
       if (cause instanceof WorkspaceOpenAIResponseError) throw routeErrorFromOpenAI(cause)
+      if (cause instanceof WorkspaceContextCapacityError) {
+        throw new ClassificationRouteError(
+          cause.code === "CAPACITY_UNKNOWN" ? 503 : 413,
+          cause.code,
+          cause.message,
+          false,
+          { phase: "config", receipt: initialReceipt },
+        )
+      }
       throw cause
     }
 
