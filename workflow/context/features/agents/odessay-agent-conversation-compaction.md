@@ -33,7 +33,7 @@ Estas reglas aplican a Ask, Classification, Contradictions, Merge y futuras acci
 3. Una mención ambigua requiere confirmación de la persona. La metadata del catálogo sirve para ayudar a desambiguar, no para autorizar la lectura del cuerpo.
 4. Classification no auto-selecciona documentos para ejecutar una acción; necesita una selección o confirmación explícita.
 5. Contradictions acepta un documento o varios: puede detectar una contradicción dentro del mismo documento o entre documentos distintos.
-6. Merge requiere al menos dos documentos distintos, pero no tiene un máximo de producto fijo. La cantidad ideal depende de la capacidad efectiva del deployment y del tamaño de cada `.md`.
+6. Merge requiere al menos dos documentos distintos, pero no tiene un máximo de producto fijo. La cantidad ideal depende de la capacidad efectiva del deployment y del tamaño de cada `.md`. La comparación y síntesis son semánticas: un diff o matcher determinista es una ayuda interna opcional, no un blocker ni la autoridad del resultado.
 7. Cambiar Workspace, acción, selección, versión o hash invalida la continuidad semántica previa y comienza un nuevo contexto.
 
 El agente puede reconocer documentos ya incluidos en el alcance durante la conversación. Reconocer una referencia no autoriza incorporar un documento nuevo: si está fuera del alcance, el agente debe pedir que se seleccione o adjunte.
@@ -74,7 +74,9 @@ Para Ask, un documento explícitamente seleccionado o el Writing actualmente abi
 
 ## Capacidad y cargas grandes
 
-La capacidad es la ventana real del modelo menos System Prompt, schemas, tools, historial, razonamiento y salida reservada. La cantidad de documentos no es el presupuesto y no debe convertirse en un límite fijo de producto.
+La capacidad es la ventana real del modelo menos System Prompt, schemas, tools, historial acumulado, razonamiento, salida reservada y margen de seguridad. La cantidad de documentos no es el presupuesto y no debe convertirse en un límite fijo de producto.
+
+La ventana física se resuelve en este orden: registry versionado de modelos conocidos, override explícito del deployment y, si ninguno aplica, estado `capacity_unknown`. Un modelo desconocido no hereda silenciosamente la ventana de otro ni un default optimista. Con `capacity_unknown`, la operación puede pedir configuración o ejecutar solo un plan cuyo presupuesto esté demostrado por el provider; no puede declarar cobertura completa por estimación inventada.
 
 El planner de `lib/ai/workspace-context-capacity.ts` puede producir:
 
@@ -129,7 +131,11 @@ El provider no tiene acceso directo al filesystem. Las lecturas adicionales son 
 
 Contradictions produce relaciones con veredicto, confianza, rationale, provenance y cobertura. Una misma fuente puede aparecer a izquierda y derecha de una relación si la contradicción es interna. Solo una relación de alta confianza, con evidencia suficiente y snapshots vigentes, puede entrar a la cola resoluble.
 
-Merge alinea secciones para presentación, pero el LLM decide equivalencia, complemento, contradicción, irrelevancia o falta de evidencia. No elige por longitud, similitud, timestamp ni “documento más reciente”. Crear el documento solo se habilita con cobertura completa, propuesta válida, conflictos tratados y aprobación; las fuentes quedan sin cambios.
+Merge puede alinear secciones para presentación o recuperación de evidencia, pero el LLM decide equivalencia, complemento, contradicción, irrelevancia o falta de evidencia. No elige por longitud, similitud, timestamp ni “documento más reciente”, y la ausencia de una alineación determinista no bloquea la revisión semántica. Crear el documento solo se habilita con cobertura completa, propuesta válida, conflictos tratados y aprobación; las fuentes quedan sin cambios.
+
+## Fuentes de enriquecimiento diferidas
+
+El contexto obligatorio de esta fase proviene del `.md` canónico, `DocumentCatalog`, vocabulary y collections. Márgenes/anotaciones guardados fuera del `.md` y learned words podrán enriquecer una iteración posterior, pero no forman parte del gate actual. Si texto de anotación ya está materializado dentro del `.md`, se procesa como parte de ese contenido, no como un store adicional.
 
 ## Criterios de aceptación
 

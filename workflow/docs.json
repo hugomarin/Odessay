@@ -117,8 +117,8 @@
       "path": "workflow/context/features/agents/odessay-agent-conversation-compaction.md",
       "type": "feature",
       "scope": "workspace-agent-conversation-compaction-and-evidence",
-      "state": "canonical-implemented-2026-09-13",
-      "description": "Contrato operativo del Workspace Agent: alcance explícito, contenido completo de documentos, continuidad por turnos, compactación repetible, capacidad física de la ventana de contexto, cargas staged y criterios de aceptación con respuestas reales de OpenAI y DMG."
+      "state": "canonical-partially-implemented-2026-09-13",
+      "description": "Contrato operativo del Workspace Agent: alcance explícito, contenido completo, continuidad, compactación, comparación semántica y capacidad por registry/override/capacity_unknown. Márgenes externos y learned words son enriquecimiento futuro; los gaps de implementación se rastrean en Linear."
     },
     {
       "path": "workflow/context/features/odessay-ai-writing-assist.md",
@@ -164,15 +164,15 @@
       "path": "workflow/context/features/odessay-desktop-app.md",
       "type": "feature",
       "scope": "desktop-direction",
-      "state": "normative-entrypoint",
-      "description": "Dirección objetivo para Desktop App: Markdown-first y filesystem-first, con `.md` como fuente de verdad, `.txt` como compatibilidad, TipTap como vista rica del documento canónico, auth opcional, sync/backup secundario y perfil Markdown compartido entre web y desktop."
+      "state": "product-direction-subordinate-to-identity-and-catalog",
+      "description": "Dirección de producto para Desktop App, con contexto histórico explícito. El ADR de identidad y el spec del catálogo desktop prevalecen para identidad, apertura, guardado y sync; las afirmaciones de implementación deben verificarse contra código antes de BUILD."
     },
     {
       "path": "workflow/context/features/odessay-desktop-migration-diagnostic.md",
       "type": "feature",
       "scope": "desktop-migration-diagnostic",
-      "state": "normative-sequence-step-2",
-      "description": "Diagnóstico arquitectónico del codebase para la migración a desktop: mapa de responsabilidades, runtimes, portabilidad, diferencias entre tauri dev y el DMG instalado, límites de capabilities nativas y permisos de BindingRoot, hotspots de acoplamiento, tensiones del modelo documental actual, secuencia recomendada de extracción de servicios y herramientas read-only de cosecha/verificación de identidades históricas (ODE-374)."
+      "state": "historical-diagnostic-sequence-step-2",
+      "description": "Diagnóstico histórico del codebase al planear desktop. Conserva mapa de responsabilidades y riesgos, pero no representa estado live; ADR de identidad y catálogo desktop prevalecen y toda afirmación en presente requiere verificación contra código."
     },
     {
       "path": "docs/desktop-distribution.md",
@@ -192,8 +192,8 @@
       "path": "workflow/context/features/odessay-desktop-target-architecture.md",
       "type": "feature",
       "scope": "desktop-target-architecture",
-      "state": "normative-sequence-step-3",
-      "description": "Arquitectura objetivo multi-runtime para Odessay: shared core, adapters web/desktop/mobile, contratos de servicio —incluidos DocumentCatalog/DocumentBindingStore/WorkspaceReconciler—, reglas de dependencia, modelo documental objetivo y §Auth comparativa web vs desktop."
+      "state": "target-architecture-subordinate-to-identity-and-catalog",
+      "description": "Arquitectura objetivo multi-runtime y reglas de dependencia. Para identidad y operación documental desktop prevalecen el ADR y el catálogo; las secciones de transición/estado actual son históricas y se verifican contra código."
     },
     {
       "path": "workflow/context/features/odessay-desktop-document-catalog.md",
@@ -206,8 +206,8 @@
       "path": "workflow/context/features/odessay-desktop-migration-plan.md",
       "type": "feature",
       "scope": "desktop-migration-plan",
-      "state": "normative-sequence-step-4",
-      "description": "Plan técnico de migración a la arquitectura desktop/multi-runtime: fases, dependencias, entregables, riesgos, gates y orden recomendado de refactors antes de tocar shell desktop."
+      "state": "historical-migration-sequence-step-4",
+      "description": "Plan histórico de migración y dependencias. No representa el estado live de cada slice; antes de BUILD se reconcilia con código y Linear, y el ADR de identidad/catálogo desktop prevalece."
     },
     {
       "path": "workflow/context/features/odessay-workspace.md",
@@ -324,7 +324,8 @@
     {
       "path": "workflow/define/validation-prompt-workspace-agent-context-drift.md",
       "type": "ops",
-      "description": "Prompt reusable para auditar con un modelo independiente el drift entre Workflow, DoD, Linear, código y evidencia del Workspace Agent: alcance explícito, cuerpos completos, capacidad staged, contradicciones intra/inter-documento, continuidad, compactación, ownership y gaps de pruebas."
+      "state": "historical-audit-executed-2026-09-13",
+      "description": "Prompt histórico usado para auditar drift entre Workflow, DoD, Linear, código y evidencia del Workspace Agent. No es spec de BUILD; las decisiones posteriores viven en el DoD de Fase 11 y el contrato canónico de conversación/compactación."
     },
     {
       "path": "workflow/define/dod-fase-1.md",

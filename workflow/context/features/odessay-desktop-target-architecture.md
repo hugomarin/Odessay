@@ -1,5 +1,7 @@
 # ODESSAY — Desktop Target Architecture
 
+> **Arquitectura objetivo subordinada (2026-09-13):** para identidad y operación documental desktop prevalecen `workflow/context/core/odessay-adr-identidad.md` y `workflow/context/features/odessay-desktop-document-catalog.md`. Las secciones de transición o estado actual de este documento son históricas y deben verificarse contra el código antes de guiar BUILD.
+
 **Documento de diseño objetivo para la arquitectura multi-runtime de Odessay.**
 Lee `workflow/context/features/odessay-desktop-app.md` para la dirección de producto, `workflow/context/features/odessay-desktop-migration-diagnostic.md` para el estado actual del codebase y `workflow/context/core/odessay-arquitectura.md` para la arquitectura vigente del producto.
 

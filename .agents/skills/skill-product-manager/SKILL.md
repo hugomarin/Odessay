@@ -223,12 +223,12 @@ Si hay checkpoint humano, el issue permanece en `In Progress` con comentario `�
 
 **In Review** — el trabajo terminó, el PR está abierto, esperando revisión.
 
-**Done** — PR mergeado, criterios de entrega verificados, commit referenciado.
+**Done** — outcome aceptado contra los criterios del issue y evidencia trazable. No implica por sí solo merge, despliegue ni release; esos estados pertenecen a GitHub o al canal de distribución y se registran aparte.
 
 Transiciones obligatorias:
 - `Todo` → `In Progress` al iniciar ejecución.
 - `In Progress` → `In Review` al abrir PR con validaciones.
-- `In Review` → `Done` tras merge confirmado.
+- `In Review` → `Done` tras aceptación del outcome. Un merge puede ser evidencia de integración, pero no decide el estado de Linear.
 - Si review es rechazado: `In Review` → `In Progress`.
 
 Si el team usa estado `Ready`, se interpreta como pre-cola entre `Todo` e `In Progress`, nunca como reemplazo de `In Progress`.
@@ -484,11 +484,13 @@ Validaciones: typecheck ✅ | lint ✅ | tests ✅
 Listo para merge.
 ```
 
-### Trazabilidad GitHub ↔ Linear ↔ ledger de entregas
+### Trazabilidad Linear ↔ GitHub ↔ ledger de entregas
 
-Las ramas de feature **no tocan** `workflow/status.json`, `workflow/built.jsonl` ni `workflow/review-history.jsonl`. Se actualizan únicamente en `main` post-merge durante REVIEW.
+Linear es la autoridad live de “en qué estamos”. GitHub aporta branch, SHA, checks, PR y merge. Los ledgers del repo describen la evidencia disponible en ese checkout y nunca deben sobreescribir el estado de Linear por inferencia.
 
-Durante BUILD, el agente solo abre el PR con body completo y mueve el issue a `In Review`. La línea en `workflow/built.jsonl` se appendea después del merge, en la etapa REVIEW, junto con el evento `build_submitted` en `workflow/review-history.jsonl`.
+Durante BUILD, la rama de feature appendea una línea nueva a `workflow/built.jsonl` con `delivery_state: "built"` y el `linear_status` observado, y un evento `build_completed` a `workflow/review-history.jsonl`. Ambos JSONL son append-only y usan `merge=union`; no se editan ni reordenan entradas existentes. `workflow/status.json` sigue reservado para DEFINE o una reconciliación deliberada de fase.
+
+`shipped` se reserva para una release realmente distribuida o deployada. No describe un build, un PR abierto, un merge ni el estado `Done`. Los eventos históricos `ship_completed` se conservan por append-only y se leen como el nombre legado de “build completado en rama”.
 
 Luego corre:
 ```bash

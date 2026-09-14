@@ -1,5 +1,7 @@
 # Prompt de validación — Workspace Agent: contexto, drift y rot documental
 
+> **Estado:** prompt histórico de auditoría ejecutado el 2026-09-13. No es una spec de BUILD. Las decisiones posteriores del dueño están formalizadas en `workflow/define/dod-fase-11.md` y `workflow/context/features/agents/odessay-agent-conversation-compaction.md`; Linear conserva el estado live de los issues.
+
 Usa un nivel de razonamiento alto. Este es un audit de planeación, contratos y riesgo de implementación; no es una solicitud de implementación ni de refactor. No edites el repositorio, no cambies Linear y no cierres issues. Reporta evidencia exacta para que otra persona pueda aplicar las correcciones.
 
 ## Objetivo

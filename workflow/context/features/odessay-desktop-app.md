@@ -1,5 +1,7 @@
 # ODESSAY — Desktop App
 
+> **Ruta normativa vigente (2026-09-13):** este documento conserva dirección de producto y contexto histórico. Para identidad, catálogo, apertura, guardado y sync desktop prevalecen `workflow/context/core/odessay-adr-identidad.md` y `workflow/context/features/odessay-desktop-document-catalog.md`. Toda afirmación en presente sobre implementación debe verificarse contra el código; no guía BUILD si contradice esas dos fuentes.
+
 **Documento de referencia para agentes de desarrollo.**
 Lee `workflow/context/core/odessay-fundacional.md` para la visión, `workflow/context/core/odessay-stack.md` para el stack vigente, `workflow/context/features/odessay-editor.md` para el comportamiento del editor, `workflow/context/features/odessay-prosemirror-tiptap.md` para el backbone TipTap/Markdown, y `workflow/context/features/odessay-sync.md` para la capa local-first actual.
 

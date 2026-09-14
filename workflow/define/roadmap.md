@@ -634,7 +634,7 @@ Referencia: `workflow/define/dod-fase-10.md`, `docs/design/migration-plan.md`, `
 
 ## Fase 11 — Artifact Studio: Agente de Workspace
 
-Al terminar esta fase: Artifact Studio tiene un agente invocado bajo demanda que expone la capa de contexto ya construida en fases anteriores —catálogo, anotaciones, vocabulary configurable, collections, learned words— y que, con autorización explícita del usuario, puede leer, escribir, mover, editar y eliminar documentos del workspace. Vive en el entorno local y usa OpenAI Responses como adapter de inferencia; esta fase no construye un agente web/cloud independiente. El alcance documental es explícito: los documentos seleccionados o adjuntos confirmados se envían con su `.md` completo; los documentos mencionados fuera del alcance requieren confirmación. Fase 10 no se toca: el vocabulario y el shell visual que esa fase entregó son insumo de esta, no se rediseñan.
+Al terminar esta fase: Artifact Studio tiene un agente invocado bajo demanda que expone el catálogo documental, el vocabulary configurable y las collections ya construidos, y que, con autorización explícita del usuario, puede leer, escribir, mover, editar y eliminar documentos del workspace. Vive en el entorno local y usa OpenAI Responses como adapter de inferencia; esta fase no construye un agente web/cloud independiente. El alcance documental es explícito: los documentos seleccionados o adjuntos confirmados se envían con su `.md` completo; los documentos mencionados fuera del alcance requieren confirmación. Márgenes/anotaciones externas y learned words quedan como enriquecimiento futuro, no como gate. Fase 11 no rediseña el vocabulario ni el shell visual entregados por Fase 10; el bloque M11 de seguridad de Fase 10 permanece como gate independiente.
 
 DoD formal: `workflow/define/dod-fase-11.md`.
 
@@ -646,12 +646,12 @@ El agente resuelve enlaces rotos, sugiere tipo/estatus, señala candidatos a arc
 **Al cierre de esta fase debe ser verdad que:**
 
 - con autorización explícita del usuario, el agente puede leer, escribir, mover, editar y eliminar documentos del workspace, y cada una de esas operaciones requiere aprobación por acción individual, nunca una autorización global de sesión;
-- el agente lee anotaciones, vocabulary, collections y learned words tal como existen hoy, sin duplicar ninguno en un almacén paralelo;
+- el agente usa `DocumentCatalog`, vocabulary y collections tal como existen hoy, sin duplicarlos en un almacén paralelo; márgenes/anotaciones externas y learned words no bloquean el cierre y quedan como enriquecimiento futuro;
 - `workflow.md` puede ser redactado por el propio agente a partir del contexto existente del workspace y funciona como el manual de operación del agente (análogo a un CLAUDE.md): sus instrucciones de operación e intención del workspace acompañan siempre la invocación del agente — validadas por versión/hash y con techo del presupuesto de contexto —, mientras que el contenido ejecutable de workflows se carga mediante evidencia bajo demanda cuando la intención lo requiere (ejecutar el workflow debe validar y leer lo necesario antes de proponer una mutación);
 - cada acción individual (enlaces rotos, tipo/estatus, archivar, contradicciones) cita evidencia real antes de ofrecer una escritura, y ninguna se ejecuta sin que el usuario la vea primero;
 - Ask conserva continuidad por turnos con `previous_response_id` únicamente cuando no cambian workspace, acción, selección, versión ni hash; el System Prompt se reenvía y las compactaciones preservan Items opacos;
-- Contradictions puede detectar contradicciones internas de un documento y entre documentos. Merge requiere al menos dos fuentes distintas, no un máximo fijo de cuatro o seis;
-- cuando el alcance excede la ventana física, el agente calcula etapas lossless o propone dividir la carga. Nunca analiza silenciosamente un subconjunto ni usa extractos como sustituto del `.md` completo;
+- Contradictions puede detectar contradicciones internas de un documento y entre documentos. Merge requiere al menos dos fuentes distintas, no un máximo fijo de cuatro o seis; la comparación es semántica y un diff determinista solo puede ser una ayuda interna opcional;
+- cuando el alcance excede la ventana física, el agente calcula etapas lossless o propone dividir la carga. La ventana se resuelve por registry de modelos conocidos, override del deployment o `capacity_unknown`; nunca se inventa un default, analiza silenciosamente un subconjunto ni usa extractos como sustituto del `.md` completo;
 - revisar un hallazgo ensancha el panel del agente en el lugar — nunca aparece un modal o sheet que cubra Desk, Studio o Workspace detrás;
 - el mismo componente se monta en Studio (`editor-right-panel-tabs.tsx`) y en Workspace (`workspace-detail.tsx`), diferenciado solo por scope;
 - arrastrar un archivo o una carpeta hacia el panel del agente lo acumula como contexto adjunto antes de enviar;
@@ -665,7 +665,7 @@ El agente resuelve enlaces rotos, sugiere tipo/estatus, señala candidatos a arc
 - acción "enlaces rotos" (determinística, sin llamada a modelo);
 - acción "sugerir tipo y estatus" contra el catálogo de vocabulary vigente;
 - acción "candidatos a archivar" con razón explícita citada;
-- acción "contradicciones y fusión", incluyendo el patrón de cola cuando hay más de un hallazgo;
+- acción "contradicciones y fusión" semántica, incluyendo el patrón de cola cuando hay más de un hallazgo; cualquier diff determinista es auxiliar y no bloqueante;
 - contrato transversal de conversación, selección explícita, `ContextLedger`, compactación y procesamiento staged para cargas grandes;
 - montaje dual del panel del agente en Studio y Workspace, con drag-and-drop de archivos y carpetas como contexto adjunto;
 - traducción del wireframe interactivo a los tokens, tipografía e iconografía reales de Artifact Studio.
@@ -677,6 +677,7 @@ El agente resuelve enlaces rotos, sugiere tipo/estatus, señala candidatos a arc
 - cualquier cambio al catálogo, binding, apertura o sync cerrados en Fase 9;
 - cualquier cambio al shell visual, overlays o marca cerrados en Fase 10;
 - versión web/cloud del agente;
+- enriquecimiento del contexto desde el store externo de márgenes/anotaciones o learned words; podrá entrar en una fase posterior con permisos, provenance y presupuesto propios;
 - acción de "mover/reorganizar carpetas completas" más allá de lo que la capa de herramientas de M0 ya habilita — se nombra como candidata futura, no se compromete en esta fase.
 
 **Secuencia de ejecución**
@@ -686,11 +687,11 @@ El agente resuelve enlaces rotos, sugiere tipo/estatus, señala candidatos a arc
 3. **M2 — enlaces rotos:** determinística, valida el patrón de detección de solo-lectura antes de tocar acciones con juicio.
 4. **M3 — sugerir tipo y estatus:** clasificación acotada contra vocabulary.
 5. **M4 — candidatos a archivar:** señales del catálogo más juicio, siempre con razón citada.
-6. **M5 — contradicciones y fusión:** comparación real de contenido; incluye el patrón de cola para varios hallazgos.
+6. **M5 — contradicciones y fusión:** comparación semántica sobre contenido real; incluye el patrón de cola para varios hallazgos y no depende de completar un diff determinista previo.
 7. **M6 — chrome dual y drag-and-drop:** montaje en Studio y Workspace, arrastrar archivos/carpetas como contexto.
 8. **M7 — gate:** traducción visual contra `skill-design`, matriz de evidencia y aceptación explícita del dueño.
 
-Referencia: `workflow/define/dod-fase-11.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `lib/queries/document-catalog.ts`, `lib/vocabulary/catalog.ts`, `lib/margins/margins.ts`, `lib/collections/collections.ts`, `lib/workspace/types.ts`, `components/editor/panels/editor-right-panel-tabs.tsx`, `components/workspace/workspace-detail.tsx`, `docs/design/system-app.md`, `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`, `workflow/agents.md`.
+Referencia: `workflow/define/dod-fase-11.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `lib/queries/document-catalog.ts`, `lib/vocabulary/catalog.ts`, `lib/collections/collections.ts`, `lib/workspace/types.ts`, `components/editor/panels/editor-right-panel-tabs.tsx`, `components/workspace/workspace-detail.tsx`, `docs/design/system-app.md`, `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`, `workflow/agents.md`.
 
 ---
 
@@ -701,3 +702,4 @@ Estas líneas no desaparecen del producto, pero salen del critical path mientras
 - **Writing Harness / Editorial Intelligence Layer** — retomar cuando shared core, adapters y paridad web/desktop estén estables. Su valor depende de operar sobre un contrato documental sólido, no sobre un runtime acoplado.
 - **Correspondences** — retomar después de la base multi-runtime; la conversación epistolar debe construirse sobre contratos de documento, sharing y sync ya estabilizados.
 - **Invitations, distribution, i18n y SEO** — quedan diferidos hasta que la convivencia web/desktop y el modelo documental estén cerrados.
+- **Contexto ampliado del Workspace Agent** — incorporar stores externos de márgenes/anotaciones y learned words solo cuando exista un contrato explícito de autorización, provenance, privacidad y presupuesto; el contenido ya materializado en `.md` sigue participando como contenido canónico.

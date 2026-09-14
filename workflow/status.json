@@ -1,8 +1,8 @@
 {
-  "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
-  "_maintenance": "No actualizar los ledgers durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: appendear la entrega a workflow/built.jsonl (una línea por issue: what, phase, issue, linear_url, pr_url, commit, date, notes), commitear y pushear a main. Luego mover el issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "_ledger": "Las entregas ya no viven acá. Ledger activo: workflow/built.jsonl. Fases cerradas: workflow/archive/built-*.jsonl. Consultar con `npm run ops:ledger -- built --issue ODE-XXX` en vez de leer los archivos completos.",
-  "last_updated": "2026-09-09",
+  "_description": "Snapshot de fase y plan para este checkout. Linear gobierna el estado live de los issues; GitHub aporta evidencia técnica; los ledgers del repo registran evidencia construida/revisada disponible en la rama.",
+  "_maintenance": "Actualizar active_phase/phase_plan solo en DEFINE o en una reconciliación deliberada. Durante BUILD, appendear evidencia a workflow/built.jsonl (delivery_state=built + linear_status observado) y workflow/review-history.jsonl (build_completed), sin editar entradas existentes; no modificar este archivo por cada issue. Done se refleja desde Linear tras aceptación y no se infiere de PR, commit o merge.",
+  "_ledger": "Ledger activo del checkout: workflow/built.jsonl; historial de eventos: workflow/review-history.jsonl; fases archivadas: workflow/archive/built-*.jsonl. `shipped` queda reservado para release distribuida/deployada. Consultar con `npm run ops:ledger -- built --issue ODE-XXX`; para estado vigente consultar Linear.",
+  "last_updated": "2026-09-13",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -84,27 +84,46 @@
     ]
   },
   "active_phase": {
-    "name": "Fase 10 — Artifact Studio: la superficie",
-    "linear_project": "https://linear.app/hugo-marin/project/fase-10-artifact-studio-la-superficie-1bb72e1d4b41",
+    "name": "Fase 11 — Artifact Studio: Agente de Workspace",
+    "linear_project": "https://linear.app/hugo-marin/project/fase-11-artifact-studio-agente-de-workspace-57df6e291df8",
     "roadmap_ref": "workflow/define/roadmap.md",
-    "definition_of_done": "workflow/define/dod-fase-10.md",
-    "notes": "Fase 10 definida por wf-define el 2026-08-14 desde el paquete de diseño Artifact Studio (handoff-artifact-studio-handsoff/ -> docs/design/). Alcance: presentación. No toca catálogo, binding, apertura ni sync de Fase 9. Secuencia: M0 normativa (ODE-423 docs, ODE-425 deltas) -> M1 primitivas (ODE-427 overlays, ODE-428 selection bar, ODE-424 marca) -> M2 ODE-429 auth/splash -> M3 ODE-430 Desk + ODE-434 preview -> M4 ODE-431 Workspace + ODE-435 add-workspace -> M5 ODE-432 Settings -> M6 ODE-433 Studio shell + ODE-436 AI bar -> M7 ODE-438 empty states, ODE-439 vocabulario, ODE-426/ODE-437 Workflows -> M8 marketing (ODE-440, ODE-441, ODE-442, ODE-443, ODE-444) -> M9 ODE-445 gate DoD. Decisiones del dueño: marketing al final; regla Ignore del add-workspace NO se implementa (solo checkbox + Only this); Workflows entra con design pass previo. Fase 9 sigue abierta en paralelo: ODE-372 es su gate DoD en DMG y no se absorbe en Fase 10. M10 (vocabulario configurable) agregado por wf-define el 2026-08-30: ODE-472 esquema+servicio -> ODE-473 desktop -> ODE-474 catalogo unico (critical-path) -> ODE-475 Settings -> ODE-476 consumidores -> ODE-477 matriz de evidencia. Decisiones del dueno 2026-08-30: borrar un item personalizado reescribe los artifacts al valor base con confirmacion previa; el vocabulario es local-first en desktop con los items actuales como default sin conexion; la asistencia AI del modal queda fuera de alcance."
+    "definition_of_done": "workflow/define/dod-fase-11.md",
+    "notes": "Fase 11 en reconciliación de contratos y Linear desde 2026-09-13. El contexto obligatorio actual es DocumentCatalog + .md canónico + vocabulary + collections; margins/anotaciones externas y learned words quedan como enriquecimiento futuro. Contradictions/Merge son comparaciones semánticas y no dependen de ODE-508 como gate determinista. La capacidad usa registry de modelos conocidos, override del deployment o capacity_unknown. Esta rama es la integración vigente y no se lleva a main sin decisión explícita del dueño. Los gates M11 de seguridad de Fase 10 y ODE-372 de Fase 9 permanecen independientes."
   },
+  "parallel_work": [
+    {
+      "name": "Fase 10 — Artifact Studio: la superficie",
+      "linear_project": "https://linear.app/hugo-marin/project/fase-10-artifact-studio-la-superficie-1bb72e1d4b41",
+      "definition_of_done": "workflow/define/dod-fase-10.md",
+      "notes": "Fase 10 definida por wf-define el 2026-08-14 desde el paquete de diseño Artifact Studio. El 2026-09-13 se agregó M11 para cerrar los ocho hallazgos bloqueantes de la revisión de seguridad del 2026-09-05 antes de ODE-445, sin cambiar catálogo, binding, apertura ni sync de Fase 9. Secuencia vigente: M10 vocabulario configurable (ODE-472..ODE-477) -> M11 security hardening (ocho hallazgos) -> M9 ODE-445 gate DoD. Marketing permanece al final; la regla Ignore de add-workspace no se implementa; Workflows requiere design pass previo."
+    },
+    {
+      "name": "Fase 9 — gate desktop",
+      "notes": "ODE-372 sigue abierto como gate DoD en DMG y no se absorbe en Fase 10 ni Fase 11."
+    }
+  ],
   "phase_plan": {
-    "phase": "Fase 6 — Desktop Local-First Runtime",
+    "phase": "Fase 11 — Artifact Studio: Agente de Workspace",
     "source_of_truth": "workflow/define/roadmap.md",
-    "definition_of_done": "workflow/define/dod-fase-6.md",
-    "linear_project": "https://linear.app/z9ne/project/fase-6-desktop-local-first-runtime-c4b2c0e833ae",
+    "definition_of_done": "workflow/define/dod-fase-11.md",
+    "linear_project": "https://linear.app/hugo-marin/project/fase-11-artifact-studio-agente-de-workspace-57df6e291df8",
     "linear_issues": [
-      "ODE-207",
-      "ODE-208",
-      "ODE-209",
-      "ODE-210",
-      "ODE-211",
-      "ODE-212",
-      "ODE-213",
-      "ODE-214"
+      "ODE-489",
+      "ODE-501",
+      "ODE-503",
+      "ODE-504",
+      "ODE-505",
+      "ODE-507",
+      "ODE-508",
+      "ODE-509",
+      "ODE-510",
+      "ODE-511",
+      "ODE-512",
+      "ODE-513",
+      "ODE-514",
+      "ODE-515",
+      "ODE-517"
     ],
-    "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
+    "notes": "Plan reconciliado el 2026-09-13. Linear es la autoridad live de estado. ODE-508 deja de ser dependencia: la comparación determinista es auxiliar opcional y la autoridad es semántica. ODE-501/509/510/513 requieren revalidación por gaps encontrados; ODE-489/504/511/512/515 continúan en progreso; ODE-505/507/514/517 permanecen en backlog hasta que su dependencia o prioridad los habilite. No mergear esta rama a main en esta etapa."
   }
 }

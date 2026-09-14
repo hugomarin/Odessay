@@ -24,6 +24,15 @@ Si el MCP no está disponible en la sesión, usar la API GraphQL como fallback:
 - Mover estado: `mutation { issueUpdate(id: "...", input: { stateId: "..." }) { success } }`
 - Comentar: `mutation { commentCreate(input: { issueId: "...", body: "..." }) { success } }`
 
+### Autoridad de estado y evidencia
+
+- **Linear gobierna “en qué estamos”**: su estado vigente es la autoridad operacional del issue. `Done` significa outcome aceptado según el contrato del issue; no se infiere de un commit, un PR abierto ni un merge.
+- **GitHub gobierna la evidencia técnica y el estado de integración**: branch, SHA, checks, PR y merge se registran como evidencia, pero no sustituyen el estado de Linear.
+- **Los ledgers del repo son evidencia del checkout**, no un espejo live global de Linear. `workflow/built.jsonl` registra trabajo construido/validado en una rama; `workflow/review-history.jsonl` registra eventos de build/review. Cada entry nuevo debe incluir el estado Linear observado al registrarlo.
+- `built`, `build_completed` o `ready_for_review` describen BUILD. `shipped` se reserva para una release realmente distribuida/deployada y nunca se usa como sinónimo de build, PR abierto o `Done`.
+- `workflow/status.json` resume la fase y el plan del checkout. Se actualiza en DEFINE o en una reconciliación deliberada de fase; no se muta por cada issue de BUILD.
+- Los eventos históricos `ship_completed` se conservan por ser append-only, pero se interpretan como el antiguo “build completado en rama”, no como prueba de merge, despliegue ni release.
+
 ---
 
 ## `/wf-define [fase?]` o `wf-define [fase?]` — PLAN
@@ -132,7 +141,7 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 
 **Entrega**
 7. `git push -u origin {rama}`. Abrir el PR con body completo (link al issue, qué se hizo, cómo testear, outputs del paso 5). Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`. Si falla, editar con `gh pr edit {n} --body "..."` antes de continuar.
-8. Confirmar PR en OPEN: `gh pr view {número} --json state`. Mover issue a `In Review` en Linear. Dejar comentario con Context Report completo:
+8. Confirmar PR en OPEN: `gh pr view {número} --json state`. Appendear en la rama de feature la evidencia de BUILD a `workflow/built.jsonl` (`delivery_state: "built"`, `linear_status: "In Review"`) y el evento `build_completed` a `workflow/review-history.jsonl`; validar ambos JSONL y pushear. Luego mover el issue a `In Review` en Linear y dejar comentario con Context Report completo:
    - `Context Gaps Detected = yes` si faltó o fue ambiguo al menos uno de: alcance, contrato de datos, evidencia requerida, dependencias, referencias documentales.
    - `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
    - `Additional Instructions Requested`: listar las instrucciones extra pedidas al humano durante BUILD.
@@ -140,9 +149,9 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
    - `Recommended Context Fixes`: cambios concretos en issue brief/docs/skills para prevenir repetición.
 9. Emitir `BUILD completado` en la conversación. Si algún paso anterior falló y no se pudo resolver, emitir `HANDOFF REQUERIDO — [motivo exacto]`.
 
-**Restricción de workflow en BUILD:** la rama de feature **no toca** `workflow/built.jsonl`, `workflow/review-history.jsonl` ni `workflow/status.json`. Se actualizan únicamente en `main` post-merge durante REVIEW. Esto elimina conflictos de merge cuando múltiples worktrees corren en paralelo.
+**Restricción de workflow en BUILD:** la rama de feature puede appendear únicamente entradas nuevas a `workflow/built.jsonl` y `workflow/review-history.jsonl`, ambos protegidos por `merge=union`; no edita ni reordena entradas existentes. `workflow/status.json` no se toca durante BUILD.
 
-**Gate de salida:** pasos 5 y 6 en verde + PR abierto con body completo (paso 7) + issue en `In Review` (paso 8). Sin eso, el issue no puede estar en `In Review` ni emitirse `BUILD completado`.
+**Gate de salida:** pasos 5 y 6 en verde + PR abierto con body completo (paso 7) + evidencia `built`/`build_completed` append-only + issue en `In Review` (paso 8). Sin eso, el issue no puede estar en `In Review` ni emitirse `BUILD completado`.
 
 ---
 
@@ -199,7 +208,7 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 
 **Objetivo:** verificar calidad del PR y cerrar la trazabilidad del issue.
 
-**Estado Linear:** `In Review` → `Done` (si aprobado, el agente hace merge y cierra) o `In Progress` (si rechazado).
+**Estado Linear:** `In Review` → `Done` si el review pasa y el outcome está aceptado, `In Review` si el review técnico pasa pero falta aceptación, o `In Progress` si es rechazado. El merge no decide por sí solo la transición.
 
 **Resolución de issue:**
 - Con argumento (`/wf-review ODE-22`): usar el issue indicado.
@@ -248,23 +257,15 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 6. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
 7. Volver a `main`: `git switch main`.
 8. Sincronizar `main` local con remoto: `git pull --ff-only origin main`.
-9. En `main`, appendear **ambos** eventos a `workflow/review-history.jsonl` (append-only): primero `build_submitted` con los datos del PR (branch, commit HEAD, PR URL, notas de BUILD), luego `review_approved` con los datos del review (score, gate_result, reviewer, findings). Antes de commitear, validar que `workflow/review-history.jsonl` y `workflow/status.json` sean parseables:
+9. En `main`, appendear `review_approved` a `workflow/review-history.jsonl` (append-only) con los datos del review (score, gate_result, reviewer, findings). El evento `build_completed` y la línea de `built.jsonl` ya deben existir en la rama integrada. Antes de commitear, validar que `workflow/review-history.jsonl` y `workflow/status.json` sean parseables:
    ```bash
    node scripts/validate-workflow-json.mjs
    git add workflow/review-history.jsonl
-   git commit -m "chore(workflow): append build_submitted + review_approved for {ISSUE-ID} [{ISSUE-ID}]"
+   git commit -m "chore(workflow): append review_approved for {ISSUE-ID} [{ISSUE-ID}]"
    git push origin main
    ```
-   > El evento `build_submitted` se aplaza a REVIEW para evitar que la rama de feature toque archivos de workflow, eliminando conflictos de merge en worktrees paralelos.
-10. Appendear el issue completado al ledger `workflow/built.jsonl` (una línea JSON: `what`, `phase`, `issue`, `linear_url`, `pr_url`, `commit`, `date`, `notes`), especificando la fase terminada. Si la fase cambió, actualizar además `active_phase` y `last_updated` en `workflow/status.json`. Antes de commitear, validar que los ledgers son parseables:
-   ```bash
-   npm run ops:ledger -- append-built '{"what":"...","phase":"...","issue":"{ISSUE-ID}","linear_url":"...","pr_url":"...","commit":"...","date":"YYYY-MM-DD","notes":"..."}'
-   node scripts/validate-workflow-json.mjs
-   git add workflow/built.jsonl workflow/status.json
-   git commit -m "chore(workflow): record {ISSUE-ID} in the built ledger [{ISSUE-ID}]"
-   git push origin main
-   ```
-11. Mover issue a `Done` en Linear.
+10. Verificar que `workflow/built.jsonl` contiene el SHA construido. Si la fase cambió por decisión de producto, actualizar `active_phase` y `last_updated` en `workflow/status.json` mediante una reconciliación separada.
+11. Mover el issue a `Done` en Linear solo cuando el outcome esté aceptado. Un merge por sí solo no autoriza esta transición; si falta aceptación, dejarlo en `In Review`.
 
 **Nota:** el agente ejecuta el merge directamente. No requiere confirmación del humano salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
 
@@ -319,11 +320,11 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 
 ---
 
-## `/wf-ship [issue-id]` o `wf-ship [issue-id]` — SHIP
+## `/wf-ship [issue-id]` o `wf-ship [issue-id]` — BUILD-TO-REVIEW (alias legado)
 
-**Objetivo:** implementar sobre el brief aprobado, abrir PR y cerrar el issue en Linear sin pasar por wf-review. El PR queda abierto para que el humano decida cuándo mergear.
+**Objetivo:** implementar sobre el brief aprobado, abrir PR y dejar el issue listo para revisión sin tocar `main`. El nombre del comando se conserva por compatibilidad; no significa release ni despliegue.
 
-**Estado Linear:** `Todo` o `Backlog` (con brief) → `In Progress` al iniciar → `Done` al confirmar PR.
+**Estado Linear:** `Todo` o `Backlog` (con brief) → `In Progress` al iniciar → `In Review` al confirmar PR y evidencia. `Done` requiere aceptación posterior del outcome.
 
 **Resolución de issue:**
 - Con argumento (`/wf-ship ODE-22`): usar el issue indicado.
@@ -367,16 +368,16 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 9. Confirmar PR en OPEN: `gh pr view {número} --json state`.
 10. Appendear a los ledgers en la **rama de feature** (no en main):
     - `workflow/built.jsonl` — la entrega del issue en la fase activa.
-    - `workflow/review-history.jsonl` — el evento `ship_completed`.
+    - `workflow/review-history.jsonl` — el evento `build_completed`.
     ```bash
-    npm run ops:ledger -- append-built '{"what":"...","phase":"...","issue":"{ISSUE-ID}","linear_url":"...","pr_url":"...","commit":"...","date":"YYYY-MM-DD","notes":"..."}'
-    npm run ops:ledger -- append-review '{"ts":"...","type":"ship_completed","issue":"{ISSUE-ID}","branch":"...","pr_url":"...","commit":"...","score":0,"gate_result":"PASS","reviewer":"...","notes":"..."}'
+    npm run ops:ledger -- append-built '{"what":"...","phase":"...","issue":"{ISSUE-ID}","linear_url":"...","pr_url":"...","commit":"...","date":"YYYY-MM-DD","delivery_state":"built","linear_status":"In Review","notes":"..."}'
+    npm run ops:ledger -- append-review '{"ts":"...","type":"build_completed","issue":"{ISSUE-ID}","branch":"...","pr_url":"...","commit":"...","linear_status":"In Review","gate_result":"PASS","reviewer":"...","notes":"..."}'
     node scripts/validate-workflow-json.mjs
     git add workflow/built.jsonl workflow/review-history.jsonl
-    git commit -m "chore(workflow): record {ISSUE-ID} ship_completed [{ISSUE-ID}]"
+    git commit -m "chore(workflow): record {ISSUE-ID} build_completed [{ISSUE-ID}]"
     git push origin {rama}
     ```
-    Ambos son ledgers JSONL append-only con `merge=union` (ver `.gitattributes`): dos ships paralelos que appendean **no conflictúan** — git conserva las dos líneas. Por eso SHIP puede escribirlos en la rama de feature sin reintroducir el problema que resolvió ODE-184. No editar líneas existentes ni reordenar el archivo: eso sí conflictúa.
+    Ambos son ledgers JSONL append-only con `merge=union` (ver `.gitattributes`): dos builds paralelos que appendean **no conflictúan** — git conserva las dos líneas. Por eso este flujo puede escribirlos en la rama de feature sin reintroducir el problema que resolvió ODE-184. No editar líneas existentes ni reordenar el archivo: eso sí conflictúa.
 11. Dejar comentario en Linear con Context Report completo. **Este paso es obligatorio — no avanzar al paso 12 hasta confirmar que el comentario fue creado** (MCP retorna el ID del comentario; GraphQL retorna `success: true`):
     - `Context Gaps Detected = yes | no`
     - `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
@@ -385,13 +386,13 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
     - `Recommended Context Fixes`: cambios concretos en issue brief/docs para prevenir repetición.
     - Outputs de validación: typecheck, lint, vitest, delivery gate.
     - Link al PR.
-    Si la llamada falla o no retorna confirmación: reintentar una vez. Si sigue fallando: reportar el bloqueo al humano y no mover a Done hasta resolverlo.
-12. Mover issue a `Done` en Linear. Solo ejecutar este paso tras haber recibido confirmación del comentario en el paso 11.
-13. Emitir `SHIP completado — PR #{número} abierto, listo para merge manual.`
+    Si la llamada falla o no retorna confirmación: reintentar una vez. Si sigue fallando: reportar el bloqueo al humano y no mover a `In Review` hasta resolverlo.
+12. Mover issue a `In Review` en Linear. Solo ejecutar este paso tras haber recibido confirmación del comentario en el paso 11.
+13. Emitir `BUILD completado — PR #{número} abierto, listo para revisión; main no fue modificado.`
 
-**Restricción:** NO hacer `gh pr merge`. NO hacer `git switch main`. NO tocar `main`. Los ledgers `workflow/built.jsonl` y `workflow/review-history.jsonl` se appendean en la **rama de feature** (no en main), a diferencia del flujo BUILD+REVIEW. Esto es seguro únicamente porque son JSONL con `merge=union`; `workflow/status.json` sigue sin tocarse en ramas de feature.
+**Restricción:** NO hacer `gh pr merge`. NO hacer `git switch main`. NO tocar `main`. Los ledgers `workflow/built.jsonl` y `workflow/review-history.jsonl` se appendean en la **rama de feature** como evidencia de build, igual que en BUILD. Esto es seguro únicamente porque son JSONL con `merge=union`; `workflow/status.json` sigue sin tocarse en ramas de feature.
 
-**Gate de salida:** pasos 6 y 7 en verde + PR abierto con body completo (paso 8) + `workflow/built.jsonl` y `review-history.jsonl` appendeados en la rama de feature (paso 10) + comentario Context Report confirmado en Linear con ID retornado (paso 11) + issue en `Done` (paso 12).
+**Gate de salida:** pasos 6 y 7 en verde + PR abierto con body completo (paso 8) + `workflow/built.jsonl` y `review-history.jsonl` appendeados en la rama de feature (paso 10) + comentario Context Report confirmado en Linear con ID retornado (paso 11) + issue en `In Review` (paso 12).
 
 ---
 

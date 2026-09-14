@@ -96,10 +96,10 @@ Si el issue requería ese contrato y no existe, está incompleto o el diff lo co
 
 ### Trazabilidad histórica (obligatoria)
 - [ ] ¿Se agregó evento append-only en `workflow/review-history.jsonl` para esta ronda?
-- [ ] ¿El evento usa tipo correcto (`review_rejected`, `review_approved`)? En aprobación, ¿se incluyó también el evento `build_submitted` aplazado desde BUILD?
+- [ ] ¿El evento usa tipo correcto (`build_completed` en BUILD; `review_rejected` o `review_approved` en REVIEW)?
 - [ ] ¿Incluye `issue`, `branch`, `pr_url`, `commit`, `ts`, `notes` (y en review: `score`, `gate_result`)?
 - [ ] ¿No se editaron ni borraron entradas previas del archivo?
-- [ ] ¿El commit de workflow files fue en `main` post-merge (nunca en la rama de feature)?
+- [ ] ¿La rama de feature solo appendeó evidencia de BUILD y dejó `workflow/status.json` intacto? ¿Los eventos de REVIEW se registraron en la rama donde ocurrió la revisión/integración?
 
 ### Architecture contract review — verificar antes de aprobar cuando aplica
 - [ ] ¿El issue/brief declara `Architecture Contract` cuando el scope toca desktop, shared core, save/sync/parser, contracts de servicio o runtime boundaries?
@@ -465,13 +465,13 @@ Appendear por el helper y no con `fs.appendFileSync` directo: el helper garantiz
 
 Este log es la fuente de verdad para tendencias de calidad.
 
-**Regla de workflow:** las ramas de feature **no tocan** `workflow/built.jsonl`, `workflow/review-history.jsonl` ni `workflow/status.json`. Se actualizan únicamente en `main` post-merge. (Excepción: `/wf-ship` appendea a los dos ledgers JSONL en la rama de feature; `merge=union` absorbe los appends paralelos.)
+**Regla de workflow:** las ramas de feature appendean evidencia de BUILD a `workflow/built.jsonl` (`delivery_state: "built"`) y `workflow/review-history.jsonl` (`build_completed`). Ambos son append-only y `merge=union` absorbe appends paralelos; no se editan entradas existentes. `workflow/status.json` no se toca durante BUILD.
 
-Tras aprobar y mergear, appendear **ambos** eventos (`build_submitted` + `review_approved`) y commitear en `main`:
+Tras aprobar y mergear, appendear `review_approved` y commitear en `main`; `build_completed` ya debe venir de la rama revisada:
 ```bash
 node scripts/validate-workflow-json.mjs
 git add workflow/review-history.jsonl
-git commit -m "chore(workflow): append build_submitted + review_approved for ODE-XX [ODE-XX]"
+git commit -m "chore(workflow): append review_approved for ODE-XX [ODE-XX]"
 git push origin main
 ```
 
@@ -522,11 +522,10 @@ Con REVIEW APROBADO, ejecutar en este orden:
 → Hacer merge del PR: `gh pr merge {número} --merge`.
 → Volver a `main`: `git switch main`.
 → Sincronizar `main`: `git pull --ff-only origin main`.
-→ Appendear `build_submitted` + `review_approved` a `workflow/review-history.jsonl` y commitear:
-  `node scripts/validate-workflow-json.mjs && git add workflow/review-history.jsonl && git commit -m "chore(workflow): append build_submitted + review_approved for {ISSUE-ID} [{ISSUE-ID}]" && git push origin main`
-→ Appendear la entrega a `workflow/built.jsonl` (y `active_phase` en `workflow/status.json` si la fase cerró) y commitear:
-  `npm run ops:ledger -- append-built '<json>' && node scripts/validate-workflow-json.mjs && git add workflow/built.jsonl workflow/status.json && git commit -m "chore(workflow): record {ISSUE-ID} in the built ledger [{ISSUE-ID}]" && git push origin main`
-→ Mover el issue a Done en Linear (`scripts/linear-cli.mjs move`).
+→ Appendear `review_approved` a `workflow/review-history.jsonl` y commitear:
+  `node scripts/validate-workflow-json.mjs && git add workflow/review-history.jsonl && git commit -m "chore(workflow): append review_approved for {ISSUE-ID} [{ISSUE-ID}]" && git push origin main`
+→ Verificar que la entrega construida ya exista en `workflow/built.jsonl`; actualizar `workflow/status.json` solo si hay una reconciliación explícita de fase.
+→ Mover el issue a Done en Linear únicamente cuando el outcome esté aceptado (`scripts/linear-cli.mjs move`).
 
 El agente ejecuta el merge directamente sin esperar confirmación del humano, salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
 

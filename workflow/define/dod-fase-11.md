@@ -3,7 +3,7 @@
 Este documento define el gate de cierre de **Fase 11 — Artifact Studio: Agente de Workspace**.
 Si un punto no está cumplido, el agente no se considera una capacidad estable del producto, aunque las acciones individuales "funcionen".
 
-Fase 10 le dio a Artifact Studio una sola identidad visual y un vocabulario de tipos/estados configurable por el usuario (`ODE-472`..`ODE-477`). Fase 11 no rediseña nada de eso: expone esa capa de contexto ya construida (catálogo, anotaciones, vocabulary, collections, learned words) a través de un agente invocado bajo demanda, que vive en el entorno local y usa OpenAI Responses como adapter de inferencia. Con autorización explícita del usuario, puede leer, escribir, mover, editar y eliminar documentos del workspace. El alcance semántico siempre es explícito: selección o adjuntos confirmados; una mención fuera del alcance requiere confirmación antes de leer el body.
+Fase 10 le dio a Artifact Studio una sola identidad visual y un vocabulario de tipos/estados configurable por el usuario (`ODE-472`..`ODE-477`). Fase 11 no rediseña nada de eso: expone el catálogo documental, el vocabulary y las collections ya construidos a través de un agente invocado bajo demanda, que vive en el entorno local y usa OpenAI Responses como adapter de inferencia. Con autorización explícita del usuario, puede leer, escribir, mover, editar y eliminar documentos del workspace. El alcance semántico siempre es explícito: selección o adjuntos confirmados; una mención fuera del alcance requiere confirmación antes de leer el body. Márgenes/anotaciones externas y learned words pueden enriquecer el contexto en una evolución posterior, pero no son requisito ni gate de esta fase.
 
 El wireframe interactivo aprobado por el dueño (2026-09-05) es la referencia de **interacción** de esta fase — qué dispara qué, dónde vive cada estado, cómo se resuelve un hallazgo. No es la referencia visual: los colores, tipografía e iconografía del wireframe se descartan en favor del sistema real de Artifact Studio (`skill-design`, `app/globals.css`) al momento de implementar.
 
@@ -12,8 +12,6 @@ Referencias:
 - `workflow/context/features/odessay-desktop-document-catalog.md` — contrato del catálogo que este agente consume, no reemplaza.
 - `lib/queries/document-catalog.ts` — capa compartida de lectura (Desk/Workspace); metadata-only, sin body.
 - `lib/services/document-service-factory.ts` — lectura acotada de body real por documento.
-- `lib/services/contracts/ai-service.ts` — contrato `learnWord`/`listLearnedWords`/`deleteLearnedWord`, precedente ya en producción de "el usuario marca algo como válido".
-- `lib/margins/margins.ts`, `lib/editor/footnote-node.ts` — anotaciones (`personal`/`ai`/`footnote`), consultables por `writing_id`.
 - `lib/vocabulary/catalog.ts`, `lib/writings/status.ts`, `lib/writings/artifact-type.ts` — catálogo de vocabulary configurable (Fase 10, `ODE-472`..`ODE-477`).
 - `lib/collections/collections.ts` — collections manuales con descripción libre.
 - `lib/workspace/types.ts` — `WorkspaceRecord.rootPath` es siempre requerido; base de que `workflow.md` como convención de archivo no necesita esquema nuevo.
@@ -36,7 +34,8 @@ Referencias:
 
 ## 2) El contexto viene del sustrato que ya existe, nunca de una fuente paralela
 
-- El agente lee anotaciones (`lib/margins/margins.ts`), vocabulary de tipo/estatus (`lib/vocabulary/catalog.ts`), collections (`lib/collections/collections.ts`) y palabras aprendidas (`lib/services/contracts/ai-service.ts`) tal como existen hoy; no se introduce un almacén paralelo de "contexto" que duplique alguno de estos.
+- El contexto base de esta fase usa `DocumentCatalog`, vocabulary de tipo/estatus y collections tal como existen hoy; no introduce un almacén paralelo que duplique esas fuentes.
+- El texto de una anotación que ya esté materializado dentro del `.md` participa como parte del contenido canónico. El store externo de márgenes/anotaciones y learned words queda fuera del gate actual; integrarlo después exigirá un contrato explícito de permisos, provenance y presupuesto.
 - La metadata liviana (título, tipo, estatus, rutas) se lee de `DocumentCatalog`; el contenido real se trae completo para cada documento seleccionado/confirmado que la acción necesita analizar. Si no cabe en una llamada, se procesa por etapas lossless; nunca se sustituye por extractos ni se precarga el body de documentos no seleccionados.
 - Ask sin alcance documental pide los documentos antes de una pregunta que requiera fuentes. No hay fallback a documentos recientes, al foco o a coincidencias adivinadas. Classification, Contradictions y Merge requieren selección/confirmación explícita.
 - Contradictions admite contradicciones internas de un documento y relaciones entre documentos. Merge requiere al menos dos documentos distintos y no tiene un máximo de producto fijo; la cantidad ideal se calcula con la ventana física del deployment.
@@ -44,7 +43,7 @@ Referencias:
 
 ## 3) `workflow.md` es una acción del agente, no una precondición manual
 
-- El agente puede redactar o actualizar un borrador de `workflow.md` en la raíz del workspace, sintetizado a partir del contenido y la organización ya existentes (títulos, collections, anotaciones) — el usuario aprueba o edita antes de que se escriba a disco.
+- El agente puede redactar o actualizar un borrador de `workflow.md` en la raíz del workspace, sintetizado a partir del contenido y la organización ya existentes (títulos, catálogo y collections) — el usuario aprueba o edita antes de que se escriba a disco.
 - `workflow.md` es el manual de operación del agente y cumple dos naturalezas con reglas de lectura distintas. Sus **instrucciones de operación** (cómo debe operar el agente y la intención del workspace) acompañan siempre la invocación del agente — análogo a un CLAUDE.md — con validación de versión/hash vía descriptor y techo del presupuesto de contexto de ODE-501. El **contenido ejecutable de workflows** (secciones de definición) se carga mediante evidencia bajo demanda cuando la intención lo requiere; el descriptor siempre informa existencia, versión/hash y alcance. Sin campo nuevo en base de datos. Una acción explícita de ejecutar el workflow debe validar y leer los fragmentos o el documento completo que necesite antes de proponer una mutación.
 - No introduce ningún store durable nuevo: `workflow.md` es un documento más del workspace, sujeto a las mismas reglas de identidad y catálogo que cualquier otro `.md`.
 
@@ -53,9 +52,9 @@ Referencias:
 - **Enlaces rotos** corre sin ninguna llamada a modelo; opera solo sobre el catálogo ya cargado y el filesystem.
 - **Sugerir tipo y estatus** siempre cita contra qué documentos similares o qué señal del catálogo se basó la sugerencia.
 - **Candidatos a archivar** siempre llega con razón explícita (fecha, similitud, o ambas) visible antes de que el usuario pueda aprobar.
-- **Contradicciones y fusión** compara contenido real (no solo metadata), incluyendo una fuente consigo misma para contradicciones internas, cita los fragmentos, y soporta más de un hallazgo en la misma corrida: resolver uno lo registra de inmediato y avanza al siguiente sin resolver; el estado de resueltos sobrevive a cerrar y reabrir la revisión.
+- **Contradicciones y fusión** compara semánticamente el contenido real (no solo metadata), incluyendo una fuente consigo misma para contradicciones internas, cita los fragmentos, y soporta más de un hallazgo en la misma corrida: resolver uno lo registra de inmediato y avanza al siguiente sin resolver; el estado de resueltos sobrevive a cerrar y reabrir la revisión. Un diff, alineación o matcher determinista puede ayudar a recuperar evidencia, pero no es precondición, autoridad ni gate para el veredicto semántico.
 - **Continuidad y compactación**: Ask reutiliza `previous_response_id` solo con el mismo fingerprint de alcance, reenvía el System Prompt y conserva Items opacos. Las operaciones largas usan `context_management`/`compact_threshold` cuando el deployment lo configura; la compactación no cambia el alcance ni reemplaza el `.md` canónico.
-- **Cargas grandes**: el planner usa la ventana real menos instrucciones, schemas/tools, historial, razonamiento y salida reservada. Puede dividir en etapas y sintetizar al final; si la capacidad física o un safety budget operativo impide completar la evidencia, devuelve `budget_exceeded`/`insufficient_evidence` sin conclusión definitiva ni mutación.
+- **Cargas grandes**: el planner resuelve la ventana mediante un registry de modelos conocidos, permite un override explícito por deployment y devuelve `capacity_unknown` cuando no puede determinarla; nunca inventa un default físico. La capacidad efectiva resta salida reservada, System Prompt, schemas/tools, historial acumulado, razonamiento y margen de seguridad. Puede dividir en etapas y sintetizar al final; si la capacidad física o un safety budget operativo impide completar la evidencia, devuelve `budget_exceeded`/`insufficient_evidence` sin conclusión definitiva ni mutación.
 - Ninguna acción ejecuta su escritura antes de que el usuario haya visto la evidencia citada.
 
 ## 5) El agente se expande en su propio panel — nunca un modal o sheet sobre el contenido
