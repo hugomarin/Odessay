@@ -6459,10 +6459,10 @@ export function EditorShell({
           data-testid="editor-band"
           className={cn(
             "EditorBand flex min-h-0 flex-1",
-            isFocusMode ? "gap-0 px-0 pb-0 pt-[46px]" : "gap-2.5 pb-2.5 pr-2.5 pt-1.5",
+            isFocusMode ? "gap-0 px-0 pb-0 pt-[46px]" : "gap-2.5 pb-1 pr-2.5 pt-1.5",
           )}
         >
-          <div className="relative flex min-w-0 flex-1 flex-col gap-1.5">
+          <div className="relative flex min-w-0 flex-1 flex-col gap-1">
             {isDesktopRuntime() && hydrationProgress.active ? (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-bg/88 backdrop-blur-sm">
                 <div className="w-full max-w-[360px] rounded-[20px] border border-border/70 bg-paper px-6 py-5 text-center shadow-[0_20px_60px_rgba(39,27,22,0.12)]">

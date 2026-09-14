@@ -44,7 +44,7 @@ export function EditorNavigationSidebar({
           far edge. The old title row is gone — with a pill already reading
           "Workspace", a heading repeating it framed the tree without naming
           anything the pills did not (owner review, this pass). */}
-      <div className="flex h-[46px] shrink-0 items-center gap-1">
+      <div className="mt-1.5 flex h-[46px] shrink-0 items-center gap-1">
         {controls}
         <button
           type="button"

@@ -142,7 +142,7 @@ const RAIL_FORCED_COLLAPSE_QUERY = "(max-width: 899px)"
  * that column, and expanding only adds room for the label to its right.
  */
 const SIDEBAR_ITEM_BASE_CLASS =
-  "flex h-10 min-h-10 w-full items-center gap-2.5 rounded-[9px] p-0 text-left text-[14px] font-medium"
+  "flex h-10 min-h-10 w-full items-center gap-0 rounded-[9px] p-0 text-left text-[14px] font-medium"
 const SIDEBAR_ICON_WRAP_CLASS =
   "flex h-10 w-10 min-w-10 flex-shrink-0 items-center justify-center"
 const SIDEBAR_ITEM_TRANSITION_CLASS = "transition-colors duration-[180ms] ease-layout"

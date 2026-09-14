@@ -313,12 +313,6 @@ export function WorkspaceTree({
                 effectiveSelectedFolder === "" && "bg-muted text-ink",
               )}
             >
-              <span
-                className="invisible h-[13px] w-[13px] shrink-0"
-                aria-hidden="true"
-              >
-                <ChevronDown className="h-[13px] w-[13px]" strokeWidth={1.5} />
-              </span>
               {rootIcon === "home" ? (
                 <Home className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
               ) : (
