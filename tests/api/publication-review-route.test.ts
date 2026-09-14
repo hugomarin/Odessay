@@ -9,6 +9,12 @@ const providerConfigMock = vi.hoisted(() => ({
   getAIProviderConfig: vi.fn(),
 }))
 
+const admissionMock = vi.hoisted(() => ({
+  tryAcquireAiAdmission: vi.fn(),
+  releaseAiAdmission: vi.fn(),
+  logAiAdmissionEvent: vi.fn(),
+}))
+
 vi.mock("@/lib/supabase/request-auth", () => ({
   getCurrentUserFromRequest: vi.fn(async () => {
     const result = await supabaseMock.getUser()
@@ -19,6 +25,8 @@ vi.mock("@/lib/supabase/request-auth", () => ({
 vi.mock("@/lib/ai/provider-config", () => ({
   getAIProviderConfig: providerConfigMock.getAIProviderConfig,
 }))
+
+vi.mock("@/lib/ai/admission", () => admissionMock)
 
 const createRequest = (body: Record<string, unknown>) =>
   new Request("https://app.odessay.com/api/ai/publication-review", {
@@ -41,6 +49,9 @@ describe("POST /api/ai/publication-review", () => {
   beforeEach(() => {
     vi.unstubAllGlobals()
     supabaseMock.getUser.mockReset()
+    admissionMock.tryAcquireAiAdmission.mockReset()
+    admissionMock.releaseAiAdmission.mockReset()
+    admissionMock.tryAcquireAiAdmission.mockResolvedValue({ admitted: true, leaseId: "lease-1" })
     providerConfigMock.getAIProviderConfig.mockReset()
     providerConfigMock.getAIProviderConfig.mockReturnValue({
       baseUrl: "https://provider.test",
@@ -422,4 +433,56 @@ describe("POST /api/ai/publication-review", () => {
     })
   })
 
+  it("returns 429 with Retry-After and never calls the provider when admission is rejected", async () => {
+    admissionMock.tryAcquireAiAdmission.mockResolvedValue({
+      admitted: false,
+      reason: "concurrency_limited",
+      retryAfterSeconds: 1,
+    })
+    const providerFetch = vi.fn()
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({}))
+    const payload = await response.json()
+
+    expect(response.status).toBe(429)
+    expect(response.headers.get("Retry-After")).toBe("1")
+    expect(payload.error.code).toBe("CONCURRENCY_LIMITED")
+    expect(providerFetch).not.toHaveBeenCalled()
+    expect(admissionMock.releaseAiAdmission).not.toHaveBeenCalled()
+  })
+
+  it("releases the admission lease after a successful request", async () => {
+    const providerFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: '{"summary":"","language":"es","corrections":[],"uncertain":[]}',
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    )
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({}))
+    await response.json()
+
+    expect(response.status).toBe(200)
+    expect(admissionMock.releaseAiAdmission).toHaveBeenCalledWith("lease-1")
+  })
+
+  it("releases the admission lease even when the provider call fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })))
+
+    const response = await POST(createRequest({}))
+    await response.json()
+
+    expect(response.status).toBeGreaterThanOrEqual(500)
+    expect(admissionMock.releaseAiAdmission).toHaveBeenCalledWith("lease-1")
+  })
 })

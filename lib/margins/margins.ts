@@ -194,6 +194,24 @@ export function sortMarginsByPosition<T extends { anchor_start: number }>(margin
   return [...margins].sort((a, b) => a.anchor_start - b.anchor_start)
 }
 
+/**
+ * Thrown when a margin sync tries to write an id that already belongs to a
+ * different reader or writing (ODE-521). Never carries the foreign owner's
+ * identity or writing — only that the id the caller already knew collided.
+ */
+export class MarginOwnershipConflictError extends Error {
+  constructor() {
+    super("MARGIN_OWNERSHIP_CONFLICT")
+    this.name = "MarginOwnershipConflictError"
+  }
+}
+
+function isMarginOwnershipConflictError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const message = "message" in error && typeof error.message === "string" ? error.message : ""
+  return message.includes("MARGIN_OWNERSHIP_CONFLICT")
+}
+
 export function isLegacyMarginsSchemaError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false
 
@@ -416,6 +434,9 @@ export async function syncMarginsFromBodyJson(
 
   if (syncRows.length > 0) {
     const { error: upsertError } = await supabase.from("margins").upsert(syncRows, { onConflict: "id" })
+    if (upsertError && isMarginOwnershipConflictError(upsertError)) {
+      throw new MarginOwnershipConflictError()
+    }
     if (upsertError && !isLegacyMarginsSchemaError(upsertError)) {
       throw upsertError
     }
@@ -432,6 +453,9 @@ export async function syncMarginsFromBodyJson(
       }))
       const { error: legacyUpsertError } = await supabase.from("margins").upsert(legacyRows, { onConflict: "id" })
       if (legacyUpsertError) {
+        if (isMarginOwnershipConflictError(legacyUpsertError)) {
+          throw new MarginOwnershipConflictError()
+        }
         throw legacyUpsertError
       }
     }
