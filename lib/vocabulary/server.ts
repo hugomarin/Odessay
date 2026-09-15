@@ -151,9 +151,14 @@ export async function listVocabulary(
     })
   }
 
-  // Custom (non-base) rows the user created.
+  // Custom (non-base) rows the user created. Skipped when their name collides
+  // (case-insensitively) with a base item already in `items` — a base status
+  // introduced after the user had already hand-created one with the same
+  // name (e.g. "In Progress") must not render as two identical-looking rows.
+  const baseNames = new Set(items.map((item) => `${item.kind}:${item.name.trim().toLowerCase()}`))
   for (const row of rows) {
     if (row.is_base) continue
+    if (baseNames.has(`${row.kind}:${row.name.trim().toLowerCase()}`)) continue
     const mapped = rowToItem(row)
     if (mapped) items.push(mapped)
   }

@@ -158,8 +158,8 @@ describe("setDisabledStatuses", () => {
     ])
     const result = await setDisabledStatuses(supabase, "user-1", ["archived"])
     expect(result.error).toBeNull()
-    // 13 merged base items (6 types + 7 statuses) plus the one custom row from the mock.
-    expect(result.data).toHaveLength(14)
+    // 14 merged base items (6 types + 8 statuses) plus the one custom row from the mock.
+    expect(result.data).toHaveLength(15)
   })
 })
 

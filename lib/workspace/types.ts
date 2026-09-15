@@ -1,5 +1,6 @@
 import type { DocumentState } from "@/lib/writings/document-state"
 import type { WritingStatus } from "@/lib/writings/status"
+import type { ArtifactType } from "@/lib/writings/artifact-type"
 
 export type WorkspaceLayout = "grid" | "list"
 
@@ -51,6 +52,7 @@ export type ContextualWorkspaceDocument = {
   relativePath: string
   state: DocumentState
   status: WritingStatus | null
+  artifactType: ArtifactType | null
   /** Plain-text excerpt for the preview modal; null when the catalog has none yet. */
   excerpt: string | null
   /** Filesystem mtime (ms) — drives the preview modal's date label. */

@@ -43,8 +43,8 @@ describe("DesktopSettingsService", () => {
     const result = await service.getUserSettings()
     expect(result.error).toBeNull()
     expect(result.data?.disabledStatuses).toEqual([])
-    // 6 base types + 7 base statuses, unmaterialized — requirement 3.
-    expect(result.data?.vocabulary).toHaveLength(13)
+    // 6 base types + 8 base statuses, unmaterialized — requirement 3.
+    expect(result.data?.vocabulary).toHaveLength(14)
     expect(result.data?.vocabulary.every((item) => item.isBase)).toBe(true)
   })
 
@@ -61,7 +61,7 @@ describe("DesktopSettingsService", () => {
     it("listVocabulary returns exactly the base items with no data written (requirement 3)", async () => {
       const result = await service.listVocabulary()
       expect(result.error).toBeNull()
-      expect(result.data).toHaveLength(13)
+      expect(result.data).toHaveLength(14)
     })
 
     it("creates a custom item and it survives a fresh listVocabulary call", async () => {
@@ -76,7 +76,7 @@ describe("DesktopSettingsService", () => {
       expect(created.data?.isBase).toBe(false)
 
       const list = await service.listVocabulary()
-      expect(list.data).toHaveLength(14)
+      expect(list.data).toHaveLength(15)
       expect(list.data?.some((item) => item.key === "research")).toBe(true)
     })
 

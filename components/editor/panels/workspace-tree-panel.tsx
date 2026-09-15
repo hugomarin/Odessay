@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { WorkspaceTree } from "@/components/workspace/workspace-tree";
+import { WorkspaceTree, type WorkspaceTreeGroupBy } from "@/components/workspace/workspace-tree";
+import { WorkspaceTreeToolbar } from "@/components/editor/panels/workspace-tree-toolbar";
 import { WritingPreviewModal } from "@/components/desk/writing-preview-modal";
 import {
   loadContextualWorkspace,
@@ -33,6 +34,7 @@ import {
 } from "@/lib/queries/writing-mutations";
 import type { LocalWritingCollection } from "@/lib/local-db/schema";
 import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status";
+import { normalizeArtifactType } from "@/lib/writings/artifact-type";
 import { buildWritingRouteHref } from "@/lib/writings/writing-route";
 
 function formatFileTimestamp(timestamp: number) {
@@ -105,6 +107,32 @@ export function WorkspaceTreePanel({
   const [collectionIdsByWritingId, setCollectionIdsByWritingId] = useState<
     Record<string, string[]>
   >({});
+  const [groupBy, setGroupBy] = useState<WorkspaceTreeGroupBy>("folder");
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(() => new Set());
+  const [selectedArtifactTypes, setSelectedArtifactTypes] = useState<Set<string>>(() => new Set());
+
+  const toggleStatusFilter = useCallback((status: string) => {
+    setSelectedStatuses((current) => {
+      const next = new Set(current);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  }, []);
+
+  const toggleArtifactTypeFilter = useCallback((artifactType: string) => {
+    setSelectedArtifactTypes((current) => {
+      const next = new Set(current);
+      if (next.has(artifactType)) next.delete(artifactType);
+      else next.add(artifactType);
+      return next;
+    });
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setSelectedStatuses(new Set());
+    setSelectedArtifactTypes(new Set());
+  }, []);
 
   const workspace = outcome?.kind === "workspace" ? outcome.workspace : null;
   workspaceRef.current = workspace;
@@ -272,17 +300,47 @@ export function WorkspaceTreePanel({
         kind: "file" as const,
         openable: document.openable,
         status: document.status,
+        artifactType: document.artifactType,
       })),
     [workspace],
   );
 
+  const filteredTreeItems = useMemo(() => {
+    if (selectedStatuses.size === 0 && selectedArtifactTypes.size === 0) return treeItems;
+    return treeItems.filter((item) => {
+      const statusOk =
+        selectedStatuses.size === 0 || selectedStatuses.has(normalizeWritingStatus(item.status));
+      const typeOk =
+        selectedArtifactTypes.size === 0 ||
+        selectedArtifactTypes.has(normalizeArtifactType(item.artifactType));
+      return statusOk && typeOk;
+    });
+  }, [treeItems, selectedStatuses, selectedArtifactTypes]);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of treeItems) {
+      const key = normalizeWritingStatus(item.status);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [treeItems]);
+
+  const artifactTypeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of treeItems) {
+      const key = normalizeArtifactType(item.artifactType);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [treeItems]);
+
   const rootDocumentCount = useMemo(() => {
-    if (!workspace) return 0;
-    return workspace.documents.filter((doc) => {
-      const parts = doc.relativePath.split(/[\\/]/).filter(Boolean);
+    return filteredTreeItems.filter((item) => {
+      const parts = item.relativePath.split(/[\\/]/).filter(Boolean);
       return parts.length <= 1;
     }).length;
-  }, [workspace]);
+  }, [filteredTreeItems]);
 
   // Feeds the same WritingPreviewModal Desk and the full Workspace view use —
   // built from this panel's own already-loaded documents rather than a
@@ -303,6 +361,7 @@ export function WorkspaceTreePanel({
             stateLabel: getWritingStatusLabel(status),
             stateTone: normalizeWritingStatus(status),
             documentState: document.state,
+            artifactType: normalizeArtifactType(document.artifactType),
             recipientPreviews: [],
             dateLabel: formatFileTimestamp(document.modifiedAt),
             isNew: false,
@@ -389,6 +448,17 @@ export function WorkspaceTreePanel({
           {openError}
         </p>
       ) : null}
+      <WorkspaceTreeToolbar
+        groupBy={groupBy}
+        onGroupByChange={setGroupBy}
+        selectedStatuses={selectedStatuses}
+        onToggleStatus={toggleStatusFilter}
+        selectedArtifactTypes={selectedArtifactTypes}
+        onToggleArtifactType={toggleArtifactTypeFilter}
+        onClearFilters={clearFilters}
+        statusCounts={statusCounts}
+        artifactTypeCounts={artifactTypeCounts}
+      />
       {/* The tree opens on the workspace root, the way Desk does. The "all
           workspaces" row that used to sit above it went nowhere — it was never
           wired to a handler — and it pushed the home row out of first place
@@ -397,7 +467,8 @@ export function WorkspaceTreePanel({
         key={workspace.slug}
         aria-label={`${workspace.name} documents`}
         mode="studio"
-        items={treeItems}
+        groupBy={groupBy}
+        items={filteredTreeItems}
         activeId={activeWritingId}
         rootLabel={workspace.name}
         rootIcon="home"
