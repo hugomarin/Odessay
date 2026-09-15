@@ -6529,7 +6529,7 @@ export function EditorShell({
                   <div
                     data-testid="editor-sheet"
                     className={cn(
-                      "EditorSheet relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sb",
+                      "EditorSheet relative mb-[5px] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sb",
                       isFocusMode ? "rounded-none shadow-none" : "rounded-[10px] shadow-float",
                     )}
                   >
@@ -6581,23 +6581,23 @@ export function EditorShell({
                       ) : null
                     }
                   />
+
+                  {!isFocusMode ? (
+                    <EditorStatusBar
+                      mode={mode}
+                      metrics={textMetrics}
+                      selectionMetrics={selectionMetrics}
+                      saveState={syncStatus}
+                      isNotesPanelOpen={activePanel === "notes"}
+                      onToggleMode={handleToggleMode}
+                      onToggleNotesPanel={() => {
+                        setActivePanel((current) => (current === "notes" ? null : "notes"))
+                      }}
+                      onOpenShortcutHelp={() => setIsShortcutHelpOpen(true)}
+                    />
+                  ) : null}
                   </div>
                 </div>
-
-                {!isFocusMode ? (
-                  <EditorStatusBar
-                    mode={mode}
-                    metrics={textMetrics}
-                    selectionMetrics={selectionMetrics}
-                    saveState={syncStatus}
-                    isNotesPanelOpen={activePanel === "notes"}
-                    onToggleMode={handleToggleMode}
-                    onToggleNotesPanel={() => {
-                      setActivePanel((current) => (current === "notes" ? null : "notes"))
-                    }}
-                    onOpenShortcutHelp={() => setIsShortcutHelpOpen(true)}
-                  />
-                ) : null}
               </>
             )}
           </div>

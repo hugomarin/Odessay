@@ -10,10 +10,14 @@ import type { EditorSaveState } from "@/components/editor/save-state"
 import type { SelectionMetrics, TextMetrics } from "@/lib/editor/text-metrics"
 
 /**
- * Status bar — 46px, edge to edge under the middle band, on the three-column
- * grid `minmax(0,1fr) auto minmax(0,1fr)` (docs/design/views/studio.md).
- * Left: save state. Center: the edit-mode segmented control. Right: metrics,
- * truncated from the right, then shortcuts and notes.
+ * Status bar — 46px, floating over the bottom edge of the sheet's scroll
+ * area (`editor-sheet` is its `relative` ancestor) rather than pushing it up
+ * in flow, so the last lines of text scroll past behind its frosted glass —
+ * the sheet frame already reserves 140px of bottom padding for this
+ * (`.odessay-editor-sheet-frame`, docs/design/layout.md §2). Left: save state
+ * and metrics, truncated from the right. Right: the edit-mode segmented
+ * control, then shortcuts and notes, grouped together against the trailing
+ * edge (docs/design/views/studio.md).
  */
 
 type StatusBarProps = {
@@ -67,7 +71,7 @@ function StatusBarInner({
         id="editor-statusbar"
         data-section="editor-statusbar"
         data-testid="editor-statusbar"
-        className="EditorStatusbar grid h-[46px] shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center bg-transparent px-3.5 font-sans"
+        className="EditorStatusbar absolute inset-x-0 bottom-0 z-10 flex h-[46px] items-center justify-between gap-3 border-t-[0.5px] border-line-soft/70 bg-sb/70 px-3.5 font-sans backdrop-blur-md"
       >
         <div className="flex min-w-0 items-center gap-2">
           <CloudUpload
@@ -77,50 +81,50 @@ function StatusBarInner({
           />
           <p
             className={cn(
-              "min-w-0 truncate text-[13px]",
+              "min-w-0 shrink-0 truncate text-[13px]",
               saveState === "error" ? "text-destructive" : "text-ink-3",
             )}
             aria-live="polite"
           >
             {SAVE_STATE_LABELS[saveState]}
           </p>
-        </div>
-
-        <div className="inline-flex items-center gap-0.5 justify-self-center rounded-lg bg-muted-hover p-[3px]">
-          <button
-            type="button"
-            onClick={() => onToggleMode("rich")}
-            className={cn(
-              SEGMENT_CLASS,
-              mode === "rich"
-                ? "bg-sb text-ink shadow-[0_1px_2px_rgba(35,24,15,0.1)]"
-                : "bg-transparent text-ink-4 hover:text-ink",
-            )}
-          >
-            Rich
-          </button>
-          <button
-            type="button"
-            onClick={() => onToggleMode("markdown")}
-            className={cn(
-              SEGMENT_CLASS,
-              mode === "markdown"
-                ? "bg-sb text-ink shadow-[0_1px_2px_rgba(35,24,15,0.1)]"
-                : "bg-transparent text-ink-4 hover:text-ink",
-            )}
-          >
-            Markdown
-          </button>
-        </div>
-
-        <div className="flex min-w-0 items-center gap-2 justify-self-end overflow-hidden">
           <span
-            className="min-w-0 flex-[0_1_auto] truncate text-right text-xs text-ink-4"
+            className="min-w-0 truncate text-xs text-ink-4"
             data-testid="editor-statusbar-metrics"
             title={metricsLabel}
           >
             {metricsLabel}
           </span>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="inline-flex items-center gap-0.5 rounded-lg bg-muted-hover p-[3px]">
+            <button
+              type="button"
+              onClick={() => onToggleMode("rich")}
+              className={cn(
+                SEGMENT_CLASS,
+                mode === "rich"
+                  ? "bg-sb text-ink shadow-[0_1px_2px_rgba(35,24,15,0.1)]"
+                  : "bg-transparent text-ink-4 hover:text-ink",
+              )}
+            >
+              Rich
+            </button>
+            <button
+              type="button"
+              onClick={() => onToggleMode("markdown")}
+              className={cn(
+                SEGMENT_CLASS,
+                mode === "markdown"
+                  ? "bg-sb text-ink shadow-[0_1px_2px_rgba(35,24,15,0.1)]"
+                  : "bg-transparent text-ink-4 hover:text-ink",
+              )}
+            >
+              Markdown
+            </button>
+          </div>
+
           <ActionTooltip
             label="Keyboard shortcuts"
             shortcut={getEditorShortcutLabel("shortcutHelp")}
