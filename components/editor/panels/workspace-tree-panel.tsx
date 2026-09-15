@@ -150,6 +150,14 @@ export function WorkspaceTreePanel({
   workspaceRef.current = workspace;
   activeWritingIdRef.current = activeWritingId;
 
+  // Filters are workspace-scoped: carrying a status/type filter over into a
+  // newly-loaded, different workspace can silently render an empty tree with
+  // only the filter-count badge as the unexplained reason. A same-workspace
+  // refresh (slug unchanged) leaves the filter selection alone.
+  useEffect(() => {
+    clearFilters();
+  }, [workspace?.slug, clearFilters]);
+
   const applyOutcome = useCallback(
     (next: ContextualWorkspaceOutcome) => {
       setOutcome(next);
@@ -498,12 +506,17 @@ export function WorkspaceTreePanel({
     },
   };
 
-  // Only the very first load blocks the tree with this message. Once a
-  // workspace has loaded once, later loads (switching tabs within the same
-  // workspace fires this same effect) refresh in the background instead of
+  // Only the very first load, or a load for a document outside the
+  // currently-loaded workspace, blocks the tree with this message. A tab
+  // switch within the same workspace refreshes in the background instead of
   // unmounting <WorkspaceTree> — that unmount was wiping its expand/collapse
   // state on every tab switch, not just when the workspace actually changed.
-  if (loading && !outcome)
+  // Switching into a genuinely different workspace still blocks, so the old
+  // workspace's tree/root/rootPath-bound actions are never shown against the
+  // new activeWritingId while the new one loads.
+  const staysInLoadedWorkspace =
+    workspace?.documents.some((doc) => doc.id === activeWritingId) ?? false;
+  if (loading && !staysInLoadedWorkspace)
     return (
       <p className="px-2 py-4 text-[11px] text-ink-4">Loading workspace…</p>
     );

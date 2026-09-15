@@ -6,12 +6,12 @@ import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
 import { VocabularyChip } from "@/components/ui/vocabulary-chip";
 import { useVocabulary } from "@/hooks/useVocabulary";
 import { getVocabularyColor } from "@/lib/vocabulary/resolve";
+import { TEXT_FADE_MASK_STYLE } from "@/lib/ui/text-fade-mask";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
-  ContextMenuShortcut,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import type { WritingStatus } from "@/lib/writings/status";
@@ -139,10 +139,7 @@ export function EditorTabItem({
           "pointer-events-none relative z-10 min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[13px] leading-[1.2]",
           active ? "font-medium text-ink" : "font-normal text-ink-4",
         )}
-        style={{
-          WebkitMaskImage: "linear-gradient(90deg, #000 85%, transparent)",
-          maskImage: "linear-gradient(90deg, #000 85%, transparent)",
-        }}
+        style={TEXT_FADE_MASK_STYLE}
       >
         {tab.title}
       </span>
@@ -188,21 +185,18 @@ export function EditorTabItem({
     <ContextMenuContent>
       <ContextMenuItem icon={<X strokeWidth={1.5} />} onSelect={() => onClose(tab.id)}>
         Close
-        <ContextMenuShortcut>⌘W</ContextMenuShortcut>
       </ContextMenuItem>
       <ContextMenuItem icon={<SquareX strokeWidth={1.5} />} onSelect={() => onCloseOthers(tab.id)}>
         Close others
       </ContextMenuItem>
       <ContextMenuItem icon={<AlignJustify strokeWidth={1.5} />} onSelect={() => onCloseAll()}>
         Close all
-        <ContextMenuShortcut>⇧⌘W</ContextMenuShortcut>
       </ContextMenuItem>
       {onReveal ? (
         <>
           <ContextMenuSeparator />
           <ContextMenuItem icon={<FolderOpen strokeWidth={1.5} />} onSelect={() => onReveal(tab.id)}>
             Reveal in Finder
-            <ContextMenuShortcut>⌘⌥R</ContextMenuShortcut>
           </ContextMenuItem>
         </>
       ) : null}

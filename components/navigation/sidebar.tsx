@@ -29,6 +29,7 @@ import {
 } from "@/lib/stores/ui-shell-store"
 import { type SidebarMode } from "@/lib/stores/ui-shell-state"
 import { cn } from "@/lib/utils"
+import { TEXT_FADE_MASK_STYLE } from "@/lib/ui/text-fade-mask"
 import {
   checkForUpdate,
   installUpdate,
@@ -736,10 +737,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                           <Folder className="h-[15px] w-[15px] flex-shrink-0" strokeWidth={2} />
                           <span
                             className="min-w-0 flex-1 overflow-hidden whitespace-nowrap"
-                            style={{
-                              WebkitMaskImage: "linear-gradient(90deg, #000 85%, transparent)",
-                              maskImage: "linear-gradient(90deg, #000 85%, transparent)",
-                            }}
+                            style={TEXT_FADE_MASK_STYLE}
                           >
                             {workspace.name}
                           </span>
@@ -803,7 +801,11 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 setExpandedWidth(DEFAULT_RAIL_WIDTH)
                 window.localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(DEFAULT_RAIL_WIDTH))
               }}
-              className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize touch-none select-none"
+              // Stops short of UserBar's 46px row (+ its 6px bottom padding)
+              // instead of spanning the rail's full height — full height put
+              // this 8px-wide strip on top of UserBar's Settings link at the
+              // rail's trailing edge, stealing its clicks.
+              className="absolute top-0 bottom-[52px] right-0 z-10 w-2 cursor-col-resize touch-none select-none"
             >
               <div
                 className={cn(

@@ -22,6 +22,7 @@ import { EditorSheetHeader } from "@/components/editor/editor-sheet-header"
 import { EditorShortcutsDialog } from "@/components/editor/editor-shortcuts-dialog"
 import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
+import { EditorRightPanel } from "@/components/editor/editor-right-panel"
 import { EditorRightPanelTabs } from "@/components/editor/panels/editor-right-panel-tabs"
 import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
 import {
@@ -469,15 +470,6 @@ const isPerfHarness = () => {
   return perfHarnessDetected
 }
 
-const RIGHT_PANEL_WIDTH_STORAGE_KEY = "od:editor-right-panel-width"
-const DEFAULT_RIGHT_PANEL_WIDTH = 276
-const MIN_RIGHT_PANEL_WIDTH = 240
-const MAX_RIGHT_PANEL_WIDTH = 480
-
-function clampRightPanelWidth(width: number): number {
-  return Math.min(MAX_RIGHT_PANEL_WIDTH, Math.max(MIN_RIGHT_PANEL_WIDTH, width))
-}
-
 export function EditorShell({
   writingId,
   forceNewWriting = false,
@@ -515,9 +507,6 @@ export function EditorShell({
   const lifecycleRef = useRef<WritingLifecycle>("local-only")
   const [isBodyHydrating, setIsBodyHydrating] = useState(false)
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
-  const [rightPanelWidth, setRightPanelWidth] = useState(DEFAULT_RIGHT_PANEL_WIDTH)
-  const [isResizingRightPanel, setIsResizingRightPanel] = useState(false)
-  const rightPanelDragRef = useRef<{ startX: number; startWidth: number } | null>(null)
   // Studio opens with both side panels closed: the ghost rail at the sheet's
   // left edge is the way in (docs/design/views/studio.md).
   const [navigationMode, setNavigationMode] = useState<EditorNavigationMode>(null)
@@ -578,55 +567,6 @@ export function EditorShell({
     activePanel: EditorPanel
     isFindReplaceOpen: boolean
   } | null>(null)
-
-  useEffect(() => {
-    const stored = Number(window.localStorage.getItem(RIGHT_PANEL_WIDTH_STORAGE_KEY))
-    if (Number.isFinite(stored) && stored > 0) setRightPanelWidth(clampRightPanelWidth(stored))
-  }, [])
-
-  const handleRightPanelPointerMove = useCallback((event: PointerEvent) => {
-    const drag = rightPanelDragRef.current
-    if (!drag) return
-    // Dragging the panel's left edge left grows it, so the delta is inverted
-    // relative to the left nav panel's drag (which grows to the right).
-    setRightPanelWidth(clampRightPanelWidth(drag.startWidth - (event.clientX - drag.startX)))
-  }, [])
-
-  const handleRightPanelPointerUp = useCallback(() => {
-    rightPanelDragRef.current = null
-    setIsResizingRightPanel(false)
-    document.body.style.removeProperty("user-select")
-    window.removeEventListener("pointermove", handleRightPanelPointerMove)
-    window.removeEventListener("pointerup", handleRightPanelPointerUp)
-    setRightPanelWidth((current) => {
-      window.localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, String(current))
-      return current
-    })
-  }, [handleRightPanelPointerMove])
-
-  useEffect(() => {
-    return () => {
-      window.removeEventListener("pointermove", handleRightPanelPointerMove)
-      window.removeEventListener("pointerup", handleRightPanelPointerUp)
-    }
-  }, [handleRightPanelPointerMove, handleRightPanelPointerUp])
-
-  const handleRightPanelPointerDown = useCallback(
-    (event: React.PointerEvent) => {
-      event.preventDefault()
-      rightPanelDragRef.current = { startX: event.clientX, startWidth: rightPanelWidth }
-      setIsResizingRightPanel(true)
-      document.body.style.userSelect = "none"
-      window.addEventListener("pointermove", handleRightPanelPointerMove)
-      window.addEventListener("pointerup", handleRightPanelPointerUp)
-    },
-    [rightPanelWidth, handleRightPanelPointerMove, handleRightPanelPointerUp],
-  )
-
-  const handleRightPanelResizeReset = useCallback(() => {
-    setRightPanelWidth(DEFAULT_RIGHT_PANEL_WIDTH)
-    window.localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, String(DEFAULT_RIGHT_PANEL_WIDTH))
-  }, [])
 
   const enterFocusMode = useCallback(() => {
     if (isFocusMode) {
@@ -5639,7 +5579,12 @@ export function EditorShell({
 
   const handleCloseWorkspaceTab = useCallback(
     async (tabId: string) => {
-      const targetTab = editorSession.tabs.find((tab) => tab.id === tabId)
+      // Read fresh rather than the closed-over `editorSession.tabs` (same
+      // reasoning as the re-resolve after the persistence await below): a
+      // tab can materialize in the store between this component's last
+      // render and the call, which the batch closers (Close others/all)
+      // make more likely by resolving their id list from live state too.
+      const targetTab = getEditorSessionState().session.tabs.find((tab) => tab.id === tabId)
       if (!targetTab) {
         return
       }
@@ -5712,7 +5657,6 @@ export function EditorShell({
       replaceEditorHistory("/write")
     },
     [
-      editorSession.tabs,
       flushQueuedRichModeUpdate,
       persistCurrentWorkspaceViewState,
       persistenceCoordinator,
@@ -6712,21 +6656,7 @@ export function EditorShell({
           </div>
 
         {!isFocusMode && activePanel && editorSession.tabs.length > 0 ? (
-          <aside
-            data-testid="editor-right-panel"
-            // The panel is always a column of the band. It used to float over
-            // the sheet below 1440 — the desktop window opens at 1280, so that
-            // was its normal state and it covered the text (owner decision,
-            // ODE-433 follow-up).
-            // Width is drag-resizable (own feature pass) rather than the fixed
-            // `--size-panel-right`, bounded between MIN/MAX_RIGHT_PANEL_WIDTH —
-            // same pattern as EditorNavigationSidebar's left panel.
-            style={{ width: rightPanelWidth }}
-            className={cn(
-              "EditorRightPanel relative flex shrink-0 flex-col overflow-hidden font-sans",
-              !isResizingRightPanel && "transition-[width] duration-[300ms] ease-layout",
-            )}
-          >
+          <EditorRightPanel>
           {/* One header for the four surfaces. Each of them used to carry a
               header and a close button of its own, and Share was a section
               buried inside Properties (owner review). */}
@@ -7004,26 +6934,7 @@ export function EditorShell({
             )}
           </Suspense>
           </div>
-
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize right panel"
-            aria-valuenow={rightPanelWidth}
-            aria-valuemin={MIN_RIGHT_PANEL_WIDTH}
-            aria-valuemax={MAX_RIGHT_PANEL_WIDTH}
-            onPointerDown={handleRightPanelPointerDown}
-            onDoubleClick={handleRightPanelResizeReset}
-            className="absolute inset-y-0 left-0 z-10 w-2 cursor-col-resize touch-none select-none"
-          >
-            <div
-              className={cn(
-                "mx-auto h-full w-px bg-transparent transition-colors",
-                isResizingRightPanel ? "bg-cursor" : "hover:bg-border",
-              )}
-            />
-          </div>
-          </aside>
+          </EditorRightPanel>
         ) : null}
         </div>
       </div>

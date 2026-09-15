@@ -18,6 +18,7 @@ import {
   type WorkspaceTreeFolderNode,
 } from "@/components/workspace/workspace-tree-item-menu";
 import { cn } from "@/lib/utils";
+import { TEXT_FADE_MASK_STYLE } from "@/lib/ui/text-fade-mask";
 
 export type WorkspaceTreeItem = {
   id: string;
@@ -33,10 +34,7 @@ export type WorkspaceTreeItem = {
 };
 
 const TREE_LABEL_CLASS = "flex-1 overflow-hidden whitespace-nowrap";
-const TREE_LABEL_FADE_STYLE = {
-  WebkitMaskImage: "linear-gradient(90deg, #000 85%, transparent)",
-  maskImage: "linear-gradient(90deg, #000 85%, transparent)",
-} as const;
+const TREE_LABEL_FADE_STYLE = TEXT_FADE_MASK_STYLE;
 
 export type WorkspaceTreeMode = "studio" | "detail";
 
@@ -392,16 +390,22 @@ export function WorkspaceTree({
 
   // Independent of `groupBy` — the "Move to" submenu needs every folder even
   // when the tree itself is currently rendering the status/type grouping.
+  // Reuses `tree` when it already built the same structure (groupBy ===
+  // "folder") instead of running buildWorkspaceFolderTree over every
+  // document a second time.
   const folderNodes = useMemo<WorkspaceTreeFolderNode[]>(() => {
     if (items.length === 0) return [{ path: "", name: rootLabel ?? "Workspace root", depth: 0 }];
-    const fullTree = buildWorkspaceFolderTree(
-      items.map((item) => ({ relativePath: item.relativePath, name: item.name })),
-    );
+    const fullTree =
+      groupBy === "folder"
+        ? tree
+        : buildWorkspaceFolderTree(
+            items.map((item) => ({ relativePath: item.relativePath, name: item.name })),
+          );
     return [
       { path: "", name: rootLabel ?? "Workspace root", depth: 0 },
       ...flattenFolderNodes(fullTree, 1, []),
     ];
-  }, [items, rootLabel]);
+  }, [items, rootLabel, groupBy, tree]);
 
   // Flattens into vocabulary groups instead of folders — "status" shows each
   // file's artifact type (the group header already names its status) and
@@ -543,6 +547,12 @@ export function WorkspaceTree({
                 effectiveSelectedFolder === "" && "bg-muted text-ink",
               )}
             >
+              <span
+                className="invisible h-[13px] w-[13px] shrink-0"
+                aria-hidden="true"
+              >
+                <ChevronDown className="h-[13px] w-[13px]" strokeWidth={1.5} />
+              </span>
               {rootIcon === "home" ? (
                 <Home className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
               ) : (
