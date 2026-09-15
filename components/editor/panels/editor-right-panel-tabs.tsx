@@ -56,7 +56,7 @@ export function EditorRightPanelTabs({
               className={cn(
                 "inline-flex h-[26px] shrink-0 items-center gap-1 rounded-[7px] px-2 text-[11.5px] transition-colors",
                 isActive
-                  ? "bg-surface-selected text-ink"
+                  ? "bg-[rgb(237,235,232)] text-ink"
                   : "text-ink-3 hover:bg-muted-hover hover:text-ink",
               )}
             >

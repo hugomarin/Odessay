@@ -166,7 +166,7 @@ export function NavigationModeButton({
       aria-pressed={active}
       className={cn(
         "flex h-[30px] items-center gap-1.5 rounded-[7px] px-2.5 text-[12px] transition-colors",
-        active ? "bg-surface-selected text-ink" : "text-ink-3 hover:bg-muted-hover hover:text-ink",
+        active ? "bg-[rgb(237,235,232)] text-ink" : "text-ink-3 hover:bg-muted-hover hover:text-ink",
       )}
     >
       {children}
