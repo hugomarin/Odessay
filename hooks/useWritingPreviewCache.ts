@@ -3,7 +3,9 @@
 import { useCallback, useRef } from "react"
 import type { JSONContent } from "@tiptap/core"
 import { renderWritingBodyHtml } from "@/lib/reading/render-body-html-client"
-import { getDocumentService } from "@/lib/services/document-service-factory"
+import { resolveLocalImageSources } from "@/lib/reading/resolve-local-image-sources"
+import { getDesktopWritingCanonicalPath, getDocumentService } from "@/lib/services/document-service-factory"
+import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import {
   extractWritingAnnotationNodes,
   type WritingAnnotationNode,
@@ -28,6 +30,8 @@ export type CachedWritingPreview = {
   annotations: WritingAnnotationNode[]
   lifecycle: WritingLifecycle
   visibility: WritingVisibility
+  /** blob: URLs created to display local images — revoke when evicted. */
+  objectUrls: string[]
 }
 
 const buildTitle = (value: string | null | undefined) => {
@@ -66,7 +70,26 @@ export function useWritingPreviewCache() {
 
       const bodyJson = (writing.content.richText ?? { type: "doc", content: [] }) as JSONContent
       const bodyText = writing.content.plainText
-      const { bodyHtml } = renderWritingBodyHtml(bodyJson, bodyText)
+      const { bodyHtml: renderedHtml } = renderWritingBodyHtml(bodyJson, bodyText, {
+        onRichRenderError: (message) =>
+          console.warn(`[writing-preview] rich render failed for ${id}, falling back:`, message),
+      })
+
+      // The live editor resolves local image sources itself, per image, via
+      // a NodeView — this read-only render goes straight to an HTML string,
+      // so nothing else ever resolves them. Desktop-only, matching the
+      // editor's own gating (web can't read local files at all).
+      let bodyHtml = renderedHtml
+      let objectUrls: string[] = []
+      if (isDesktopRuntime()) {
+        const documentPath = await getDesktopWritingCanonicalPath(id)
+        if (documentPath) {
+          const resolved = await resolveLocalImageSources(renderedHtml, documentPath)
+          bodyHtml = resolved.html
+          objectUrls = resolved.objectUrls
+        }
+      }
+
       const updatedAt = writing.updatedAt || writing.createdAt
       const preview: CachedWritingPreview = {
         id: writing.id,
@@ -81,6 +104,7 @@ export function useWritingPreviewCache() {
         annotations: extractWritingAnnotationNodes(bodyJson),
         lifecycle: writing.lifecycle ?? inferLifecycle(writing),
         visibility: writing.visibility,
+        objectUrls,
       }
 
       cache.current.set(id, preview)
@@ -102,14 +126,18 @@ export function useWritingPreviewCache() {
 
   const retainOnly = useCallback((ids: string[]) => {
     const allowed = new Set(ids)
-    for (const id of cache.current.keys()) {
+    for (const [id, cached] of cache.current) {
       if (!allowed.has(id)) {
+        for (const objectUrl of cached.objectUrls) URL.revokeObjectURL(objectUrl)
         cache.current.delete(id)
       }
     }
   }, [])
 
   const clear = useCallback(() => {
+    for (const cached of cache.current.values()) {
+      for (const objectUrl of cached.objectUrls) URL.revokeObjectURL(objectUrl)
+    }
     cache.current.clear()
     pending.current.clear()
   }, [])

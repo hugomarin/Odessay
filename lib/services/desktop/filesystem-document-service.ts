@@ -46,15 +46,6 @@ function isoNow(): string {
   return new Date().toISOString()
 }
 
-function extractPlainText(markdown: string): string {
-  return markdown
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/[*_`~]+/g, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/\n{2,}/g, " ")
-    .trim()
-}
-
 function fileMetadataToSummary(meta: DesktopFileMetadata): WritingSummary {
   const title = filenameToTitle(meta.name)
   const updatedAt = new Date(meta.modifiedAt).toISOString()
@@ -274,7 +265,14 @@ export class FilesystemDocumentService implements DocumentService {
       const markdown = await tauriOpenFile(writingId)
       const filename = writingId.split("/").pop() ?? writingId
       const title = filenameToTitle(filename)
-      const plainText = extractPlainText(markdown)
+      // Same parser exportWriting already uses (parseDocumentFileToSnapshot,
+      // a real TipTap Editor pass) rather than the old hand-rolled
+      // extractPlainText: that regex stripped heading/bold/italic markers
+      // outright and collapsed every blank line to a single space, so a
+      // synced file with real markdown structure (headings, tables, marks)
+      // rendered as one run-on, unstyled paragraph — richText was never
+      // even populated (hard-coded null) for a file opened this way.
+      const { bodyJson: richText, bodyText: plainText } = parseDocumentFileToSnapshot(markdown).snapshot
       const now = isoNow()
       const writing: WritingRecord = {
         id: writingId,
@@ -282,7 +280,7 @@ export class FilesystemDocumentService implements DocumentService {
         title,
         content: {
           markdown,
-          richText: null,
+          richText,
           plainText,
           canonicalSource: "markdown",
         },
@@ -350,6 +348,7 @@ export class FilesystemDocumentService implements DocumentService {
       const resolvedNewPath = await tauriRenameFile(writingId, newPath)
 
       const markdown = await tauriOpenFile(resolvedNewPath)
+      const { bodyJson: richText, bodyText: plainText } = parseDocumentFileToSnapshot(markdown).snapshot
       const now = isoNow()
       const renamedRecord: WritingRecord = {
         id: resolvedNewPath,
@@ -357,8 +356,8 @@ export class FilesystemDocumentService implements DocumentService {
         title: filenameToTitle(resolvedNewPath),
         content: {
           markdown,
-          richText: null,
-          plainText: extractPlainText(markdown),
+          richText,
+          plainText,
           canonicalSource: "markdown",
         },
         slug: null,
