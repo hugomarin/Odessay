@@ -32,6 +32,12 @@ export type WorkspaceTreeItem = {
   artifactType?: ArtifactType | null;
 };
 
+const TREE_LABEL_CLASS = "flex-1 overflow-hidden whitespace-nowrap";
+const TREE_LABEL_FADE_STYLE = {
+  WebkitMaskImage: "linear-gradient(90deg, #000 85%, transparent)",
+  maskImage: "linear-gradient(90deg, #000 85%, transparent)",
+} as const;
+
 export type WorkspaceTreeMode = "studio" | "detail";
 
 /** "folder" (default) nests by path; "status"/"type" flatten into vocabulary groups instead. */
@@ -149,7 +155,7 @@ function FileRow({
           />
         ) : null}
         {icon}
-        <span className="flex-1 truncate">{label}</span>
+        <span className={TREE_LABEL_CLASS} style={TREE_LABEL_FADE_STYLE}>{label}</span>
       </button>
       {onPreview && !disabled ? (
         <button
@@ -295,7 +301,7 @@ function TreeRow({
         ) : (
           <Folder className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
         )}
-        <span className="flex-1 truncate">{node.name}</span>
+        <span className={TREE_LABEL_CLASS} style={TREE_LABEL_FADE_STYLE}>{node.name}</span>
         {typeof node.fileCount === "number" ? (
           <span className="font-mono text-[11px] text-ink-4">
             {node.fileCount}
@@ -542,7 +548,7 @@ export function WorkspaceTree({
               ) : (
                 <Folder className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
               )}
-              <span className="flex-1 truncate">{rootLabel}</span>
+              <span className={TREE_LABEL_CLASS} style={TREE_LABEL_FADE_STYLE}>{rootLabel}</span>
               {typeof rootCount === "number" ? (
                 <span className="font-mono text-[11px] text-ink-4">
                   {rootCount}
@@ -613,7 +619,7 @@ export function WorkspaceTree({
                   ) : (
                     <ArtifactTypeIcon artifactType={section.key} className="h-3.5 w-3.5 shrink-0" />
                   )}
-                  <span className="flex-1 truncate">{section.label}</span>
+                  <span className={TREE_LABEL_CLASS} style={TREE_LABEL_FADE_STYLE}>{section.label}</span>
                   <span className="font-mono text-[11px] text-ink-4">{section.items.length}</span>
                 </button>
                 {expanded && hasItems ? (

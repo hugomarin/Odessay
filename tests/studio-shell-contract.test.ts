@@ -135,7 +135,11 @@ describe("studio shell contract", () => {
   it("keeps the right panel as a column of the band at every width", () => {
     const shell = read("components/editor/editor-shell.tsx")
 
-    expect(shell).toContain("w-[var(--size-panel-right)]")
+    // Width is now drag-resizable (own feature pass) rather than the fixed
+    // `--size-panel-right`, but it must still stay bounded between a min/max
+    // rather than becoming an unconstrained overlay — same invariant as the
+    // left panel (EditorNavigationSidebar's clampPanelWidth).
+    expect(shell).toContain("clampRightPanelWidth")
     expect(shell).not.toContain('isNarrowViewport &&\n                "absolute inset-y-0 right-0 z-30')
     // The panel is a column at every width, so nothing reads a narrow-viewport
     // probe any more — it only kept the breadcrumb toggles on screen next to an

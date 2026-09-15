@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import {
+  Check,
   ChevronDown,
+  Copy,
   Download,
   ExternalLink,
   FileText,
@@ -147,6 +149,7 @@ export function PropertiesPanel({
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingDocx, setIsExportingDocx] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [pathCopied, setPathCopied] = useState(false)
   const catalog = useVocabulary()
   const sharingService = useMemo(() => createSharingService(), [])
   const enabledStatuses = useMemo(
@@ -254,6 +257,19 @@ export function PropertiesPanel({
 
     setShareError("Failed to copy preview link.")
   }, [shareLink.link])
+
+  const handleCopyPath = useCallback(async () => {
+    if (!canonicalPath) {
+      return
+    }
+
+    const copied = await copyTextWithFallback(canonicalPath)
+
+    if (copied) {
+      setPathCopied(true)
+      window.setTimeout(() => setPathCopied(false), 2000)
+    }
+  }, [canonicalPath])
 
   const handleSharesStateChange = useCallback(
     (hasShares: boolean) => {
@@ -370,14 +386,29 @@ export function PropertiesPanel({
         {canonicalPath ? (
           <section className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Path</p>
-            <p
-              data-testid="editor-properties-path"
-              title={canonicalPath}
-              className="truncate rounded-[8px] border-[0.5px] border-border bg-bg px-3 py-2 font-mono text-[11px] text-ink-3"
-              dir="rtl"
-            >
-              {canonicalPath}
-            </p>
+            <div className="flex items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-bg py-2 pl-3 pr-2">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-ink-4" strokeWidth={1.5} aria-hidden="true" />
+              <p
+                data-testid="editor-properties-path"
+                title={canonicalPath}
+                className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink-3"
+                dir="rtl"
+              >
+                {canonicalPath}
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleCopyPath()}
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted-hover hover:text-ink"
+                aria-label="Copy path"
+              >
+                {pathCopied ? (
+                  <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" strokeWidth={1.75} />
+                )}
+              </button>
+            </div>
           </section>
         ) : null}
 

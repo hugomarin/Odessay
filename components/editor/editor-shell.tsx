@@ -182,9 +182,11 @@ import { getAssetService } from "@/lib/services/asset-service-factory"
 import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 import {
   createDesktopDraft as createProductionDesktopDraft,
+  getDesktopWritingCanonicalPath,
   getDocumentService,
   importDesktopWritingFile,
 } from "@/lib/services/document-service-factory"
+import { revealWorkspacePath } from "@/lib/workspace/reveal-path"
 import {
   filenameToTitle,
   titleToFilename,
@@ -467,6 +469,15 @@ const isPerfHarness = () => {
   return perfHarnessDetected
 }
 
+const RIGHT_PANEL_WIDTH_STORAGE_KEY = "od:editor-right-panel-width"
+const DEFAULT_RIGHT_PANEL_WIDTH = 276
+const MIN_RIGHT_PANEL_WIDTH = 240
+const MAX_RIGHT_PANEL_WIDTH = 480
+
+function clampRightPanelWidth(width: number): number {
+  return Math.min(MAX_RIGHT_PANEL_WIDTH, Math.max(MIN_RIGHT_PANEL_WIDTH, width))
+}
+
 export function EditorShell({
   writingId,
   forceNewWriting = false,
@@ -504,6 +515,9 @@ export function EditorShell({
   const lifecycleRef = useRef<WritingLifecycle>("local-only")
   const [isBodyHydrating, setIsBodyHydrating] = useState(false)
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
+  const [rightPanelWidth, setRightPanelWidth] = useState(DEFAULT_RIGHT_PANEL_WIDTH)
+  const [isResizingRightPanel, setIsResizingRightPanel] = useState(false)
+  const rightPanelDragRef = useRef<{ startX: number; startWidth: number } | null>(null)
   // Studio opens with both side panels closed: the ghost rail at the sheet's
   // left edge is the way in (docs/design/views/studio.md).
   const [navigationMode, setNavigationMode] = useState<EditorNavigationMode>(null)
@@ -564,6 +578,55 @@ export function EditorShell({
     activePanel: EditorPanel
     isFindReplaceOpen: boolean
   } | null>(null)
+
+  useEffect(() => {
+    const stored = Number(window.localStorage.getItem(RIGHT_PANEL_WIDTH_STORAGE_KEY))
+    if (Number.isFinite(stored) && stored > 0) setRightPanelWidth(clampRightPanelWidth(stored))
+  }, [])
+
+  const handleRightPanelPointerMove = useCallback((event: PointerEvent) => {
+    const drag = rightPanelDragRef.current
+    if (!drag) return
+    // Dragging the panel's left edge left grows it, so the delta is inverted
+    // relative to the left nav panel's drag (which grows to the right).
+    setRightPanelWidth(clampRightPanelWidth(drag.startWidth - (event.clientX - drag.startX)))
+  }, [])
+
+  const handleRightPanelPointerUp = useCallback(() => {
+    rightPanelDragRef.current = null
+    setIsResizingRightPanel(false)
+    document.body.style.removeProperty("user-select")
+    window.removeEventListener("pointermove", handleRightPanelPointerMove)
+    window.removeEventListener("pointerup", handleRightPanelPointerUp)
+    setRightPanelWidth((current) => {
+      window.localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, String(current))
+      return current
+    })
+  }, [handleRightPanelPointerMove])
+
+  useEffect(() => {
+    return () => {
+      window.removeEventListener("pointermove", handleRightPanelPointerMove)
+      window.removeEventListener("pointerup", handleRightPanelPointerUp)
+    }
+  }, [handleRightPanelPointerMove, handleRightPanelPointerUp])
+
+  const handleRightPanelPointerDown = useCallback(
+    (event: React.PointerEvent) => {
+      event.preventDefault()
+      rightPanelDragRef.current = { startX: event.clientX, startWidth: rightPanelWidth }
+      setIsResizingRightPanel(true)
+      document.body.style.userSelect = "none"
+      window.addEventListener("pointermove", handleRightPanelPointerMove)
+      window.addEventListener("pointerup", handleRightPanelPointerUp)
+    },
+    [rightPanelWidth, handleRightPanelPointerMove, handleRightPanelPointerUp],
+  )
+
+  const handleRightPanelResizeReset = useCallback(() => {
+    setRightPanelWidth(DEFAULT_RIGHT_PANEL_WIDTH)
+    window.localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, String(DEFAULT_RIGHT_PANEL_WIDTH))
+  }, [])
 
   const enterFocusMode = useCallback(() => {
     if (isFocusMode) {
@@ -5657,6 +5720,49 @@ export function EditorShell({
     ],
   )
 
+  // Closing more than one tab reuses handleCloseWorkspaceTab per id rather
+  // than a batch primitive in the session store — it already re-reads fresh
+  // state each call (ODE-478 follow-up), so sequencing them one at a time
+  // keeps every close's persistence/active-tab bookkeeping correct.
+  const handleCloseOtherWorkspaceTabs = useCallback(
+    async (tabId: string) => {
+      const idsToClose = getEditorSessionState()
+        .session.tabs.map((tab) => tab.id)
+        .filter((id) => id !== tabId)
+      for (const id of idsToClose) {
+        await handleCloseWorkspaceTab(id)
+      }
+    },
+    [handleCloseWorkspaceTab],
+  )
+
+  const handleCloseAllWorkspaceTabs = useCallback(async () => {
+    const ids = getEditorSessionState().session.tabs.map((tab) => tab.id)
+    for (const id of ids) {
+      await handleCloseWorkspaceTab(id)
+    }
+  }, [handleCloseWorkspaceTab])
+
+  // Reveals the tab's file, not the tab itself: draft tabs (no writing_id
+  // yet, or no local binding on this machine — cloud-only) have nothing on
+  // disk to reveal, so the caller hides this action rather than no-op it.
+  const handleRevealWorkspaceTab = useCallback(async (tabId: string) => {
+    const tab = getEditorSessionState().session.tabs.find((candidate) => candidate.id === tabId)
+    if (!tab?.writing_id) {
+      return
+    }
+    const canonicalPath = await getDesktopWritingCanonicalPath(tab.writing_id)
+    if (!canonicalPath) {
+      return
+    }
+    const dir = canonicalPath.slice(0, canonicalPath.lastIndexOf("/"))
+    try {
+      await revealWorkspacePath(dir)
+    } catch (reason) {
+      console.error("[editor-tabs] reveal failed", reason)
+    }
+  }, [])
+
   // Renaming reads the loaded editor, so a pencil pressed on a background tab
   // selects it first and opens the modal once that tab is the active one.
   const pendingRenameTabIdRef = useRef<string | null>(null)
@@ -6417,6 +6523,9 @@ export function EditorShell({
             activeTabId={editorSession.active_tab_id}
             onSelectTab={handleSelectWorkspaceTab}
             onCloseTab={handleCloseWorkspaceTab}
+            onCloseOtherTabs={handleCloseOtherWorkspaceTabs}
+            onCloseAllTabs={handleCloseAllWorkspaceTabs}
+            onRevealTab={isDesktopRuntime() ? handleRevealWorkspaceTab : undefined}
             onRenameTab={handleRenameWorkspaceTab}
             onReorderTab={handleReorderWorkspaceTab}
             onNewTab={handleCreateWorkspaceTab}
@@ -6459,7 +6568,7 @@ export function EditorShell({
           data-testid="editor-band"
           className={cn(
             "EditorBand flex min-h-0 flex-1",
-            isFocusMode ? "gap-0 px-0 pb-0 pt-[46px]" : "gap-2.5 pb-1 pr-2.5 pt-1.5",
+            isFocusMode ? "gap-0 px-0 pb-0 pt-[46px]" : "gap-1.5 pb-1 pr-2.5 pt-1.5",
           )}
         >
           <div className="relative flex min-w-0 flex-1 flex-col gap-1">
@@ -6609,7 +6718,14 @@ export function EditorShell({
             // the sheet below 1440 — the desktop window opens at 1280, so that
             // was its normal state and it covered the text (owner decision,
             // ODE-433 follow-up).
-            className="EditorRightPanel flex w-[var(--size-panel-right)] shrink-0 flex-col overflow-hidden border-l-[0.5px] border-border font-sans"
+            // Width is drag-resizable (own feature pass) rather than the fixed
+            // `--size-panel-right`, bounded between MIN/MAX_RIGHT_PANEL_WIDTH —
+            // same pattern as EditorNavigationSidebar's left panel.
+            style={{ width: rightPanelWidth }}
+            className={cn(
+              "EditorRightPanel relative flex shrink-0 flex-col overflow-hidden font-sans",
+              !isResizingRightPanel && "transition-[width] duration-[300ms] ease-layout",
+            )}
           >
           {/* One header for the four surfaces. Each of them used to carry a
               header and a close button of its own, and Share was a section
@@ -6887,6 +7003,25 @@ export function EditorShell({
               />
             )}
           </Suspense>
+          </div>
+
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize right panel"
+            aria-valuenow={rightPanelWidth}
+            aria-valuemin={MIN_RIGHT_PANEL_WIDTH}
+            aria-valuemax={MAX_RIGHT_PANEL_WIDTH}
+            onPointerDown={handleRightPanelPointerDown}
+            onDoubleClick={handleRightPanelResizeReset}
+            className="absolute inset-y-0 left-0 z-10 w-2 cursor-col-resize touch-none select-none"
+          >
+            <div
+              className={cn(
+                "mx-auto h-full w-px bg-transparent transition-colors",
+                isResizingRightPanel ? "bg-cursor" : "hover:bg-border",
+              )}
+            />
           </div>
           </aside>
         ) : null}

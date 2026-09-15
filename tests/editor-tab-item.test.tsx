@@ -50,6 +50,8 @@ describe("EditorTabItem — save-state indicator vs. rename button", () => {
           active={false}
           onSelect={() => {}}
           onClose={() => {}}
+          onCloseOthers={() => {}}
+          onCloseAll={() => {}}
           onRename={() => {}}
         />,
       )
@@ -68,6 +70,8 @@ describe("EditorTabItem — save-state indicator vs. rename button", () => {
           active={false}
           onSelect={() => {}}
           onClose={() => {}}
+          onCloseOthers={() => {}}
+          onCloseAll={() => {}}
           onRename={() => {}}
         />,
       )

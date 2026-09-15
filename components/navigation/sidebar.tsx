@@ -734,7 +734,15 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                           className="flex h-8 flex-shrink-0 items-center gap-[9px] rounded-[8px] px-2.5 text-[13px] font-medium leading-[1.45] text-ink-4 transition-colors duration-[180ms] hover:bg-muted hover:text-ink"
                         >
                           <Folder className="h-[15px] w-[15px] flex-shrink-0" strokeWidth={2} />
-                          <span className="truncate">{workspace.name}</span>
+                          <span
+                            className="min-w-0 flex-1 overflow-hidden whitespace-nowrap"
+                            style={{
+                              WebkitMaskImage: "linear-gradient(90deg, #000 85%, transparent)",
+                              maskImage: "linear-gradient(90deg, #000 85%, transparent)",
+                            }}
+                          >
+                            {workspace.name}
+                          </span>
                         </Link>
                       ))}
                     </div>
@@ -756,6 +764,31 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
           ) : null}
 
           <UserBar collapsed={isIconOnly} displayName={userDisplayName} username={userUsername} />
+
+          {/*
+            Edge fade at the rail's top and bottom, matching the app's other
+            scroll/overflow fades. Deliberately a gradient overlay rather than
+            a mask-image on the nav itself — masking the whole nav also
+            affected the fixed-position rail toggle button in titlebar mode.
+          */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 z-10 h-5"
+            style={{
+              background: isCollapsed
+                ? "linear-gradient(180deg, rgb(247,246,246), transparent)"
+                : "linear-gradient(180deg, rgb(250,249,249), transparent)",
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-5"
+            style={{
+              background: isCollapsed
+                ? "linear-gradient(0deg, rgb(247,246,246), transparent)"
+                : "linear-gradient(0deg, rgb(250,249,249), transparent)",
+            }}
+          />
 
           {isCollapsed ? null : (
             <div

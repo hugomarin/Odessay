@@ -161,7 +161,7 @@ describe("WorkspaceTreePanel", () => {
     const treeItems = () =>
       Array.from(container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'));
     const rowLabels = () =>
-      treeItems().map((row) => row.querySelector(".flex-1.truncate")?.textContent?.trim());
+      treeItems().map((row) => row.querySelector(".flex-1.overflow-hidden.whitespace-nowrap")?.textContent?.trim());
     // Folders appear, collapsed by default.
     expect(rowLabels()).toContain("03-analisis");
     expect(rowLabels()).toContain("04-sesiones");
@@ -170,10 +170,10 @@ describe("WorkspaceTreePanel", () => {
 
     // Files appear once their folder is expanded (not foldersOnly).
     const folder03 = treeItems().find(
-      (row) => row.querySelector(".flex-1.truncate")?.textContent?.trim() === "03-analisis",
+      (row) => row.querySelector(".flex-1.overflow-hidden.whitespace-nowrap")?.textContent?.trim() === "03-analisis",
     );
     const folder04 = treeItems().find(
-      (row) => row.querySelector(".flex-1.truncate")?.textContent?.trim() === "04-sesiones",
+      (row) => row.querySelector(".flex-1.overflow-hidden.whitespace-nowrap")?.textContent?.trim() === "04-sesiones",
     );
     await act(async () => {
       folder03?.click();
@@ -361,12 +361,12 @@ describe("WorkspaceTreePanel", () => {
       Array.from(
         container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
       ).find(
-        (row) => row.querySelector(".flex-1.truncate")?.textContent?.trim() === "04-sesiones",
+        (row) => row.querySelector(".flex-1.overflow-hidden.whitespace-nowrap")?.textContent?.trim() === "04-sesiones",
       );
     const documentRows = () =>
       Array.from(
         container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
-      ).map((row) => row.querySelector(".flex-1.truncate")?.textContent?.trim());
+      ).map((row) => row.querySelector(".flex-1.overflow-hidden.whitespace-nowrap")?.textContent?.trim());
 
     // Folders open collapsed by default.
     expect(findFolder()?.getAttribute("aria-expanded")).toBe("false");

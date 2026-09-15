@@ -1,11 +1,19 @@
 "use client"
 
-import { Loader2, Pencil, X } from "lucide-react";
+import { AlignJustify, FolderOpen, Loader2, Pencil, SquareX, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
 import { VocabularyChip } from "@/components/ui/vocabulary-chip";
 import { useVocabulary } from "@/hooks/useVocabulary";
 import { getVocabularyColor } from "@/lib/vocabulary/resolve";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import type { WritingStatus } from "@/lib/writings/status";
 import type { LocalEditorSessionTab } from "@/lib/local-db/schema";
 import type { PointerEventHandler } from "react";
@@ -25,6 +33,10 @@ type EditorTabItemProps = {
   status?: WritingStatus | null;
   onSelect: (tabId: string) => void;
   onClose: (tabId: string) => void;
+  onCloseOthers: (tabId: string) => void;
+  onCloseAll: () => void;
+  /** Undefined on web — "Reveal in Finder" is hidden then. */
+  onReveal?: (tabId: string) => void;
   onRename: (tabId: string) => void;
   isDragging?: boolean;
   isDragTarget?: boolean;
@@ -40,6 +52,9 @@ export function EditorTabItem({
   status,
   onSelect,
   onClose,
+  onCloseOthers,
+  onCloseAll,
+  onReveal,
   onRename,
   isDragging = false,
   isDragTarget = false,
@@ -52,6 +67,8 @@ export function EditorTabItem({
   const statusColor = getVocabularyColor(catalog, "status", status ?? "draft")
 
   return (
+    <ContextMenu>
+    <ContextMenuTrigger asChild>
     <div
       data-editor-tab-id={tab.id}
       data-active={active ? "true" : "false"}
@@ -59,7 +76,6 @@ export function EditorTabItem({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
-      onContextMenu={(event) => event.preventDefault()}
       className={cn(
         "group relative flex h-[36px] w-[200px] min-w-[96px] shrink select-none items-center gap-[9px] overflow-hidden rounded-lg px-3 text-left font-sans transition-[background-color,color] duration-150 ease-out",
         active
@@ -120,9 +136,13 @@ export function EditorTabItem({
 
       <span
         className={cn(
-          "pointer-events-none relative z-10 min-w-0 flex-1 truncate text-[13px] leading-[1.2]",
+          "pointer-events-none relative z-10 min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[13px] leading-[1.2]",
           active ? "font-medium text-ink" : "font-normal text-ink-4",
         )}
+        style={{
+          WebkitMaskImage: "linear-gradient(90deg, #000 85%, transparent)",
+          maskImage: "linear-gradient(90deg, #000 85%, transparent)",
+        }}
       >
         {tab.title}
       </span>
@@ -164,5 +184,29 @@ export function EditorTabItem({
         />
       ) : null}
     </div>
+    </ContextMenuTrigger>
+    <ContextMenuContent>
+      <ContextMenuItem icon={<X strokeWidth={1.5} />} onSelect={() => onClose(tab.id)}>
+        Close
+        <ContextMenuShortcut>⌘W</ContextMenuShortcut>
+      </ContextMenuItem>
+      <ContextMenuItem icon={<SquareX strokeWidth={1.5} />} onSelect={() => onCloseOthers(tab.id)}>
+        Close others
+      </ContextMenuItem>
+      <ContextMenuItem icon={<AlignJustify strokeWidth={1.5} />} onSelect={() => onCloseAll()}>
+        Close all
+        <ContextMenuShortcut>⇧⌘W</ContextMenuShortcut>
+      </ContextMenuItem>
+      {onReveal ? (
+        <>
+          <ContextMenuSeparator />
+          <ContextMenuItem icon={<FolderOpen strokeWidth={1.5} />} onSelect={() => onReveal(tab.id)}>
+            Reveal in Finder
+            <ContextMenuShortcut>⌘⌥R</ContextMenuShortcut>
+          </ContextMenuItem>
+        </>
+      ) : null}
+    </ContextMenuContent>
+    </ContextMenu>
   );
 }

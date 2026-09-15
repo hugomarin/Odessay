@@ -98,7 +98,7 @@ function StatusBarInner({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <div className="inline-flex items-center gap-0.5 rounded-lg bg-muted-hover p-[3px]">
+          <div className="inline-flex items-center gap-0.5 rounded-lg border-[0.5px] border-border bg-muted p-[3px]">
             <button
               type="button"
               onClick={() => onToggleMode("rich")}

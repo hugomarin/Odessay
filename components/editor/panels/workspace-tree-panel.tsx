@@ -498,7 +498,12 @@ export function WorkspaceTreePanel({
     },
   };
 
-  if (loading)
+  // Only the very first load blocks the tree with this message. Once a
+  // workspace has loaded once, later loads (switching tabs within the same
+  // workspace fires this same effect) refresh in the background instead of
+  // unmounting <WorkspaceTree> — that unmount was wiping its expand/collapse
+  // state on every tab switch, not just when the workspace actually changed.
+  if (loading && !outcome)
     return (
       <p className="px-2 py-4 text-[11px] text-ink-4">Loading workspace…</p>
     );
