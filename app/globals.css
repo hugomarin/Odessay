@@ -39,7 +39,7 @@
 
 :root {
   /* Odessay tokens */
-  --bg: 40 11.1% 94.7%;          /* #F3F2F0 — base surface, lighter than the sheet's hairlines */
+  --bg: 0 5.9% 96.7%;            /* rgb(247 246 246) — base surface, lighter than the sheet's hairlines */
   --sb: 0 0% 100%;
   --muted: 38 8% 93%;
   --muted-h: 38 8% 90%;

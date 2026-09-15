@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ChevronRight, Settings } from "lucide-react"
+import { Wrench } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { getEditorShortcutLabel } from "@/lib/editor/shortcuts"
 import { cn } from "@/lib/utils"
@@ -69,12 +69,11 @@ export function UserBar({ collapsed, displayName, username }: UserBarProps) {
 
           <span
             className={cn(
-              "flex shrink-0 items-center gap-1.5 text-ink-4 transition-opacity duration-200 ease-out",
+              "flex shrink-0 items-center pr-2.5 text-ink-4 transition-opacity duration-200 ease-out",
               collapsed ? "opacity-0" : "opacity-100",
             )}
           >
-            <Settings className="h-[15px] w-[15px]" strokeWidth={1.5} />
-            <ChevronRight className="h-[15px] w-[15px]" strokeWidth={1.5} />
+            <Wrench className="h-[15px] w-[15px]" strokeWidth={1.5} />
           </span>
         </Link>
       </ActionTooltip>

@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
+  ChevronDown,
   Folder,
   FolderTree,
   LampDesk,
@@ -117,13 +118,21 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 /**
- * Geometry from `docs/design/system-app.md` §3, already tokenised in
- * `globals.css` as `--size-rail-collapsed` / `--size-rail-expanded`. The numbers
- * live here too because the width is also written to a JS style and to
- * `--app-shell-left-offset`; they must not drift from the tokens.
+ * Geometry from `docs/design/system-app.md` §3, tokenised in `globals.css` as
+ * `--size-rail-collapsed` (collapsed stays fixed). The expanded width used to
+ * be fixed too (`--size-rail-expanded: 244px`) but is now drag-resizable
+ * (owner request) between MIN/MAX_RAIL_WIDTH, so that token is only its
+ * historical default now, not a live contract.
  */
-const SIDEBAR_WIDTH_EXPANDED = 244
 const SIDEBAR_WIDTH_COLLAPSED = 52
+const RAIL_WIDTH_STORAGE_KEY = "od:sidebar-width"
+const DEFAULT_RAIL_WIDTH = 210
+const MIN_RAIL_WIDTH = 210
+const MAX_RAIL_WIDTH = 300
+
+function clampRailWidth(width: number): number {
+  return Math.min(MAX_RAIL_WIDTH, Math.max(MIN_RAIL_WIDTH, width))
+}
 
 /**
  * Below 900px the rail is forced collapsed (`docs/design/layout.md` §5). This is
@@ -134,7 +143,8 @@ const RAIL_FORCED_COLLAPSE_QUERY = "(max-width: 899px)"
 
 /**
  * The rail item, read from the prototypes' `railRow`: 40px tall at radius 9,
- * `padding: 0`, `gap: 10`, 14px medium-weight label.
+ * `padding: 0`, `gap: 10`, 15px semibold label at -0.3px tracking (bumped
+ * from 14px/medium/normal-tracking, owner request).
  *
  * The icon does not live behind padding — it sits in a **fixed 40px column**
  * (`railIconWrap`). That is the mechanism behind "the icon never changes X
@@ -142,7 +152,7 @@ const RAIL_FORCED_COLLAPSE_QUERY = "(max-width: 899px)"
  * that column, and expanding only adds room for the label to its right.
  */
 const SIDEBAR_ITEM_BASE_CLASS =
-  "flex h-10 min-h-10 w-full items-center gap-0 rounded-[9px] p-0 text-left text-[14px] font-medium"
+  "flex h-10 min-h-10 w-full items-center gap-0 rounded-[9px] p-0 text-left text-[15px] font-semibold tracking-[-0.3px]"
 const SIDEBAR_ICON_WRAP_CLASS =
   "flex h-10 w-10 min-w-10 flex-shrink-0 items-center justify-center"
 const SIDEBAR_ITEM_TRANSITION_CLASS = "transition-colors duration-[180ms] ease-layout"
@@ -229,9 +239,54 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
   const isCollapsed = shellState.sidebarMode === "collapsed" || isWidthForcedCollapse
   const isIconOnly = isCollapsed
 
+  const [expandedWidth, setExpandedWidth] = useState(DEFAULT_RAIL_WIDTH)
+  const [isResizingRail, setIsResizingRail] = useState(false)
+  const railDragRef = useRef<{ startX: number; startWidth: number } | null>(null)
+
+  useEffect(() => {
+    const stored = Number(window.localStorage.getItem(RAIL_WIDTH_STORAGE_KEY))
+    if (Number.isFinite(stored) && stored > 0) setExpandedWidth(clampRailWidth(stored))
+  }, [])
+
+  const handleRailPointerMove = useCallback((event: PointerEvent) => {
+    const drag = railDragRef.current
+    if (!drag) return
+    setExpandedWidth(clampRailWidth(drag.startWidth + (event.clientX - drag.startX)))
+  }, [])
+
+  const handleRailPointerUp = useCallback(() => {
+    railDragRef.current = null
+    setIsResizingRail(false)
+    document.body.style.removeProperty("user-select")
+    window.removeEventListener("pointermove", handleRailPointerMove)
+    window.removeEventListener("pointerup", handleRailPointerUp)
+    setExpandedWidth((current) => {
+      window.localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(current))
+      return current
+    })
+  }, [handleRailPointerMove])
+
+  // Belt-and-suspenders unmount cleanup — a drag that ends by the rail
+  // collapsing (narrow window, toggle) still needs these off the window.
+  useEffect(() => {
+    return () => {
+      window.removeEventListener("pointermove", handleRailPointerMove)
+      window.removeEventListener("pointerup", handleRailPointerUp)
+    }
+  }, [handleRailPointerMove, handleRailPointerUp])
+
+  const handleRailPointerDown = (event: React.PointerEvent) => {
+    event.preventDefault()
+    railDragRef.current = { startX: event.clientX, startWidth: expandedWidth }
+    setIsResizingRail(true)
+    document.body.style.userSelect = "none"
+    window.addEventListener("pointermove", handleRailPointerMove)
+    window.addEventListener("pointerup", handleRailPointerUp)
+  }
+
   const sidebarWidth = useMemo(() => {
-    return isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED
-  }, [isCollapsed])
+    return isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : expandedWidth
+  }, [isCollapsed, expandedWidth])
   const shellLeftOffset = sidebarWidth
   const shellStyle = {
     "--app-shell-left-offset": `${shellLeftOffset}px`,
@@ -252,6 +307,9 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
   // in the normal navigation alongside Desk and Studio.
   const navItems = NAV_ITEMS
   const workspaces = useRailWorkspaces()
+  // Independent of the rail's own collapse — the author can hide the folder
+  // list under Workspace without icon-only-ing the whole rail.
+  const [isWorkspaceFoldersOpen, setIsWorkspaceFoldersOpen] = useState(true)
 
   const handleSidebarToggle = () => {
     toggleSidebarMode()
@@ -420,12 +478,23 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             id="sidebar"
             data-page="sidebar"
             /*
-             * Layer 0: the rail has no background and no border of its own —
-             * it sits on the shell (`docs/design/system-app.md` §4). The
-             * separation from the content comes from the view's own sheet
-             * (layer 1), not from a rule down the rail's edge.
+             * The rail carries its own flat background (rgb(250 249 249), a
+             * hair lighter than the shell's --bg) and a full-height hairline
+             * down its trailing edge — both deliberately faint, so the rail
+             * still reads as one surface with the shell rather than a boxed
+             * panel (owner request, superseding the old layer-0 "no
+             * background, no border" rule). Collapsed, it drops back to the
+             * shell's own rgb(247 246 246) so the icon-only rail doesn't read
+             * as a separate panel once it has no content of its own to frame
+             * — the trailing hairline goes with it, for the same reason.
              */
-            className="flex h-screen flex-col bg-transparent transition-[width] duration-[300ms] ease-layout"
+            className={cn(
+              "relative flex h-screen flex-col",
+              isCollapsed
+                ? "mr-0 border-r-transparent bg-[rgb(247,246,246)]"
+                : "mr-[7px] border-r border-line-soft bg-[rgb(250,249,249)]",
+              !isResizingRail && "transition-[width,margin] duration-[300ms] ease-layout",
+            )}
             style={{ width: sidebarWidth }}
           >
           <div
@@ -488,7 +557,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 )}
                 aria-label={isIconOnly ? "Expand sidebar" : "Collapse sidebar"}
               >
-                <PanelLeft className="h-[18px] w-[18px]" strokeWidth={1.5} />
+                <PanelLeft className="h-[18px] w-[18px]" strokeWidth={2} />
               </button>
             </ActionTooltip>
             )}
@@ -511,7 +580,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 aria-label="New Artifact"
               >
                 <span className={SIDEBAR_ICON_WRAP_CLASS}>
-                  <Plus className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
+                  <Plus className={SIDEBAR_ICON_CLASS} strokeWidth={2} />
                 </span>
                 <span className={cn(SIDEBAR_LABEL_TRANSITION_CLASS, isIconOnly ? "opacity-0" : "opacity-100")}>
                   New Artifact
@@ -531,7 +600,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 aria-label="Search"
               >
                 <span className={SIDEBAR_ICON_WRAP_CLASS}>
-                  <Search className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
+                  <Search className={SIDEBAR_ICON_CLASS} strokeWidth={2} />
                 </span>
                 <span className={cn(SIDEBAR_LABEL_TRANSITION_CLASS, isIconOnly ? "opacity-0" : "opacity-100")}>
                   Search
@@ -557,58 +626,103 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
               const shortcut = item.shortcut ? getShortcutForPlatform(item.shortcut) : null
 
+              const isWorkspaceItem = item.href === "/workspace"
+
               return (
                 <div key={item.href} className="flex flex-shrink-0 flex-col">
-                  <ActionTooltip label={item.label} shortcut={shortcut} side="right">
-                    <Link
-                      href={item.href}
-                      id={item.section}
-                      data-section={item.section}
-                      data-testid={item.section}
-                      className={cn(
-                        SIDEBAR_ITEM_BASE_CLASS,
-                        SIDEBAR_ITEM_TRANSITION_CLASS,
-                        // Keep the active state darker while the shared base class
-                        // gives every rail label the slightly heavier requested
-                        // weight.
-                        isActive
-                          ? "bg-muted-hover font-medium text-ink"
-                          : "text-ink-2 hover:bg-muted hover:text-ink",
-                      )}
-                      aria-label={item.label}
-                    >
-                      <span className={SIDEBAR_ICON_WRAP_CLASS}>
-                        <item.icon
-                          className={cn(SIDEBAR_ICON_CLASS, isActive && "text-ink")}
-                          strokeWidth={1.5}
-                        />
-                      </span>
-                      <span
+                  {/*
+                    `relative` wraps only the row itself (40px), not the
+                    folder list below — the chevron button is absolutely
+                    positioned against this box, so it must not include the
+                    folder list's own height or it centers against the
+                    combined block instead of the Workspace row.
+                  */}
+                  <div className="relative">
+                    <ActionTooltip label={item.label} shortcut={shortcut} side="right">
+                      <Link
+                        href={item.href}
+                        id={item.section}
+                        data-section={item.section}
+                        data-testid={item.section}
                         className={cn(
-                          SIDEBAR_LABEL_TRANSITION_CLASS,
-                          isIconOnly ? "opacity-0" : "opacity-100",
+                          SIDEBAR_ITEM_BASE_CLASS,
+                          SIDEBAR_ITEM_TRANSITION_CLASS,
+                          // Keep the active state darker — the shared base
+                          // class already gives every rail label its weight,
+                          // so this branch is color/bg only.
+                          isActive
+                            ? "bg-muted-hover text-ink"
+                            : "text-ink-2 hover:bg-muted hover:text-ink",
                         )}
+                        aria-label={item.label}
                       >
-                        {item.label}
-                      </span>
-                    </Link>
-                  </ActionTooltip>
+                        <span className={SIDEBAR_ICON_WRAP_CLASS}>
+                          <item.icon
+                            className={cn(SIDEBAR_ICON_CLASS, isActive && "text-ink")}
+                            strokeWidth={2}
+                          />
+                        </span>
+                        <span
+                          className={cn(
+                            SIDEBAR_LABEL_TRANSITION_CLASS,
+                            isIconOnly ? "opacity-0" : "opacity-100",
+                          )}
+                        >
+                          {item.label}
+                        </span>
+                      </Link>
+                    </ActionTooltip>
+
+                    {/*
+                      A sibling of the Link, not nested in it — an <a> is not
+                      a valid ancestor for another interactive control.
+                      Absolutely positioned on top of the row's right edge so
+                      it intercepts its own clicks without the Link
+                      underneath also firing.
+                    */}
+                    {isWorkspaceItem && !isIconOnly ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          setIsWorkspaceFoldersOpen((current) => !current)
+                        }}
+                        aria-label={isWorkspaceFoldersOpen ? "Collapse workspace folders" : "Expand workspace folders"}
+                        aria-expanded={isWorkspaceFoldersOpen}
+                        className="absolute right-1 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted-hover hover:text-ink"
+                      >
+                        <ChevronDown
+                          className={cn(
+                            "h-[15px] w-[15px] transition-transform duration-[180ms] ease-layout",
+                            isWorkspaceFoldersOpen ? "rotate-0" : "-rotate-90",
+                          )}
+                          strokeWidth={2}
+                        />
+                      </button>
+                    ) : null}
+                  </div>
 
                   {/*
-                    The workspace folders hang under the Workspace item, indented
-                    to 50px so they line up past the icon column. This is the
-                    block the prototypes draw where the repo used to list
-                    "Recent" — the rail is an inventory of places, not of
-                    history. It collapses to `max-height: 0` with the rail.
+                    The workspace folders hang under the Workspace item,
+                    indented to 30px so their icon lands under the item's own
+                    label text (40px from the row's left edge: the item's
+                    own icon column, minus the folder row's own 10px of
+                    leading padding) rather than past it. This is the block
+                    the prototypes draw where the repo used to list "Recent"
+                    — the rail is an inventory of places, not of history. It
+                    collapses to `max-height: 0` with the rail.
                   */}
-                  {item.href === "/workspace" ? (
+                  {isWorkspaceItem ? (
                     <div
                       data-section="sidebar-workspace-folders"
                       data-testid="sidebar-workspace-folders"
                       className={cn(
-                        "od-scroll flex min-h-0 flex-col gap-px overflow-y-auto pl-[50px] pt-0.5",
+                        "od-scroll flex min-h-0 flex-col gap-px overflow-y-auto pl-[30px] pt-0.5",
                         "transition-[max-height,opacity] duration-300 ease-layout",
-                        isIconOnly ? "max-h-0 opacity-0" : "max-h-[240px] opacity-100",
+                        isIconOnly || !isWorkspaceFoldersOpen
+                          ? "max-h-0 opacity-0"
+                          : "max-h-[240px] opacity-100",
                       )}
                     >
                       {workspaces.map((workspace) => (
@@ -619,7 +733,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                           title={workspace.name}
                           className="flex h-8 flex-shrink-0 items-center gap-[9px] rounded-[8px] px-2.5 text-[13px] font-medium leading-[1.45] text-ink-4 transition-colors duration-[180ms] hover:bg-muted hover:text-ink"
                         >
-                          <Folder className="h-[15px] w-[15px] flex-shrink-0" strokeWidth={1.5} />
+                          <Folder className="h-[15px] w-[15px] flex-shrink-0" strokeWidth={2} />
                           <span className="truncate">{workspace.name}</span>
                         </Link>
                       ))}
@@ -642,6 +756,30 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
           ) : null}
 
           <UserBar collapsed={isIconOnly} displayName={userDisplayName} username={userUsername} />
+
+          {isCollapsed ? null : (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize sidebar"
+              aria-valuenow={expandedWidth}
+              aria-valuemin={MIN_RAIL_WIDTH}
+              aria-valuemax={MAX_RAIL_WIDTH}
+              onPointerDown={handleRailPointerDown}
+              onDoubleClick={() => {
+                setExpandedWidth(DEFAULT_RAIL_WIDTH)
+                window.localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(DEFAULT_RAIL_WIDTH))
+              }}
+              className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize touch-none select-none"
+            >
+              <div
+                className={cn(
+                  "mx-auto h-full w-px bg-transparent transition-colors",
+                  isResizingRail ? "bg-cursor" : "hover:bg-border",
+                )}
+              />
+            </div>
+          )}
           </nav>
         </div>
 

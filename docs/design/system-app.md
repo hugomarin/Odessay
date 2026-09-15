@@ -137,7 +137,7 @@ layer 0 — shell        #F3F2F0, no border, holds titlebar, rail, panels
 layer 1 — the sheet    #FFFFFF, radius 10, shadow-float, holds content
 ```
 
-- Rail and side panels have **no background of their own** — they sit on layer 0.
+- Side panels have **no background of their own** — they sit on layer 0. The rail is the exception: it carries its own faint background (`rgb(250 249 249)`, a hair lighter than layer 0) and a full-height hairline (`--line-soft`) down its trailing edge (owner request).
 - Everything that belongs to the content (header, toolbar, footer, status bar) lives **inside** the sheet's column, never spanning the shell.
 - Only one elevated surface per view. Overlays are the exception and they dim the shell.
 

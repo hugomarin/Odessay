@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 
 const PANEL_WIDTH_STORAGE_KEY = "od:editor-nav-panel-width";
 const DEFAULT_PANEL_WIDTH = 236;
-const MIN_PANEL_WIDTH = 200;
+const MIN_PANEL_WIDTH = 210;
 const MAX_PANEL_WIDTH = 420;
 
 function clampPanelWidth(width: number): number {
