@@ -10,6 +10,13 @@ import { useVocabulary } from "@/hooks/useVocabulary";
 import { orderGroupKeysByCatalog } from "@/lib/vocabulary/resolve";
 import { getWritingStatusLabel, normalizeWritingStatus, type WritingStatus } from "@/lib/writings/status";
 import { getArtifactTypeLabel, normalizeArtifactType, type ArtifactType } from "@/lib/writings/artifact-type";
+import {
+  WorkspaceFileContextMenu,
+  WorkspaceFolderContextMenu,
+  type WorkspaceTreeFileActions,
+  type WorkspaceTreeFolderActions,
+  type WorkspaceTreeFolderNode,
+} from "@/components/workspace/workspace-tree-item-menu";
 import { cn } from "@/lib/utils";
 
 export type WorkspaceTreeItem = {
@@ -57,6 +64,10 @@ export type WorkspaceTreeProps = {
   emptyState?: React.ReactNode;
   className?: string;
   "aria-label"?: string;
+  /** Right-click menu on file rows. Omitted entirely when not provided. */
+  fileActions?: WorkspaceTreeFileActions;
+  /** Right-click menu on folder rows. Omitted entirely when not provided. */
+  folderActions?: WorkspaceTreeFolderActions;
 };
 
 function totalFileCount(items: WorkspaceTreeItem[]): number {
@@ -73,6 +84,20 @@ function collectFolderPaths(nodes: WorkspaceFolderTreeNode[]): string[] {
   return paths;
 }
 
+/** Flat, depth-annotated folder list for the "Move to" submenu — independent of `groupBy`. */
+function flattenFolderNodes(
+  nodes: WorkspaceFolderTreeNode[],
+  depth: number,
+  out: WorkspaceTreeFolderNode[],
+): WorkspaceTreeFolderNode[] {
+  for (const node of nodes) {
+    if (node.kind !== "folder") continue;
+    out.push({ path: node.path, name: node.name, depth });
+    flattenFolderNodes(node.children, depth + 1, out);
+  }
+  return out;
+}
+
 /** One file row — shared by the folder tree and the status/type grouped list. */
 function FileRow({
   depth,
@@ -81,6 +106,10 @@ function FileRow({
   active,
   disabled,
   icon,
+  status,
+  artifactType,
+  folders,
+  fileActions,
   onOpen,
   onPreview,
 }: {
@@ -90,10 +119,14 @@ function FileRow({
   active: boolean;
   disabled: boolean;
   icon: ReactNode;
+  status?: WritingStatus | null;
+  artifactType?: ArtifactType | null;
+  folders?: WorkspaceTreeFolderNode[];
+  fileActions?: WorkspaceTreeFileActions;
   onOpen?: () => void;
   onPreview?: () => void;
 }) {
-  return (
+  const row = (
     <li className="group relative">
       <button
         type="button"
@@ -133,6 +166,20 @@ function FileRow({
       ) : null}
     </li>
   );
+
+  if (!fileActions || disabled) return row;
+
+  return (
+    <WorkspaceFileContextMenu
+      id={id}
+      status={status}
+      artifactType={artifactType}
+      folders={folders ?? []}
+      actions={fileActions}
+    >
+      {row}
+    </WorkspaceFileContextMenu>
+  );
 }
 
 function TreeRow({
@@ -144,7 +191,11 @@ function TreeRow({
   collapsedPaths,
   idByRelativePath,
   statusByRelativePath,
+  artifactTypeByRelativePath,
   foldersOnly,
+  folderNodes,
+  fileActions,
+  folderActions,
   onToggleFolder,
   onOpenFile,
   onPreviewFile,
@@ -158,7 +209,11 @@ function TreeRow({
   collapsedPaths: ReadonlySet<string>;
   idByRelativePath: ReadonlyMap<string, string>;
   statusByRelativePath: ReadonlyMap<string, WritingStatus | null | undefined>;
+  artifactTypeByRelativePath: ReadonlyMap<string, ArtifactType | null | undefined>;
   foldersOnly?: boolean;
+  folderNodes: WorkspaceTreeFolderNode[];
+  fileActions?: WorkspaceTreeFileActions;
+  folderActions?: WorkspaceTreeFolderActions;
   onToggleFolder: (path: string) => void;
   onOpenFile?: (id: string) => void;
   onPreviewFile?: (id: string) => void;
@@ -178,6 +233,10 @@ function TreeRow({
         label={previewLabel}
         active={active}
         disabled={disabled}
+        status={status}
+        artifactType={artifactTypeByRelativePath.get(node.path)}
+        folders={folderNodes}
+        fileActions={fileActions}
         icon={
           status ? (
             <WritingStatusIcon status={status} className="h-[14px] w-[14px] shrink-0" />
@@ -198,7 +257,7 @@ function TreeRow({
     ? node.children.some((child) => child.kind === "folder")
     : node.children.length > 0;
 
-  return (
+  const folderRow = (
     <li>
       <button
         type="button"
@@ -256,7 +315,11 @@ function TreeRow({
               collapsedPaths={collapsedPaths}
               idByRelativePath={idByRelativePath}
               statusByRelativePath={statusByRelativePath}
+              artifactTypeByRelativePath={artifactTypeByRelativePath}
               foldersOnly={foldersOnly}
+              folderNodes={folderNodes}
+              fileActions={fileActions}
+              folderActions={folderActions}
               onToggleFolder={onToggleFolder}
               onOpenFile={onOpenFile}
               onPreviewFile={onPreviewFile}
@@ -266,6 +329,14 @@ function TreeRow({
         </ul>
       ) : null}
     </li>
+  );
+
+  if (!folderActions) return folderRow;
+
+  return (
+    <WorkspaceFolderContextMenu path={node.path} actions={folderActions}>
+      {folderRow}
+    </WorkspaceFolderContextMenu>
   );
 }
 
@@ -287,6 +358,8 @@ export function WorkspaceTree({
   emptyState,
   className,
   "aria-label": ariaLabel,
+  fileActions,
+  folderActions,
 }: WorkspaceTreeProps) {
   const catalog = useVocabulary();
   const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(
@@ -310,6 +383,19 @@ export function WorkspaceTree({
       })),
     );
   }, [items, groupBy]);
+
+  // Independent of `groupBy` — the "Move to" submenu needs every folder even
+  // when the tree itself is currently rendering the status/type grouping.
+  const folderNodes = useMemo<WorkspaceTreeFolderNode[]>(() => {
+    if (items.length === 0) return [{ path: "", name: rootLabel ?? "Workspace root", depth: 0 }];
+    const fullTree = buildWorkspaceFolderTree(
+      items.map((item) => ({ relativePath: item.relativePath, name: item.name })),
+    );
+    return [
+      { path: "", name: rootLabel ?? "Workspace root", depth: 0 },
+      ...flattenFolderNodes(fullTree, 1, []),
+    ];
+  }, [items, rootLabel]);
 
   // Flattens into vocabulary groups instead of folders — "status" shows each
   // file's artifact type (the group header already names its status) and
@@ -353,6 +439,11 @@ export function WorkspaceTree({
 
   const statusByRelativePath = useMemo(
     () => new Map(items.map((item) => [item.relativePath, item.status])),
+    [items],
+  );
+
+  const artifactTypeByRelativePath = useMemo(
+    () => new Map(items.map((item) => [item.relativePath, item.artifactType])),
     [items],
   );
 
@@ -478,7 +569,11 @@ export function WorkspaceTree({
               collapsedPaths={collapsedPaths}
               idByRelativePath={idByRelativePath}
               statusByRelativePath={statusByRelativePath}
+              artifactTypeByRelativePath={artifactTypeByRelativePath}
               foldersOnly={foldersOnly}
+              folderNodes={folderNodes}
+              fileActions={fileActions}
+              folderActions={folderActions}
               onToggleFolder={handleToggleFolder}
               onOpenFile={onOpenFile}
               onPreviewFile={onPreviewFile}
@@ -534,6 +629,10 @@ export function WorkspaceTree({
                           label={item.name.replace(/\.md$/i, "")}
                           active={active}
                           disabled={disabled}
+                          status={item.status}
+                          artifactType={item.artifactType}
+                          folders={folderNodes}
+                          fileActions={fileActions}
                           icon={
                             groupBy === "status" ? (
                               item.artifactType ? (

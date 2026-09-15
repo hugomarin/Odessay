@@ -63,6 +63,8 @@ export type ContextualWorkspaceDocument = {
 export type ContextualWorkspace = {
   slug: string
   name: string
+  /** Absolute filesystem root — drives "New artifact here" / "Move to" / folder "Reveal in Finder". Empty when unavailable (never used as `""` = workspace root by accident: callers gate on `status === "ready"` first). */
+  rootPath: string
   status: WorkspaceStatus
   missingReason: string | null
   documents: ContextualWorkspaceDocument[]

@@ -3,6 +3,7 @@ import {
   createVocabularyItem,
   deleteVocabularyItem,
   deriveDisabledStatuses,
+  listVocabulary,
   setDisabledStatuses,
   updateVocabularyItem,
 } from "@/lib/vocabulary/server"
@@ -50,6 +51,44 @@ const baseRow = {
   created_at: "2026-08-01T00:00:00.000Z",
   updated_at: "2026-08-01T00:00:00.000Z",
 }
+
+describe("listVocabulary", () => {
+  it("does not duplicate a row whose key matches a base item even when its own is_base column reads false", async () => {
+    // Reproduces the real bug: a user's pre-existing custom row happened to
+    // carry the exact key a later base item ("in_progress") was added with.
+    // The row is matched by key against BASE_VOCABULARY_ITEMS first — it must
+    // not also be re-pushed by the "custom rows" pass just because its own
+    // `is_base` column is stale/false.
+    const supabase = makeSupabase([
+      {
+        data: [
+          { ...baseRow, kind: "status", key: "in_progress", name: "In Progress", icon: "zap", color: "#C07B2A", is_base: false },
+        ],
+        error: null,
+      },
+    ])
+    const result = await listVocabulary(supabase, "user-1")
+    expect(result.error).toBeNull()
+    const matches = result.data!.filter((item) => item.kind === "status" && item.key === "in_progress")
+    expect(matches).toHaveLength(1)
+  })
+
+  it("does not duplicate a hand-created status whose name collides with a base item under a different key", async () => {
+    const supabase = makeSupabase([
+      {
+        data: [
+          { ...baseRow, kind: "status", key: "custom-in-progress", name: "In Progress", icon: "zap", color: "#C07B2A", is_base: false },
+        ],
+        error: null,
+      },
+    ])
+    const result = await listVocabulary(supabase, "user-1")
+    const matches = result.data!.filter(
+      (item) => item.kind === "status" && item.name.trim().toLowerCase() === "in progress",
+    )
+    expect(matches).toHaveLength(1)
+  })
+})
 
 describe("createVocabularyItem", () => {
   it("rejects an icon outside the closed set before touching the database", async () => {

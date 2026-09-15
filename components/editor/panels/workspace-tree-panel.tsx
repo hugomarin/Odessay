@@ -36,6 +36,18 @@ import type { LocalWritingCollection } from "@/lib/local-db/schema";
 import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status";
 import { normalizeArtifactType } from "@/lib/writings/artifact-type";
 import { buildWritingRouteHref } from "@/lib/writings/writing-route";
+import {
+  createDesktopDraft,
+  getDesktopWritingCanonicalPath,
+  relocateDesktopWriting,
+} from "@/lib/services/document-service-factory";
+import { tauriOpenFile } from "@/lib/services/desktop/tauri-commands";
+import { revealWorkspacePath } from "@/lib/workspace/reveal-path";
+import { copyTextWithFallback } from "@/lib/utils/clipboard";
+import type {
+  WorkspaceTreeFileActions,
+  WorkspaceTreeFolderActions,
+} from "@/components/workspace/workspace-tree-item-menu";
 
 function formatFileTimestamp(timestamp: number) {
   return new Intl.DateTimeFormat("en-US", {
@@ -397,6 +409,95 @@ export function WorkspaceTreePanel({
     }
   };
 
+  // Context-menu actions (right-click on a tree row). Desktop-only: every
+  // handler here touches the local filesystem through the same "conscious
+  // move" primitive (relocateDesktopWriting) the Save dialog uses — never a
+  // raw fs write of its own — so a file always keeps exactly one canonical
+  // path and one catalog binding through a rename/move/duplicate.
+  const fileActions: WorkspaceTreeFileActions = {
+    onRename: (id) => {
+      const doc = workspace?.documents.find((document) => document.id === id);
+      if (!doc) return;
+      const next = window.prompt("Rename artifact", doc.name.replace(/\.md$/i, ""));
+      if (!next || !next.trim()) return;
+      void renameWriting(id, next.trim());
+    },
+    onDuplicate: async (id) => {
+      try {
+        const canonicalPath = await getDesktopWritingCanonicalPath(id);
+        if (!canonicalPath) return;
+        const slashIndex = canonicalPath.lastIndexOf("/");
+        const dir = canonicalPath.slice(0, slashIndex);
+        const baseName = canonicalPath.slice(slashIndex + 1).replace(/\.md$/i, "");
+        const content = await tauriOpenFile(canonicalPath);
+        const draft = await createDesktopDraft({ title: `${baseName} copy` });
+        if (draft.error || !draft.data) return;
+        await relocateDesktopWriting(draft.data.id, `${dir}/${baseName} copy.md`, content);
+      } catch (reason) {
+        console.error("[workspace-tree] duplicate failed", reason);
+      }
+    },
+    onChangeStatus: (id, status) => void changeWritingStatus(id, status),
+    onChangeArtifactType: (id, artifactType) => void changeWritingArtifactType(id, artifactType),
+    onMoveTo: async (id, folderPath) => {
+      try {
+        const canonicalPath = await getDesktopWritingCanonicalPath(id);
+        if (!canonicalPath || !workspace) return;
+        const filename = canonicalPath.slice(canonicalPath.lastIndexOf("/") + 1);
+        const targetDir = folderPath ? `${workspace.rootPath}/${folderPath}` : workspace.rootPath;
+        await relocateDesktopWriting(id, `${targetDir}/${filename}`);
+      } catch (reason) {
+        console.error("[workspace-tree] move failed", reason);
+      }
+    },
+    onCopyLink: async (id) => {
+      const href = buildWritingRouteHref("/write", { id, slug: null });
+      const url = typeof window !== "undefined" ? `${window.location.origin}${href}` : href;
+      await copyTextWithFallback(url);
+    },
+    onCopyPath: async (id) => {
+      const doc = workspace?.documents.find((document) => document.id === id);
+      if (!doc) return;
+      const path = workspace ? `${workspace.rootPath}/${doc.relativePath}` : doc.relativePath;
+      await copyTextWithFallback(path);
+    },
+    onReveal: async (id) => {
+      const doc = workspace?.documents.find((document) => document.id === id);
+      if (!workspace || !doc) return;
+      const absolutePath = `${workspace.rootPath}/${doc.relativePath}`;
+      const dir = absolutePath.slice(0, absolutePath.lastIndexOf("/"));
+      try {
+        await revealWorkspacePath(dir);
+      } catch (reason) {
+        console.error("[workspace-tree] reveal failed", reason);
+      }
+    },
+    onDelete: (id) => void deleteWriting(id),
+  };
+
+  const folderActions: WorkspaceTreeFolderActions = {
+    onNewArtifactHere: async (folderPath) => {
+      if (!workspace) return;
+      try {
+        const draft = await createDesktopDraft({});
+        if (draft.error || !draft.data) return;
+        const targetDir = folderPath ? `${workspace.rootPath}/${folderPath}` : workspace.rootPath;
+        const result = await relocateDesktopWriting(draft.data.id, `${targetDir}/${draft.data.title}.md`);
+        if (result.status === "relocated") await handleOpen(draft.data.id);
+      } catch (reason) {
+        console.error("[workspace-tree] new artifact failed", reason);
+      }
+    },
+    onReveal: async (folderPath) => {
+      if (!workspace) return;
+      try {
+        await revealWorkspacePath(folderPath ? `${workspace.rootPath}/${folderPath}` : workspace.rootPath);
+      } catch (reason) {
+        console.error("[workspace-tree] reveal failed", reason);
+      }
+    },
+  };
+
   if (loading)
     return (
       <p className="px-2 py-4 text-[11px] text-ink-4">Loading workspace…</p>
@@ -475,6 +576,8 @@ export function WorkspaceTreePanel({
         rootCount={rootDocumentCount}
         onOpenFile={(id) => void handleOpen(id)}
         onPreviewFile={(id) => setPreviewWritingId(id)}
+        fileActions={fileActions}
+        folderActions={folderActions}
       />
       <WritingPreviewModal
         open={previewWritingId !== null && previewIndex !== null && previewIndex !== -1}

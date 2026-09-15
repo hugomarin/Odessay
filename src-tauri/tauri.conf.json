@@ -43,6 +43,9 @@
         "https://github.com/hugomarin/Odessay/releases/latest/download/latest.json"
       ],
       "dialog": false
+    },
+    "shell": {
+      "open": "(/.+|file://.+)"
     }
   },
   "bundle": {

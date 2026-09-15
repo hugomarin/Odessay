@@ -67,6 +67,7 @@ function workspaceWith(
   return {
     slug: "aplyca",
     name: "Aplyca",
+    rootPath: "/Users/test/Aplyca",
     status: "ready",
     missingReason: null,
     documents,

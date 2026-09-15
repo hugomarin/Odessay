@@ -183,6 +183,7 @@ export async function loadContextualWorkspace(
     workspace: {
       slug: workspace.slug,
       name: workspace.name,
+      rootPath: workspace.rootPath,
       status: workspace.status,
       missingReason: workspace.missingReason,
       documents: workspace.files.map((file) => {
