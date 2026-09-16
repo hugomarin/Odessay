@@ -181,30 +181,6 @@ const getPreviewFixtureResponse = (token: string): TestLinkAccessResult | null =
 const hashForLog = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 12)
 const sanitizeIdForLog = (value: string) => (value.length <= 12 ? value : `${value.slice(0, 8)}...${value.slice(-4)}`)
 
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;")
-
-const renderPlainTextPreviewHtml = (bodyText: string | null) => {
-  const normalized = (bodyText ?? "").replaceAll("\r\n", "\n").trim()
-
-  if (!normalized) {
-    return "<p></p>"
-  }
-
-  const paragraphs = normalized
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
-    .map((paragraph) => `<p>${escapeHtml(paragraph).replaceAll("\n", "<br />")}</p>`)
-
-  return paragraphs.length > 0 ? paragraphs.join("") : "<p></p>"
-}
-
 type PreviewHtmlRenderResult = {
   bodyHtml: string
   mode: "rich" | "plain-text"
@@ -218,19 +194,16 @@ type PreviewHtmlRenderOptions = {
 export const renderPreviewBodyHtml = (
   writing: Pick<WritingRow, "body_json" | "body_text">,
   options: PreviewHtmlRenderOptions = {},
-): PreviewHtmlRenderResult => {
-  const rendered = renderWritingBodyHtml(writing.body_json, writing.body_text, {
+): PreviewHtmlRenderResult =>
+  // Delegates the plain-text fallback to the same shared pipeline every
+  // other reading surface uses (/write, /shared, the Desk preview modal) —
+  // this used to re-render it locally with a separate, simpler
+  // paragraph-only escaper, so a test-link preview whose richText failed to
+  // parse never got the shared fallback's heading/table/image support.
+  renderWritingBodyHtml(writing.body_json, writing.body_text, {
     renderRichHtml: options.renderRichHtml,
     onRichRenderError: options.onRichRenderError,
   })
-
-  return rendered.mode === "rich"
-    ? rendered
-    : {
-        bodyHtml: renderPlainTextPreviewHtml(writing.body_text),
-        mode: "plain-text",
-      }
-}
 
 export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<TestLinkAccessResult> => {
   const token = normalizeTestLinkToken(rawToken)

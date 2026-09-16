@@ -57,7 +57,7 @@ describe("useVocabulary", () => {
     await act(async () => {
       root.render(<Probe />)
     })
-    expect(container.querySelector('[data-testid="count"]')?.textContent).toBe("13")
+    expect(container.querySelector('[data-testid="count"]')?.textContent).toBe("14")
   })
 
   it("repaints on a catalog change without a reload — one re-render for the whole batch (requirement 9/10)", async () => {

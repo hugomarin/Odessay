@@ -20,7 +20,15 @@ import type { VocabularyKind } from "@/lib/vocabulary/types"
  */
 
 type BaseArtifactTypeKey = "general" | "agent" | "skill" | "prompt" | "template" | "status"
-type BaseWritingStatusKey = "new" | "exploring" | "draft" | "in_review" | "done" | "archived" | "canceled"
+type BaseWritingStatusKey =
+  | "new"
+  | "exploring"
+  | "draft"
+  | "in_review"
+  | "done"
+  | "archived"
+  | "canceled"
+  | "in_progress"
 
 /**
  * Literal, not derived from `VOCABULARY_COLORS` in `lib/settings/vocabulary.ts`
@@ -141,6 +149,13 @@ const WRITING_STATUS_BASE: Record<BaseWritingStatusKey, Omit<BaseVocabularyDefin
     color: GREY,
     isRequired: false,
   },
+  in_progress: {
+    name: "In Progress",
+    description: "Actively being worked on right now.",
+    icon: "zap",
+    color: AMBER,
+    isRequired: false,
+  },
 }
 
 /** Base type keys, in canonical order — the authority `lib/writings/artifact-type.ts` imports its `ARTIFACT_TYPE_VALUES` from. */
@@ -162,6 +177,7 @@ export const BASE_WRITING_STATUS_KEYS = [
   "done",
   "archived",
   "canceled",
+  "in_progress",
 ] as const satisfies readonly BaseWritingStatusKey[]
 
 export const BASE_MANDATORY_WRITING_STATUSES = ["draft"] as const satisfies readonly BaseWritingStatusKey[]

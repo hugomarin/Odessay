@@ -151,9 +151,20 @@ export async function listVocabulary(
     })
   }
 
-  // Custom (non-base) rows the user created.
+  // Custom (non-base) rows the user created. A row already consumed above by
+  // key match (line ~131) must never be pushed again here just because its
+  // own `is_base` column happens to read false — that column can lag a base
+  // item introduced after the row already existed with the same key. Also
+  // skipped when the NAME collides (case-insensitively) with a base item
+  // already in `items` — a base status introduced after the user had already
+  // hand-created one with the same name but a different key must not render
+  // as two identical-looking rows either.
+  const consumedKeys = new Set(items.map((item) => `${item.kind}:${item.key}`))
+  const baseNames = new Set(items.map((item) => `${item.kind}:${item.name.trim().toLowerCase()}`))
   for (const row of rows) {
     if (row.is_base) continue
+    if (consumedKeys.has(`${row.kind}:${row.key}`)) continue
+    if (baseNames.has(`${row.kind}:${row.name.trim().toLowerCase()}`)) continue
     const mapped = rowToItem(row)
     if (mapped) items.push(mapped)
   }

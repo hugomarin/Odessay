@@ -31,9 +31,11 @@ describe("vocabulary catalog singleton", () => {
     resetVocabularyCatalogForTest()
   })
 
-  it("defaults to exactly the 13 base items before anything is set", () => {
+  it("defaults to exactly the 14 base items before anything is set", () => {
     const snapshot = getVocabularyCatalogSnapshot()
-    expect(snapshot).toHaveLength(13)
+    // 6 artifact types + 8 statuses (new/exploring/draft/in_review/done/
+    // archived/canceled/in_progress) — see lib/vocabulary/base-items.ts.
+    expect(snapshot).toHaveLength(14)
     expect(snapshot.every((item) => item.isBase)).toBe(true)
   })
 

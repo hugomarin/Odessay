@@ -57,7 +57,10 @@ export function ReadingContent({
   bodyRef,
   selectionPreviewRects,
 }: ReadingContentProps) {
-  const { bodyHtml } = renderWritingBodyHtml(bodyJson, bodyText)
+  const { bodyHtml } = renderWritingBodyHtml(bodyJson, bodyText, {
+    onRichRenderError: (message) =>
+      console.warn(`[reading-content] rich render failed for "${title}", falling back:`, message),
+  })
 
   const displayName = author?.displayName ?? author?.username ?? "Artifact Studio author"
   const initials = getInitials(displayName)

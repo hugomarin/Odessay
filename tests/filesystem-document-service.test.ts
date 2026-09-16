@@ -183,7 +183,14 @@ describe("FilesystemDocumentService", () => {
     expect(result.data!.content.markdown).toBe(md)
     expect(result.data!.title).toBe("My Writing")
     expect(result.data!.content.canonicalSource).toBe("markdown")
+    // richText stays null here on purpose: DesktopDocumentService.openWriting
+    // (the real caller behind getDocumentService()) parses this class's
+    // returned markdown itself via desktopDocumentEngine.parseSourceDocument
+    // and never reads this class's own richText/plainText. Parsing it a
+    // second time here doubled the TipTap Editor cost of every real
+    // document open for no benefit — see derivePlainText.
     expect(result.data!.content.richText).toBeNull()
+    expect(result.data!.content.plainText).toBe(md)
     vi.useFakeTimers()
   })
 

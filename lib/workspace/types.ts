@@ -1,4 +1,6 @@
 import type { DocumentState } from "@/lib/writings/document-state"
+import type { WritingStatus } from "@/lib/writings/status"
+import type { ArtifactType } from "@/lib/writings/artifact-type"
 
 export type WorkspaceLayout = "grid" | "list"
 
@@ -49,12 +51,20 @@ export type ContextualWorkspaceDocument = {
   name: string
   relativePath: string
   state: DocumentState
+  status: WritingStatus | null
+  artifactType: ArtifactType | null
+  /** Plain-text excerpt for the preview modal; null when the catalog has none yet. */
+  excerpt: string | null
+  /** Filesystem mtime (ms) — drives the preview modal's date label. */
+  modifiedAt: number
   openable: boolean
 }
 
 export type ContextualWorkspace = {
   slug: string
   name: string
+  /** Absolute filesystem root — drives "New artifact here" / "Move to" / folder "Reveal in Finder". Empty when unavailable (never used as `""` = workspace root by accident: callers gate on `status === "ready"` first). */
+  rootPath: string
   status: WorkspaceStatus
   missingReason: string | null
   documents: ContextualWorkspaceDocument[]

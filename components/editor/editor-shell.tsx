@@ -22,6 +22,7 @@ import { EditorSheetHeader } from "@/components/editor/editor-sheet-header"
 import { EditorShortcutsDialog } from "@/components/editor/editor-shortcuts-dialog"
 import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
+import { EditorRightPanel } from "@/components/editor/editor-right-panel"
 import { EditorRightPanelTabs } from "@/components/editor/panels/editor-right-panel-tabs"
 import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
 import {
@@ -182,9 +183,11 @@ import { getAssetService } from "@/lib/services/asset-service-factory"
 import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 import {
   createDesktopDraft as createProductionDesktopDraft,
+  getDesktopWritingCanonicalPath,
   getDocumentService,
   importDesktopWritingFile,
 } from "@/lib/services/document-service-factory"
+import { revealWorkspacePath } from "@/lib/workspace/reveal-path"
 import {
   filenameToTitle,
   titleToFilename,
@@ -5576,7 +5579,12 @@ export function EditorShell({
 
   const handleCloseWorkspaceTab = useCallback(
     async (tabId: string) => {
-      const targetTab = editorSession.tabs.find((tab) => tab.id === tabId)
+      // Read fresh rather than the closed-over `editorSession.tabs` (same
+      // reasoning as the re-resolve after the persistence await below): a
+      // tab can materialize in the store between this component's last
+      // render and the call, which the batch closers (Close others/all)
+      // make more likely by resolving their id list from live state too.
+      const targetTab = getEditorSessionState().session.tabs.find((tab) => tab.id === tabId)
       if (!targetTab) {
         return
       }
@@ -5649,13 +5657,55 @@ export function EditorShell({
       replaceEditorHistory("/write")
     },
     [
-      editorSession.tabs,
       flushQueuedRichModeUpdate,
       persistCurrentWorkspaceViewState,
       persistenceCoordinator,
       snapshotOutgoingDraftContent,
     ],
   )
+
+  // Closing more than one tab reuses handleCloseWorkspaceTab per id rather
+  // than a batch primitive in the session store — it already re-reads fresh
+  // state each call (ODE-478 follow-up), so sequencing them one at a time
+  // keeps every close's persistence/active-tab bookkeeping correct.
+  const handleCloseOtherWorkspaceTabs = useCallback(
+    async (tabId: string) => {
+      const idsToClose = getEditorSessionState()
+        .session.tabs.map((tab) => tab.id)
+        .filter((id) => id !== tabId)
+      for (const id of idsToClose) {
+        await handleCloseWorkspaceTab(id)
+      }
+    },
+    [handleCloseWorkspaceTab],
+  )
+
+  const handleCloseAllWorkspaceTabs = useCallback(async () => {
+    const ids = getEditorSessionState().session.tabs.map((tab) => tab.id)
+    for (const id of ids) {
+      await handleCloseWorkspaceTab(id)
+    }
+  }, [handleCloseWorkspaceTab])
+
+  // Reveals the tab's file, not the tab itself: draft tabs (no writing_id
+  // yet, or no local binding on this machine — cloud-only) have nothing on
+  // disk to reveal, so the caller hides this action rather than no-op it.
+  const handleRevealWorkspaceTab = useCallback(async (tabId: string) => {
+    const tab = getEditorSessionState().session.tabs.find((candidate) => candidate.id === tabId)
+    if (!tab?.writing_id) {
+      return
+    }
+    const canonicalPath = await getDesktopWritingCanonicalPath(tab.writing_id)
+    if (!canonicalPath) {
+      return
+    }
+    const dir = canonicalPath.slice(0, canonicalPath.lastIndexOf("/"))
+    try {
+      await revealWorkspacePath(dir)
+    } catch (reason) {
+      console.error("[editor-tabs] reveal failed", reason)
+    }
+  }, [])
 
   // Renaming reads the loaded editor, so a pencil pressed on a background tab
   // selects it first and opens the modal once that tab is the active one.
@@ -6417,6 +6467,9 @@ export function EditorShell({
             activeTabId={editorSession.active_tab_id}
             onSelectTab={handleSelectWorkspaceTab}
             onCloseTab={handleCloseWorkspaceTab}
+            onCloseOtherTabs={handleCloseOtherWorkspaceTabs}
+            onCloseAllTabs={handleCloseAllWorkspaceTabs}
+            onRevealTab={isDesktopRuntime() ? handleRevealWorkspaceTab : undefined}
             onRenameTab={handleRenameWorkspaceTab}
             onReorderTab={handleReorderWorkspaceTab}
             onNewTab={handleCreateWorkspaceTab}
@@ -6459,10 +6512,10 @@ export function EditorShell({
           data-testid="editor-band"
           className={cn(
             "EditorBand flex min-h-0 flex-1",
-            isFocusMode ? "gap-0 px-0 pb-0 pt-[46px]" : "gap-2.5 pb-2.5 pr-2.5 pt-1.5",
+            isFocusMode ? "gap-0 px-0 pb-0 pt-[46px]" : "gap-1.5 pb-1 pr-2.5 pt-1.5",
           )}
         >
-          <div className="relative flex min-w-0 flex-1 flex-col gap-1.5">
+          <div className="relative flex min-w-0 flex-1 flex-col gap-1">
             {isDesktopRuntime() && hydrationProgress.active ? (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-bg/88 backdrop-blur-sm">
                 <div className="w-full max-w-[360px] rounded-[20px] border border-border/70 bg-paper px-6 py-5 text-center shadow-[0_20px_60px_rgba(39,27,22,0.12)]">
@@ -6529,7 +6582,7 @@ export function EditorShell({
                   <div
                     data-testid="editor-sheet"
                     className={cn(
-                      "EditorSheet relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sb",
+                      "EditorSheet relative mb-[5px] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sb",
                       isFocusMode ? "rounded-none shadow-none" : "rounded-[10px] shadow-float",
                     )}
                   >
@@ -6581,36 +6634,29 @@ export function EditorShell({
                       ) : null
                     }
                   />
+
+                  {!isFocusMode ? (
+                    <EditorStatusBar
+                      mode={mode}
+                      metrics={textMetrics}
+                      selectionMetrics={selectionMetrics}
+                      saveState={syncStatus}
+                      isNotesPanelOpen={activePanel === "notes"}
+                      onToggleMode={handleToggleMode}
+                      onToggleNotesPanel={() => {
+                        setActivePanel((current) => (current === "notes" ? null : "notes"))
+                      }}
+                      onOpenShortcutHelp={() => setIsShortcutHelpOpen(true)}
+                    />
+                  ) : null}
                   </div>
                 </div>
-
-                {!isFocusMode ? (
-                  <EditorStatusBar
-                    mode={mode}
-                    metrics={textMetrics}
-                    selectionMetrics={selectionMetrics}
-                    saveState={syncStatus}
-                    isNotesPanelOpen={activePanel === "notes"}
-                    onToggleMode={handleToggleMode}
-                    onToggleNotesPanel={() => {
-                      setActivePanel((current) => (current === "notes" ? null : "notes"))
-                    }}
-                    onOpenShortcutHelp={() => setIsShortcutHelpOpen(true)}
-                  />
-                ) : null}
               </>
             )}
           </div>
 
         {!isFocusMode && activePanel && editorSession.tabs.length > 0 ? (
-          <aside
-            data-testid="editor-right-panel"
-            // The panel is always a column of the band. It used to float over
-            // the sheet below 1440 — the desktop window opens at 1280, so that
-            // was its normal state and it covered the text (owner decision,
-            // ODE-433 follow-up).
-            className="EditorRightPanel flex w-[var(--size-panel-right)] shrink-0 flex-col overflow-hidden border-l-[0.5px] border-border font-sans"
-          >
+          <EditorRightPanel>
           {/* One header for the four surfaces. Each of them used to carry a
               header and a close button of its own, and Share was a section
               buried inside Properties (owner review). */}
@@ -6888,7 +6934,7 @@ export function EditorShell({
             )}
           </Suspense>
           </div>
-          </aside>
+          </EditorRightPanel>
         ) : null}
         </div>
       </div>

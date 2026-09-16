@@ -9,6 +9,8 @@ import { loadWorkspaceDocumentJoin } from "@/lib/queries/workspace-catalog-sourc
 import { subscribeToCatalog } from "@/lib/queries/document-catalog"
 import type { CatalogChange } from "@/lib/services/contracts/document-catalog"
 import type { DocumentState } from "@/lib/writings/document-state"
+import type { WritingStatus } from "@/lib/writings/status"
+import type { ArtifactType } from "@/lib/writings/artifact-type"
 import type {
   ContextualWorkspace,
   ContextualWorkspaceDocument,
@@ -181,6 +183,7 @@ export async function loadContextualWorkspace(
     workspace: {
       slug: workspace.slug,
       name: workspace.name,
+      rootPath: workspace.rootPath,
       status: workspace.status,
       missingReason: workspace.missingReason,
       documents: workspace.files.map((file) => {
@@ -190,6 +193,10 @@ export async function loadContextualWorkspace(
           name: file.name,
           relativePath: file.relativePath,
           state: document?.state ?? "rebuilding",
+          status: document?.status ?? null,
+          artifactType: document?.artifactType ?? null,
+          excerpt: document?.excerpt ?? null,
+          modifiedAt: file.modifiedAt,
           openable: Boolean(document?.id),
         }
       }),
@@ -211,6 +218,8 @@ function sameDocuments(
       document.name === other.name &&
       document.relativePath === other.relativePath &&
       document.state === other.state &&
+      document.status === other.status &&
+      document.artifactType === other.artifactType &&
       document.openable === other.openable
     )
   })
@@ -242,7 +251,16 @@ export async function refreshContextualWorkspaceDocuments(
 
   const root = record.rootPath.replace(/[\\/]+$/, "")
   const documentJoin = await loadWorkspaceDocumentJoin(record.rootPath)
-  const byId = new Map<string, { relativePath: string; state: DocumentState }>()
+  const byId = new Map<
+    string,
+    {
+      relativePath: string
+      state: DocumentState
+      status: WritingStatus
+      artifactType: ArtifactType
+      excerpt: string | null
+    }
+  >()
   for (const [canonicalPath, info] of documentJoin) {
     const normalized = canonicalPath.replace(/\\/g, "/")
     byId.set(info.id, {
@@ -250,6 +268,9 @@ export async function refreshContextualWorkspaceDocuments(
         ? normalized.slice(root.length + 1)
         : normalized,
       state: info.state,
+      status: info.status,
+      artifactType: info.artifactType,
+      excerpt: info.excerpt,
     })
   }
 
@@ -271,6 +292,13 @@ export async function refreshContextualWorkspaceDocuments(
       name: basename(entry.relativePath),
       relativePath: entry.relativePath,
       state: entry.state,
+      status: entry.status,
+      artifactType: entry.artifactType,
+      excerpt: entry.excerpt,
+      // Not worth a filesystem stat for a one-document patch — this path only
+      // runs right after a catalog change, so "now" is accurate enough for
+      // the preview modal's date label.
+      modifiedAt: Date.now(),
       openable: true,
     })
   }
@@ -284,6 +312,10 @@ export async function refreshContextualWorkspaceDocuments(
       name: basename(entry.relativePath),
       relativePath: entry.relativePath,
       state: entry.state,
+      status: entry.status,
+      artifactType: entry.artifactType,
+      excerpt: entry.excerpt,
+      modifiedAt: Date.now(),
       openable: true,
     })
   }

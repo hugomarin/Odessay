@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Check,
   ChevronLeft,
   Eye,
   ExternalLink,
@@ -900,10 +901,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                       </span>
                       {normalizeWritingStatus(document?.status ?? "draft") ===
                       status ? (
-                        <span
-                          className="h-2.5 w-2.5 rounded-full bg-ink"
-                          aria-hidden="true"
-                        />
+                        <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
                       ) : null}
                     </DropdownMenuItem>
                   ))}
@@ -954,10 +952,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                       </span>
                       {(document?.artifactType ?? "general") ===
                       artifactType ? (
-                        <span
-                          className="h-2.5 w-2.5 rounded-full bg-ink"
-                          aria-hidden="true"
-                        />
+                        <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
                       ) : null}
                     </DropdownMenuItem>
                   ))}

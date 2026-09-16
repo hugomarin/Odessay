@@ -364,7 +364,7 @@ function RowTrigger({
           >
             {item.leading ? <span className="flex flex-shrink-0 items-center text-ink-3">{item.leading}</span> : null}
             <span className="flex-1 truncate">{item.label}</span>
-            {item.selected ? <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-ink" aria-hidden /> : null}
+            {item.selected ? <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden /> : null}
           </button>
         ))}
       </PopoverContent>

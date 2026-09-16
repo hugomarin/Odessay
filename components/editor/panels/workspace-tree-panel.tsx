@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { WorkspaceTree } from "@/components/workspace/workspace-tree";
+import { WorkspaceTree, type WorkspaceTreeGroupBy } from "@/components/workspace/workspace-tree";
+import { WorkspaceTreeToolbar } from "@/components/editor/panels/workspace-tree-toolbar";
+import { WritingPreviewModal } from "@/components/desk/writing-preview-modal";
 import {
   loadContextualWorkspace,
   refreshContextualWorkspaceDocuments,
@@ -13,6 +15,48 @@ import type {
   ContextualWorkspaceDocument,
   ContextualWorkspaceOutcome,
 } from "@/lib/workspace/types";
+import type { DeskActivityRow } from "@/lib/queries/desk-activity";
+import {
+  getLocalDBScope,
+  loadCollectionState,
+} from "@/lib/queries/desk-catalog-source";
+import {
+  buildCollectionOptions,
+  type CollectionOption,
+} from "@/lib/collections/collections";
+import {
+  changeWritingArtifactType,
+  changeWritingStatus,
+  createAndAssignCollection,
+  deleteWriting,
+  renameWriting,
+  toggleWritingCollection as toggleWritingCollectionMutation,
+} from "@/lib/queries/writing-mutations";
+import type { LocalWritingCollection } from "@/lib/local-db/schema";
+import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status";
+import { normalizeArtifactType } from "@/lib/writings/artifact-type";
+import { buildWritingRouteHref } from "@/lib/writings/writing-route";
+import {
+  createDesktopDraft,
+  getDesktopWritingCanonicalPath,
+  relocateDesktopWriting,
+} from "@/lib/services/document-service-factory";
+import { tauriOpenFile } from "@/lib/services/desktop/tauri-commands";
+import { revealWorkspacePath } from "@/lib/workspace/reveal-path";
+import { copyTextWithFallback } from "@/lib/utils/clipboard";
+import type {
+  WorkspaceTreeFileActions,
+  WorkspaceTreeFolderActions,
+} from "@/components/workspace/workspace-tree-item-menu";
+
+function formatFileTimestamp(timestamp: number) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
 
 export type WorkspaceTreeFolder = {
   name: string;
@@ -70,10 +114,49 @@ export function WorkspaceTreePanel({
   const workspaceRef = useRef<ContextualWorkspace | null>(null);
   const activeWritingIdRef = useRef(activeWritingId);
   const [retryToken, setRetryToken] = useState(0);
+  const [previewWritingId, setPreviewWritingId] = useState<string | null>(null);
+  const [collectionOptions, setCollectionOptions] = useState<CollectionOption[]>([]);
+  const [collectionIdsByWritingId, setCollectionIdsByWritingId] = useState<
+    Record<string, string[]>
+  >({});
+  const [groupBy, setGroupBy] = useState<WorkspaceTreeGroupBy>("folder");
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(() => new Set());
+  const [selectedArtifactTypes, setSelectedArtifactTypes] = useState<Set<string>>(() => new Set());
+
+  const toggleStatusFilter = useCallback((status: string) => {
+    setSelectedStatuses((current) => {
+      const next = new Set(current);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  }, []);
+
+  const toggleArtifactTypeFilter = useCallback((artifactType: string) => {
+    setSelectedArtifactTypes((current) => {
+      const next = new Set(current);
+      if (next.has(artifactType)) next.delete(artifactType);
+      else next.add(artifactType);
+      return next;
+    });
+  }, []);
+
+  const clearFilters = useCallback(() => {
+    setSelectedStatuses(new Set());
+    setSelectedArtifactTypes(new Set());
+  }, []);
 
   const workspace = outcome?.kind === "workspace" ? outcome.workspace : null;
   workspaceRef.current = workspace;
   activeWritingIdRef.current = activeWritingId;
+
+  // Filters are workspace-scoped: carrying a status/type filter over into a
+  // newly-loaded, different workspace can silently render an empty tree with
+  // only the filter-count badge as the unexplained reason. A same-workspace
+  // refresh (slug unchanged) leaves the filter selection alone.
+  useEffect(() => {
+    clearFilters();
+  }, [workspace?.slug, clearFilters]);
 
   const applyOutcome = useCallback(
     (next: ContextualWorkspaceOutcome) => {
@@ -89,6 +172,45 @@ export function WorkspaceTreePanel({
       );
     },
     [onCountChange],
+  );
+
+  // Collections are user-wide, not workspace-scoped — loaded once and
+  // refreshed after a mutation from the preview modal, the same shape
+  // `workspace-detail.tsx` uses for the same modal.
+  const loadCollections = useCallback(async () => {
+    try {
+      const collectionState = await loadCollectionState();
+      const idsByWritingId: Record<string, string[]> = {};
+      for (const assignment of collectionState.writingCollections) {
+        idsByWritingId[assignment.writing_id] = [
+          ...(idsByWritingId[assignment.writing_id] ?? []),
+          assignment.collection_id,
+        ];
+      }
+      setCollectionOptions(buildCollectionOptions(collectionState.collections));
+      setCollectionIdsByWritingId(idsByWritingId);
+    } catch {
+      // The preview modal's collection picker just stays empty — it is not
+      // this panel's job to surface a collections-service outage.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCollections();
+  }, [loadCollections]);
+
+  const writingCollections = useMemo<LocalWritingCollection[]>(
+    () =>
+      Object.entries(collectionIdsByWritingId).flatMap(([writingId, ids]) =>
+        ids.map((collectionId, index) => ({
+          id: `${writingId}-${collectionId}-${index}`,
+          writing_id: writingId,
+          collection_id: collectionId,
+          added_at: "",
+          local_updated_at: 0,
+        })),
+      ),
+    [collectionIdsByWritingId],
   );
 
   // A catalog notification never resolves through the scanning loader: the
@@ -197,17 +319,90 @@ export function WorkspaceTreePanel({
         relativePath: document.relativePath,
         kind: "file" as const,
         openable: document.openable,
+        status: document.status,
+        artifactType: document.artifactType,
       })),
     [workspace],
   );
 
+  const filteredTreeItems = useMemo(() => {
+    if (selectedStatuses.size === 0 && selectedArtifactTypes.size === 0) return treeItems;
+    return treeItems.filter((item) => {
+      const statusOk =
+        selectedStatuses.size === 0 || selectedStatuses.has(normalizeWritingStatus(item.status));
+      const typeOk =
+        selectedArtifactTypes.size === 0 ||
+        selectedArtifactTypes.has(normalizeArtifactType(item.artifactType));
+      return statusOk && typeOk;
+    });
+  }, [treeItems, selectedStatuses, selectedArtifactTypes]);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of treeItems) {
+      const key = normalizeWritingStatus(item.status);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [treeItems]);
+
+  const artifactTypeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of treeItems) {
+      const key = normalizeArtifactType(item.artifactType);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [treeItems]);
+
   const rootDocumentCount = useMemo(() => {
-    if (!workspace) return 0;
-    return workspace.documents.filter((doc) => {
-      const parts = doc.relativePath.split(/[\\/]/).filter(Boolean);
+    return filteredTreeItems.filter((item) => {
+      const parts = item.relativePath.split(/[\\/]/).filter(Boolean);
       return parts.length <= 1;
     }).length;
-  }, [workspace]);
+  }, [filteredTreeItems]);
+
+  // Feeds the same WritingPreviewModal Desk and the full Workspace view use —
+  // built from this panel's own already-loaded documents rather than a
+  // second query.
+  const previewRows = useMemo<DeskActivityRow[]>(
+    () =>
+      (workspace?.documents ?? [])
+        .filter((document): document is ContextualWorkspaceDocument & { id: string } =>
+          Boolean(document.id),
+        )
+        .map((document) => {
+          const status = document.status ?? "draft";
+          return {
+            id: document.id,
+            title: document.name.replace(/\.(md|mdx)$/i, ""),
+            excerpt: document.excerpt ?? "",
+            localPath: document.relativePath,
+            stateLabel: getWritingStatusLabel(status),
+            stateTone: normalizeWritingStatus(status),
+            documentState: document.state,
+            artifactType: normalizeArtifactType(document.artifactType),
+            recipientPreviews: [],
+            dateLabel: formatFileTimestamp(document.modifiedAt),
+            isNew: false,
+            destinationHref: buildWritingRouteHref("/write", {
+              id: document.id,
+              slug: null,
+            }),
+            workspaceSlug: workspace?.slug ?? null,
+            workspaceName: workspace?.name ?? null,
+          };
+        }),
+    [workspace],
+  );
+
+  const previewIndex = useMemo(
+    () =>
+      previewWritingId === null
+        ? null
+        : previewRows.findIndex((row) => row.id === previewWritingId),
+    [previewRows, previewWritingId],
+  );
 
   const handleOpen = async (id: string) => {
     setOpenError(null);
@@ -222,7 +417,106 @@ export function WorkspaceTreePanel({
     }
   };
 
-  if (loading)
+  // Context-menu actions (right-click on a tree row). Desktop-only: every
+  // handler here touches the local filesystem through the same "conscious
+  // move" primitive (relocateDesktopWriting) the Save dialog uses — never a
+  // raw fs write of its own — so a file always keeps exactly one canonical
+  // path and one catalog binding through a rename/move/duplicate.
+  const fileActions: WorkspaceTreeFileActions = {
+    onRename: (id) => {
+      const doc = workspace?.documents.find((document) => document.id === id);
+      if (!doc) return;
+      const next = window.prompt("Rename artifact", doc.name.replace(/\.md$/i, ""));
+      if (!next || !next.trim()) return;
+      void renameWriting(id, next.trim());
+    },
+    onDuplicate: async (id) => {
+      try {
+        const canonicalPath = await getDesktopWritingCanonicalPath(id);
+        if (!canonicalPath) return;
+        const slashIndex = canonicalPath.lastIndexOf("/");
+        const dir = canonicalPath.slice(0, slashIndex);
+        const baseName = canonicalPath.slice(slashIndex + 1).replace(/\.md$/i, "");
+        const content = await tauriOpenFile(canonicalPath);
+        const draft = await createDesktopDraft({ title: `${baseName} copy` });
+        if (draft.error || !draft.data) return;
+        await relocateDesktopWriting(draft.data.id, `${dir}/${baseName} copy.md`, content);
+      } catch (reason) {
+        console.error("[workspace-tree] duplicate failed", reason);
+      }
+    },
+    onChangeStatus: (id, status) => void changeWritingStatus(id, status),
+    onChangeArtifactType: (id, artifactType) => void changeWritingArtifactType(id, artifactType),
+    onMoveTo: async (id, folderPath) => {
+      try {
+        const canonicalPath = await getDesktopWritingCanonicalPath(id);
+        if (!canonicalPath || !workspace) return;
+        const filename = canonicalPath.slice(canonicalPath.lastIndexOf("/") + 1);
+        const targetDir = folderPath ? `${workspace.rootPath}/${folderPath}` : workspace.rootPath;
+        await relocateDesktopWriting(id, `${targetDir}/${filename}`);
+      } catch (reason) {
+        console.error("[workspace-tree] move failed", reason);
+      }
+    },
+    onCopyLink: async (id) => {
+      const href = buildWritingRouteHref("/write", { id, slug: null });
+      const url = typeof window !== "undefined" ? `${window.location.origin}${href}` : href;
+      await copyTextWithFallback(url);
+    },
+    onCopyPath: async (id) => {
+      const doc = workspace?.documents.find((document) => document.id === id);
+      if (!doc) return;
+      const path = workspace ? `${workspace.rootPath}/${doc.relativePath}` : doc.relativePath;
+      await copyTextWithFallback(path);
+    },
+    onReveal: async (id) => {
+      const doc = workspace?.documents.find((document) => document.id === id);
+      if (!workspace || !doc) return;
+      const absolutePath = `${workspace.rootPath}/${doc.relativePath}`;
+      const dir = absolutePath.slice(0, absolutePath.lastIndexOf("/"));
+      try {
+        await revealWorkspacePath(dir);
+      } catch (reason) {
+        console.error("[workspace-tree] reveal failed", reason);
+      }
+    },
+    onDelete: (id) => void deleteWriting(id),
+  };
+
+  const folderActions: WorkspaceTreeFolderActions = {
+    onNewArtifactHere: async (folderPath) => {
+      if (!workspace) return;
+      try {
+        const draft = await createDesktopDraft({});
+        if (draft.error || !draft.data) return;
+        const targetDir = folderPath ? `${workspace.rootPath}/${folderPath}` : workspace.rootPath;
+        const result = await relocateDesktopWriting(draft.data.id, `${targetDir}/${draft.data.title}.md`);
+        if (result.status === "relocated") await handleOpen(draft.data.id);
+      } catch (reason) {
+        console.error("[workspace-tree] new artifact failed", reason);
+      }
+    },
+    onReveal: async (folderPath) => {
+      if (!workspace) return;
+      try {
+        await revealWorkspacePath(folderPath ? `${workspace.rootPath}/${folderPath}` : workspace.rootPath);
+      } catch (reason) {
+        console.error("[workspace-tree] reveal failed", reason);
+      }
+    },
+  };
+
+  // Only the very first load, or a load for a document outside the
+  // currently-loaded workspace, blocks the tree with this message. A tab
+  // switch within the same workspace refreshes in the background instead of
+  // unmounting <WorkspaceTree> — that unmount was wiping its expand/collapse
+  // state on every tab switch, not just when the workspace actually changed.
+  // Switching into a genuinely different workspace still blocks, so the old
+  // workspace's tree/root/rootPath-bound actions are never shown against the
+  // new activeWritingId while the new one loads.
+  const staysInLoadedWorkspace =
+    workspace?.documents.some((doc) => doc.id === activeWritingId) ?? false;
+  if (loading && !staysInLoadedWorkspace)
     return (
       <p className="px-2 py-4 text-[11px] text-ink-4">Loading workspace…</p>
     );
@@ -273,19 +567,80 @@ export function WorkspaceTreePanel({
           {openError}
         </p>
       ) : null}
+      <WorkspaceTreeToolbar
+        groupBy={groupBy}
+        onGroupByChange={setGroupBy}
+        selectedStatuses={selectedStatuses}
+        onToggleStatus={toggleStatusFilter}
+        selectedArtifactTypes={selectedArtifactTypes}
+        onToggleArtifactType={toggleArtifactTypeFilter}
+        onClearFilters={clearFilters}
+        statusCounts={statusCounts}
+        artifactTypeCounts={artifactTypeCounts}
+      />
       {/* The tree opens on the workspace root, the way Desk does. The "all
           workspaces" row that used to sit above it went nowhere — it was never
           wired to a handler — and it pushed the home row out of first place
           (owner review). */}
       <WorkspaceTree
+        key={workspace.slug}
         aria-label={`${workspace.name} documents`}
         mode="studio"
-        items={treeItems}
+        groupBy={groupBy}
+        items={filteredTreeItems}
         activeId={activeWritingId}
         rootLabel={workspace.name}
         rootIcon="home"
         rootCount={rootDocumentCount}
         onOpenFile={(id) => void handleOpen(id)}
+        onPreviewFile={(id) => setPreviewWritingId(id)}
+        fileActions={fileActions}
+        folderActions={folderActions}
+      />
+      <WritingPreviewModal
+        open={previewWritingId !== null && previewIndex !== null && previewIndex !== -1}
+        rows={previewRows}
+        currentIndex={previewIndex ?? 0}
+        collectionOptions={collectionOptions}
+        collectionIdsByWritingId={collectionIdsByWritingId}
+        onOpenChange={(open) => {
+          if (!open) setPreviewWritingId(null);
+        }}
+        onIndexChange={(index) => {
+          const nextRow = previewRows[index];
+          if (nextRow) setPreviewWritingId(nextRow.id);
+        }}
+        onToggleCollection={async (writingId, collectionId) => {
+          await toggleWritingCollectionMutation(writingId, collectionId, writingCollections);
+          await loadCollections();
+        }}
+        onCreateCollection={async (writingId, name) => {
+          const ownerId = getLocalDBScope();
+          await createAndAssignCollection(
+            writingId,
+            name,
+            ownerId === "anonymous" ? null : ownerId,
+            writingCollections,
+          );
+          await loadCollections();
+        }}
+        onStatusChange={async (writingId, status) => {
+          await changeWritingStatus(writingId, status);
+        }}
+        onArtifactTypeChange={async (writingId, artifactType) => {
+          await changeWritingArtifactType(writingId, artifactType);
+        }}
+        onTitleChange={async (writingId, title) => {
+          await renameWriting(writingId, title);
+        }}
+        onOpenFullWriting={(writingId) => {
+          setPreviewWritingId(null);
+          void handleOpen(writingId);
+        }}
+        onDelete={async (writingId) => {
+          await deleteWriting(writingId);
+          setPreviewWritingId(null);
+        }}
       />
     </div>
   );

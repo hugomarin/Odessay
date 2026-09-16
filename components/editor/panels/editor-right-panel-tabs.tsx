@@ -40,7 +40,7 @@ export function EditorRightPanelTabs({
   return (
     <div
       data-testid="editor-right-panel-tabs"
-      className="flex h-[46px] shrink-0 items-center gap-0.5 border-b-[0.5px] border-border pl-2 pr-1.5"
+      className="mt-1.5 flex h-[46px] shrink-0 items-center gap-0.5 pl-2 pr-1.5"
     >
       <div role="tablist" aria-label="Panel" className="flex min-w-0 flex-1 items-center gap-0.5">
         {EDITOR_RIGHT_PANEL_TABS.map((tab) => {
@@ -56,7 +56,7 @@ export function EditorRightPanelTabs({
               className={cn(
                 "inline-flex h-[26px] shrink-0 items-center gap-1 rounded-[7px] px-2 text-[11.5px] transition-colors",
                 isActive
-                  ? "bg-surface-selected text-ink"
+                  ? "bg-[rgb(237,235,232)] text-ink"
                   : "text-ink-3 hover:bg-muted-hover hover:text-ink",
               )}
             >

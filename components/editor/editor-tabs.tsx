@@ -14,6 +14,9 @@ type EditorTabsProps = {
   activeTabId: string | null;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
+  onCloseOtherTabs: (tabId: string) => void;
+  onCloseAllTabs: () => void;
+  onRevealTab?: (tabId: string) => void;
   onRenameTab: (tabId: string) => void;
   onReorderTab: (tabId: string, targetTabId: string) => void;
   onNewTab: () => void;
@@ -29,6 +32,9 @@ export function EditorTabs({
   activeTabId,
   onSelectTab,
   onCloseTab,
+  onCloseOtherTabs,
+  onCloseAllTabs,
+  onRevealTab,
   onRenameTab,
   onReorderTab,
   onNewTab,
@@ -304,6 +310,10 @@ export function EditorTabs({
         ref={scrollerRef}
         data-tauri-drag-region
         className="od-drag-region min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        style={{
+          WebkitMaskImage: "linear-gradient(90deg, transparent, #000 20px, #000 calc(100% - 20px), transparent)",
+          maskImage: "linear-gradient(90deg, transparent, #000 20px, #000 calc(100% - 20px), transparent)",
+        }}
       >
         <div data-tauri-drag-region className="inline-flex min-w-full items-center">
           {tabs.map((tab) => (
@@ -314,6 +324,9 @@ export function EditorTabs({
               status={tabStatuses?.[tab.id] ?? null}
               onSelect={onSelectTab}
               onClose={onCloseTab}
+              onCloseOthers={onCloseOtherTabs}
+              onCloseAll={onCloseAllTabs}
+              onReveal={onRevealTab}
               onRename={onRenameTab}
               isDragging={tab.id === draggedTabId}
               isDragTarget={tab.id === dragTargetTabId && tab.id !== draggedTabId}

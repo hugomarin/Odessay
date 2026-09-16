@@ -41,6 +41,7 @@ const NEW_ID = "33333333-3333-4333-8333-333333333333"
 const workspace: ContextualWorkspace = {
   slug: "aplyca",
   name: "Aplyca",
+  rootPath: ROOT,
   status: "ready",
   missingReason: null,
   documents: [
@@ -49,6 +50,10 @@ const workspace: ContextualWorkspace = {
       name: "analisis.md",
       relativePath: "03-analisis/analisis.md",
       state: "synced",
+      status: "draft",
+      artifactType: "general",
+      excerpt: null,
+      modifiedAt: 0,
       openable: true,
     },
     {
@@ -56,6 +61,10 @@ const workspace: ContextualWorkspace = {
       name: "sesion.md",
       relativePath: "04-sesiones/sesion.md",
       state: "synced",
+      status: "draft",
+      artifactType: "general",
+      excerpt: null,
+      modifiedAt: 0,
       openable: true,
     },
     // Discovered on disk but not reconciled into the catalog yet.
@@ -64,6 +73,10 @@ const workspace: ContextualWorkspace = {
       name: "borrador.md",
       relativePath: "borrador.md",
       state: "rebuilding",
+      status: null,
+      artifactType: "general",
+      excerpt: null,
+      modifiedAt: 0,
       openable: false,
     },
   ],
