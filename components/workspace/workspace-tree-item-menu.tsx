@@ -28,8 +28,9 @@ import {
 } from "@/components/ui/context-menu";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
 import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon";
+import { VocabularyChip } from "@/components/ui/vocabulary-chip";
 import { useVocabulary } from "@/hooks/useVocabulary";
-import { listVisibleVocabulary } from "@/lib/vocabulary/resolve";
+import { getVocabularyColor, listVisibleVocabulary } from "@/lib/vocabulary/resolve";
 import { normalizeWritingStatus } from "@/lib/writings/status";
 import { normalizeArtifactType } from "@/lib/writings/artifact-type";
 
@@ -95,7 +96,11 @@ export function WorkspaceFileContextMenu({
             {statuses.map((item) => (
               <ContextMenuItem
                 key={item.key}
-                icon={<WritingStatusIcon status={item.key} className="h-[13px] w-[13px]" />}
+                icon={
+                  <VocabularyChip color={getVocabularyColor(catalog, "status", item.key)} size={20}>
+                    <WritingStatusIcon status={item.key} className="h-[12px] w-[12px]" />
+                  </VocabularyChip>
+                }
                 onSelect={() => actions.onChangeStatus(id, item.key)}
               >
                 {item.name}
@@ -111,7 +116,11 @@ export function WorkspaceFileContextMenu({
             {artifactTypes.map((item) => (
               <ContextMenuItem
                 key={item.key}
-                icon={<ArtifactTypeIcon artifactType={item.key} />}
+                icon={
+                  <VocabularyChip color={getVocabularyColor(catalog, "type", item.key)} size={20}>
+                    <ArtifactTypeIcon artifactType={item.key} className="h-[12px] w-[12px]" />
+                  </VocabularyChip>
+                }
                 onSelect={() => actions.onChangeArtifactType(id, item.key)}
               >
                 {item.name}
