@@ -4,7 +4,6 @@ import Bold from "@tiptap/extension-bold"
 import BulletList from "@tiptap/extension-bullet-list"
 import CharacterCount from "@tiptap/extension-character-count"
 import Code from "@tiptap/extension-code"
-import CodeBlock from "@tiptap/extension-code-block"
 import Document from "@tiptap/extension-document"
 import Heading from "@tiptap/extension-heading"
 import History from "@tiptap/extension-history"
@@ -34,6 +33,13 @@ import { CorrectionTriggerExtension } from "@/lib/editor/correction-trigger-plug
 import { FrontmatterNode } from "@/lib/editor/frontmatter-node"
 import { PublicationSuggestionExtension } from "@/lib/editor/publication-suggestion-extension"
 import { AnnotationHighlight } from "@/lib/editor/annotation-highlight"
+import {
+  CardBlock,
+  DocumentCodeBlock,
+  DocumentComponentCommands,
+  InfoBlock,
+  TipBlock,
+} from "@/lib/editor/document-component-extensions"
 import {
   LocalImageExtension,
   type LocalImageBackupRequest,
@@ -100,7 +106,11 @@ export const createEditorExtensions = (options: CreateEditorExtensionsOptions = 
     OrderedList.extend({ addKeyboardShortcuts: () => ({}) }),
     ListItem,
     Code.extend({ addKeyboardShortcuts: () => ({}) }),
-    CodeBlock.extend({ addKeyboardShortcuts: () => ({}) }),
+    DocumentCodeBlock,
+    TipBlock,
+    InfoBlock,
+    CardBlock,
+    DocumentComponentCommands,
     Markdown.configure({
       transformPastedText: true,
       transformCopiedText: true,

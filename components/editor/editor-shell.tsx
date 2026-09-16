@@ -3518,6 +3518,21 @@ export function EditorShell({
         case "codeBlock":
           runWithRichSelection((chain) => chain.toggleCodeBlock())
           return
+        case "tipBlock":
+          editor.chain().focus().insertTip().run()
+          return
+        case "infoBlock":
+          editor.chain().focus().insertInfo().run()
+          return
+        case "cardBlock": {
+          const selectedRange = getValidatedRichSelection()
+          let chain = editor.chain().focus()
+          if (selectedRange) chain = chain.setTextSelection(selectedRange)
+          if (!chain.convertSelectionToCard().run()) {
+            editor.chain().focus().insertCard().run()
+          }
+          return
+        }
         case "paragraph":
           preserveViewport(() => {
             runWithRichSelection((chain) => chain.setParagraph())
