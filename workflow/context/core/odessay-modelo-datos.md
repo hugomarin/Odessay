@@ -7,6 +7,8 @@ Este documento describe principalmente el **modelo de datos remoto/cloud y el es
 
 > **En arquitectura de documento, prevalece `workflow/context/core/odessay-adr-identidad.md` (ADR):** este schema remoto es la **autoridad de la metadata** y guarda una **copia** del contenido; la verdad del contenido es el `.md` canónico (D1/D10). El registro de nube debe sumar `content_hash` para reconciliar archivos desnudos cross-máquina (D11).
 
+> **Actualización D2/D3 — 2026-09-16:** `<Annotation id="…" type="…" comment="…">texto</Annotation>` es la sintaxis canónica objetivo. Las referencias posteriores a `==texto==[@…]` o `annotationReference` describen el runtime legacy y deben leerse como contexto de migración, no como contrato del serializer nuevo.
+
 No define por sí solo el contrato documental futuro del producto. Para la estrategia desktop y el rol de `.md` como documento canónico, usar además:
 
 - `workflow/context/features/odessay-desktop-app.md`
@@ -205,11 +207,11 @@ Persistencia de correcciones mecánicas por bloque. Supabase es la fuente de ver
 
 ### margins
 
-Payload/índice de anotaciones en la nube. La **fuente de verdad del contenido anotado es el documento canónico** (el `.md` con `==texto==[@n:..]` inline; ver `odessay-adr-identidad.md` D3), no `body_json` (copia de trabajo) ni esta tabla. `margins` existe para listar, filtrar y compartir sin reparsear el documento, y para conservar el estado de colaboración (`shared/resolved/shared_at`) que no vive en el documento. Está atada al `id` estable de cada anotación.
+Payload/índice de anotaciones en la nube. La **fuente de verdad del contenido anotado es el documento canónico** (el `.md` con `<Annotation>`; ver `odessay-adr-identidad.md` D3), no `body_json` (copia de trabajo) ni esta tabla. `margins` existe para listar, filtrar y compartir sin reparsear el documento, y para conservar el estado de colaboración (`shared/resolved/shared_at`) que no vive en el documento. Está atada al `id` estable de cada anotación.
 
 | Campo | Tipo | Constraints | Nota |
 |-------|------|-------------|------|
-| id | uuid | PK | Mismo UUID estable que el nodo `annotationReference` en `body_json` |
+| id | uuid | PK | Mismo UUID estable que `<Annotation id>` en source y su mark equivalente en `body_json` |
 | reader_id | uuid | FK → profiles, not null | Usuario que mantiene este índice materializado |
 | writing_id | uuid | FK → writings, not null | Writing anotado |
 | anchor_start | integer | not null | Offset de inicio del highlight en el texto renderizado |
@@ -225,7 +227,7 @@ Payload/índice de anotaciones en la nube. La **fuente de verdad del contenido a
 | created_at | timestamptz | default now() | |
 | updated_at | timestamptz | default now() | |
 
-**Regla de sincronización:** cada save del writing vuelve a extraer nodos `annotationReference` desde `body_json`, hace upsert por `id` en `margins` y elimina las filas cuyo `id` ya no existe en el documento.
+**Regla de sincronización objetivo:** cada save extrae anotaciones desde el Document IR, hace upsert por `id` en `margins` y elimina las filas cuyo `id` ya no existe sólo cuando el parseo completo fue válido. El runtime legacy todavía extrae nodos `annotationReference` desde `body_json` durante la migración.
 
 **Privados por defecto:** `shared = false` hasta que el lector decida compartirlos con el autor. Compartir márgenes sigue siendo un gesto explícito.
 

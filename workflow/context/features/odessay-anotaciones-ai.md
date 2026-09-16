@@ -5,6 +5,8 @@ Lee `odessay-margenes.md` antes de implementar — este documento extiende esa v
 
 Issue de implementación: ODE-169.
 
+> **Actualización D2/D3 — 2026-09-16:** la sintaxis canónica objetivo es `<Annotation id="…" type="…" comment="…">texto</Annotation>`. Este documento conserva la descripción del nodo `annotationReference` y de los sigils porque explica el runtime vigente y sus consumidores; esas formas quedan como entrada legacy durante la migración y no como salida del serializer nuevo.
+
 ---
 
 ## Visión
@@ -67,7 +69,7 @@ Son marcas de lectura sin texto obligatorio. Usan el mismo anclaje inline que la
 
 ### Las anotaciones viven inline en el documento canónico
 
-Todas las anotaciones viven como **notación inline dentro del documento** (`==texto==[@n|id: comentario]`): la marca Highlight (`==..==`) define el rango y el marcador lleva el comentario. No son una capa aparte ni dependen de `body_json` como verdad. Al editar, se materializan como nodos `annotationReference` en la copia de trabajo `body_json`; al guardar, se re-serializan al `.md`/`body_text`.
+Todas las anotaciones viven como **notación inline dentro del documento**. El contrato objetivo usa `<Annotation id="…" type="…" comment="…">texto</Annotation>`. El runtime legacy descrito en este documento todavía usa `==texto==[@n|id: comentario]`, materializa nodos `annotationReference` en `body_json` y se mantiene como reader de migración hasta completar el nuevo adapter.
 
 ```
 Usuario anota en reading view
@@ -258,7 +260,7 @@ El color del subrayado/fondo se decide por marca, no por heurística de párrafo
 - `mark[data-annotation-type="personal"]` y `mark[data-annotation-type="footnote"]` usan neutro (`#999990`).
 - Marks sin `data-annotation-type` son highlights manuales y conservan el estilo default ámbar.
 
-La sintaxis markdown canónica incluye `|id`: `==texto==[@tipo...|id: ...]`. Al parsear markdown, el rich parser re-deriva `data-annotation-type` desde el `annotationReference` que cierra el ancla. En selecciones multibloque, el tipo se aplica a cada fragmento `==...==` contiguo que precede ese único reference.
+La sintaxis legacy incluye `|id`: `==texto==[@tipo...|id: ...]`. Su parser re-deriva `data-annotation-type` desde el `annotationReference` que cierra el ancla. El adapter objetivo obtiene tipo e identidad directamente del mark semántico producido desde `<Annotation>`; v1 rechaza selecciones inline multibloque.
 
 ### "Copiar para AI"
 
@@ -269,7 +271,7 @@ Footer section en el sidebar cuando hay al menos una anotación `ai`. Dos accion
 
 ---
 
-## Alcance v1
+## Alcance v1 legacy entregado
 
 ### Sí entra
 

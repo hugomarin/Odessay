@@ -43,11 +43,15 @@ El usuario puede cambiar al modo "source" (Markdown crudo) para editar directame
 
 ### Markdown que excede el subconjunto
 
-Si se importa Markdown con features no soportadas (HTML inline, footnotes extendidos, definiciones de referencia), el parser las trata como texto plano — no se pierden, no se corrompen, simplemente no se renderizan como formato rico. Esto se controla directamente desde las extensiones de TipTap cargadas: lo que no tiene extensión, no se interpreta.
+El perfil controlado puede incluir componentes documentales `PascalCase` definidos por Odessay. Esos componentes pasan por el Document IR y sus adapters TipTap; no se delegan a HTML arbitrario ni a JSX ejecutable. Un tag desconocido, inválido o de una versión futura se conserva como source opaco y recuperable; no se interpreta como UI rica ni se elimina al guardar.
+
+Para Markdown ajeno fuera del subconjunto y del vocabulario controlado, la degradación debe conservar el source. Que TipTap no tenga una extensión no autoriza a normalizar o descartar silenciosamente el contenido.
 
 ### Stack de conversión
 
-`tiptap-markdown` maneja la serialización y el parseo del round-trip. La conversión es confiable dentro del subconjunto definido. No implementar conversión propia — usar exclusivamente este paquete.
+`tiptap-markdown` continúa manejando el subconjunto Markdown base dentro del adapter de editor. El perfil documental completo —incluidos componentes controlados, source opaco, migración legacy y canonicalización— pertenece al Document Engine compartido y a su Document IR.
+
+No implementar conversiones ad hoc en componentes de UI ni sumar otra ruta canónica. Las APIs vigentes de `document-serialization.ts` actúan como compatibility wrappers mientras los consumidores migran al engine compartido. Ver `docs/design/document-components-implementation-plan.md` y `odessay-prosemirror-tiptap.md`.
 
 ---
 
@@ -109,7 +113,7 @@ TipTap es el editor headless que corre sobre ProseMirror. Se usa en modo complet
 | History | `@tiptap/extension-history` | Undo/Redo |
 | Placeholder | `@tiptap/extension-placeholder` | Placeholder en título y cuerpo |
 | CharacterCount | `@tiptap/extension-character-count` | Conteo de palabras para status bar |
-| Markdown | `tiptap-markdown` | Serialización y parseo Markdown ↔ JSON. Fuente de verdad del round-trip. |
+| Markdown | `tiptap-markdown` | Bridge del subconjunto Markdown base dentro del adapter TipTap. El contrato completo vive en el Document Engine. |
 
 **Extensión excluida intencionalmente:** `Underline` (Markdown no lo soporta — rompería el round-trip). `Table` está activa (non-resizable, con normalización HTML ↔ Markdown en `markdown-format.ts`; ver `odessay-prosemirror-tiptap.md`). El inventario canónico es `lib/editor/extensions.ts`. No agregar ni quitar extensiones sin revisar paridad con el subconjunto definido.
 
@@ -119,6 +123,8 @@ TipTap es el editor headless que corre sobre ProseMirror. Se usa en modo complet
 |-----------|---------|
 | `FootnoteExtension` | Superíndices numerados con sección de notas al pie |
 | `AIObservationExtension` | Renderiza observaciones del agente AI al margen del párrafo relevante |
+
+Los componentes documentales propios y MDX-like se incorporan por incrementos según `docs/design/document-components-implementation-plan.md`. No se añaden todos a este inventario hasta que exista su spec de sintaxis, round-trip y proyección por superficie.
 
 ### Configuración base
 
@@ -168,7 +174,9 @@ const editor = useEditor({
 
 ## Shortcuts de teclado
 
-El editor no muestra toolbar flotante al seleccionar texto — decisión deliberada de diseño. Los shortcuts son el mecanismo primario de formato. Todos son estándar del sistema y no requieren aprendizaje.
+Los shortcuts y la toolbar fija siguen siendo el mecanismo primario del formato Markdown nativo. Al seleccionar texto, el editor puede mostrar **un único bubble contextual** para acciones que requieren un rango —por ejemplo `Highlight`, `Annotation`, `ProtectedText` o `Entity`— y para acciones ya existentes de anotación/footnote. Ese bubble no replica toda la toolbar, no permanece visible sin selección y reutiliza la infraestructura de `SelectionPopup`/`AnnotationBubble`.
+
+No se permite crear un segundo overlay de selección o un listener global por feature. Las acciones disponibles provienen de un catálogo y ejecutan comandos TipTap; el bubble no concatena tags ni persiste por su cuenta.
 
 ### Formato de texto
 
@@ -269,6 +277,8 @@ Tres acciones abren un modal en lugar de ejecutarse directamente. El modal apare
 - Click fuera del modal lo cierra
 - Enter en campo de texto de una sola línea confirma
 - La animación de entrada es `translateY(8px) scale(0.99) → translateY(0) scale(1)` en 220ms
+
+Los componentes documentales no usan modal por defecto. Sus títulos y cuerpos se editan en el nodo; atributos breves y cerrados usan popover. Un modal queda reservado para operaciones realmente multistep o de riesgo y debe justificarse en el contrato UX del issue.
 
 ---
 

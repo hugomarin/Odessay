@@ -57,7 +57,7 @@
       "type": "feature",
       "scope": "runtime-web-actual",
       "state": "canonical-feature-doc-with-desktop-bounds",
-      "description": "Comportamiento técnico y de UX del editor TipTap en el runtime actual: extensiones activas, shortcuts, modelo Rich Text con paridad Markdown, auto-save, modales, FootnoteExtension y layout de columnas. Para contrato documental futuro ver la secuencia desktop."
+      "description": "Comportamiento técnico y de UX del editor TipTap en el runtime actual: extensiones activas, shortcuts, bubble contextual único, modelo Rich Text con paridad Markdown, auto-save, modales, FootnoteExtension y layout. El Markdown base usa tiptap-markdown dentro del adapter; el perfil controlado y el round-trip completo pertenecen al Document Engine compartido."
     },
     {
       "path": "workflow/context/features/odessay-prosemirror-tiptap.md",
@@ -323,6 +323,11 @@
       "description": "Gate de cierre de Fase 11 — Artifact Studio: Agente de Workspace. Exige una capa de herramientas autorizada (leer/escribir/mover/editar/eliminar) gateada por aprobación explícita por acción, contexto leído del sustrato ya existente (catálogo, anotaciones, vocabulary, collections, learned words), workflow.md como acción del propio agente, panel que se expande en el lugar (nunca modal/sheet), y el wireframe interactivo tratado como referencia de interacción, nunca de visual final."
     },
     {
+      "path": "workflow/define/dod-fase-12.md",
+      "type": "ops",
+      "description": "Gate de cierre de Fase 12 — Artifact Studio: Componentes Documentales. Exige un único perfil y Document IR para Markdown puro, semántica propia y componentes MDX-like controlados; round-trip TipTap/Markdown, invocación en Studio, paridad de preview/lectura, proyecciones body_text/PDF/DOCX, seguridad, performance y rollout beta reader-first."
+    },
+    {
       "path": "workflow/define/dod-fase-8.md",
       "type": "ops",
       "description": "Gate de cierre de Fase 8 — Biblioteca, Preview y Calidad de Producto: checklist de cierre post-convergencia para Biblioteca (Desk/Workspace), Preview, sharing nativo desktop, identidad de documento D1-D10 y calidad de correcciones/anotaciones."
@@ -582,6 +587,13 @@
       "scope": "exploracion-de-componentes-documentales",
       "state": "editable-design-exploration",
       "description": "Laboratorio editable para alinear sintaxis, atributos, render e inserción de highlight, annotation, Tip, Card, CardGroup, Steps, CodeGroup y bloques Mermaid. No es todavía el contrato de producción del parser."
+    },
+    {
+      "path": "docs/design/document-components-implementation-plan.md",
+      "type": "design-reference",
+      "scope": "exploracion-de-componentes-documentales",
+      "state": "phase-12-defined",
+      "description": "Plan revisado de implementación del perfil documental MDX-like controlado, con ownership en Fase 12: contrato Markdown, Document IR, adapters TipTap, invocación, render compartido, persistencia y rollout. Incluye contratos de performance, failure modes, trazabilidad a los briefs ODE-528–ODE-539 y gates de aceptación. La fase está planificada en Linear, no activa."
     },
     {
       "path": "prototypes/document-components-playground.html",

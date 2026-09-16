@@ -257,8 +257,7 @@
 
       .workspace {
         display: grid;
-        grid-template-columns: minmax(600px, 1fr) 292px;
-        gap: 20px;
+        grid-template-columns: minmax(0, 1fr);
         align-items: start;
       }
 
@@ -356,124 +355,6 @@
       }
 
       .preview-canvas { min-height: 250px; }
-
-      .invocation-lab { padding: 16px 18px 20px; }
-
-      .invocation-context { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
-
-      .invocation-context-copy { display: grid; gap: 4px; }
-
-      .invocation-context-copy strong { color: var(--ink); font-size: 13px; font-weight: 600; }
-
-      .invocation-context-copy span { color: var(--ink-3); font-size: 11px; line-height: 1.45; }
-
-      .invocation-trigger-chip { flex: 0 0 auto; padding: 5px 8px; border-radius: 6px; background: var(--cursor-soft); color: var(--cursor); font-family: var(--font-mono); font-size: 10px; }
-
-      .invocation-surface-demo { position: relative; overflow: visible; min-height: 184px; border: 0.5px solid var(--border); border-radius: 10px; background: hsl(38 12% 97%); }
-
-      .artifact-toolbar-demo { position: relative; display: flex; align-items: center; gap: 4px; min-height: 54px; padding: 10px 12px; border-bottom: 0.5px solid var(--border); border-radius: 10px 10px 0 0; background: var(--surface); }
-
-      .toolbar-demo-button, .toolbar-demo-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 30px; height: 32px; padding: 0 9px; border-radius: 8px; background: transparent; color: var(--ink-3); font-size: 15px; }
-
-      .toolbar-demo-button:hover, .toolbar-demo-trigger:hover { background: var(--muted); color: var(--ink); }
-
-      .toolbar-demo-button.active, .toolbar-demo-trigger.active { background: var(--muted); color: var(--ink); }
-
-      .toolbar-demo-button.muted, .toolbar-demo-trigger.muted { color: var(--ink-5); }
-
-      .toolbar-demo-button.mono { font-family: var(--font-mono); font-size: 13px; }
-
-      .toolbar-demo-trigger { min-width: 82px; justify-content: space-between; font-size: 13px; }
-
-      .toolbar-demo-trigger.insert { min-width: 92px; }
-
-      .toolbar-demo-chevron { color: var(--ink-4); font-size: 14px; line-height: 1; }
-
-      .toolbar-demo-divider { width: 0.5px; height: 25px; margin: 0 8px; background: var(--border-strong); }
-
-      .toolbar-demo-menu { position: absolute; top: 48px; right: 12px; z-index: 4; width: 252px; padding: 8px; border: 0.5px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-panel); }
-
-      .toolbar-demo-menu[hidden] { display: none; }
-
-      .toolbar-demo-menu-head { padding: 5px 9px 7px; color: var(--ink-5); font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-
-      .toolbar-demo-menu-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px; border-radius: 7px; background: transparent; color: var(--ink-2); text-align: left; font-size: 12px; }
-
-      .toolbar-demo-menu-item:hover, .toolbar-demo-menu-item.active { background: var(--muted); color: var(--ink); }
-
-      .toolbar-demo-menu-glyph { width: 20px; color: var(--cursor); font-family: var(--font-mono); font-size: 11px; text-align: center; }
-
-      .toolbar-demo-menu-label { flex: 1; }
-
-      .toolbar-demo-menu-kbd { color: var(--ink-5); font-family: var(--font-mono); font-size: 9px; }
-
-      .selection-demo-stage { min-height: 128px; display: grid; align-content: center; margin: 14px; padding: 16px 20px; border: 0.5px solid var(--border); border-radius: 8px; background: var(--surface); }
-
-      .selection-demo-kicker { margin-bottom: 8px; color: var(--ink-5); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; }
-
-      .selection-demo-copy { margin: 0; color: var(--ink-2); font-family: var(--font-prose); font-size: 16px; line-height: 1.7; }
-
-      .selection-demo-selected { padding: 0 2px; border-radius: 2px; background: var(--highlight-active); }
-
-      .selection-bubble-demo { display: flex; width: max-content; max-width: 100%; margin: 0 auto 11px; padding: 5px; border-radius: 9px; background: var(--ink); box-shadow: var(--shadow-panel); }
-
-      .selection-bubble-demo[hidden] { display: none; }
-
-      .selection-bubble-action { padding: 7px 9px; border-right: 0.5px solid hsl(38 12% 98% / 0.28); background: transparent; color: var(--bg); font-size: 11px; }
-
-      .selection-bubble-action:last-child { border-right: 0; }
-
-      .selection-bubble-action:hover, .selection-bubble-action.active { border-radius: 6px; background: hsl(38 12% 98% / 0.12); color: white; }
-
-      .invocation-config-row { position: relative; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; color: var(--ink-4); font-size: 10px; }
-
-      .invocation-config-row strong { color: var(--ink-3); font-weight: 500; }
-
-      .invocation-preview-button { height: 27px; padding-inline: 9px; font-size: 10px; }
-
-      .invocation-config-preview { display: grid; place-items: center; margin-top: 14px; padding: 12px; border: 0.5px dashed var(--border-strong); border-radius: 9px; background: hsl(38 12% 96%); }
-
-      .invocation-config-preview[hidden] { display: none; }
-
-      .invocation-config-card { width: min(100%, 390px); overflow: hidden; border: 0.5px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-panel); }
-
-      .invocation-config-card.popover { width: min(100%, 310px); margin-left: auto; }
-
-      .invocation-config-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 15px 16px 11px; border-bottom: 0.5px solid var(--border); }
-
-      .invocation-config-head h3 { margin: 0; color: var(--ink); font-family: var(--font-prose); font-size: 18px; font-weight: 500; }
-
-      .invocation-config-head p { margin: 4px 0 0; color: var(--ink-3); font-family: var(--font-prose); font-size: 12px; line-height: 1.4; }
-
-      .invocation-config-close { color: var(--ink-5); font-size: 17px; line-height: 1; }
-
-      .invocation-config-fields { display: grid; gap: 10px; padding: 14px 16px; }
-
-      .invocation-config-field { display: grid; gap: 5px; }
-
-      .invocation-config-field label { color: var(--ink-3); font-size: 10px; font-weight: 600; }
-
-      .invocation-config-control { min-height: 34px; padding: 8px 9px; border: 0.5px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--ink-2); font-size: 11px; }
-
-      .invocation-config-selection { border-color: hsl(22 55% 38% / 0.28); background: var(--cursor-soft); }
-
-      .invocation-config-grid { display: grid; grid-template-columns: repeat(4, 24px); gap: 4px; padding: 4px 0; }
-
-      .invocation-config-grid span { width: 24px; height: 22px; border: 0.5px solid var(--border); border-radius: 4px; background: var(--muted); }
-
-      .invocation-config-grid span.active { border-color: var(--cursor); background: var(--cursor-soft); box-shadow: 0 0 0 2px hsl(22 55% 38% / 0.14); }
-
-      .invocation-config-foot { display: flex; align-items: center; justify-content: flex-end; gap: 7px; padding: 10px 16px 14px; border-top: 0.5px solid var(--border); }
-
-      .invocation-config-foot .button { height: 30px; font-size: 11px; }
-
-      .invocation-command-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 72px; margin: 14px; padding: 14px 16px; border: 0.5px dashed var(--border-strong); border-radius: 8px; background: var(--surface); }
-
-      .invocation-command-card strong { color: var(--ink); font-size: 12px; font-weight: 600; }
-
-      .invocation-command-card span { color: var(--ink-3); font-family: var(--font-prose); font-size: 13px; }
-
-      .invocation-command-key { padding: 5px 7px; border-radius: 5px; background: var(--muted); color: var(--ink-3); font-family: var(--font-mono); font-size: 10px; }
 
       .prose {
         color: var(--ink-2);
@@ -586,6 +467,40 @@
 
       .tip-heading { margin-bottom: 5px; color: var(--tip-accent); font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
 
+      .accordion-group { overflow: hidden; border: 0.5px solid var(--border); border-radius: 10px; background: var(--surface); }
+
+      .accordion { border-bottom: 0.5px solid var(--border); }
+
+      .accordion:last-child { border-bottom: 0; }
+
+      .accordion-summary { display: flex; align-items: center; gap: 10px; padding: 15px 16px; color: var(--ink); cursor: pointer; font-family: var(--font-ui); font-size: 15px; font-weight: 600; list-style: none; }
+
+      .accordion-summary::-webkit-details-marker { display: none; }
+
+      .accordion-summary::before { content: ""; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid var(--ink-3); transition: transform 180ms ease; }
+
+      .accordion[open] .accordion-summary::before { transform: rotate(90deg); }
+
+      .accordion-summary:hover { background: hsl(38 20% 99%); }
+
+      .accordion-body { padding: 0 16px 18px 32px; color: var(--ink-3); font-family: var(--font-prose); font-size: 15px; line-height: 1.65; }
+
+      .accordion-body p { margin: 0; }
+
+      .content-tabs { overflow: hidden; border: 0.5px solid var(--border); border-radius: 9px; background: var(--surface); }
+
+      .content-tab-row { display: flex; gap: 4px; padding: 6px 8px 0; border-bottom: 0.5px solid var(--border); background: var(--bg); }
+
+      .content-tab { padding: 9px 12px; border-bottom: 0.5px solid transparent; color: var(--ink-4); font-family: var(--font-ui); font-size: 12px; }
+
+      .content-tab:hover { color: var(--ink-2); }
+
+      .content-tab.active { border-bottom-color: var(--cursor); color: var(--ink); font-weight: 600; }
+
+      .content-tab-panel { padding: 18px; color: var(--ink-2); font-family: var(--font-prose); font-size: 15px; line-height: 1.65; }
+
+      .content-tab-panel p { margin: 0; }
+
       .card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 
       .card-grid.columns-1 { grid-template-columns: 1fr; }
@@ -671,201 +586,23 @@
 
       .message-label { position: absolute; left: 50%; top: -18px; transform: translateX(-50%); color: var(--ink-3); font-size: 10px; white-space: nowrap; }
 
-      .inspector { position: sticky; top: 0; display: grid; gap: 12px; }
+      .decision-notes { width: 100%; min-height: 108px; resize: vertical; padding: 10px; border: 0.5px solid var(--border); border-radius: 7px; outline: none; background: var(--bg); color: var(--ink-2); font-size: 12px; line-height: 1.5; }
 
-      .inspector-card { padding: 16px; border: 0.5px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-float); }
+      .decision-notes:focus { border-color: var(--cursor); }
 
-      .inspector-title { margin: 0 0 14px; font-size: 13px; font-weight: 600; }
+      .decision-notes-wrap { padding: 14px 16px 16px; }
 
-      .contract-tag { display: inline-block; margin-bottom: 14px; padding: 5px 8px; border-radius: 6px; background: var(--ink); color: var(--bg); font-family: var(--font-mono); font-size: 11px; }
+      .source-actions { display: flex; align-items: center; gap: 8px; }
 
-      .property-list { display: grid; gap: 10px; margin: 0; }
+      .source-settings { height: 28px; padding: 0 9px; border: 0.5px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: var(--ink-3); font-size: 11px; }
 
-      .property { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 11px; }
+      .source-settings:hover { background: var(--muted); color: var(--ink); }
 
-      .property dt { color: var(--ink-4); font-family: var(--font-mono); }
+      .source-settings[hidden] { display: none; }
 
-      .property dd { margin: 0; color: var(--ink-2); line-height: 1.45; }
-
-      .insert-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; color: var(--ink-3); font-size: 12px; line-height: 1.45; }
-
-      .insert-list li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; }
-
-      .insert-list li::before { content: "→"; color: var(--cursor); }
-
-      .invocation-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
-
-      .invocation-state { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-
-      .invocation-status, .invocation-surface { padding: 4px 7px; border-radius: 6px; font-family: var(--font-mono); font-size: 9px; line-height: 1.2; text-transform: uppercase; }
-
-      .invocation-status.current { background: var(--success-tint); color: var(--success); }
-
-      .invocation-status.proposed { background: var(--cursor-soft); color: var(--cursor); }
-
-      .invocation-status.gap { background: hsl(39 80% 92%); color: hsl(30 65% 37%); }
-
-      .invocation-surface { color: var(--ink-4); background: var(--muted); }
-
-      .invocation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; border-top: 0.5px solid var(--border); }
-
-      .invocation-item { min-width: 0; padding: 10px 0; border-bottom: 0.5px solid var(--border); }
-
-      .invocation-item.wide { grid-column: 1 / -1; }
-
-      .invocation-label { display: block; margin-bottom: 4px; color: var(--ink-5); font-size: 9px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; }
-
-      .invocation-value { color: var(--ink-2); font-size: 11px; line-height: 1.45; }
-
-      .invocation-note { margin: 12px 0 0; color: var(--ink-3); font-size: 11px; line-height: 1.5; }
-
-      .authoring-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-
-      .authoring-scope { padding: 4px 7px; border-radius: 6px; background: var(--muted); color: var(--ink-4); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; }
-
-      .flow-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-bottom: 12px; padding: 3px; border-radius: 8px; background: var(--muted); }
-
-      .flow-tabs[hidden], .configure-button[hidden] { display: none; }
-
-      .flow-tab { min-width: 0; padding: 7px 6px; border-radius: 6px; background: transparent; color: var(--ink-3); font-size: 10px; font-weight: 500; line-height: 1.25; }
-
-      .flow-tab:hover { color: var(--ink); }
-
-      .flow-tab.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-float); }
-
-      .flow-tab:disabled { cursor: not-allowed; color: var(--ink-5); opacity: 0.75; }
-
-      .authoring-summary { margin: 0; color: var(--ink-2); font-size: 12px; line-height: 1.5; }
-
-      .authoring-summary strong { color: var(--ink); font-weight: 600; }
-
-      .authoring-layers { display: grid; gap: 7px; margin-top: 14px; }
-
-      .authoring-layer { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 8px; padding-top: 9px; border-top: 0.5px solid var(--border); }
-
-      .authoring-layer-label { color: var(--ink-5); font-size: 9px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; }
-
-      .authoring-layer-value { color: var(--ink-3); font-size: 11px; line-height: 1.45; }
-
-      .configure-button { width: 100%; margin-top: 14px; }
-
-      .authoring-preview-wrap { padding: 20px 22px 24px; }
-
-      .authoring-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-
-      .authoring-preview-head strong { color: var(--ink); font-size: 13px; font-weight: 600; }
-
-      .authoring-preview-head span { display: block; margin-top: 4px; color: var(--ink-3); font-size: 11px; line-height: 1.45; }
-
-      .authoring-preview-mode { flex: 0 0 auto; padding: 5px 7px; border-radius: 6px; background: var(--success-tint); color: var(--success); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; }
-
-      .inline-authoring-canvas { overflow: hidden; border: 0.5px solid var(--border); border-radius: 10px; background: hsl(38 12% 97%); }
-
-      .inline-authoring-document { padding: 18px; background: var(--surface); }
-
-      .inline-authoring-context { margin-bottom: 10px; color: var(--ink-5); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; }
-
-      .inline-authoring-prose { margin: 0; color: var(--ink-2); font-family: var(--font-prose); font-size: 16px; line-height: 1.7; }
-
-      .inline-authoring-mark { padding: 1px 3px; border-radius: 3px; background: var(--highlight-active); }
-
-      .inline-authoring-mark.protected { border-bottom: 0.5px dashed var(--ink-4); background: var(--muted); }
-
-      .inline-authoring-mark.entity { border-bottom: 0.5px dotted var(--cursor); background: var(--cursor-soft); }
-
-      .inline-authoring-mark.annotation { border-bottom: 1.5px solid hsl(35 80% 55%); }
-
-      .inline-authoring-mark-label { margin-left: 5px; color: var(--cursor); font-family: var(--font-ui); font-size: 9px; font-weight: 600; text-transform: uppercase; white-space: nowrap; }
-
-      .inline-component-shell { overflow: hidden; border: 0.5px solid var(--border-strong); border-radius: 10px; background: var(--surface); }
-
-      .inline-component-shell.tip { border-left: 3px solid var(--cursor); }
-
-      .inline-component-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; border-bottom: 0.5px solid var(--border); background: hsl(38 12% 98%); color: var(--ink-3); font-size: 10px; }
-
-      .inline-component-toolbar strong { color: var(--ink); font-weight: 600; }
-
-      .inline-component-state { color: var(--ink-5); font-family: var(--font-mono); font-size: 9px; }
-
-      .inline-component-content { padding: 16px 18px 18px; }
-
-      .inline-field-label { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; color: var(--ink-5); font-size: 9px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; }
-
-      .inline-field-label span { color: var(--cursor); font-family: var(--font-mono); font-size: 8px; font-weight: 400; }
-
-      .inline-editable-field, .inline-editable-body { outline: none; }
-
-      .inline-editable-field:focus, .inline-editable-body:focus { box-shadow: 0 0 0 3px hsl(22 55% 38% / 0.08); }
-
-      .inline-card-title { min-height: 31px; padding: 4px 7px; border-radius: 5px; color: var(--ink); font-size: 18px; font-weight: 600; }
-
-      .inline-card-title.focused { border: 0.5px solid hsl(22 55% 38% / 0.35); background: var(--cursor-soft); }
-
-      .inline-placeholder { color: var(--ink-5); font-weight: 400; }
-
-      .inline-card-body { min-height: 45px; padding: 7px; color: var(--ink-3); font-family: var(--font-prose); font-size: 14px; line-height: 1.55; }
-
-      .inline-card-body.selection { border-left: 2px solid var(--cursor); background: hsl(22 55% 95% / 0.5); }
-
-      .inline-card-icon-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-
-      .inline-icon-token { display: inline-flex; align-items: center; gap: 7px; color: var(--cursor); font-family: var(--font-mono); font-size: 10px; }
-
-      .inline-icon-token::before { content: "✦"; font-family: var(--font-ui); font-size: 15px; }
-
-      .inline-property-button { padding: 5px 7px; border: 0.5px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--ink-3); font-size: 10px; }
-
-      .inline-property-button:hover { background: var(--muted); color: var(--ink); }
-
-      .inline-property-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 13px; padding-top: 11px; border-top: 0.5px solid var(--border); color: var(--ink-5); font-size: 10px; }
-
-      .inline-property-chip { padding: 4px 6px; border-radius: 5px; background: var(--muted); color: var(--ink-3); font-family: var(--font-mono); font-size: 9px; }
-
-      .inline-steps { display: grid; gap: 0; }
-
-      .inline-step-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 11px; position: relative; padding-bottom: 16px; }
-
-      .inline-step-row:last-child { padding-bottom: 0; }
-
-      .inline-step-row:not(:last-child)::before { content: ""; position: absolute; top: 25px; bottom: 0; left: 13px; width: 0.5px; background: var(--border-strong); }
-
-      .inline-step-number { width: 27px; height: 27px; display: grid; place-items: center; z-index: 1; border-radius: 50%; background: var(--muted); color: var(--ink); font-size: 11px; font-weight: 600; }
-
-      .inline-step-title { min-height: 25px; padding: 2px 5px; color: var(--ink); font-size: 14px; font-weight: 600; }
-
-      .inline-step-body { min-height: 26px; padding: 3px 5px; color: var(--ink-3); font-family: var(--font-prose); font-size: 13px; line-height: 1.5; }
-
-      .inline-add-control { margin-top: 9px; padding: 5px 7px; border-radius: 6px; background: var(--cursor-soft); color: var(--cursor); font-size: 10px; }
-
-      .inline-code-editor { overflow: hidden; border-radius: 8px; background: var(--code-bg); }
-
-      .inline-code-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: hsl(30 15% 17%); color: hsl(38 10% 64%); font-family: var(--font-mono); font-size: 9px; }
-
-      .inline-code-language { color: var(--code-ink); }
-
-      .inline-code-body { min-height: 92px; padding: 13px; color: var(--code-ink); font-family: var(--font-mono); font-size: 10px; line-height: 1.65; white-space: pre-wrap; }
-
-      .inline-mermaid-preview { margin-top: 10px; padding: 10px; border: 0.5px solid var(--border); border-radius: 7px; background: hsl(38 12% 99%); }
-
-      .authoring-syntax { margin: 12px 0 0; overflow: auto; padding: 12px 13px; border: 0.5px solid var(--border); border-radius: 8px; background: var(--code-bg); color: var(--code-ink); font-family: var(--font-mono); font-size: 10px; line-height: 1.65; white-space: pre-wrap; }
-
-      .authoring-use { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 12px; }
-
-      .authoring-use-step { min-height: 58px; padding: 9px; border: 0.5px solid var(--border); border-radius: 7px; background: var(--bg); }
-
-      .authoring-use-step strong { display: block; margin-bottom: 4px; color: var(--cursor); font-family: var(--font-mono); font-size: 9px; }
-
-      .authoring-use-step span { color: var(--ink-3); font-size: 10px; line-height: 1.4; }
-
-      .config-overlay { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: hsl(25 18% 10% / 0.22); backdrop-filter: blur(4px); }
+      .config-overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: hsl(25 18% 10% / 0.22); backdrop-filter: blur(4px); }
 
       .config-overlay[hidden] { display: none; }
-
-      .invocation-preview-overlay { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 24px; background: hsl(25 18% 10% / 0.22); backdrop-filter: blur(4px); }
-
-      .invocation-preview-overlay[hidden] { display: none; }
-
-      .invocation-preview-overlay .invocation-config-preview { width: min(440px, 100%); margin: 0; padding: 0; border: 0; background: transparent; }
 
       .config-modal { width: min(440px, 100%); overflow: hidden; border: 0.5px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-panel); }
 
@@ -897,12 +634,6 @@
 
       .config-modal-hint { margin-right: auto; color: var(--ink-5); font-size: 10px; }
 
-      .decision-label { display: block; margin-bottom: 8px; color: var(--ink-4); font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-
-      .decision-notes { width: 100%; min-height: 108px; resize: vertical; padding: 10px; border: 0.5px solid var(--border); border-radius: 7px; outline: none; background: var(--bg); color: var(--ink-2); font-size: 12px; line-height: 1.5; }
-
-      .decision-notes:focus { border-color: var(--cursor); }
-
       .save-status { display: block; margin-top: 8px; color: var(--ink-5); font-size: 10px; }
 
       .empty-preview { display: grid; min-height: 250px; place-items: center; color: var(--ink-4); font-family: var(--font-prose); font-size: 16px; }
@@ -932,7 +663,7 @@
         .layout { grid-template-columns: 204px minmax(0, 1fr); }
         .sidebar { padding-inline: 10px; }
         .main { padding-inline: 24px; }
-        .workspace { grid-template-columns: minmax(0, 1fr) 260px; }
+        .workspace { grid-template-columns: minmax(0, 1fr); }
       }
     </style>
   </head>
@@ -945,28 +676,28 @@
 
       <div class="layout">
         <aside class="sidebar">
-          <div class="sidebar-heading">Document components</div>
+          <div class="sidebar-heading">MDX components</div>
           <div class="sidebar-scroll">
             <nav class="component-list" id="component-list" aria-label="Document components"></nav>
-            <div class="sidebar-heading">Markdown native</div>
+            <div class="sidebar-heading">Markdown nativo</div>
             <nav class="component-list" id="markdown-list" aria-label="Markdown native"></nav>
           </div>
           <div class="sidebar-note">
-            <strong>Purpose</strong><br />
-            Edit the source, inspect the render and leave a decision note before we implement the real parser.
+            <strong>Explora</strong><br />
+            Edita el source y revisa cómo se verá al leerlo.
           </div>
         </aside>
 
         <main class="main">
           <header class="page-header">
             <div>
-              <div class="eyebrow">Alignment workspace</div>
-              <h1>Document Components Lab</h1>
-              <p class="page-description">Define how enriched Markdown should be written, inserted and rendered in Odessay. The source is editable; the preview is a visual proposal.</p>
+              <div class="eyebrow">Exploración de formato</div>
+              <h1>Componentes del documento</h1>
+              <p class="page-description">Edita Markdown o MDX y revisa el resultado de lectura. Las etiquetas se mantienen como texto al editar.</p>
             </div>
             <div class="header-actions">
-              <button class="button" id="reset-all" type="button">Reset samples</button>
-              <button class="button primary" id="copy-markdown" type="button">Copy source</button>
+              <button class="button" id="reset-all" type="button">Restablecer ejemplos</button>
+              <button class="button primary" id="copy-markdown" type="button">Copiar source</button>
             </div>
           </header>
 
@@ -974,99 +705,41 @@
             <section class="workspace-main">
               <article class="card-shell">
                 <div class="shell-head">
-                  <div class="shell-title"><span>Source</span><span class="tag-label" id="source-tag">&lt;annotation&gt;</span></div>
-                  <span class="shell-meta">editable Markdown proposal</span>
+                  <div class="source-actions">
+                    <div class="shell-title"><span>Source Markdown / MDX</span><span class="tag-label" id="source-tag">&lt;Annotation&gt;</span></div>
+                    <button class="source-settings" id="configure-source" type="button" hidden>Configurar</button>
+                  </div>
+                  <span class="shell-meta">texto editable</span>
                 </div>
                 <div class="editor-wrap">
                   <textarea class="source-editor" id="source-editor" spellcheck="false" aria-label="Editable component source"></textarea>
                   <div class="editor-footer">
-                    <span id="source-help">Changes update the render instantly.</span>
-                    <div class="editor-footer-actions"><button class="link-button" id="reset-current" type="button">Reset this sample</button></div>
+                    <span id="source-help">Los cambios actualizan la vista de lectura.</span>
+                    <div class="editor-footer-actions"><button class="link-button" id="reset-current" type="button">Restablecer ejemplo</button></div>
                   </div>
                 </div>
               </article>
 
               <article class="card-shell">
                 <div class="shell-head">
-                  <div class="shell-title"><span>Invocation preview</span><span class="tag-label" id="invocation-stage-tag">Selection popup</span></div>
-                  <span class="shell-meta">how the user activates it</span>
-                </div>
-                <div class="invocation-lab" id="invocation-lab"></div>
-              </article>
-
-              <article class="card-shell">
-                <div class="shell-head">
-                  <div class="shell-title"><span>Inline authoring preview</span><span class="tag-label" id="authoring-preview-tag">insert → node</span></div>
-                  <span class="shell-meta">what the editor inserts</span>
-                </div>
-                <div class="authoring-preview-wrap" id="authoring-preview"></div>
-              </article>
-
-              <article class="card-shell">
-                <div class="shell-head">
-                  <div class="shell-title"><span>Preview</span><span class="tag-label" id="preview-tag">&lt;annotation&gt;</span></div>
-                  <span class="shell-meta">proposed render</span>
+                  <div class="shell-title"><span>Vista de lectura</span><span class="tag-label" id="preview-tag">&lt;Annotation&gt;</span></div>
+                  <span class="shell-meta">así lo verá quien lee</span>
                 </div>
                 <div class="preview-wrap">
-                  <div class="preview-label">What the reader sees</div>
                   <div class="preview-canvas" id="preview-canvas"></div>
                 </div>
               </article>
+              <section class="card-shell decision-card">
+                <div class="shell-head">
+                  <label class="shell-title" for="decision-notes">Notas para decidir</label>
+                  <span class="shell-meta">guardadas localmente</span>
+                </div>
+                <div class="decision-notes-wrap">
+                  <textarea class="decision-notes" id="decision-notes" placeholder="¿Qué cambiarías de este elemento?"></textarea>
+                  <span class="save-status" id="save-status" aria-live="polite">Guardadas en este navegador.</span>
+                </div>
+              </section>
             </section>
-
-            <aside class="inspector">
-              <section class="inspector-card">
-                <h2 class="inspector-title">Component contract</h2>
-                <div class="contract-tag" id="contract-tag">&lt;annotation&gt;</div>
-                <dl class="property-list" id="property-list"></dl>
-              </section>
-
-              <section class="inspector-card">
-                <h2 class="inspector-title">Insertion behavior</h2>
-                <ul class="insert-list" id="insert-list"></ul>
-              </section>
-
-              <section class="inspector-card">
-                <div class="invocation-head">
-                  <h2 class="inspector-title" style="margin-bottom: 0">Invocation</h2>
-                  <div class="invocation-state">
-                    <span class="invocation-status" id="invocation-status">Current</span>
-                    <span class="invocation-surface" id="invocation-surface">Toolbar</span>
-                  </div>
-                </div>
-                <div class="invocation-grid" id="invocation-grid"></div>
-                <p class="invocation-note" id="invocation-note"></p>
-              </section>
-
-              <section class="inspector-card">
-                <div class="authoring-head">
-                  <h2 class="inspector-title" style="margin-bottom: 0">Authoring flow</h2>
-                  <span class="authoring-scope" id="authoring-scope">Rich component</span>
-                </div>
-                <div class="flow-tabs" id="flow-tabs" role="tablist" aria-label="Authoring flow">
-                  <button class="flow-tab active" type="button" data-flow-mode="insert">Insert new</button>
-                  <button class="flow-tab" type="button" data-flow-mode="selection">Convert selection</button>
-                </div>
-                <p class="authoring-summary" id="authoring-summary"></p>
-                <div class="authoring-layers">
-                  <div class="authoring-layer">
-                    <span class="authoring-layer-label">Body</span>
-                    <span class="authoring-layer-value" id="authoring-body"></span>
-                  </div>
-                  <div class="authoring-layer">
-                    <span class="authoring-layer-label">Properties</span>
-                    <span class="authoring-layer-value" id="authoring-properties"></span>
-                  </div>
-                </div>
-                <button class="button configure-button" id="configure-component" type="button">Configure properties</button>
-              </section>
-
-              <section class="inspector-card">
-                <label class="decision-label" for="decision-notes">Your decision notes</label>
-                <textarea class="decision-notes" id="decision-notes" placeholder="Qué debería cambiar aquí…"></textarea>
-                <span class="save-status" id="save-status">Saved locally in this browser.</span>
-              </section>
-            </aside>
           </div>
         </main>
       </div>
@@ -1076,22 +749,18 @@
       <section class="config-modal" role="dialog" aria-modal="true" aria-labelledby="config-modal-title">
         <div class="config-modal-head">
           <div>
-            <h2 class="config-modal-title" id="config-modal-title">Configure properties</h2>
+            <h2 class="config-modal-title" id="config-modal-title">Configurar</h2>
             <p class="config-modal-description" id="config-modal-description"></p>
           </div>
-          <button class="modal-close" id="close-config" type="button" aria-label="Close configuration">×</button>
+          <button class="modal-close" id="close-config" type="button" aria-label="Cerrar configuración">×</button>
         </div>
         <div class="config-fields" id="config-fields"></div>
         <div class="config-modal-foot">
-          <span class="config-modal-hint" id="config-modal-hint">Writes attributes, not body text.</span>
-          <button class="button" id="cancel-config" type="button">Cancel</button>
-          <button class="button primary" id="apply-config" type="button">Apply</button>
+          <span class="config-modal-hint" id="config-modal-hint">Actualiza metadata, no el cuerpo.</span>
+          <button class="button" id="cancel-config" type="button">Cancelar</button>
+          <button class="button primary" id="apply-config" type="button">Aplicar</button>
         </div>
       </section>
-    </div>
-
-    <div class="invocation-preview-overlay" id="invocation-preview-overlay" hidden>
-      <section id="invocation-preview-modal" role="dialog" aria-modal="true" aria-labelledby="invocation-preview-title"></section>
     </div>
 
     <script>
@@ -1101,8 +770,8 @@
           label: "Annotation",
           glyph: "@",
           kind: "inline",
-          tag: "<annotation>",
-          source: '<annotation id="ann-123" type="personal" comment="Este comentario queda vinculado a la selección.">por ejemplo este texto es un solo mensaje</annotation>',
+          tag: "<Annotation>",
+          source: '<Annotation id="ann-123" type="personal" comment="Este comentario queda vinculado a la selección.">por ejemplo este texto es un solo mensaje</Annotation>',
           properties: [
             ["id", "Stable identity; generated automatically."],
             ["type", "personal · ai · footnote"],
@@ -1113,7 +782,7 @@
             const comment = attr(source, "comment", "Comentario asociado.");
             const type = attr(source, "type", "personal");
             const id = attr(source, "id", "ann-123");
-            const text = tagBody(source, "annotation") || "por ejemplo este texto es un solo mensaje";
+            const text = tagBody(source, "Annotation") || "por ejemplo este texto es un solo mensaje";
             return '<div class="annotation-layout"><div class="prose"><p>Una selección puede conservar su identidad sin marcadores ambiguos: <span class="annotation-anchor">' + esc(text) + '</span> y continuar siendo parte normal del texto.</p></div><aside class="annotation-bubble"><div class="bubble-meta"><span>' + esc(type) + '</span><span>' + esc(id) + '</span></div><p>' + esc(comment) + '</p></aside></div>';
           },
         },
@@ -1121,8 +790,8 @@
           label: "Protected text",
           glyph: "⊘",
           kind: "inline",
-          tag: "<protected>",
-          source: '<protected id="lock-123" reason="System-managed">Este texto no se puede editar ni eliminar.</protected>',
+          tag: "<ProtectedText>",
+          source: '<ProtectedText id="lock-123" reason="System-managed">Este texto no se puede editar ni eliminar.</ProtectedText>',
           properties: [
             ["id", "Stable identity; generated automatically."],
             ["reason", "Optional explanation shown in the editor."],
@@ -1132,7 +801,7 @@
           render(source) {
             const id = attr(source, "id", "lock-123");
             const reason = attr(source, "reason", "This text is managed and cannot be changed.");
-            const text = tagBody(source, "protected") || "Este texto no se puede editar ni eliminar.";
+            const text = tagBody(source, "ProtectedText") || "Este texto no se puede editar ni eliminar.";
             return '<div class="protected-layout"><div class="prose"><p>Este fragmento permanece visible, pero queda fuera de la edición normal: <span class="protected-anchor"><span>' + esc(text) + '</span><span class="protected-badge">protected</span></span>.</p></div><aside class="protected-notice"><div class="bubble-meta"><span>Read-only</span><span>' + esc(id) + '</span></div><p>' + esc(reason) + '</p></aside></div>';
           },
         },
@@ -1140,8 +809,8 @@
           label: "Entity",
           glyph: "◇",
           kind: "inline",
-          tag: "<entity>",
-          source: '<entity id="ent-123" type="company">Aplyca</entity>',
+          tag: "<Entity>",
+          source: '<Entity id="ent-123" type="company">Aplyca</Entity>',
           properties: [
             ["id", "Stable identity for this entity mention."],
             ["type", "company · person · place · product · event · custom"],
@@ -1151,7 +820,7 @@
           render(source) {
             const id = attr(source, "id", "ent-123");
             const type = attr(source, "type", "company");
-            const text = tagBody(source, "entity") || "Aplyca";
+            const text = tagBody(source, "Entity") || "Aplyca";
             const label = entityTypeLabel(type);
             return '<div class="entity-layout"><div class="prose"><p>La selección se conserva como texto normal, pero ahora tiene una clasificación: <span class="entity-anchor"><span>' + esc(text) + '</span><span class="entity-type">' + esc(label) + '</span></span>.</p></div><aside class="entity-bubble"><div class="bubble-meta"><span>Entity</span><span>' + esc(id) + '</span></div><p>' + esc(text) + ' está clasificada como ' + esc(label) + '.</p></aside></div>';
           },
@@ -1160,12 +829,12 @@
           label: "Highlight",
           glyph: "H",
           kind: "inline",
-          tag: "<highlight>",
-          source: '<highlight id="hl-123" color="yellow">texto simplemente resaltado</highlight>',
+          tag: "<Highlight>",
+          source: '<Highlight id="hl-123" color="yellow">texto simplemente resaltado</Highlight>',
           properties: [["id", "Optional stable identity."], ["color", "yellow · amber · custom token"], ["body", "Selected text inside the tag."]],
           insertion: ["Select text and choose Highlight.", "Apply the default color immediately.", "Use a small popover for color changes; no modal needed."],
           render(source) {
-            const text = tagBody(source, "highlight") || "texto simplemente resaltado";
+            const text = tagBody(source, "Highlight") || "texto simplemente resaltado";
             const color = attr(source, "color", "yellow").toLowerCase();
             const colorClass = color === "blue" ? "hl-blue" : color === "green" ? "hl-green" : "hl-amber";
             return '<div class="prose"><p>Este es un marcado visual: <span class="hl ' + colorClass + '">' + esc(text) + '</span> y el resto del párrafo mantiene su ritmo.</p></div>';
@@ -1178,7 +847,7 @@
           tag: "<Tip>",
           source: '<Tip>Recuerda validar el cierre de cada etiqueta.</Tip>',
           properties: [["type", "Optional only if we add note/warning variants."], ["body", "Markdown content inside the block."]],
-          insertion: ["Choose Tip from the proposed Insert menu.", "Place the cursor inside the new block.", "Keep the first version simple: one visual treatment."],
+          insertion: ["Choose Insert → Tip; the editor inserts paired <Tip> tags as plain text.", "The cursor lands between the tags so you can write the body.", "The callout styling appears only in the reader preview; no setup modal."],
           render(source) {
             const text = tagBody(source, "Tip") || "Recuerda validar el cierre de cada etiqueta.";
             const type = attr(source, "type", "default").toLowerCase();
@@ -1188,6 +857,68 @@
             return '<div class="tip ' + typeClass + ' ' + colorClass + '"><div class="tip-heading">Tip</div><div>' + esc(text) + '</div></div>';
           },
         },
+        info: {
+          label: "Info",
+          glyph: "i",
+          kind: "block",
+          tag: "<Info>",
+          source: '<Info>Una información importante para entender este documento.</Info>',
+          properties: [["body", "Markdown content inside the callout."], ["style", "Shared callout style with Info semantics."], ["config", "No extra configuration in the first version."]],
+          insertion: ["Choose Insert → Info; the editor inserts paired <Info> tags as text.", "Write the content between the opening and closing tags.", "Use Info for context or prerequisites; keep Tip for optional recommendations."],
+          render(source) {
+            const text = tagBody(source, "Info") || "Una información importante para entender este documento.";
+            return '<div class="tip tip-variant-info tip-accent-blue"><div class="tip-heading">Info</div><div>' + esc(text) + '</div></div>';
+          },
+        },
+        accordion: {
+          label: "Accordion",
+          glyph: "▸",
+          kind: "block",
+          tag: "<Accordion>",
+          source: '<Accordion title="New Accordion" defaultOpen="true">Este contenido aparece al abrir el acordeón.</Accordion>',
+          properties: [["title", "Visible heading in the summary row."], ["defaultOpen", "Optional initial open state."], ["body", "Markdown content revealed on demand."]],
+          insertion: ["Choose Insert → Accordion; the editor inserts the paired tags.", "Edit title=\"…\" inline and write the content between the tags.", "Use defaultOpen only when the content should be visible initially."],
+          render(source) {
+            const title = attr(source, "title", "New Accordion");
+            const body = tagBody(source, "Accordion") || "Este contenido aparece al abrir el acordeón.";
+            const open = attr(source, "defaultOpen", "false").toLowerCase() === "true";
+            return '<details class="accordion" ' + (open ? "open" : "") + '><summary class="accordion-summary">' + esc(title) + '</summary><div class="accordion-body"><p>' + esc(body) + '</p></div></details>';
+          },
+        },
+        accordionGroup: {
+          label: "Accordion group",
+          glyph: "▾▾",
+          kind: "container",
+          tag: "<AccordionGroup>",
+          source: '<AccordionGroup>\n  <Accordion title="Getting started" defaultOpen="true">Puedes incluir contenido relacionado dentro del grupo.</Accordion>\n  <Accordion title="Advanced features">Las secciones secundarias permanecen cerradas hasta que se necesitan.</Accordion>\n</AccordionGroup>',
+          properties: [["Accordion.title", "Visible heading per row."], ["Accordion.defaultOpen", "Optional initial open state."], ["content", "Each child can contain Markdown or another supported component."]],
+          insertion: ["Choose Insert → Accordion group; the editor inserts a group with two Accordion children.", "Edit each title and body inline in the source.", "Use a group when the accordions belong to the same topic."],
+          render(source) {
+            const accordions = [];
+            const re = /<Accordion\b([^>]*)>([\s\S]*?)<\/Accordion>/gi;
+            let match;
+            while ((match = re.exec(source))) accordions.push({ title: attr(match[1], "title", "New Accordion"), body: clean(match[2]), open: attr(match[1], "defaultOpen", "false").toLowerCase() === "true" });
+            if (!accordions.length) accordions.push({ title: "Getting started", body: "Puedes incluir contenido relacionado dentro del grupo.", open: true }, { title: "Advanced features", body: "Las secciones secundarias permanecen cerradas hasta que se necesitan.", open: false });
+            return '<div class="accordion-group">' + accordions.map((item) => '<details class="accordion" ' + (item.open ? "open" : "") + '><summary class="accordion-summary">' + esc(item.title) + '</summary><div class="accordion-body"><p>' + esc(item.body) + '</p></div></details>').join("") + '</div>';
+          },
+        },
+        tabs: {
+          label: "Tabs",
+          glyph: "[]",
+          kind: "container",
+          tag: "<Tabs>",
+          source: '<Tabs>\n  <Tab title="Tab 1">Contenido de la primera alternativa.</Tab>\n  <Tab title="Tab 2">Contenido de la segunda alternativa.</Tab>\n</Tabs>',
+          properties: [["Tab.title", "Required label for each tab."], ["defaultTab", "Optional initial tab; first tab is the default."], ["content", "Each tab can contain Markdown or supported components."]],
+          insertion: ["Choose Insert → Tabs; the editor inserts a Tabs wrapper and two Tab children.", "Edit each title=\"…\" inline and write the panel content between the tags.", "Use tabs for alternatives, not for content readers should compare at once."],
+          render(source) {
+            const tabs = [];
+            const re = /<Tab\b([^>]*)>([\s\S]*?)<\/Tab>/gi;
+            let match;
+            while ((match = re.exec(source))) tabs.push({ title: attr(match[1], "title", "Tab"), body: clean(match[2]) });
+            if (!tabs.length) tabs.push({ title: "Tab 1", body: "Contenido de la primera alternativa." }, { title: "Tab 2", body: "Contenido de la segunda alternativa." });
+            return '<div class="content-tabs"><div class="content-tab-row">' + tabs.map((tab, index) => '<button class="content-tab ' + (index === 0 ? "active" : "") + '" type="button" data-content-tab="' + index + '">' + esc(tab.title) + '</button>').join("") + '</div>' + tabs.map((tab, index) => '<div class="content-tab-panel" data-content-panel="' + index + '" ' + (index ? "hidden" : "") + '><p>' + esc(tab.body) + '</p></div>').join("") + '</div>';
+          },
+        },
         card: {
           label: "Card",
           glyph: "□",
@@ -1195,7 +926,7 @@
           tag: "<Card>",
           source: '<Card title="Build a Server" icon="server" href="/docs/build-server" accent="terracotta">Create MCP servers.</Card>',
           properties: [["title", "Visible heading."], ["icon", "Icon name from the allowed icon map."], ["href", "Optional destination URL."], ["accent", "Optional presentation token."], ["body", "Markdown content inside the card."]],
-          insertion: ["Choose Card from the proposed Insert menu.", "The Card structure appears inline with focus in its title field.", "Edit title and body inline; use secondary properties for icon, URL or accent."],
+          insertion: ["Choose Insert → Card; the editor inserts the MDX structure as text.", "Type the title in title=\"…\" and the description between the tags.", "Optional icon and href are attributes in the opening tag; no properties modal."],
           render(source) {
             const title = attr(source, "title", "Build a Server");
             const icon = attr(source, "icon", "server");
@@ -1213,7 +944,7 @@
           tag: "<CardGroup>",
           source: '<CardGroup columns="2">\n  <Card title="Build a Server" icon="server" href="/docs/build-server">Create MCP servers.</Card>\n  <Card title="Build a Client" icon="computer" href="/docs/build-client">Connect to MCP servers.</Card>\n</CardGroup>',
           properties: [["columns", "1 · 2 · 3; default is still open."], ["Card.title", "Visible heading."], ["Card.icon", "Icon name from the allowed icon map."], ["Card.href", "Optional destination URL."]],
-          insertion: ["Choose Card group from the proposed Insert menu.", "Configure columns in the group setup modal.", "Add and edit each Card from its own configuration modal."],
+          insertion: ["Choose Insert → Card group to insert <CardGroup> and its child <Card> tags.", "Set columns and each Card's title/icon/href in the opening tags.", "Source order determines card order; the grid appears only in reader preview."],
           render(source) {
             const cards = [];
             const re = /<Card\b([^>]*)>([\s\S]*?)<\/Card>/gi;
@@ -1231,7 +962,7 @@
           tag: "<Steps>",
           source: '<Steps>\n  <Step title="Discovery">El cliente descubre las capacidades del servidor.</Step>\n  <Step title="Authorization">El cliente obtiene un token válido.</Step>\n</Steps>',
           properties: [["Step.title", "Required visible heading."], ["order", "Derived from child order; never typed manually."], ["content", "Markdown blocks inside each step."]],
-          insertion: ["Insert a Steps container with one first Step.", "Add, remove and reorder child steps inline.", "Keep numbering derived from structure."],
+          insertion: ["Choose Insert → Steps to insert <Steps> with an initial <Step>.", "Write each title in title=\"…\" and its body between the Step tags.", "Source order drives front-end numbering; no setup modal."],
           render(source) {
             const steps = [];
             const re = /<Step\b([^>]*)>([\s\S]*?)<\/Step>/gi;
@@ -1248,7 +979,7 @@
           tag: "<CodeGroup>",
           source: '<CodeGroup>\n  ' + fence + 'json Discover Request\n  { "method": "server/discover" }\n  ' + fence + '\n\n  ' + fence + 'json Discover Response\n  { "resultType": "complete" }\n  ' + fence + '\n</CodeGroup>',
           properties: [["tabs", "One tab per fenced code block."], ["language", "Taken from each fence info string."], ["content", "Opaque code; never parse inner markers."]],
-          insertion: ["Choose Code group from the proposed Insert menu.", "Add tabs with title and language in the setup flow.", "Edit each code block with the normal code editor."],
+          insertion: ["Choose Insert → Code group to insert the wrapper and code fences as text.", "Each fence carries its language and optional tab title.", "The reader renderer turns the fences into tabs; no group setup modal."],
           render(source) {
             const blocks = parseFences(source);
             if (!blocks.length) blocks.push({ language: "json", title: "Discover Request", code: '{ "method": "server/discover" }' }, { language: "json", title: "Discover Response", code: '{ "resultType": "complete" }' });
@@ -1446,650 +1177,21 @@
         },
       };
 
-      const richKeys = ["annotation", "protected", "entity", "highlight", "tip", "card", "cardGroup", "steps", "codeGroup", "mermaid"];
+      const richKeys = ["annotation", "protected", "entity", "highlight", "tip", "info", "card", "cardGroup", "accordion", "accordionGroup", "tabs", "steps", "codeGroup", "mermaid"];
       const markdownKeys = ["paragraph", "bold", "italic", "heading1", "heading2", "heading3", "blockquote", "bulletList", "orderedList", "link", "inlineCode", "strike", "codeBlock", "table", "image", "footnote", "horizontalRule"];
 
-      const invocations = {
-        annotation: {
-          status: "Proposed contract",
-          tone: "proposed",
-          surface: "Selection popup",
-          entry: "Select text → AI (rename to Annotate)",
-          shortcut: "Not assigned · bubble primary",
-          overlay: "Floating annotation composer",
-          configuration: "Yes · comment + type",
-          selection: "Selected text required",
-          note: "Current Artifact Studio exposes the annotation flow as AI. The XML proposal keeps the selection and comment together in one <annotation> node; there is no separate <note> node.",
-        },
-        protected: {
-          status: "Proposed",
-          tone: "proposed",
-          surface: "Selection popup",
-          entry: "Select text → Protect",
-          shortcut: "Not assigned · candidate",
-          overlay: "None · immediate protection",
-          configuration: "No · optional reason later",
-          selection: "Selected text required",
-          note: "Protection is a document constraint, not a comment. The selected text remains visible and gets a read-only affordance; editing requires an explicit unlock flow outside this first proposal.",
-        },
-        entity: {
-          status: "Proposed",
-          tone: "proposed",
-          surface: "Selection popup",
-          entry: "Select text → Entity",
-          shortcut: "Not assigned · candidate",
-          overlay: "Entity type modal",
-          configuration: "Yes · entity type",
-          selection: "Selected text required",
-          note: "Select Aplyca, choose Company / Compañía, and serialize the selection as one entity node without changing its visible text.",
-        },
-        highlight: {
-          status: "Current",
-          tone: "current",
-          surface: "Selection popup",
-          entry: "Select text → Highlight",
-          shortcut: "⌘⇧H",
-          overlay: "None · color popover later",
-          configuration: "No · default color",
-          selection: "Selected text required",
-          note: "Apply the default highlight immediately. A small color popover can be added later without turning this into a modal flow.",
-        },
-        tip: {
-          status: "Proposed",
-          tone: "proposed",
-          surface: "Insert menu",
-          entry: "Insert → Tip",
-          shortcut: "Not assigned · candidate",
-          overlay: "None in v1",
-          configuration: "No · one visual variant",
-          selection: "Cursor between blocks",
-          note: "Insert an empty block and place the cursor inside. Only add a setup popover if Tip later gains variants such as warning or note.",
-        },
-        card: {
-          status: "Proposed",
-          tone: "proposed",
-          surface: "Insert menu",
-          entry: "Insert → Card",
-          shortcut: "Not assigned · candidate",
-          overlay: "Inline fields + properties popover",
-          configuration: "Light · title/body inline; icon + href secondary",
-          selection: "Cursor or whole block selection",
-          note: "Insert the shell inline, focus the title, and keep the body in the document. A secondary properties surface handles icon, URL and accent.",
-        },
-        cardGroup: {
-          status: "Proposed",
-          tone: "proposed",
-          surface: "Insert menu",
-          entry: "Insert → Card group",
-          shortcut: "Not assigned · candidate",
-          overlay: "Inline cards + group properties",
-          configuration: "Light · cards inline; columns secondary",
-          selection: "Cursor between blocks",
-          note: "Insert the container and first Card inline. Cards remain individually editable; a secondary properties surface handles columns and presentation metadata.",
-        },
-        steps: {
-          status: "Proposed",
-          tone: "proposed",
-          surface: "Insert menu",
-          entry: "Insert → Steps",
-          shortcut: "Not assigned · candidate",
-          overlay: "Inline step controls",
-          configuration: "Light · no modal",
-          selection: "Cursor between blocks",
-          note: "Create the container with one Step, then add, remove and reorder children inline. Numbering is derived from structure.",
-        },
-        codeGroup: {
-          status: "Proposed",
-          tone: "proposed",
-          surface: "Insert menu",
-          entry: "Insert → Code group",
-          shortcut: "Not assigned · candidate",
-          overlay: "Code group setup modal",
-          configuration: "Yes · tabs + languages",
-          selection: "Cursor between blocks",
-          note: "Configure tab titles and languages once, then edit each opaque code block with the normal code editor.",
-        },
-        mermaid: {
-          status: "Proposed",
-          tone: "proposed",
-          surface: "Text dropdown",
-          entry: "Text → Code → Mermaid",
-          shortcut: "⌘⇧E for Code",
-          overlay: "Code-block inspector / popover",
-          configuration: "Yes · language + view",
-          selection: "Cursor in a block",
-          note: "Mermaid remains a fenced code block. The configuration controls language and code/diagram/split view; the Mermaid source remains canonical.",
-        },
-        paragraph: {
-          status: "Current",
-          tone: "current",
-          surface: "Text dropdown",
-          entry: "Text → Normal",
-          shortcut: "⌘0",
-          overlay: "None",
-          configuration: "No",
-          selection: "Cursor in a block",
-          note: "Typing directly creates ordinary Markdown prose. A blank line separates paragraphs.",
-        },
-        bold: {
-          status: "Current",
-          tone: "current",
-          surface: "Format toolbar",
-          entry: "Select text → Bold",
-          shortcut: "⌘B",
-          overlay: "None",
-          configuration: "No",
-          selection: "Selection or typing state",
-          note: "Direct inline mark; serialized as **bold** in Markdown.",
-        },
-        italic: {
-          status: "Current",
-          tone: "current",
-          surface: "Format toolbar",
-          entry: "Select text → Italic",
-          shortcut: "⌘I",
-          overlay: "None",
-          configuration: "No",
-          selection: "Selection or typing state",
-          note: "Direct inline mark; serialized as *italic* in Markdown.",
-        },
-        heading1: {
-          status: "Current",
-          tone: "current",
-          surface: "Text dropdown",
-          entry: "Text → Heading 1",
-          shortcut: "⌘1",
-          overlay: "None",
-          configuration: "No",
-          selection: "Cursor in a block",
-          note: "Converts the current block into H1. Markdown shortcut: # followed by a space.",
-        },
-        heading2: {
-          status: "Current",
-          tone: "current",
-          surface: "Text dropdown",
-          entry: "Text → Heading 2",
-          shortcut: "⌘2",
-          overlay: "None",
-          configuration: "No",
-          selection: "Cursor in a block",
-          note: "Converts the current block into H2. Markdown shortcut: ## followed by a space.",
-        },
-        heading3: {
-          status: "Current",
-          tone: "current",
-          surface: "Text dropdown",
-          entry: "Text → Heading 3",
-          shortcut: "⌘3",
-          overlay: "None",
-          configuration: "No",
-          selection: "Cursor in a block",
-          note: "Converts the current block into H3. Markdown shortcut: ### followed by a space.",
-        },
-        blockquote: {
-          status: "Current · context gap",
-          tone: "gap",
-          surface: "Text dropdown",
-          entry: "Text → Blockquote",
-          shortcut: "⌘⇧B",
-          overlay: "None in current code",
-          configuration: "Open · attribution is in spec",
-          selection: "Cursor in a block",
-          note: "The current toolbar toggles Blockquote directly. The feature document still describes a quote modal with attribution. Resolve this before adding new quote attributes.",
-        },
-        bulletList: {
-          status: "Current",
-          tone: "current",
-          surface: "Lists dropdown",
-          entry: "Lists → • List",
-          shortcut: "⌘L",
-          overlay: "None",
-          configuration: "No",
-          selection: "Cursor in a block",
-          note: "Enter creates another item; Enter twice exits the list. Markdown shortcut: - followed by a space.",
-        },
-        orderedList: {
-          status: "Current",
-          tone: "current",
-          surface: "Lists dropdown",
-          entry: "Lists → # List",
-          shortcut: "⌘⇧L",
-          overlay: "None",
-          configuration: "No",
-          selection: "Cursor in a block",
-          note: "Numbering is derived from list order. Markdown shortcut: 1. followed by a space.",
-        },
-        link: {
-          status: "Current",
-          tone: "current",
-          surface: "Insert dropdown",
-          entry: "Insert → Link",
-          shortcut: "⌘⇧K",
-          overlay: "Link form modal",
-          configuration: "Yes · text + URL",
-          selection: "Selection preferred",
-          note: "The modal preserves the selection and asks for the destination URL before inserting the Markdown link.",
-        },
-        inlineCode: {
-          status: "Current",
-          tone: "current",
-          surface: "Format toolbar",
-          entry: "Select text → Inline code",
-          shortcut: "⌘E",
-          overlay: "None",
-          configuration: "No",
-          selection: "Selection or typing state",
-          note: "Direct inline mark; serialized with single backticks and treated as literal text.",
-        },
-        strike: {
-          status: "Current",
-          tone: "current",
-          surface: "Format toolbar",
-          entry: "Select text → Strike",
-          shortcut: "⌘⇧X",
-          overlay: "None",
-          configuration: "No",
-          selection: "Selection or typing state",
-          note: "Direct inline mark; serialized as ~~strike~~ in Markdown.",
-        },
-        codeBlock: {
-          status: "Current · config proposal",
-          tone: "gap",
-          surface: "Code dropdown",
-          entry: "Text → Code",
-          shortcut: "⌘⇧E",
-          overlay: "Code-block settings popover",
-          configuration: "Yes · language / type",
-          selection: "Cursor in a block",
-          note: "The current toolbar creates an opaque block. The proposed next step is a block-level language selector, with the active trigger labelled Code.",
-        },
-        table: {
-          status: "Current",
-          tone: "current",
-          surface: "Insert dropdown",
-          entry: "Insert → Table",
-          shortcut: "⌘T",
-          overlay: "Table grid modal",
-          configuration: "Yes · rows + columns",
-          selection: "Cursor between blocks",
-          note: "The grid modal chooses the initial dimensions; cell content is edited inline afterward.",
-        },
-        image: {
-          status: "Current",
-          tone: "current",
-          surface: "Insert dropdown",
-          entry: "Insert → Image",
-          shortcut: "⌘⇧I",
-          overlay: "Image form modal",
-          configuration: "Yes · source + alt",
-          selection: "Cursor between blocks",
-          note: "The image flow handles local asset or source selection and requires accessible alt text before insertion.",
-        },
-        footnote: {
-          status: "Current",
-          tone: "current",
-          surface: "Selection popup / Notes",
-          entry: "Select text → Footnote or Notes → Add note",
-          shortcut: "⌘⇧A · Notes: ⌘⇧N",
-          overlay: "Footnote form modal + Notes panel",
-          configuration: "Yes · note text",
-          selection: "Cursor or selected text",
-          note: "The editor creates the reference and definition together, keeps numbering automatic and exposes the result in Notes.",
-        },
-        horizontalRule: {
-          status: "Current · exposure open",
-          tone: "gap",
-          surface: "Markdown / command",
-          entry: "Type --- on its own line",
-          shortcut: "⌘⇧-",
-          overlay: "None",
-          configuration: "No",
-          selection: "Cursor between blocks",
-          note: "The command exists in the editor, but Divider is not currently exposed in the visible Artifact Studio toolbar. Decide whether it belongs in Insert.",
-        },
-      };
-
-      const authoringFlows = {
-        annotation: {
-          scope: "Rich component",
-          defaultMode: "selection",
-          insert: "Not available: an annotation always starts with a selected passage.",
-          selection: "Select text → choose AI today (Annotate recommended) → write the comment in the floating composer.",
-          body: "The selected passage remains editable inline; the comment is composed separately.",
-          properties: "Generated id · type · comment",
-          configure: "Edit annotation properties",
-          configTitle: "Configure annotation",
-          configDescription: "The selection is the body. These fields describe its associated comment.",
-          configHint: "Writes attributes, not selected text.",
-          selectionAvailable: true,
-        },
-        protected: {
-          scope: "Rich component",
-          defaultMode: "selection",
-          insert: "Not available: protected text always starts from an existing selected passage.",
-          selection: "Select text → Protect. The selection becomes read-only without opening a modal.",
-          body: "The protected passage remains visible but cannot be edited or deleted through the normal editor.",
-          properties: "Generated id · optional reason",
-          configure: "No configuration modal",
-          configTitle: "Protected text",
-          configDescription: "Protection is applied directly from the selection bubble.",
-          configHint: "An explicit unlock flow is a separate permission decision.",
-          selectionAvailable: true,
-          noModal: true,
-        },
-        entity: {
-          scope: "Rich component",
-          defaultMode: "selection",
-          insert: "Not available: an entity is created from a selected text range.",
-          selection: "Select text → Entity → choose the semantic type, such as Company / Compañía.",
-          body: "The selected surface form stays inline and editable as text only through the entity flow.",
-          properties: "Generated id · type",
-          configure: "Configure entity type",
-          configTitle: "Configure entity",
-          configDescription: "Classify the selected text without replacing its visible label.",
-          configHint: "Writes entity metadata, not body text.",
-          selectionAvailable: true,
-        },
-        highlight: {
-          scope: "Rich component",
-          defaultMode: "selection",
-          insert: "Not available: a highlight is created from selected text.",
-          selection: "Select text → Highlight; apply the default color immediately.",
-          body: "The selected passage is the complete body of the node.",
-          properties: "color · optional id",
-          configure: "Adjust highlight properties",
-          configTitle: "Configure highlight",
-          configDescription: "Color is presentation metadata; the selected text stays in the document body.",
-          configHint: "Writes the color attribute only.",
-          selectionAvailable: true,
-        },
-        tip: {
-          scope: "Rich component",
-          defaultMode: "insert",
-          insert: "Insert → Tip creates an empty block and places the cursor inside so you can write normally.",
-          selection: "Select one or more whole blocks → Tip wraps them. A partial inline selection should promote its paragraph or be rejected.",
-          body: "Write and format Markdown directly inside the Tip body.",
-          properties: "Optional variant · optional accent color · future icon",
-          configure: "Configure Tip properties",
-          configTitle: "Configure Tip",
-          configDescription: "Keep content inline. Use settings for presentation choices that are not prose.",
-          configHint: "Body text remains outside this form.",
-          selectionAvailable: true,
-        },
-        card: {
-          scope: "Rich component",
-          defaultMode: "insert",
-          insert: "Insert → Card inserts the shell inline and places the cursor in the title field.",
-          selection: "Select a whole block → Card wraps it as the body and focuses a new inline title.",
-          body: "Title and body are edited directly inside the Card node; selected content stays editable.",
-          properties: "title · icon · href · optional accent",
-          configure: "Configure Card properties",
-          configTitle: "Card properties",
-          configDescription: "Title and body stay inline. Use this secondary surface only for icon, URL or accent.",
-          configHint: "Writes presentation attributes; body text stays in the document.",
-          selectionAvailable: true,
-        },
-        cardGroup: {
-          scope: "Rich component",
-          defaultMode: "insert",
-          insert: "Insert → Card group inserts the container and a first Card inline; columns can be adjusted afterward.",
-          selection: "Select whole blocks → convert them into Cards (future). Do not treat an arbitrary text range as a complete Card.",
-          body: "Each Card body is edited inline after its shell is created.",
-          properties: "Group columns · Card title · icon · href · optional accent",
-          configure: "Configure group and first Card",
-          configTitle: "Configure Card group",
-          configDescription: "Use settings only for group layout and secondary Card properties. Add and edit Cards inline.",
-          configHint: "Writes structure metadata; body copy remains in the document.",
-          selectionAvailable: true,
-        },
-        steps: {
-          scope: "Rich component",
-          defaultMode: "insert",
-          insert: "Insert → Steps creates the container with one Step and puts the cursor in its body.",
-          selection: "Select consecutive whole blocks → convert them into ordered Steps (future). Numbering stays structural.",
-          body: "Step titles and body copy are edited inline; add, remove and reorder with local controls.",
-          properties: "Step title · derived order",
-          configure: "No configuration modal",
-          configTitle: "Steps use inline controls",
-          configDescription: "The structure is visible while editing, so a modal would add friction without adding clarity.",
-          configHint: "No separate properties to apply.",
-          selectionAvailable: true,
-          noModal: true,
-        },
-        codeGroup: {
-          scope: "Rich component",
-          defaultMode: "insert",
-          insert: "Insert → Code group opens a setup flow for tabs, then focuses the first opaque code block.",
-          selection: "Select consecutive code blocks → group them (future). Only complete code blocks are eligible.",
-          body: "Each tab is edited as literal code with the normal code editor.",
-          properties: "Tab title · language · tab order",
-          configure: "Configure code group",
-          configTitle: "Configure Code group",
-          configDescription: "Tabs carry labels and languages; their inner code is never interpreted as component markup.",
-          configHint: "Writes fence metadata, not code content.",
-          selectionAvailable: true,
-        },
-        codeBlock: {
-          scope: "Native block + settings",
-          defaultMode: "insert",
-          insert: "Text/Code → Code creates an opaque fenced block and exposes its language in the block settings.",
-          selection: "Select an existing code block → change its language or convert it to Mermaid.",
-          body: "Edit literal code in the block; inner Markdown and component tags are not interpreted.",
-          properties: "language · code type · optional preview mode",
-          configure: "Configure code block",
-          configTitle: "Configure code block",
-          configDescription: "Language is block metadata. It changes the code label and optional renderer, not the code body.",
-          configHint: "Writes the fence info string, not the code content.",
-          selectionAvailable: true,
-        },
-        mermaid: {
-          scope: "Rich component",
-          defaultMode: "insert",
-          insert: "Text → Code → Mermaid creates a fenced block and opens the diagram view when requested.",
-          selection: "Select an existing code block → set its language to Mermaid. Do not wrap an arbitrary prose selection.",
-          body: "Edit the Mermaid source as literal code; the source remains canonical.",
-          properties: "language · code/diagram/split view · theme",
-          configure: "Configure code block",
-          configTitle: "Configure Mermaid block",
-          configDescription: "The block remains Markdown code. These settings affect presentation, not the diagram source.",
-          configHint: "View settings are preview metadata.",
-          selectionAvailable: true,
-        },
-      };
-
-      const invocationConfigSamples = {
-        annotation: { kind: "composer", title: "Annotate selection", description: "Write a comment for the selected passage.", fields: [["Comment", "Este comentario queda vinculado a la selección."], ["Type", "Personal"]], action: "Add annotation" },
-        entity: { kind: "modal", title: "Create entity", description: "Classify the current selection without changing its visible text.", fields: [["Selected text", "Aplyca"], ["Entity type", "Company / Compañía"]], action: "Create entity" },
-        card: { kind: "popover", title: "Card properties", description: "Title and body are edited inline. Configure only secondary presentation properties here.", fields: [["Icon (optional)", "server"], ["URL (optional)", "/docs/build-server"], ["Accent (optional)", "terracotta"]], action: "Apply properties" },
-        cardGroup: { kind: "popover", title: "Card group properties", description: "Cards are edited inline. Configure only the group layout and secondary properties here.", fields: [["Columns", "2"], ["Order", "Source order"]], action: "Apply properties" },
-        codeGroup: { kind: "modal", title: "Insert Code group", description: "Set tab labels and languages; code stays opaque.", fields: [["Tab 1", "Discover Request · json"], ["Tab 2", "Discover Response · json"]], action: "Insert Code group" },
-        codeBlock: { kind: "popover", title: "Code settings", description: "Language is fence metadata, not code content.", fields: [["Language / type", "json"], ["Preview", "Code"]], action: "Apply settings" },
-        mermaid: { kind: "popover", title: "Mermaid settings", description: "Choose how the canonical Mermaid source is presented.", fields: [["Language", "mermaid"], ["View", "Code · diagram · split"]], action: "Apply settings" },
-        link: { kind: "modal", title: "Insert link", description: "Attach a URL to the current selection or insert linked text.", fields: [["Text", "MCP documentation"], ["URL", "https://modelcontextprotocol.io"]], action: "Insert link" },
-        table: { kind: "modal", title: "Insert table", description: "Select the number of rows and columns.", fields: [], special: "table", action: "Select grid" },
-        image: { kind: "modal", title: "Insert image", description: "Choose an image source and provide accessible alt text.", fields: [["Source", "assets/reference.png"], ["Alt text", "Reference screenshot"]], action: "Insert image" },
-        footnote: { kind: "modal", title: "Add footnote", description: "Write the note that will be referenced from the selection.", fields: [["Note text", "The response can be cached."], ["Reference", "Auto-numbered"]], action: "Add footnote" },
-      };
-
-      function invocationMode(key) {
-        const surface = invocations[key]?.surface || "";
-        if (surface.includes("Selection")) return "bubble";
-        if (surface.includes("Format")) return "format";
-        if (surface.includes("Lists")) return "lists";
-        if (surface.includes("Insert")) return "insert";
-        if (surface.includes("Text") || surface.includes("Code")) return "text";
-        if (surface.includes("Markdown")) return "command";
-        return "text";
-      }
-
-      function selectedInvocationText(key) {
-        return ({
-          annotation: "por ejemplo este texto es un solo mensaje",
-          highlight: "texto simplemente resaltado",
-          protected: "Este texto no se puede editar ni eliminar.",
-          entity: "Aplyca",
-          card: "Learn how to create your first MCP server.",
-          link: "MCP documentation",
-          footnote: "The response can be cached.",
-        }[key] || "como si se tratara de una presentación");
-      }
-
-      function renderInvocationMenu(mode, key) {
-        const menus = {
-          insert: [
-            ["▧", "Image", "⌘⇧I", "image"], ["▦", "Table", "⌘T", "table"], ["↗", "Link", "⌘⇧K", "link"],
-            ["!", "Tip", "", "tip"], ["□", "Card", "", "card"], ["▦", "Card group", "", "cardGroup"], ["1–", "Steps", "", "steps"], ["[]", "Code group", "", "codeGroup"],
-          ],
-          text: [["¶", "Normal", "⌘0", "paragraph"], ["H1", "Heading 1", "⌘1", "heading1"], ["H2", "Heading 2", "⌘2", "heading2"], ["H3", "Heading 3", "⌘3", "heading3"], ["“", "Blockquote", "⌘⇧B", "blockquote"], ["{}", "Code", "⌘⇧E", "codeBlock"], ["↝", "Mermaid", "", "mermaid"]],
-          lists: [["•", "Bullet list", "⌘L", "bulletList"], ["1.", "Numbered list", "⌘⇧L", "orderedList"]],
-        };
-        const items = menus[mode] || [];
-        return '<div class="toolbar-demo-menu"><div class="toolbar-demo-menu-head">' + esc(mode === "insert" ? "Insert" : mode === "lists" ? "List" : "Text") + '</div>' + items.map(([glyph, label, shortcut, itemKey]) => '<button class="toolbar-demo-menu-item ' + (itemKey === key ? "active" : "") + '" type="button" data-invocation-select="' + esc(itemKey) + '"><span class="toolbar-demo-menu-glyph">' + esc(glyph) + '</span><span class="toolbar-demo-menu-label">' + esc(label) + '</span><span class="toolbar-demo-menu-kbd">' + esc(shortcut) + '</span></button>').join("") + '</div>';
-      }
-
-      function renderInvocationToolbar(key, mode) {
-        const dropdownModes = ["insert", "text", "lists"];
-        const defaultMenu = dropdownModes.includes(mode) ? mode : null;
-        const visibleMenu = state.presentation.invocationMenu || defaultMenu;
-        const direct = (label, itemKey, extraClass) => '<button class="toolbar-demo-button ' + (itemKey === key ? "active " : "") + (extraClass || "") + '" type="button" title="' + esc(label) + '" data-invocation-select="' + esc(itemKey) + '">' + esc(label) + '</button>';
-        const menuTrigger = (menuKey, label, extraClass) => '<button class="toolbar-demo-trigger ' + (visibleMenu === menuKey ? "active " : "") + (extraClass || "") + '" type="button" data-invocation-menu="' + menuKey + '"><span>' + esc(label) + '</span><span class="toolbar-demo-chevron">⌄</span></button>';
-        const textLabel = ({ paragraph: "Normal", heading1: "H1", heading2: "H2", heading3: "H3", blockquote: "Quote", codeBlock: "Code", mermaid: "Code" }[key] || "Text");
-        const menu = visibleMenu && dropdownModes.includes(visibleMenu) ? renderInvocationMenu(visibleMenu, key) : "";
-        return '<div class="artifact-toolbar-demo">' + direct("B", "bold") + direct("I", "italic") + direct("S", "strike") + direct("</>", "inlineCode", "mono") + '<span class="toolbar-demo-divider"></span>' + menuTrigger("lists", "List") + menuTrigger("text", textLabel) + menuTrigger("insert", "Insert", "insert") + menu + '</div>';
-      }
-
-      function renderInvocationBubble(key, mode) {
-        const actions = [["Highlight", "highlight"], ["AI", "annotation"], ["Footnote", "footnote"], ["Protect", "protected"], ["Entity", "entity"]];
-        const bubble = mode === "bubble" ? '<div class="selection-bubble-demo">' + actions.map(([label, itemKey]) => '<button class="selection-bubble-action ' + (itemKey === key ? "active" : "") + '" type="button" data-invocation-select="' + itemKey + '">' + label + '</button>').join("") + '</div>' : '';
-        const selected = mode === "bubble" ? '<span class="selection-demo-selected">' + esc(selectedInvocationText(key)) + '</span>' : esc(selectedInvocationText(key));
-        return '<div class="selection-demo-stage"><div class="selection-demo-kicker">' + esc(mode === "bubble" ? "Selection state · choose an action" : "Document state") + '</div>' + bubble + '<p class="selection-demo-copy">Selecciona ' + selected + ' para activar la acción propuesta.</p></div>';
-      }
-
-      function renderInvocationConfig(key) {
-        const config = invocationConfigSamples[key];
-        if (!config) return "";
-        let body = config.fields.map(([label, value]) => '<div class="invocation-config-field"><label>' + esc(label) + '</label><div class="invocation-config-control">' + esc(value) + '</div></div>').join("");
-        if (config.bodyFromSelection) body = '<div class="invocation-config-field"><label>Body from selection</label><div class="invocation-config-control invocation-config-selection">' + esc(config.bodyFromSelection) + '</div><span class="config-help">Read-only preview here; the Card body remains editable after insertion.</span></div>' + body;
-        if (config.special === "table") body = '<div class="invocation-config-field"><label>Rows × columns</label><div class="invocation-config-grid">' + Array.from({ length: 16 }, (_, index) => '<span class="' + (index < 6 ? "active" : "") + '"></span>').join("") + '</div></div>';
-        return '<div class="invocation-config-preview"><div class="invocation-config-card ' + (config.kind === "popover" ? "popover" : "") + '"><div class="invocation-config-head"><div><h3 id="invocation-preview-title">' + esc(config.title) + '</h3><p>' + esc(config.description) + '</p></div><button class="invocation-config-close" type="button" data-invocation-close aria-label="Close preview">×</button></div><div class="invocation-config-fields">' + body + '</div><div class="invocation-config-foot"><button class="button" type="button" data-invocation-close>Cancel</button><button class="button primary" type="button" data-invocation-close>' + esc(config.action) + '</button></div></div></div>';
-      }
-
-      function renderInvocationLab() {
-        const key = state.selected;
-        const invocation = invocations[key];
-        const mode = invocationMode(key);
-        const config = invocationConfigSamples[key];
-        invocationStageTag.textContent = invocation.surface;
-        const modeLabel = mode === "bubble" ? "Selection bubble" : mode === "command" ? "Markdown command" : mode === "format" ? "Format toolbar" : mode === "insert" ? "Insert dropdown" : mode === "lists" ? "List dropdown" : "Text / Code dropdown";
-        const configButton = config ? '<button class="button invocation-preview-button" type="button" data-invocation-config>' + esc(config.kind === "popover" ? "Preview settings" : "Preview modal") + '</button>' : '';
-        const command = mode === "command" ? '<div class="invocation-command-card"><div><strong>Markdown / command</strong><br /><span>Escribe la sintaxis o invoca la acción disponible.</span></div><span class="invocation-command-key">' + esc(invocation.shortcut) + '</span></div>' : '';
-        invocationLab.innerHTML = '<div class="invocation-context"><div class="invocation-context-copy"><strong>' + esc(modeLabel) + '</strong><span>' + esc(invocation.entry) + '</span></div><span class="invocation-trigger-chip">' + esc(invocation.shortcut) + '</span></div><div class="invocation-surface-demo">' + (mode === "command" ? '' : renderInvocationToolbar(key, mode)) + (mode === "command" ? command : renderInvocationBubble(key, mode)) + '</div><div class="invocation-config-row"><span><strong>Configuration:</strong> ' + esc(invocation.overlay) + '</span>' + configButton + '</div>';
-      }
-
-      function renderAuthoringGuide(steps) {
-        return '<div class="authoring-use">' + steps.map((step, index) => '<div class="authoring-use-step"><strong>' + String(index + 1).padStart(2, "0") + '</strong><span>' + esc(step) + '</span></div>').join("") + '</div>';
-      }
-
-      function renderAuthoringPreview() {
-        const key = state.selected;
-        const flow = authoringFlows[key];
-        const source = state.sources[key] || samples[key].source;
-        const mode = flow ? state.authoringModes[key] || flow.defaultMode : "insert";
-        const modeLabel = mode === "selection" ? "selection → inline node" : "insert → inline node";
-        const compactSource = String(source).trim().length > 520 ? String(source).trim().slice(0, 520) + "\n…" : String(source).trim();
-        let content = "";
-        let syntax = compactSource;
-        let guide = [];
-        let heading = flow ? "The node is visible while you write" : "Native Markdown stays in place";
-        let description = flow ? "The editor inserts the structure, then keeps editorial content inside the document." : "Formatting changes the current mark or block; there is no custom component shell.";
-
-        if (!flow) {
-          const nativeText = String(source).replace(/^```[\s\S]*?```$/, "Code content remains literal.").replace(/^#{1,3}\s*/, "").replace(/^>\s?/, "").trim();
-          content = '<div class="inline-authoring-document"><div class="inline-authoring-context">native Markdown · edit in place</div><p class="inline-authoring-prose">' + inlineMarkdown(nativeText || "Write directly in the current block.") + '</p></div>';
-          guide = ["Select text or place the cursor in a block.", "Use the current toolbar action or Markdown shortcut.", "Continue typing; no component properties are created."];
-        } else if (key === "annotation" || key === "protected" || key === "entity" || key === "highlight") {
-          const text = tagBody(source, key === "protected" ? "protected" : key) || selectedInvocationText(key);
-          const marker = key === "protected" ? "protected" : key === "entity" ? "entity" : key === "annotation" ? "annotation" : "highlight";
-          const label = key === "protected" ? "read-only" : key === "entity" ? entityTypeLabel(attr(source, "type", "company")) : key === "annotation" ? "comment attached" : "highlight";
-          content = '<div class="inline-authoring-document"><div class="inline-authoring-context">selection transform · inline mark</div><p class="inline-authoring-prose">Selecciona <span class="inline-authoring-mark ' + marker + '">' + esc(text) + '</span><span class="inline-authoring-mark-label">' + esc(label) + '</span> y continúa editando el resto del párrafo.</p></div>';
-          guide = key === "annotation"
-            ? ["Select the passage you want to discuss.", "Choose Annotate from the selection bubble.", "Write the comment in the attached composer; the passage stays inline."]
-            : key === "protected"
-              ? ["Select the passage that must not change.", "Choose Protect in the selection bubble.", "Protection applies immediately; unlocking is an explicit permission flow."]
-              : key === "entity"
-                ? ["Select the surface form, such as Aplyca.", "Choose Entity in the selection bubble.", "Pick Company / Compañía; the visible text stays the same."]
-                : ["Select the passage to emphasize.", "Choose Highlight in the selection bubble.", "The default color applies immediately; presentation settings remain secondary."];
-        } else if (key === "tip") {
-          const text = tagBody(source, "Tip") || "Escribe aquí el contenido del tip.";
-          content = '<div class="inline-component-shell tip"><div class="inline-component-toolbar"><strong>Tip</strong><span class="inline-component-state">block node · cursor in body</span></div><div class="inline-component-content"><div class="inline-field-label">Body <span>editable</span></div><div class="inline-editable-body" contenteditable="true" data-inline-field="tip-body" role="textbox" aria-label="Tip body">' + esc(text) + '</div><div class="inline-property-row"><span>Optional properties</span><span class="inline-property-chip">variant</span><span class="inline-property-chip">accent</span><button class="inline-property-button" type="button" data-inline-config>Properties</button></div></div></div>';
-          guide = ["Choose Insert → Tip from the toolbar.", "The empty block is inserted and the cursor lands in its body.", "Write normally; open Properties only if a variant or accent is needed."];
-        } else if (key === "card") {
-          const title = mode === "selection" ? "" : attr(source, "title", "Card title") || "Card title";
-          const icon = attr(source, "icon", "server") || "server";
-          const href = attr(source, "href", "/docs/build-server") || "/docs/build-server";
-          const body = mode === "selection" ? selectedInvocationText("card") : tagBody(source, "Card") || "Write your card description here.";
-          const titleDisplay = title ? esc(title) : '<span class="inline-placeholder">Add card title</span>';
-          if (mode === "selection") syntax = '<Card title="" icon="' + escapeSourceAttribute(icon) + '" href="' + escapeSourceAttribute(href) + '">\n  ' + body + '\n</Card>';
-          content = '<div class="inline-component-shell"><div class="inline-component-toolbar"><strong>Card</strong><span class="inline-component-state">block node · title + body inline</span></div><div class="inline-component-content"><div class="inline-card-icon-row"><span class="inline-icon-token">' + esc(icon) + '</span><button class="inline-property-button" type="button" data-inline-config>Properties</button></div><div class="inline-field-label">Title <span>editable · focused after insert</span></div><div class="inline-editable-field inline-card-title focused" contenteditable="true" data-inline-field="card-title" data-inline-index="0" role="textbox" aria-label="Card title">' + titleDisplay + '</div><div class="inline-field-label" style="margin-top: 13px">Body <span>' + (mode === "selection" ? "selection converted" : "editable") + '</span></div><div class="inline-editable-body inline-card-body ' + (mode === "selection" ? "selection" : "") + '" contenteditable="true" data-inline-field="card-body" data-inline-index="0" role="textbox" aria-label="Card body">' + esc(body) + '</div><div class="inline-property-row"><span>Secondary properties</span><span class="inline-property-chip">icon: ' + esc(icon) + '</span><span class="inline-property-chip">href: ' + esc(href) + '</span><span class="inline-property-chip">accent</span></div></div></div>';
-          guide = mode === "selection"
-            ? ["Select one or more complete blocks.", "Choose Card; the blocks become the editable body.", "Type the title inline, then use Properties for icon, URL or accent."]
-            : ["Choose Insert → Card from the toolbar.", "The Card shell appears with focus in the title field.", "Type title and body inline; use Properties only for icon, URL or accent."];
-        } else if (key === "cardGroup") {
-          content = '<div class="inline-component-shell"><div class="inline-component-toolbar"><strong>Card group</strong><span class="inline-component-state">container node · cards editable inline</span></div><div class="inline-component-content"><div class="inline-property-row" style="margin-top: 0; padding-top: 0; border-top: 0"><span>Layout</span><span class="inline-property-chip">columns: 2</span><button class="inline-property-button" type="button" data-inline-config>Properties</button></div><div class="card-grid" style="margin-top: 13px"><div class="doc-card"><div class="doc-card-icon">server</div><div class="inline-editable-field" contenteditable="true" data-inline-field="card-title" data-inline-index="0" role="textbox">Build a Server</div><div class="inline-editable-body" contenteditable="true" data-inline-field="card-body" data-inline-index="0" role="textbox">Create MCP servers.</div></div><div class="doc-card"><div class="doc-card-icon">computer</div><div class="inline-editable-field" contenteditable="true" data-inline-field="card-title" data-inline-index="1" role="textbox">Build a Client</div><div class="inline-editable-body" contenteditable="true" data-inline-field="card-body" data-inline-index="1" role="textbox">Connect to MCP servers.</div></div></div><button class="inline-add-control" type="button">+ Add card inline</button></div></div>';
-          guide = ["Choose Insert → Card group.", "The container and first Card are inserted together.", "Edit each Card inline; use Properties for columns and secondary metadata."];
-        } else if (key === "steps") {
-          content = '<div class="inline-component-shell"><div class="inline-component-toolbar"><strong>Steps</strong><span class="inline-component-state">container node · numbering derived</span></div><div class="inline-component-content"><div class="inline-steps"><div class="inline-step-row"><div class="inline-step-number">1</div><div><div class="inline-field-label">Step title <span>editable</span></div><div class="inline-editable-field inline-step-title" contenteditable="true" data-inline-field="step-title" data-inline-index="0" role="textbox">Discovery</div><div class="inline-editable-body inline-step-body" contenteditable="true" data-inline-field="step-body" data-inline-index="0" role="textbox">El cliente descubre las capacidades del servidor.</div></div></div></div><button class="inline-add-control" type="button">+ Add step inline</button></div></div>';
-          guide = mode === "selection"
-            ? ["Select consecutive complete blocks.", "Choose Steps to create ordered child steps.", "Edit titles and bodies inline; order creates the numbers."]
-            : ["Choose Insert → Steps from the toolbar.", "A container with one Step is inserted and focused.", "Edit the title/body and add more steps inline."];
-        } else if (key === "codeGroup") {
-          const blocks = parseFences(source);
-          const first = blocks[0] || { language: "json", title: "Discover Request", code: '{ "method": "server/discover" }' };
-          content = '<div class="inline-code-editor"><div class="tab-row"><button class="code-tab active" type="button">' + esc(first.title || first.language) + '</button><button class="code-tab" type="button">Discover Response</button></div><div class="inline-code-toolbar"><span class="inline-code-language">' + esc(first.language) + '</span><span>tab metadata · settings</span></div><div class="inline-code-body" contenteditable="true" data-inline-field="code-body" role="textbox" aria-label="Code group source">' + esc(first.code) + '</div></div>';
-          guide = ["Choose Insert → Code group.", "Add tabs and assign each language in the group settings.", "Edit the selected tab as literal code; its content is never reinterpreted."];
-        } else if (key === "codeBlock" || key === "mermaid") {
-          const block = parseFences(source)[0] || { language: key === "mermaid" ? "mermaid" : "json", code: key === "mermaid" ? "sequenceDiagram\\n    C->>M: MCP request" : '{ "resultType": "complete" }' };
-          const language = key === "mermaid" ? "mermaid" : block.language;
-          const diagram = key === "mermaid" ? '<div class="inline-mermaid-preview"><span class="diagram-title">diagram preview · optional</span><div class="diagram-track"><div class="diagram-row"><div class="participant">Client</div><div class="message"><span class="message-label">request</span></div><div class="participant">Server</div></div></div></div>' : '';
-          content = '<div class="inline-code-editor"><div class="inline-code-toolbar"><span class="inline-code-language">' + esc(language) + ' ▾</span><button class="inline-property-button" type="button" data-inline-config>Settings</button></div><div class="inline-code-body" contenteditable="true" data-inline-field="code-body" role="textbox" aria-label="Code block source">' + esc(block.code) + '</div></div>' + diagram;
-          guide = key === "mermaid"
-            ? ["Choose Text → Code from the toolbar.", "Set the language to Mermaid in the block settings.", "Edit the fenced source; toggle code, diagram or split view."]
-            : ["Choose Text → Code from the toolbar.", "Select the language in the block settings.", "Edit literal code inline; inner Markdown is not parsed."];
-        }
-
-        authoringPreviewTag.textContent = flow ? modeLabel : "native Markdown";
-        authoringPreview.innerHTML = '<div class="authoring-preview-head"><div><strong>' + esc(heading) + '</strong><span>' + esc(description) + '</span></div><span class="authoring-preview-mode">' + esc(flow ? modeLabel : "edit in place") + '</span></div><div class="inline-authoring-canvas">' + content + '</div><pre class="authoring-syntax">' + esc(syntax) + '</pre>' + renderAuthoringGuide(guide);
-      }
-
-      const state = { selected: "annotation", sources: {}, notes: {}, authoringModes: {}, presentation: { invocationMenu: null, invocationConfig: false } };
+      const state = { selected: "card", sources: {}, notes: {}, presentation: {} };
       const list = document.getElementById("component-list");
       const markdownList = document.getElementById("markdown-list");
       const sourceEditor = document.getElementById("source-editor");
       const previewCanvas = document.getElementById("preview-canvas");
-      const invocationLab = document.getElementById("invocation-lab");
-      const invocationStageTag = document.getElementById("invocation-stage-tag");
-      const propertyList = document.getElementById("property-list");
-      const insertList = document.getElementById("insert-list");
-      const invocationStatus = document.getElementById("invocation-status");
-      const invocationSurface = document.getElementById("invocation-surface");
-      const invocationGrid = document.getElementById("invocation-grid");
-      const invocationNote = document.getElementById("invocation-note");
-      const flowTabs = document.getElementById("flow-tabs");
-      const authoringScope = document.getElementById("authoring-scope");
-      const authoringSummary = document.getElementById("authoring-summary");
-      const authoringBody = document.getElementById("authoring-body");
-      const authoringProperties = document.getElementById("authoring-properties");
-      const authoringPreview = document.getElementById("authoring-preview");
-      const authoringPreviewTag = document.getElementById("authoring-preview-tag");
-      const configureComponent = document.getElementById("configure-component");
+      const decisionNotes = document.getElementById("decision-notes");
+      const configureSource = document.getElementById("configure-source");
       const configOverlay = document.getElementById("config-overlay");
       const configModalTitle = document.getElementById("config-modal-title");
       const configModalDescription = document.getElementById("config-modal-description");
       const configModalHint = document.getElementById("config-modal-hint");
       const configFields = document.getElementById("config-fields");
-      const decisionNotes = document.getElementById("decision-notes");
-      const invocationPreviewOverlay = document.getElementById("invocation-preview-overlay");
-      const invocationPreviewModal = document.getElementById("invocation-preview-modal");
 
       try {
         const stored = JSON.parse(localStorage.getItem("odessay-document-components-lab") || "{}");
@@ -2142,7 +1244,7 @@
 
       function persist() {
         localStorage.setItem("odessay-document-components-lab", JSON.stringify({ sources: state.sources, notes: state.notes }));
-        document.getElementById("save-status").textContent = "Saved locally in this browser.";
+        document.getElementById("save-status").textContent = "Guardadas en este navegador.";
       }
 
       function renderList() {
@@ -2154,14 +1256,22 @@
         markdownList.innerHTML = renderButtons(markdownKeys);
       }
 
+      const configMeta = {
+        annotation: ["Configurar Annotation", "El comentario y el tipo permanecen como metadata de la anotación.", "Actualiza metadata, no el texto seleccionado."],
+        entity: ["Configurar entidad", "Clasifica la selección sin cambiar el texto visible.", "Actualiza el tipo de entidad."],
+        highlight: ["Configurar highlight", "El texto permanece igual; sólo cambia su presentación.", "Actualiza el color."],
+        codeBlock: ["Configurar bloque de código", "El lenguaje se guarda en la información del fence.", "Actualiza metadata del bloque, no el código."],
+        mermaid: ["Configurar Mermaid", "El source del diagrama sigue siendo un bloque de código.", "Actualiza la forma de mostrar el preview."],
+      };
+
       function escapeSourceAttribute(value) {
         return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
       }
 
       function updateOpeningTagAttribute(openingTag, name, value) {
         const text = String(value).trim();
-        const attributePattern = new RegExp('(' + name + '\\s*=\\s*")[^"]*(")', 'i');
-        if (!text) return openingTag.replace(new RegExp('\\s+' + name + '\\s*=\\s*"[^"]*"', 'i'), "");
+        const attributePattern = new RegExp('(' + name + '\\s*=\\s*")[^"]*(")', "i");
+        if (!text) return openingTag.replace(new RegExp("\\s+" + name + '\\s*=\\s*"[^"]*"', "i"), "");
         if (attributePattern.test(openingTag)) return openingTag.replace(attributePattern, "$1" + escapeSourceAttribute(text) + "$2");
         return openingTag.replace(/\/?>(\s*)$/, ' ' + name + '="' + escapeSourceAttribute(text) + '"$&');
       }
@@ -2170,154 +1280,70 @@
         return String(source).replace(new RegExp("<" + tag + "\\b[^>]*>", "i"), (openingTag) => updateOpeningTagAttribute(openingTag, name, value));
       }
 
-      function updateFirstCardAttribute(source, name, value) {
-        return String(source).replace(/<Card\b[^>]*>/i, (openingTag) => updateOpeningTagAttribute(openingTag, name, value));
-      }
-
-      function updateFirstFence(source, language, title) {
-        const info = [String(language).trim() || "text", String(title).trim()].filter(Boolean).join(" ");
-        return String(source).replace(new RegExp(fence + "[^\\n]*\\n"), fence + info + "\n");
-      }
-
-      function updateFirstTagBody(source, tag, value) {
-        return String(source).replace(new RegExp("(<" + tag + "\\b[^>]*>)[\\s\\S]*?(</" + tag + ">)", "i"), "$1" + String(value) + "$2");
-      }
-
-      function updateCardAttributeAt(source, index, name, value) {
-        let current = -1;
-        return String(source).replace(/<Card\b[^>]*>/gi, (openingTag) => {
-          current += 1;
-          return current === Number(index) ? updateOpeningTagAttribute(openingTag, name, value) : openingTag;
-        });
-      }
-
-      function updateCardBodyAt(source, index, value) {
-        let current = -1;
-        return String(source).replace(/(<Card\b[^>]*>)[\s\S]*?(<\/Card>)/gi, (whole, openingTag, closingTag) => {
-          current += 1;
-          return current === Number(index) ? openingTag + String(value) + closingTag : whole;
-        });
-      }
-
-      function updateStepAttributeAt(source, index, name, value) {
-        let current = -1;
-        return String(source).replace(/<Step\b[^>]*>/gi, (openingTag) => {
-          current += 1;
-          return current === Number(index) ? updateOpeningTagAttribute(openingTag, name, value) : openingTag;
-        });
-      }
-
-      function updateStepBodyAt(source, index, value) {
-        let current = -1;
-        return String(source).replace(/(<Step\b[^>]*>)[\s\S]*?(<\/Step>)/gi, (whole, openingTag, closingTag) => {
-          current += 1;
-          return current === Number(index) ? openingTag + String(value) + closingTag : whole;
-        });
-      }
-
-      function updateFirstFenceBody(source, value) {
-        return String(source).replace(new RegExp("(" + fence + "[^\\n]*\\n)[\\s\\S]*?(" + fence + ")"), "$1" + String(value) + "\n$2");
+      function updateFirstFence(source, language) {
+        return String(source).replace(new RegExp(fence + "[^\\n]*\\n"), fence + (String(language).trim() || "text") + "\n");
       }
 
       function getConfigFields(key, source) {
-        const cardOpeningTag = /<Card\b[^>]*>/i.exec(String(source))?.[0] || "";
-        const firstFence = parseFences(source)[0] || { language: "json", title: "Discover Request" };
-        switch (key) {
-          case "annotation":
-            return [
-              { key: "type", label: "Type", kind: "select", value: attr(source, "type", "personal"), options: ["personal", "ai", "footnote"], help: "The comment remains part of the annotation contract." },
-              { key: "comment", label: "Comment", kind: "textarea", value: attr(source, "comment", ""), help: "Optional metadata; never a second note node." },
-            ];
-          case "entity":
-            return [{ key: "type", label: "Entity type", kind: "select", value: attr(source, "type", "company"), options: [
-              { value: "company", label: "Company / Compañía" },
-              { value: "person", label: "Person / Persona" },
-              { value: "place", label: "Place / Lugar" },
-              { value: "product", label: "Product / Producto" },
-              { value: "event", label: "Event / Evento" },
-              { value: "custom", label: "Custom / Personalizada" },
-            ], help: "The selected text remains the visible surface form." }];
-          case "highlight":
-            return [{ key: "color", label: "Highlight color", kind: "select", value: attr(source, "color", "yellow"), options: ["yellow", "blue", "green"], help: "Only the presentation attribute changes." }];
-          case "tip":
-            return [
-              { key: "type", label: "Variant", kind: "select", value: attr(source, "type", "default"), options: ["default", "info", "warning"], help: "Proposal: keep one default visual treatment until variants are needed." },
-              { key: "color", label: "Accent color", kind: "select", value: attr(source, "color", "inherit"), options: ["inherit", "terracotta", "amber", "blue"], help: "Proposal: presentation metadata, separate from body text." },
-            ];
-          case "card":
-            return [
-              { key: "icon", label: "Card icon", kind: "text", value: attr(source, "icon", ""), help: "Use an icon from the allowed icon map." },
-              { key: "accent", label: "Card accent", kind: "select", value: attr(source, "accent", "terracotta"), options: ["terracotta", "amber", "blue"], help: "Proposal: presentation metadata for the icon and accent." },
-              { key: "href", label: "Card URL", kind: "url", value: attr(source, "href", ""), help: "Optional destination for the card." },
-            ];
-          case "cardGroup":
-            return [
-              { key: "columns", label: "Columns", kind: "select", value: attr(source, "columns", "2"), options: ["1", "2", "3"], help: "Group-level layout setting." },
-              { key: "icon", label: "First Card icon", kind: "text", value: attr(cardOpeningTag, "icon", ""), help: "Use an icon from the allowed icon map." },
-              { key: "accent", label: "First Card accent", kind: "select", value: attr(cardOpeningTag, "accent", "terracotta"), options: ["terracotta", "amber", "blue"], help: "Proposal: presentation metadata for the icon and accent." },
-              { key: "href", label: "First Card URL", kind: "url", value: attr(cardOpeningTag, "href", ""), help: "Optional destination for the card." },
-            ];
-          case "codeGroup":
-            return [
-              { key: "title", label: "First tab title", kind: "text", value: firstFence.title || firstFence.language, help: "Tab label only; code remains opaque." },
-              { key: "language", label: "First tab language", kind: "text", value: firstFence.language, help: "Fence metadata; it does not parse the code body." },
-            ];
-          case "codeBlock":
-            return [{ key: "language", label: "Language / type", kind: "select", value: firstFence.language, options: ["text", "json", "javascript", "typescript", "python", "bash", "mermaid"], help: "Fence metadata that selects the code label or renderer." }];
-          case "mermaid":
-            return [
-              { key: "view", label: "Preview mode", kind: "select", value: state.presentation.mermaid?.view || "split", options: ["code", "diagram", "split"], help: "Presentation preference; the fenced source remains canonical." },
-              { key: "theme", label: "Diagram theme", kind: "select", value: state.presentation.mermaid?.theme || "document", options: ["document", "light", "dark"], help: "Proposal: inherit the document theme by default." },
-            ];
-          default:
-            return [];
-        }
+        const firstFence = parseFences(source)[0] || { language: "json" };
+        if (key === "annotation") return [
+          { key: "type", label: "Tipo", kind: "select", value: attr(source, "type", "personal"), options: ["personal", "ai", "footnote"] },
+          { key: "comment", label: "Comentario", kind: "textarea", value: attr(source, "comment", "") },
+        ];
+        if (key === "entity") return [{ key: "type", label: "Tipo de entidad", kind: "select", value: attr(source, "type", "company"), options: [
+          { value: "company", label: "Company / Compañía" }, { value: "person", label: "Person / Persona" }, { value: "place", label: "Place / Lugar" }, { value: "product", label: "Product / Producto" }, { value: "event", label: "Event / Evento" }, { value: "custom", label: "Custom / Personalizada" },
+        ] }];
+        if (key === "highlight") return [{ key: "color", label: "Color", kind: "select", value: attr(source, "color", "yellow"), options: ["yellow", "blue", "green"] }];
+        if (key === "codeBlock") return [{ key: "language", label: "Lenguaje / tipo", kind: "select", value: firstFence.language, options: ["text", "json", "javascript", "typescript", "python", "bash", "mermaid"] }];
+        if (key === "mermaid") return [
+          { key: "view", label: "Vista", kind: "select", value: state.presentation.mermaid?.view || "split", options: ["code", "diagram", "split"] },
+          { key: "theme", label: "Tema", kind: "select", value: state.presentation.mermaid?.theme || "document", options: ["document", "light", "dark"] },
+        ];
+        return [];
       }
 
-      function renderAuthoringFlow() {
-        const flow = authoringFlows[state.selected];
-        const isNative = !flow;
-        flowTabs.hidden = isNative;
-        configureComponent.hidden = isNative;
-        authoringScope.textContent = isNative ? "Markdown native" : flow.scope;
-
-        if (isNative) {
-          authoringSummary.innerHTML = "<strong>Use the current Artifact Studio command.</strong> The content is edited directly as native Markdown text, mark or block.";
-          authoringBody.textContent = "Selected text or the current block, depending on the element.";
-          authoringProperties.textContent = "No additional component properties.";
-          renderAuthoringPreview();
-          return;
-        }
-
-        const mode = state.authoringModes[state.selected] || flow.defaultMode;
-        flowTabs.querySelectorAll("[data-flow-mode]").forEach((button) => {
-          const buttonMode = button.dataset.flowMode;
-          button.classList.toggle("active", buttonMode === mode);
-          button.disabled = buttonMode === "insert" ? flow.insert.startsWith("Not available") : !flow.selectionAvailable;
-        });
-        const modeLabel = mode === "selection" ? "Convert selection" : "Insert new";
-        authoringSummary.innerHTML = "<strong>" + esc(modeLabel) + ".</strong> " + esc(flow[mode]);
-        authoringBody.textContent = flow.body;
-        authoringProperties.textContent = flow.properties;
-        configureComponent.textContent = flow.configure;
-        configureComponent.disabled = Boolean(flow.noModal);
-        renderAuthoringPreview();
+      function renderLabels() {
+        const sample = samples[state.selected];
+        document.getElementById("source-tag").textContent = sample.tag;
+        document.getElementById("preview-tag").textContent = sample.tag;
+        configureSource.hidden = !configMeta[state.selected];
+        decisionNotes.value = state.notes[state.selected] || "";
       }
+
+      function render() {
+        const sample = samples[state.selected];
+        sourceEditor.value = state.sources[state.selected] || sample.source;
+        previewCanvas.innerHTML = sample.render(sourceEditor.value);
+        renderList();
+        renderLabels();
+        bindCodeTabs();
+      }
+
+      function handleComponentClick(event) {
+        const button = event.target.closest("[data-component]");
+        if (!button) return;
+        state.sources[state.selected] = sourceEditor.value;
+        state.selected = button.dataset.component;
+        closeConfiguration();
+        persist();
+        render();
+      }
+
+      list.addEventListener("click", handleComponentClick);
+      markdownList.addEventListener("click", handleComponentClick);
 
       function openConfiguration() {
-        const flow = authoringFlows[state.selected];
-        if (!flow || flow.noModal) return;
-        configModalTitle.textContent = flow.configTitle;
-        configModalDescription.textContent = flow.configDescription;
-        configModalHint.textContent = flow.configHint;
+        const meta = configMeta[state.selected];
+        if (!meta) return;
+        configModalTitle.textContent = meta[0];
+        configModalDescription.textContent = meta[1];
+        configModalHint.textContent = meta[2];
         const fields = getConfigFields(state.selected, sourceEditor.value);
         configFields.innerHTML = fields.map((field) => {
           const control = field.kind === "textarea"
             ? '<textarea data-config-field="' + esc(field.key) + '">' + esc(field.value) + '</textarea>'
-            : field.kind === "select"
-              ? '<select data-config-field="' + esc(field.key) + '">' + field.options.map((option) => { const optionValue = typeof option === "string" ? option : option.value; const optionLabel = typeof option === "string" ? option : option.label; return '<option value="' + esc(optionValue) + '" ' + (optionValue === field.value ? "selected" : "") + '>' + esc(optionLabel) + '</option>'; }).join("") + '</select>'
-              : '<input type="' + esc(field.kind) + '" data-config-field="' + esc(field.key) + '" value="' + esc(field.value) + '" />';
-          return '<div class="config-field"><label>' + esc(field.label) + '</label>' + control + '<span class="config-help">' + esc(field.help) + '</span></div>';
+            : '<select data-config-field="' + esc(field.key) + '">' + field.options.map((option) => { const optionValue = typeof option === "string" ? option : option.value; const optionLabel = typeof option === "string" ? option : option.label; return '<option value="' + esc(optionValue) + '" ' + (optionValue === field.value ? "selected" : "") + '>' + esc(optionLabel) + '</option>'; }).join("") + '</select>';
+          return '<div class="config-field"><label>' + esc(field.label) + '</label>' + control + '</div>';
         }).join("");
         configOverlay.hidden = false;
         configFields.querySelector("[data-config-field]")?.focus();
@@ -2328,198 +1354,29 @@
       }
 
       function applyConfiguration() {
+        const key = state.selected;
         const values = {};
         configFields.querySelectorAll("[data-config-field]").forEach((field) => { values[field.dataset.configField] = field.value; });
-        const key = state.selected;
         let source = sourceEditor.value;
-
         if (key === "annotation") {
-          source = updateTagAttribute(source, "annotation", "type", values.type);
-          source = updateTagAttribute(source, "annotation", "comment", values.comment);
+          source = updateTagAttribute(source, "Annotation", "type", values.type);
+          source = updateTagAttribute(source, "Annotation", "comment", values.comment);
         } else if (key === "entity") {
-          source = updateTagAttribute(source, "entity", "type", values.type);
+          source = updateTagAttribute(source, "Entity", "type", values.type);
         } else if (key === "highlight") {
-          source = updateTagAttribute(source, "highlight", "color", values.color);
-        } else if (key === "tip") {
-          source = updateTagAttribute(source, "Tip", "type", values.type);
-          source = updateTagAttribute(source, "Tip", "color", values.color);
-        } else if (key === "card") {
-          if (values.title !== undefined) source = updateFirstCardAttribute(source, "title", values.title);
-          if (values.icon !== undefined) source = updateFirstCardAttribute(source, "icon", values.icon);
-          if (values.accent !== undefined) source = updateFirstCardAttribute(source, "accent", values.accent);
-          if (values.href !== undefined) source = updateFirstCardAttribute(source, "href", values.href);
-        } else if (key === "cardGroup") {
-          if (values.columns !== undefined) source = updateTagAttribute(source, "CardGroup", "columns", values.columns);
-          if (values.title !== undefined) source = updateFirstCardAttribute(source, "title", values.title);
-          if (values.icon !== undefined) source = updateFirstCardAttribute(source, "icon", values.icon);
-          if (values.accent !== undefined) source = updateFirstCardAttribute(source, "accent", values.accent);
-          if (values.href !== undefined) source = updateFirstCardAttribute(source, "href", values.href);
+          source = updateTagAttribute(source, "Highlight", "color", values.color);
         } else if (key === "codeBlock") {
-          const currentFence = parseFences(source)[0] || { title: "" };
-          source = updateFirstFence(source, values.language, currentFence.title);
-        } else if (key === "codeGroup") {
-          source = updateFirstFence(source, values.language, values.title);
+          source = updateFirstFence(source, values.language);
         } else if (key === "mermaid") {
           state.presentation.mermaid = { view: values.view, theme: values.theme };
         }
-
         state.sources[key] = source;
-        sourceEditor.value = source;
-        previewCanvas.innerHTML = samples[key].render(source);
-        persist();
-        renderInspector();
-        renderInvocationLab();
-        bindCodeTabs();
         closeConfiguration();
-      }
-
-      function renderInspector() {
-        const sample = samples[state.selected];
-        document.getElementById("source-tag").textContent = sample.tag;
-        document.getElementById("preview-tag").textContent = sample.tag;
-        document.getElementById("contract-tag").textContent = sample.tag;
-        propertyList.innerHTML = sample.properties.map(([key, value]) => '<div class="property"><dt>' + esc(key) + '</dt><dd>' + esc(value) + '</dd></div>').join("");
-        insertList.innerHTML = sample.insertion.map((item) => '<li><span>' + esc(item) + '</span></li>').join("");
-        const invocation = invocations[state.selected];
-        invocationStatus.className = "invocation-status " + invocation.tone;
-        invocationStatus.textContent = invocation.status;
-        invocationSurface.textContent = invocation.surface;
-        const invocationFields = [
-          ["Entry point", invocation.entry, true],
-          ["Shortcut", invocation.shortcut, false],
-          ["Overlay", invocation.overlay, false],
-          ["Configuration", invocation.configuration, false],
-          ["Selection", invocation.selection, false],
-        ];
-        invocationGrid.innerHTML = invocationFields.map(([label, value, wide]) => '<div class="invocation-item ' + (wide ? "wide" : "") + '"><span class="invocation-label">' + esc(label) + '</span><div class="invocation-value">' + esc(value) + '</div></div>').join("");
-        invocationNote.textContent = invocation.note;
-        renderAuthoringFlow();
-        decisionNotes.value = state.notes[state.selected] || "";
-      }
-
-      function render() {
-        const sample = samples[state.selected];
-        sourceEditor.value = state.sources[state.selected] || sample.source;
-        previewCanvas.innerHTML = sample.render(sourceEditor.value);
-        renderList();
-        renderInvocationLab();
-        renderInspector();
-        bindCodeTabs();
-      }
-
-      function openInvocationPreview() {
-        if (!invocationConfigSamples[state.selected]) return;
-        invocationPreviewModal.innerHTML = renderInvocationConfig(state.selected);
-        invocationPreviewOverlay.hidden = false;
-      }
-
-      function closeInvocationPreview() {
-        invocationPreviewOverlay.hidden = true;
-        invocationPreviewModal.innerHTML = "";
-      }
-
-      function handleComponentClick(event) {
-        const button = event.target.closest("[data-component]");
-        if (!button) return;
-        state.sources[state.selected] = sourceEditor.value;
-        state.selected = button.dataset.component;
-        state.presentation.invocationMenu = null;
-        state.presentation.invocationConfig = false;
-        closeInvocationPreview();
-        closeConfiguration();
-        persist();
         render();
+        persist();
       }
 
-      list.addEventListener("click", handleComponentClick);
-      markdownList.addEventListener("click", handleComponentClick);
-
-      invocationLab.addEventListener("click", (event) => {
-        const selectButton = event.target.closest("[data-invocation-select]");
-        if (selectButton) {
-          const nextKey = selectButton.dataset.invocationSelect;
-          if (!samples[nextKey]) return;
-          state.sources[state.selected] = sourceEditor.value;
-          state.selected = nextKey;
-          state.presentation.invocationMenu = null;
-          state.presentation.invocationConfig = false;
-          closeInvocationPreview();
-          closeConfiguration();
-          persist();
-          render();
-          return;
-        }
-
-        const menuButton = event.target.closest("[data-invocation-menu]");
-        if (menuButton) {
-          const nextMenu = menuButton.dataset.invocationMenu;
-          const defaultMenu = ["insert", "text", "lists"].includes(invocationMode(state.selected)) ? invocationMode(state.selected) : null;
-          state.presentation.invocationMenu = state.presentation.invocationMenu === nextMenu || (state.presentation.invocationMenu === null && defaultMenu === nextMenu) ? null : nextMenu;
-          renderInvocationLab();
-          return;
-        }
-
-        if (event.target.closest("[data-invocation-config]")) {
-          openInvocationPreview();
-          return;
-        }
-
-        if (event.target.closest("[data-invocation-close]")) {
-          closeInvocationPreview();
-        }
-      });
-
-      authoringPreview.addEventListener("click", (event) => {
-        if (event.target.closest("[data-inline-config]")) openConfiguration();
-      });
-
-      authoringPreview.addEventListener("input", (event) => {
-        const field = event.target.closest("[data-inline-field]");
-        if (!field) return;
-        const value = field.innerText.replace(/\u00a0/g, " ").trim();
-        const fieldKey = field.dataset.inlineField;
-        const index = field.dataset.inlineIndex || 0;
-        let source = sourceEditor.value;
-
-        if (state.selected === "tip" && fieldKey === "tip-body") {
-          source = updateFirstTagBody(source, "Tip", value);
-        } else if ((state.selected === "card" || state.selected === "cardGroup") && fieldKey === "card-title") {
-          source = updateCardAttributeAt(source, index, "title", value);
-        } else if ((state.selected === "card" || state.selected === "cardGroup") && fieldKey === "card-body") {
-          source = updateCardBodyAt(source, index, value);
-        } else if (state.selected === "steps" && fieldKey === "step-title") {
-          source = updateStepAttributeAt(source, index, "title", value);
-        } else if (state.selected === "steps" && fieldKey === "step-body") {
-          source = updateStepBodyAt(source, index, value);
-        } else if ((state.selected === "codeGroup" || state.selected === "codeBlock" || state.selected === "mermaid") && fieldKey === "code-body") {
-          source = updateFirstFenceBody(source, value);
-        } else {
-          return;
-        }
-
-        state.sources[state.selected] = source;
-        sourceEditor.value = source;
-        previewCanvas.innerHTML = samples[state.selected].render(source);
-        persist();
-        bindCodeTabs();
-      });
-
-      invocationPreviewOverlay.addEventListener("click", (event) => {
-        if (event.target.closest("[data-invocation-close]")) {
-          closeInvocationPreview();
-          return;
-        }
-        if (event.target === invocationPreviewOverlay) closeInvocationPreview();
-      });
-
-      flowTabs.addEventListener("click", (event) => {
-        const button = event.target.closest("[data-flow-mode]");
-        if (!button || button.disabled) return;
-        state.authoringModes[state.selected] = button.dataset.flowMode;
-        renderAuthoringFlow();
-      });
-
-      configureComponent.addEventListener("click", openConfiguration);
+      configureSource.addEventListener("click", openConfiguration);
       document.getElementById("close-config").addEventListener("click", closeConfiguration);
       document.getElementById("cancel-config").addEventListener("click", closeConfiguration);
       document.getElementById("apply-config").addEventListener("click", applyConfiguration);
@@ -2528,7 +1385,6 @@
       });
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape" && !configOverlay.hidden) closeConfiguration();
-        if (event.key === "Escape" && !invocationPreviewOverlay.hidden) closeInvocationPreview();
       });
 
       sourceEditor.addEventListener("input", () => {
@@ -2536,7 +1392,6 @@
         previewCanvas.innerHTML = samples[state.selected].render(sourceEditor.value);
         persist();
         bindCodeTabs();
-        renderAuthoringPreview();
       });
 
       decisionNotes.addEventListener("input", () => {
@@ -2553,10 +1408,6 @@
       document.getElementById("reset-all").addEventListener("click", () => {
         state.sources = {};
         state.notes = {};
-        state.presentation.invocationMenu = null;
-        state.presentation.invocationConfig = false;
-        closeInvocationPreview();
-        closeConfiguration();
         render();
         persist();
       });
@@ -2565,7 +1416,7 @@
         await navigator.clipboard?.writeText(sourceEditor.value);
         const button = event.currentTarget;
         const original = button.textContent;
-        button.textContent = "Copied";
+        button.textContent = "Copiado";
         setTimeout(() => { button.textContent = original; }, 1200);
       });
 
@@ -2575,6 +1426,13 @@
             const index = button.dataset.codeTab;
             previewCanvas.querySelectorAll("[data-code-tab]").forEach((tab) => tab.classList.toggle("active", tab === button));
             previewCanvas.querySelectorAll("[data-code-panel]").forEach((panel) => { panel.hidden = panel.dataset.codePanel !== index; });
+          });
+        });
+        previewCanvas.querySelectorAll("[data-content-tab]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const index = button.dataset.contentTab;
+            previewCanvas.querySelectorAll("[data-content-tab]").forEach((tab) => tab.classList.toggle("active", tab === button));
+            previewCanvas.querySelectorAll("[data-content-panel]").forEach((panel) => { panel.hidden = panel.dataset.contentPanel !== index; });
           });
         });
       }

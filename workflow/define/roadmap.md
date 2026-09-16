@@ -83,7 +83,7 @@ Dependencias: Implement authentication, Implement design system.
 Referencia: `workflow/context/core/odessay-arquitectura.md` (sección: Sidebar/List panel), `.agents/skills/skill-design/vistas.md` (sección: Sidebar), `workflow/context/reference/editor.html`, `workflow/context/reference/desk.html`, `workflow/context/reference/collections.html`.
 
 **Implement TipTap editor** `[frontend]`
-Editor TipTap headless configurado con el subconjunto de extensiones de Odessay: Document, Paragraph, Text, Heading (H1/H2/H3), Bold, Italic, Strike, Highlight, Link, Blockquote, BulletList, OrderedList, ListItem, Code, CodeBlock, Markdown (tiptap-markdown + parser compatible con el dialecto markdown del proyecto), History, Placeholder, CharacterCount. Sin toolbar flotante al seleccionar. Tipografía del sistema de diseño aplicada. Layout de tres capas: topbar 46px + writing area flex-1 + statusbar 32px. Sidebar en modo mini (52px) por defecto en el editor.
+Editor TipTap headless configurado con el subconjunto de extensiones de Odessay: Document, Paragraph, Text, Heading (H1/H2/H3), Bold, Italic, Strike, Highlight, Link, Blockquote, BulletList, OrderedList, ListItem, Code, CodeBlock, Markdown (tiptap-markdown + parser compatible con el dialecto markdown del proyecto), History, Placeholder, CharacterCount. Sin toolbar flotante que replique el formato nativo; una selección sí puede abrir el bubble contextual único para anotaciones y otras acciones que requieren rango. Tipografía del sistema de diseño aplicada. Layout de tres capas: topbar 46px + writing area flex-1 + statusbar 32px. Sidebar en modo mini (52px) por defecto en el editor.
 Incluye modales de rename, insert link e insert footnote, shortcuts de teclado para formato testeados sin colisiones (Mac/Win/Linux) y métricas de texto en panel derecho (palabras, caracteres, oraciones, tiempo de lectura, páginas estimadas).
 Dependencias: Build global sidebar shell (3 estados).
 Referencia: `workflow/context/features/odessay-editor.md`, `.agents/skills/skill-design/vistas.md` (sección: Editor), `workflow/context/reference/editor.html`.
@@ -684,6 +684,70 @@ El agente resuelve enlaces rotos, sugiere tipo/estatus, señala candidatos a arc
 8. **M7 — gate:** traducción visual contra `skill-design`, matriz de evidencia y aceptación explícita del dueño.
 
 Referencia: `workflow/define/dod-fase-11.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `lib/queries/document-catalog.ts`, `lib/vocabulary/catalog.ts`, `lib/margins/margins.ts`, `lib/collections/collections.ts`, `lib/workspace/types.ts`, `components/editor/panels/editor-right-panel-tabs.tsx`, `components/workspace/workspace-detail.tsx`, `docs/design/system-app.md`, `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`, `workflow/agents.md`.
+
+---
+
+## Fase 12 — Artifact Studio: Componentes Documentales
+
+Al terminar esta fase: Artifact Studio tiene un único sistema de componentes documentales sobre su Markdown canónico. Markdown puro, semántica editorial propia (`Annotation`, `Highlight`, `ProtectedText`, `Entity`) y bloques MDX-like controlados comparten Document IR, parser, serializer y políticas de proyección. El mismo documento puede editarse, previsualizarse, leerse, publicarse y exportarse a PDF/DOCX sin perder contenido ni introducir JSX arbitrario o una segunda fuente de verdad.
+
+DoD formal: `workflow/define/dod-fase-12.md`.
+Proyecto Linear: [Fase 12 — Artifact Studio: Componentes Documentales](https://linear.app/hugo-marin/project/fase-12-artifact-studio-componentes-documentales-3397e6e8ea2e) (`ODE-528`–`ODE-539`). El proyecto permanece `Planned` mientras Fase 11 está activa.
+
+---
+
+**Hito**
+El autor puede aplicar semántica a una selección e insertar estructuras editoriales desde Artifact Studio; el resultado round-tripea por Markdown/TipTap, se degrada de forma explícita en cada superficie y conserva el write-path local-first vigente en web y desktop.
+
+**Al cierre de esta fase debe ser verdad que:**
+
+- existe un solo perfil documental y un solo Document IR compartido; parser, serializer, TipTap y render no mantienen vocabularios divergentes;
+- `<Annotation>` reemplaza la escritura legacy y conserva id, tipo, comentario y ancla, mientras las superficies limpias nunca filtran metadata privada accidentalmente;
+- `Annotation`, `Highlight`, `Entity` y `ProtectedText` funcionan como semántica inline compatible con el formato Markdown nativo y con las operaciones transversales del editor;
+- `Tip`, `Info`, `Card`, código, Mermaid, acordeones, tabs, steps y sus contenedores se insertan y editan sin modal obligatorio;
+- toolbar, bubble, `Insert`, `/` y popovers consumen un catálogo común de invocación y no escriben source ni storage directamente;
+- editor, preview, reading, shared, publicación, `body_text`, PDF y DOCX tienen una política explícita y una cobertura verificable por cada `kind` habilitado;
+- Mermaid se carga bajo demanda y ningún componente agrega parseo completo por tecla, listeners por instancia inline ni trabajo global no explicado;
+- source inválido, tags desconocidos, assets no disponibles o fallas de render/export se degradan de forma localizada y recuperable;
+- el rollout es reader-first/writer-second, mantiene lectura temporal de anotaciones legacy y demuestra compatibilidad mixta antes de retirar la ruta anterior.
+
+**Temas que entran en esta fase**
+
+- contratos pequeños de sintaxis/round-trip, semántica inline y proyecciones por superficie;
+- `DocumentComponentSpecRegistry`, Document IR y engine canónico en shared core;
+- adapters TipTap, comandos y guards transaccionales para semántica inline;
+- vertical slice de `Annotation`, `Tip`/`Info`, `Card`, CodeBlock y Mermaid;
+- `Entity`, `Highlight` y un issue propio para `ProtectedText`;
+- composición con `Accordion`, `Tabs`, `Steps`, `CardGroup`, `AccordionGroup` y `CodeGroup`;
+- catálogo de invocación para toolbar, bubble, `Insert`, `/`, popovers y shortcuts existentes;
+- renderer compartido y proyecciones para preview, lectura, shared, publicación, texto plano, PDF y DOCX;
+- seguridad, fixtures de escala, migración beta, compatibilidad y aceptación cross-runtime.
+
+**Temas que no son objetivo de esta fase**
+
+- un compilador MDX general, JSX/ESM/JavaScript embebido o componentes de terceros no registrados;
+- implementar sin caso de producto todo el catálogo especializado de Mintlify;
+- reabrir catálogo, binding, apertura, identidad, write-path o sync cerrados por el ADR y Fase 9;
+- rediseñar el shell, overlays, marca o sistema visual cerrado en Fase 10;
+- cambiar el agente o sus herramientas cerradas en Fase 11;
+- colaboración en tiempo real, un nuevo sistema de permisos o un store durable adicional;
+- tratar `ProtectedText` como seguridad fuera del editor Rich.
+
+**Secuencia de ejecución**
+
+1. **M0 — definición:** cerrar los tres contratos pequeños y fixtures; ningún writer nuevo se habilita antes de este gate.
+2. **M1 — document engine:** registry, Document IR, parser/serializer canónico, source opaco y compatibility wrappers.
+3. **M2 — anotación:** lectura dual, escritura `<Annotation>`, identidad estable, proyección `margins` y export limpio.
+4. **M3 — vertical slice de bloques:** `Tip`/`Info`, `Card` y CodeBlock end-to-end, incluida conversión de selección.
+5. **M4 — Mermaid:** fence source-first, preview lazy, sanitización, cache por hash, cancelación y fallback.
+6. **M5 — semántica inline:** `Entity` y `Highlight`; `ProtectedText` se implementa y valida en un issue independiente.
+7. **M6 — composición:** Accordion, Tabs, Steps y grupos después de demostrar nesting y round-trip en el slice inicial.
+8. **M7 — invocación y proyecciones:** catálogo de comandos, render compartido, `body_text`, preview/reading y exportación PDF/DOCX.
+9. **M8 — rollout y gate:** reader-first/writer-second, feature flag, compatibilidad mixta, E2E, evidencia de escala y aceptación del dueño.
+
+Las dependencias entre issues, no milestones artificiales, deben hacer cumplir esta secuencia. `ProtectedText`, invocación, render cross-surface y exportación se mantienen como briefs separados cuando sus criterios de entrega sean independientes.
+
+Referencia: `workflow/define/dod-fase-12.md`, `docs/design/document-components-implementation-plan.md`, `docs/design/document-components-playground.md`, `prototypes/document-components-playground.html`, `workflow/context/core/odessay-adr-identidad.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-prosemirror-tiptap.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-performance/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`, `workflow/agents.md`.
 
 ---
 
