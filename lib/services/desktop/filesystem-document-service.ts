@@ -47,23 +47,21 @@ function isoNow(): string {
 }
 
 /**
- * `parseDocumentFileToSnapshot` runs a real TipTap Editor pass and can throw
- * on content it doesn't understand. That must never fail the surrounding
- * openWriting/renameWriting call the way a missing/unreadable file does —
- * the file read already succeeded by this point, and (for renameWriting)
- * the rename on disk may already have happened too. Fall back to the
- * markdown itself as plainText, same as an unparsed document would have
- * shown before richText existed at all; the reading pipeline's own
- * plain-text fallback (lib/reading/render-body-html-core.ts) still renders
- * headings/tables/images from that.
+ * Deliberately does NOT run markdown through parseDocumentFileToSnapshot
+ * (a real TipTap Editor instantiation) here. The only production caller —
+ * DesktopDocumentService.openWriting/renameWriting, behind
+ * getDocumentService() — already does that parse itself (via
+ * desktopDocumentEngine.parseSourceDocument) and never reads this class's
+ * own richText/plainText at all; an earlier pass added a real parse here
+ * too, which meant every document open/rename on the real app paid for two
+ * full Editor instantiations over the same markdown instead of one, on the
+ * hottest path in the whole app (every tab switch, every workspace-tree
+ * open). Parsing has exactly one owner; this stays a cheap, non-throwing
+ * placeholder for direct/test callers of this class that don't go through
+ * that owner.
  */
-function safeParseMarkdown(markdown: string): { richText: DocumentSerializationSnapshot["bodyJson"] | null; plainText: string } {
-  try {
-    const { bodyJson, bodyText } = parseDocumentFileToSnapshot(markdown).snapshot
-    return { richText: bodyJson, plainText: bodyText }
-  } catch {
-    return { richText: null, plainText: markdown }
-  }
+function derivePlainText(markdown: string): { richText: DocumentSerializationSnapshot["bodyJson"] | null; plainText: string } {
+  return { richText: null, plainText: markdown }
 }
 
 function fileMetadataToSummary(meta: DesktopFileMetadata): WritingSummary {
@@ -285,16 +283,10 @@ export class FilesystemDocumentService implements DocumentService {
       const markdown = await tauriOpenFile(writingId)
       const filename = writingId.split("/").pop() ?? writingId
       const title = filenameToTitle(filename)
-      // Same parser exportWriting already uses (parseDocumentFileToSnapshot,
-      // a real TipTap Editor pass) rather than the old hand-rolled
-      // extractPlainText: that regex stripped heading/bold/italic markers
-      // outright and collapsed every blank line to a single space, so a
-      // synced file with real markdown structure (headings, tables, marks)
-      // rendered as one run-on, unstyled paragraph — richText was never
-      // even populated (hard-coded null) for a file opened this way.
-      // safeParseMarkdown never throws: a parse failure here must not read
-      // as "file not found" to a caller branching on that error code.
-      const { richText, plainText } = safeParseMarkdown(markdown)
+      // See derivePlainText: parsing markdown into richText belongs to
+      // DesktopDocumentService.openWriting (the real caller), which already
+      // does it via desktopDocumentEngine.parseSourceDocument.
+      const { richText, plainText } = derivePlainText(markdown)
       const now = isoNow()
       const writing: WritingRecord = {
         id: writingId,
@@ -370,10 +362,9 @@ export class FilesystemDocumentService implements DocumentService {
       const resolvedNewPath = await tauriRenameFile(writingId, newPath)
 
       const markdown = await tauriOpenFile(resolvedNewPath)
-      // The file is already renamed on disk at this point (tauriRenameFile
-      // above) — a parse failure here must not report the rename itself as
-      // failed. See safeParseMarkdown.
-      const { richText, plainText } = safeParseMarkdown(markdown)
+      // See derivePlainText: DesktopDocumentService.renameWriting is the
+      // real caller and doesn't read this class's richText/plainText either.
+      const { richText, plainText } = derivePlainText(markdown)
       const now = isoNow()
       const renamedRecord: WritingRecord = {
         id: resolvedNewPath,
