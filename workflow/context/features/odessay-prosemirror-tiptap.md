@@ -7,7 +7,7 @@ Este documento describe el backbone actual de ProseMirror/TipTap y su integraci�
 
 > **En contrato documental canónico, prevalece `workflow/context/core/odessay-adr-identidad.md` (ADR):** `body_json`/ProseMirror JSON es **copia de trabajo**, no la verdad persistida (D1). El round-trip `.md ⇄ body_json` debe ser lossless, incluido el `id` estable de las anotaciones (D3).
 
-> **Actualización D2/D3 — 2026-09-16:** `<Annotation>` es la sintaxis canónica objetivo. La sección de `annotationReference` y sigils documenta el adapter legacy actual; el nuevo contrato se implementará mediante Document IR y marks semánticos, con lectura temporal de ambas sintaxis.
+> **Actualización D2/D3 — 2026-09-16:** `<Annotation>` es la sintaxis canónica. `lib/document-components/` ya posee el Document IR, registry, parser, serializer, diagnostics y coverage gate compartidos. La sección de `annotationReference` y sigils documenta el adapter TipTap legacy que ODE-531 todavía debe migrar; el engine compartido lee ambas sintaxis y sólo serializa `<Annotation>`.
 
 Para decisiones sobre contrato documental canónico y arquitectura multi-runtime, usar además:
 
@@ -147,6 +147,12 @@ Implicación:
 ---
 
 ## Backbone Markdown (riesgo principal)
+
+### Controlled document engine
+
+`lib/document-components/` es el shared core framework-neutral para el perfil controlado. `DocumentComponentSpecRegistry` declara kinds, atributos y nesting con lookup O(1); `parseControlledMarkdown` produce Document IR + diagnostics recuperables; `serializeControlledDocument` canonicaliza nodos conocidos y conserva source opaco byte-for-byte. Fences se reconocen antes que tags y nunca se interpretan como componentes.
+
+`lib/editor/document-serialization.ts` expone `parseMarkdownToDocumentIr` y `serializeDocumentIrToMarkdown` como único seam público para consumidores component-aware. El adapter TipTap existente aún conserva su comportamiento hasta que las extensiones por kind se habiliten en los siguientes slices; no puede implementar otro parser privado. Parse/serialize completo ocurre sólo en open/import, snapshots de save coalescidos y transiciones Rich/Source, nunca en cada tecla.
 
 ProseMirror no es markdown-native. En Odessay usamos un puente explícito.
 

@@ -18,6 +18,11 @@ import {
   materializeMarkdownForRichParser,
   normalizeMarkdownForRoundTrip,
 } from "@/lib/editor/markdown-format";
+import {
+  parseControlledMarkdown,
+  serializeControlledDocument,
+  type DocumentParseResult,
+} from "@/lib/document-components";
 
 export type DocumentSerializationSnapshot = {
   bodyJson: JSONContent;
@@ -30,6 +35,17 @@ export type CanonicalDocumentFileSnapshot = {
   snapshot: DocumentSerializationSnapshot;
   markdown: string;
 };
+
+/**
+ * Framework-neutral adapter for component-aware consumers. TipTap remains an
+ * adapter and must not grow a second controlled-Markdown parser.
+ */
+export const parseMarkdownToDocumentIr = (markdown: string): DocumentParseResult =>
+  parseControlledMarkdown(markdown);
+
+export const serializeDocumentIrToMarkdown = (
+  parsed: DocumentParseResult,
+): string => serializeControlledDocument(parsed.document);
 
 const BLOCK_SEPARATOR = "\n";
 const FRONTMATTER_DELIMITER = "---";
