@@ -80,6 +80,70 @@ describe("DesktopSettingsService", () => {
       expect(list.data?.some((item) => item.key === "research")).toBe(true)
     })
 
+    it("does not duplicate a stored row whose key matches a base item even when its own isBase flag reads false", async () => {
+      // Reproduces the real bug: a user's pre-existing custom status happened
+      // to carry the exact key a later base item ("in_progress") was added
+      // with. The row is matched by key against BASE_VOCABULARY_ITEMS first —
+      // it must not also be re-pushed by the "custom rows" pass just because
+      // its own isBase flag is stale/false. Mirrors
+      // tests/vocabulary/server.test.ts's identical case for the cloud/web
+      // adapter, whose listVocabulary already guards against this.
+      mockSettingsStore.set("desktop_settings_v1", {
+        disabledStatuses: [],
+        vocabularyItems: [
+          {
+            id: "row-1",
+            kind: "status",
+            key: "in_progress",
+            name: "In Progress",
+            description: "",
+            icon: "zap",
+            color: "#C07B2A",
+            hidden: false,
+            isBase: false,
+            isRequired: false,
+            position: 7,
+            createdAt: "2026-08-01T00:00:00.000Z",
+            updatedAt: "2026-08-01T00:00:00.000Z",
+          },
+        ],
+      })
+
+      const result = await service.listVocabulary()
+      expect(result.error).toBeNull()
+      const matches = result.data!.filter((item) => item.kind === "status" && item.key === "in_progress")
+      expect(matches).toHaveLength(1)
+    })
+
+    it("does not duplicate a hand-created status whose name collides with a base item under a different key", async () => {
+      mockSettingsStore.set("desktop_settings_v1", {
+        disabledStatuses: [],
+        vocabularyItems: [
+          {
+            id: "row-2",
+            kind: "status",
+            key: "custom-in-progress",
+            name: "In Progress",
+            description: "",
+            icon: "zap",
+            color: "#C07B2A",
+            hidden: false,
+            isBase: false,
+            isRequired: false,
+            position: 7,
+            createdAt: "2026-08-01T00:00:00.000Z",
+            updatedAt: "2026-08-01T00:00:00.000Z",
+          },
+        ],
+      })
+
+      const result = await service.listVocabulary()
+      const matches = result.data!.filter(
+        (item) => item.kind === "status" && item.name.trim().toLowerCase() === "in progress",
+      )
+      expect(matches).toHaveLength(1)
+    })
+
     it("rejects an icon outside the closed set for the kind", async () => {
       const result = await service.createVocabularyItem({
         kind: "status",

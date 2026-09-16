@@ -157,8 +157,23 @@ export class DesktopSettingsService implements SettingsService {
         },
       )
     }
+    // Custom (non-base) rows the user created locally. A row already
+    // consumed above by key match must never be pushed again here just
+    // because its own `isBase` flag happens to read false — that flag can
+    // lag a base item introduced after the row already existed with the
+    // same key (e.g. "in_progress" added as an official base status after a
+    // user had already hand-created a custom one with that key). Also
+    // skipped when the NAME collides case-insensitively with a base item
+    // already in `items`. Mirrors the same guard in lib/vocabulary/server.ts's
+    // listVocabulary, which had this exact duplicate-key bug fixed already —
+    // this desktop-local counterpart never got the same fix.
+    const consumedKeys = new Set(items.map((item) => `${item.kind}:${item.key}`))
+    const baseNames = new Set(items.map((item) => `${item.kind}:${item.name.trim().toLowerCase()}`))
     for (const item of stored) {
-      if (!item.isBase) items.push(item)
+      if (item.isBase) continue
+      if (consumedKeys.has(`${item.kind}:${item.key}`)) continue
+      if (baseNames.has(`${item.kind}:${item.name.trim().toLowerCase()}`)) continue
+      items.push(item)
     }
     return items
   }
