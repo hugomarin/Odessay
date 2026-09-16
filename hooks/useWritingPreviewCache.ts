@@ -3,7 +3,7 @@
 import { useCallback, useRef } from "react"
 import type { JSONContent } from "@tiptap/core"
 import { renderWritingBodyHtml } from "@/lib/reading/render-body-html-client"
-import { resolveLocalImageSources } from "@/lib/reading/resolve-local-image-sources"
+import { hasLocalImageSources, resolveLocalImageSources } from "@/lib/reading/resolve-local-image-sources"
 import { getDesktopWritingCanonicalPath, getDocumentService } from "@/lib/services/document-service-factory"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import {
@@ -81,7 +81,7 @@ export function useWritingPreviewCache() {
       // editor's own gating (web can't read local files at all).
       let bodyHtml = renderedHtml
       let objectUrls: string[] = []
-      if (isDesktopRuntime()) {
+      if (isDesktopRuntime() && hasLocalImageSources(renderedHtml)) {
         const documentPath = await getDesktopWritingCanonicalPath(id)
         if (documentPath) {
           const resolved = await resolveLocalImageSources(renderedHtml, documentPath)

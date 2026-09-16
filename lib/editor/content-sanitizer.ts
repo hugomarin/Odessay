@@ -14,6 +14,16 @@ const sanitizeText = (value: string) =>
   value
     .replace(CITATION_ARTIFACT_REGEX, "")
     .replace(/[ \t]{3,}/g, "  ")
+    // A "blank" line carrying stray trailing whitespace (common from
+    // pasted/exported markdown) isn't literally empty, so it survived as a
+    // \n \n gap that \n{3,} below doesn't match — collapse it to a true
+    // empty line first so it still counts as a blank-line boundary. Anchored
+    // to sit strictly between two newlines (not just "^...$" on the whole
+    // string): sanitizeValue runs this over every text node in richText
+    // JSON too, where a standalone " " can be a legitimate one-space text
+    // node between two inline marks — collapsing that to "" produced an
+    // empty text node, which TipTap's schema rejects outright.
+    .replace(/(?<=\n)[ \t]+(?=\n)/g, "")
     .replace(/\n{3,}/g, "\n\n")
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>

@@ -19,7 +19,7 @@ import {
   titleToFilename,
   UNTITLED_DOCUMENT_NAME,
 } from "@/lib/desktop/document-naming"
-import { parseDocumentFileToSnapshot } from "@/lib/editor/document-serialization"
+import { parseDocumentFileToSnapshot, type DocumentSerializationSnapshot } from "@/lib/editor/document-serialization"
 import { renderWritingToDocxBytes } from "@/lib/export/to-docx"
 import { renderWritingToPdfBytes } from "@/lib/export/to-pdf"
 import { buildWritingExportDocument } from "@/lib/export/writing-export"
@@ -44,6 +44,26 @@ function err<T>(code: ServiceError["code"], message: string): ServiceResponse<T>
 
 function isoNow(): string {
   return new Date().toISOString()
+}
+
+/**
+ * `parseDocumentFileToSnapshot` runs a real TipTap Editor pass and can throw
+ * on content it doesn't understand. That must never fail the surrounding
+ * openWriting/renameWriting call the way a missing/unreadable file does —
+ * the file read already succeeded by this point, and (for renameWriting)
+ * the rename on disk may already have happened too. Fall back to the
+ * markdown itself as plainText, same as an unparsed document would have
+ * shown before richText existed at all; the reading pipeline's own
+ * plain-text fallback (lib/reading/render-body-html-core.ts) still renders
+ * headings/tables/images from that.
+ */
+function safeParseMarkdown(markdown: string): { richText: DocumentSerializationSnapshot["bodyJson"] | null; plainText: string } {
+  try {
+    const { bodyJson, bodyText } = parseDocumentFileToSnapshot(markdown).snapshot
+    return { richText: bodyJson, plainText: bodyText }
+  } catch {
+    return { richText: null, plainText: markdown }
+  }
 }
 
 function fileMetadataToSummary(meta: DesktopFileMetadata): WritingSummary {
@@ -272,7 +292,9 @@ export class FilesystemDocumentService implements DocumentService {
       // synced file with real markdown structure (headings, tables, marks)
       // rendered as one run-on, unstyled paragraph — richText was never
       // even populated (hard-coded null) for a file opened this way.
-      const { bodyJson: richText, bodyText: plainText } = parseDocumentFileToSnapshot(markdown).snapshot
+      // safeParseMarkdown never throws: a parse failure here must not read
+      // as "file not found" to a caller branching on that error code.
+      const { richText, plainText } = safeParseMarkdown(markdown)
       const now = isoNow()
       const writing: WritingRecord = {
         id: writingId,
@@ -348,7 +370,10 @@ export class FilesystemDocumentService implements DocumentService {
       const resolvedNewPath = await tauriRenameFile(writingId, newPath)
 
       const markdown = await tauriOpenFile(resolvedNewPath)
-      const { bodyJson: richText, bodyText: plainText } = parseDocumentFileToSnapshot(markdown).snapshot
+      // The file is already renamed on disk at this point (tauriRenameFile
+      // above) — a parse failure here must not report the rename itself as
+      // failed. See safeParseMarkdown.
+      const { richText, plainText } = safeParseMarkdown(markdown)
       const now = isoNow()
       const renamedRecord: WritingRecord = {
         id: resolvedNewPath,

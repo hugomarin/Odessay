@@ -77,7 +77,11 @@ export const escapeHtml = (value: string) =>
 const HEADING_LINE = /^(#{1,6})\s+(.*)$/
 const IMAGE_LINE = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)$/
 const TABLE_ROW = /^\|(.+)\|$/
-const TABLE_SEPARATOR_ROW = /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/
+// Requires the leading/trailing pipes TABLE_ROW itself requires — a bare
+// "---" with no pipe at all is far more likely a thematic break (or a
+// setext heading underline) than a one-column table separator.
+const TABLE_SEPARATOR_ROW = /^\|\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|$/
+const FENCE_LINE = /^```/
 
 const parseTableRow = (line: string) =>
   line
@@ -88,28 +92,88 @@ const parseTableRow = (line: string) =>
     .map((cell) => cell.trim())
 
 /**
+ * A blank line inside a fenced code block must not split it into separate
+ * blocks (and its content must never be re-interpreted as a heading/table),
+ * so blocks are split by scanning lines rather than a single `\n{2,})` regex
+ * split — the split has to know it's inside a fence to ignore blank lines
+ * there.
+ */
+const splitIntoBlocks = (text: string): string[] => {
+  const blocks: string[] = []
+  let current: string[] = []
+  let inFence = false
+
+  const flush = () => {
+    const block = current.join("\n").trim()
+    if (block) blocks.push(block)
+    current = []
+  }
+
+  for (const line of text.split("\n")) {
+    if (FENCE_LINE.test(line.trim())) {
+      inFence = !inFence
+      current.push(line)
+      continue
+    }
+    if (!inFence && line.trim() === "") {
+      flush()
+      continue
+    }
+    current.push(line)
+  }
+  flush()
+
+  return blocks
+}
+
+/**
  * `bodyText` (the plainText a document falls back to when its richText is
  * missing or fails to parse — an older desktop-synced doc, a corrupt
- * snapshot) can still be raw markdown source. Recognizing headings, tables,
- * and block images here — not just paragraphs — keeps this fallback from
- * dumping "| a | b |" and "![alt](src)" as literal escaped text. A heading
- * is checked against the block's first line specifically (not only whole
- * single-line blocks) because source markdown commonly puts body text on
- * the very next line without a blank line in between; the rest of the block
- * still gets the same treatment recursively.
+ * snapshot) can still be raw markdown source. Recognizing fenced code,
+ * headings, tables, and block images here — not just paragraphs — keeps
+ * this fallback from dumping "| a | b |" and "![alt](src)" as literal
+ * escaped text (or, worse, a `#` inside a code sample rendering as a real
+ * heading). A heading is checked against the block's first line
+ * specifically (not only whole single-line blocks) because source markdown
+ * commonly puts body text on the very next line without a blank line in
+ * between; the rest of the block still gets the same treatment recursively.
  */
 const renderBlockHtml = (block: string): string => {
   const lines = block.split("\n")
   const trimmedLines = lines.map((line) => line.trim())
 
+  if (FENCE_LINE.test(trimmedLines[0])) {
+    const closingIndex = lines.findIndex((line, index) => index > 0 && FENCE_LINE.test(line.trim()))
+    const codeLines = closingIndex === -1 ? lines.slice(1) : lines.slice(1, closingIndex)
+    return `<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`
+  }
+
   if (lines.length >= 2 && TABLE_ROW.test(trimmedLines[0]) && TABLE_SEPARATOR_ROW.test(trimmedLines[1])) {
     const headerCells = parseTableRow(trimmedLines[0])
-    const bodyRows = trimmedLines.slice(2).filter((line) => TABLE_ROW.test(line)).map(parseTableRow)
-    const thead = `<thead><tr>${headerCells.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead>`
-    const tbody = `<tbody>${bodyRows
-      .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`)
-      .join("")}</tbody>`
-    return `<table>${thead}${tbody}</table>`
+    // A separator whose cell count doesn't match the header's isn't a table
+    // separator at all — e.g. a one-cell "| Revenue |" line followed
+    // unrelatedly by a "---" thematic break. Falls through to a paragraph.
+    if (parseTableRow(trimmedLines[1]).length === headerCells.length) {
+      // Stops at the first line that isn't a table row instead of silently
+      // dropping trailing non-row content (a caption with no blank line
+      // before the next block) — that remainder still gets rendered, via
+      // the same recursive treatment a heading's trailing text gets.
+      let bodyRowCount = 0
+      while (
+        2 + bodyRowCount < trimmedLines.length &&
+        TABLE_ROW.test(trimmedLines[2 + bodyRowCount])
+      ) {
+        bodyRowCount++
+      }
+      const bodyRows = trimmedLines.slice(2, 2 + bodyRowCount).map(parseTableRow)
+      const thead = `<thead><tr>${headerCells.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead>`
+      const tbody = `<tbody>${bodyRows
+        .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`)
+        .join("")}</tbody>`
+      const tableHtml = `<table>${thead}${tbody}</table>`
+      const rest = lines.slice(2 + bodyRowCount).join("\n")
+      return rest.trim() ? tableHtml + renderBlockHtml(rest) : tableHtml
+    }
   }
 
   const headingMatch = trimmedLines[0].match(HEADING_LINE)
@@ -138,11 +202,7 @@ export const renderPlainTextHtml = (bodyText: string | null | undefined) => {
     return "<p></p>"
   }
 
-  const blocks = normalized
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter(Boolean)
-    .map(renderBlockHtml)
+  const blocks = splitIntoBlocks(normalized).map(renderBlockHtml)
 
   return blocks.length > 0 ? containWideTables(blocks.join("")) : "<p></p>"
 }

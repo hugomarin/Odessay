@@ -11,6 +11,15 @@ export type ResolvedLocalImages = {
 }
 
 /**
+ * Cheap pre-check so a caller can skip resolving a canonical path (an extra
+ * async round-trip) for the common case of a document with no local images
+ * at all.
+ */
+export function hasLocalImageSources(html: string): boolean {
+  return Array.from(html.matchAll(IMG_SRC_REGEX), (match) => match[1]).some(isLocalImageSource)
+}
+
+/**
  * Rewrites `<img src="...">` references to desktop-local files into
  * displayable blob: URLs. The live editor resolves these itself, per image,
  * via LocalImageExtension's NodeView — this covers read-only surfaces (a
