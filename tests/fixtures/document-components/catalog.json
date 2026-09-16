@@ -1,0 +1,15 @@
+{
+  "fixtures": [
+    { "path": "valid/mixed.md", "classification": "valid", "covers": ["markdown", "semantic-inline", "registered-block", "fence"] },
+    { "path": "valid/nesting.md", "classification": "valid", "covers": ["nesting", "containers"] },
+    { "path": "valid/escaped-attributes.md", "classification": "valid", "covers": ["escaping", "attribute-order"] },
+    { "path": "valid/assets.md", "classification": "valid", "covers": ["assets", "links"] },
+    { "path": "legacy/annotation.md", "classification": "legacy", "covers": ["annotation-compatibility"] },
+    { "path": "invalid/unbalanced.md", "classification": "opaque", "covers": ["unbalanced"] },
+    { "path": "invalid/unknown-tag.md", "classification": "opaque", "covers": ["unknown-kind"] },
+    { "path": "invalid/attributes.md", "classification": "opaque", "covers": ["invalid-attributes", "expressions"] },
+    { "path": "scale/10.md", "classification": "valid", "componentCount": 10, "covers": ["scale"] },
+    { "path": "scale/100.md", "classification": "valid", "componentCount": 100, "covers": ["scale"] },
+    { "path": "scale/1000.md", "classification": "valid", "componentCount": 1000, "covers": ["scale"] }
+  ]
+}

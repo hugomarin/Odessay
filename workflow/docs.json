@@ -596,6 +596,27 @@
       "description": "Plan revisado de implementación del perfil documental MDX-like controlado, con ownership en Fase 12: contrato Markdown, Document IR, adapters TipTap, invocación, render compartido, persistencia y rollout. Incluye contratos de performance, failure modes, trazabilidad a los briefs ODE-528–ODE-539 y gates de aceptación. La fase está planificada en Linear, no activa."
     },
     {
+      "path": "docs/design/document-components/syntax-and-roundtrip.md",
+      "type": "design-contract",
+      "scope": "fase-12-componentes-documentales",
+      "state": "normative",
+      "description": "Gramática normativa del perfil controlado: familias, nombres, atributos, escaping, nesting, recuperación opaca, round-trip semántico e idempotencia canónica."
+    },
+    {
+      "path": "docs/design/document-components/inline-semantics.md",
+      "type": "design-contract",
+      "scope": "fase-12-componentes-documentales",
+      "state": "normative",
+      "description": "Contrato de identidad, overlaps, copy/paste, mutación y unlock para Annotation, Highlight, Entity y ProtectedText."
+    },
+    {
+      "path": "docs/design/document-components/surface-projections.md",
+      "type": "design-contract",
+      "scope": "fase-12-componentes-documentales",
+      "state": "normative",
+      "description": "Matriz normativa de proyección por kind para Rich, Source, lectura, body_text, AI context, Markdown limpio, PDF y DOCX."
+    },
+    {
       "path": "prototypes/document-components-playground.html",
       "type": "design-reference",
       "scope": "exploracion-de-componentes-documentales",
