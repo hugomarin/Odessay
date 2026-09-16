@@ -7,6 +7,8 @@ Este documento describe el backbone actual de ProseMirror/TipTap y su integraci�
 
 > **En contrato documental canónico, prevalece `workflow/context/core/odessay-adr-identidad.md` (ADR):** `body_json`/ProseMirror JSON es **copia de trabajo**, no la verdad persistida (D1). El round-trip `.md ⇄ body_json` debe ser lossless, incluido el `id` estable de las anotaciones (D3).
 
+> **Actualización D2/D3 — 2026-09-16:** `<Annotation>` es la sintaxis canónica objetivo. La sección de `annotationReference` y sigils documenta el adapter legacy actual; el nuevo contrato se implementará mediante Document IR y marks semánticos, con lectura temporal de ambas sintaxis.
+
 Para decisiones sobre contrato documental canónico y arquitectura multi-runtime, usar además:
 
 - `workflow/context/features/odessay-desktop-app.md`
@@ -93,7 +95,7 @@ Definidas en `lib/editor/extensions.ts` con `createEditorExtensions()`.
 
 ---
 
-## Implementación custom relevante
+## Implementación custom relevante del runtime actual
 
 ## 1) Footnotes
 
@@ -101,16 +103,18 @@ Archivos:
 - `lib/editor/footnote-node.ts`
 - `lib/editor/footnote-extension.ts`
 
-Diseño:
+Diseño legacy vigente hasta completar la migración D2/D3:
 - Node inline atómico (`annotationReference`, antes `footnoteReference` — el código acepta ambos nombres) con attrs `{ id, type, index, text }`; `type` cubre `footnote | personal | ai | highlight`.
 - NodeView renderiza `<sup>` clickable y emite evento `footnote:click`.
 - Serialización markdown inline: `[^n|id: nota]`, `[@n|id: nota]`, `[@pn|id: nota]` o `[@hn|id: nota]` según tipo.
 - `]` y `\` dentro de la nota se serializan como `\]` y `\\`; el primer `]` no escapado cierra el marcador.
 - Una selección multibloque conserva varios fragments de mark y un único `annotationReference`; el panel Notes enumera el reference, no los fragments.
 
-Regla:
-- Las definiciones legacy no viven como bloque visible de ProseMirror; al guardar/exportar se normalizan al marcador inline canónico.
+Regla legacy:
+- Las definiciones legacy no viven como bloque visible de ProseMirror; el adapter vigente las normaliza al marcador inline legacy mientras se implementa el serializer `<Annotation>`.
 - En tablas, el reference se mantiene en la misma celda que el último fragmento seleccionado y antes del delimitador `|`.
+
+Contrato objetivo: `Annotation` se representa como mark semántico con `{ id, type, comment }`, el texto marcado es el ancla y el Document IR es el único puente entre source y TipTap JSON. El adapter nuevo lee temporalmente sigils y `<Annotation>`, pero sólo serializa `<Annotation>`.
 
 ## 2) Find/Replace decorations
 
