@@ -118,6 +118,15 @@ const sheetHeaderState = vi.hoisted(() => ({
   onRunAction: null as ((action: string) => void) | null,
 }))
 
+const editorContentState = vi.hoisted(() => ({
+  markdownValue: "",
+  onMarkdownChange: null as ((markdown: string) => void) | null,
+}))
+
+const statusBarState = vi.hoisted(() => ({
+  onToggleMode: null as ((mode: "rich" | "markdown") => void) | null,
+}))
+
 const imageModalState = vi.hoisted(() => ({
   writingId: null as string | null,
 }))
@@ -408,12 +417,26 @@ vi.mock("@/components/editor/editor-sheet-header", () => ({
     return null
   },
 }))
-vi.mock("@/components/editor/editor-content", () => ({ WritingEditorContent: () => null }))
+vi.mock("@/components/editor/editor-content", () => ({
+  WritingEditorContent: (props: {
+    markdownValue: string
+    onMarkdownChange: (markdown: string) => void
+  }) => {
+    editorContentState.markdownValue = props.markdownValue
+    editorContentState.onMarkdownChange = props.onMarkdownChange
+    return null
+  },
+}))
 vi.mock("@/components/editor/editor-empty-state", () => ({ EditorEmptyState: () => null }))
 vi.mock("@/components/editor/editor-find-replace", () => ({ EditorFindReplace: () => null }))
 vi.mock("@/components/editor/editor-shortcuts-dialog", () => ({ EditorShortcutsDialog: () => null }))
 vi.mock("@/components/editor/mobile-write-notice", () => ({ MobileWriteNotice: () => null }))
-vi.mock("@/components/editor/status-bar", () => ({ EditorStatusBar: () => null }))
+vi.mock("@/components/editor/status-bar", () => ({
+  EditorStatusBar: (props: { onToggleMode: (mode: "rich" | "markdown") => void }) => {
+    statusBarState.onToggleMode = props.onToggleMode
+    return null
+  },
+}))
 vi.mock("@/components/reading/margins/annotation-bubble", () => ({ AnnotationBubble: () => null }))
 vi.mock("@/components/reading/margins/selection-popup", () => ({ SelectionPopup: () => null }))
 vi.mock("@/components/editor/modals/insert-footnote-modal", () => ({
@@ -508,6 +531,9 @@ beforeEach(async () => {
   saveToDiskState.onSaveToDisk = null
   saveToDiskState.onGetSaveContent = null
   sheetHeaderState.onRunAction = null
+  editorContentState.markdownValue = ""
+  editorContentState.onMarkdownChange = null
+  statusBarState.onToggleMode = null
   imageModalState.writingId = null
   window.confirm = vi.fn(() => true)
 
@@ -801,6 +827,59 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
 })
 
 describe("ODE-461 — desktop save reliability", () => {
+  it("keeps a clean Rich → Source → Rich transition out of setContent and persistence", async () => {
+    await act(async () => root?.render(<EditorShell writingId="desktop-draft-1" />))
+    await vi.waitFor(() => expect(statusBarState.onToggleMode).not.toBeNull())
+
+    // Ignore the initial document hydration; this assertion owns only the
+    // presentation-only mode transition discovered during ODE-530 review.
+    setContentCommand.mockClear()
+    mocks.saveWriting.mockClear()
+    const readsBeforeToggle = {
+      text: editorState.textReads,
+      json: editorState.jsonReads,
+    }
+
+    await act(async () => {
+      statusBarState.onToggleMode?.("markdown")
+    })
+    await act(async () => {
+      statusBarState.onToggleMode?.("rich")
+    })
+
+    expect(setContentCommand).not.toHaveBeenCalled()
+    expect(editorState.textReads).toBe(readsBeforeToggle.text)
+    expect(editorState.jsonReads).toBe(readsBeforeToggle.json)
+    expect(mocks.saveWriting).not.toHaveBeenCalled()
+  })
+
+  it("applies and persists a real Source edit when returning to Rich", async () => {
+    await act(async () => root?.render(<EditorShell writingId="desktop-draft-1" />))
+    await vi.waitFor(() => expect(statusBarState.onToggleMode).not.toBeNull())
+
+    setContentCommand.mockClear()
+    mocks.saveWriting.mockClear()
+    const readsBeforeEdit = {
+      text: editorState.textReads,
+      json: editorState.jsonReads,
+    }
+
+    await act(async () => {
+      statusBarState.onToggleMode?.("markdown")
+    })
+    await act(async () => {
+      editorContentState.onMarkdownChange?.("Changed in Source")
+    })
+    await vi.waitFor(() => expect(editorContentState.markdownValue).toBe("Changed in Source"))
+    await act(async () => {
+      statusBarState.onToggleMode?.("rich")
+    })
+
+    expect(setContentCommand).toHaveBeenCalledTimes(1)
+    expect(editorState.textReads).toBeGreaterThan(readsBeforeEdit.text)
+    expect(editorState.jsonReads).toBeGreaterThan(readsBeforeEdit.json)
+  })
+
   it("keeps full-document snapshot reads outside the desktop keystroke frame", async () => {
     await act(async () => root?.render(<EditorShell />))
     await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())

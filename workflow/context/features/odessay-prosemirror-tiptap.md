@@ -152,7 +152,7 @@ Implicación:
 
 `lib/document-components/` es el shared core framework-neutral para el perfil controlado. `DocumentComponentSpecRegistry` declara kinds, atributos y nesting con lookup O(1); `parseControlledMarkdown` produce Document IR + diagnostics recuperables; `serializeControlledDocument` canonicaliza nodos conocidos y conserva source opaco byte-for-byte. Fences se reconocen antes que tags y nunca se interpretan como componentes.
 
-`lib/editor/document-serialization.ts` expone `parseMarkdownToDocumentIr` y `serializeDocumentIrToMarkdown` como único seam público para consumidores component-aware. El adapter TipTap existente aún conserva su comportamiento hasta que las extensiones por kind se habiliten en los siguientes slices; no puede implementar otro parser privado. Parse/serialize completo ocurre sólo en open/import, snapshots de save coalescidos y transiciones Rich/Source, nunca en cada tecla.
+`lib/editor/document-serialization.ts` expone `parseMarkdownToDocumentIr` y `serializeDocumentIrToMarkdown` como único seam público para consumidores component-aware. El adapter TipTap existente aún conserva su comportamiento hasta que las extensiones por kind se habiliten en los siguientes slices; no puede implementar otro parser privado. Parse/serialize completo ocurre sólo en open/import, snapshots de save coalescidos y transiciones Rich/Source con cambios aceptados, nunca en cada tecla ni en un toggle Source sin modificaciones. `EditorContent` conserva un único owner montado durante Source para no destruir NodeViews o reemplazar EditorState por un cambio de presentación.
 
 ProseMirror no es markdown-native. En Odessay usamos un puente explícito.
 

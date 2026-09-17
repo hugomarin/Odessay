@@ -70,7 +70,9 @@ El toggle **Rich / Markdown** en la topbar (zona izquierda, junto a los botones 
 
 - El toggle es un segmented control de dos estados: **Rich** y **Markdown**. El estado activo tiene fondo `--ink-5` o equivalente (ver referencia en imagen — borde con fondo tenue).
 - Al activar Markdown: el JSON del editor se serializa a Markdown con `tiptap-markdown` y se muestra en un `<textarea>` controlado.
-- Al activar Rich: el contenido del textarea se pasa al parser de `tiptap-markdown` y se re-hidrata el editor TipTap. La selección y posición del cursor se pierden — comportamiento esperado y aceptable.
+- Al activar Rich sin cambios en el textarea: se vuelve a mostrar el mismo EditorState. No se ejecuta `setContent`, no se reconstruyen NodeViews, no se pierde selección/historial y no se programa persistencia.
+- Al activar Rich después de editar el textarea: el Markdown aceptado se parsea una sola vez y actualiza TipTap; la persistencia queda asociada a esa mutación real, no al cambio de vista.
+- La isla `EditorContent` permanece montada e inerte mientras Markdown está activo. Esto conserva ownership de ProseMirror/NodeViews; la vista Source no crea una segunda fuente de verdad.
 - El switch es instantáneo — sin animación, sin loading state.
 
 ### Botones de formato en modo Markdown

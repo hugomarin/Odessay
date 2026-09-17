@@ -3940,7 +3940,31 @@ export function EditorShell({
       const normalizedMarkdown = isDesktopRuntime()
         ? markdownValue
         : normalizeMarkdownForRoundTrip(markdownValue)
+
+      let currentRichMarkdown: string
+      if (isDesktopRuntime()) {
+        const result = desktopDocumentEngine.richToSource(editor)
+        currentRichMarkdown = result.success ? result.markdown : getEditorMarkdown(editor)
+      } else {
+        currentRichMarkdown = normalizeMarkdownForRoundTrip(
+          getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
+        )
+      }
+
       modeRef.current = "rich"
+      setMode("rich")
+      setMarkdownValue(normalizedMarkdown)
+
+      // Source is another presentation of the same EditorState. A clean
+      // Rich -> Source -> Rich transition must not replace that state: doing
+      // so destroys/recreates every custom NodeView, resets editor-owned
+      // history/selection, and schedules a durable write for unchanged
+      // content. Markdown edits that already passed the Source autosave have
+      // also been applied to TipTap, so they take this same no-op path.
+      if (currentRichMarkdown === normalizedMarkdown) {
+        return
+      }
+
       isApplyingContentRef.current = true
       if (isDesktopRuntime()) {
         const result = desktopDocumentEngine.sourceToRich(normalizedMarkdown)
@@ -3954,8 +3978,6 @@ export function EditorShell({
         editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
       }
       isApplyingContentRef.current = false
-      setMarkdownValue(normalizedMarkdown)
-      setMode("rich")
       updateDerivedEditorState(editor)
       void persistEditorSnapshot(editor)
     },
