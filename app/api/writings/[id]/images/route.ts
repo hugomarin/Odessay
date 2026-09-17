@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { sanitizeSvgMarkup } from "@/lib/security/sanitize-svg"
 import { z } from "zod"
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -8,6 +9,7 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/jpg",
   "image/webp",
   "image/gif",
+  "image/svg+xml",
 ])
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
@@ -15,7 +17,7 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const uploadSchema = z.object({
   file: z.instanceof(File).refine(
     (file) => ALLOWED_MIME_TYPES.has(file.type),
-    { message: "Invalid file type. Allowed: png, jpg, jpeg, webp, gif." }
+    { message: "Invalid file type. Allowed: png, jpg, jpeg, webp, gif, svg." }
   ).refine(
     (file) => file.size > 0 && file.size <= MAX_FILE_SIZE,
     { message: "File must be between 1 byte and 5MB." }
@@ -98,9 +100,18 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     const assetId = crypto.randomUUID()
     const storagePath = `${user.id}/${writingId}/${assetId}.${ext}`
 
+    // Defense in depth: the client already sanitizes SVGs before upload, but
+    // this route is reachable directly (not only via that UI), so a raw
+    // <script>-bearing SVG must never reach storage from here either.
+    let uploadBody: File | ArrayBuffer = imageFile
+    if (imageFile.type === "image/svg+xml") {
+      const sanitized = sanitizeSvgMarkup(await imageFile.text())
+      uploadBody = new TextEncoder().encode(sanitized).buffer as ArrayBuffer
+    }
+
     const { error: uploadError } = await admin.storage
       .from("writing-assets")
-      .upload(storagePath, imageFile, {
+      .upload(storagePath, uploadBody, {
         contentType: imageFile.type,
         upsert: false,
       })
@@ -121,7 +132,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         author_id: user.id,
         storage_path: storagePath,
         mime_type: imageFile.type,
-        size_bytes: imageFile.size,
+        size_bytes: uploadBody instanceof ArrayBuffer ? uploadBody.byteLength : imageFile.size,
       })
       .select()
       .single()
