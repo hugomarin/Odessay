@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 use tauri_plugin_fs::FsExt;
 use uuid::Uuid;
 
@@ -19,6 +19,14 @@ pub struct FileMetadata {
 #[tauri::command]
 pub fn open_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| format!("open_file: {e}"))
+}
+
+/// Drains file paths macOS asked us to open (Finder "Open With" / a Dock
+/// drop) before the frontend had a `menu:os-open-path` listener registered.
+/// Called once at boot so a cold-start open isn't lost to that race.
+#[tauri::command]
+pub fn take_pending_open_paths(state: State<crate::PendingOpenPaths>) -> Vec<String> {
+    std::mem::take(&mut *state.0.lock().unwrap())
 }
 
 /// Grant the native fs watcher access to a user-confirmed BindingRoot.
