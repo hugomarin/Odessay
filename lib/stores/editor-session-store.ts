@@ -23,7 +23,7 @@ import type {
   LocalEditorTabViewState,
 } from "@/lib/local-db/schema";
 
-type EditorSessionState = {
+export type EditorSessionState = {
   loaded: boolean;
   loading: boolean;
   session: LocalEditorSession;

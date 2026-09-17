@@ -53,21 +53,26 @@ export type DurableSaveSnapshot = {
   cloudPresent: boolean
 }
 
+const CATALOG_TO_WRITING_SYNC_STATUS: Record<CatalogSyncStatus, LocalWriting["sync_status"]> = {
+  "local-only": "synced",
+  synced: "synced",
+  pending: "pending",
+  conflict: "failed",
+  failed: "failed",
+  deleted: "deleted",
+}
+
 export const mapCatalogRecordToSaveState = (
   record: DurableSaveSnapshot,
   isOnline: boolean,
 ): EditorSaveState => {
   const lifecycle: WritingLifecycle = record.cloudPresent ? "server-confirmed" : "local-only"
-  const writingSyncStatus: LocalWriting["sync_status"] =
-    record.syncStatus === "pending"
-      ? "pending"
-      : record.syncStatus === "failed" || record.syncStatus === "conflict"
-        ? "failed"
-        : record.syncStatus === "deleted"
-          ? "deleted"
-          : "synced"
 
-  return mapLocalSyncStatusToSaveState(writingSyncStatus, lifecycle, isOnline)
+  return mapLocalSyncStatusToSaveState(
+    CATALOG_TO_WRITING_SYNC_STATUS[record.syncStatus],
+    lifecycle,
+    isOnline,
+  )
 }
 
 export const isDurableTerminalSyncStatus = (syncStatus: CatalogSyncStatus): boolean =>
