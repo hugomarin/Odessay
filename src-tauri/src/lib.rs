@@ -1,12 +1,51 @@
 pub mod commands;
 
+use std::sync::Mutex;
 use tauri::menu::{AboutMetadata, MenuBuilder, MenuItem, SubmenuBuilder};
 use tauri::Emitter;
 use tauri::Manager;
 
+/// File paths macOS asked us to open (via "Open With" or a Dock drop) before
+/// the webview had a `menu:os-open-path` listener registered — drained once by
+/// the frontend on boot (`take_pending_open_paths`) so a cold-start open isn't
+/// silently lost to the listener-registration race.
+#[derive(Default)]
+pub struct PendingOpenPaths(pub Mutex<Vec<String>>);
+
+/// Handles OS-level "open this file" requests (Finder "Open With", or a file
+/// dropped on the Dock icon). Only exists on platforms where the OS routes
+/// file opens through the app bundle rather than argv.
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn handle_run_event(app_handle: &tauri::AppHandle, event: &tauri::RunEvent) {
+    let tauri::RunEvent::Opened { urls } = event else {
+        return;
+    };
+    let paths: Vec<String> = urls
+        .iter()
+        .filter_map(|url| url.to_file_path().ok())
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    if paths.is_empty() {
+        return;
+    }
+    if let Some(state) = app_handle.try_state::<PendingOpenPaths>() {
+        state.0.lock().unwrap().extend(paths);
+    }
+    // No payload: the path(s) always travel through the queue above, which
+    // `take_pending_open_paths` drains exactly once each. This is just a
+    // wake-up signal for a listener that's already mounted (warm runtime) —
+    // a cold-start open is instead picked up by the frontend's boot-time
+    // drain, since the listener may not exist yet when this fires.
+    let _ = app_handle.emit("menu:os-open-path", ());
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
+fn handle_run_event(_app_handle: &tauri::AppHandle, _event: &tauri::RunEvent) {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(PendingOpenPaths::default())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
@@ -276,6 +315,7 @@ pub fn run() {
             commands::document::list_recent_files,
             commands::document::resolve_asset_path,
             commands::document::read_local_image_asset,
+            commands::document::take_pending_open_paths,
             commands::index::catalog_schema_version,
             commands::index::catalog_dual_write,
             commands::index::catalog_bulk_dual_write,
@@ -320,6 +360,7 @@ pub fn run() {
             commands::workspace::workspace_touch_file,
             commands::workspace::workspace_compute_content_hash,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app_handle, event| handle_run_event(app_handle, &event));
 }

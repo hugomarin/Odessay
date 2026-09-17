@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { subscribeMenuAction } from "@/lib/services/desktop/menu-event-bus"
+import { drainPendingOsOpenPaths } from "@/lib/services/desktop/pending-os-open"
 import type { EditorShortcutAction } from "@/lib/editor/shortcuts"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 
@@ -98,6 +99,21 @@ export function useTauriMenuEvents({
         onOpenFileRef.current(path, content)
       }),
     )
+
+    // A .md opened from Finder ("Open With") or dropped on the Dock icon —
+    // the OS already gave us the path, so unlike menu:open-file there's no
+    // dialog to show (see src-tauri/src/lib.rs RunEvent::Opened).
+    const openFromOsPath = async (path: string) => {
+      const { invoke } = await import("@tauri-apps/api/core")
+      const content = await invoke<string>("open_file", { path })
+      onOpenFileRef.current(path, content)
+    }
+    unsubscribers.push(
+      subscribeMenuAction("os-open-path", () => drainPendingOsOpenPaths(openFromOsPath)),
+    )
+    // Cold start: the OS may have queued the open before this listener
+    // existed. Drain it once so that open isn't silently lost.
+    void drainPendingOsOpenPaths(openFromOsPath)
 
     unsubscribers.push(
       subscribeMenuAction("new-file", async () => {
