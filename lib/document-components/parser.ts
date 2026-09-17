@@ -144,6 +144,7 @@ const occupiesOwnLine = (source: string, start: number, end: number) => {
 const parseControlledMarkdownInternal = (
   source: string,
   stopAfterFirstTopLevelComponent: boolean,
+  topLevelStart = 0,
 ): DocumentParseResult => {
   const diagnostics: DocumentDiagnostic[] = [];
 
@@ -332,7 +333,7 @@ const parseControlledMarkdownInternal = (
     return { nodes, cursor: source.length, closed: false };
   };
 
-  const parsed = parseRange(0);
+  const parsed = parseRange(topLevelStart);
   return {
     document: { type: "document", version: 1, source, children: parsed.nodes },
     diagnostics,
@@ -343,10 +344,10 @@ const parseControlledMarkdownInternal = (
 export const parseControlledMarkdown = (source: string): DocumentParseResult =>
   parseControlledMarkdownInternal(source, false);
 
-export const parseControlledComponentPrefix = (source: string): ComponentNode | null => {
-  const parsed = parseControlledMarkdownInternal(source, true);
+export const parseControlledComponentAt = (source: string, start = 0): ComponentNode | null => {
+  const parsed = parseControlledMarkdownInternal(source, true, start);
   const first = parsed.document.children[0];
-  return first?.type === "component" && first.start === 0 && parsed.diagnostics.length === 0
+  return first?.type === "component" && first.start === start && parsed.diagnostics.length === 0
     ? first
     : null;
 };

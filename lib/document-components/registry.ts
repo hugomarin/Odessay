@@ -9,7 +9,7 @@ const safeUrl = (value: string) => {
   if (value.length === 0 || value !== value.trim() || /[\u0000-\u001F\u007F]/.test(value)) {
     return false;
   }
-  if (value.startsWith("//") || value.startsWith("\\")) return false;
+  if (value.startsWith("//") || value.includes("\\")) return false;
   if (value.startsWith("#")) return true;
   const scheme = value.match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
   if (scheme) return /^(?:https?|mailto)$/i.test(scheme[1]);

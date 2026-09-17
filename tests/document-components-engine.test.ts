@@ -5,6 +5,7 @@ import {
   DOCUMENT_PROJECTION_SURFACES,
   DocumentComponentSpecRegistry,
   canonicalizeControlledMarkdown,
+  parseControlledComponentAt,
   parseControlledMarkdown,
   serializeControlledDocument,
   validateDocumentComponentCoverage,
@@ -53,6 +54,16 @@ describe("ODE-529 controlled document engine", () => {
     expect(canonicalizeControlledMarkdown(source)).toBe(source);
   });
 
+  it("parses one controlled block from its source offset without copying the suffix", () => {
+    const source = 'Prelude\n\n<Tip title="At offset">\nBody\n</Tip>\n\nEpilogue';
+    const start = source.indexOf("<Tip");
+    const component = parseControlledComponentAt(source, start);
+
+    expect(component).toMatchObject({ kind: "Tip", start });
+    expect(component?.end).toBe(source.indexOf("</Tip>") + "</Tip>".length);
+    expect(parseControlledComponentAt(source, start + 1)).toBeNull();
+  });
+
   it.each(["Annotation", "Highlight", "Entity", "ProtectedText"])(
     "preserves an empty %s as invalid opaque source",
     (kind) => {
@@ -82,6 +93,7 @@ describe("ODE-529 controlled document engine", () => {
     expect(href?.validate?.("#notes")).toBe(true);
     expect(href?.validate?.("//evil.example")).toBe(false);
     expect(href?.validate?.(String.raw`\evil.example`)).toBe(false);
+    expect(href?.validate?.(String.raw`chapter\evil.example`)).toBe(false);
     expect(href?.validate?.(" javascript:alert(1)")).toBe(false);
     expect(href?.validate?.("data:text/html,bad")).toBe(false);
     expect(href?.validate?.("file:///tmp/private")).toBe(false);

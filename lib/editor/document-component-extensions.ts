@@ -3,7 +3,7 @@ import CodeBlock from "@tiptap/extension-code-block"
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { findWrapping } from "@tiptap/pm/transform"
 import { escapeControlledAttribute } from "@/lib/document-components/entities"
-import { parseControlledComponentPrefix } from "@/lib/document-components/parser"
+import { parseControlledComponentAt } from "@/lib/document-components/parser"
 import { DocumentComponentSpecRegistry } from "@/lib/document-components/registry"
 import type { DocumentComponentKind } from "@/lib/document-components/types"
 
@@ -96,10 +96,9 @@ const setupMarkdownItRule = (kind: ControlledBlockKind) => (md: any) => {
       const start = state.bMarks[startLine]
       const openingLine = state.src.slice(start, state.eMarks[startLine])
       if (!new RegExp(`^<${kind}(?:\\s|>)`).test(openingLine)) return false
-      const remaining = state.src.slice(start)
-      const first = parseControlledComponentPrefix(remaining)
+      const first = parseControlledComponentAt(state.src, start)
       if (!first || first.kind !== kind) return false
-      const fragment = remaining.slice(0, first.end)
+      const fragment = state.src.slice(start, first.end)
       if (silent) return true
 
       const raw = fragment
