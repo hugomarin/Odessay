@@ -135,6 +135,43 @@ describe("controlled document component blocks", () => {
     editor.destroy()
   })
 
+  it("rejects controlled blocks in unsupported parents without mutation", () => {
+    for (const content of [
+      {
+        type: "doc",
+        content: [{ type: "blockquote", content: [{ type: "paragraph", content: [{ type: "text", text: "Quote" }] }] }],
+      },
+      {
+        type: "doc",
+        content: [{ type: "bulletList", content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "Item" }] }] }] }],
+      },
+    ] satisfies Content[]) {
+      const editor = createEditor(content)
+      editor.commands.setTextSelection(2)
+      const before = editor.getJSON()
+
+      expect(editor.commands.insertTip()).toBe(false)
+      expect(editor.getJSON()).toEqual(before)
+      editor.destroy()
+    }
+  })
+
+  it("does not wrap an existing controlled block in a Card", () => {
+    const editor = createEditor({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "Alpha" }] },
+        { type: "tip", attrs: { title: "Remember" }, content: [{ type: "paragraph", content: [{ type: "text", text: "Inside" }] }] },
+      ],
+    })
+    editor.commands.setTextSelection({ from: 1, to: editor.state.doc.content.size - 1 })
+    const before = editor.getJSON()
+
+    expect(editor.commands.convertSelectionToCard()).toBe(false)
+    expect(editor.getJSON()).toEqual(before)
+    editor.destroy()
+  })
+
   it("keeps fenced code literal and preserves unsupported language strings", () => {
     const markdown = "```custom-runtime\n<Tip title=\"literal\">\nnot a component\n</Tip>\n```"
     const editor = createEditor()
@@ -174,6 +211,23 @@ describe("controlled document component blocks", () => {
     editor.destroy()
   })
 
+  it.each([10, 100, 1000])("opens a component with %i literal closing tags in one pass", (count) => {
+    const literalClosings = Array.from({ length: count }, () => "</Tip>").join("\n")
+    const markdown = `<Tip title="Stress">\n\`\`\`md\n${literalClosings}\n\`\`\`\nAfter the fence.\n</Tip>`
+    const editor = createEditor()
+
+    editor.commands.setContent(markdown)
+
+    expect(editor.getJSON().content?.[0]).toMatchObject({
+      type: "tip",
+      content: [
+        { type: "codeBlock", content: [{ type: "text", text: literalClosings }] },
+        { type: "paragraph", content: [{ type: "text", text: "After the fence." }] },
+      ],
+    })
+    editor.destroy()
+  })
+
   it("does not parse or serialize the full document during typing transactions", () => {
     const editor = createEditor("Start")
     const markdownStorage = (editor.storage as unknown as { markdown: { getMarkdown: () => string } }).markdown
@@ -196,6 +250,8 @@ describe("controlled document component blocks", () => {
     expect(shell).toContain("insertTip().run()")
     expect(shell).toContain("insertInfo().run()")
     expect(shell).toContain("convertSelectionToCard().run()")
+    expect(shell).toContain("Those blocks cannot be placed in a Card.")
+    expect(shell).toContain("chain.insertCard().run()")
     expect(shell).not.toMatch(/case \"(?:tipBlock|infoBlock|cardBlock)\"[\s\S]{0,500}persistEditorSnapshot/)
   })
 })

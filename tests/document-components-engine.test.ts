@@ -42,6 +42,51 @@ describe("ODE-529 controlled document engine", () => {
     expect(canonicalizeControlledMarkdown(canonical)).toBe(canonical);
   });
 
+  it("keeps block-looking tags literal when they do not occupy their own lines", () => {
+    const source = 'Before <Tip title="x">literal</Tip> after';
+    const parsed = parseControlledMarkdown(source);
+
+    expect(parsed.diagnostics).toEqual([]);
+    expect(parsed.document.children).toEqual([
+      { type: "markdown", raw: source, start: 0, end: source.length },
+    ]);
+    expect(canonicalizeControlledMarkdown(source)).toBe(source);
+  });
+
+  it.each(["Annotation", "Highlight", "Entity", "ProtectedText"])(
+    "preserves an empty %s as invalid opaque source",
+    (kind) => {
+      const attributes = kind === "Annotation"
+        ? 'id="a" type="footnote" comment=""'
+        : kind === "Entity"
+          ? 'id="e" type="person"'
+          : 'id="x"';
+      const source = `<${kind} ${attributes}></${kind}>`;
+      const parsed = parseControlledMarkdown(source);
+
+      expect(parsed.diagnostics).toContainEqual(expect.objectContaining({
+        code: "invalid-content",
+        kind,
+      }));
+      expect(serializeControlledDocument(parsed.document)).toBe(source);
+    },
+  );
+
+  it("accepts only explicit safe schemes or document-relative Card links", () => {
+    const href = DocumentComponentSpecRegistry.get("Card")?.attributes.find(({ name }) => name === "href");
+
+    expect(href?.validate?.("https://example.com")).toBe(true);
+    expect(href?.validate?.("mailto:reader@example.com")).toBe(true);
+    expect(href?.validate?.("../chapter/two")).toBe(true);
+    expect(href?.validate?.("chapter/two")).toBe(true);
+    expect(href?.validate?.("#notes")).toBe(true);
+    expect(href?.validate?.("//evil.example")).toBe(false);
+    expect(href?.validate?.(String.raw`\evil.example`)).toBe(false);
+    expect(href?.validate?.(" javascript:alert(1)")).toBe(false);
+    expect(href?.validate?.("data:text/html,bad")).toBe(false);
+    expect(href?.validate?.("file:///tmp/private")).toBe(false);
+  });
+
   it.each([
     ["invalid/unbalanced.md", "unbalanced-component"],
     ["invalid/unknown-tag.md", "unknown-component"],

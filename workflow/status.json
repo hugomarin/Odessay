@@ -2,7 +2,7 @@
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar los ledgers durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: appendear la entrega a workflow/built.jsonl (una línea por issue: what, phase, issue, linear_url, pr_url, commit, date, notes), commitear y pushear a main. Luego mover el issue a Done en Linear y ajustar active_phase si la fase cambia.",
   "_ledger": "Las entregas ya no viven acá. Ledger activo: workflow/built.jsonl. Fases cerradas: workflow/archive/built-*.jsonl. Consultar con `npm run ops:ledger -- built --issue ODE-XXX` en vez de leer los archivos completos.",
-  "last_updated": "2026-09-14",
+  "last_updated": "2026-09-16",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -80,6 +80,10 @@
       {
         "issue": "ODE-400",
         "reason": "Referenced by docs commit 938f34f on main (ADR D7 amendment for explicit user moves) before product-code delivery. Issue In Progress; its relocate implementation ships in later slices (ODE-401+). Ignored for status drift until delivery."
+      },
+      {
+        "issue": "ODE-445",
+        "reason": "Fase 10 closure and active-phase transition recorded only in workflow metadata. It is not a separate product-code delivery and therefore has no built-ledger entry."
       }
     ]
   },

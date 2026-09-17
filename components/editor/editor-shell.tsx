@@ -3528,8 +3528,17 @@ export function EditorShell({
           const selectedRange = getValidatedRichSelection()
           let chain = editor.chain().focus()
           if (selectedRange) chain = chain.setTextSelection(selectedRange)
-          if (!chain.convertSelectionToCard().run()) {
-            editor.chain().focus().insertCard().run()
+          if (selectedRange && selectedRange.from !== selectedRange.to) {
+            if (!chain.convertSelectionToCard().run()) {
+              showCorrectionToast({
+                phase: "error",
+                completed: 0,
+                total: 0,
+                message: "Those blocks cannot be placed in a Card.",
+              }, 4000)
+            }
+          } else {
+            chain.insertCard().run()
           }
           return
         }
@@ -3648,6 +3657,7 @@ export function EditorShell({
       persistEditorSnapshot,
       queueMarkdownSelectionRestore,
       router,
+      showCorrectionToast,
       toggleFocusMode,
     ],
   )

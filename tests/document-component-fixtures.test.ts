@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { DocumentComponentSpecRegistry } from "@/lib/document-components";
 
 const fixtureRoot = join(process.cwd(), "tests/fixtures/document-components");
 
@@ -46,6 +47,18 @@ describe("ODE-528 document component fixtures", () => {
         true,
       );
     }
+  });
+
+  it("keeps the executable profile aligned with the shared registry", () => {
+    expect(
+      DocumentComponentSpecRegistry.values().map((spec) => ({
+        kind: spec.kind,
+        family: spec.family,
+        form: spec.form,
+        attributes: spec.attributes.map(({ name }) => name),
+        required: spec.attributes.filter(({ required }) => required).map(({ name }) => name),
+      })),
+    ).toEqual(profile.kinds);
   });
 
   it("declares every required projection surface", () => {

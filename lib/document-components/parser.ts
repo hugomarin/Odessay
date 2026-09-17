@@ -131,7 +131,20 @@ const diagnostic = (
 const isWhitespaceMarkdown = (node: DocumentIrNode) =>
   node.type === "markdown" && node.raw.trim().length === 0;
 
-export const parseControlledMarkdown = (source: string): DocumentParseResult => {
+const occupiesOwnLine = (source: string, start: number, end: number) => {
+  const lineStart = source.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+  const nextLineBreak = source.indexOf("\n", end);
+  const lineEnd = nextLineBreak === -1 ? source.length : nextLineBreak;
+  return (
+    source.slice(lineStart, start).trim().length === 0 &&
+    source.slice(end, lineEnd).trim().length === 0
+  );
+};
+
+const parseControlledMarkdownInternal = (
+  source: string,
+  stopAfterFirstTopLevelComponent: boolean,
+): DocumentParseResult => {
   const diagnostics: DocumentDiagnostic[] = [];
 
   const parseRange = (
@@ -204,7 +217,12 @@ export const parseControlledMarkdown = (source: string): DocumentParseResult => 
       }
 
       if (tag.closing) {
-        if (expectedClose === tag.kind && tag.valid) {
+        const expectedSpec = expectedClose
+          ? DocumentComponentSpecRegistry.get(expectedClose)
+          : undefined;
+        const closingPositionValid =
+          expectedSpec?.form === "inline" || occupiesOwnLine(source, cursor, tag.end);
+        if (expectedClose === tag.kind && tag.valid && closingPositionValid) {
           flushMarkdown(cursor);
           return { nodes, cursor: tag.end, closed: true };
         }
@@ -212,8 +230,13 @@ export const parseControlledMarkdown = (source: string): DocumentParseResult => 
         continue;
       }
 
-      flushMarkdown(cursor);
       const spec = DocumentComponentSpecRegistry.get(tag.kind);
+      if (spec && tag.kind !== "CodeBlock" && spec.form !== "inline" && !occupiesOwnLine(source, cursor, tag.end)) {
+        cursor += 1;
+        continue;
+      }
+
+      flushMarkdown(cursor);
       if (!spec || tag.kind === "CodeBlock") {
         const end = findOpaqueEnd(source, tag);
         diagnostic(diagnostics, "unknown-component", `Unknown component ${tag.kind}.`, cursor, end, tag.kind);
@@ -267,6 +290,18 @@ export const parseControlledMarkdown = (source: string): DocumentParseResult => 
         spec.form === "inline" &&
         (source.slice(tag.end, parsedChildren.cursor - tag.kind.length - 3).includes("\n") ||
           componentChildren.some((node) => DocumentComponentSpecRegistry.get(node.kind)?.form !== "inline"));
+      const inlineContentIsEmpty =
+        spec.form === "inline" &&
+        source.slice(tag.end, parsedChildren.cursor - tag.kind.length - 3).trim().length === 0;
+
+      if (inlineContentIsEmpty) {
+        const opaqueEnd = parsedChildren.cursor;
+        diagnostic(diagnostics, "invalid-content", `Empty content for ${tag.kind}.`, cursor, opaqueEnd, tag.kind);
+        nodes.push({ type: "opaque", raw: source.slice(cursor, opaqueEnd), reason: "invalid-content", start: cursor, end: opaqueEnd });
+        cursor = opaqueEnd;
+        markdownStart = cursor;
+        continue;
+      }
 
       if (!validParent || !validChildren || inlineHasBlock) {
         const opaqueEnd = parsedChildren.cursor;
@@ -288,6 +323,9 @@ export const parseControlledMarkdown = (source: string): DocumentParseResult => 
       nodes.push(node);
       cursor = parsedChildren.cursor;
       markdownStart = cursor;
+      if (!expectedClose && stopAfterFirstTopLevelComponent) {
+        return { nodes, cursor, closed: false };
+      }
     }
 
     flushMarkdown(source.length);
@@ -300,4 +338,15 @@ export const parseControlledMarkdown = (source: string): DocumentParseResult => 
     diagnostics,
     recoverable: true,
   };
+};
+
+export const parseControlledMarkdown = (source: string): DocumentParseResult =>
+  parseControlledMarkdownInternal(source, false);
+
+export const parseControlledComponentPrefix = (source: string): ComponentNode | null => {
+  const parsed = parseControlledMarkdownInternal(source, true);
+  const first = parsed.document.children[0];
+  return first?.type === "component" && first.start === 0 && parsed.diagnostics.length === 0
+    ? first
+    : null;
 };

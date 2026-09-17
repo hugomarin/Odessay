@@ -52,6 +52,10 @@ export const EMPTY_EDITOR_JSON: JSONContent = {
   content: [{ type: "paragraph" }],
 }
 
+const ControlledDocument = Document.extend({
+  content: "(block | controlledBlock)+",
+})
+
 type CreateEditorExtensionsOptions = {
   onTableOfContentsUpdate?: (items: TableOfContentData) => void
   tableOfContentsScrollParent?: () => HTMLElement | Window
@@ -81,7 +85,7 @@ export const createEditorExtensions = (options: CreateEditorExtensionsOptions = 
     : []
 
   return [
-    Document,
+    ControlledDocument,
     Paragraph,
     Text,
     Heading.extend({ addKeyboardShortcuts: () => ({}) }).configure({ levels: [1, 2, 3] }),

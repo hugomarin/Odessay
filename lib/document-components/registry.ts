@@ -5,8 +5,16 @@ import type {
 } from "@/lib/document-components/types";
 
 const anyString = (value: string) => value.length > 0;
-const safeUrl = (value: string) =>
-  /^(?:https?:|mailto:|#|\.?\.?\/)/.test(value);
+const safeUrl = (value: string) => {
+  if (value.length === 0 || value !== value.trim() || /[\u0000-\u001F\u007F]/.test(value)) {
+    return false;
+  }
+  if (value.startsWith("//") || value.startsWith("\\")) return false;
+  if (value.startsWith("#")) return true;
+  const scheme = value.match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
+  if (scheme) return /^(?:https?|mailto)$/i.test(scheme[1]);
+  return true;
+};
 const columns = (value: string) => /^[1-4]$/.test(value);
 
 const specs: readonly DocumentComponentSpec[] = [
@@ -180,4 +188,3 @@ export const DocumentComponentSpecRegistry = Object.freeze({
     return specs;
   },
 });
-

@@ -3,7 +3,7 @@ import CodeBlock from "@tiptap/extension-code-block"
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { findWrapping } from "@tiptap/pm/transform"
 import { escapeControlledAttribute } from "@/lib/document-components/entities"
-import { parseControlledMarkdown } from "@/lib/document-components/parser"
+import { parseControlledComponentPrefix } from "@/lib/document-components/parser"
 import { DocumentComponentSpecRegistry } from "@/lib/document-components/registry"
 import type { DocumentComponentKind } from "@/lib/document-components/types"
 
@@ -24,6 +24,11 @@ export const CONTROLLED_BLOCK_NODE_NAMES: Readonly<Record<ControlledBlockKind, C
 
 const nodeNameForKind = (kind: ControlledBlockKind) => CONTROLLED_BLOCK_NODE_NAMES[kind]
 
+const kindForNodeName = (name: string): ControlledBlockKind | null => {
+  const match = Object.entries(CONTROLLED_BLOCK_NODE_NAMES).find(([, nodeName]) => nodeName === name)
+  return (match?.[0] as ControlledBlockKind | undefined) ?? null
+}
+
 const isValidAttribute = (kind: ControlledBlockKind, name: string, value: string) => {
   const attribute = DocumentComponentSpecRegistry.get(kind)?.attributes.find((candidate) => candidate.name === name)
   if (!attribute) return false
@@ -31,10 +36,17 @@ const isValidAttribute = (kind: ControlledBlockKind, name: string, value: string
   return attribute.validate?.(value) ?? true
 }
 
-const hasControlledBlockAncestor = (state: CommandProps["state"]) => {
-  for (let depth = state.selection.$from.depth; depth > 0; depth -= 1) {
-    const name = state.selection.$from.node(depth).type.name
-    if (name === "tip" || name === "info" || name === "card") return true
+const canInsertAtSelection = (state: CommandProps["state"], kind: ControlledBlockKind) => {
+  const spec = DocumentComponentSpecRegistry.get(kind)
+  if (!spec) return false
+
+  for (let depth = state.selection.$from.depth; depth >= 0; depth -= 1) {
+    const node = state.selection.$from.node(depth)
+    if (node.isTextblock) continue
+    if (node.type.name === "doc") return spec.allowedParents.includes("document")
+    const parentKind = kindForNodeName(node.type.name)
+    if (parentKind) return spec.allowedParents.includes(parentKind)
+    return false
   }
   return false
 }
@@ -84,35 +96,10 @@ const setupMarkdownItRule = (kind: ControlledBlockKind) => (md: any) => {
       const start = state.bMarks[startLine]
       const openingLine = state.src.slice(start, state.eMarks[startLine])
       if (!new RegExp(`^<${kind}(?:\\s|>)`).test(openingLine)) return false
-      const closingMarker = `\n</${kind}>`
-      let searchFrom = state.eMarks[startLine]
-      let fragment = ""
-      let first: Extract<ReturnType<typeof parseControlledMarkdown>["document"]["children"][number], { type: "component" }> | undefined
-      while (searchFrom < state.src.length) {
-        const closingStart = state.src.indexOf(closingMarker, searchFrom)
-        if (closingStart === -1) return false
-        const closeEnd = closingStart + closingMarker.length
-        const closingLineEnd = state.src.indexOf("\n", closingStart + 1)
-        const candidateEnd = closingLineEnd === -1 ? state.src.length : closingLineEnd
-        searchFrom = closeEnd
-        if (state.src.slice(closingStart + 1, candidateEnd).trim() !== `</${kind}>`) continue
-
-        const candidate = state.src.slice(start, closeEnd)
-        const parsed = parseControlledMarkdown(candidate)
-        const node = parsed.document.children[0]
-        if (
-          node?.type === "component" &&
-          node.kind === kind &&
-          node.start === 0 &&
-          node.end === candidate.length &&
-          parsed.diagnostics.length === 0
-        ) {
-          fragment = candidate
-          first = node
-          break
-        }
-      }
-      if (!first) return false
+      const remaining = state.src.slice(start)
+      const first = parseControlledComponentPrefix(remaining)
+      if (!first || first.kind !== kind) return false
+      const fragment = remaining.slice(0, first.end)
       if (silent) return true
 
       const raw = fragment
@@ -278,7 +265,7 @@ const createControlledBlockNode = (kind: ControlledBlockKind) => {
 
   return Node.create({
     name: nodeNameForKind(kind),
-    group: "block",
+    group: "controlledBlock",
     content: "block+",
     defining: true,
     isolating: true,
@@ -353,7 +340,7 @@ export const DocumentComponentCommands = Extension.create({
   addCommands() {
     const insert = (kind: ControlledBlockKind, attributes: Record<string, string> = {}) =>
       ({ commands, state }: CommandProps) => {
-        if (hasControlledBlockAncestor(state)) return false
+        if (!canInsertAtSelection(state, kind)) return false
         if (Object.entries(attributes).some(([name, value]) => !isValidAttribute(kind, name, value))) return false
         return commands.insertContent({
           type: nodeNameForKind(kind),
@@ -376,7 +363,7 @@ export const DocumentComponentCommands = Extension.create({
         ({ state, dispatch }) => {
           const cardType = state.schema.nodes[nodeNameForKind("Card")]
           if (!cardType) return false
-          if (state.selection.empty || hasControlledBlockAncestor(state)) return false
+          if (state.selection.empty || !canInsertAtSelection(state, "Card")) return false
           const nextAttributes = {
             title: attributes.title?.trim() || "Card",
             icon: attributes.icon?.trim() ?? "",
