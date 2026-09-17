@@ -2,6 +2,7 @@ import { Extension, Node, mergeAttributes, type CommandProps, type NodeViewRende
 import CodeBlock from "@tiptap/extension-code-block"
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { findWrapping } from "@tiptap/pm/transform"
+import type { ViewMutationRecord } from "@tiptap/pm/view"
 import { escapeControlledAttribute } from "@/lib/document-components/entities"
 import { parseControlledComponentAt } from "@/lib/document-components/parser"
 import { DocumentComponentSpecRegistry } from "@/lib/document-components/registry"
@@ -254,6 +255,9 @@ const createControlledBlockNodeView = (kind: ControlledBlockKind) =>
       },
       stopEvent(event: Event) {
         return event.target instanceof HTMLElement && Boolean(event.target.closest("input, button, .odessay-card-properties"))
+      },
+      ignoreMutation(mutation: ViewMutationRecord) {
+        return !contentDOM.contains(mutation.target)
       },
     }
   }

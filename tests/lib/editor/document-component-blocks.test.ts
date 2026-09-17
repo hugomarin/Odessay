@@ -59,7 +59,7 @@ describe("controlled document component blocks", () => {
     editor.destroy()
   })
 
-  it("edits titles and Card properties without leaving the document surface", () => {
+  it("keeps Card properties open after ProseMirror observes the UI mutation", async () => {
     const editor = createEditor()
     editor.commands.insertTip()
     const tipTitle = editor.view.dom.querySelector<HTMLInputElement>('[aria-label="Tip title"]')
@@ -76,7 +76,9 @@ describe("controlled document component blocks", () => {
     const settings = editor.view.dom.querySelector<HTMLButtonElement>('[aria-label="Edit card properties"]')
     expect(settings).not.toBeNull()
     settings?.click()
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(settings?.getAttribute("aria-expanded")).toBe("true")
+    expect(editor.view.dom.querySelector<HTMLElement>(".odessay-card-properties")?.hidden).toBe(false)
     const icon = editor.view.dom.querySelector<HTMLInputElement>('[aria-label="Card icon"]')
     const href = editor.view.dom.querySelector<HTMLInputElement>('[aria-label="Card link"]')
     if (!icon || !href) return
