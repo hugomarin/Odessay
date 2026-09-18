@@ -46,7 +46,7 @@ Para el change surface declarado en el brief, resolver en orden:
 6. **Consumers downstream** — quién llama/importa/renderiza lo que se va a modificar. Un consumer olvidado es la causa más común de regresión silenciosa.
 7. **Tests canónicos** — qué test(s) ya demuestran el comportamiento actual de esa pieza. Si no existen, es una señal que se registra en el output — probablemente el test se crea durante la implementación — y nunca por sí sola motivo para detener BUILD.
 8. **Hotspots tocados** — si el change surface cae dentro de un archivo/módulo ya identificado como hotspot (ver `Construction order` en `.agents/agents/build-agent.md`), declararlo explícitamente. Si el owner de la responsabilidad ya es claro, esto es una decisión de wiring, no una ambigüedad — ver `Hotspots` en `build-agent.md`.
-9. **AGENTS.md local aplicable** — hoy solo existe el `AGENTS.md` raíz; si en el futuro aparece un `AGENTS.md` en el subtree tocado, léelo y respétalo antes de implementar.
+9. **AGENTS.md local aplicable** — si el change surface cae dentro de `components/editor/**` o `src-tauri/**`, leer el `AGENTS.md` de ese subtree antes de implementar. Para cualquier otro subtree, aplican solo las reglas universales del `AGENTS.md` raíz.
 
 ---
 

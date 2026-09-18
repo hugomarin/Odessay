@@ -3,6 +3,11 @@
   "_comment": "Inventario completo de todos los documentos del proyecto. Un documento que no aparece aquí es un nodo huérfano — no tiene ruta de entrada para ningún agente. Actualizar este archivo cuando se agregue, mueva o elimine cualquier documento.",
   "registry": [
     {
+      "path": "AGENTS.md",
+      "type": "agent",
+      "description": "Constitución raíz para cualquier agente (incluye herramientas que no encadenan a workflow/agents.md, ej. Codex): reglas universales del quality harness (reuse-before-creation, one-owner, architecture-before-locality, proteger hotspots, smallest coherent change, descubrir AGENTS.md locales) + el guardrail no negociable de arquitectura documental desktop."
+    },
+    {
       "path": "workflow/context/core/odessay-fundacional.md",
       "type": "core",
       "description": "Por qué existe Odessay, para quién es y qué problema resuelve. Los tres modos (Escribir/Leer/Organizar) y los principios de producto no negociables. No contiene código ni specs técnicas."
@@ -441,6 +446,16 @@
       "path": ".agents/agents/review-agent.md",
       "type": "agent",
       "description": "Rol de agente para `/wf-review`: reconstruye el comportamiento cambiado antes de buscar findings, activa solo las lentes review-* relevantes al scope del diff, consolida findings y produce el veredicto técnico (GateResult/QualityScore/ProcessInsights). No repite merge, ledgers ni Linear — eso es workflow.md."
+    },
+    {
+      "path": "components/editor/AGENTS.md",
+      "type": "agent",
+      "description": "Reglas locales del hotspot editor: editor-shell.tsx es composition boundary, no owner de persistencia/identidad/dominio; documenta la deuda conocida de localDB.correctionBlocks directo como no-plantilla; ownership de estado y descubrimiento de patrón existente antes de agregar comportamiento."
+    },
+    {
+      "path": "src-tauri/AGENTS.md",
+      "type": "agent",
+      "description": "Reglas locales del runtime desktop: commands como capa delgada, index.rs/workspace.rs como hotspots con disposition ratchet+staged-extraction, native owners en módulo propio, SQLite (rusqlite) como único catálogo, sin dependencias de runtime web."
     },
     {
       "path": ".agents/skills/architecture-recon/SKILL.md",
