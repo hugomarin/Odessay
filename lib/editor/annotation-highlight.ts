@@ -2,6 +2,7 @@ import { getMarkRange } from "@tiptap/core"
 import Highlight from "@tiptap/extension-highlight"
 import type { Editor } from "@tiptap/react"
 import { ANNOTATION_TYPES, type AnnotationType } from "@/lib/editor/footnote-node"
+import { escapeControlledAttribute } from "@/lib/document-components/entities"
 
 export type StandaloneHighlightTarget = {
   anchorText: string
@@ -100,6 +101,12 @@ export const coerceHighlightAnnotationType = (value: unknown): AnnotationType | 
 export const AnnotationHighlight = Highlight.extend({
   addAttributes() {
     return {
+      annotationId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-annotation-id"),
+        renderHTML: (attrs) =>
+          attrs.annotationId ? { "data-annotation-id": String(attrs.annotationId) } : {},
+      },
       annotationType: {
         default: null,
         parseHTML: (element) =>
@@ -107,6 +114,44 @@ export const AnnotationHighlight = Highlight.extend({
         renderHTML: (attrs) => {
           const annotationType = coerceHighlightAnnotationType(attrs.annotationType)
           return annotationType ? { "data-annotation-type": annotationType } : {}
+        },
+      },
+      annotationComment: {
+        default: null,
+        parseHTML: (element) => {
+          const value = element.getAttribute("data-annotation-comment")
+          if (value == null) return null
+          try {
+            return decodeURIComponent(value)
+          } catch {
+            return value
+          }
+        },
+        renderHTML: (attrs) =>
+          attrs.annotationComment != null
+            ? { "data-annotation-comment": encodeURIComponent(String(attrs.annotationComment)) }
+            : {},
+      },
+    }
+  },
+
+  addStorage() {
+    return {
+      markdown: {
+        parse: {},
+        serialize: {
+          mixable: true,
+          open: (_state: unknown, mark: { attrs: Record<string, unknown> }) => {
+            const id = mark.attrs.annotationId
+            const type = coerceHighlightAnnotationType(mark.attrs.annotationType)
+            if (!id || !type) return "=="
+            const comment = String(mark.attrs.annotationComment ?? "")
+            return `<Annotation id="${escapeControlledAttribute(String(id))}" type="${escapeControlledAttribute(type)}" comment="${escapeControlledAttribute(comment)}">`
+          },
+          close: (_state: unknown, mark: { attrs: Record<string, unknown> }) =>
+            mark.attrs.annotationId && coerceHighlightAnnotationType(mark.attrs.annotationType)
+              ? "</Annotation>"
+              : "==",
         },
       },
     }

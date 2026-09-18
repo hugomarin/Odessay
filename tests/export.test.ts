@@ -64,10 +64,11 @@ afterEach(() => {
 describe("export helpers", () => {
   it("serializes a writing body to markdown", () => {
     expect(buildWritingMarkdown(sampleBody)).toContain("# **Hello**")
-    expect(buildWritingMarkdown(sampleBody)).toContain("A *note* with [^2]")
+    expect(buildWritingMarkdown(sampleBody)).toContain("A *note* with")
+    expect(buildWritingMarkdown(sampleBody)).not.toContain("[^2]")
     expect(buildWritingMarkdown(sampleBody)).toContain("> Quoted line")
     expect(buildWritingMarkdown(sampleBody)).toContain("- First")
-    expect(buildWritingMarkdown(sampleBody)).toContain("[^2]: Footnote text")
+    expect(buildWritingMarkdown(sampleBody)).not.toContain("Footnote text")
   })
 
   it("builds a stable filename from title, body text, or id", () => {

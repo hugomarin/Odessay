@@ -51,6 +51,40 @@ const sanitizeValue = (value: unknown): unknown => {
   return value
 }
 
+const projectCleanReadingValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value
+      .filter(
+        (child) =>
+          !isPlainObject(child) ||
+          (child.type !== "annotationReference" && child.type !== "footnoteReference"),
+      )
+      .map(projectCleanReadingValue)
+  }
+
+  if (!isPlainObject(value)) return value
+
+  const next: Record<string, unknown> = { ...value }
+  if (Array.isArray(value.marks)) {
+    next.marks = value.marks
+      .filter((mark) => {
+        if (!isPlainObject(mark) || mark.type !== "highlight" || !isPlainObject(mark.attrs)) {
+          return true
+        }
+        return !(
+          mark.attrs.annotationId != null ||
+          mark.attrs.annotationType != null ||
+          mark.attrs.annotationComment != null
+        )
+      })
+      .map(projectCleanReadingValue)
+  }
+  if (Array.isArray(value.content)) {
+    next.content = projectCleanReadingValue(value.content)
+  }
+  return next
+}
+
 export const sanitizeWritingBodyText = (value: string | null | undefined) => sanitizeText(value ?? "")
 
 export const sanitizeWritingBodyJson = (value: JSONContent | null | undefined): JSONContent | null => {
@@ -58,5 +92,5 @@ export const sanitizeWritingBodyJson = (value: JSONContent | null | undefined): 
     return null
   }
 
-  return sanitizeValue(value) as JSONContent
+  return projectCleanReadingValue(sanitizeValue(value)) as JSONContent
 }

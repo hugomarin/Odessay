@@ -12,6 +12,7 @@ import {
   updateMarkdownAnnotation,
   updateMarkdownFootnote,
 } from "@/lib/editor/footnote-extension"
+import { projectAnnotationsToCleanMarkdown } from "@/lib/editor/annotation-markdown"
 
 describe("footnote extension helpers", () => {
   const annotationSummary = (markdown: string) =>
@@ -22,9 +23,9 @@ describe("footnote extension helpers", () => {
       text,
     }))
   const annotationsOnlyPrefix =
-    "The block below contains the author's instructions about their artifact. Each line follows the format: a quote of the relevant passage, then the instruction in brackets. Treat them as the author's directives about that specific fragment."
+    "The block below contains the author's instructions about their artifact. Each line contains the quoted passage followed by the author's instruction. Treat each instruction as applying only to that passage."
   const fullTextPrefix =
-    "<!-- Author annotations embedded in the text. Format: ==quoted text==[@N: instruction] — the fragment between == is the passage the bracketed instruction refers to. They are the author's directives for you; they are not part of the publishable artifact. Take them into account when processing the text. -->"
+    "<!-- Author annotations are represented with canonical Annotation elements. Their comments are private editorial directives, not publishable text. -->"
 
   it("normalizes references and keeps definitions aligned", () => {
     const markdown = "Body[^3] and more[^1]\n\n[^1]: First\n[^3]: Third"
@@ -35,10 +36,10 @@ describe("footnote extension helpers", () => {
   })
 
   it("appends a new footnote with sequential index", () => {
-    const markdown = "Text[^1: Existing]"
+    const markdown = "Text to annotate"
 
-    expect(appendMarkdownFootnote(markdown, "New note")).toMatch(
-      /^Text\[\^1: Existing\]\[\^2\|[^\]:|]+: New note\]$/,
+    expect(appendMarkdownFootnote(markdown, "New note", 0, 4)).toMatch(
+      /^<Annotation id="[^\"]+" type="footnote" comment="New note">Text<\/Annotation> to annotate$/,
     )
   })
 
@@ -81,8 +82,8 @@ describe("footnote extension helpers", () => {
     const markdown = "==AI==[@1|ann-ai: note] text with [link](https://example.com) and ] literal"
 
     expect(buildAiAnnotationCopy(markdown)).toEqual({
-      annotationsOnly: `${annotationsOnlyPrefix}\n\n"AI" [@1|ann-ai: note]`,
-      fullText: `${fullTextPrefix}\n\n${markdown}`,
+      annotationsOnly: `${annotationsOnlyPrefix}\n\n"AI" — note`,
+      fullText: `${fullTextPrefix}\n\n<Annotation id="ann-ai" type="ai" comment="note">AI</Annotation> text with [link](https://example.com) and ] literal`,
     })
   })
 
@@ -98,8 +99,8 @@ describe("footnote extension helpers", () => {
     const markdown = "==Passage==[@1: simplify][@p1: for later][@c1: share with team][^1: source]"
 
     expect(buildAiAnnotationCopy(markdown)).toEqual({
-      annotationsOnly: `${annotationsOnlyPrefix}\n\n"Passage" [@1: simplify]`,
-      fullText: `${fullTextPrefix}\n\n==Passage==[@1: simplify][^1: source]`,
+      annotationsOnly: `${annotationsOnlyPrefix}\n\n"Passage" — simplify`,
+      fullText: `${fullTextPrefix}\n\n<Annotation id="legacy-f34a4185" type="ai" comment="simplify">Passage</Annotation>[^1: source]`,
     })
   })
 
@@ -108,8 +109,8 @@ describe("footnote extension helpers", () => {
 
     expect(buildAiAnnotationCopy(markdown)).toEqual({
       annotationsOnly:
-        `${annotationsOnlyPrefix}\n\n[@1: check this]\n"Highlighted" [@2: expand]`,
-      fullText: `${fullTextPrefix}\n\nIntro[@1: check this] ==Highlighted==[@2: expand]`,
+        `${annotationsOnlyPrefix}\n\n"Highlighted" — expand\n[@1: check this]`,
+      fullText: `${fullTextPrefix}\n\nIntro[@1: check this] <Annotation id="legacy-5389448a" type="ai" comment="expand">Highlighted</Annotation>`,
     })
   })
 
@@ -121,12 +122,11 @@ describe("footnote extension helpers", () => {
       id: "ann-ai",
       type: "ai",
       anchor_text: "Target anchor",
-      anchor_start: markdown.indexOf("Target anchor"),
-      anchor_end: markdown.indexOf("Target anchor") + "Target anchor".length,
-      source_start: markdown.indexOf("[@1|ann-ai:"),
     })
-    expect(markdown.slice(annotation.source_start, annotation.source_end)).toBe(
-      "[@1|ann-ai: Revise this]",
+    const normalized = normalizeMarkdownFootnotes(markdown)
+    expect(normalized.slice(annotation.anchor_start, annotation.anchor_end)).toBe("Target anchor")
+    expect(normalized.slice(annotation.source_start, annotation.source_end)).toBe(
+      '<Annotation id="ann-ai" type="ai" comment="Revise this">Target anchor</Annotation>',
     )
   })
 
@@ -179,6 +179,20 @@ describe("footnote extension helpers", () => {
     ).toEqual({ found: false, markdown })
   })
 
+  it("projects annotation anchors without leaking private metadata", () => {
+    const source =
+      'Before <Annotation id="ann-1" type="personal" comment="private">visible **anchor**</Annotation> after'
+    expect(projectAnnotationsToCleanMarkdown(source)).toEqual({
+      ok: true,
+      markdown: "Before visible **anchor** after",
+    })
+  })
+
+  it("preserves invalid annotation source and blocks destructive clean projection", () => {
+    const source = 'Before <Annotation id="ann-1" type="ai" comment="keep">unfinished'
+    expect(projectAnnotationsToCleanMarkdown(source)).toEqual({ ok: false, markdown: source })
+  })
+
   it("includes standalone markdown highlights and supports navigation, annotation, and deletion", () => {
     const markdown = "Before ==Standalone== after ==Anchored==[@1|ann-ai: Keep]"
     const standalone = getMarkdownFootnotes(markdown).find((entry) =>
@@ -202,7 +216,7 @@ describe("footnote extension helpers", () => {
     )
     expect(annotated).toEqual({
       found: true,
-      markdown: "Before ==Standalone==[@p1|new-id: Remember] after ==Anchored==[@1|ann-ai: Keep]",
+      markdown: 'Before <Annotation id="new-id" type="personal" comment="Remember">Standalone</Annotation> after ==Anchored==[@1|ann-ai: Keep]',
     })
 
     const removed = removeMarkdownStandaloneHighlight(markdown, standalone!)

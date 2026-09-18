@@ -19,7 +19,11 @@ type ParsedTag = {
 
 const TAG_NAME = /^[A-Z][A-Za-z0-9]*$/;
 const ATTRIBUTE_NAME = /^[A-Za-z][A-Za-z0-9-]*$/;
-const LEGACY_ANNOTATION = /==([^=\n]+)==\[@([pchn]?)(\d*)(?:\|([^\]:|]+))?:\s*([^\]]*)\]/y;
+const LEGACY_ANNOTATION =
+  /==([^=\n]+)==[\t ]*(?:\[\^(\d+)(?:\|([^\]:|]+))?:\s*((?:\\.|[^\]])*)\]|\[@([pchn]?)(\d*)(?:\|([^\]:|]+))?:\s*((?:\\.|[^\]])*)\])/y;
+
+const unescapeLegacyComment = (value: string) =>
+  value.replace(/\\([\\\]])/g, "$1");
 
 const compatibilityId = (source: string): string => {
   let hash = 2166136261;
@@ -33,7 +37,8 @@ const compatibilityId = (source: string): string => {
 const annotationType = (prefix: string) => {
   if (prefix === "h") return "highlight";
   if (prefix === "p" || prefix === "c") return "personal";
-  return "footnote";
+  if (prefix === "n") return "footnote";
+  return "ai";
 };
 
 const parseTag = (source: string, start: number): ParsedTag | null => {
@@ -190,13 +195,16 @@ const parseControlledMarkdownInternal = (
       if (legacy) {
         flushMarkdown(cursor);
         const raw = legacy[0];
-        const id = legacy[4] || compatibilityId(raw);
+        const isFootnote = legacy[2] !== undefined;
+        const id = (isFootnote ? legacy[3] : legacy[7]) || compatibilityId(raw);
+        const comment = unescapeLegacyComment((isFootnote ? legacy[4] : legacy[8]) ?? "");
+        const type = isFootnote ? "footnote" : annotationType(legacy[5] ?? "");
         const childStart = cursor + 2;
         const childEnd = childStart + legacy[1].length;
         nodes.push({
           type: "component",
           kind: "Annotation",
-          attributes: { id, type: annotationType(legacy[2]), comment: legacy[5] },
+          attributes: { id, type, comment },
           children: [{ type: "markdown", raw: legacy[1], start: childStart, end: childEnd }],
           start: cursor,
           end: cursor + raw.length,

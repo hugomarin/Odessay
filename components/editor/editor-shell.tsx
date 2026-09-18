@@ -492,6 +492,7 @@ export function EditorShell({
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
+  const [acceptedMarkdownForAnnotations, setAcceptedMarkdownForAnnotations] = useState("")
 
   const [bodyText, setBodyText] = useState("")
   const [markdownSelectionState, setMarkdownSelectionState] = useState<MarkdownSelectionSnapshot | null>(null)
@@ -2460,6 +2461,7 @@ export function EditorShell({
           modeRef.current = "markdown"
           setMode("markdown")
           setMarkdownValue(nextMarkdown)
+          setAcceptedMarkdownForAnnotations(nextMarkdown)
 
           window.requestAnimationFrame(() => {
             generation.run(() => {
@@ -2673,6 +2675,7 @@ export function EditorShell({
       if (!editor) return false
 
       setMarkdownValue(normalizedMarkdown)
+      setAcceptedMarkdownForAnnotations(normalizedMarkdown)
       isApplyingContentRef.current = true
 
       const applied = applyPanelMarkdownChange(editor, materializeMarkdownForRichParser(normalizedMarkdown), {
@@ -3257,6 +3260,7 @@ export function EditorShell({
           isApplyingContentRef.current = true
           editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
           isApplyingContentRef.current = false
+          setAcceptedMarkdownForAnnotations(nextMarkdown)
           setBodyText(editor.getText())
           void persistEditorSnapshot(editor)
           markdownSaveTimeoutRef.current = null
@@ -3929,11 +3933,13 @@ export function EditorShell({
           bodyMarkdown = getEditorMarkdown(editor)
         }
         const footnoteNodes = getEditorFootnotes(editor)
-        setMarkdownValue(
-          isDesktopRuntime()
-            ? bodyMarkdown
-            : normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes)),
-        )
+        const sourceMarkdown = isDesktopRuntime()
+          ? bodyMarkdown
+          : normalizeMarkdownForRoundTrip(
+              getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes),
+            )
+        setMarkdownValue(sourceMarkdown)
+        setAcceptedMarkdownForAnnotations(sourceMarkdown)
         return
       }
 
@@ -4011,6 +4017,7 @@ export function EditorShell({
           parsed?.success ? parsed.snapshot.bodyJson : materializeMarkdownForRichParser(normalizedMarkdown),
         )
         isApplyingContentRef.current = false
+        setAcceptedMarkdownForAnnotations(normalizedMarkdown)
         // Update metrics from TipTap but do NOT derive markdownValue from it —
         // TipTap serializes table nodes as HTML, which would overwrite GFM textarea content.
         // In Markdown mode the textarea is the source of truth; markdownValue is already correct.
@@ -4055,6 +4062,7 @@ export function EditorShell({
             isApplyingContentRef.current = true
             editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
             isApplyingContentRef.current = false
+            setAcceptedMarkdownForAnnotations(nextMarkdown)
             setBodyText(editor.getText())
             void persistEditorSnapshot(editor)
             markdownSaveTimeoutRef.current = null
@@ -4153,6 +4161,7 @@ export function EditorShell({
         isApplyingContentRef.current = true
         editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
         isApplyingContentRef.current = false
+        setAcceptedMarkdownForAnnotations(nextMarkdown)
         void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
       }, MARKDOWN_SAVE_DEBOUNCE_MS)
@@ -4187,6 +4196,7 @@ export function EditorShell({
             isApplyingContentRef.current = true
             editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
             isApplyingContentRef.current = false
+            setAcceptedMarkdownForAnnotations(nextMarkdown)
             setBodyText(editor.getText())
             void persistEditorSnapshot(editor)
             markdownSaveTimeoutRef.current = null
@@ -4244,7 +4254,14 @@ export function EditorShell({
   const handleInsertFootnote = useCallback(
     (note: string) => {
       if (modeRef.current === "markdown") {
-        const nextMarkdown = appendMarkdownFootnote(markdownValue, note)
+        const selection = markdownSelectionRef.current
+        const nextMarkdown = appendMarkdownFootnote(
+          markdownValue,
+          note,
+          selection?.start,
+          selection?.end,
+        )
+        if (nextMarkdown === markdownValue) return
         applyMarkdownFromPanel(nextMarkdown)
         setActivePanel("notes")
         return
@@ -4273,8 +4290,8 @@ export function EditorShell({
       return extractRichEditorAnnotations(editor)
     }
 
-    return getMarkdownFootnotes(markdownValue)
-  }, [editor, markdownValue, mode, richFootnoteRevision, version])
+    return getMarkdownFootnotes(acceptedMarkdownForAnnotations)
+  }, [acceptedMarkdownForAnnotations, editor, mode, richFootnoteRevision, version])
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const selectionMetrics = useEditorSelection(editor, mode, markdownSelectionState)
   const displayTitle = useMemo(

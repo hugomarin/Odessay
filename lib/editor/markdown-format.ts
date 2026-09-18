@@ -1,6 +1,7 @@
 import { normalizeMarkdownFootnotes } from "@/lib/editor/footnote-extension"
 import {
   findInlineAnnotationMarkers,
+  scanControlledAnnotations,
   replaceInlineAnnotationMarkers,
 } from "@/lib/editor/annotation-markdown"
 
@@ -62,8 +63,15 @@ export const toggleMarkdownInlineMarker = (
   }
 }
 
-export const normalizeMarkdownHighlights = (markdown: string): string =>
-  markdown.replace(/<mark(?:\s[^>]*)?>([\s\S]*?)<\/mark>/gi, "==$1==")
+export const normalizeMarkdownHighlights = (
+  markdown: string,
+  preserveAnnotationMarks = false,
+): string =>
+  markdown.replace(/<mark(\s[^>]*)?>([\s\S]*?)<\/mark>/gi, (raw, attributes = "", body) =>
+    preserveAnnotationMarks && /data-annotation-(?:id|type|comment)=/i.test(attributes)
+      ? raw
+      : `==${body}==`,
+  )
 
 const BLOCK_IMAGE_TOKEN_RE = /!\[[^\]\n]*\]\([^)\n]+\)/
 
@@ -261,12 +269,18 @@ export const convertHtmlTablesToMarkdown = (value: string): string => {
   })
 }
 
-export const normalizeMarkdownForRoundTrip = (markdown: string): string =>
+export const normalizeMarkdownForRoundTrip = (
+  markdown: string,
+  options: { preserveAnnotationMarks?: boolean } = {},
+): string =>
   normalizeMarkdownFootnotes(
     normalizeTableAnnotationBoundaries(
       mergeFragmentedHighlights(
         normalizeBlockImageBoundaries(
-          normalizeMarkdownHighlights(convertHtmlTablesToMarkdown(markdown)),
+          normalizeMarkdownHighlights(
+            convertHtmlTablesToMarkdown(markdown),
+            options.preserveAnnotationMarks,
+          ),
         ),
       ),
     ),
@@ -338,10 +352,54 @@ const materializeInlineAnnotations = (markdown: string): string =>
     return `<annotation-ref${idAttributes} annotation-type="${marker.type}" index="${marker.index}" annotation-text="${escapeAnnotationAttribute(encodeURIComponent(marker.text))}"></annotation-ref>`
   })
 
-export const materializeMarkdownForRichParser = (markdown: string): string =>
-  materializeInlineAnnotations(
-    materializeAnnotationHighlightTypes(normalizeMarkdownForRoundTrip(markdown)),
-  ).replace(/==([^=\n]+)==/g, "<mark>$1</mark>")
+const materializeControlledAnnotations = (markdown: string): string => {
+  const { annotations } = scanControlledAnnotations(markdown)
+  if (annotations.length === 0) return markdown
+  const seenIds = new Set<string>()
+  const resolvedIds = new Map<number, string>()
+  for (const annotation of annotations) {
+    let id = annotation.id
+    let attempts = 0
+    while (seenIds.has(id) && attempts < 4) {
+      id = crypto.randomUUID()
+      attempts += 1
+    }
+    if (seenIds.has(id)) {
+      let suffix = 2
+      id = `${annotation.id}-copy-${suffix}`
+      while (seenIds.has(id)) {
+        suffix += 1
+        id = `${annotation.id}-copy-${suffix}`
+      }
+    }
+    seenIds.add(id)
+    resolvedIds.set(annotation.sourceStart, id)
+  }
+
+  return [...annotations]
+    .sort((a, b) => b.sourceStart - a.sourceStart)
+    .reduce((result, annotation) => {
+      const id = escapeAnnotationAttribute(
+        resolvedIds.get(annotation.sourceStart) ?? annotation.id,
+      )
+      const type = escapeAnnotationAttribute(annotation.type)
+      const encodedComment = escapeAnnotationAttribute(encodeURIComponent(annotation.comment))
+      const reference = `<annotation-ref id="${id}" annotation-id="${id}" annotation-type="${type}" index="${annotation.index}" annotation-text="${encodedComment}"></annotation-ref>`
+      const marked = `<mark data-annotation-id="${id}" data-annotation-type="${type}" data-annotation-comment="${encodedComment}">${annotation.anchorMarkdown}</mark>`
+      return `${result.slice(0, annotation.sourceStart)}${marked}${reference}${result.slice(annotation.sourceEnd)}`
+    }, markdown)
+}
+
+export const materializeMarkdownForRichParser = (markdown: string): string => {
+  const typedLegacy = materializeAnnotationHighlightTypes(markdown)
+  const normalized = normalizeMarkdownForRoundTrip(typedLegacy, {
+    preserveAnnotationMarks: true,
+  })
+  return materializeInlineAnnotations(materializeControlledAnnotations(normalized)).replace(
+    /==([^=\n]+)==/g,
+    "<mark>$1</mark>",
+  )
+}
 
 const escapeHtml = (value: string) =>
   value

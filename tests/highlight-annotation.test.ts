@@ -60,7 +60,9 @@ describe("highlight annotation", () => {
         return result
       }
 
-      expect(markdown).toBe("==AI span==[@1|ann-ai: AI note] and ==highlight span==[@h1|ann-h: saved]")
+      expect(markdown).toBe(
+        '<Annotation id="ann-ai" type="ai" comment="AI note">AI span</Annotation> and <Annotation id="ann-h" type="highlight" comment="saved">highlight span</Annotation>',
+      )
       expect(collectHighlightTypes(parsed.bodyJson)).toEqual(["ai", "highlight"])
       expect(collectHighlightTypes(reparsed.bodyJson)).toEqual(["ai", "highlight"])
     })
@@ -86,9 +88,11 @@ describe("highlight annotation", () => {
       }
 
       expect(collectHighlightTypes(parsed.bodyJson)).toEqual(["ai", "ai"])
-      expect(collectHighlightTypes(reparsed.bodyJson)).toEqual(["ai", "ai"])
+      expect(collectHighlightTypes(reparsed.bodyJson)).toEqual([null, "ai"])
       expect(extractWritingAnnotationNodes(parsed.bodyJson)).toHaveLength(1)
-      expect(serialized).toBe(markdown)
+      expect(serialized).toBe(
+        '# ==Mis conclusiones:==\n\n<Annotation id="ann-ai" type="ai" comment="Tests de Nota">Luna es la familia más costo-eficiente.</Annotation>',
+      )
     })
 
     it("keeps one annotation type when the final fragment is a blockquote", () => {
@@ -119,7 +123,9 @@ describe("highlight annotation", () => {
       expect(new Set(highlightTypes)).toEqual(new Set(["ai"]))
       expect(highlightTypes.length).toBeGreaterThanOrEqual(3)
       expect(extractWritingAnnotationNodes(parsed.bodyJson)).toHaveLength(1)
-      expect(serialized).toBe(markdown.replace("[@3|", "[@1|"))
+      expect(serialized).toBe(
+        '## ==Titulo 2==\n\n==Terra queda en un efecto sándwich. **Podría recuperar sentido.**==\n\n> <Annotation id="ann-ai" type="ai" comment="TEST 3">Terra queda en un efecto sándwich. Podría recuperar sentido.</Annotation>',
+      )
 
       const reparsed = parseMarkdownToSnapshot(serialized)
       const reparsedTypes: Array<string | null> = []
@@ -135,7 +141,7 @@ describe("highlight annotation", () => {
         for (const child of current.content ?? []) collectReparsedTypes(child)
       }
       collectReparsedTypes(reparsed.bodyJson)
-      expect(new Set(reparsedTypes)).toEqual(new Set(["ai"]))
+      expect(new Set(reparsedTypes)).toEqual(new Set([null, "ai"]))
       expect(extractWritingAnnotationNodes(reparsed.bodyJson)).toHaveLength(1)
     })
 
@@ -186,8 +192,12 @@ describe("highlight annotation", () => {
       const snapshot = parseMarkdownToSnapshot(markdown)
       const serialized = serializeDocumentToMarkdown(snapshot.bodyJson)
 
-      expect(serialized).toContain("==**1. Foundation**==[@1|ann-4: TEST 4] | Meses 1–3")
-      expect(serialized).toContain("==Workflows personales.==[@2|ann-5: TEST 5] | Consolidado")
+      expect(serialized).toContain(
+        '**<Annotation id="ann-4" type="ai" comment="TEST 4">1. Foundation</Annotation>** | Meses 1–3',
+      )
+      expect(serialized).toContain(
+        '<Annotation id="ann-5" type="ai" comment="TEST 5">Workflows personales.</Annotation> | Consolidado',
+      )
       expect(extractWritingAnnotationNodes(snapshot.bodyJson)).toHaveLength(2)
     })
 
@@ -197,7 +207,9 @@ describe("highlight annotation", () => {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const markdown = (editor.storage as any).markdown?.getMarkdown() ?? ""
-      expect(markdown).toMatch(/\[@h1\|[^\]:|]+: my note\]/)
+      expect(markdown).toMatch(
+        /^<Annotation id="[^\"]+" type="highlight" comment="my note">Hello<\/Annotation> world$/,
+      )
       editor.destroy()
     })
 
@@ -207,7 +219,9 @@ describe("highlight annotation", () => {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const markdown = (editor.storage as any).markdown?.getMarkdown() ?? ""
-      expect(markdown).toMatch(/\[@h1\|[^\]:|]+: \]/)
+      expect(markdown).toMatch(
+        /^<Annotation id="[^\"]+" type="highlight" comment="">Hello<\/Annotation> world$/,
+      )
       editor.destroy()
     })
   })
@@ -272,7 +286,7 @@ describe("highlight annotation", () => {
       const copy = buildAiAnnotationCopy(markdown)
       expect(copy.annotationsOnly).toContain("[@1: simplify]")
       expect(copy.annotationsOnly).not.toContain("[@h1: remember this]")
-      expect(copy.fullText).toContain("==Passage==[@1: simplify]")
+      expect(copy.fullText).toContain("Passage[@1: simplify]")
       expect(copy.fullText).not.toContain("[@h1: remember this]")
     })
   })
@@ -631,16 +645,15 @@ describe("highlight annotation", () => {
       expect(coerceHighlightAnnotationType(null)).toBeNull()
     })
 
-    it("keeps annotation type attributes in reading HTML", () => {
+    it("removes private annotation attributes from reading HTML", () => {
       const { bodyJson } = parseMarkdownToSnapshot(
         "==AI==[@1|ann-ai: Note] ==Personal==[@p1|ann-p: Note] ==Saved==[@h1|ann-h: Note] ==Footnote==[^1|ann-f: Note]",
       )
       const { bodyHtml, mode } = renderWritingBodyHtml(bodyJson, "")
 
       expect(mode).toBe("rich")
-      for (const type of ["ai", "personal", "highlight", "footnote"]) {
-        expect(bodyHtml).toContain(`data-annotation-type=\"${type}\"`)
-      }
+      expect(bodyHtml).toBe("<p>AI Personal Saved Footnote</p>")
+      expect(bodyHtml).not.toContain("data-annotation-")
     })
   })
 })

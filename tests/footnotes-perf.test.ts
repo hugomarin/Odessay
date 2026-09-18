@@ -14,6 +14,24 @@ function createTestEditor(content = "") {
 }
 
 describe("footnotes useMemo performance", () => {
+  it.each([10, 100, 1000])(
+    "extracts %i canonical annotations from one accepted snapshot",
+    (count) => {
+      const markdown = Array.from(
+        { length: count },
+        (_, index) =>
+          `<Annotation id="ann-${index}" type="ai" comment="note-${index}">anchor-${index}</Annotation>`,
+      ).join(" ")
+      const startedAt = performance.now()
+      const annotations = getMarkdownFootnotes(markdown)
+      const durationMs = performance.now() - startedAt
+
+      expect(annotations).toHaveLength(count)
+      expect(new Set(annotations.map((annotation) => annotation.id)).size).toBe(count)
+      expect(durationMs).toBeLessThan(250)
+    },
+  )
+
   it("computes footnotes for 5 highlights (2 annotated) within latency budget", () => {
     const editor = createTestEditor("First highlight one and second highlight two and third highlight three and fourth highlight four and fifth highlight five.")
 

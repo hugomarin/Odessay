@@ -88,7 +88,8 @@ Definidas en `lib/editor/extensions.ts` con `createEditorExtensions()`.
 - `FindReplaceExtension` (`lib/editor/find-replace.ts`)
 - `CorrectionTriggerExtension` (`lib/editor/correction-trigger-plugin.ts`) — expone bloques del documento para correcciones AI; ya no encola automáticamente, `useManualCorrections` lo consulta bajo demanda
 - `PublicationSuggestionExtension` (`lib/editor/publication-suggestion-extension.ts`)
-- `AnnotationReferenceNode` (`lib/editor/footnote-node.ts`) — antes `FootnoteReferenceNode`; el schema acepta ambos nombres de nodo por compatibilidad
+- `AnnotationHighlight` (`lib/editor/annotation-highlight.ts`) — mark semántico `{ annotationId, annotationType, annotationComment }`
+- `AnnotationReferenceNode` (`lib/editor/footnote-node.ts`) — affordance atómico transitorio para click/bubble; no es formato durable
 - `FootnoteExtension` (`lib/editor/footnote-extension.ts`)
 - `FrontmatterNode` (`lib/editor/frontmatter-node.ts`)
 - `TableOfContents` (opcional, solo si el shell pasa `onTableOfContentsUpdate`)
@@ -103,18 +104,14 @@ Archivos:
 - `lib/editor/footnote-node.ts`
 - `lib/editor/footnote-extension.ts`
 
-Diseño legacy vigente hasta completar la migración D2/D3:
-- Node inline atómico (`annotationReference`, antes `footnoteReference` — el código acepta ambos nombres) con attrs `{ id, type, index, text }`; `type` cubre `footnote | personal | ai | highlight`.
-- NodeView renderiza `<sup>` clickable y emite evento `footnote:click`.
-- Serialización markdown inline: `[^n|id: nota]`, `[@n|id: nota]`, `[@pn|id: nota]` o `[@hn|id: nota]` según tipo.
-- `]` y `\` dentro de la nota se serializan como `\]` y `\\`; el primer `]` no escapado cierra el marcador.
-- Una selección multibloque conserva varios fragments de mark y un único `annotationReference`; el panel Notes enumera el reference, no los fragments.
-
-Regla legacy:
-- Las definiciones legacy no viven como bloque visible de ProseMirror; el adapter vigente las normaliza al marcador inline legacy mientras se implementa el serializer `<Annotation>`.
-- En tablas, el reference se mantiene en la misma celda que el último fragmento seleccionado y antes del delimitador `|`.
-
-Contrato objetivo: `Annotation` se representa como mark semántico con `{ id, type, comment }`, el texto marcado es el ancla y el Document IR es el único puente entre source y TipTap JSON. El adapter nuevo lee temporalmente sigils y `<Annotation>`, pero sólo serializa `<Annotation>`.
+Diseño canónico desde ODE-531:
+- `Annotation` se representa en el texto como mark semántico con `{ annotationId, annotationType, annotationComment }`; el texto marcado es el ancla.
+- El Document IR es el único bridge Source ↔ TipTap. Lee temporalmente sigils y `<Annotation>`, pero todo snapshot durable serializa únicamente `<Annotation id="…" type="…" comment="…">texto</Annotation>`.
+- `annotationReference` conserva por compatibilidad el click que abre el bubble y la enumeración del panel Notes. Comparte identidad y payload con el mark, no emite source cuando el mark semántico es dueño del rango y puede retirarse cuando la interacción deje de necesitar el nodo atómico.
+- Las definiciones y sigils legacy son entrada de migración. Nunca son salida del serializer público.
+- Al pegar una identidad duplicada, el adapter remapea la copia completa antes de persistirla; el mark y el reference reciben el mismo id nuevo.
+- Las selecciones nuevas deben ser no vacías y permanecer dentro de un bloque, según el perfil controlado. El adapter de compatibilidad puede leer documentos beta multibloque, pero la escritura canónica no crea rangos nuevos que violen esa regla.
+- En tablas, el reference interno se mantiene en la misma celda que el último fragmento seleccionado y antes del delimitador `|`.
 
 ## 2) Find/Replace decorations
 
