@@ -108,9 +108,10 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
 - Sin argumento (`/wf-build`): consultar Linear → buscar issues en estado `Todo` o `Backlog` que tengan Issue Brief y pertenezcan a la fase activa en `status.json` → tomar el de mayor prioridad según orden del roadmap → confirmar al humano el issue seleccionado antes de iniciar.
 
 **Contexto a cargar:**
-1. El Issue Brief desde Linear.
-2. Los documentos listados en la sección `Reference docs` del brief — son los únicos que aplican. No cargar documentación adicional por intuición.
-3. Excepción controlada: sí está permitido hacer repository reconnaissance dirigido y acotado sobre código (no documentos) para resolver owner/siblings/consumers/tests, según `.agents/skills/architecture-recon/SKILL.md`. Esto no abre la puerta a leer documentación de producto, roadmap o features fuera de lo citado en el brief.
+1. Leer el Issue Brief desde Linear.
+2. Para contexto normativo y de producto, cargar únicamente los documentos listados en `Reference docs` del brief. No buscar documentación adicional por intuición.
+3. Para entender cómo está implementado actualmente el sistema, ejecutar repository reconnaissance dirigido sobre el código según `.agents/skills/architecture-recon/SKILL.md`. Está permitido inspeccionar owner, reusable APIs/abstractions, siblings, consumers, contracts, hotspots y tests relevantes al cambio.
+4. Architecture Recon no autoriza ampliar el contexto documental. Si el código revela que falta una decisión o documento necesario para resolver ownership o contracts, declarar `Context Gap — Architecture Recon` en lugar de buscar documentación adicional por cuenta propia.
 
 **Excepción obligatoria por gap de contexto arquitectónico:**
 - Si el brief toca desktop, shared core, runtime boundaries, filesystem local, `.md` como contrato documental, extracción de servicios (`DocumentService`, `SyncService`, etc.) o migración web → desktop, el agente debe validar el brief contra su `Architecture Contract`.
@@ -129,8 +130,8 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
    - Si aparece un identificador histórico inválido o huérfano, registrarlo en `workflow/status.json.traceability_exceptions.ignored_issue_ids` con razón concreta. No volver a copiar ese falso positivo en notas de `status.json`, PRs o reviews posteriores.
 
 **Ejecución**
-4. Architecture Recon: si el cambio no es trivial (ver criterios de activación en `.agents/skills/architecture-recon/SKILL.md`), ejecutar Recon antes de escribir código — owner canónico, siblings, consumers, contratos, hotspots y tests canónicos — y declarar el output completo. Si Recon revela ambigüedad material de ownership o contrato, detener BUILD con `Context Gap — Architecture Recon` en vez de resolverlo por inferencia. Declarar `Construction order` (extender owner → reutilizar abstracción → extraer de hotspot → crear nuevo) según `.agents/agents/build-agent.md`.
-5. Implementar según el brief y el Recon declarado. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`. Si el diff real se desvía materialmente del change surface declarado en Recon, o revela un owner distinto, detener la edición y repetir Recon antes de continuar.
+4. Architecture Recon: si el cambio no es trivial (ver criterios de activación en `.agents/skills/architecture-recon/SKILL.md`), ejecutar Recon antes de escribir código — owner canónico, reusable API/abstraction, canonical reference/sibling, siblings, consumers, contratos, hotspots y tests canónicos — y declarar el output completo en el contexto de ejecución del propio Build Agent (no se persiste como documento del repo). Si Recon revela ambigüedad material de ownership o contrato, detener BUILD con `Context Gap — Architecture Recon` en vez de resolverlo por inferencia. Declarar `Construction order` (extender owner → reutilizar API/abstraction → seguir canonical reference/sibling si hace falta algo nuevo → extraer de hotspot → crear abstraction nueva) según `.agents/agents/build-agent.md`.
+5. Implementar según el brief y el Recon declarado. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`. Si el diff real se desvía materialmente del change surface declarado en Recon, o revela un owner distinto, detener la edición, actualizar Recon y solo entonces continuar.
 
 **Validación**
 6. `npm run typecheck` + `npm run lint` + `npm test`. Si el `Performance Architecture Contract` seleccionó evidencia ejecutable, generarla con el instrumento correspondiente. Guardar outputs — van en el body del PR.

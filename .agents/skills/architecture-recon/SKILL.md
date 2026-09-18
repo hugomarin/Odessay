@@ -87,6 +87,29 @@ Si el brief ya trae `Architecture Contract` (de `skill-architecture`), este outp
 
 ---
 
+## Persistencia
+
+El Architecture Recon completo es **working context** del Build Agent — no se persiste por defecto como documento del repositorio. Sirve para construir bien este cambio, no para quedar archivado.
+
+```text
+Recon                    → contexto temporal para construir bien
+Hallazgo reusable        → Linear (comentario o Issue Brief)
+Regla madura y recurrente → después: AGENTS.md / architecture / test / CI
+```
+
+Si Recon descubre una decisión o aprendizaje útil más allá del issue actual (ej. "este archivo es el owner canónico de X, no lo dupliques"), registrar únicamente ese hallazgo en Linear — como comentario o actualización del Issue Brief —, no el Recon entero:
+
+```text
+Architecture finding:
+`lib/corrections/persistence.ts` es el canonical owner de
+corrections persistence. `editor-shell.tsx` debe limitarse
+a wiring y no introducir nuevos persistence paths.
+```
+
+No persistir observaciones triviales ni información fácilmente redescubrible desde el código con un Recon nuevo. Si el mismo hallazgo se repite en varios issues, ya no es un hallazgo puntual de Linear — sigue el `Learning loop` del quality harness: se convierte en regla de `AGENTS.md` local, en `architecture/*` o en un boundary check cuando sea mecánicamente demostrable.
+
+---
+
 ## Stop condition
 
 Declarar `Context Gap — Architecture Recon` solo cuando el ownership o la elección de contrato sea **materialmente ambiguo**: dos siblings `canonical` plausibles, un `duplicate` que contradice al owner declarado en el brief, o un consumer cuyo comportamiento esperado no puede inferirse sin asumir arquitectura.

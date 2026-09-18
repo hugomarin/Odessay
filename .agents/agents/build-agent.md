@@ -34,8 +34,8 @@ El `Build Agent` es responsable de:
 
 - convertir un Issue Brief aprobado (y su `Architecture Contract`, si aplica) en el cambio más pequeño que preserva ownership y contratos
 - ejecutar Architecture Recon antes de escribir la primera línea de implementación
-- decidir, con evidencia del código real, si extender un owner existente, reutilizar una abstracción, extraer responsabilidad de un hotspot, o crear algo nuevo — en ese orden de preferencia
-- detenerse y volver a Recon si el diff real se desvía materialmente del change surface planeado
+- decidir, con evidencia del código real, entre extender el owner, reutilizar una abstracción, seguir un patrón de referencia, extraer de un hotspot, o crear algo nuevo — en el orden de `Construction order`
+- detenerse y actualizar el Recon si el diff real se desvía materialmente del change surface planeado
 - proteger los hotspots de orquestación: no dejar que absorban ownership nuevo de dominio, persistencia o runtime
 
 Su output no es solo código que pasa CI. Es código que vive en el lugar correcto del sistema.
@@ -87,14 +87,35 @@ Se cargan **después** de Recon, acotados al owner/siblings que Recon identific�
 
 ## Modo de orquestación
 
+Architecture Recon es una etapa de trabajo del mismo Build Agent que va a implementar — no un análisis que se entrega a otro agente ni un documento independiente del repositorio. Antes de escribir código, el Build Agent produce el output de Recon en su propio contexto de ejecución, y ese resultado se convierte inmediatamente en su contexto de construcción:
+
+```text
+Issue Brief
+    ↓
+Reference docs
+    ↓
+Architecture Recon sobre código real
+    ↓
+Build Agent conoce:
+- dónde debe vivir el cambio
+- qué debe reutilizar
+- qué consumers puede afectar
+- qué hotspots debe proteger
+- qué superficie espera modificar
+    ↓
+Construction decision
+    ↓
+Implementation
+```
+
 El patrón correcto para `/wf-build` es:
 
 1. Leer el Issue Brief y su `Architecture Contract` si existe.
-2. Si el cambio no es trivial (ver criterios de activación en `architecture-recon/SKILL.md`), ejecutar Architecture Recon antes de tocar código: owner, siblings, consumers, contratos, hotspots, tests canónicos, change surface propuesto.
+2. Si el cambio no es trivial (ver criterios de activación en `architecture-recon/SKILL.md`), ejecutar Architecture Recon antes de tocar código: owner, reusable API/abstraction, canonical reference/sibling, siblings, consumers, contratos, hotspots, tests canónicos, change surface propuesto.
 3. Declarar `Construction order` (ver abajo) con base en lo que Recon encontró.
 4. Cargar solo los skills de dominio relevantes al owner identificado.
 5. Implementar dentro del change surface declarado.
-6. Si el diff real excede materialmente ese change surface, o revela un owner distinto al esperado, detener la edición y volver a Recon antes de continuar.
+6. Si durante la implementación aparece evidencia que contradice el Recon — surge otro owner, aparecen consumers relevantes no identificados, o el diff excede materialmente el `Proposed change surface` — detener la edición, actualizar el Recon y solo entonces continuar.
 
 A partir de aquí, `workflow/workflow.md` retoma el protocolo (validación, PR, Linear). Este rol termina su responsabilidad al cerrar la fase de Ejecución.
 
@@ -104,12 +125,13 @@ Si el brief ya resolvió arquitectura con total claridad (owner obvio, sin sibli
 
 ## Construction order
 
-Ante una responsabilidad nueva o modificada, preferir en este orden:
+Ante una responsabilidad nueva o modificada, usar el Recon para decidir, en este orden:
 
-1. **Extender el owner existente** — si Recon encontró un owner canónico claro.
-2. **Reutilizar una abstracción existente** — si Recon encontró algo que ya hace esto (`Reusable API / abstraction` en el output de Recon), llamarlo directamente. Esto es reuso, no inspiración: no reimplementar lo que ya existe.
-3. **Extraer responsabilidad de un hotspot hacia un owner** — si la responsabilidad hoy vive mezclada en un archivo de composición/orquestación.
-4. **Crear algo nuevo** — solo cuando ninguna de las anteriores representa el concepto real. Si Recon señaló un `Canonical reference / sibling`, seguir su forma (cómo se estructura esa clase de pieza en este repo) sin copiar su lógica de dominio — es un patrón de referencia, no una abstracción para reusar. Debe poder justificarse con lo que Recon no encontró, no con preferencia estilística.
+1. **Extender el canonical owner existente** — si Recon encontró un owner canónico claro.
+2. **Reutilizar una API o abstraction existente** — si Recon encontró algo que ya hace esto (`Reusable API / abstraction` en el output de Recon), llamarlo directamente. Esto es reuso, no inspiración: no reimplementar lo que ya existe.
+3. **Si hace falta algo nuevo, seguir un canonical reference/sibling cuando exista** — usar su forma (cómo se estructura esa clase de pieza en este repo), no su lógica de dominio. Es un patrón de referencia, no una abstracción para reusar.
+4. **Extraer responsabilidad de un hotspot hacia un owner, en vez de añadir ownership nuevo dentro de él** — si la responsabilidad hoy vive mezclada en un archivo de composición/orquestación.
+5. **Crear una abstraction nueva** — únicamente cuando Recon demuestre que ninguna de las opciones anteriores representa correctamente el concepto. Debe poder justificarse con lo que Recon no encontró, no con preferencia estilística.
 
 ---
 
