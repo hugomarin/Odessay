@@ -72,6 +72,43 @@ describe("mermaid loader (ODE-533)", () => {
     setMermaidLoaderForTests(null);
   });
 
+  it("normalizes <br> to <br/> for the renderer without touching the source", async () => {
+    const render = vi.fn(async (_id: string, text: string) => {
+      expect(text).toContain("<br/>");
+      expect(text).not.toMatch(/<br>/);
+      return { svg: "<svg><g>ok</g></svg>" };
+    });
+    setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
+    await expect(renderMermaidSvg("graph TD; A[one<br>two]")).resolves.toBe("<svg><g>ok</g></svg>");
+    expect(render).toHaveBeenCalledTimes(1);
+    setMermaidLoaderForTests(null);
+  });
+
+  it("rejects resolved error SVGs without caching them", async () => {
+    const render = vi.fn(async () => ({
+      svg: '<svg><g><text class="error-text">Syntax error in text</text></g></svg>',
+    }));
+    setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
+    await expect(renderMermaidSvg("graph TD; A-->B")).rejects.toMatchObject({ code: "invalid" });
+    const safeRender = vi.fn(async () => ({ svg: "<svg><g>safe</g></svg>" }));
+    setMermaidLoaderForTests(async () => ({ initialize: () => {}, render: safeRender }));
+    await expect(renderMermaidSvg("graph TD; A-->B")).resolves.toBe("<svg><g>safe</g></svg>");
+    expect(safeRender).toHaveBeenCalledTimes(1);
+    setMermaidLoaderForTests(null);
+  });
+
+  it("hints at statement separators when the parser expects SEMI or NEWLINE", async () => {
+    const render = vi.fn(async () => {
+      throw new Error("Parse error on line 2:\nA-->B B-->C\nExpecting 'SEMI', 'NEWLINE', got 'NODE_STRING'");
+    });
+    setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
+    const failure = await renderMermaidSvg("flowchart TB\nA-->B B-->C").catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(MermaidRenderError);
+    expect((failure as MermaidRenderError).code).toBe("invalid");
+    expect((failure as Error).message).toContain("';'");
+    setMermaidLoaderForTests(null);
+  });
+
   it("rejects empty and oversized sources before loading", async () => {
     const render = vi.fn(async () => ({ svg: "<svg></svg>" }));
     setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));

@@ -43,6 +43,26 @@ type MermaidApi = {
   default?: MermaidApi;
 };
 
+/**
+ * Render-only normalization. AI-generated diagrams commonly use `<br>` where
+ * Mermaid documents `<br/>`; both mean the same line break. The canonical
+ * source is never rewritten — this applies to the renderer input only.
+ */
+export const normalizeMermaidSourceForRender = (source: string): string =>
+  source.replace(/<\s*br\s*>/gi, "<br/>");
+
+const MERMAID_ERROR_SVG_MARKER = "Syntax error in text";
+
+const STATEMENT_SEPARATOR_HINT =
+  " Tip: each statement needs its own line or a ';' separator (e.g. `A-->B; B-->C`).";
+
+const toInvalidMessage = (error: unknown): string => {
+  const raw = error instanceof Error && error.message ? error.message : "Invalid diagram source.";
+  const capped = raw.length > 600 ? `${raw.slice(0, 600).trimEnd()}…` : raw;
+  const needsHint = /SEMI|NEWLINE|Expecting/i.test(raw);
+  return `Invalid diagram: ${capped}${needsHint ? STATEMENT_SEPARATOR_HINT : ""}`;
+};
+
 type MermaidLoader = () => Promise<MermaidApi>;
 
 let testLoader: MermaidLoader | null = null;
@@ -92,7 +112,8 @@ export const renderMermaidSvg = async (
     throw new MermaidRenderError("too-large", "Diagram source is too large to preview.");
   }
   const configId = options.configId ?? MERMAID_CONFIG_ID;
-  const cached = getCachedMermaidSvg(source, configId);
+  const effective = normalizeMermaidSourceForRender(source);
+  const cached = getCachedMermaidSvg(effective, configId);
   if (cached) return cached;
 
   const timeoutMs = options.timeoutMs ?? MERMAID_RENDER_TIMEOUT_MS;
@@ -127,21 +148,39 @@ export const renderMermaidSvg = async (
   const renderId = `odessay-mermaid-${Date.now().toString(36)}-${idCounter}-${renderCounter}`;
   let raw: { svg: string } | string;
   try {
-    raw = await withTimeout(api.render(renderId, source), timeoutMs);
+    raw = await withTimeout(api.render(renderId, effective), timeoutMs);
   } catch (error) {
     if (error instanceof MermaidRenderError) throw error;
-    throw new MermaidRenderError(
-      "invalid",
-      error instanceof Error && error.message ? `Invalid diagram: ${error.message}` : "Invalid diagram source.",
-    );
+    throw new MermaidRenderError("invalid", toInvalidMessage(error));
   }
 
   const svg = typeof raw === "string" ? raw : raw.svg;
+  // Depending on config, Mermaid can resolve (instead of throwing) with an
+  // inline error SVG. That is still a render failure: never display it as a
+  // successful preview and never cache it — fall back to source + retry.
+  if (typeof svg === "string" && svg.includes(MERMAID_ERROR_SVG_MARKER)) {
+    const textContent = svg
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const markerAt = textContent.indexOf(MERMAID_ERROR_SVG_MARKER);
+    const detail =
+      markerAt >= 0
+        ? textContent
+            .slice(markerAt + MERMAID_ERROR_SVG_MARKER.length)
+            .trim()
+            .slice(0, 400)
+        : "";
+    throw new MermaidRenderError(
+      "invalid",
+      toInvalidMessage(detail ? new Error(detail) : new Error("Mermaid reported a syntax error.")),
+    );
+  }
   const sanitized = sanitizeMermaidSvg(svg);
   if (!sanitized) {
     throw new MermaidRenderError("unsafe", "Diagram output was rejected for safety. The source is preserved.");
   }
-  setCachedMermaidSvg(source, sanitized, configId);
+  setCachedMermaidSvg(effective, sanitized, configId);
   return sanitized;
 };
 

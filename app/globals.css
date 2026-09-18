@@ -630,6 +630,9 @@
     font-family: var(--od-font-ui);
     font-size: 12px;
     margin: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   /* ODE-533: reading fallback shares the document-width containment contract. */
