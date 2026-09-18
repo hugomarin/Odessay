@@ -7,7 +7,7 @@ import {
 import { escapeControlledAttribute } from "@/lib/document-components/entities"
 import { parseControlledMarkdown } from "@/lib/document-components/parser"
 import { DocumentComponentSpecRegistry } from "@/lib/document-components/registry"
-import type { ComponentNode, DocumentIrNode } from "@/lib/document-components/types"
+import type { DocumentIrNode } from "@/lib/document-components/types"
 
 export type MarkdownInlineToggleResult = {
   markdown: string
