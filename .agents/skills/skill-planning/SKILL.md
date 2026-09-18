@@ -11,7 +11,7 @@ La orquestación de la fase — topología, secuenciación, critical path, sínt
 
 El alcance específico del proyecto — fases e issues macro — vive en `workflow/define/roadmap.md`. Lee ese documento antes de crear issues.
 
-Usa Linear MCP para crear y gestionar todo directamente.
+Este skill define **qué** debe existir en cada issue y con qué calidad. La persistencia en Linear — crear y gestionar proyecto e issues — es ownership de `wf-define` (ver `workflow/workflow.md`), no de este documento.
 
 Si la fase ya tiene roadmap y DoD, este skill se usa para convertir esa definición en planeación táctica de issues. No debe reabrir la estrategia de fase salvo que detecte una asimetría real entre roadmap y DoD.
 
@@ -248,10 +248,10 @@ Formato — siempre texto plano, nunca Markdown links:
 2. Paths sin prefijo `./` — usar `app/page.tsx`, no `./app/page.tsx`. El path es relativo a la raíz del repo, el `./` es ruido.
 3. Los docs de spec (`workflow/context/core/`, `workflow/context/features/`) nunca van aquí — son fuente de verdad que la implementación lee, no modifica. Si los pones en Files affected, estás invirtiendo la dirección de la dependencia.
 4. Los skills (`.agents/skills/*/SKILL.md`) nunca van aquí — son referencia, no output. Van en Reference docs.
-5. `workflow/built.jsonl` debe aparecer como `(modifica)` en todo issue que vaya a `In Review` (antes era `workflow/status.json`, que ahora solo cambia cuando cambia la fase activa). `workflow/workflow.md` solo aparece cuando cambian reglas operativas, tools o permisos.
+5. `workflow/workflow.md` solo aparece cuando cambian reglas operativas, tools o permisos. Los ledgers (`workflow/built.jsonl`, `workflow/review-history.jsonl`, `workflow/status.json`) no van aquí — las ramas de feature no los tocan; se actualizan en `main` post-merge durante REVIEW (ver `workflow/workflow.md`).
 6. **Honestidad de scope code vs docs.** Si el cambio principal es documental (`workflow/context/features/*.md`, `workflow/context/core/*.md`, etc.) pero el doc define o redefine un patrón que requiere código para funcionar, listar también los archivos de código que el patrón obliga a tocar. Aplica en cualquier dirección: un brief de feature, performance budget, modelo de datos, contrato de presentación o protocolo de auth puede empezar como docs y terminar requiriendo route handlers, helpers, migraciones, tests o componentes. Un brief que oculta el código bajo la etiqueta "docs-only" genera scope creep silencioso en BUILD y deja al REVIEW sin baseline. Ejemplos de patrones que típicamente arrastran código: redefinición de un contrato de URL/redirect, cambio de schema de tabla, nuevo budget de perf con harness asociado, nuevo flow visual con componente compartido, nueva política de validación de input.
 
-Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados + `workflow/built.jsonl`.
+Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados.
 
 ## Handoff *(solo si el issue requiere acción humana)*
 
@@ -413,54 +413,27 @@ El criterio operativo es simple: BUILD debe poder implementar sin tener que infe
 
 ## Delivery
 
-### Validation
-[LLM] Antes de mover el issue a In Review, ejecuta las validaciones que apliquen y documenta el resultado. No es suficiente que el código compile — el agente debe proporcionar proof of work: el output real de lo que corrió.
+### Validation — qué evidencia debe exigir el brief
+
+Esta sección no ejecuta validaciones — define qué evidencia debe exigir el brief para que BUILD sepa qué producir y REVIEW sepa qué verificar. Ejecutar los checks, pegar outputs y abrir el PR es de BUILD (ver `workflow/workflow.md`); el schema de qué se exige vive aquí.
+
+Todo brief debe declarar:
+
+- **Proof of work de código:** como mínimo, que `typecheck`, `lint` y `test` deben pasar antes de que el issue avance. No es suficiente que el código compile — el brief exige el output real de lo que corrió, no solo que "compiló".
+- **Evidencia de interacción**, si el issue toca funcionalidad interactiva en el browser: qué flujo completo debe quedar recorrido y qué estados (carga, error, edge cases de Requirements) deben quedar verificados. El brief especifica qué debe quedar demostrado, no qué herramienta usar para demostrarlo.
+- **Visual / UX Contract**, si aplica (ver §Visual / UX Contract): qué comparación lado-a-lado y qué criterios de paridad enumerados hacen falta como evidencia. "No hay errores en consola" no cubre paridad visual.
+- **Performance evidence**, si `skill-performance` está activo: qué artefacto (`ops:perf:gate`, `ops:network:gate`, fixture de escala, evidencia de bundle desktop) prueba la decisión arquitectónica del `Performance Architecture Contract`. El brief declara qué decisión prueba cada artefacto — no todo issue necesita todos los artefactos, solo el que el riesgo real seleccione.
+- **Evidencia de base de datos**, si el issue toca schema/RLS: qué verificación de schema y de policies (permite/bloquea según las reglas definidas) debe quedar documentada.
+- **Demo de outcome**, para todo issue con comportamiento visible al usuario (ver más abajo).
 
 **El owner de Odessay es no técnico — pero eso no lo saca de la aceptación.** Hay que separar dos cosas que antes estaban colapsadas:
 
-- **Calidad de código:** la valida el agente. El humano no hace code review; confía en el proof of work (typecheck/lint/tests + evidencia). Esto sigue igual.
-- **Aceptación del resultado:** la hace el humano. El dueño no técnico **sí** puede juzgar el *outcome* — si la tabla de Workspace se ve como la de Desk, si Studio lo manda al editor, si el flujo hace lo que el issue prometía. Confundir "no puede revisar código" con "no puede aceptar resultados" es lo que dejó shippear mismatches visibles: el agente auto-validaba el código y nadie con intención de producto miraba el resultado antes de Done.
+- **Calidad de código:** la prueba el proof of work (typecheck/lint/tests + evidencia). Ejecutarlo y confirmarlo es de BUILD/REVIEW.
+- **Aceptación del resultado:** la hace el humano, sobre el *outcome* — si la tabla de Workspace se ve como la de Desk, si Studio lo manda al editor, si el flujo hace lo que el issue prometía —, no sobre el código. Confundir "no puede revisar código" con "no puede aceptar resultados" es lo que dejó shippear mismatches visibles: el código se auto-validaba y nadie con intención de producto miraba el resultado antes de Done.
 
-Por eso, para todo issue con comportamiento visible al usuario, el agente debe entregar —además del proof of work de código— un **demo de outcome** que el dueño pueda aceptar o rechazar (ver §Aceptación de resultado del dueño). El proof of work prueba que el código corre; el demo de outcome prueba que el resultado es el correcto. Son cosas distintas y se exigen las dos.
+**Demo de outcome (issues con comportamiento visible al usuario):** el brief debe exigir, además del proof of work de código, evidencia del estado final de cada Requirement (screenshots o recording del flujo real) mostrada **contra la intención declarada**, no contra el código — y debe dejar explícito que el dueño acepta o rechaza sobre ese resultado, no solo sobre que el código corre. Cómo se publica ese demo, dónde se enlaza, y qué transición de estado sigue a un rechazo es protocolo de BUILD/REVIEW (ver `workflow/workflow.md`) — este skill exige que el requisito exista en el brief, no ejecuta la publicación.
 
-**Checks obligatorios en todo issue:**
-```bash
-npm run typecheck   # debe pasar sin errores
-npm run lint        # debe pasar sin errores
-npm test            # debe pasar sin dependencias externas (ver workflow/quality/testing-observability.md §Hermetic testing)
-```
-Pegar el output de estos tres comandos en la descripción del PR. Sin este output, el PR no está completo.
-
-**Si el issue toca funcionalidad de interacción en el browser:**
-- Usa Playwright MCP para recorrer el flujo completo que el issue habilita.
-- Verifica que no hay errores en consola del browser durante el flujo.
-- Verifica estados de carga, errores y casos edge definidos en Requirements.
-- Pegar screenshot o log del resultado en el PR.
-
-**Si el issue tiene `Visual / UX Contract` required:**
-- Adjunta el screenshot lado-a-lado de la superficie nueva contra la referencia, por cada criterio de paridad declarado.
-- "No hay errores en consola" NO cubre paridad visual; un mismatch de fondo/borde/ícono/columnas pasa todos los checks técnicos. La comparación visual es el único check que lo atrapa.
-
-**Aceptación de resultado del dueño (issues con comportamiento visible al usuario):**
-- Antes de pedir el merge, el agente publica un **demo de outcome**: screenshots del estado final de cada Requirement, o un recording corto del flujo real, mostrando el resultado **contra la intención** que el issue declaró (no contra el código).
-- El demo se publica en el PR y se enlaza en el comentario de trazabilidad de Linear.
-- El dueño acepta o rechaza sobre el resultado. Un rechazo de outcome devuelve el issue a `In Progress`, igual que un review de código rechazado.
-- Este gate es independiente del proof of work de código: typecheck/lint/tests verdes no sustituyen la aceptación del resultado.
-
-**Si `skill-performance` fue activado:**
-- Verifica que el `Performance Architecture Contract` esté completo.
-- Ejecuta únicamente la evidencia que el skill haya seleccionado para el riesgo real del cambio.
-- Usa `ops:perf:gate`, `ops:network:gate`, fixtures de escala o evidencia de bundle desktop cuando el contrato los requiera; no los conviertas en una lista automática para todo issue.
-- Si se captura HAR, trace o Resource Timing con datos sensibles, procesa el input localmente con `--redact` y adjunta solo artefactos sanitizados.
-- El brief debe declarar qué decisión arquitectónica prueba cada artefacto.
-
-**Si el issue toca base de datos:**
-- Usa Supabase MCP para verificar que el schema resultante coincide con lo especificado.
-- Verifica que las RLS policies permiten y bloquean acceso según las reglas definidas.
-- Pegar el output de la verificación en el PR.
-
-**Si el issue es de infra, configuración o documentación:**
-No se requiere Playwright ni Supabase MCP. Verificar que el resultado es funcional y documentar cómo se verificó.
+Las condiciones verificables que significan Done para el issue quedan en §Definition of Done; esta sección solo define qué evidencia las respalda.
 
 ### Definition of Done
 Condiciones que deben ser verdaderas para cerrar el issue. Escritas en prosa. Sin checklists.
@@ -583,7 +556,7 @@ Un brief construido sobre un spec que contradice el código propaga el error con
 
 Un issue de UI sin `Visual / UX Contract` está incompleto. "Se ve como Desk" no es una intención implícita que BUILD pueda adivinar y REVIEW pueda verificar. Sin referencia visual nombrada y criterio de paridad enumerado, el resultado pasa todos los checks técnicos y aun así no coincide. Ver §Visual / UX Contract.
 
-Un issue visible cerrado solo con proof of work de código no está aceptado. Typecheck/lint/tests verdes prueban que el código corre, no que el resultado es el correcto. Si el dueño no aceptó el demo de outcome, el issue no está Done aunque el PR esté mergeado. Ver §Aceptación de resultado del dueño.
+Un issue visible cerrado solo con proof of work de código no está aceptado. Typecheck/lint/tests verdes prueban que el código corre, no que el resultado es el correcto. Si el dueño no aceptó el demo de outcome, el issue no está Done aunque el PR esté mergeado. Ver §Validation — Demo de outcome.
 
 Un brief que no pasó por los skills de su scope es un brief sin revisar. Que el Planning Agent conozca las reglas de frontend no sustituye cargar `skill-frontend` y confrontar el brief contra sus invariantes — el precedente ODE-338 demuestra que las reglas escritas no protegen si nadie las invoca. Ver §Revisión por skills de dominio.
 
