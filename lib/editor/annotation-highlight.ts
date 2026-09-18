@@ -99,6 +99,11 @@ export const coerceHighlightAnnotationType = (value: unknown): AnnotationType | 
 }
 
 export const AnnotationHighlight = Highlight.extend({
+  // Outermost mark of the canonical semantic chain: Annotation → Entity →
+  // Highlight → native Markdown marks (inline-semantics.md). Higher priority
+  // than the Link mark (1000) keeps this rank first.
+  priority: 3000,
+
   addAttributes() {
     return {
       annotationId: {

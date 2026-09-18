@@ -792,6 +792,43 @@
     text-decoration: underline dotted var(--od-annotation-muted);
   }
 
+  /* Semantic <Highlight> component: inherits the amber mark language by
+     default; palette choices only swap the tint hue, the dotted underline
+     stays as the non-color cue (surface-projections.md). */
+  .odessay-editor-content mark[data-semantic-highlight],
+  .prose-odessay mark[data-semantic-highlight] {
+    background: color-mix(in srgb, var(--od-annotation-highlight) 20%, transparent);
+    text-decoration: underline dotted var(--od-annotation-highlight);
+  }
+
+  .odessay-editor-content mark[data-highlight-color="green"],
+  .prose-odessay mark[data-highlight-color="green"] {
+    background: color-mix(in srgb, var(--success) 16%, transparent);
+    text-decoration: underline dotted var(--success);
+  }
+
+  .odessay-editor-content mark[data-highlight-color="indigo"],
+  .prose-odessay mark[data-highlight-color="indigo"] {
+    background: color-mix(in srgb, var(--od-annotation-ai) 14%, transparent);
+    text-decoration: underline dotted var(--od-annotation-ai);
+  }
+
+  .odessay-editor-content mark[data-highlight-color="slate"],
+  .prose-odessay mark[data-highlight-color="slate"] {
+    background: color-mix(in srgb, var(--od-annotation-muted) 16%, transparent);
+    text-decoration: underline dotted var(--od-annotation-muted);
+  }
+
+  /* Semantic <Entity>: discreet dotted reference in ink-3 so it never
+     competes with links (solid) or highlights (background tint). */
+  .odessay-editor-content mark[data-entity-type],
+  .prose-odessay mark[data-entity-type] {
+    background: transparent;
+    text-decoration: underline dotted hsl(var(--ink-3));
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+
   /* Cuando un mark contiene una corrección, quitar su propia decoración
      para que no se apile con el wavy de .pub-suggestion-pending */
   .odessay-editor-content mark:has(.pub-suggestion-pending),

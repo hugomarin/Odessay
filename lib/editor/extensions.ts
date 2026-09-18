@@ -34,6 +34,11 @@ import { FrontmatterNode } from "@/lib/editor/frontmatter-node"
 import { PublicationSuggestionExtension } from "@/lib/editor/publication-suggestion-extension"
 import { AnnotationHighlight } from "@/lib/editor/annotation-highlight"
 import {
+  EntityMark,
+  SemanticHighlightMark,
+  SemanticMarkCommands,
+} from "@/lib/editor/semantic-mark-extensions"
+import {
   CardBlock,
   DocumentCodeBlock,
   DocumentComponentCommands,
@@ -89,10 +94,16 @@ export const createEditorExtensions = (options: CreateEditorExtensionsOptions = 
     Paragraph,
     Text,
     Heading.extend({ addKeyboardShortcuts: () => ({}) }).configure({ levels: [1, 2, 3] }),
+    // Semantic marks precede native inline marks so the serializer opens the
+    // canonical chain (Annotation → Entity → Highlight) before native marks,
+    // keeping their nesting byte-stable across round-trips.
+    AnnotationHighlight.extend({ addKeyboardShortcuts: () => ({}) }),
+    EntityMark,
+    SemanticHighlightMark,
+    SemanticMarkCommands,
     Bold.extend({ addKeyboardShortcuts: () => ({}) }),
     Italic.extend({ addKeyboardShortcuts: () => ({}) }),
     Strike.extend({ addKeyboardShortcuts: () => ({}) }),
-    AnnotationHighlight.extend({ addKeyboardShortcuts: () => ({}) }),
     LocalImageExtension.extend({ addKeyboardShortcuts: () => ({}) }).configure({
       allowBase64: false,
       inline: false,

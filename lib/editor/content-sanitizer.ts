@@ -77,12 +77,29 @@ const projectCleanReadingValue = (value: unknown): unknown => {
           mark.attrs.annotationComment != null
         )
       })
+      .map(projectEntityReadingMark)
       .map(projectCleanReadingValue)
   }
   if (Array.isArray(value.content)) {
     next.content = projectCleanReadingValue(value.content)
   }
   return next
+}
+
+const projectEntityReadingMark = (mark: unknown): unknown => {
+  if (!isPlainObject(mark) || mark.type !== "entity") {
+    return mark
+  }
+
+  // Reading surfaces keep the accessible type styling but never the stable
+  // entity ID or its internal ref (surface-projections.md, privacy policy).
+  if (!isPlainObject(mark.attrs)) {
+    return { type: mark.type, attrs: {} }
+  }
+  return {
+    type: mark.type,
+    attrs: { entityType: mark.attrs.entityType ?? "other" },
+  }
 }
 
 export const sanitizeWritingBodyText = (value: string | null | undefined) => sanitizeText(value ?? "")

@@ -24,6 +24,10 @@ import { FootnoteExtension } from "@/lib/editor/footnote-extension"
 import { AnnotationReferenceNode } from "@/lib/editor/footnote-node"
 import { FrontmatterNode } from "@/lib/editor/frontmatter-node"
 import { AnnotationHighlight } from "@/lib/editor/annotation-highlight"
+import {
+  EntityMark,
+  SemanticHighlightMark,
+} from "@/lib/editor/semantic-mark-extensions"
 
 export const WRITING_BODY_EXTENSIONS = [
   Document,
@@ -35,6 +39,8 @@ export const WRITING_BODY_EXTENSIONS = [
   Strike,
   HorizontalRule,
   AnnotationHighlight,
+  EntityMark.configure({ exposeIdentity: false }),
+  SemanticHighlightMark,
   Image.configure({ allowBase64: false, inline: false }),
   Link.configure({ openOnClick: false, autolink: true, protocols: ["http", "https", "mailto"] }),
   Blockquote,

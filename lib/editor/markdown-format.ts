@@ -4,6 +4,10 @@ import {
   scanControlledAnnotations,
   replaceInlineAnnotationMarkers,
 } from "@/lib/editor/annotation-markdown"
+import { escapeControlledAttribute } from "@/lib/document-components/entities"
+import { parseControlledMarkdown } from "@/lib/document-components/parser"
+import { DocumentComponentSpecRegistry } from "@/lib/document-components/registry"
+import type { ComponentNode, DocumentIrNode } from "@/lib/document-components/types"
 
 export type MarkdownInlineToggleResult = {
   markdown: string
@@ -395,10 +399,66 @@ export const materializeMarkdownForRichParser = (markdown: string): string => {
   const normalized = normalizeMarkdownForRoundTrip(typedLegacy, {
     preserveAnnotationMarks: true,
   })
-  return materializeInlineAnnotations(materializeControlledAnnotations(normalized)).replace(
+  const semantic = materializeControlledSemanticMarks(normalized)
+  return materializeInlineAnnotations(materializeControlledAnnotations(semantic)).replace(
     /==([^=\n]+)==/g,
     "<mark>$1</mark>",
   )
+}
+
+const serializeRichNode = (node: DocumentIrNode): string => {
+  if (node.type === "markdown" || node.type === "code-block" || node.type === "opaque") {
+    return node.raw
+  }
+
+  if (node.kind === "Entity") {
+    const attributes = [`data-entity-id="${encodeURIComponent(node.attributes.id ?? "")}"`]
+    attributes.push(`data-entity-type="${encodeURIComponent(node.attributes.type ?? "")}"`)
+    if (node.attributes.ref) {
+      attributes.push(`data-entity-ref="${encodeURIComponent(node.attributes.ref)}"`)
+    }
+    return `<mark ${attributes.join(" ")}>${node.children.map(serializeRichNode).join("")}</mark>`
+  }
+
+  if (node.kind === "Highlight") {
+    const color = node.attributes.color
+    const attributes = color
+      ? `data-semantic-highlight="true" data-highlight-color="${encodeURIComponent(color)}"`
+      : 'data-semantic-highlight="true"'
+    return `<mark ${attributes}>${node.children.map(serializeRichNode).join("")}</mark>`
+  }
+
+  const spec = DocumentComponentSpecRegistry.get(node.kind)
+  if (!spec) throw new Error(`Missing component spec for ${node.kind}.`)
+  const openingTag = (() => {
+    const attributes = spec.attributes
+      .filter(({ name }) => Object.hasOwn(node.attributes, name))
+      .map(({ name }) => `${name}="${escapeControlledAttribute(node.attributes[name])}"`)
+      .join(" ")
+    return `<${node.kind}${attributes ? ` ${attributes}` : ""}>`
+  })()
+  const content = node.children.map(serializeRichNode).join("")
+  if (spec.form === "inline") {
+    return `${openingTag}${content}</${node.kind}>`
+  }
+  const body = content.replace(/^\n/, "").replace(/\n$/, "")
+  return `${openingTag}\n${body}\n</${node.kind}>`
+}
+
+/**
+ * Projects canonical `<Entity>`/`<Highlight>` tags into the mark HTML the
+ * TipTap DOM parser consumes. Runs only when the source actually contains
+ * the tags, so existing documents keep their exact parse path. Metadata
+ * travels in encodeURIComponent data attributes, mirroring the annotation
+ * marks.
+ */
+export const materializeControlledSemanticMarks = (markdown: string): string => {
+  if (!markdown.includes("<Entity") && !markdown.includes("<Highlight")) {
+    return markdown
+  }
+  return parseControlledMarkdown(markdown).document.children
+    .map(serializeRichNode)
+    .join("")
 }
 
 const escapeHtml = (value: string) =>

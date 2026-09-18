@@ -193,7 +193,7 @@ describe("highlight annotation", () => {
       const serialized = serializeDocumentToMarkdown(snapshot.bodyJson)
 
       expect(serialized).toContain(
-        '**<Annotation id="ann-4" type="ai" comment="TEST 4">1. Foundation</Annotation>** | Meses 1–3',
+        '<Annotation id="ann-4" type="ai" comment="TEST 4">**1. Foundation**</Annotation> | Meses 1–3',
       )
       expect(serialized).toContain(
         '<Annotation id="ann-5" type="ai" comment="TEST 5">Workflows personales.</Annotation> | Consolidado',

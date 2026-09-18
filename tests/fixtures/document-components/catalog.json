@@ -10,6 +10,9 @@
     { "path": "invalid/attributes.md", "classification": "opaque", "covers": ["invalid-attributes", "expressions"] },
     { "path": "scale/10.md", "classification": "valid", "componentCount": 10, "covers": ["scale"] },
     { "path": "scale/100.md", "classification": "valid", "componentCount": 100, "covers": ["scale"] },
-    { "path": "scale/1000.md", "classification": "valid", "componentCount": 1000, "covers": ["scale"] }
+    { "path": "scale/1000.md", "classification": "valid", "componentCount": 1000, "covers": ["scale"] },
+    { "path": "scale/marks-10.md", "classification": "valid", "covers": ["scale-marks", "semantic-inline"] },
+    { "path": "scale/marks-100.md", "classification": "valid", "covers": ["scale-marks", "semantic-inline"] },
+    { "path": "scale/marks-1000.md", "classification": "valid", "covers": ["scale-marks", "semantic-inline"] }
   ]
 }
