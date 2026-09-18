@@ -34,6 +34,19 @@ import { EditorShell } from "@/components/editor/editor-shell"
 const LOCATION_CHANGE_EVENT = "odessay:locationchange"
 
 let pushStatePatched = false
+let locationChangeQueued = false
+
+function queueLocationChange() {
+  if (locationChangeQueued) {
+    return
+  }
+
+  locationChangeQueued = true
+  queueMicrotask(() => {
+    locationChangeQueued = false
+    window.dispatchEvent(new Event(LOCATION_CHANGE_EVENT))
+  })
+}
 
 function ensurePushStatePatched() {
   if (pushStatePatched || typeof window === "undefined") {
@@ -46,7 +59,12 @@ function ensurePushStatePatched() {
     ...args: Parameters<typeof originalPushState>
   ) {
     const result = originalPushState(...args)
-    window.dispatchEvent(new Event(LOCATION_CHANGE_EVENT))
+    // useSyncExternalStore installs this subscription from React's insertion
+    // phase. Next may also call pushState during that phase; notifying the
+    // store synchronously would schedule a React update before the commit has
+    // finished and abort tab creation. The URL changes synchronously, while a
+    // coalesced microtask publishes the new snapshot after the current commit.
+    queueLocationChange()
     return result
   }
 }

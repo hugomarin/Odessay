@@ -7,7 +7,7 @@ Este documento describe el backbone actual de ProseMirror/TipTap y su integraci�
 
 > **En contrato documental canónico, prevalece `workflow/context/core/odessay-adr-identidad.md` (ADR):** `body_json`/ProseMirror JSON es **copia de trabajo**, no la verdad persistida (D1). El round-trip `.md ⇄ body_json` debe ser lossless, incluido el `id` estable de las anotaciones (D3).
 
-> **Actualización D2/D3 — 2026-09-16:** `<Annotation>` es la sintaxis canónica objetivo. La sección de `annotationReference` y sigils documenta el adapter legacy actual; el nuevo contrato se implementará mediante Document IR y marks semánticos, con lectura temporal de ambas sintaxis.
+> **Actualización D2/D3 — 2026-09-16:** `<Annotation>` es la sintaxis canónica. `lib/document-components/` ya posee el Document IR, registry, parser, serializer, diagnostics y coverage gate compartidos. La sección de `annotationReference` y sigils documenta el adapter TipTap legacy que ODE-531 todavía debe migrar; el engine compartido lee ambas sintaxis y sólo serializa `<Annotation>`.
 
 Para decisiones sobre contrato documental canónico y arquitectura multi-runtime, usar además:
 
@@ -88,7 +88,8 @@ Definidas en `lib/editor/extensions.ts` con `createEditorExtensions()`.
 - `FindReplaceExtension` (`lib/editor/find-replace.ts`)
 - `CorrectionTriggerExtension` (`lib/editor/correction-trigger-plugin.ts`) — expone bloques del documento para correcciones AI; ya no encola automáticamente, `useManualCorrections` lo consulta bajo demanda
 - `PublicationSuggestionExtension` (`lib/editor/publication-suggestion-extension.ts`)
-- `AnnotationReferenceNode` (`lib/editor/footnote-node.ts`) — antes `FootnoteReferenceNode`; el schema acepta ambos nombres de nodo por compatibilidad
+- `AnnotationHighlight` (`lib/editor/annotation-highlight.ts`) — mark semántico `{ annotationId, annotationType, annotationComment }`
+- `AnnotationReferenceNode` (`lib/editor/footnote-node.ts`) — affordance atómico transitorio para click/bubble; no es formato durable
 - `FootnoteExtension` (`lib/editor/footnote-extension.ts`)
 - `FrontmatterNode` (`lib/editor/frontmatter-node.ts`)
 - `TableOfContents` (opcional, solo si el shell pasa `onTableOfContentsUpdate`)
@@ -103,18 +104,14 @@ Archivos:
 - `lib/editor/footnote-node.ts`
 - `lib/editor/footnote-extension.ts`
 
-Diseño legacy vigente hasta completar la migración D2/D3:
-- Node inline atómico (`annotationReference`, antes `footnoteReference` — el código acepta ambos nombres) con attrs `{ id, type, index, text }`; `type` cubre `footnote | personal | ai | highlight`.
-- NodeView renderiza `<sup>` clickable y emite evento `footnote:click`.
-- Serialización markdown inline: `[^n|id: nota]`, `[@n|id: nota]`, `[@pn|id: nota]` o `[@hn|id: nota]` según tipo.
-- `]` y `\` dentro de la nota se serializan como `\]` y `\\`; el primer `]` no escapado cierra el marcador.
-- Una selección multibloque conserva varios fragments de mark y un único `annotationReference`; el panel Notes enumera el reference, no los fragments.
-
-Regla legacy:
-- Las definiciones legacy no viven como bloque visible de ProseMirror; el adapter vigente las normaliza al marcador inline legacy mientras se implementa el serializer `<Annotation>`.
-- En tablas, el reference se mantiene en la misma celda que el último fragmento seleccionado y antes del delimitador `|`.
-
-Contrato objetivo: `Annotation` se representa como mark semántico con `{ id, type, comment }`, el texto marcado es el ancla y el Document IR es el único puente entre source y TipTap JSON. El adapter nuevo lee temporalmente sigils y `<Annotation>`, pero sólo serializa `<Annotation>`.
+Diseño canónico desde ODE-531:
+- `Annotation` se representa en el texto como mark semántico con `{ annotationId, annotationType, annotationComment }`; el texto marcado es el ancla.
+- El Document IR es el único bridge Source ↔ TipTap. Lee temporalmente sigils y `<Annotation>`, pero todo snapshot durable serializa únicamente `<Annotation id="…" type="…" comment="…">texto</Annotation>`.
+- `annotationReference` conserva por compatibilidad el click que abre el bubble y la enumeración del panel Notes. Comparte identidad y payload con el mark, no emite source cuando el mark semántico es dueño del rango y puede retirarse cuando la interacción deje de necesitar el nodo atómico.
+- Las definiciones y sigils legacy son entrada de migración. Nunca son salida del serializer público.
+- Al pegar una identidad duplicada, el adapter remapea la copia completa antes de persistirla; el mark y el reference reciben el mismo id nuevo.
+- Las selecciones nuevas deben ser no vacías y permanecer dentro de un bloque, según el perfil controlado. El adapter de compatibilidad puede leer documentos beta multibloque, pero la escritura canónica no crea rangos nuevos que violen esa regla.
+- En tablas, el reference interno se mantiene en la misma celda que el último fragmento seleccionado y antes del delimitador `|`.
 
 ## 2) Find/Replace decorations
 
@@ -147,6 +144,12 @@ Implicación:
 ---
 
 ## Backbone Markdown (riesgo principal)
+
+### Controlled document engine
+
+`lib/document-components/` es el shared core framework-neutral para el perfil controlado. `DocumentComponentSpecRegistry` declara kinds, atributos y nesting con lookup O(1); `parseControlledMarkdown` produce Document IR + diagnostics recuperables; `serializeControlledDocument` canonicaliza nodos conocidos y conserva source opaco byte-for-byte. Fences se reconocen antes que tags y nunca se interpretan como componentes.
+
+`lib/editor/document-serialization.ts` expone `parseMarkdownToDocumentIr` y `serializeDocumentIrToMarkdown` como único seam público para consumidores component-aware. El adapter TipTap existente aún conserva su comportamiento hasta que las extensiones por kind se habiliten en los siguientes slices; no puede implementar otro parser privado. Parse/serialize completo ocurre sólo en open/import, snapshots de save coalescidos y transiciones Rich/Source con cambios aceptados, nunca en cada tecla ni en un toggle Source sin modificaciones. `EditorContent` conserva un único owner montado durante Source para no destruir NodeViews o reemplazar EditorState por un cambio de presentación.
 
 ProseMirror no es markdown-native. En Odessay usamos un puente explícito.
 

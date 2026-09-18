@@ -22,6 +22,9 @@ export type EditorShortcutAction =
   | "footnote"
   | "table"
   | "image"
+  | "tipBlock"
+  | "infoBlock"
+  | "cardBlock"
   | "horizontalRule"
   // Navigate (global)
   | "goDesk"
@@ -81,6 +84,9 @@ const EDITOR_SHORTCUT_LABELS: Record<EditorShortcutAction, ShortcutDisplay> = {
   footnote: { mac: "⌘⇧A", windows: "Ctrl+Shift+A" },
   table: { mac: "⌘T", windows: "Ctrl+T" },
   image: { mac: "⌘⇧I", windows: "Ctrl+Shift+I" },
+  tipBlock: { mac: "", windows: "" },
+  infoBlock: { mac: "", windows: "" },
+  cardBlock: { mac: "", windows: "" },
   horizontalRule: { mac: "⌘⇧-", windows: "Ctrl+Shift+-" },
   // Navigate
   goDesk: { mac: "⌘⌥1", windows: "Ctrl+Alt+1" },

@@ -30,7 +30,8 @@ import {
   nextAnnotationSessionId,
   type AnnotationBubblePosition,
 } from "@/components/reading/margins/annotation-bubble"
-import { SelectionPopup, type SelectionPopupPosition } from "@/components/reading/margins/selection-popup"
+import { SelectionPopup, type SelectionPopupPosition, type SemanticMarkApplyResult } from "@/components/reading/margins/selection-popup"
+import { applyEntityMark, applySemanticHighlight, type EntityTypeName, type HighlightColorName } from "@/lib/editor/semantic-marks"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { BackupImageModal } from "@/components/editor/modals/backup-image-modal"
 import { InsertImageModal } from "@/components/editor/modals/insert-image-modal"
@@ -492,6 +493,7 @@ export function EditorShell({
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
+  const [acceptedMarkdownForAnnotations, setAcceptedMarkdownForAnnotations] = useState("")
 
   const [bodyText, setBodyText] = useState("")
   const [markdownSelectionState, setMarkdownSelectionState] = useState<MarkdownSelectionSnapshot | null>(null)
@@ -2460,6 +2462,7 @@ export function EditorShell({
           modeRef.current = "markdown"
           setMode("markdown")
           setMarkdownValue(nextMarkdown)
+          setAcceptedMarkdownForAnnotations(nextMarkdown)
 
           window.requestAnimationFrame(() => {
             generation.run(() => {
@@ -2673,6 +2676,7 @@ export function EditorShell({
       if (!editor) return false
 
       setMarkdownValue(normalizedMarkdown)
+      setAcceptedMarkdownForAnnotations(normalizedMarkdown)
       isApplyingContentRef.current = true
 
       const applied = applyPanelMarkdownChange(editor, materializeMarkdownForRichParser(normalizedMarkdown), {
@@ -3257,6 +3261,7 @@ export function EditorShell({
           isApplyingContentRef.current = true
           editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
           isApplyingContentRef.current = false
+          setAcceptedMarkdownForAnnotations(nextMarkdown)
           setBodyText(editor.getText())
           void persistEditorSnapshot(editor)
           markdownSaveTimeoutRef.current = null
@@ -3518,6 +3523,30 @@ export function EditorShell({
         case "codeBlock":
           runWithRichSelection((chain) => chain.toggleCodeBlock())
           return
+        case "tipBlock":
+          editor.chain().focus().insertTip().run()
+          return
+        case "infoBlock":
+          editor.chain().focus().insertInfo().run()
+          return
+        case "cardBlock": {
+          const selectedRange = getValidatedRichSelection()
+          let chain = editor.chain().focus()
+          if (selectedRange) chain = chain.setTextSelection(selectedRange)
+          if (selectedRange && selectedRange.from !== selectedRange.to) {
+            if (!chain.convertSelectionToCard().run()) {
+              showCorrectionToast({
+                phase: "error",
+                completed: 0,
+                total: 0,
+                message: "Those blocks cannot be placed in a Card.",
+              }, 4000)
+            }
+          } else {
+            chain.insertCard().run()
+          }
+          return
+        }
         case "paragraph":
           preserveViewport(() => {
             runWithRichSelection((chain) => chain.setParagraph())
@@ -3633,6 +3662,7 @@ export function EditorShell({
       persistEditorSnapshot,
       queueMarkdownSelectionRestore,
       router,
+      showCorrectionToast,
       toggleFocusMode,
     ],
   )
@@ -3747,6 +3777,54 @@ export function EditorShell({
       handleAnnotateSelection(type)
     },
     [handleAnnotateSelection, handleFootnoteSelection, handleMarkSelection],
+  )
+
+  const applySemanticEntityAtSelection = useCallback(
+    (type: EntityTypeName): SemanticMarkApplyResult => {
+      if (!editor || !pendingRichSelection) {
+        return "Select some text first."
+      }
+      suppressNextSelectionPopupRef.current = true
+      editor.commands.focus()
+      const decision = applyEntityMark(editor, {
+        from: pendingRichSelection.from,
+        to: pendingRichSelection.to,
+        type,
+      })
+      if (!decision.ok) {
+        suppressNextSelectionPopupRef.current = false
+        return decision.message
+      }
+      setPendingRichSelection(null)
+      updateDerivedEditorState(editor)
+      void persistEditorSnapshot(editor)
+      return null
+    },
+    [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState],
+  )
+
+  const applySemanticHighlightAtSelection = useCallback(
+    (color: HighlightColorName): SemanticMarkApplyResult => {
+      if (!editor || !pendingRichSelection) {
+        return "Select some text first."
+      }
+      suppressNextSelectionPopupRef.current = true
+      editor.commands.focus()
+      const decision = applySemanticHighlight(editor, {
+        from: pendingRichSelection.from,
+        to: pendingRichSelection.to,
+        color,
+      })
+      if (!decision.ok) {
+        suppressNextSelectionPopupRef.current = false
+        return decision.message
+      }
+      setPendingRichSelection(null)
+      updateDerivedEditorState(editor)
+      void persistEditorSnapshot(editor)
+      return null
+    },
+    [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState],
   )
 
   const handleConfirmAnnotation = useCallback(
@@ -3904,18 +3982,44 @@ export function EditorShell({
           bodyMarkdown = getEditorMarkdown(editor)
         }
         const footnoteNodes = getEditorFootnotes(editor)
-        setMarkdownValue(
-          isDesktopRuntime()
-            ? bodyMarkdown
-            : normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes)),
-        )
+        const sourceMarkdown = isDesktopRuntime()
+          ? bodyMarkdown
+          : normalizeMarkdownForRoundTrip(
+              getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes),
+            )
+        setMarkdownValue(sourceMarkdown)
+        setAcceptedMarkdownForAnnotations(sourceMarkdown)
         return
       }
 
       const normalizedMarkdown = isDesktopRuntime()
         ? markdownValue
         : normalizeMarkdownForRoundTrip(markdownValue)
+
+      let currentRichMarkdown: string
+      if (isDesktopRuntime()) {
+        const result = desktopDocumentEngine.richToSource(editor)
+        currentRichMarkdown = result.success ? result.markdown : getEditorMarkdown(editor)
+      } else {
+        currentRichMarkdown = normalizeMarkdownForRoundTrip(
+          getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
+        )
+      }
+
       modeRef.current = "rich"
+      setMode("rich")
+      setMarkdownValue(normalizedMarkdown)
+
+      // Source is another presentation of the same EditorState. A clean
+      // Rich -> Source -> Rich transition must not replace that state: doing
+      // so destroys/recreates every custom NodeView, resets editor-owned
+      // history/selection, and schedules a durable write for unchanged
+      // content. Markdown edits that already passed the Source autosave have
+      // also been applied to TipTap, so they take this same no-op path.
+      if (currentRichMarkdown === normalizedMarkdown) {
+        return
+      }
+
       isApplyingContentRef.current = true
       if (isDesktopRuntime()) {
         const result = desktopDocumentEngine.sourceToRich(normalizedMarkdown)
@@ -3929,8 +4033,6 @@ export function EditorShell({
         editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
       }
       isApplyingContentRef.current = false
-      setMarkdownValue(normalizedMarkdown)
-      setMode("rich")
       updateDerivedEditorState(editor)
       void persistEditorSnapshot(editor)
     },
@@ -3964,6 +4066,7 @@ export function EditorShell({
           parsed?.success ? parsed.snapshot.bodyJson : materializeMarkdownForRichParser(normalizedMarkdown),
         )
         isApplyingContentRef.current = false
+        setAcceptedMarkdownForAnnotations(normalizedMarkdown)
         // Update metrics from TipTap but do NOT derive markdownValue from it —
         // TipTap serializes table nodes as HTML, which would overwrite GFM textarea content.
         // In Markdown mode the textarea is the source of truth; markdownValue is already correct.
@@ -4008,6 +4111,7 @@ export function EditorShell({
             isApplyingContentRef.current = true
             editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
             isApplyingContentRef.current = false
+            setAcceptedMarkdownForAnnotations(nextMarkdown)
             setBodyText(editor.getText())
             void persistEditorSnapshot(editor)
             markdownSaveTimeoutRef.current = null
@@ -4106,6 +4210,7 @@ export function EditorShell({
         isApplyingContentRef.current = true
         editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
         isApplyingContentRef.current = false
+        setAcceptedMarkdownForAnnotations(nextMarkdown)
         void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
       }, MARKDOWN_SAVE_DEBOUNCE_MS)
@@ -4140,6 +4245,7 @@ export function EditorShell({
             isApplyingContentRef.current = true
             editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
             isApplyingContentRef.current = false
+            setAcceptedMarkdownForAnnotations(nextMarkdown)
             setBodyText(editor.getText())
             void persistEditorSnapshot(editor)
             markdownSaveTimeoutRef.current = null
@@ -4197,7 +4303,14 @@ export function EditorShell({
   const handleInsertFootnote = useCallback(
     (note: string) => {
       if (modeRef.current === "markdown") {
-        const nextMarkdown = appendMarkdownFootnote(markdownValue, note)
+        const selection = markdownSelectionRef.current
+        const nextMarkdown = appendMarkdownFootnote(
+          markdownValue,
+          note,
+          selection?.start,
+          selection?.end,
+        )
+        if (nextMarkdown === markdownValue) return
         applyMarkdownFromPanel(nextMarkdown)
         setActivePanel("notes")
         return
@@ -4226,8 +4339,8 @@ export function EditorShell({
       return extractRichEditorAnnotations(editor)
     }
 
-    return getMarkdownFootnotes(markdownValue)
-  }, [editor, markdownValue, mode, richFootnoteRevision, version])
+    return getMarkdownFootnotes(acceptedMarkdownForAnnotations)
+  }, [acceptedMarkdownForAnnotations, editor, mode, richFootnoteRevision, version])
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const selectionMetrics = useEditorSelection(editor, mode, markdownSelectionState)
   const displayTitle = useMemo(
@@ -7030,6 +7143,8 @@ export function EditorShell({
         position={pendingRichSelection?.popupPosition ?? null}
         onSelectType={handleEditorSelectType}
         onDismiss={dismissSelectionPopup}
+        onApplyEntity={applySemanticEntityAtSelection}
+        onApplyHighlight={applySemanticHighlightAtSelection}
       />
 
       <AnnotationBubble

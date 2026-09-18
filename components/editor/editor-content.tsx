@@ -60,41 +60,45 @@ export function WritingEditorContent({
     >
       <div className="odessay-editor-sheet-frame relative">
         {topSlot ? <div className="odessay-sticky-slot">{topSlot}</div> : null}
-        {mode === "markdown" ? (
-          <div className="odessay-markdown-shell relative min-h-[55vh] w-full">
-            <pre
-              ref={markdownSemanticRef}
-              aria-hidden="true"
-              className="odessay-markdown-semantic pointer-events-none absolute inset-0 z-0 m-0 overflow-hidden whitespace-pre-wrap break-words"
-              dangerouslySetInnerHTML={{ __html: `${semanticHtml}\n` }}
-            />
-            <textarea
-              ref={markdownTextareaRef}
-              value={markdownValue}
-              onChange={(event) => onMarkdownChange(event.target.value)}
-              onScroll={handleMarkdownScroll}
-              onSelect={(event) => emitMarkdownSelection(event.currentTarget)}
-              onFocus={(event) => emitMarkdownSelection(event.currentTarget)}
-              onKeyUp={(event) => emitMarkdownSelection(event.currentTarget)}
-              onMouseUp={(event) => emitMarkdownSelection(event.currentTarget)}
-              spellCheck={false}
-              autoCorrect="off"
-              autoCapitalize="off"
-              style={{ fieldSizing: "content" } as CSSProperties}
-              className="odessay-markdown-source relative z-10 box-border min-h-[55vh] w-full max-w-full resize-none border-none bg-transparent outline-none"
-              aria-label="Markdown source"
-            />
-          </div>
-        ) : (
+        <div className="relative">
+          {mode === "markdown" ? (
+            <div className="odessay-markdown-shell relative min-h-[55vh] w-full">
+              <pre
+                ref={markdownSemanticRef}
+                aria-hidden="true"
+                className="odessay-markdown-semantic pointer-events-none absolute inset-0 z-0 m-0 overflow-hidden whitespace-pre-wrap break-words"
+                dangerouslySetInnerHTML={{ __html: `${semanticHtml}\n` }}
+              />
+              <textarea
+                ref={markdownTextareaRef}
+                value={markdownValue}
+                onChange={(event) => onMarkdownChange(event.target.value)}
+                onScroll={handleMarkdownScroll}
+                onSelect={(event) => emitMarkdownSelection(event.currentTarget)}
+                onFocus={(event) => emitMarkdownSelection(event.currentTarget)}
+                onKeyUp={(event) => emitMarkdownSelection(event.currentTarget)}
+                onMouseUp={(event) => emitMarkdownSelection(event.currentTarget)}
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
+                style={{ fieldSizing: "content" } as CSSProperties}
+                className="odessay-markdown-source relative z-10 box-border min-h-[55vh] w-full max-w-full resize-none border-none bg-transparent outline-none"
+                aria-label="Markdown source"
+              />
+            </div>
+          ) : null}
           <div
+            aria-hidden={mode === "markdown" ? "true" : undefined}
+            inert={mode === "markdown" ? true : undefined}
             className={cn(
               "EditorRichContent",
               "rounded-[8px] border-[0.5px] border-transparent bg-transparent",
+              mode === "markdown" && "pointer-events-none invisible absolute inset-x-0 top-0",
             )}
           >
             <EditorContent editor={editor} />
           </div>
-        )}
+        </div>
       </div>
     </div>
   )

@@ -178,7 +178,13 @@ const collectInlineRuns = (nodes: ExportNode[] | undefined, footnotes: WritingEx
             run.code = true
             break
           case "highlight":
-            run.highlight = true
+            if (
+              mark.attrs?.annotationId == null &&
+              mark.attrs?.annotationType == null &&
+              mark.attrs?.annotationComment == null
+            ) {
+              run.highlight = true
+            }
             break
           case "link":
             run.linkHref = readString(mark.attrs?.href) ?? undefined
@@ -193,18 +199,9 @@ const collectInlineRuns = (nodes: ExportNode[] | undefined, footnotes: WritingEx
     }
 
     if (node.type === "annotationReference" || node.type === "footnoteReference") {
-      const index = readNumber(node.attrs?.index)
-      if (index === null) {
-        continue
-      }
-
-      const type = readString(node.attrs?.type) ?? "footnote"
-      const text = readString(node.attrs?.text) ?? ""
-      if (text && type === "footnote") {
-        footnotes.push({ index, text })
-      }
-
-      runs.push({ text: type === "footnote" ? `[^${index}]` : `[@${index}]`, footnoteRef: index })
+      // Annotation metadata is authoring state. The selected text is already
+      // present in the preceding semantic mark, so clean Markdown/PDF/DOCX
+      // omit the interaction reference and never expose IDs or comments.
       continue
     }
 

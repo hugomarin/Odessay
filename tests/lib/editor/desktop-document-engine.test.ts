@@ -346,6 +346,11 @@ Paragraph with **bold**, *italic*, ~~strike~~, ==highlight==, [link](https://exa
 Middle ==second passage==[@p1|22222222-2222-4222-8222-222222222222: keep for later].
 
 End ==third passage==[@h1|33333333-3333-4333-8333-333333333333: ].`
+      const canonical = `Intro <Annotation id="11111111-1111-4111-8111-111111111111" type="ai" comment="simplify this">first passage</Annotation>.
+
+Middle <Annotation id="22222222-2222-4222-8222-222222222222" type="personal" comment="keep for later">second passage</Annotation>.
+
+End <Annotation id="33333333-3333-4333-8333-333333333333" type="highlight" comment="">third passage</Annotation>.`
 
       const first = engine.sourceToRich(markdown)
       expect(first.success).toBe(true)
@@ -365,7 +370,7 @@ End ==third passage==[@h1|33333333-3333-4333-8333-333333333333: ].`
       const firstSerialized = engine.serializeBodyJson(first.snapshot.bodyJson)
       expect(firstSerialized.success).toBe(true)
       if (!firstSerialized.success) return
-      expect(firstSerialized.markdown).toBe(markdown)
+      expect(firstSerialized.markdown).toBe(canonical)
 
       const second = engine.sourceToRich(firstSerialized.markdown)
       expect(second.success).toBe(true)
@@ -374,7 +379,7 @@ End ==third passage==[@h1|33333333-3333-4333-8333-333333333333: ].`
       const secondSerialized = engine.serializeBodyJson(second.snapshot.bodyJson)
       expect(secondSerialized.success).toBe(true)
       if (!secondSerialized.success) return
-      expect(secondSerialized.markdown).toBe(markdown)
+      expect(secondSerialized.markdown).toBe(canonical)
 
       const secondRows = buildMarginSyncRows(
         second.snapshot.bodyJson,
