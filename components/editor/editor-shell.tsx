@@ -557,6 +557,8 @@ export function EditorShell({
   const artifactTypeRef = useRef<ArtifactType>(artifactType)
   const visibilityRef = useRef<WritingVisibility>(writingVisibility)
   const markdownSaveTimeoutRef = useRef<number | null>(null)
+  const pendingMarkdownSaveRef = useRef<string | null>(null)
+  const tabSelectionRequestRef = useRef(0)
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
   const activeEditorTabIdRef = useRef<string | null>(editorSession.active_tab_id)
@@ -1304,7 +1306,7 @@ export function EditorShell({
       const draftWritingId = ephemeralDraftWritingIdRef.current
       const sourceTabId = activeEditorTabIdRef.current ?? (activeId ?? EDITOR_DRAFT_TAB_ID)
 
-      const result = await persistenceCoordinator.persist(
+      const persistence = persistenceCoordinator.persist(
         {
           writingId: activeId,
           createdAt: baseCreatedAt,
@@ -1330,18 +1332,29 @@ export function EditorShell({
         overrides,
       )
 
-      if (!options?.awaitDurability || !result) {
-        return result
+      if (!options?.awaitDurability) {
+        return persistence
       }
 
-      // persist() can resolve `true` optimistically when merged into an
-      // already-in-flight write, without waiting for that write to actually
-      // land — fine for fire-and-forget autosave, but a caller reporting
-      // success back to the user (e.g. a rename confirmation) needs the real
-      // outcome (ODE-478 follow-up).
-      return persistenceCoordinator.settle({ writingId: activeId, draftWritingId, sourceTabId })
+      // Enqueue first, then settle immediately. Waiting for persist() before
+      // calling settle() leaves a fresh request parked behind desktop's quiet
+      // window, which is exactly what explicit structural mutations (marks,
+      // annotations, rename) must not do: their plain text can remain
+      // unchanged while their serialized Markdown is already different.
+      // settle() also covers the optimistic in-flight branch, while awaiting
+      // `persistence` preserves the caller's generation-scoped result.
+      const settled = await persistenceCoordinator.settle({ writingId: activeId, draftWritingId, sourceTabId })
+      const persisted = await persistence
+      return settled && persisted
     },
     [persistenceCoordinator],
+  )
+
+  const persistExplicitStructuralMutation = useCallback(
+    (editorInstance: Editor) => {
+      void persistEditorSnapshot(editorInstance, undefined, { awaitDurability: true })
+    },
+    [persistEditorSnapshot],
   )
 
   const runRichModeUpdateSideEffects = useCallback(
@@ -1551,6 +1564,37 @@ export function EditorShell({
       bodyJson: editor.getJSON() as Record<string, unknown>,
     }
   }, [editor])
+
+  // Source-mode symmetry for ODE-478 case 2: the 800ms markdown save debounce
+  // only guards on modeRef, never on document identity. If a tab switch, close
+  // or New Tab flips the writing identity while the timer is pending, the
+  // callback would either persist the outgoing document's markdown under the
+  // incoming tab's writing id, or get silently dropped when the new tab's
+  // hydration restores a non-markdown mode first — the user loses the edit
+  // either way. Flush it against the outgoing document BEFORE the identity
+  // flip, exactly like flushQueuedRichModeUpdate does for rich-mode updates.
+  const flushPendingMarkdownSave = useCallback(() => {
+    const pendingMarkdown = pendingMarkdownSaveRef.current
+    if (markdownSaveTimeoutRef.current !== null) {
+      window.clearTimeout(markdownSaveTimeoutRef.current)
+      markdownSaveTimeoutRef.current = null
+    }
+    pendingMarkdownSaveRef.current = null
+    if (pendingMarkdown === null) return
+
+    const editorInstance = editorInstanceRef.current
+    if (!editorInstance || modeRef.current !== "markdown") return
+
+    isApplyingContentRef.current = true
+    const parsed = isDesktopRuntime() ? desktopDocumentEngine.sourceToRich(pendingMarkdown) : null
+    editorInstance.commands.setContent(
+      parsed?.success ? parsed.snapshot.bodyJson : materializeMarkdownForRichParser(pendingMarkdown),
+    )
+    isApplyingContentRef.current = false
+    setAcceptedMarkdownForAnnotations(pendingMarkdown)
+    setBodyText(editorInstance.getText())
+    void persistEditorSnapshot(editorInstance)
+  }, [persistEditorSnapshot])
 
   // Uploading an image needs a real writingId to attach the asset to
   // (server-side storage path + RLS), so a still-blank draft must
@@ -1820,11 +1864,15 @@ export function EditorShell({
       return
     }
 
+    // An external navigation (Desk/Search opening another artifact) flips the
+    // writing identity too; a pending Source-mode save must land on the
+    // outgoing document before that happens.
+    flushPendingMarkdownSave()
     currentWritingIdRef.current = nextExternalLoad.activeWritingId
     setCurrentWritingId(nextExternalLoad.activeWritingId)
     setHydrationWritingId(nextExternalLoad.hydrationWritingId)
     navigatedToDraftRef.current = false
-  }, [routeWritingId])
+  }, [flushPendingMarkdownSave, routeWritingId])
 
   useEffect(() => {
     currentWritingIdRef.current = currentWritingId
@@ -2629,9 +2677,9 @@ export function EditorShell({
     const correctionFailureRetryTimers = correctionFailureRetryTimersRef.current
 
     return () => {
-      if (markdownSaveTimeoutRef.current) {
-        window.clearTimeout(markdownSaveTimeoutRef.current)
-      }
+      // Flush rather than drop: a Source-mode edit typed <800ms before an
+      // unmount (web route change) still belongs to the current document.
+      flushPendingMarkdownSave()
 
       if (richUpdateRafRef.current !== null) {
         window.cancelAnimationFrame(richUpdateRafRef.current)
@@ -2667,7 +2715,7 @@ export function EditorShell({
       correctionQueueRef.current = []
       persistCurrentWorkspaceViewState()
     }
-  }, [persistCurrentWorkspaceViewState])
+  }, [flushPendingMarkdownSave, persistCurrentWorkspaceViewState])
 
   const applyMarkdownFromPanel = useCallback(
     (nextMarkdown: string) => {
@@ -2685,6 +2733,9 @@ export function EditorShell({
             window.clearTimeout(markdownSaveTimeoutRef.current)
             markdownSaveTimeoutRef.current = null
           }
+          // The panel applies this markdown synchronously, so any queued
+          // textarea snapshot has been superseded rather than abandoned.
+          pendingMarkdownSaveRef.current = null
         },
         updateDerivedState: () => {
           if (!editor) {
@@ -3241,6 +3292,7 @@ export function EditorShell({
 
       const persistMarkdownDraft = (nextMarkdown: string) => {
         setMarkdownValue(nextMarkdown)
+        pendingMarkdownSaveRef.current = nextMarkdown
 
         if (markdownSaveTimeoutRef.current) {
           window.clearTimeout(markdownSaveTimeoutRef.current)
@@ -3253,18 +3305,8 @@ export function EditorShell({
         }
 
         markdownSaveTimeoutRef.current = window.setTimeout(() => {
-          if (modeRef.current !== "markdown") {
-            markdownSaveTimeoutRef.current = null
-            return
-          }
-
-          isApplyingContentRef.current = true
-          editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
-          isApplyingContentRef.current = false
-          setAcceptedMarkdownForAnnotations(nextMarkdown)
-          setBodyText(editor.getText())
-          void persistEditorSnapshot(editor)
           markdownSaveTimeoutRef.current = null
+          flushPendingMarkdownSave()
         }, MARKDOWN_SAVE_DEBOUNCE_MS)
       }
 
@@ -3656,10 +3698,10 @@ export function EditorShell({
     [
       captureRichSelectionSnapshot,
       editor,
+      flushPendingMarkdownSave,
       markdownValue,
       openFindReplacePanel,
       openInsertImageModal,
-      persistEditorSnapshot,
       queueMarkdownSelectionRestore,
       router,
       showCorrectionToast,
@@ -3689,8 +3731,8 @@ export function EditorShell({
 
     setPendingRichSelection(null)
     updateDerivedEditorState(editor)
-    void persistEditorSnapshot(editor)
-  }, [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState])
+    persistExplicitStructuralMutation(editor)
+  }, [editor, pendingRichSelection, persistExplicitStructuralMutation, updateDerivedEditorState])
 
   const convertStandaloneHighlight = useCallback(
     (anchorText: string, type: AnnotationType, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => {
@@ -3797,10 +3839,10 @@ export function EditorShell({
       }
       setPendingRichSelection(null)
       updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
+      persistExplicitStructuralMutation(editor)
       return null
     },
-    [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState],
+    [editor, pendingRichSelection, persistExplicitStructuralMutation, updateDerivedEditorState],
   )
 
   const applySemanticHighlightAtSelection = useCallback(
@@ -3821,10 +3863,10 @@ export function EditorShell({
       }
       setPendingRichSelection(null)
       updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
+      persistExplicitStructuralMutation(editor)
       return null
     },
-    [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState],
+    [editor, pendingRichSelection, persistExplicitStructuralMutation, updateDerivedEditorState],
   )
 
   const handleConfirmAnnotation = useCallback(
@@ -3859,9 +3901,9 @@ export function EditorShell({
 
       setPendingAnnotation(null)
       updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
+      persistExplicitStructuralMutation(editor)
     },
-    [editor, pendingAnnotation, persistEditorSnapshot, updateDerivedEditorState],
+    [editor, pendingAnnotation, persistExplicitStructuralMutation, updateDerivedEditorState],
   )
 
   useEffect(() => {
@@ -4054,28 +4096,13 @@ export function EditorShell({
 
       setSyncStatus("saving")
 
+      pendingMarkdownSaveRef.current = normalizedMarkdown
       markdownSaveTimeoutRef.current = window.setTimeout(() => {
-        if (modeRef.current !== "markdown") {
-          markdownSaveTimeoutRef.current = null
-          return
-        }
-
-        isApplyingContentRef.current = true
-        const parsed = isDesktopRuntime() ? desktopDocumentEngine.sourceToRich(normalizedMarkdown) : null
-        editor.commands.setContent(
-          parsed?.success ? parsed.snapshot.bodyJson : materializeMarkdownForRichParser(normalizedMarkdown),
-        )
-        isApplyingContentRef.current = false
-        setAcceptedMarkdownForAnnotations(normalizedMarkdown)
-        // Update metrics from TipTap but do NOT derive markdownValue from it —
-        // TipTap serializes table nodes as HTML, which would overwrite GFM textarea content.
-        // In Markdown mode the textarea is the source of truth; markdownValue is already correct.
-        setBodyText(editor.getText())
-        void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
+        flushPendingMarkdownSave()
       }, MARKDOWN_SAVE_DEBOUNCE_MS)
     },
-    [editor, persistEditorSnapshot],
+    [editor, flushPendingMarkdownSave],
   )
 
   const handleInsertLink = useCallback(
@@ -4102,19 +4129,10 @@ export function EditorShell({
         setSyncStatus("saving")
 
         if (editor) {
+          pendingMarkdownSaveRef.current = nextMarkdown
           markdownSaveTimeoutRef.current = window.setTimeout(() => {
-            if (modeRef.current !== "markdown") {
-              markdownSaveTimeoutRef.current = null
-              return
-            }
-
-            isApplyingContentRef.current = true
-            editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
-            isApplyingContentRef.current = false
-            setAcceptedMarkdownForAnnotations(nextMarkdown)
-            setBodyText(editor.getText())
-            void persistEditorSnapshot(editor)
             markdownSaveTimeoutRef.current = null
+            flushPendingMarkdownSave()
           }, MARKDOWN_SAVE_DEBOUNCE_MS)
         }
 
@@ -4152,7 +4170,7 @@ export function EditorShell({
           .run()
       }
     },
-    [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore],
+    [editor, flushPendingMarkdownSave, markdownValue, queueMarkdownSelectionRestore],
   )
 
   useEffect(() => {
@@ -4201,21 +4219,13 @@ export function EditorShell({
       // Debounce parse + persist exactly like handleMarkdownChange, but do NOT call
       // updateDerivedEditorState — that would overwrite markdownValue with TipTap's
       // serialization of the table nodes, which can include HTML instead of GFM syntax.
+      pendingMarkdownSaveRef.current = nextMarkdown
       markdownSaveTimeoutRef.current = window.setTimeout(() => {
-        if (modeRef.current !== "markdown") {
-          markdownSaveTimeoutRef.current = null
-          return
-        }
-
-        isApplyingContentRef.current = true
-        editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
-        isApplyingContentRef.current = false
-        setAcceptedMarkdownForAnnotations(nextMarkdown)
-        void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
+        flushPendingMarkdownSave()
       }, MARKDOWN_SAVE_DEBOUNCE_MS)
     },
-    [mode, editor, markdownValue, persistEditorSnapshot],
+    [mode, editor, flushPendingMarkdownSave, markdownValue, persistEditorSnapshot],
   )
 
   const handleInsertImage = useCallback(
@@ -4237,18 +4247,10 @@ export function EditorShell({
           if (markdownSaveTimeoutRef.current) {
             window.clearTimeout(markdownSaveTimeoutRef.current)
           }
+          pendingMarkdownSaveRef.current = nextMarkdown
           markdownSaveTimeoutRef.current = window.setTimeout(() => {
-            if (modeRef.current !== "markdown") {
-              markdownSaveTimeoutRef.current = null
-              return
-            }
-            isApplyingContentRef.current = true
-            editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
-            isApplyingContentRef.current = false
-            setAcceptedMarkdownForAnnotations(nextMarkdown)
-            setBodyText(editor.getText())
-            void persistEditorSnapshot(editor)
             markdownSaveTimeoutRef.current = null
+            flushPendingMarkdownSave()
           }, MARKDOWN_SAVE_DEBOUNCE_MS)
         }
 
@@ -4267,7 +4269,7 @@ export function EditorShell({
         .run()
       void persistEditorSnapshot(editor)
     },
-    [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore],
+    [editor, flushPendingMarkdownSave, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore],
   )
 
   const handleBackupLocalImage = useCallback(async () => {
@@ -5656,29 +5658,86 @@ export function EditorShell({
   ])
 
   const handleSelectWorkspaceTab = useCallback(
-    (tabId: string) => {
-      const nextTab = editorSession.tabs.find((tab) => tab.id === tabId)
+    async (tabId: string) => {
+      const nextTab = getEditorSessionState().session.tabs.find((tab) => tab.id === tabId)
       if (!nextTab) {
         return
+      }
+
+      if (activeEditorTabIdRef.current === tabId) {
+        // If another selection is waiting on durability, clicking the tab
+        // that is still visible means "stay here". Make that latest intent
+        // win instead of allowing the older request to switch afterward.
+        tabSelectionRequestRef.current += 1
+        return
+      }
+
+      const requestId = tabSelectionRequestRef.current + 1
+      tabSelectionRequestRef.current = requestId
+      const outgoingTarget = {
+        writingId: currentWritingIdRef.current,
+        draftWritingId: currentWritingIdRef.current === null ? ephemeralDraftWritingIdRef.current : null,
+        sourceTabId: activeEditorTabIdRef.current,
       }
 
       // A queued rich-mode update still holds the OLD tab's editor instance.
       // Flushing it here — before currentWritingIdRef changes below — makes
       // sure that content lands on the document it was actually typed into,
-      // not on whatever tab we're about to switch to (ODE-478 case 2).
+      // not on whatever tab we're about to switch to (ODE-478 case 2). A
+      // pending Source-mode save gets the same treatment: without the flush,
+      // its identity-blind timer attributes the edit to the incoming tab or
+      // drops it when hydration restores a different mode.
       flushQueuedRichModeUpdate()
+      flushPendingMarkdownSave()
       snapshotOutgoingDraftContent()
 
       persistCurrentWorkspaceViewState()
-      activeEditorTabIdRef.current = tabId
-      focusTab(tabId)
+
+      // Desktop coalesces filesystem saves behind a quiet window. Switching
+      // identity before the outgoing snapshot reaches disk lets a quick
+      // return hydrate the old `.md`, which visibly removes annotations,
+      // highlights and recent text/title edits. Force the queued write now
+      // and keep this transition owned by the current request until the
+      // document is durable.
+      // A still-ephemeral draft has no durable file to rehydrate yet; its
+      // existing in-memory snapshot/reconciliation path intentionally allows
+      // background materialization. Named documents do have a `.md`, so they
+      // must not expose that older durable version to a returning tab.
+      if (outgoingTarget.writingId && persistenceCoordinator.hasPending(outgoingTarget)) {
+        if (outgoingTarget.sourceTabId) {
+          updateTabSaveState({
+            tabId: outgoingTarget.sourceTabId,
+            saveState: "saving",
+            hasPendingSync: true,
+          })
+        }
+        const settled = await persistenceCoordinator.settle(outgoingTarget)
+        if (!settled || tabSelectionRequestRef.current !== requestId) {
+          return
+        }
+      } else if (tabSelectionRequestRef.current !== requestId) {
+        return
+      }
+
+      const resolvedNextTab = getEditorSessionState().session.tabs.find((tab) =>
+        tab.id === tabId || Boolean(nextTab.writing_id && tab.writing_id === nextTab.writing_id),
+      )
+      if (!resolvedNextTab) {
+        return
+      }
+
+      activeEditorTabIdRef.current = resolvedNextTab.id
+      focusTab(resolvedNextTab.id)
       navigatedToDraftRef.current = false
 
-      if (nextTab.writing_id) {
-        currentWritingIdRef.current = nextTab.writing_id
-        setCurrentWritingId(nextTab.writing_id)
-        setHydrationWritingId(nextTab.writing_id)
-        replaceEditorHistory(buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }))
+      if (resolvedNextTab.writing_id) {
+        currentWritingIdRef.current = resolvedNextTab.writing_id
+        setCurrentWritingId(resolvedNextTab.writing_id)
+        setHydrationWritingId(resolvedNextTab.writing_id)
+        replaceEditorHistory(buildWritingRouteHref("/write", {
+          id: resolvedNextTab.writing_id,
+          slug: resolvedNextTab.slug,
+        }))
         return
       }
 
@@ -5687,7 +5746,13 @@ export function EditorShell({
       setHydrationWritingId(null)
       replaceEditorHistory("/write")
     },
-    [editorSession.tabs, flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, snapshotOutgoingDraftContent],
+    [
+      flushPendingMarkdownSave,
+      flushQueuedRichModeUpdate,
+      persistenceCoordinator,
+      persistCurrentWorkspaceViewState,
+      snapshotOutgoingDraftContent,
+    ],
   )
 
   const handleCloseWorkspaceTab = useCallback(
@@ -5705,6 +5770,7 @@ export function EditorShell({
       // Same reasoning as handleSelectWorkspaceTab: flush before this tab's
       // identity can change under a still-queued update (ODE-478 case 2).
       flushQueuedRichModeUpdate()
+      flushPendingMarkdownSave()
       snapshotOutgoingDraftContent()
 
       const isClosingActiveTab = activeEditorTabIdRef.current === tabId
@@ -5770,6 +5836,7 @@ export function EditorShell({
       replaceEditorHistory("/write")
     },
     [
+      flushPendingMarkdownSave,
       flushQueuedRichModeUpdate,
       persistCurrentWorkspaceViewState,
       persistenceCoordinator,
@@ -6021,6 +6088,7 @@ export function EditorShell({
       // frame/save landed (ODE-478 follow-up — this handler never got the
       // original case 2/4 fix).
       flushQueuedRichModeUpdate()
+      flushPendingMarkdownSave()
       snapshotOutgoingDraftContent()
 
       persistCurrentWorkspaceViewState()
@@ -6165,6 +6233,7 @@ export function EditorShell({
     currentWritingId,
     editor,
     editorSession.tabs,
+    flushPendingMarkdownSave,
     flushQueuedRichModeUpdate,
     persistenceCoordinator,
     persistCurrentWorkspaceViewState,
@@ -6180,6 +6249,7 @@ export function EditorShell({
     // not be discarded just because the user opened a different document via
     // search/recents instead of the tab bar (ODE-478 follow-up).
     flushQueuedRichModeUpdate()
+    flushPendingMarkdownSave()
     snapshotOutgoingDraftContent()
 
     const outcome = await openDocumentById(documentId)
@@ -6191,7 +6261,7 @@ export function EditorShell({
     setCurrentWritingId(documentId)
     setHydrationWritingId(documentId)
     openWritingTab({ writingId: documentId, slug: outcome.record.slug, title: openedTitle, saveState: "saved-local", hasPendingSync: false })
-  }, [flushQueuedRichModeUpdate, snapshotOutgoingDraftContent])
+  }, [flushPendingMarkdownSave, flushQueuedRichModeUpdate, snapshotOutgoingDraftContent])
 
   selectAdjacentTabRef.current = (direction) => {
     const tabs = editorSession.tabs
@@ -6224,6 +6294,7 @@ export function EditorShell({
       // "Open File" menu also detaches from whatever is currently active
       // (ODE-478 follow-up).
       flushQueuedRichModeUpdate()
+      flushPendingMarkdownSave()
       snapshotOutgoingDraftContent()
 
       persistCurrentWorkspaceViewState()
@@ -6332,7 +6403,7 @@ export function EditorShell({
         router.push(`/write/${nextWritingId}`)
       }
     },
-    [flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, router, snapshotOutgoingDraftContent],
+    [flushPendingMarkdownSave, flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, router, snapshotOutgoingDraftContent],
   )
 
   const handleMenuNewFile = useCallback(() => {
@@ -6436,8 +6507,9 @@ export function EditorShell({
   // save abandoned it the same way (ODE-478 follow-up).
   const settleBeforeClose = useCallback(async () => {
     flushQueuedRichModeUpdate()
+    flushPendingMarkdownSave()
     await persistenceCoordinator.settle()
-  }, [flushQueuedRichModeUpdate, persistenceCoordinator])
+  }, [flushPendingMarkdownSave, flushQueuedRichModeUpdate, persistenceCoordinator])
   useTauriCloseGuard(settleBeforeClose)
 
   // Picks up a file opened via Cmd+O from outside Write (see useGlobalOpenFileMenu).
