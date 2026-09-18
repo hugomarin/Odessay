@@ -76,9 +76,9 @@ Ese rol resuelve la topología de ejecución (capabilities, dependencias, critic
 11. Crear o actualizar el proyecto de la fase y los issues en Linear con su brief incluido.
 12. Verificar que cada brief creado está completo antes de cerrar: `Definition check` sin contradicción abierta y `Skill reviews` sin objeciones pendientes (ver `skill-planning`).
 13. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
-14. Entregar la `Execution Trace` — el schema de campos lo define `.agents/skills/skill-planning/SKILL.md`; este paso solo exige que exista y esté completa, no repite el schema aquí.
+14. Entregar **una** `Execution Trace` para toda esta ejecución de `wf-define` — no una por issue. El schema de campos lo define `.agents/skills/skill-planning/SKILL.md`; este paso solo exige que exista y esté completa, no repite el schema aquí.
 
-**Gate de salida:** los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo y su `Execution Trace` presente. Sin brief por issue no hay BUILD. Si un issue es arquitectónico y no incluye `Architecture Contract`, DEFINE no está completo.
+**Gate de salida:** todos los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo, **más** la única `Execution Trace` de la ejecución presente y completa. Sin brief por issue no hay BUILD. Si un issue es arquitectónico y no incluye `Architecture Contract`, DEFINE no está completo.
 
 **No es un output válido de DEFINE:** dejar un breakdown táctico solo en markdown dentro del repo sin persistirlo en Linear.
 **No es un output trazable suficiente de DEFINE:** decir que “se usó” un rol o skill sin declararlo en la `Execution Trace`.

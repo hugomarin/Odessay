@@ -114,7 +114,7 @@ Un documento local puede existir como borrador de trabajo interno mientras el ag
 
 ### `workflow/workflow.md`
 
-Define qué hace `/wf-define`: qué contexto carga, qué gates debe pasar, cuándo pausar o continuar. Este rol opera dentro de ese protocolo; no lo repite.
+Define qué hace `/wf-define`: qué contexto carga, qué gates debe pasar, cuándo pausar o continuar, y **cuándo y cómo se persiste en Linear** (crear/actualizar el proyecto de la fase, crear los issues). Este rol diseña la topología y el contenido de cada brief; la persistencia en Linear es protocolo de `workflow.md`, no de este documento — aunque en runtime el mismo agente suela ejecutar ambos pasos, el ownership documental queda separado.
 
 ### `.agents/skills/skill-planning/SKILL.md`
 
@@ -140,27 +140,27 @@ El patrón correcto para `/wf-define` es:
 4. Decidir qué domain skills consultar para destrabar decisiones puntuales de la topología (ver `Cuándo convocar especialistas`).
 5. Si hay duda sobre cobertura del DoD, overlaps, huecos o secuencia, activar `skill-audit-planning` antes de continuar.
 6. Para cada nodo de la topología, usar `skill-planning` para endurecerlo en un Issue Brief completo — incluida la revisión por domain skills que ese brief específico activa.
-7. Sintetizar una sola propuesta coherente y materializarla en Linear.
+7. Sintetizar una sola propuesta coherente. La persistencia en Linear (crear/actualizar proyecto e issues) la ejecuta `wf-define` según su protocolo — ver `Relación con otras capas`.
 8. Producir la `Execution Trace`.
 
 Si roadmap y DoD ya estaban cerrados, el agente no vuelve a hacer diseño estratégico de la fase. Pasa directo a descomposición táctica: topología, dependencias, critical path y briefs ejecutables.
 
 ---
 
-## Relación con Linear
+## Contrato de salida en Linear
 
-Linear no es una herramienta opcional en este rol. Es el sistema operativo de salida de la planeación.
+Linear no es una herramienta opcional para PLAN. Es el sistema operativo de salida de la planeación — pero este rol diseña **qué** debe terminar existiendo ahí, no posee **cuándo y cómo** se persiste (eso es `workflow/workflow.md`, ver `Relación con otras capas`).
 
-El agente debe:
+Lo que este rol debe dejar listo para que `wf-define` lo persista:
 
-- verificar si el proyecto de la fase ya existe en Linear
-- crearlo si no existe
-- crear los issues de la fase con su brief estructurado, en el orden que la topología resolvió
-- registrar dependencias y critical path entre issues cuando aplique
-- confirmar al humano qué issues quedaron creados y en qué orden conviene ejecutarlos
-- declarar en la salida qué rol, skills y consultas efectivamente usó
+- si el proyecto de la fase ya existe en Linear o hace falta crearlo
+- los issues de la fase con su brief estructurado, en el orden que la topología resolvió
+- dependencias y critical path entre issues, cuando aplique
+- qué rol, skills y consultas efectivamente usó, para la `Execution Trace`
 
-Si Linear no está disponible o el agente no puede crear los issues, no debe inventar una salida equivalente dentro del repo. Debe detenerse y declarar el bloqueo explícitamente.
+El agente también confirma al humano qué issues quedaron creados y en qué orden conviene ejecutarlos — eso ocurre después de que `wf-define` completó la persistencia, no como parte del diseño de este rol.
+
+Si Linear no está disponible o no se puede crear lo necesario, este rol no debe inventar una salida equivalente dentro del repo. Debe detenerse y declarar el bloqueo explícitamente — ese bloqueo lo reporta `wf-define` según su protocolo.
 
 ---
 

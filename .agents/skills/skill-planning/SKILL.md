@@ -1,11 +1,11 @@
 ---
 name: skill-planning
-description: "Método de Planning para Odessay: cómo convertir cada unidad de trabajo del roadmap en un Issue Brief ejecutable y bien definido — schema, verificación de definición, contratos, revisión por domain skills. Usar cuando definas, endurezcas o ejecutes un issue del roadmap."
+description: "Método de Planning para Odessay: cómo convertir cada unidad de trabajo del roadmap en un Issue Brief ejecutable y bien definido — schema, verificación de definición, contratos, revisión por domain skills. Usar cuando definas o endurezcas un issue del roadmap."
 ---
 
 # Skill: Planning
 
-Este skill tiene tres funciones. Primera, definir cómo se escribe y ejecuta cada issue para que sea completamente ejecutable por un agente de código o legible por un humano sin ambigüedad. Segunda, establecer qué debe contener cada tipo de contrato (`Architecture`, `Performance`, `Visual/UX`) y cuándo es obligatorio. Tercera —y la que falla cuando un trabajo se ejecuta impecablemente y aun así sale mal— **garantizar que la definición sobre la que se construye el brief es verdadera** (reconciliada con el código, no solo internamente consistente) **y que el resultado entregado fue aceptado por el dueño** contra su intención. Sin la tercera función, las dos primeras producen ejecución perfecta de la cosa equivocada.
+Este skill tiene tres funciones. Primera, definir cómo se define y endurece cada issue para que sea completamente ejecutable por un agente de código o legible por un humano sin ambigüedad. Segunda, establecer qué debe contener cada tipo de contrato (`Architecture`, `Performance`, `Visual/UX`) y cuándo es obligatorio. Tercera —y la que falla cuando un trabajo se ejecuta impecablemente y aun así sale mal— **garantizar que la definición sobre la que se construye el brief es verdadera** (reconciliada con el código, no solo internamente consistente) **y que el resultado entregado fue aceptado por el dueño** contra su intención. Sin la tercera función, las dos primeras producen ejecución perfecta de la cosa equivocada.
 
 La orquestación de la fase — topología, secuenciación, critical path, síntesis — vive en `.agents/agents/planning-agent.md`. Este skill no la repite: endurece cada nodo de esa topología en un Issue Brief ejecutable.
 
@@ -23,7 +23,7 @@ Cuando el issue introduzca datos, fetches, hydration, listeners, componentes en 
 
 ## Execution Trace — schema
 
-Toda salida cerrada de `wf-define` debe incluir esta `Execution Trace`. Un solo canonical owner del schema: este skill lo define porque forma parte de la calidad de la definición. El `Planning Agent` la produce; `wf-define` solo verifica que exista antes de cerrar — ninguno de los dos repite el schema completo.
+Toda salida cerrada de `wf-define` debe incluir esta `Execution Trace` — **una por ejecución de `wf-define`, no una por issue**: la fase puede generar varios issues en una sola corrida, y todos comparten la misma traza de cómo se planificó la fase. Un solo canonical owner del schema: este skill lo define porque forma parte de la calidad de la definición. El `Planning Agent` la produce; `wf-define` solo verifica que exista antes de cerrar — ninguno de los dos repite el schema completo.
 
 - `Planning role`: rol efectivamente usado
 - `Skills loaded`: skills realmente cargados, no skills meramente disponibles
@@ -149,17 +149,17 @@ Un invariante citado sin esta anotación es un `Context Gap`: nadie sabrá si se
 
 ```
 Team: Odessay
-  └── Project: Fase 0 — Cimientos    ← status: In Progress
-  └── Project: Fase 1 — Escribir     ← status: Planned
-  └── Project: Fase 2 — ...          ← status: Planned
-  ...hasta Fase 7
+  └── Project: Fase N — <nombre>     ← status: In Progress   (la fase activa)
+  └── Project: Fase N+1 — <nombre>   ← status: Planned
+  └── Project: Fase N+2 — <nombre>   ← status: Planned
+  ...una entrada por cada fase del roadmap (ver workflow/define/roadmap.md para el estado real)
 ```
 
 **Reglas no negociables:**
 - Un proyecto por fase. No un proyecto "Odessay" con milestones internos.
 - El team Odessay ya es el contenedor del producto — un proyecto adicional con el mismo nombre es redundante.
 - Los milestones dentro de un proyecto solo se usan si una fase tiene sub-entregas con criterios de done independientes. En la mayoría de las fases no son necesarios.
-- Todos los proyectos se crean desde el inicio con status `Planned`. Solo la fase activa pasa a `In Progress`.
+- Cada proyecto se crea con status `Planned` hasta que su fase se activa. Solo la fase activa pasa a `In Progress`.
 
 ---
 
@@ -180,29 +180,6 @@ Los labels se crean una sola vez en Linear antes de crear cualquier issue. Son d
 - `needs-clarification` — el issue tiene ambigüedad que debe resolverse antes de ejecutar.
 
 Un issue puede tener múltiples labels de capa técnica si toca varias capas. Solo uno de estado del proyecto a la vez.
-
----
-
-## Estados de un issue
-
-Linear usa esta máquina de estados canónica:
-
-**Todo** — el issue existe y está definido. No está en ejecución aún.
-
-**In Progress** — hay un agente o humano trabajando en él. Tiene branch activo.  
-Si hay checkpoint humano, el issue permanece en `In Progress` con comentario `⏸ HANDOFF REQUERIDO`.
-
-**In Review** — el trabajo terminó, el PR está abierto, esperando revisión.
-
-**Done** — PR mergeado, criterios de entrega verificados, commit referenciado.
-
-Transiciones obligatorias:
-- `Todo` → `In Progress` al iniciar ejecución.
-- `In Progress` → `In Review` al abrir PR con validaciones.
-- `In Review` → `Done` tras merge confirmado.
-- Si review es rechazado: `In Review` → `In Progress`.
-
-Si el team usa estado `Ready`, se interpreta como pre-cola entre `Todo` e `In Progress`, nunca como reemplazo de `In Progress`.
 
 ---
 
@@ -436,44 +413,6 @@ El criterio operativo es simple: BUILD debe poder implementar sin tener que infe
 
 ## Delivery
 
-### Commits
-El agente hace commits atómicos durante el desarrollo con mensajes en formato convencional.
-Cada mensaje incluye el ID del issue al final: `feat: implement auto-save debounce [ODE-42]`
-> **Excepción:** los commits de workflow en `main` durante REVIEW (`review_rejected`) **no** llevan `[ISSUE-ID]` en el subject, porque el issue aún no está en el ledger `workflow/built.jsonl` y `check-status-drift` lo reportaría como falso positivo. El id puede ir en el body si se necesita trazabilidad adicional.
-Se hace push al branch remoto al terminar cada subtarea significativa dentro del issue.
-
-### Trazabilidad Linear ↔ GitHub
-
-Al mover el issue a In Review, el agente debe dejar un comentario en el issue de Linear con:
-- Link al PR abierto
-- SHA del commit principal (o el último commit del branch)
-- Resultado resumido de las validaciones (✅ typecheck / ✅ lint / ✅ tests o equivalente)
-
-Sin este comentario, el issue queda desconectado del trabajo real y el humano no puede hacer el merge con contexto.
-
-Formato del comentario:
-```
-PR: [link]
-Commit: [SHA]
-Validaciones: typecheck ✅ | lint ✅ | tests ✅
-Listo para merge.
-```
-
-### Trazabilidad GitHub ↔ Linear ↔ ledger de entregas
-
-Las ramas de feature **no tocan** `workflow/status.json`, `workflow/built.jsonl` ni `workflow/review-history.jsonl`. Se actualizan únicamente en `main` post-merge durante REVIEW.
-
-Durante BUILD, el agente solo abre el PR con body completo y mueve el issue a `In Review`. La línea en `workflow/built.jsonl` se appendea después del merge, en la etapa REVIEW, junto con el evento `build_submitted` en `workflow/review-history.jsonl`.
-
-Luego corre:
-```bash
-npm run ops:delivery:gate
-```
-
-Si este gate falla, el issue no puede pasar a `In Review`.
-
-> **Nota de validación de workflow:** antes de cualquier commit que toque `workflow/status.json`, `workflow/built.jsonl` o `workflow/review-history.jsonl`, se debe ejecutar `node scripts/validate-workflow-json.mjs` (o `npm run ops:workflow:validate`) para garantizar que el JSON/JSONL sea parseable y que ninguna unión automática haya dejado marcadores de conflicto. Esto previene regresiones como comas finales inválidas que bloquean CI.
-
 ### Validation
 [LLM] Antes de mover el issue a In Review, ejecuta las validaciones que apliquen y documenta el resultado. No es suficiente que el código compile — el agente debe proporcionar proof of work: el output real de lo que corrió.
 
@@ -557,11 +496,11 @@ Se crean subissues cuando un issue tiene partes que pueden ejecutarse en paralel
 
 ## Cómo secuenciar issues
 
-Dentro de cada fase, el orden de ejecución es siempre: database → backend → frontend → validation. Los issues de infra y configuración son siempre los primeros de cualquier proyecto y son `critical-path` para todo lo demás.
+La secuencia de issues dentro de una fase se deriva de la topología que el Planning Agent resuelve — capabilities, dependencies, contracts y critical path (ver `.agents/agents/planning-agent.md`) —, no de un orden fijo de capas. Un `smallest coherent stage` puede cruzar capas (database+backend+frontend en el mismo issue) cuando esa es la unidad mínima coherente; forzar la separación por capa cuando la topología real no lo pide fragmenta el trabajo sin necesidad.
+
+Los issues de infra y configuración suelen terminar como `critical-path` porque casi toda otra capability depende de ellos — eso es consecuencia de su posición real en la topología, no una regla de orden que se aplique por default.
 
 Las dependencias se declaran explícitamente en la sección Dependencies de cada issue. Un issue sin dependencias declaradas se asume independiente. Nunca asumir dependencias implícitas — si algo debe existir para que este issue funcione, se declara.
-
-Un issue nunca pasa a In Progress mientras tenga dependencias en estado distinto a Done.
 
 ---
 
@@ -585,7 +524,7 @@ Mal: "Odessay es una plataforma de escritura epistolar con tres modos principale
 El status del proyecto refleja el estado real de la fase: `Planned` → `In Progress` → `Completed`. Cuando una fase termina, el proyecto se cierra. No se reutiliza.
 
 **Por qué un proyecto por fase y no un proyecto por producto:**
-Si el team y el proyecto tienen el mismo nombre (`Team: Odessay`, `Project: Odessay`), el nivel de proyecto no agrega ningún significado — es ruido. Con un proyecto por fase, la jerarquía es plana y semánticamente clara: `Team: Odessay → Project: Fase 0 — Cimientos → Issues`.
+Si el team y el proyecto tienen el mismo nombre (`Team: Odessay`, `Project: Odessay`), el nivel de proyecto no agrega ningún significado — es ruido. Con un proyecto por fase, la jerarquía es plana y semánticamente clara: `Team: Odessay → Project: Fase N — <nombre> → Issues`.
 
 ### Milestone (dentro de un proyecto, opcional)
 
@@ -600,7 +539,7 @@ Milestone: "Frontend listo"  → panel UI + render de observaciones + context in
 
 El frontend no debería empezar hasta que la API esté validada. El milestone hace ese gate explícito y visible.
 
-Cuándo NO usarlos: cuando las dependencias entre issues ya dan el orden correcto. En Fase 0, Fase 1 y la mayoría de las fases, los issues están encadenados por Dependencies — no hace falta un milestone adicional. Añadirlos ahí es ruido.
+Cuándo NO usarlos: cuando las dependencias entre issues ya dan el orden correcto. En la mayoría de las fases los issues están encadenados por Dependencies — no hace falta un milestone adicional. Añadirlos ahí es ruido.
 
 ### Issue (uno por entregable)
 
@@ -610,34 +549,11 @@ La descripción del issue sigue la estructura definida en §Estructura de un iss
 
 ## Cómo usar este skill
 
-### Al iniciar el proyecto
-
-1. Lee `workflow/define/roadmap.md` para entender fases y el mapa de issues.
-2. Crea los labels en Linear exactamente como están definidos en este documento.
-3. Crea los estados en Linear: Todo, In Progress, In Review, Done. (Ready es opcional como pre-cola).
-4. Crea **un proyecto por fase** en Linear, con el nombre exacto de la fase (`Fase 0 — Cimientos`, `Fase 1 — Escribir`, etc.) y descripción de exit criteria específica a esa fase.
-5. Crea todos los proyectos desde el inicio con status `Planned`. Solo la fase activa pasa a `In Progress`.
-6. Crea los issues de la fase activa dentro de su proyecto, con estado Todo.
-7. Mueve a In Progress solo los que no tienen dependencias abiertas.
-8. No crees issues de fases siguientes hasta que la fase anterior esté completa.
-
 ### Al crear un issue
 
 Sigue la estructura de descripción definida en este documento. Todo issue debe tener Context, Dependencies, Requirements, Reference docs, Delivery y Notes si aplica. Un issue sin Definition of Done no es un issue.
 
 **Asignación:** el agente crea los issues sin assignee. El humano los asigna. No asignar issues a nombres o usuarios — dejar el campo vacío al crear.
-
-### Al ejecutar un issue
-
-[LLM] Antes de empezar: verifica que todas las dependencias están en Done. Lee los Reference docs indicados en el issue. Crea el branch desde main con el formato `codex/{issue-id}-{descripcion-corta}` o `feat/{issue-id}-{descripcion-corta}` o `fix/{issue-id}-{descripcion-corta}`. Si la rama actual es `main`, no commitees ahí: cambia primero al branch de trabajo. Mueve el issue a In Progress.
-
-Durante la ejecución: commits atómicos con ID del issue en el mensaje. Push al branch remoto al terminar cada subtarea significativa.
-
-Al terminar: ejecuta las validaciones definidas en la sección Validation. Solo cuando todas las validaciones pasan, mueve el issue a In Review y abre el PR.
-
-### Al completar una fase
-
-Antes de empezar la siguiente: verifica deploy en staging funcionando. Recorre los flujos completos de la fase con Playwright MCP. Verifica que nada de fases anteriores se rompió. Si hay algo roto, crea un issue de fix antes de avanzar.
 
 ---
 
