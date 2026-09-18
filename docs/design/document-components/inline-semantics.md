@@ -9,15 +9,15 @@ This contract defines identity and mutation behavior for `Annotation`, `Highligh
 - Semantic ranges may be nested only in this canonical order, outermost to innermost: `ProtectedText` → `Annotation` → `Entity` → `Highlight` → native Markdown marks. Partial/crossing overlaps are rejected atomically.
 - Reapplying the same kind to the exact same range edits its attributes rather than creating a duplicate wrapper.
 - Applying a kind across incompatible semantic boundaries is a no-op with a localized explanation. Commands never split identities silently.
-- Each semantic component has a required stable `id`. IDs are document-scoped, opaque strings and are never regenerated during normal round-trip.
+- `Annotation`, `Entity`, and `ProtectedText` carry a required stable `id`. IDs are document-scoped, opaque strings and are never regenerated during normal round-trip. `Highlight` carries no `id` in v1; only its optional `color` attribute.
 
 ## Per-kind meaning
 
 | Kind | Meaning | Identity behavior | Default text projection |
 | --- | --- | --- | --- |
 | `Annotation` | Anchored editorial comment | `id` joins durable `margins`; text, type, and comment are governed by Markdown | text only; comment/ID excluded |
-| `Highlight` | Author-selected emphasis with optional color | `id` persists through edits to the enclosed text | text only; color/ID excluded |
-| `Entity` | Typed semantic reference with optional external ref | `id` identifies the occurrence; `ref` identifies the target when present | visible label text only |
+| `Highlight` | Author-selected emphasis with optional color | no `id` in v1; reapplying on the same range edits its `color` | text only; color excluded |
+| `Entity` | Typed semantic reference with optional external ref | `id` identifies the entity and may be shared by compatible mentions; `ref` identifies the target when present | visible label text only |
 | `ProtectedText` | Rich-editor mutation guard with optional reason | `id` persists until explicit unlock/removal | text only; reason/ID excluded |
 
 `ProtectedText` is an editor safeguard, not encryption, authorization, DRM, or protection in Source mode or exported files.
@@ -25,7 +25,7 @@ This contract defines identity and mutation behavior for `Annotation`, `Highligh
 ## Copy, paste, duplication, and movement
 
 - Moving a range inside the same document preserves IDs.
-- Copying within the same document preserves IDs only for a cut/move transaction. A true duplicate mints new IDs for every semantic occurrence in one atomic command.
+- Copying within the same document preserves IDs only for a cut/move transaction. A true duplicate mints new IDs for every semantic occurrence in one atomic command. `Entity` is the exception: its `id` identifies the entity rather than the occurrence, so paste and duplicate preserve it. A pasted or duplicated mention whose `id` already exists with an incompatible `type` or `ref` is rejected atomically.
 - Copying to another document always mints new IDs. `Annotation` copies visible text and comment metadata but does not copy remote collaboration state; the receiving document may create its own margin projection after a confirmed save.
 - Plain-text paste strips all semantic metadata. Controlled rich paste parses the same profile, validates nesting, and remaps IDs before insertion.
 - Paste, drop, undo, and redo either apply the entire valid structure or make no mutation. Unknown source remains opaque.

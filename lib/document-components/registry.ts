@@ -33,10 +33,7 @@ const specs: readonly DocumentComponentSpec[] = [
     kind: "Highlight",
     family: "semantic-inline",
     form: "inline",
-    attributes: [
-      { name: "id", required: true, validate: anyString },
-      { name: "color" },
-    ],
+    attributes: [{ name: "color" }],
     allowedParents: ["text-block", "Entity", "Annotation", "ProtectedText"],
   },
   {

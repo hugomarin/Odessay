@@ -27,7 +27,7 @@ This document is the normative grammar for the Fase 12 controlled component prof
 | Kind | Form | Attributes in canonical order | Content | Allowed parent |
 | --- | --- | --- | --- | --- |
 | `Annotation` | inline | `id`, `type`, `comment` | non-empty inline Markdown | text block |
-| `Highlight` | inline | `id`, `color` | non-empty inline Markdown | text block |
+| `Highlight` | inline | `color` | non-empty inline Markdown | text block |
 | `Entity` | inline | `id`, `type`, `ref` | non-empty inline Markdown | text block |
 | `ProtectedText` | inline | `id`, `reason` | non-empty inline Markdown | text block |
 | `Tip` | block | `title` | block Markdown | document, `Tab`, `Step` |
@@ -43,7 +43,7 @@ This document is the normative grammar for the Fase 12 controlled component prof
 | `CodeGroup` | block container | none | two or more fenced `CodeBlock` nodes | document, `Tab`, `Step` |
 | `CodeBlock` | Markdown fence | `language` (info string) | literal source | document or permitted block container |
 
-`id` is required and stable for semantic inline kinds. `type` is required for `Annotation` and `Entity`; `comment` is required for `Annotation`; `reason`, `color`, and `ref` are optional. `title` is required for `Card`, `Accordion`, `Tab`, and `Step`, and optional for `Tip`/`Info`. `columns` is an integer string from `1` through `4`. `href` accepts only the URL policy defined by the surface projection contract.
+`id` is required and stable for `Annotation`, `Entity`, and `ProtectedText`; `Highlight` carries no `id` in v1. `type` is required for `Annotation` and `Entity`; `comment` is required for `Annotation`; `reason`, `color`, and `ref` are optional. `title` is required for `Card`, `Accordion`, `Tab`, and `Step`, and optional for `Tip`/`Info`. `columns` is an integer string from `1` through `4`. `href` accepts only the URL policy defined by the surface projection contract.
 
 The specialized documentation catalog (`ParamField`, `ResponseField`, `RequestExample`, `Tree`, `Frame`, `Prompt`, `Color`, `Columns`, `Update`, and `Expandable`) is not registered in this profile.
 

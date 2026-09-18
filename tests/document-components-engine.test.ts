@@ -25,6 +25,14 @@ describe("ODE-529 controlled document engine", () => {
       "icon",
       "href",
     ]);
+    expect(DocumentComponentSpecRegistry.get("Entity")?.attributes.map(({ name }) => name)).toEqual([
+      "id",
+      "type",
+      "ref",
+    ]);
+    expect(DocumentComponentSpecRegistry.get("Highlight")?.attributes.map(({ name }) => name)).toEqual([
+      "color",
+    ]);
     expect(DocumentComponentSpecRegistry.get("Unknown")).toBeUndefined();
     expect(DocumentComponentSpecRegistry.values()).toHaveLength(16);
   });
@@ -71,8 +79,10 @@ describe("ODE-529 controlled document engine", () => {
         ? 'id="a" type="footnote" comment=""'
         : kind === "Entity"
           ? 'id="e" type="person"'
-          : 'id="x"';
-      const source = `<${kind} ${attributes}></${kind}>`;
+          : kind === "ProtectedText"
+            ? 'id="x"'
+            : "";
+      const source = `<${kind}${attributes ? ` ${attributes}` : ""}></${kind}>`;
       const parsed = parseControlledMarkdown(source);
 
       expect(parsed.diagnostics).toContainEqual(expect.objectContaining({
@@ -82,6 +92,37 @@ describe("ODE-529 controlled document engine", () => {
       expect(serializeControlledDocument(parsed.document)).toBe(source);
     },
   );
+
+  it.each([
+    ["Highlight", '<Highlight id="h1">text</Highlight>'],
+    ["Highlight", '<Highlight color="amber" id="h1">text</Highlight>'],
+    ["Entity", '<Entity id="e1">text</Entity>'],
+    ["Entity", '<Entity type="person">text</Entity>'],
+    ["Entity", '<Entity id="e1" type="person" ref="ref" extra="x">text</Entity>'],
+  ])("preserves an invalid %s as opaque source", (kind, source) => {
+    const parsed = parseControlledMarkdown(source);
+
+    expect(parsed.diagnostics).toContainEqual(expect.objectContaining({
+      code: "invalid-attributes",
+      kind,
+    }));
+    expect(serializeControlledDocument(parsed.document)).toBe(source);
+  });
+
+  it("canonicalizes Entity and Highlight inline semantics", () => {
+    const source = 'See <Highlight color="amber">this</Highlight> about <Entity id="ent-123" ref="https://example.com" type="company">Aplyca</Entity>.';
+    const canonical = canonicalizeControlledMarkdown(source);
+    expect(canonical).toBe(
+      'See <Highlight color="amber">this</Highlight> about <Entity id="ent-123" type="company" ref="https://example.com">Aplyca</Entity>.',
+    );
+    expect(canonicalizeControlledMarkdown(canonical)).toBe(canonical);
+  });
+
+  it("round-trips a Highlight without attributes with the amber default", () => {
+    const source = "<Highlight>text</Highlight>";
+    const canonical = canonicalizeControlledMarkdown(source);
+    expect(canonical).toBe(source);
+  });
 
   it("accepts only explicit safe schemes or document-relative Card links", () => {
     const href = DocumentComponentSpecRegistry.get("Card")?.attributes.find(({ name }) => name === "href");

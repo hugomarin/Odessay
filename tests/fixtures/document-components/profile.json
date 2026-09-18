@@ -4,7 +4,7 @@
   "surfaces": ["rich", "source", "preview", "shared", "public", "body_text", "ai_context", "clean_markdown", "pdf", "docx"],
   "kinds": [
     { "kind": "Annotation", "family": "semantic-inline", "form": "inline", "attributes": ["id", "type", "comment"], "required": ["id", "type", "comment"] },
-    { "kind": "Highlight", "family": "semantic-inline", "form": "inline", "attributes": ["id", "color"], "required": ["id"] },
+    { "kind": "Highlight", "family": "semantic-inline", "form": "inline", "attributes": ["color"], "required": [] },
     { "kind": "Entity", "family": "semantic-inline", "form": "inline", "attributes": ["id", "type", "ref"], "required": ["id", "type"] },
     { "kind": "ProtectedText", "family": "semantic-inline", "form": "inline", "attributes": ["id", "reason"], "required": ["id"] },
     { "kind": "Tip", "family": "registered-block", "form": "block", "attributes": ["title"], "required": [] },
