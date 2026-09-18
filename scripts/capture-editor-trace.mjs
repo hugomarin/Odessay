@@ -141,18 +141,9 @@ async function prepareHarness(page, targetUrl, timeoutMs, scenario) {
     await page.getByRole("button", { name: "Markdown" }).click();
     const markdown = page.getByLabel("Markdown source");
     const types = ["ai", "personal", "footnote", "highlight"];
-    const sigil = (type, index) => {
-      if (type === "personal") return `@p${index}`;
-      if (type === "footnote") return `^${index}`;
-      if (type === "highlight") return `@h${index}`;
-      return `@${index}`;
-    };
-    const typeCounts = new Map();
     const fixture = Array.from({ length: 24 }, (_, index) => {
       const type = types[index % types.length];
-      const typeIndex = (typeCounts.get(type) ?? 0) + 1;
-      typeCounts.set(type, typeIndex);
-      return `==Annotation anchor ${index + 1}==[${sigil(type, typeIndex)}|perf-${index + 1}: Annotation note ${index + 1}]`;
+      return `<Annotation id="perf-${index + 1}" type="${type}" comment="Annotation note ${index + 1}">Annotation anchor ${index + 1}</Annotation>`;
     }).join("\n\n");
     await markdown.fill(fixture);
     await page.getByRole("button", { name: "Notes panel" }).click();
@@ -339,7 +330,7 @@ async function runMeasuredScenario(page, targetUrl, scenario) {
     await aiCard.getByRole("button", { name: "Personal" }).click();
 
     const footnoteCard = panel.locator("article").filter({ hasText: "“Annotation anchor 3”" });
-    await footnoteCard.getByRole("button", { name: "Go to annotation in document" }).click({ force: true });
+    await footnoteCard.getByRole("button", { name: "Go to annotation in artifact" }).click({ force: true });
 
     const highlightCard = panel.locator("article").filter({ hasText: "“Annotation anchor 4”" });
     await highlightCard.getByRole("button", { name: "Delete Highlight" }).click({ force: true });
