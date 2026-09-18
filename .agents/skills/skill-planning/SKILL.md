@@ -1,19 +1,19 @@
 ---
-name: skill-product-manager
-description: "Workflow de Product Manager para Odessay en Linear: definición de issues ejecutables, dependencias, prioridades, validaciones y criterios de done. Usar cuando crees, priorices, refinés o ejecutes tickets y milestones del roadmap."
+name: skill-planning
+description: "Método de Planning para Odessay: cómo convertir cada unidad de trabajo del roadmap en un Issue Brief ejecutable y bien definido — schema, verificación de definición, contratos, revisión por domain skills. Usar cuando definas o endurezcas un issue del roadmap."
 ---
 
-# Skill: Product Manager (Linear)
+# Skill: Planning
 
-Este skill tiene tres funciones. Primera, definir cómo se escribe y ejecuta cada issue para que sea completamente ejecutable por un agente de código o legible por un humano sin ambigüedad. Segunda, establecer el proceso de orquestación: cómo se secuencian los issues, cómo se hace seguimiento, y cómo se valida la entrega. Tercera —y la que falla cuando un trabajo se ejecuta impecablemente y aun así sale mal— **garantizar que la definición sobre la que se construye el brief es verdadera** (reconciliada con el código, no solo internamente consistente) **y que el resultado entregado fue aceptado por el dueño** contra su intención. Sin la tercera función, las dos primeras producen ejecución perfecta de la cosa equivocada.
+Este skill tiene tres funciones. Primera, definir cómo se define y endurece cada issue para que sea completamente ejecutable por un agente de código o legible por un humano sin ambigüedad. Segunda, establecer qué debe contener cada tipo de contrato (`Architecture`, `Performance`, `Visual/UX`) y cuándo es obligatorio. Tercera —y la que falla cuando un trabajo se ejecuta impecablemente y aun así sale mal— **garantizar que la definición sobre la que se construye el brief es verdadera** (reconciliada con el código, no solo internamente consistente) **y que el resultado entregado fue aceptado por el dueño** contra su intención. Sin la tercera función, las dos primeras producen ejecución perfecta de la cosa equivocada.
+
+La orquestación de la fase — topología, secuenciación, critical path, síntesis — vive en `.agents/agents/planning-agent.md`. Este skill no la repite: endurece cada nodo de esa topología en un Issue Brief ejecutable.
 
 El alcance específico del proyecto — fases e issues macro — vive en `workflow/define/roadmap.md`. Lee ese documento antes de crear issues.
 
-Usa Linear MCP para crear y gestionar todo directamente.
+Este skill define **qué** debe existir en cada issue y con qué calidad. La persistencia en Linear — crear y gestionar proyecto e issues — es ownership de `wf-define` (ver `workflow/workflow.md`), no de este documento.
 
 Si la fase ya tiene roadmap y DoD, este skill se usa para convertir esa definición en planeación táctica de issues. No debe reabrir la estrategia de fase salvo que detecte una asimetría real entre roadmap y DoD.
-
-Toda salida cerrada de `wf-define` debe incluir una `Execution Trace` explícita. No basta con asumir que el rol o los skills “quedaron implícitos”.
 
 Cuando el issue deje de ser solo producto/scope y pase a involucrar runtime boundaries, shared core, save path, sync, parser/serializer o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md`.
 
@@ -21,49 +21,20 @@ Cuando el issue introduzca datos, fetches, hydration, listeners, componentes en 
 
 ---
 
-## Modo de orquestación
+## Execution Trace — schema
 
-Este skill no sustituye al agente principal; lo guía.
-El rol de orquestación para `/wf-define` vive en `.agents/agents/product-manager.md`.
+Toda salida cerrada de `wf-define` debe incluir esta `Execution Trace` — **una por ejecución de `wf-define`, no una por issue**: la fase puede generar varios issues en una sola corrida, y todos comparten la misma traza de cómo se planificó la fase. Un solo canonical owner del schema: este skill lo define porque forma parte de la calidad de la definición. El `Planning Agent` la produce; `wf-define` solo verifica que exista antes de cerrar — ninguno de los dos repite el schema completo.
 
-Para `/wf-define`, el patrón correcto es:
-
-- un **agente de planeación** conduce la definición de fase
-- este skill provee el marco principal de planning, secuenciación y calidad de briefs
-- `skill-audit-planning` está disponible para revisar la calidad del plan antes de cerrarlo o al preparar `wf-audit`
-- `skill-architecture` entra como segunda capa obligatoria cuando el problema toca desktop, multi-runtime o boundaries del sistema
-- `skill-performance` entra cuando el cambio puede alterar la forma de carga, el costo de crecimiento o la carga global del sistema
-- los skills técnicos del scope (`skill-frontend`, `skill-backend`, `skill-database`, `skill-corrections`, etc.) **no son consultivos opcionales**: todo brief pasa por la revisión de los skills de su scope antes de crear el issue (ver §Revisión por skills de dominio)
-
-Reglas:
-
-- el roadmap no se construye como suma de workstreams aislados por disciplina
-- el agente principal debe sintetizar una sola propuesta coherente de hitos, dependencias, ownership y criterios de salida
-- si el entorno soporta subagentes, pueden usarse para consultas acotadas; si no, el mismo agente debe cargar los skills relevantes y producir la síntesis igualmente
-
-Señal de mala orquestación:
-
-- frontend propone una secuencia
-- backend propone otra
-- arquitectura propone una tercera
-- y el PM solo las concatena sin resolver contradicciones
-
-Eso produce planificación inflada y sin verdadero critical path. El agente de planeación debe cerrar esas tensiones antes de crear briefs o issues.
-
-Cuando existan dudas sobre cobertura del DoD, overlaps, huecos o secuencia entre issues, cargar además `.agents/skills/skill-audit-planning/SKILL.md`.
-
-Cuando existan dudas sobre acumulación de carga, duplicación de operaciones, escalabilidad o integración global, cargar además `.agents/skills/skill-performance/SKILL.md`.
-
-La `Execution Trace` mínima debe declarar:
-
-- `Planning role`
-- `Skills loaded`
-- `Specialist consults`
+- `Planning role`: rol efectivamente usado
+- `Skills loaded`: skills realmente cargados, no skills meramente disponibles
+- `Specialist consults`: consultas explícitas a frontend/backend/database/ux u otros
 - `Skill reviews` — veredicto por cada skill de dominio del scope: `sin objeciones` u `objeciones resueltas: <lista>` (ver §Revisión por skills de dominio). No se puede cerrar una definición con este campo vacío si el scope activó al menos un skill.
-- `Audit run`
+- `Audit run` — si se ejecutó `skill-audit-planning`, y sobre qué artefactos.
 - `Definition check` — resultado de la verificación de definición (ver §Verificación de definición): `docs↔code↔linear = consistente` o `contradicción detectada (bloquea)`. No se puede cerrar una definición con este campo vacío.
-- `Artifacts created`
-- `Why`
+- `Artifacts created`: proyecto/issues/comentarios/documentos persistidos
+- `Why`: justificación corta de por qué esos skills/consultas fueron suficientes
+
+El objetivo no es verbosear el razonamiento interno, sino dejar trazabilidad operativa verificable.
 
 ---
 
@@ -83,7 +54,7 @@ Cuando el prompt, roadmap o conversación mencionen cualquiera de estas señales
 - separación frontend/backend para portabilidad
 - extracción de servicios (`DocumentService`, `SyncService`, etc.)
 
-el agente de PM debe asumir que el issue toca la estrategia arquitectónica del producto y cargar esta secuencia, en este orden:
+el Planning Agent debe asumir que el issue toca la estrategia arquitectónica del producto y cargar esta secuencia, en este orden:
 
 1. `workflow/context/features/odessay-desktop-app.md`
 2. `workflow/context/features/odessay-desktop-migration-diagnostic.md`
@@ -98,8 +69,8 @@ Cómo llegar ahí:
 Regla:
 
 - si un issue cambia arquitectura, contratos, runtime boundaries, documento canónico o secuencia de migración, el brief no puede quedarse solo con docs técnicos locales del feature; debe incluir el doc desktop correspondiente
-- si el prompt menciona desktop de forma estratégica y el PM no cita ninguno de estos docs, el brief está incompleto
-- si además el issue cruza frontend/backend/database, el PM debe usar `skill-architecture` para clasificar ownership y boundaries antes de cerrar el brief
+- si el prompt menciona desktop de forma estratégica y el Planning Agent no cita ninguno de estos docs, el brief está incompleto
+- si además el issue cruza frontend/backend/database, el Planning Agent debe usar `skill-architecture` para clasificar ownership y boundaries antes de cerrar el brief
 
 ---
 
@@ -178,17 +149,17 @@ Un invariante citado sin esta anotación es un `Context Gap`: nadie sabrá si se
 
 ```
 Team: Odessay
-  └── Project: Fase 0 — Cimientos    ← status: In Progress
-  └── Project: Fase 1 — Escribir     ← status: Planned
-  └── Project: Fase 2 — ...          ← status: Planned
-  ...hasta Fase 7
+  └── Project: Fase N — <nombre>     ← status: In Progress   (la fase activa)
+  └── Project: Fase N+1 — <nombre>   ← status: Planned
+  └── Project: Fase N+2 — <nombre>   ← status: Planned
+  ...una entrada por cada fase del roadmap (ver workflow/define/roadmap.md para el estado real)
 ```
 
 **Reglas no negociables:**
 - Un proyecto por fase. No un proyecto "Odessay" con milestones internos.
 - El team Odessay ya es el contenedor del producto — un proyecto adicional con el mismo nombre es redundante.
 - Los milestones dentro de un proyecto solo se usan si una fase tiene sub-entregas con criterios de done independientes. En la mayoría de las fases no son necesarios.
-- Todos los proyectos se crean desde el inicio con status `Planned`. Solo la fase activa pasa a `In Progress`.
+- Cada proyecto se crea con status `Planned` hasta que su fase se activa. Solo la fase activa pasa a `In Progress`.
 
 ---
 
@@ -209,29 +180,6 @@ Los labels se crean una sola vez en Linear antes de crear cualquier issue. Son d
 - `needs-clarification` — el issue tiene ambigüedad que debe resolverse antes de ejecutar.
 
 Un issue puede tener múltiples labels de capa técnica si toca varias capas. Solo uno de estado del proyecto a la vez.
-
----
-
-## Estados de un issue
-
-Linear usa esta máquina de estados canónica:
-
-**Todo** — el issue existe y está definido. No está en ejecución aún.
-
-**In Progress** — hay un agente o humano trabajando en él. Tiene branch activo.  
-Si hay checkpoint humano, el issue permanece en `In Progress` con comentario `⏸ HANDOFF REQUERIDO`.
-
-**In Review** — el trabajo terminó, el PR está abierto, esperando revisión.
-
-**Done** — PR mergeado, criterios de entrega verificados, commit referenciado.
-
-Transiciones obligatorias:
-- `Todo` → `In Progress` al iniciar ejecución.
-- `In Progress` → `In Review` al abrir PR con validaciones.
-- `In Review` → `Done` tras merge confirmado.
-- Si review es rechazado: `In Review` → `In Progress`.
-
-Si el team usa estado `Ready`, se interpreta como pre-cola entre `Todo` e `In Progress`, nunca como reemplazo de `In Progress`.
 
 ---
 
@@ -285,6 +233,8 @@ Tipos de contrato cuya modificación obliga a hacer este análisis:
 
 Un brief que cambia un contrato sin listar consumidores produce regresiones latentes: el feature consumidor sigue funcionando localmente con su asunción vieja hasta que un caso edge lo expone, típicamente lejos del autor del cambio. Cuando dudes si algo es "un contrato", asume que sí lo es y enumera consumidores.
 
+Esta lista no termina en el brief: `.agents/skills/architecture-recon/SKILL.md` la confirma contra el código real antes de implementar (BUILD), y `.agents/skills/review-architecture/SKILL.md` verifica que los consumers efectivamente dependen del owner declarado, no de una copia paralela (REVIEW). Un consumer que el brief omitió es la causa más común de un finding `[P0]`/`[P1]` de arquitectura.
+
 ## Files affected
 Archivos que este issue va a crear o modificar. El agente verifica antes de empezar
 que ningún PR abierto toca los mismos archivos — si hay solapamiento, espera.
@@ -298,10 +248,10 @@ Formato — siempre texto plano, nunca Markdown links:
 2. Paths sin prefijo `./` — usar `app/page.tsx`, no `./app/page.tsx`. El path es relativo a la raíz del repo, el `./` es ruido.
 3. Los docs de spec (`workflow/context/core/`, `workflow/context/features/`) nunca van aquí — son fuente de verdad que la implementación lee, no modifica. Si los pones en Files affected, estás invirtiendo la dirección de la dependencia.
 4. Los skills (`.agents/skills/*/SKILL.md`) nunca van aquí — son referencia, no output. Van en Reference docs.
-5. `workflow/built.jsonl` debe aparecer como `(modifica)` en todo issue que vaya a `In Review` (antes era `workflow/status.json`, que ahora solo cambia cuando cambia la fase activa). `workflow/workflow.md` solo aparece cuando cambian reglas operativas, tools o permisos.
+5. `workflow/workflow.md` solo aparece cuando cambian reglas operativas, tools o permisos. Los ledgers (`workflow/built.jsonl`, `workflow/review-history.jsonl`, `workflow/status.json`) no van aquí — las ramas de feature no los tocan; se actualizan en `main` post-merge durante REVIEW (ver `workflow/workflow.md`).
 6. **Honestidad de scope code vs docs.** Si el cambio principal es documental (`workflow/context/features/*.md`, `workflow/context/core/*.md`, etc.) pero el doc define o redefine un patrón que requiere código para funcionar, listar también los archivos de código que el patrón obliga a tocar. Aplica en cualquier dirección: un brief de feature, performance budget, modelo de datos, contrato de presentación o protocolo de auth puede empezar como docs y terminar requiriendo route handlers, helpers, migraciones, tests o componentes. Un brief que oculta el código bajo la etiqueta "docs-only" genera scope creep silencioso en BUILD y deja al REVIEW sin baseline. Ejemplos de patrones que típicamente arrastran código: redefinición de un contrato de URL/redirect, cambio de schema de tabla, nuevo budget de perf con harness asociado, nuevo flow visual con componente compartido, nueva política de validación de input.
 
-Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados + `workflow/built.jsonl`.
+Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados.
 
 ## Handoff *(solo si el issue requiere acción humana)*
 
@@ -357,6 +307,8 @@ Por cada operación async que el issue introduce o modifica, responder cuatro pr
 
 Formato: prosa corta por operación. `not required` exige justificación ("el issue no toca operaciones async porque...") — la omisión silenciosa es lo que este campo existe para evitar.
 
+Este campo no es solo autochequeo: es el contrato que `.agents/skills/review-correctness/SKILL.md` verifica en `/wf-review` (transición co-owned, estado intermedio no modelado, identidad creada en hot path, update optimista sin rollback, colapso de colección sobre output de LLM). Un brief que responde bien estas cuatro preguntas reduce directamente los findings de esa lente.
+
 ## Performance Architecture Review
 
 La arquitectura de performance vive en `.agents/skills/skill-performance/SKILL.md`. Este skill no duplica sus tablas, umbrales ni patrones: decide cuándo debe consultarse y exige que el resultado forme parte del brief.
@@ -373,7 +325,7 @@ Cuando aplica, el brief debe incluir el `Performance Architecture Contract` del 
 - evidencia proporcional;
 - enfoque descartado y por qué.
 
-El PM no debe crear un issue que resuelva una necesidad local mientras agrega carga global no explicada. Si no se puede determinar la forma de carga o los consumidores existentes, el issue queda `needs-clarification` o `blocked` antes de BUILD.
+El Planning Agent no debe crear un issue que resuelva una necesidad local mientras agrega carga global no explicada. Si no se puede determinar la forma de carga o los consumidores existentes, el issue queda `needs-clarification` o `blocked` antes de BUILD.
 
 ## Visual / UX Contract
 
@@ -433,10 +385,10 @@ Regla:
 
 **Regla de conexión de documentos (obligatoria):**
 - Si el issue cambia comportamiento de una feature documentada, el brief debe citar explícitamente ese documento en `Reference docs`.
-- Si no existe documento de feature para el cambio, el PM debe crear un sub-issue de documentación o ampliar el issue para incluir la actualización del documento y `workflow/docs.json`.
+- Si no existe documento de feature para el cambio, el Planning Agent debe crear un sub-issue de documentación o ampliar el issue para incluir la actualización del documento y `workflow/docs.json`.
 - No dejar documentos “huérfanos”: todo documento de `workflow/context/features/` debe tener al menos un tipo de issue que lo cite de forma explícita.
-- En temas de desktop/arquitectura, el PM debe poder explicar la ruta de descubrimiento del documento: `prompt/roadmap -> workflow/docs.json -> doc de dirección -> diagnóstico -> target architecture -> migration plan`. Si no puede reconstruir esa ruta, hay riesgo de documento desconectado.
-- En temas de arquitectura, el PM debe poder responder además: `qué capa es`, `qué runtime toca`, `qué contract toca` y `quién es owner`. Si no puede responder eso, el brief todavía no está listo para BUILD.
+- En temas de desktop/arquitectura, el Planning Agent debe poder explicar la ruta de descubrimiento del documento: `prompt/roadmap -> workflow/docs.json -> doc de dirección -> diagnóstico -> target architecture -> migration plan`. Si no puede reconstruir esa ruta, hay riesgo de documento desconectado.
+- En temas de arquitectura, el Planning Agent debe poder responder además: `qué capa es`, `qué runtime toca`, `qué contract toca` y `quién es owner`. Si no puede responder eso, el brief todavía no está listo para BUILD.
 - Si el issue usa solo una parte de la familia desktop, el brief debe justificarlo implícitamente en su `Architecture Contract`: `Required docs` debe nombrar los docs concretos de los que depende el trabajo. Si el trabajo depende del estado actual del runtime o del save path real, omitir `odessay-desktop-migration-diagnostic.md` es un gap bloqueante.
 - Si el issue toca desktop/shared core/runtime boundaries/save/sync/parser/servicios, el brief debe incluir además un bloque explícito `Architecture Contract` con:
   - `Layer`
@@ -461,92 +413,27 @@ El criterio operativo es simple: BUILD debe poder implementar sin tener que infe
 
 ## Delivery
 
-### Commits
-El agente hace commits atómicos durante el desarrollo con mensajes en formato convencional.
-Cada mensaje incluye el ID del issue al final: `feat: implement auto-save debounce [ODE-42]`
-> **Excepción:** los commits de workflow en `main` durante REVIEW (`review_rejected`) **no** llevan `[ISSUE-ID]` en el subject, porque el issue aún no está en el ledger `workflow/built.jsonl` y `check-status-drift` lo reportaría como falso positivo. El id puede ir en el body si se necesita trazabilidad adicional.
-Se hace push al branch remoto al terminar cada subtarea significativa dentro del issue.
+### Validation — qué evidencia debe exigir el brief
 
-### Trazabilidad Linear ↔ GitHub
+Esta sección no ejecuta validaciones — define qué evidencia debe exigir el brief para que BUILD sepa qué producir y REVIEW sepa qué verificar. Ejecutar los checks, pegar outputs y abrir el PR es de BUILD (ver `workflow/workflow.md`); el schema de qué se exige vive aquí.
 
-Al mover el issue a In Review, el agente debe dejar un comentario en el issue de Linear con:
-- Link al PR abierto
-- SHA del commit principal (o el último commit del branch)
-- Resultado resumido de las validaciones (✅ typecheck / ✅ lint / ✅ tests o equivalente)
+Todo brief debe declarar:
 
-Sin este comentario, el issue queda desconectado del trabajo real y el humano no puede hacer el merge con contexto.
-
-Formato del comentario:
-```
-PR: [link]
-Commit: [SHA]
-Validaciones: typecheck ✅ | lint ✅ | tests ✅
-Listo para merge.
-```
-
-### Trazabilidad GitHub ↔ Linear ↔ ledger de entregas
-
-Las ramas de feature **no tocan** `workflow/status.json`, `workflow/built.jsonl` ni `workflow/review-history.jsonl`. Se actualizan únicamente en `main` post-merge durante REVIEW.
-
-Durante BUILD, el agente solo abre el PR con body completo y mueve el issue a `In Review`. La línea en `workflow/built.jsonl` se appendea después del merge, en la etapa REVIEW, junto con el evento `build_submitted` en `workflow/review-history.jsonl`.
-
-Luego corre:
-```bash
-npm run ops:delivery:gate
-```
-
-Si este gate falla, el issue no puede pasar a `In Review`.
-
-> **Nota de validación de workflow:** antes de cualquier commit que toque `workflow/status.json`, `workflow/built.jsonl` o `workflow/review-history.jsonl`, se debe ejecutar `node scripts/validate-workflow-json.mjs` (o `npm run ops:workflow:validate`) para garantizar que el JSON/JSONL sea parseable y que ninguna unión automática haya dejado marcadores de conflicto. Esto previene regresiones como comas finales inválidas que bloquean CI.
-
-### Validation
-[LLM] Antes de mover el issue a In Review, ejecuta las validaciones que apliquen y documenta el resultado. No es suficiente que el código compile — el agente debe proporcionar proof of work: el output real de lo que corrió.
+- **Proof of work de código:** como mínimo, que `typecheck`, `lint` y `test` deben pasar antes de que el issue avance. No es suficiente que el código compile — el brief exige el output real de lo que corrió, no solo que "compiló".
+- **Evidencia de interacción**, si el issue toca funcionalidad interactiva en el browser: qué flujo completo debe quedar recorrido y qué estados (carga, error, edge cases de Requirements) deben quedar verificados. El brief especifica qué debe quedar demostrado, no qué herramienta usar para demostrarlo.
+- **Visual / UX Contract**, si aplica (ver §Visual / UX Contract): qué comparación lado-a-lado y qué criterios de paridad enumerados hacen falta como evidencia. "No hay errores en consola" no cubre paridad visual.
+- **Performance evidence**, si `skill-performance` está activo: qué artefacto (`ops:perf:gate`, `ops:network:gate`, fixture de escala, evidencia de bundle desktop) prueba la decisión arquitectónica del `Performance Architecture Contract`. El brief declara qué decisión prueba cada artefacto — no todo issue necesita todos los artefactos, solo el que el riesgo real seleccione.
+- **Evidencia de base de datos**, si el issue toca schema/RLS: qué verificación de schema y de policies (permite/bloquea según las reglas definidas) debe quedar documentada.
+- **Demo de outcome**, para todo issue con comportamiento visible al usuario (ver más abajo).
 
 **El owner de Odessay es no técnico — pero eso no lo saca de la aceptación.** Hay que separar dos cosas que antes estaban colapsadas:
 
-- **Calidad de código:** la valida el agente. El humano no hace code review; confía en el proof of work (typecheck/lint/tests + evidencia). Esto sigue igual.
-- **Aceptación del resultado:** la hace el humano. El dueño no técnico **sí** puede juzgar el *outcome* — si la tabla de Workspace se ve como la de Desk, si Studio lo manda al editor, si el flujo hace lo que el issue prometía. Confundir "no puede revisar código" con "no puede aceptar resultados" es lo que dejó shippear mismatches visibles: el agente auto-validaba el código y nadie con intención de producto miraba el resultado antes de Done.
+- **Calidad de código:** la prueba el proof of work (typecheck/lint/tests + evidencia). Ejecutarlo y confirmarlo es de BUILD/REVIEW.
+- **Aceptación del resultado:** la hace el humano, sobre el *outcome* — si la tabla de Workspace se ve como la de Desk, si Studio lo manda al editor, si el flujo hace lo que el issue prometía —, no sobre el código. Confundir "no puede revisar código" con "no puede aceptar resultados" es lo que dejó shippear mismatches visibles: el código se auto-validaba y nadie con intención de producto miraba el resultado antes de Done.
 
-Por eso, para todo issue con comportamiento visible al usuario, el agente debe entregar —además del proof of work de código— un **demo de outcome** que el dueño pueda aceptar o rechazar (ver §Aceptación de resultado del dueño). El proof of work prueba que el código corre; el demo de outcome prueba que el resultado es el correcto. Son cosas distintas y se exigen las dos.
+**Demo de outcome (issues con comportamiento visible al usuario):** el brief debe exigir, además del proof of work de código, evidencia del estado final de cada Requirement (screenshots o recording del flujo real) mostrada **contra la intención declarada**, no contra el código — y debe dejar explícito que el dueño acepta o rechaza sobre ese resultado, no solo sobre que el código corre. Cómo se publica ese demo, dónde se enlaza, y qué transición de estado sigue a un rechazo es protocolo de BUILD/REVIEW (ver `workflow/workflow.md`) — este skill exige que el requisito exista en el brief, no ejecuta la publicación.
 
-**Checks obligatorios en todo issue:**
-```bash
-npm run typecheck   # debe pasar sin errores
-npm run lint        # debe pasar sin errores
-npm test            # debe pasar sin dependencias externas (ver workflow/quality/testing-observability.md §Hermetic testing)
-```
-Pegar el output de estos tres comandos en la descripción del PR. Sin este output, el PR no está completo.
-
-**Si el issue toca funcionalidad de interacción en el browser:**
-- Usa Playwright MCP para recorrer el flujo completo que el issue habilita.
-- Verifica que no hay errores en consola del browser durante el flujo.
-- Verifica estados de carga, errores y casos edge definidos en Requirements.
-- Pegar screenshot o log del resultado en el PR.
-
-**Si el issue tiene `Visual / UX Contract` required:**
-- Adjunta el screenshot lado-a-lado de la superficie nueva contra la referencia, por cada criterio de paridad declarado.
-- "No hay errores en consola" NO cubre paridad visual; un mismatch de fondo/borde/ícono/columnas pasa todos los checks técnicos. La comparación visual es el único check que lo atrapa.
-
-**Aceptación de resultado del dueño (issues con comportamiento visible al usuario):**
-- Antes de pedir el merge, el agente publica un **demo de outcome**: screenshots del estado final de cada Requirement, o un recording corto del flujo real, mostrando el resultado **contra la intención** que el issue declaró (no contra el código).
-- El demo se publica en el PR y se enlaza en el comentario de trazabilidad de Linear.
-- El dueño acepta o rechaza sobre el resultado. Un rechazo de outcome devuelve el issue a `In Progress`, igual que un review de código rechazado.
-- Este gate es independiente del proof of work de código: typecheck/lint/tests verdes no sustituyen la aceptación del resultado.
-
-**Si `skill-performance` fue activado:**
-- Verifica que el `Performance Architecture Contract` esté completo.
-- Ejecuta únicamente la evidencia que el skill haya seleccionado para el riesgo real del cambio.
-- Usa `ops:perf:gate`, `ops:network:gate`, fixtures de escala o evidencia de bundle desktop cuando el contrato los requiera; no los conviertas en una lista automática para todo issue.
-- Si se captura HAR, trace o Resource Timing con datos sensibles, procesa el input localmente con `--redact` y adjunta solo artefactos sanitizados.
-- El brief debe declarar qué decisión arquitectónica prueba cada artefacto.
-
-**Si el issue toca base de datos:**
-- Usa Supabase MCP para verificar que el schema resultante coincide con lo especificado.
-- Verifica que las RLS policies permiten y bloquean acceso según las reglas definidas.
-- Pegar el output de la verificación en el PR.
-
-**Si el issue es de infra, configuración o documentación:**
-No se requiere Playwright ni Supabase MCP. Verificar que el resultado es funcional y documentar cómo se verificó.
+Las condiciones verificables que significan Done para el issue quedan en §Definition of Done; esta sección solo define qué evidencia las respalda.
 
 ### Definition of Done
 Condiciones que deben ser verdaderas para cerrar el issue. Escritas en prosa. Sin checklists.
@@ -582,11 +469,11 @@ Se crean subissues cuando un issue tiene partes que pueden ejecutarse en paralel
 
 ## Cómo secuenciar issues
 
-Dentro de cada fase, el orden de ejecución es siempre: database → backend → frontend → validation. Los issues de infra y configuración son siempre los primeros de cualquier proyecto y son `critical-path` para todo lo demás.
+La secuencia de issues dentro de una fase se deriva de la topología que el Planning Agent resuelve — capabilities, dependencies, contracts y critical path (ver `.agents/agents/planning-agent.md`) —, no de un orden fijo de capas. Un `smallest coherent stage` puede cruzar capas (database+backend+frontend en el mismo issue) cuando esa es la unidad mínima coherente; forzar la separación por capa cuando la topología real no lo pide fragmenta el trabajo sin necesidad.
+
+Los issues de infra y configuración suelen terminar como `critical-path` porque casi toda otra capability depende de ellos — eso es consecuencia de su posición real en la topología, no una regla de orden que se aplique por default.
 
 Las dependencias se declaran explícitamente en la sección Dependencies de cada issue. Un issue sin dependencias declaradas se asume independiente. Nunca asumir dependencias implícitas — si algo debe existir para que este issue funcione, se declara.
-
-Un issue nunca pasa a In Progress mientras tenga dependencias en estado distinto a Done.
 
 ---
 
@@ -610,7 +497,7 @@ Mal: "Odessay es una plataforma de escritura epistolar con tres modos principale
 El status del proyecto refleja el estado real de la fase: `Planned` → `In Progress` → `Completed`. Cuando una fase termina, el proyecto se cierra. No se reutiliza.
 
 **Por qué un proyecto por fase y no un proyecto por producto:**
-Si el team y el proyecto tienen el mismo nombre (`Team: Odessay`, `Project: Odessay`), el nivel de proyecto no agrega ningún significado — es ruido. Con un proyecto por fase, la jerarquía es plana y semánticamente clara: `Team: Odessay → Project: Fase 0 — Cimientos → Issues`.
+Si el team y el proyecto tienen el mismo nombre (`Team: Odessay`, `Project: Odessay`), el nivel de proyecto no agrega ningún significado — es ruido. Con un proyecto por fase, la jerarquía es plana y semánticamente clara: `Team: Odessay → Project: Fase N — <nombre> → Issues`.
 
 ### Milestone (dentro de un proyecto, opcional)
 
@@ -625,7 +512,7 @@ Milestone: "Frontend listo"  → panel UI + render de observaciones + context in
 
 El frontend no debería empezar hasta que la API esté validada. El milestone hace ese gate explícito y visible.
 
-Cuándo NO usarlos: cuando las dependencias entre issues ya dan el orden correcto. En Fase 0, Fase 1 y la mayoría de las fases, los issues están encadenados por Dependencies — no hace falta un milestone adicional. Añadirlos ahí es ruido.
+Cuándo NO usarlos: cuando las dependencias entre issues ya dan el orden correcto. En la mayoría de las fases los issues están encadenados por Dependencies — no hace falta un milestone adicional. Añadirlos ahí es ruido.
 
 ### Issue (uno por entregable)
 
@@ -635,34 +522,11 @@ La descripción del issue sigue la estructura definida en §Estructura de un iss
 
 ## Cómo usar este skill
 
-### Al iniciar el proyecto
-
-1. Lee `workflow/define/roadmap.md` para entender fases y el mapa de issues.
-2. Crea los labels en Linear exactamente como están definidos en este documento.
-3. Crea los estados en Linear: Todo, In Progress, In Review, Done. (Ready es opcional como pre-cola).
-4. Crea **un proyecto por fase** en Linear, con el nombre exacto de la fase (`Fase 0 — Cimientos`, `Fase 1 — Escribir`, etc.) y descripción de exit criteria específica a esa fase.
-5. Crea todos los proyectos desde el inicio con status `Planned`. Solo la fase activa pasa a `In Progress`.
-6. Crea los issues de la fase activa dentro de su proyecto, con estado Todo.
-7. Mueve a In Progress solo los que no tienen dependencias abiertas.
-8. No crees issues de fases siguientes hasta que la fase anterior esté completa.
-
 ### Al crear un issue
 
 Sigue la estructura de descripción definida en este documento. Todo issue debe tener Context, Dependencies, Requirements, Reference docs, Delivery y Notes si aplica. Un issue sin Definition of Done no es un issue.
 
 **Asignación:** el agente crea los issues sin assignee. El humano los asigna. No asignar issues a nombres o usuarios — dejar el campo vacío al crear.
-
-### Al ejecutar un issue
-
-[LLM] Antes de empezar: verifica que todas las dependencias están en Done. Lee los Reference docs indicados en el issue. Crea el branch desde main con el formato `codex/{issue-id}-{descripcion-corta}` o `feat/{issue-id}-{descripcion-corta}` o `fix/{issue-id}-{descripcion-corta}`. Si la rama actual es `main`, no commitees ahí: cambia primero al branch de trabajo. Mueve el issue a In Progress.
-
-Durante la ejecución: commits atómicos con ID del issue en el mensaje. Push al branch remoto al terminar cada subtarea significativa.
-
-Al terminar: ejecuta las validaciones definidas en la sección Validation. Solo cuando todas las validaciones pasan, mueve el issue a In Review y abre el PR.
-
-### Al completar una fase
-
-Antes de empezar la siguiente: verifica deploy en staging funcionando. Recorre los flujos completos de la fase con Playwright MCP. Verifica que nada de fases anteriores se rompió. Si hay algo roto, crea un issue de fix antes de avanzar.
 
 ---
 
@@ -692,8 +556,8 @@ Un brief construido sobre un spec que contradice el código propaga el error con
 
 Un issue de UI sin `Visual / UX Contract` está incompleto. "Se ve como Desk" no es una intención implícita que BUILD pueda adivinar y REVIEW pueda verificar. Sin referencia visual nombrada y criterio de paridad enumerado, el resultado pasa todos los checks técnicos y aun así no coincide. Ver §Visual / UX Contract.
 
-Un issue visible cerrado solo con proof of work de código no está aceptado. Typecheck/lint/tests verdes prueban que el código corre, no que el resultado es el correcto. Si el dueño no aceptó el demo de outcome, el issue no está Done aunque el PR esté mergeado. Ver §Aceptación de resultado del dueño.
+Un issue visible cerrado solo con proof of work de código no está aceptado. Typecheck/lint/tests verdes prueban que el código corre, no que el resultado es el correcto. Si el dueño no aceptó el demo de outcome, el issue no está Done aunque el PR esté mergeado. Ver §Validation — Demo de outcome.
 
-Un brief que no pasó por los skills de su scope es un brief sin revisar. Que el PM conozca las reglas de frontend no sustituye cargar `skill-frontend` y confrontar el brief contra sus invariantes — el precedente ODE-338 demuestra que las reglas escritas no protegen si nadie las invoca. Ver §Revisión por skills de dominio.
+Un brief que no pasó por los skills de su scope es un brief sin revisar. Que el Planning Agent conozca las reglas de frontend no sustituye cargar `skill-frontend` y confrontar el brief contra sus invariantes — el precedente ODE-338 demuestra que las reglas escritas no protegen si nadie las invoca. Ver §Revisión por skills de dominio.
 
 Un issue con operaciones async sin sección Failure modes shippea el happy path. Los bugs de carrera, estados colgados y optimistic updates sin rollback no los atrapa ningún checklist de código — solo se previenen si el brief los definió. Ver §Failure modes.

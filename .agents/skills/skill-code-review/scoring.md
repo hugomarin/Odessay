@@ -8,11 +8,11 @@ Guía de scoring para el agente revisor. Este documento es referencia — el sco
 
 El review debe reportar tres resultados distintos:
 
-1. `GateResult` (PASS/FAIL): contratos y gates operativos.
+1. `TechnicalVerdict` (PASS/FAIL): el juicio de esta investigación — findings, contratos que las lentes evalúan, seguridad.
 2. `QualityScore` (0-10): calidad técnica del diff.
 3. `ProcessInsights`: aprendizaje del ciclo (fallos de primera ronda, churn y gaps de contexto).
 
-`GateResult` decide merge/no-merge. `QualityScore` no reemplaza gates.
+`TechnicalVerdict` no es el gate final de merge. `workflow/workflow.md` lo combina con lo que ya verifica mecánicamente (CI, Vercel, `ops:delivery:gate`, proof of work) para producir el `GateResult` — un solo owner por responsabilidad: este documento y el review deciden `TechnicalVerdict`, `workflow.md` decide `GateResult`. `QualityScore` no reemplaza a ninguno de los dos.
 
 ---
 
@@ -53,20 +53,22 @@ Redondeado a 1 decimal = __/10
 
 | QualityScore | Lectura | Acción sugerida |
 |-------|-----------|--------|
-| 9.0 – 10.0 | Sólido | Merge si `GateResult=PASS` |
-| 7.0 – 8.9 | Bueno con deuda menor | Merge si `GateResult=PASS` + follow-up |
+| 9.0 – 10.0 | Sólido | Merge si `TechnicalVerdict=PASS` (y el `GateResult` final en `workflow.md` también aprueba) |
+| 7.0 – 8.9 | Bueno con deuda menor | Merge si `TechnicalVerdict=PASS` + follow-up |
 | 5.0 – 6.9 | Inestable | Pedir cambios |
 | < 5.0 | Débil | Rechazar |
 
-### Overrides de gate (se reportan fuera de QualityScore)
+### Overrides de `TechnicalVerdict` (los decide este review, se reportan fuera de QualityScore)
 
-- Si hay **algún P0 activo**: `GateResult=FAIL`.
-- Si falla el `Performance Architecture Contract` requerido o la evidencia que este seleccionó: `GateResult=FAIL`.
-- Si falta proof of work (typecheck/lint/tests): `GateResult=FAIL`.
-- Si PR no está OPEN/CI requerido en rojo/evidencia contractual faltante: `GateResult=FAIL`.
+- Si hay **algún P0 activo**: `TechnicalVerdict=FAIL`.
+- Si falla el `Performance Architecture Contract` requerido, la evidencia que este seleccionó, o falta evidencia contractual que el brief exigía: `TechnicalVerdict=FAIL`.
 - **Findings investigados y descartados:** Si durante el review se investiga un finding y se determina que es un falso positivo (ej. se revisa el diff y el cambio es legítimo), ese finding NO se cuenta en el score. Eliminarlo del bloque de cálculo. Solo contar findings que el revisor considera válidos al momento del veredicto.
 
-El `QualityScore` puede ser alto y aun así rechazarse por `GateResult=FAIL`.
+### Overrides mecánicos del `GateResult` final (no son responsabilidad de este skill)
+
+`workflow/workflow.md` ya aplica estos antes/además de considerar el `TechnicalVerdict`: falta de proof of work (typecheck/lint/tests), PR no está `OPEN`, o el CI requerido está en rojo. No los recalcules aquí ni los repitas en el veredicto de este skill.
+
+El `QualityScore` puede ser alto y aun así rechazarse por `TechnicalVerdict=FAIL` o por un override mecánico del `GateResult`.
 
 ---
 
