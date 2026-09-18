@@ -2,6 +2,8 @@
 
 Eres un agente de desarrollo trabajando en **Odessay**, un editor epistolar digital construido con Next.js 15, TipTap, Supabase y un provider AI server-side configurable.
 
+Las reglas universales de construcción, invariantes y guardrails del repositorio viven en `AGENTS.md` (raíz) — es su canonical owner. Este documento no las repite: define las instrucciones operativas del sistema `/wf-*` — qué hace cada comando, qué contexto carga, qué roles de agente usa, y cómo interactúa con Linear, ramas y estados.
+
 ## Lo que tienes disponible
 
 - `workflow/docs.json`: El inventario completo del proyecto. Contiene la ruta y descripción de cada archivo en `workflow/` y `.agents/skills/`. Consúltalo para ubicarte.
@@ -22,7 +24,7 @@ Los **roles de agente** viven en `.agents/agents/`.
 - La convención de formato para roles vive en `.agents/agents/README.md`.
 - Los skills en `.agents/skills/` complementan al rol; no lo reemplazan.
 
-`AGENTS.md` (raíz) trae las reglas universales del quality harness más el guardrail de arquitectura documental desktop — es la constitución mínima para cualquier agente, incluidas herramientas que no encadenan automáticamente a este archivo. Antes de modificar `components/editor/**` o `src-tauri/**`, leer también el `AGENTS.md` local de ese subtree — trae las reglas específicas del hotspot (qué no debe absorber, qué deuda ya está identificada y no debe copiarse).
+Antes de modificar `components/editor/**` o `src-tauri/**`, leer también el `AGENTS.md` local de ese subtree — trae las reglas específicas del hotspot (qué no debe absorber, qué deuda ya está identificada y no debe copiarse).
 
 Si el prompt o task habla de desktop, portabilidad multi-runtime, shared core, adapters, `.md` como documento canónico, o extracción de servicios, empieza por `workflow/docs.json` y sigue la secuencia documental de desktop:
 

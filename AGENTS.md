@@ -1,6 +1,8 @@
 # Odessay — Agent Instructions
 
-Ver instrucciones completas en `workflow/agents.md`.
+Este archivo es el **canonical owner** de las reglas universales de construcción, invariantes y guardrails del repositorio — qué debe seguir siendo verdad en cualquier cambio, para cualquier agente.
+
+`workflow/agents.md` es el documento complementario: instrucciones operativas del sistema `/wf-*` — qué hace cada comando, qué contexto carga, qué roles de agente usa, y cómo interactúa con Linear, ramas y estados. Referencia las reglas de este archivo; no las redefine. Léelo para saber *cómo operar* un comando; lee este archivo para saber *qué no debe romperse* mientras lo haces.
 
 ## Reglas universales de construcción
 
@@ -37,12 +39,15 @@ Antes de modificar un subtree, verificar si existe un `AGENTS.md` más específi
 
 Este archivo es el **canonical owner** de este contrato — `workflow/agents.md` lo referencia, no lo repite.
 
-Para cualquier trabajo que toque desktop, Desk, Workspace, Open Document, watcher, filesystem, SQLite, IndexedDB, sync/hydration, identidad o apertura documental, la carga mínima obligatoria es:
+### Cuándo cargar cada documento
 
-1. `workflow/context/core/odessay-adr-identidad.md` — autoridad de identidad, contenido y metadata.
-2. `workflow/context/features/odessay-desktop-document-catalog.md` — autoridad del catálogo, BindingRoots, reconciliación, apertura y migración desktop.
+No es "cualquier cambio que toque Desktop/Desk/Workspace" — el criterio es si el cambio puede afectar el contrato, no si toca la superficie donde vive:
 
-Estas decisiones son no negociables salvo un nuevo ADR aprobado.
+- Cargar `workflow/context/core/odessay-adr-identidad.md` cuando el cambio pueda afectar identidad/UUID, autoridad de contenido o metadata, binding archivo↔documento, el contrato `.md`/`body_json`, lifecycle local/cloud, o semántica documental compartida entre runtimes.
+- Cargar además `workflow/context/features/odessay-desktop-document-catalog.md` cuando pueda afectar el `DocumentCatalog`, BindingRoots/`.odessay/index.json`, SQLite/IndexedDB desktop, el watcher/`WorkspaceReconciler`, resolución `UUID ↔ path`, apertura/materialización, las fuentes de datos de Desk/Workspace/Search/Recent, o el lifecycle de save/sync.
+- Un cambio puramente visual, de copy o de interacción local que no altera ninguno de esos contratos **no** carga estos documentos solo por tocar Desk, Workspace o Desktop.
+
+Precedencia de lectura: ADR de identidad → spec del catálogo desktop → implementación. Estas decisiones son no negociables salvo un nuevo ADR aprobado.
 
 ### Precedencia
 

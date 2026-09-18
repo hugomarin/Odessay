@@ -5,7 +5,7 @@
     {
       "path": "AGENTS.md",
       "type": "guardrail",
-      "description": "Constitución raíz para cualquier agente (incluye herramientas que no encadenan a workflow/agents.md, ej. Codex): reglas universales del quality harness (reuse-before-creation, one-owner, architecture-before-locality, proteger hotspots, smallest coherent change, descubrir AGENTS.md locales) + el guardrail no negociable de arquitectura documental desktop."
+      "description": "Canonical owner de las reglas universales de construcción, invariantes y guardrails del repositorio (incluye herramientas que no encadenan a workflow/agents.md, ej. Codex): reuse-before-creation, one-owner, architecture-before-locality (con activación acotada), proteger hotspots, smallest coherent change, descubrir AGENTS.md locales, y el guardrail no negociable de arquitectura documental desktop con criterio explícito de cuándo cargar cada doc (ADR identidad vs. catálogo desktop)."
     },
     {
       "path": "workflow/context/core/odessay-fundacional.md",
@@ -230,7 +230,7 @@
     {
       "path": "workflow/agents.md",
       "type": "ops",
-      "description": "Fuente de verdad para todos los LLMs usados en Odessay. Define recursos, operación, ramas y el guardrail obligatorio del catálogo documental desktop: precedencia ADR/spec, invariantes de manifest/SQLite/DocumentCatalog/OpenDocument y protocolo de Context Gap ante docs o código contradictorios."
+      "description": "Instrucciones operativas del sistema /wf-* para todos los LLMs usados en Odessay: recursos disponibles, roles de agente por comando, carga de contexto, ramas y estados de Linear. Referencia el guardrail de arquitectura documental desktop — su canonical owner es AGENTS.md (raíz), no lo repite aquí."
     },
     {
       "path": "workflow/workflow.md",
