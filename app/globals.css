@@ -542,6 +542,118 @@
     margin: 0;
   }
 
+  /* ODE-533: lazy source-first Mermaid previews. Source stays canonical and
+     editable; preview is adjacent UI-only chrome. The outer preview never
+     causes page-level horizontal overflow: it contains its own scroll. */
+  .odessay-editor-content .odessay-mermaid-bar {
+    align-items: center;
+    border-bottom: 0.5px solid hsl(var(--line-soft));
+    display: flex;
+    gap: 8px;
+    padding: 6px 10px;
+  }
+
+  .odessay-editor-content .odessay-mermaid-bar[hidden] {
+    display: none;
+  }
+
+  .odessay-editor-content .odessay-mermaid-toggle,
+  .odessay-editor-content .odessay-mermaid-retry,
+  .odessay-editor-content .odessay-mermaid-zoom {
+    border: 0.5px solid hsl(var(--line-soft));
+    border-radius: 6px;
+    color: hsl(var(--ink-2));
+    font-family: var(--od-font-ui);
+    font-size: 12px;
+    padding: 4px 10px;
+  }
+
+  .odessay-editor-content .odessay-mermaid-toggle:hover,
+  .odessay-editor-content .odessay-mermaid-toggle:focus-visible,
+  .odessay-editor-content .odessay-mermaid-retry:hover,
+  .odessay-editor-content .odessay-mermaid-retry:focus-visible,
+  .odessay-editor-content .odessay-mermaid-zoom:hover,
+  .odessay-editor-content .odessay-mermaid-zoom:focus-visible {
+    background: hsl(var(--surface-menu-hover));
+    color: hsl(var(--ink));
+    outline: none;
+  }
+
+  .odessay-editor-content .odessay-mermaid-zoom-label {
+    color: hsl(var(--ink-4));
+    font: 500 11px/1.2 var(--od-font-ui);
+    min-width: 3rem;
+    text-align: center;
+  }
+
+  .odessay-editor-content .odessay-mermaid-preview {
+    border-top: 0.5px solid hsl(var(--line-soft));
+    max-width: 100%;
+    overflow: auto;
+    padding: 12px 14px;
+  }
+
+  .odessay-editor-content .odessay-mermaid-preview[hidden] {
+    display: none;
+  }
+
+  .odessay-editor-content .odessay-mermaid-canvas {
+    margin: 0 auto;
+    max-width: 100%;
+    min-width: 100%;
+  }
+
+  .odessay-editor-content .odessay-mermaid-svg svg {
+    display: block;
+    height: auto;
+    max-width: 100%;
+  }
+
+  .odessay-editor-content .odessay-mermaid-status {
+    color: hsl(var(--ink-4));
+    font-family: var(--od-font-ui);
+    font-size: 12px;
+    margin: 0;
+  }
+
+  .odessay-editor-content .odessay-mermaid-error {
+    display: grid;
+    gap: 8px;
+  }
+
+  .odessay-editor-content .odessay-mermaid-error[hidden] {
+    display: none;
+  }
+
+  .odessay-editor-content .odessay-mermaid-error-text {
+    color: hsl(var(--ink-3));
+    font-family: var(--od-font-ui);
+    font-size: 12px;
+    margin: 0;
+  }
+
+  /* ODE-533: reading fallback shares the document-width containment contract. */
+  .odessay-rich-content .odessay-mermaid-fallback,
+  .prose-odessay .odessay-mermaid-fallback {
+    margin-block: 1.4em;
+    max-width: 100%;
+  }
+
+  .odessay-rich-content .odessay-mermaid-fallback pre,
+  .prose-odessay .odessay-mermaid-fallback pre {
+    margin-block: 0;
+    max-width: 100%;
+    overflow: auto;
+  }
+
+  .odessay-rich-content .odessay-mermaid-fallback figcaption,
+  .prose-odessay .odessay-mermaid-fallback figcaption {
+    color: hsl(var(--ink-4));
+    font-family: var(--od-font-ui);
+    font-size: 12px;
+    margin-top: 6px;
+  }
+
   /* Markdown source mode is a stacked pair: a transparent textarea over the
      semantic layer. The two must stay byte-identical in metrics to each other,
      and they track the body size so toggling the mode does not resize the text. */

@@ -7,6 +7,7 @@ import { escapeControlledAttribute } from "@/lib/document-components/entities"
 import { parseControlledComponentAt } from "@/lib/document-components/parser"
 import { DocumentComponentSpecRegistry } from "@/lib/document-components/registry"
 import type { DocumentComponentKind } from "@/lib/document-components/types"
+import { isMermaidLanguage } from "@/lib/mermaid/mermaid-language"
 
 type ControlledBlockKind = "Tip" | "Info" | "Card"
 type ControlledBlockNodeName = "tip" | "info" | "card"
@@ -399,7 +400,9 @@ export const TipBlock = createControlledBlockNode("Tip")
 export const InfoBlock = createControlledBlockNode("Info")
 export const CardBlock = createControlledBlockNode("Card")
 
-const COMMON_CODE_LANGUAGES = ["", "bash", "css", "html", "javascript", "json", "markdown", "python", "sql", "typescript"]
+const COMMON_CODE_LANGUAGES = ["", "bash", "css", "html", "javascript", "json", "markdown", "mermaid", "python", "sql", "typescript"]
+
+let mermaidPreviewCounter = 0
 
 export const DocumentCodeBlock = CodeBlock.extend({
   addKeyboardShortcuts: () => ({}),
@@ -407,6 +410,14 @@ export const DocumentCodeBlock = CodeBlock.extend({
   addNodeView() {
     return ({ node, editor, getPos }: NodeViewRendererProps) => {
       let currentNode = node
+      let disposed = false
+      let previewVisible = false
+      let previewZoom = 1
+      let lastRenderedSource: string | null = null
+      let renderSequence = 0
+      let unobservePreview: (() => void) | null = null
+      mermaidPreviewCounter += 1
+      const previewId = `odessay-mermaid-preview-${mermaidPreviewCounter}`
       const dom = document.createElement("section")
       dom.className = "odessay-code-block"
       const toolbar = document.createElement("div")
@@ -432,6 +443,225 @@ export const DocumentCodeBlock = CodeBlock.extend({
       pre.append(contentDOM)
       dom.append(toolbar, pre)
 
+      // ODE-533: Mermaid chrome lives outside contentDOM as UI-only state.
+      // Source stays canonical in the ProseMirror codeBlock; preview, zoom and
+      // visibility never serialize. Mermaid loads lazily via the shared
+      // coordinator (no static import, one observer owner).
+      const mermaidBar = document.createElement("div")
+      mermaidBar.className = "odessay-mermaid-bar"
+      mermaidBar.contentEditable = "false"
+      mermaidBar.hidden = true
+      const toggle = document.createElement("button")
+      toggle.type = "button"
+      toggle.className = "odessay-mermaid-toggle"
+      toggle.setAttribute("aria-controls", previewId)
+      toggle.setAttribute("aria-expanded", "false")
+      toggle.textContent = "Preview diagram"
+      const zoomOut = document.createElement("button")
+      zoomOut.type = "button"
+      zoomOut.className = "odessay-mermaid-zoom"
+      zoomOut.setAttribute("aria-label", "Zoom out diagram preview")
+      zoomOut.textContent = "−"
+      zoomOut.hidden = true
+      const zoomLabel = document.createElement("span")
+      zoomLabel.className = "odessay-mermaid-zoom-label"
+      zoomLabel.setAttribute("aria-live", "polite")
+      zoomLabel.hidden = true
+      const zoomIn = document.createElement("button")
+      zoomIn.type = "button"
+      zoomIn.className = "odessay-mermaid-zoom"
+      zoomIn.setAttribute("aria-label", "Zoom in diagram preview")
+      zoomIn.textContent = "+"
+      zoomIn.hidden = true
+      mermaidBar.append(toggle, zoomOut, zoomLabel, zoomIn)
+
+      const preview = document.createElement("div")
+      preview.id = previewId
+      preview.className = "odessay-mermaid-preview"
+      preview.setAttribute("role", "region")
+      preview.setAttribute("aria-label", "Diagram preview")
+      preview.contentEditable = "false"
+      preview.hidden = true
+      const status = document.createElement("p")
+      status.className = "odessay-mermaid-status"
+      status.setAttribute("aria-live", "polite")
+      status.hidden = true
+      const canvas = document.createElement("div")
+      canvas.className = "odessay-mermaid-canvas"
+      const errorBox = document.createElement("div")
+      errorBox.className = "odessay-mermaid-error"
+      errorBox.setAttribute("role", "alert")
+      errorBox.hidden = true
+      const errorText = document.createElement("p")
+      errorText.className = "odessay-mermaid-error-text"
+      const retry = document.createElement("button")
+      retry.type = "button"
+      retry.className = "odessay-mermaid-retry"
+      retry.textContent = "Retry preview"
+      errorBox.append(errorText, retry)
+      preview.append(status, canvas, errorBox)
+      dom.append(mermaidBar, preview)
+
+      const readLiveSource = (): string | null => {
+        const position = typeof getPos === "function" ? getPos() : null
+        if (typeof position !== "number") return currentNode.textContent ?? null
+        const liveNode = editor.state.doc.nodeAt(position)
+        if (!liveNode || liveNode.type.name !== "codeBlock") return null
+        return liveNode.textContent ?? ""
+      }
+
+      const readLiveLanguage = (): string => {
+        const position = typeof getPos === "function" ? getPos() : null
+        if (typeof position !== "number") return String(currentNode.attrs.language ?? "")
+        const liveNode = editor.state.doc.nodeAt(position)
+        if (!liveNode || liveNode.type.name !== "codeBlock") return String(currentNode.attrs.language ?? "")
+        return String(liveNode.attrs.language ?? "")
+      }
+
+      const refreshMermaidChrome = () => {
+        // mermaid-language has no renderer dependency, so this static import
+        // adds no bootstrap cost. The heavy renderer stays behind the dynamic
+        // coordinator import in requestPreviewRender/scheduleRenderWhenVisible.
+        const isMermaid = isMermaidLanguage(readLiveLanguage())
+        mermaidBar.hidden = !isMermaid
+        dom.classList.toggle("odessay-code-mermaid", isMermaid)
+        if (!isMermaid && previewVisible) {
+          previewVisible = false
+          preview.hidden = true
+          toggle.setAttribute("aria-expanded", "false")
+          toggle.textContent = "Preview diagram"
+        }
+        zoomOut.hidden = !isMermaid || !previewVisible
+        zoomIn.hidden = !isMermaid || !previewVisible
+        zoomLabel.hidden = !isMermaid || !previewVisible
+      }
+
+      const paintZoom = () => {
+        zoomLabel.textContent = `${Math.round(previewZoom * 100)}%`
+        canvas.style.width = `${Math.round(previewZoom * 100)}%`
+      }
+
+      const showStatus = (message: string) => {
+        status.textContent = message
+        status.hidden = false
+        errorBox.hidden = true
+        canvas.replaceChildren()
+      }
+
+      const showError = (message: string) => {
+        status.hidden = true
+        errorText.textContent = message
+        errorBox.hidden = false
+      }
+
+      const commitSvg = (svg: string, sequence: number, requestedSource: string) => {
+        if (disposed || sequence !== renderSequence || !previewVisible) return
+        if (readLiveSource() !== requestedSource) return
+        status.hidden = true
+        errorBox.hidden = true
+        canvas.replaceChildren()
+        const wrapper = document.createElement("div")
+        wrapper.className = "odessay-mermaid-svg"
+        // The SVG was sanitized by the loader; injecting it as markup is the
+        // documented Mermaid integration path. Source remains the authority.
+        wrapper.innerHTML = svg
+        canvas.append(wrapper)
+        paintZoom()
+        lastRenderedSource = requestedSource
+      }
+
+      const requestPreviewRender = () => {
+        const source = readLiveSource() ?? ""
+        if (!source.trim()) {
+          showError("Diagram source is empty. Write a diagram to preview it.")
+          return
+        }
+        if (source === lastRenderedSource && canvas.firstChild) return
+        renderSequence += 1
+        const sequence = renderSequence
+        showStatus("Rendering diagram…")
+        // Lazy-load the coordinator + renderer only on explicit request.
+        void import("@/lib/mermaid/mermaid-coordinator").then(({ mermaidRenderCoordinator }) => {
+          if (disposed || sequence !== renderSequence || !previewVisible) return
+          const revision = mermaidRenderCoordinator.nextRevision()
+          void mermaidRenderCoordinator
+            .requestRender(source, revision)
+            .then((svg) => commitSvg(svg, sequence, source))
+            .catch((error: unknown) => {
+              if (disposed || sequence !== renderSequence || !previewVisible) return
+              if (readLiveSource() !== source) return
+              const message =
+                error instanceof Error && error.message ? error.message : "Diagram could not be rendered. The source is preserved."
+              showError(message)
+            })
+        })
+      }
+
+      const scheduleRenderWhenVisible = () => {
+        unobservePreview?.()
+        unobservePreview = null
+        if (typeof IntersectionObserver === "undefined") {
+          requestPreviewRender()
+          return
+        }
+        void import("@/lib/mermaid/mermaid-coordinator").then(({ mermaidRenderCoordinator }) => {
+          if (disposed || !previewVisible) return
+          const source = readLiveSource() ?? ""
+          if (source === lastRenderedSource && canvas.firstChild) return
+          unobservePreview = mermaidRenderCoordinator.observe(preview, () => {
+            unobservePreview = null
+            requestPreviewRender()
+          })
+        })
+      }
+
+      toggle.addEventListener("click", () => {
+        previewVisible = !previewVisible
+        preview.hidden = !previewVisible
+        toggle.setAttribute("aria-expanded", String(previewVisible))
+        toggle.textContent = previewVisible ? "Hide preview" : "Preview diagram"
+        zoomOut.hidden = !previewVisible
+        zoomIn.hidden = !previewVisible
+        zoomLabel.hidden = !previewVisible
+        if (previewVisible) {
+          paintZoom()
+          scheduleRenderWhenVisible()
+          toggle.focus()
+        } else {
+          unobservePreview?.()
+          unobservePreview = null
+          renderSequence += 1
+        }
+      })
+      const refocusEditor = () => {
+        editor.commands.focus()
+      }
+      for (const control of [toggle, retry, zoomIn, zoomOut]) {
+        control.addEventListener("keydown", (event) => {
+          if (event.key !== "Escape") return
+          event.preventDefault()
+          refocusEditor()
+        })
+      }
+      retry.addEventListener("click", () => {
+        lastRenderedSource = null
+        renderSequence += 1
+        requestPreviewRender()
+        retry.focus()
+      })
+      zoomIn.addEventListener("click", () => {
+        previewZoom = Math.min(2, Math.round((previewZoom + 0.25) * 100) / 100)
+        paintZoom()
+        zoomIn.focus()
+      })
+      zoomOut.addEventListener("click", () => {
+        previewZoom = Math.max(0.5, Math.round((previewZoom - 0.25) * 100) / 100)
+        paintZoom()
+        zoomOut.focus()
+      })
+      refreshMermaidChrome()
+      paintZoom()
+
       const updateLanguage = () => {
         const position = getPos()
         if (typeof position !== "number") return
@@ -455,10 +685,28 @@ export const DocumentCodeBlock = CodeBlock.extend({
           if (nextNode.type !== currentNode.type) return false
           currentNode = nextNode
           input.value = String(nextNode.attrs.language ?? "")
+          refreshMermaidChrome()
           return true
         },
         stopEvent(event) {
-          return event.target === input || event.target === datalist
+          return (
+            event.target === input ||
+            event.target === datalist ||
+            (event.target instanceof HTMLElement &&
+              Boolean(event.target.closest(".odessay-mermaid-bar, .odessay-mermaid-preview")))
+          )
+        },
+        ignoreMutation(mutation) {
+          // ODE-540: preview/status chrome mutates outside contentDOM during
+          // async renders. Those mutations must never be read as document
+          // edits; only mutations inside the editable <code> matter.
+          return !contentDOM.contains(mutation.target)
+        },
+        destroy() {
+          disposed = true
+          renderSequence += 1
+          unobservePreview?.()
+          unobservePreview = null
         },
       }
     }
