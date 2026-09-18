@@ -93,7 +93,7 @@ Igual para mutaciones optimistas: toda escritura optimista (learn word, accept) 
 
 ## Failure modes que todo brief de corrections debe responder
 
-Complemento de `skill-product-manager §Failure modes`, instanciado para este subsistema:
+Complemento de `skill-planning §Failure modes`, instanciado para este subsistema:
 
 1. ¿Qué pasa si el análisis del bloque falla o llega tarde? (¿las stale expiran?)
 2. ¿Qué pasa si la lista de learned words no ha cargado cuando corre el primer análisis?
@@ -118,7 +118,7 @@ Un brief de corrections que no responde estas cinco preguntas no está listo par
 
 ## Relación con otros skills
 
-- `skill-product-manager` invoca este skill en la revisión de briefs que tocan corrections (§Revisión por skills de dominio).
+- `skill-planning` invoca este skill en la revisión de briefs que tocan corrections (§Revisión por skills de dominio).
 - `skill-frontend` es dueño de los guardrails de decoraciones/ProseMirror; este skill los especializa para correcciones y les añade enforcement.
 - `skill-backend` es dueño de las reglas de la route `publication-review` (proveedor/modelo por env, contrato de error); este skill fija qué debe validar esa route (admisión, límites de token, degradación por item).
 - `skill-code-review` usa el checklist de arriba como criterio de rechazo en PRs de este scope.

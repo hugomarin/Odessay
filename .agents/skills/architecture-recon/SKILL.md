@@ -132,7 +132,7 @@ Required action: <corregir brief | issue de migración | decisión humana>
 ## Non-goals
 
 - No decide `Layer`/`Runtime scope`/`Owner` esperados — eso es `skill-architecture`.
-- No escribe el Issue Brief ni el `Architecture Contract` — eso es DEFINE/`skill-product-manager`.
+- No escribe el Issue Brief ni el `Architecture Contract` — eso es DEFINE/`skill-planning`.
 - No ejecuta el review técnico del PR — eso es `skill-code-review` en `/wf-review`.
 - No es una auditoría exhaustiva del repo: se acota estrictamente al change surface del issue actual.
 
@@ -141,5 +141,5 @@ Required action: <corregir brief | issue de migración | decisión humana>
 ## Relación con otros skills
 
 - `skill-architecture` fija la intención (`Layer`, `Runtime scope`, `Owner`, contratos, invariantes). Este skill la confronta contra el código real.
-- `skill-product-manager` no usa este skill directamente: Recon es de BUILD, no de DEFINE.
+- `skill-planning` no usa este skill directamente: Recon es de BUILD, no de DEFINE.
 - `skill-frontend` / `skill-backend` / `skill-database` se cargan **después** de Recon, ya acotados al owner/siblings que Recon identificó — no antes, por deducción propia.

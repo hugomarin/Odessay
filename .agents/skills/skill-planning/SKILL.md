@@ -1,11 +1,13 @@
 ---
-name: skill-product-manager
-description: "Workflow de Product Manager para Odessay en Linear: definición de issues ejecutables, dependencias, prioridades, validaciones y criterios de done. Usar cuando crees, priorices, refinés o ejecutes tickets y milestones del roadmap."
+name: skill-planning
+description: "Método de Planning para Odessay: cómo convertir cada unidad de trabajo del roadmap en un Issue Brief ejecutable y bien definido — schema, verificación de definición, contratos, revisión por domain skills. Usar cuando definas, endurezcas o ejecutes un issue del roadmap."
 ---
 
-# Skill: Product Manager (Linear)
+# Skill: Planning
 
-Este skill tiene tres funciones. Primera, definir cómo se escribe y ejecuta cada issue para que sea completamente ejecutable por un agente de código o legible por un humano sin ambigüedad. Segunda, establecer el proceso de orquestación: cómo se secuencian los issues, cómo se hace seguimiento, y cómo se valida la entrega. Tercera —y la que falla cuando un trabajo se ejecuta impecablemente y aun así sale mal— **garantizar que la definición sobre la que se construye el brief es verdadera** (reconciliada con el código, no solo internamente consistente) **y que el resultado entregado fue aceptado por el dueño** contra su intención. Sin la tercera función, las dos primeras producen ejecución perfecta de la cosa equivocada.
+Este skill tiene tres funciones. Primera, definir cómo se escribe y ejecuta cada issue para que sea completamente ejecutable por un agente de código o legible por un humano sin ambigüedad. Segunda, establecer qué debe contener cada tipo de contrato (`Architecture`, `Performance`, `Visual/UX`) y cuándo es obligatorio. Tercera —y la que falla cuando un trabajo se ejecuta impecablemente y aun así sale mal— **garantizar que la definición sobre la que se construye el brief es verdadera** (reconciliada con el código, no solo internamente consistente) **y que el resultado entregado fue aceptado por el dueño** contra su intención. Sin la tercera función, las dos primeras producen ejecución perfecta de la cosa equivocada.
+
+La orquestación de la fase — topología, secuenciación, critical path, síntesis — vive en `.agents/agents/planning-agent.md`. Este skill no la repite: endurece cada nodo de esa topología en un Issue Brief ejecutable.
 
 El alcance específico del proyecto — fases e issues macro — vive en `workflow/define/roadmap.md`. Lee ese documento antes de crear issues.
 
@@ -13,57 +15,26 @@ Usa Linear MCP para crear y gestionar todo directamente.
 
 Si la fase ya tiene roadmap y DoD, este skill se usa para convertir esa definición en planeación táctica de issues. No debe reabrir la estrategia de fase salvo que detecte una asimetría real entre roadmap y DoD.
 
-Toda salida cerrada de `wf-define` debe incluir una `Execution Trace` explícita. No basta con asumir que el rol o los skills “quedaron implícitos”.
-
 Cuando el issue deje de ser solo producto/scope y pase a involucrar runtime boundaries, shared core, save path, sync, parser/serializer o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md`.
 
 Cuando el issue introduzca datos, fetches, hydration, listeners, componentes en caminos críticos, procesos bulk, trabajo background o una capability de runtime, cargar también `.agents/skills/skill-performance/SKILL.md` antes de cerrar el brief.
 
 ---
 
-## Modo de orquestación
+## Execution Trace — schema
 
-Este skill no sustituye al agente principal; lo guía.
-El rol de orquestación para `/wf-define` vive en `.agents/agents/product-manager.md`.
+Toda salida cerrada de `wf-define` debe incluir esta `Execution Trace`. Un solo canonical owner del schema: este skill lo define porque forma parte de la calidad de la definición. El `Planning Agent` la produce; `wf-define` solo verifica que exista antes de cerrar — ninguno de los dos repite el schema completo.
 
-Para `/wf-define`, el patrón correcto es:
-
-- un **agente de planeación** conduce la definición de fase
-- este skill provee el marco principal de planning, secuenciación y calidad de briefs
-- `skill-audit-planning` está disponible para revisar la calidad del plan antes de cerrarlo o al preparar `wf-audit`
-- `skill-architecture` entra como segunda capa obligatoria cuando el problema toca desktop, multi-runtime o boundaries del sistema
-- `skill-performance` entra cuando el cambio puede alterar la forma de carga, el costo de crecimiento o la carga global del sistema
-- los skills técnicos del scope (`skill-frontend`, `skill-backend`, `skill-database`, `skill-corrections`, etc.) **no son consultivos opcionales**: todo brief pasa por la revisión de los skills de su scope antes de crear el issue (ver §Revisión por skills de dominio)
-
-Reglas:
-
-- el roadmap no se construye como suma de workstreams aislados por disciplina
-- el agente principal debe sintetizar una sola propuesta coherente de hitos, dependencias, ownership y criterios de salida
-- si el entorno soporta subagentes, pueden usarse para consultas acotadas; si no, el mismo agente debe cargar los skills relevantes y producir la síntesis igualmente
-
-Señal de mala orquestación:
-
-- frontend propone una secuencia
-- backend propone otra
-- arquitectura propone una tercera
-- y el PM solo las concatena sin resolver contradicciones
-
-Eso produce planificación inflada y sin verdadero critical path. El agente de planeación debe cerrar esas tensiones antes de crear briefs o issues.
-
-Cuando existan dudas sobre cobertura del DoD, overlaps, huecos o secuencia entre issues, cargar además `.agents/skills/skill-audit-planning/SKILL.md`.
-
-Cuando existan dudas sobre acumulación de carga, duplicación de operaciones, escalabilidad o integración global, cargar además `.agents/skills/skill-performance/SKILL.md`.
-
-La `Execution Trace` mínima debe declarar:
-
-- `Planning role`
-- `Skills loaded`
-- `Specialist consults`
+- `Planning role`: rol efectivamente usado
+- `Skills loaded`: skills realmente cargados, no skills meramente disponibles
+- `Specialist consults`: consultas explícitas a frontend/backend/database/ux u otros
 - `Skill reviews` — veredicto por cada skill de dominio del scope: `sin objeciones` u `objeciones resueltas: <lista>` (ver §Revisión por skills de dominio). No se puede cerrar una definición con este campo vacío si el scope activó al menos un skill.
-- `Audit run`
+- `Audit run` — si se ejecutó `skill-audit-planning`, y sobre qué artefactos.
 - `Definition check` — resultado de la verificación de definición (ver §Verificación de definición): `docs↔code↔linear = consistente` o `contradicción detectada (bloquea)`. No se puede cerrar una definición con este campo vacío.
-- `Artifacts created`
-- `Why`
+- `Artifacts created`: proyecto/issues/comentarios/documentos persistidos
+- `Why`: justificación corta de por qué esos skills/consultas fueron suficientes
+
+El objetivo no es verbosear el razonamiento interno, sino dejar trazabilidad operativa verificable.
 
 ---
 
@@ -83,7 +54,7 @@ Cuando el prompt, roadmap o conversación mencionen cualquiera de estas señales
 - separación frontend/backend para portabilidad
 - extracción de servicios (`DocumentService`, `SyncService`, etc.)
 
-el agente de PM debe asumir que el issue toca la estrategia arquitectónica del producto y cargar esta secuencia, en este orden:
+el Planning Agent debe asumir que el issue toca la estrategia arquitectónica del producto y cargar esta secuencia, en este orden:
 
 1. `workflow/context/features/odessay-desktop-app.md`
 2. `workflow/context/features/odessay-desktop-migration-diagnostic.md`
@@ -98,8 +69,8 @@ Cómo llegar ahí:
 Regla:
 
 - si un issue cambia arquitectura, contratos, runtime boundaries, documento canónico o secuencia de migración, el brief no puede quedarse solo con docs técnicos locales del feature; debe incluir el doc desktop correspondiente
-- si el prompt menciona desktop de forma estratégica y el PM no cita ninguno de estos docs, el brief está incompleto
-- si además el issue cruza frontend/backend/database, el PM debe usar `skill-architecture` para clasificar ownership y boundaries antes de cerrar el brief
+- si el prompt menciona desktop de forma estratégica y el Planning Agent no cita ninguno de estos docs, el brief está incompleto
+- si además el issue cruza frontend/backend/database, el Planning Agent debe usar `skill-architecture` para clasificar ownership y boundaries antes de cerrar el brief
 
 ---
 
@@ -377,7 +348,7 @@ Cuando aplica, el brief debe incluir el `Performance Architecture Contract` del 
 - evidencia proporcional;
 - enfoque descartado y por qué.
 
-El PM no debe crear un issue que resuelva una necesidad local mientras agrega carga global no explicada. Si no se puede determinar la forma de carga o los consumidores existentes, el issue queda `needs-clarification` o `blocked` antes de BUILD.
+El Planning Agent no debe crear un issue que resuelva una necesidad local mientras agrega carga global no explicada. Si no se puede determinar la forma de carga o los consumidores existentes, el issue queda `needs-clarification` o `blocked` antes de BUILD.
 
 ## Visual / UX Contract
 
@@ -437,10 +408,10 @@ Regla:
 
 **Regla de conexión de documentos (obligatoria):**
 - Si el issue cambia comportamiento de una feature documentada, el brief debe citar explícitamente ese documento en `Reference docs`.
-- Si no existe documento de feature para el cambio, el PM debe crear un sub-issue de documentación o ampliar el issue para incluir la actualización del documento y `workflow/docs.json`.
+- Si no existe documento de feature para el cambio, el Planning Agent debe crear un sub-issue de documentación o ampliar el issue para incluir la actualización del documento y `workflow/docs.json`.
 - No dejar documentos “huérfanos”: todo documento de `workflow/context/features/` debe tener al menos un tipo de issue que lo cite de forma explícita.
-- En temas de desktop/arquitectura, el PM debe poder explicar la ruta de descubrimiento del documento: `prompt/roadmap -> workflow/docs.json -> doc de dirección -> diagnóstico -> target architecture -> migration plan`. Si no puede reconstruir esa ruta, hay riesgo de documento desconectado.
-- En temas de arquitectura, el PM debe poder responder además: `qué capa es`, `qué runtime toca`, `qué contract toca` y `quién es owner`. Si no puede responder eso, el brief todavía no está listo para BUILD.
+- En temas de desktop/arquitectura, el Planning Agent debe poder explicar la ruta de descubrimiento del documento: `prompt/roadmap -> workflow/docs.json -> doc de dirección -> diagnóstico -> target architecture -> migration plan`. Si no puede reconstruir esa ruta, hay riesgo de documento desconectado.
+- En temas de arquitectura, el Planning Agent debe poder responder además: `qué capa es`, `qué runtime toca`, `qué contract toca` y `quién es owner`. Si no puede responder eso, el brief todavía no está listo para BUILD.
 - Si el issue usa solo una parte de la familia desktop, el brief debe justificarlo implícitamente en su `Architecture Contract`: `Required docs` debe nombrar los docs concretos de los que depende el trabajo. Si el trabajo depende del estado actual del runtime o del save path real, omitir `odessay-desktop-migration-diagnostic.md` es un gap bloqueante.
 - Si el issue toca desktop/shared core/runtime boundaries/save/sync/parser/servicios, el brief debe incluir además un bloque explícito `Architecture Contract` con:
   - `Layer`
@@ -698,6 +669,6 @@ Un issue de UI sin `Visual / UX Contract` está incompleto. "Se ve como Desk" no
 
 Un issue visible cerrado solo con proof of work de código no está aceptado. Typecheck/lint/tests verdes prueban que el código corre, no que el resultado es el correcto. Si el dueño no aceptó el demo de outcome, el issue no está Done aunque el PR esté mergeado. Ver §Aceptación de resultado del dueño.
 
-Un brief que no pasó por los skills de su scope es un brief sin revisar. Que el PM conozca las reglas de frontend no sustituye cargar `skill-frontend` y confrontar el brief contra sus invariantes — el precedente ODE-338 demuestra que las reglas escritas no protegen si nadie las invoca. Ver §Revisión por skills de dominio.
+Un brief que no pasó por los skills de su scope es un brief sin revisar. Que el Planning Agent conozca las reglas de frontend no sustituye cargar `skill-frontend` y confrontar el brief contra sus invariantes — el precedente ODE-338 demuestra que las reglas escritas no protegen si nadie las invoca. Ver §Revisión por skills de dominio.
 
 Un issue con operaciones async sin sección Failure modes shippea el happy path. Los bugs de carrera, estados colgados y optimistic updates sin rollback no los atrapa ningún checklist de código — solo se previenen si el brief los definió. Ver §Failure modes.

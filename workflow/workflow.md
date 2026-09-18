@@ -34,9 +34,9 @@ Si el roadmap de la fase y su DoD ya existen y están alineados, `wf-define` no 
 
 PLAN no parte de issues existentes — parte de una fase definida en el roadmap. El output es el conjunto de issues que el agente de BUILD va a ejecutar.
 
-**Agente responsable:** `/wf-define` lo conduce el rol definido en `.agents/agents/product-manager.md`.
+**Agente responsable:** `/wf-define` lo conduce el rol definido en `.agents/agents/planning-agent.md`.
 
-Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal y activa skills especializados según el contexto de la fase. `workflow.md` define el protocolo; el documento del agente define la estrategia de orquestación.
+Ese rol resuelve la topología de ejecución (capabilities, dependencias, critical path, smallest coherent stages) antes de escribir ningún brief, y usa `.agents/skills/skill-planning/SKILL.md` para endurecer cada issue de esa topología. `workflow.md` define el protocolo — qué contexto cargar, qué pasos ejecutar, qué gate cierra PLAN; no define cómo pensar la topología ni el schema del Issue Brief.
 
 **Resolución de fase:**
 - Con argumento (`/wf-define fase-2`): usar la fase indicada.
@@ -46,7 +46,7 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 1. `workflow/status.json` — fase activa y plan de fases. Para saber qué está construido, consultar el ledger: `npm run ops:ledger -- built --phase "Fase N" --brief` (no leer `workflow/built.jsonl` entero).
 2. `workflow/define/roadmap.md` — alcance y dependencias de la fase.
 3. El subconjunto estricto de documentos de `workflow/context/` citados en la línea `Referencia` de cada issue del roadmap.
-4. `.agents/skills/skill-product-manager/SKILL.md` — cómo estructurar issues ejecutables, jerarquía en Linear y template de Issue Brief.
+4. `.agents/skills/skill-planning/SKILL.md` — cómo estructurar issues ejecutables, jerarquía en Linear y template de Issue Brief.
 
 **No cargar por defecto:** skills técnicos (frontend, backend, database), testing. Solo si un issue de la fase los requiere explícitamente.
 
@@ -66,25 +66,19 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 3. Actualizar `workflow/status.json` definiendo explícitamente la `active_phase` actual.
 4. Buscar si existe un documento `workflow/define/dod-[fase].md` (ej. `dod-fase-1.md`) para la fase actual.
 5. **Si no existe el DoD:** Pausar y co-crear el DoD iterando con el humano, basándose en el roadmap y los objetivos de experiencia.
-6. **Si existe el DoD:** El agente cruza el Roadmap contra el DoD. Si hay asimetrías de alcance, el agente dialoga con el humano para **complementar** el Roadmap y/o el DoD. Nada se borra, se enriquece el contrato.
-7. Una vez que ambos documentos están alineados y el humano da luz verde, proceder. Si la fase ya estaba estratégicamente definida, este paso marca el cambio explícito a planeación táctica de issues.
-8. Leer `.agents/skills/skill-product-manager/SKILL.md`.
+6. **Si existe el DoD:** el Planning Agent cruza el Roadmap contra el DoD. Si hay asimetrías de alcance, dialoga con el humano para **complementar** el Roadmap y/o el DoD. Nada se borra, se enriquece el contrato.
+7. Una vez que ambos documentos están alineados y el humano da luz verde, ejecutar el Planning Agent: resuelve la topología de la fase (capabilities, dependencias, critical path, smallest coherent stages — ver `.agents/agents/planning-agent.md`) antes de escribir ningún brief. Si la fase ya estaba estratégicamente definida, este paso marca el cambio explícito a planeación táctica de issues.
+8. Para cada nodo de la topología, el Planning Agent usa `.agents/skills/skill-planning/SKILL.md` para endurecerlo en un Issue Brief — incluida la revisión por los domain skills que ese brief active.
 9. Si algún issue de la fase toca arquitectura o runtime boundaries, leer `.agents/skills/skill-architecture/SKILL.md` antes de fijar ownership y `Reference docs`.
-10. Descomponer la fase en issues atómicos. **Para cada issue, leer ÚNICAMENTE los documentos de contexto listados en su línea `Referencia:`**.
-11. Redactar el Issue Brief estructurándolo según las guías de `.agents/skills/skill-product-manager/SKILL.md`. El agente DEBE inyectar como *Proof of Work/Acceptance Criteria* las pruebas rigurosas exigidas por el DoD para ese alcance.
+10. **Para cada issue, leer ÚNICAMENTE los documentos de contexto listados en su línea `Referencia:`**. El agente DEBE inyectar como *Proof of Work/Acceptance Criteria* las pruebas rigurosas exigidas por el DoD para ese alcance.
     - Si el issue toca presentación de texto, incluir explícitamente `Presentation Contract` cross-mode (`/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}`) con criterios verificables.
     - Si el issue toca arquitectura, runtime boundaries, desktop/shared-core, save path, sync/hydration, parser/serializer o extracción de servicios, agregar en el brief un `Architecture Contract` obligatorio con: `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants`, `Required docs`.
-12. Crear los issues en Linear con su brief incluido.
+11. Crear o actualizar el proyecto de la fase y los issues en Linear con su brief incluido.
+12. Verificar que cada brief creado está completo antes de cerrar: `Definition check` sin contradicción abierta y `Skill reviews` sin objeciones pendientes (ver `skill-planning`).
 13. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
-14. Entregar una `Execution Trace` explícita del proceso con:
-    - `Planning role`
-    - `Skills loaded`
-    - `Specialist consults`
-    - `Audit run`
-    - `Artifacts created`
-    - `Why`
+14. Entregar la `Execution Trace` — el schema de campos lo define `.agents/skills/skill-planning/SKILL.md`; este paso solo exige que exista y esté completa, no repite el schema aquí.
 
-**Gate de salida:** los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo. Sin brief por issue no hay BUILD. Si un issue es arquitectónico y no incluye `Architecture Contract`, DEFINE no está completo.
+**Gate de salida:** los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo y su `Execution Trace` presente. Sin brief por issue no hay BUILD. Si un issue es arquitectónico y no incluye `Architecture Contract`, DEFINE no está completo.
 
 **No es un output válido de DEFINE:** dejar un breakdown táctico solo en markdown dentro del repo sin persistirlo en Linear.
 **No es un output trazable suficiente de DEFINE:** decir que “se usó” un rol o skill sin declararlo en la `Execution Trace`.
@@ -116,7 +110,7 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
 **Excepción obligatoria por gap de contexto arquitectónico:**
 - Si el brief toca desktop, shared core, runtime boundaries, filesystem local, `.md` como contrato documental, extracción de servicios (`DocumentService`, `SyncService`, etc.) o migración web → desktop, el agente debe validar el brief contra su `Architecture Contract`.
 - Si falta `Architecture Contract`, o le falta cualquiera de estos campos: `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants`, `Required docs`, BUILD debe detenerse con `Context Gap` bloqueante. No inferir ese contrato desde el diff ni desde el código existente.
-- Si `Required docs` o `Reference docs` no son suficientes para ejecutar sin inferir arquitectura desde el código, BUILD debe detenerse con `Context Gap` bloqueante y pedir corrección del brief según el criterio de `skill-product-manager` + `skill-architecture`.
+- Si `Required docs` o `Reference docs` no son suficientes para ejecutar sin inferir arquitectura desde el código, BUILD debe detenerse con `Context Gap` bloqueante y pedir corrección del brief según el criterio de `skill-planning` + `skill-architecture`.
 - Regla específica: si el trabajo depende del estado actual del codebase, del save path real, de restricciones del runtime desktop vigente o de gaps de migración ya diagnosticados, entonces `workflow/context/features/odessay-desktop-migration-diagnostic.md` debe aparecer explícitamente en `Required docs`/`Reference docs`. Si no aparece, el brief está incompleto.
 
 **Secuencia:**

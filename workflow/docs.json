@@ -433,9 +433,9 @@
       "description": "Convención mínima para roles de agente en Odessay: ubicación, frontmatter requerido, naming, responsabilidades y relación entre workflow, agent roles y skills."
     },
     {
-      "path": ".agents/agents/product-manager.md",
+      "path": ".agents/agents/planning-agent.md",
       "type": "agent",
-      "description": "Rol de agente para `/wf-define`: orquesta la planeación de fases, usa skill-product-manager como marco principal, convoca especialistas cuando hace falta y consolida roadmap, DoD y briefs en una sola voz."
+      "description": "Rol de agente para `/wf-define`: resuelve la topología de ejecución (capabilities, dependencias, critical path, smallest coherent stages) antes de escribir briefs, usa skill-planning como marco principal para endurecer cada issue, convoca especialistas cuando hace falta y consolida roadmap, DoD y briefs en una sola voz. Simétrico a build-agent.md/review-agent.md."
     },
     {
       "path": ".agents/agents/build-agent.md",
@@ -493,9 +493,9 @@
       "description": "Guía de base de datos: convenciones de migración SQL, RLS policies, triggers, índices, naming de tablas y cómo actualizar odessay-modelo-datos.md después de un cambio de schema."
     },
     {
-      "path": ".agents/skills/skill-product-manager/SKILL.md",
+      "path": ".agents/skills/skill-planning/SKILL.md",
       "type": "skill",
-      "description": "Workflow de PM en Linear: cómo escribir issues ejecutables, jerarquía de proyectos/milestones, template con areas_affected y proof of work requerido. Incluye §Verificación de definición (reconciliar el spec citado contra el código antes del brief; contradicción = bloqueante, consistencia ≠ corrección), §Visual / UX Contract (paridad visual verificable para UI) y aceptación de resultado del dueño (demo de outcome además del proof of work de código). Leer antes de crear o modificar issues."
+      "description": "Método para endurecer cada issue en un Issue Brief ejecutable: schema, jerarquía de proyectos/milestones, template con areas_affected y proof of work requerido. Incluye §Verificación de definición (reconciliar el spec citado contra el código antes del brief; contradicción = bloqueante, consistencia ≠ corrección), §Visual / UX Contract, contratos de Architecture/Performance, revisión por domain skills, y el schema canónico de Execution Trace. La orquestación de la fase (topología, síntesis) vive en planning-agent.md, no aquí."
     },
     {
       "path": ".agents/skills/skill-performance/SKILL.md",

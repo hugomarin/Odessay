@@ -18,7 +18,7 @@ Cuando recibas un comando `/wf-*`, lee `workflow/workflow.md` y sigue la secuenc
 
 Los **roles de agente** viven en `.agents/agents/`.
 
-- Para `/wf-define`, usar `.agents/agents/product-manager.md` como rol de orquestación.
+- Para `/wf-define`, usar `.agents/agents/planning-agent.md` como rol de orquestación. Resuelve la topología de ejecución (capabilities, dependencias, critical path) antes de escribir briefs, y usa `.agents/skills/skill-planning/SKILL.md` para endurecer cada issue de esa topología.
 - Para `/wf-build`, usar `.agents/agents/build-agent.md` como rol de orquestación. Ejecuta `.agents/skills/architecture-recon/SKILL.md` antes de implementar cualquier cambio no trivial, para localizar owner/siblings/consumers/tests reales antes de escribir código.
 - Para `/wf-review`, usar `.agents/agents/review-agent.md` como rol de orquestación. Usa `.agents/skills/skill-code-review/SKILL.md` para decidir qué lentes activar (`review-correctness`, `review-architecture`, `review-testing`, `review-change-size`) según el scope real del diff — no todas por defecto.
 - La convención de formato para roles vive en `.agents/agents/README.md`.
