@@ -251,12 +251,18 @@ const renderBlock = (
           {renderInlineRuns(item, `ordered-${index}-${itemIndex}`, currentStyles)}
         </Text>
       ))
-    case "codeBlock":
+    case "codeBlock": {
+      // ODE-533: content-preserving Mermaid fallback for export. The renderer
+      // is unavailable in PDF, so the diagram source is always included with
+      // a caption — content is never omitted.
+      const isMermaid = (block.language ?? "").trim().toLowerCase() === "mermaid"
       return (
-        <Text key={`code-${index}`} style={currentStyles.codeBlock}>
-          {block.code.trimEnd()}
-        </Text>
+        <View key={`code-${index}`}>
+          {isMermaid ? <Text style={currentStyles.paragraph}>Diagram source (mermaid):</Text> : null}
+          <Text style={currentStyles.codeBlock}>{block.code.trimEnd()}</Text>
+        </View>
       )
+    }
     case "separator":
       return <View key={`separator-${index}`} style={currentStyles.separator} />
     case "table": {

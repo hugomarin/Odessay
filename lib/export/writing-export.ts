@@ -421,8 +421,13 @@ const renderBlockToMarkdown = (block: WritingExportBlock) => {
       return block.items
         .map((item, index) => `${index + 1}. ${indentMarkdown(renderInlineRunsToMarkdown(item))}`.trimEnd())
         .join("\n")
-    case "codeBlock":
-      return ["```", block.code.trimEnd(), "```"].join("\n")
+    case "codeBlock": {
+      // ODE-533: preserve the fence language so ```mermaid round-trips as
+      // ordinary fenced Markdown through export. Language comes from the
+      // codeBlock attrs; an empty language keeps the bare fence.
+      const language = (block.language ?? "").trim().split(/\s+/)[0] ?? ""
+      return [`\`\`\`${language}`, block.code.trimEnd(), "```"].join("\n")
+    }
     case "separator":
       return "---"
     case "table": {

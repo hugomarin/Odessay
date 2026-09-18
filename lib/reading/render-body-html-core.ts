@@ -144,6 +144,8 @@ const splitIntoBlocks = (text: string): string[] => {
  * commonly puts body text on the very next line without a blank line in
  * between; the rest of the block still gets the same treatment recursively.
  */
+const FENCE_LANGUAGE = /^```\s*([^\s`]*)/
+
 const renderBlockHtml = (block: string): string => {
   const lines = block.split("\n")
   const trimmedLines = lines.map((line) => line.trim())
@@ -151,7 +153,21 @@ const renderBlockHtml = (block: string): string => {
   if (FENCE_LINE.test(trimmedLines[0])) {
     const closingIndex = lines.findIndex((line, index) => index > 0 && FENCE_LINE.test(line.trim()))
     const codeLines = closingIndex === -1 ? lines.slice(1) : lines.slice(1, closingIndex)
-    return `<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`
+    const language = (trimmedLines[0].match(FENCE_LANGUAGE)?.[1] ?? "").trim().toLowerCase()
+    const source = codeLines.join("\n")
+    // ODE-533: content-preserving Mermaid fallback for reading surfaces.
+    // Readers (including mobile without interactive preview) always receive
+    // the legible source; an interactive preview may enhance this figure
+    // client-side but never replaces the fence content.
+    if (language === "mermaid") {
+      return (
+        `<figure class="odessay-mermaid-fallback" data-language="mermaid">` +
+        `<pre><code data-language="mermaid">${escapeHtml(source)}</code></pre>` +
+        `<figcaption>Diagram source (mermaid)</figcaption>` +
+        `</figure>`
+      )
+    }
+    return `<pre><code>${escapeHtml(source)}</code></pre>`
   }
 
   if (lines.length >= 2 && TABLE_ROW.test(trimmedLines[0]) && TABLE_SEPARATOR_ROW.test(trimmedLines[1])) {
