@@ -1,0 +1,45 @@
+name: blocking-ci
+
+# Único entrypoint de merge. La composición interna (quality/process-checks/
+# scoped-ci/repo-checks cuando exista) puede cambiar sin tener que
+# reconfigurar branch protection cada vez — el único check que se marca
+# como required en GitHub Settings es "CI required".
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+    secrets: inherit
+
+  process-checks:
+    uses: ./.github/workflows/process-checks.yml
+    secrets: inherit
+
+  scoped-ci:
+    uses: ./.github/workflows/scoped-ci.yml
+    secrets: inherit
+
+  required:
+    name: CI required
+    if: always()
+    needs: [quality, process-checks, scoped-ci]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all required jobs passed
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "One or more required jobs failed."
+            exit 1
+          fi
+          if [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more required jobs were cancelled."
+            exit 1
+          fi
+          echo "All required jobs passed."
