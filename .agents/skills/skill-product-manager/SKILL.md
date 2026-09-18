@@ -285,6 +285,8 @@ Tipos de contrato cuya modificación obliga a hacer este análisis:
 
 Un brief que cambia un contrato sin listar consumidores produce regresiones latentes: el feature consumidor sigue funcionando localmente con su asunción vieja hasta que un caso edge lo expone, típicamente lejos del autor del cambio. Cuando dudes si algo es "un contrato", asume que sí lo es y enumera consumidores.
 
+Esta lista no termina en el brief: `.agents/skills/architecture-recon/SKILL.md` la confirma contra el código real antes de implementar (BUILD), y `.agents/skills/review-architecture/SKILL.md` verifica que los consumers efectivamente dependen del owner declarado, no de una copia paralela (REVIEW). Un consumer que el brief omitió es la causa más común de un finding `[P0]`/`[P1]` de arquitectura.
+
 ## Files affected
 Archivos que este issue va a crear o modificar. El agente verifica antes de empezar
 que ningún PR abierto toca los mismos archivos — si hay solapamiento, espera.
@@ -356,6 +358,8 @@ Por cada operación async que el issue introduce o modifica, responder cuatro pr
 4. **Estado intermedio:** si la operación introduce un estado transitorio visible (loading, stale, recalculando), ¿cuál es su transición de salida garantizada y su timeout? Un estado sin salida es un bug de diseño, no un edge case.
 
 Formato: prosa corta por operación. `not required` exige justificación ("el issue no toca operaciones async porque...") — la omisión silenciosa es lo que este campo existe para evitar.
+
+Este campo no es solo autochequeo: es el contrato que `.agents/skills/review-correctness/SKILL.md` verifica en `/wf-review` (transición co-owned, estado intermedio no modelado, identidad creada en hot path, update optimista sin rollback, colapso de colección sobre output de LLM). Un brief que responde bien estas cuatro preguntas reduce directamente los findings de esa lente.
 
 ## Performance Architecture Review
 

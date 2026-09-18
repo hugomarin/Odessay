@@ -207,6 +207,10 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
 
 **Estado Linear:** `In Review` → `Done` (si aprobado, el agente hace merge y cierra) o `In Progress` (si rechazado).
 
+**Agente responsable:** `/wf-review` lo conduce el rol definido en `.agents/agents/review-agent.md`.
+
+Ese rol usa `.agents/skills/skill-code-review/SKILL.md` para orquestar la investigación técnica y activa las lentes `review-correctness`, `review-architecture`, `review-testing`, `review-change-size` según el scope real del diff. `workflow.md` define el protocolo (gates, merge, ledgers, Linear); el documento del agente y sus skills definen cómo se investiga el diff.
+
 **Resolución de issue:**
 - Con argumento (`/wf-review ODE-22`): usar el issue indicado.
 - Sin argumento (`/wf-review`): consultar Linear → buscar issues en estado `In Review` de la fase activa → si hay uno, tomarlo directamente. Si hay más de uno, listarlos y pedir al humano que confirme cuál revisar.
@@ -214,10 +218,10 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
 **Contexto a cargar:**
 1. El Issue Brief desde Linear.
 2. El diff del PR.
-3. `.agents/skills/skill-code-review/SKILL.md`.
+3. `.agents/skills/skill-code-review/SKILL.md` — orquesta cuáles de `review-correctness`, `review-architecture`, `review-testing`, `review-change-size` activar según el diff.
 4. Si el brief tiene `Performance Architecture Contract` activo: solo los artefactos que ese contrato seleccionó (trace, report o output de gate).
 5. Si el brief tiene `Presentation Contract` requerido: evidencia cross-mode (`write`, `preview`, `shared`, `public`) con foco en tablas, `pre/code`, URLs largas y overflow.
-6. Si el brief toca desktop/shared core/runtime boundaries/save path/sync/parser/serializer/servicios: `.agents/skills/skill-architecture/SKILL.md` + el `Architecture Contract` del brief.
+6. Si el brief toca desktop/shared core/runtime boundaries/save path/sync/parser/serializer/servicios: `.agents/skills/skill-architecture/SKILL.md` + el `Architecture Contract` del brief (la lente `review-architecture` aplica este checklist, incluido el bloque de bundle desktop/Tauri).
 
 **No cargar por defecto:** documentos core, features, roadmap.
 

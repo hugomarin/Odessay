@@ -438,6 +438,11 @@
       "description": "Rol de agente para `/wf-build`: ejecuta Architecture Recon antes de implementar, decide entre extender owner existente, reutilizar abstracción, extraer de hotspot o crear nuevo, y protege hotspots de orquestación de ownership nuevo."
     },
     {
+      "path": ".agents/agents/review-agent.md",
+      "type": "agent",
+      "description": "Rol de agente para `/wf-review`: reconstruye el comportamiento cambiado antes de buscar findings, activa solo las lentes review-* relevantes al scope del diff, consolida findings y produce el veredicto técnico (GateResult/QualityScore/ProcessInsights). No repite merge, ledgers ni Linear — eso es workflow.md."
+    },
+    {
       "path": ".agents/skills/architecture-recon/SKILL.md",
       "type": "skill",
       "description": "Localiza owner canónico, siblings, consumers, contratos y tests reales en el código antes de implementar. Complementa a skill-architecture (qué debería ser verdad) confrontándolo contra dónde vive hoy la responsabilidad. Excepción controlada a 'no cargar contexto adicional por deducción' en BUILD, acotada a reconnaissance de código."
@@ -514,7 +519,27 @@
     {
       "path": ".agents/skills/skill-code-review/SKILL.md",
       "type": "skill",
-      "description": "Checklist pre-PR: typecheck, lint, tests hermético, calidad de código, seguridad y performance. Define el estándar mínimo que debe cumplir cualquier entrega antes de abrir un PR."
+      "description": "Orquestación técnica del review: qué evidencia leer, tabla de dispatch de las lentes review-*, formato de finding válido, prioridad de búsqueda (defectos sistémicos primero) y mapa de qué vive en cada otra capa. No repite protocolo de Linear/merge/ledgers (workflow.md) ni la fórmula de score (scoring.md)."
+    },
+    {
+      "path": ".agents/skills/review-correctness/SKILL.md",
+      "type": "skill",
+      "description": "Lente de review para regresiones lógicas y failure modes: transición co-owned, estado intermedio no modelado, identidad creada en hot path, update optimista sin rollback, colapso de colección sobre output de LLM, contrato AI violado por scope, velocidad percibida como invariante de producto."
+    },
+    {
+      "path": ".agents/skills/review-architecture/SKILL.md",
+      "type": "skill",
+      "description": "Lente de review para ownership/boundaries y validación de Architecture Contract, incluido el checklist de bundle desktop/Tauri (CSP ipc, keyring backend, supabase-js vs ssr, DevTools, isTauriBuild) y coherencia de documentación por scope."
+    },
+    {
+      "path": ".agents/skills/review-testing/SKILL.md",
+      "type": "skill",
+      "description": "Lente de review para cobertura de testing: happy path, error paths, edge cases, calidad de tests y anti-patterns. Contraparte cognitiva de specialists/testing.md (que es la variante JSON para dispatch a subagente)."
+    },
+    {
+      "path": ".agents/skills/review-change-size/SKILL.md",
+      "type": "skill",
+      "description": "Lente de review para si el diff sigue siendo una unidad coherente y revisable o debió dividirse en stages más pequeños. Distinto de los umbrales de dispatch de claude-enhancements.md (costo de despachar especialistas, no revisabilidad)."
     },
     {
       "path": ".agents/skills/skill-code-review/claude-enhancements.md",
