@@ -99,13 +99,18 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 
 **Estado Linear:** `Todo` o `Backlog` (con brief) → `In Progress` al iniciar → `In Review` al dejar PR listo.
 
+**Agente responsable:** `/wf-build` lo conduce el rol definido en `.agents/agents/build-agent.md`.
+
+Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/siblings/consumers/tests antes de implementar, y activa skills de dominio según lo que encuentre. `workflow.md` define el protocolo; el documento del agente define el orden de construcción.
+
 **Resolución de issue:**
 - Con argumento (`/wf-build ODE-22`): usar el issue indicado.
 - Sin argumento (`/wf-build`): consultar Linear → buscar issues en estado `Todo` o `Backlog` que tengan Issue Brief y pertenezcan a la fase activa en `status.json` → tomar el de mayor prioridad según orden del roadmap → confirmar al humano el issue seleccionado antes de iniciar.
 
 **Contexto a cargar:**
 1. El Issue Brief desde Linear.
-2. Los documentos listados en la sección `Reference docs` del brief — son los únicos que aplican. No cargar nada adicional por deducción propia.
+2. Los documentos listados en la sección `Reference docs` del brief — son los únicos que aplican. No cargar documentación adicional por intuición.
+3. Excepción controlada: sí está permitido hacer repository reconnaissance dirigido y acotado sobre código (no documentos) para resolver owner/siblings/consumers/tests, según `.agents/skills/architecture-recon/SKILL.md`. Esto no abre la puerta a leer documentación de producto, roadmap o features fuera de lo citado en el brief.
 
 **Excepción obligatoria por gap de contexto arquitectónico:**
 - Si el brief toca desktop, shared core, runtime boundaries, filesystem local, `.md` como contrato documental, extracción de servicios (`DocumentService`, `SyncService`, etc.) o migración web → desktop, el agente debe validar el brief contra su `Architecture Contract`.
@@ -124,25 +129,26 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
    - Si aparece un identificador histórico inválido o huérfano, registrarlo en `workflow/status.json.traceability_exceptions.ignored_issue_ids` con razón concreta. No volver a copiar ese falso positivo en notas de `status.json`, PRs o reviews posteriores.
 
 **Ejecución**
-4. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
+4. Architecture Recon: si el cambio no es trivial (ver criterios de activación en `.agents/skills/architecture-recon/SKILL.md`), ejecutar Recon antes de escribir código — owner canónico, siblings, consumers, contratos, hotspots y tests canónicos — y declarar el output completo. Si Recon revela ambigüedad material de ownership o contrato, detener BUILD con `Context Gap — Architecture Recon` en vez de resolverlo por inferencia. Declarar `Construction order` (extender owner → reutilizar abstracción → extraer de hotspot → crear nuevo) según `.agents/agents/build-agent.md`.
+5. Implementar según el brief y el Recon declarado. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`. Si el diff real se desvía materialmente del change surface declarado en Recon, o revela un owner distinto, detener la edición y repetir Recon antes de continuar.
 
 **Validación**
-5. `npm run typecheck` + `npm run lint` + `npm test`. Si el `Performance Architecture Contract` seleccionó evidencia ejecutable, generarla con el instrumento correspondiente. Guardar outputs — van en el body del PR.
-6. `npm run ops:delivery:gate` (con `OPS_PERF_TRACE_PATH=...` solo cuando el contrato seleccionó el gate del editor). Debe terminar en verde.
+6. `npm run typecheck` + `npm run lint` + `npm test`. Si el `Performance Architecture Contract` seleccionó evidencia ejecutable, generarla con el instrumento correspondiente. Guardar outputs — van en el body del PR.
+7. `npm run ops:delivery:gate` (con `OPS_PERF_TRACE_PATH=...` solo cuando el contrato seleccionó el gate del editor). Debe terminar en verde.
 
 **Entrega**
-7. `git push -u origin {rama}`. Abrir el PR con body completo (link al issue, qué se hizo, cómo testear, outputs del paso 5). Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`. Si falla, editar con `gh pr edit {n} --body "..."` antes de continuar.
-8. Confirmar PR en OPEN: `gh pr view {número} --json state`. Mover issue a `In Review` en Linear. Dejar comentario con Context Report completo:
+8. `git push -u origin {rama}`. Abrir el PR con body completo (link al issue, qué se hizo, cómo testear, outputs del paso 6). Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`. Si falla, editar con `gh pr edit {n} --body "..."` antes de continuar.
+9. Confirmar PR en OPEN: `gh pr view {número} --json state`. Mover issue a `In Review` en Linear. Dejar comentario con Context Report completo:
    - `Context Gaps Detected = yes` si faltó o fue ambiguo al menos uno de: alcance, contrato de datos, evidencia requerida, dependencias, referencias documentales.
    - `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
    - `Additional Instructions Requested`: listar las instrucciones extra pedidas al humano durante BUILD.
    - `Decisions Made During Build`: decisiones tomadas para destrabar ejecución.
    - `Recommended Context Fixes`: cambios concretos en issue brief/docs/skills para prevenir repetición.
-9. Emitir `BUILD completado` en la conversación. Si algún paso anterior falló y no se pudo resolver, emitir `HANDOFF REQUERIDO — [motivo exacto]`.
+10. Emitir `BUILD completado` en la conversación. Si algún paso anterior falló y no se pudo resolver, emitir `HANDOFF REQUERIDO — [motivo exacto]`.
 
 **Restricción de workflow en BUILD:** la rama de feature **no toca** `workflow/built.jsonl`, `workflow/review-history.jsonl` ni `workflow/status.json`. Se actualizan únicamente en `main` post-merge durante REVIEW. Esto elimina conflictos de merge cuando múltiples worktrees corren en paralelo.
 
-**Gate de salida:** pasos 5 y 6 en verde + PR abierto con body completo (paso 7) + issue en `In Review` (paso 8). Sin eso, el issue no puede estar en `In Review` ni emitirse `BUILD completado`.
+**Gate de salida:** pasos 6 y 7 en verde + PR abierto con body completo (paso 8) + issue en `In Review` (paso 9). Sin eso, el issue no puede estar en `In Review` ni emitirse `BUILD completado`.
 
 ---
 

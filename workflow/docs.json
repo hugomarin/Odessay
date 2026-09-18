@@ -433,6 +433,16 @@
       "description": "Rol de agente para `/wf-define`: orquesta la planeación de fases, usa skill-product-manager como marco principal, convoca especialistas cuando hace falta y consolida roadmap, DoD y briefs en una sola voz."
     },
     {
+      "path": ".agents/agents/build-agent.md",
+      "type": "agent",
+      "description": "Rol de agente para `/wf-build`: ejecuta Architecture Recon antes de implementar, decide entre extender owner existente, reutilizar abstracción, extraer de hotspot o crear nuevo, y protege hotspots de orquestación de ownership nuevo."
+    },
+    {
+      "path": ".agents/skills/architecture-recon/SKILL.md",
+      "type": "skill",
+      "description": "Localiza owner canónico, siblings, consumers, contratos y tests reales en el código antes de implementar. Complementa a skill-architecture (qué debería ser verdad) confrontándolo contra dónde vive hoy la responsabilidad. Excepción controlada a 'no cargar contexto adicional por deducción' en BUILD, acotada a reconnaissance de código."
+    },
+    {
       "path": ".agents/skills/skill-design/SKILL.md",
       "type": "skill",
       "description": "Sistema de diseño visual completo: paleta de colores (tokens ink/paper/accent), tipografía (Lora para contenido, Geist para UI), componentes ShadCN adaptados, iconos, transiciones y reglas visuales invariables."
