@@ -44,14 +44,14 @@ Su output no es solo código que pasa CI. Es código que vive en el lugar correc
 
 ## Output formal
 
-La salida formal de este rol para `wf-build` es:
+La salida formal de este rol es:
 
 - el `Architecture Recon` completo, declarado antes de implementar (ver `.agents/skills/architecture-recon/SKILL.md`)
 - el diff implementado, dentro del change surface declarado o con una nueva Recon si se desvió
-- los checks canónicos en verde (`typecheck`, `lint`, `test`, `ops:delivery:gate`)
-- el PR abierto con evidencia, según el gate de salida de `workflow/workflow.md`
 
-No es una salida válida de `wf-build`:
+Los checks canónicos, el PR y el gate de salida de `/wf-build` son responsabilidad de `workflow/workflow.md`, no de este rol — este documento no los repite.
+
+No es una salida válida de este rol:
 
 - implementar sin haber declarado Architecture Recon cuando el cambio lo requiere
 - crear una segunda implementación de una responsabilidad que ya tiene owner, sin declarar por qué
@@ -95,7 +95,8 @@ El patrón correcto para `/wf-build` es:
 4. Cargar solo los skills de dominio relevantes al owner identificado.
 5. Implementar dentro del change surface declarado.
 6. Si el diff real excede materialmente ese change surface, o revela un owner distinto al esperado, detener la edición y volver a Recon antes de continuar.
-7. Ejecutar los checks canónicos y abrir el PR según el gate de salida de `workflow/workflow.md`.
+
+A partir de aquí, `workflow/workflow.md` retoma el protocolo (validación, PR, Linear). Este rol termina su responsabilidad al cerrar la fase de Ejecución.
 
 Si el brief ya resolvió arquitectura con total claridad (owner obvio, sin siblings ni duplicados plausibles), Recon puede ser breve — pero debe quedar declarado, no omitido en silencio.
 
@@ -106,9 +107,9 @@ Si el brief ya resolvió arquitectura con total claridad (owner obvio, sin sibli
 Ante una responsabilidad nueva o modificada, preferir en este orden:
 
 1. **Extender el owner existente** — si Recon encontró un owner canónico claro.
-2. **Reutilizar una abstracción existente** — si existe un patrón análogo (otro service/store/adapter del mismo shape).
+2. **Reutilizar una abstracción existente** — si Recon encontró algo que ya hace esto (`Reusable API / abstraction` en el output de Recon), llamarlo directamente. Esto es reuso, no inspiración: no reimplementar lo que ya existe.
 3. **Extraer responsabilidad de un hotspot hacia un owner** — si la responsabilidad hoy vive mezclada en un archivo de composición/orquestación.
-4. **Crear una abstracción nueva** — solo cuando ninguna de las anteriores representa el concepto real. Debe poder justificarse con lo que Recon no encontró, no con preferencia estilística.
+4. **Crear algo nuevo** — solo cuando ninguna de las anteriores representa el concepto real. Si Recon señaló un `Canonical reference / sibling`, seguir su forma (cómo se estructura esa clase de pieza en este repo) sin copiar su lógica de dominio — es un patrón de referencia, no una abstracción para reusar. Debe poder justificarse con lo que Recon no encontró, no con preferencia estilística.
 
 ---
 
@@ -116,7 +117,11 @@ Ante una responsabilidad nueva o modificada, preferir en este orden:
 
 Los hotspots de orquestación (ej. `components/editor/editor-shell.tsx`, `src-tauri/src/commands/index.rs`, `lib/services/document-service-factory.ts`) pueden orquestar: montar subsistemas, cablear eventos, coordinar composición de UI.
 
-No deben adquirir ownership nuevo de dominio, persistencia o runtime. Si Recon detecta que el brief empuja al Build Agent a escribir persistencia, lógica de dominio o un adapter nuevo directamente dentro de un hotspot, eso es señal de `Architecture ambiguity: yes` — declararlo en el output de Recon en vez de implementarlo directamente ahí.
+No deben adquirir ownership nuevo de dominio, persistencia o runtime.
+
+Esto casi nunca es una ambigüedad arquitectónica — es una decisión de `Construction order` ya resuelta. Si Recon encontró un owner canónico claro para esa responsabilidad (ej. `lib/corrections/persistence.ts` para persistencia de corrections), la resolución es directa: extender ese owner y cablear la llamada desde el hotspot, no escribir la lógica dentro de él. No declarar `Architecture ambiguity: yes` por esto.
+
+`Architecture ambiguity: yes` se reserva para cuando Recon no puede determinar el owner en sí — por ejemplo, dos owners igualmente plausibles y el `Architecture Contract` no lo resuelve. Solo en ese caso se sigue el protocolo de `Context Gap — Architecture Recon` en vez de decidir por inferencia.
 
 ---
 
@@ -139,9 +144,9 @@ Este rol no puede declarar el paso de Ejecución de `wf-build` como completo si:
 
 - el cambio no trivial no tiene Architecture Recon declarado
 - el diff introduce una segunda implementación de una responsabilidad con owner conocido sin justificarlo explícitamente
-- un hotspot terminó absorbiendo ownership nuevo sin que Recon lo haya señalado como `Architecture ambiguity: yes`
+- un hotspot terminó absorbiendo ownership nuevo (persistencia, dominio, runtime) cuando Recon ya había identificado un owner canónico claro para esa responsabilidad — esto se corrige extendiendo el owner, no se reporta como ambigüedad
 
-Si Recon revela una ambigüedad real de ownership/contrato, el Build Agent no la resuelve por inferencia: emite `Context Gap — Architecture Recon` (ver `architecture-recon/SKILL.md`) y sigue el protocolo de `Context Gap` ya definido en `workflow/agents.md`.
+Si Recon revela una ambigüedad real de ownership/contrato (owner en sí indeterminable, no solo "dónde escribir el código"), el Build Agent no la resuelve por inferencia: emite `Context Gap — Architecture Recon` (ver `architecture-recon/SKILL.md`) y sigue el protocolo de `Context Gap` ya definido en `workflow/agents.md`.
 
 ---
 

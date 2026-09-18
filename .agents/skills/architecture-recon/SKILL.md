@@ -40,12 +40,13 @@ Para el change surface declarado en el brief, resolver en orden:
 
 1. **Owner canónico** — el archivo/módulo que hoy posee esta responsabilidad. Buscar por nombre de dominio, no solo por ruta obvia (`grep`/`Explore` sobre el concepto, no solo sobre el archivo más cercano).
 2. **Siblings relevantes** — implementaciones vecinas del mismo tipo de responsabilidad (otros services, otros stores, otros adapters del mismo runtime).
-3. **Abstracciones existentes** — si ya existe un patrón para "esta clase de cosa" (ej. otro `*Service` con el mismo shape), úsalo como plantilla antes de inventar uno nuevo.
-4. **Dependencias upstream** — de qué depende hoy el owner (contratos, tipos, otros services).
-5. **Consumers downstream** — quién llama/importa/renderiza lo que se va a modificar. Un consumer olvidado es la causa más común de regresión silenciosa.
-6. **Tests canónicos** — qué test(s) ya demuestran el comportamiento actual de esa pieza. Si no existen, es una señal, no un bloqueo.
-7. **Hotspots tocados** — si el change surface cae dentro de un archivo/módulo ya identificado como hotspot (ver `Construction order` en `.agents/agents/build-agent.md`), declararlo explícitamente.
-8. **AGENTS.md local aplicable** — hoy solo existe el `AGENTS.md` raíz; si en el futuro aparece un `AGENTS.md` en el subtree tocado, léelo y respétalo antes de implementar.
+3. **Reusable API / abstraction** — ¿ya existe algo que puedas llamar directamente para resolver esto? (ej. ya existe `DocumentService` con el método que necesitas → úsalo, no lo repliques). Esto es reuso: la responsabilidad ya vive en código, no hace falta escribir nada nuevo para ella.
+4. **Canonical reference / sibling** — solo si genuinamente necesitas crear algo nuevo (ningún owner ni abstracción resuelve el concepto): ¿hay un sibling análogo que sirva de ejemplo de **forma**, no de contenido? (ej. vas a crear un `SyncService` nuevo → mira cómo está estructurado `AuthService` para mantener consistencia de diseño, sin copiar su lógica de dominio). Un pattern de referencia no es una abstracción para reusar — es un ejemplo de cómo este repo construye esa clase de pieza.
+5. **Dependencias upstream** — de qué depende hoy el owner (contratos, tipos, otros services).
+6. **Consumers downstream** — quién llama/importa/renderiza lo que se va a modificar. Un consumer olvidado es la causa más común de regresión silenciosa.
+7. **Tests canónicos** — qué test(s) ya demuestran el comportamiento actual de esa pieza. Si no existen, es una señal que se registra en el output — probablemente el test se crea durante la implementación — y nunca por sí sola motivo para detener BUILD.
+8. **Hotspots tocados** — si el change surface cae dentro de un archivo/módulo ya identificado como hotspot (ver `Construction order` en `.agents/agents/build-agent.md`), declararlo explícitamente. Si el owner de la responsabilidad ya es claro, esto es una decisión de wiring, no una ambigüedad — ver `Hotspots` en `build-agent.md`.
+9. **AGENTS.md local aplicable** — hoy solo existe el `AGENTS.md` raíz; si en el futuro aparece un `AGENTS.md` en el subtree tocado, léelo y respétalo antes de implementar.
 
 ---
 
@@ -70,7 +71,8 @@ Architecture Recon
 - Change intent:
 - Domain:
 - Canonical owner:
-- Existing abstraction:
+- Reusable API / abstraction: (algo que ya existe y se puede llamar directamente)
+- Canonical reference / sibling: (solo si hace falta crear algo nuevo — patrón de forma, no de contenido)
 - Relevant siblings: (con su clasificación)
 - Consumers:
 - Contracts touched:
@@ -89,7 +91,7 @@ Si el brief ya trae `Architecture Contract` (de `skill-architecture`), este outp
 
 Declarar `Context Gap — Architecture Recon` solo cuando el ownership o la elección de contrato sea **materialmente ambiguo**: dos siblings `canonical` plausibles, un `duplicate` que contradice al owner declarado en el brief, o un consumer cuyo comportamiento esperado no puede inferirse sin asumir arquitectura.
 
-No detenerse por decisiones de implementación ordinarias (nombrar una función, elegir estructura interna de un archivo nuevo dentro de un owner ya claro, etc.).
+No detenerse por decisiones de implementación ordinarias (nombrar una función, elegir estructura interna de un archivo nuevo dentro de un owner ya claro, etc.). En particular, la ausencia de tests canónicos **nunca** es, por sí sola, motivo de `Context Gap` — ver punto 7 de `Investigar`. Owner/contrato ambiguo detiene BUILD; tests faltantes no.
 
 Reporte mínimo, siguiendo el mismo formato que `skill-architecture`:
 
@@ -98,7 +100,7 @@ Context Gap — Architecture Recon
 Source: <archivo(s) encontrados>
 Observed behavior: <qué hace hoy el código>
 Ambiguity: <qué decisión de ownership/contrato no puede resolverse sin arquitectura>
-Classification: duplicate-owner | contradicts-brief | missing-canonical-test | normative-conflict
+Classification: duplicate-owner | contradicts-brief | normative-conflict
 Required action: <corregir brief | issue de migración | decisión humana>
 ```
 
