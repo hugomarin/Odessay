@@ -240,6 +240,42 @@ test.describe("floating selection overlays stay inside the viewport", () => {
     expect(box?.x).toBe(8)
     await screenshot(page, "reading-left-clamp.png")
   })
+
+  test("editor More menu opens Entity types without dismissing the popup", async ({ page }) => {
+    // ODE-532 regression: discrete-event updates flush synchronously, so the
+    // view switch unmounts the clicked button before the native event reaches
+    // the document-level dismiss listener. The dismiss must ignore detached
+    // targets instead of closing the popup on every in-popup navigation.
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await openEditorHarness(page)
+    await switchToMarkdown(page)
+    const markdown = await markdownTextarea(page)
+    await markdown.fill("Worked at Aplyca for years.")
+    await switchToRich(page)
+
+    const paragraph = page.locator(".odessay-editor-content p").first()
+    await paragraph.click()
+    await page.keyboard.press("Home")
+    for (let index = 0; index < 10; index += 1) {
+      await page.keyboard.press("ArrowRight")
+    }
+    await page.keyboard.down("Shift")
+    for (let index = 0; index < 6; index += 1) {
+      await page.keyboard.press("ArrowRight")
+    }
+    await page.keyboard.up("Shift")
+
+    const popup = page.getByTestId("selection-popup")
+    await expect(popup).toBeVisible()
+    await popup.getByRole("button", { name: "More mark options" }).click()
+    await expect(popup.getByRole("menuitem", { name: "Entity" })).toBeVisible()
+    await popup.getByRole("menuitem", { name: "Entity" }).click()
+    await expect(popup.getByRole("menuitem", { name: "Company" })).toBeVisible()
+    await popup.getByRole("menuitem", { name: "Company" }).click()
+
+    await expect(page.locator('.odessay-editor-content mark[data-entity-type="company"]')).toBeVisible()
+    await expect(popup).toBeHidden()
+  })
 })
 
 // ─── ODE-409 ────────────────────────────────────────────────────────────────

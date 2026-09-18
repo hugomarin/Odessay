@@ -87,7 +87,15 @@ export function SelectionPopup({
     if (!position) return
 
     function handlePointerDown(e: PointerEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      const target = e.target as Node | null
+      // A detached target means React already consumed this interaction inside
+      // the popup: discrete-event updates flush synchronously, so a view
+      // switch (More → menu → options) unmounts the clicked button before the
+      // native event reaches this document-level bubble listener. Treating it
+      // as an outside click would dismiss the popup on every in-popup
+      // navigation whose success path keeps the popup open.
+      if (!target || !document.contains(target)) return
+      if (ref.current && !ref.current.contains(target)) {
         onDismiss()
       }
     }
