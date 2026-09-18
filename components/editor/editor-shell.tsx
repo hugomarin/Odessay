@@ -30,7 +30,8 @@ import {
   nextAnnotationSessionId,
   type AnnotationBubblePosition,
 } from "@/components/reading/margins/annotation-bubble"
-import { SelectionPopup, type SelectionPopupPosition } from "@/components/reading/margins/selection-popup"
+import { SelectionPopup, type SelectionPopupPosition, type SemanticMarkApplyResult } from "@/components/reading/margins/selection-popup"
+import { applyEntityMark, applySemanticHighlight, type EntityTypeName, type HighlightColorName } from "@/lib/editor/semantic-marks"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { BackupImageModal } from "@/components/editor/modals/backup-image-modal"
 import { InsertImageModal } from "@/components/editor/modals/insert-image-modal"
@@ -3778,6 +3779,54 @@ export function EditorShell({
     [handleAnnotateSelection, handleFootnoteSelection, handleMarkSelection],
   )
 
+  const applySemanticEntityAtSelection = useCallback(
+    (type: EntityTypeName): SemanticMarkApplyResult => {
+      if (!editor || !pendingRichSelection) {
+        return "Select some text first."
+      }
+      suppressNextSelectionPopupRef.current = true
+      editor.commands.focus()
+      const decision = applyEntityMark(editor, {
+        from: pendingRichSelection.from,
+        to: pendingRichSelection.to,
+        type,
+      })
+      if (!decision.ok) {
+        suppressNextSelectionPopupRef.current = false
+        return decision.message
+      }
+      setPendingRichSelection(null)
+      updateDerivedEditorState(editor)
+      void persistEditorSnapshot(editor)
+      return null
+    },
+    [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState],
+  )
+
+  const applySemanticHighlightAtSelection = useCallback(
+    (color: HighlightColorName): SemanticMarkApplyResult => {
+      if (!editor || !pendingRichSelection) {
+        return "Select some text first."
+      }
+      suppressNextSelectionPopupRef.current = true
+      editor.commands.focus()
+      const decision = applySemanticHighlight(editor, {
+        from: pendingRichSelection.from,
+        to: pendingRichSelection.to,
+        color,
+      })
+      if (!decision.ok) {
+        suppressNextSelectionPopupRef.current = false
+        return decision.message
+      }
+      setPendingRichSelection(null)
+      updateDerivedEditorState(editor)
+      void persistEditorSnapshot(editor)
+      return null
+    },
+    [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState],
+  )
+
   const handleConfirmAnnotation = useCallback(
     (note: string) => {
       if (!editor || !pendingAnnotation) return
@@ -7094,6 +7143,8 @@ export function EditorShell({
         position={pendingRichSelection?.popupPosition ?? null}
         onSelectType={handleEditorSelectType}
         onDismiss={dismissSelectionPopup}
+        onApplyEntity={applySemanticEntityAtSelection}
+        onApplyHighlight={applySemanticHighlightAtSelection}
       />
 
       <AnnotationBubble
