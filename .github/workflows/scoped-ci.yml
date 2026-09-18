@@ -15,6 +15,9 @@ permissions:
 jobs:
   desktop-draft-lifecycle:
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: example-public-anon-key
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

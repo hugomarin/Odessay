@@ -14,25 +14,66 @@ permissions:
   contents: read
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      app_changed: ${{ steps.detect.outputs.app_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          CHANGED="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
+          echo "Changed files:"
+          echo "${CHANGED}"
+
+          # Rutas que nunca afectan app code, scripts, CI o los gates de
+          # proceso (ops:process:sync, ledgers, drift) — solo contenido de
+          # skills/roles/docs. workflow/workflow.md y workflow/agents.md
+          # quedan deliberadamente fuera: ops:process:sync los acopla a
+          # cambios en skill-planning/skill-code-review, y ese gate solo
+          # corre dentro de process-checks.
+          SAFE_PATTERN='^(\.agents/|docs/|README\.md$|AGENTS\.md$|.*/AGENTS\.md$|\.claude/commands/)'
+
+          if echo "${CHANGED}" | grep -qvE "${SAFE_PATTERN}"; then
+            echo "app_changed=true" >> "${GITHUB_OUTPUT}"
+            echo "Hay archivos fuera de docs/skills/roles — corre CI completo."
+          else
+            echo "app_changed=false" >> "${GITHUB_OUTPUT}"
+            echo "Solo cambiaron docs/skills/roles — se salta quality/process-checks/scoped-ci."
+          fi
+
   quality:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.app_changed == 'true'
     uses: ./.github/workflows/quality.yml
     secrets: inherit
 
   process-checks:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.app_changed == 'true'
     uses: ./.github/workflows/process-checks.yml
     secrets: inherit
 
   scoped-ci:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.app_changed == 'true'
     uses: ./.github/workflows/scoped-ci.yml
     secrets: inherit
 
   required:
     name: CI required
     if: always()
-    needs: [quality, process-checks, scoped-ci]
+    needs: [detect-changes, quality, process-checks, scoped-ci]
     runs-on: ubuntu-latest
     steps:
-      - name: Check all required jobs passed
+      - name: Check all required jobs passed or were skipped
         run: |
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
             echo "One or more required jobs failed."
@@ -42,4 +83,4 @@ jobs:
             echo "One or more required jobs were cancelled."
             exit 1
           fi
-          echo "All required jobs passed."
+          echo "All required jobs passed or were correctly skipped."
