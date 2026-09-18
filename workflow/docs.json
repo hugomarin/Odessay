@@ -4,7 +4,7 @@
   "registry": [
     {
       "path": "AGENTS.md",
-      "type": "agent",
+      "type": "guardrail",
       "description": "Constitución raíz para cualquier agente (incluye herramientas que no encadenan a workflow/agents.md, ej. Codex): reglas universales del quality harness (reuse-before-creation, one-owner, architecture-before-locality, proteger hotspots, smallest coherent change, descubrir AGENTS.md locales) + el guardrail no negociable de arquitectura documental desktop."
     },
     {
@@ -445,22 +445,22 @@
     {
       "path": ".agents/agents/review-agent.md",
       "type": "agent",
-      "description": "Rol de agente para `/wf-review`: reconstruye el comportamiento cambiado antes de buscar findings, activa solo las lentes review-* relevantes al scope del diff, consolida findings y produce el veredicto técnico (GateResult/QualityScore/ProcessInsights). No repite merge, ledgers ni Linear — eso es workflow.md."
+      "description": "Rol de agente para `/wf-review`: reconstruye el comportamiento cambiado antes de buscar findings, activa solo las lentes review-* relevantes al scope del diff, consolida findings y produce TechnicalVerdict/QualityScore/ProcessInsights. No calcula el GateResult final (eso combina TechnicalVerdict con CI/Vercel/delivery en workflow.md) ni repite merge, ledgers o Linear."
     },
     {
       "path": "components/editor/AGENTS.md",
-      "type": "agent",
+      "type": "guardrail",
       "description": "Reglas locales del hotspot editor: editor-shell.tsx es composition boundary, no owner de persistencia/identidad/dominio; documenta la deuda conocida de localDB.correctionBlocks directo como no-plantilla; ownership de estado y descubrimiento de patrón existente antes de agregar comportamiento."
     },
     {
       "path": "src-tauri/AGENTS.md",
-      "type": "agent",
+      "type": "guardrail",
       "description": "Reglas locales del runtime desktop: commands como capa delgada, index.rs/workspace.rs como hotspots con disposition ratchet+staged-extraction, native owners en módulo propio, SQLite (rusqlite) como único catálogo, sin dependencias de runtime web."
     },
     {
       "path": ".agents/skills/architecture-recon/SKILL.md",
       "type": "skill",
-      "description": "Localiza owner canónico, siblings, consumers, contratos y tests reales en el código antes de implementar. Complementa a skill-architecture (qué debería ser verdad) confrontándolo contra dónde vive hoy la responsabilidad. Excepción controlada a 'no cargar contexto adicional por deducción' en BUILD, acotada a reconnaissance de código."
+      "description": "Localiza owner canónico, siblings, consumers, contratos y tests reales en el código antes de implementar. Complementa a skill-architecture (qué debería ser verdad) confrontándolo contra dónde vive hoy la responsabilidad. Leer código relevante es parte normal de BUILD — la restricción de 'no cargar contexto adicional por intuición' sigue aplicando solo a documentación, nunca a código."
     },
     {
       "path": ".agents/skills/skill-design/SKILL.md",
@@ -549,7 +549,7 @@
     {
       "path": ".agents/skills/review-testing/SKILL.md",
       "type": "skill",
-      "description": "Lente de review para cobertura de testing: happy path, error paths, edge cases, calidad de tests y anti-patterns. Contraparte cognitiva de specialists/testing.md (que es la variante JSON para dispatch a subagente)."
+      "description": "Lente de review para cobertura de testing: happy path, error paths, edge cases, calidad de tests y anti-patterns. Canonical owner del criterio — specialists/testing.md es solo su adapter de ejecución JSON, no una copia paralela."
     },
     {
       "path": ".agents/skills/review-change-size/SKILL.md",
@@ -584,7 +584,7 @@
     {
       "path": ".agents/skills/skill-code-review/specialists/testing.md",
       "type": "skill",
-      "description": "Checklist especializado de testing review: happy paths, error paths, edge cases, calidad de tests, anti-patterns y output JSON estricto."
+      "description": "Adapter de ejecución JSON para review-testing/SKILL.md (canonical owner del criterio) — no repite el checklist, lo aplica contra el diff con output estricto para dispatch a subagente."
     },
     {
       "path": ".agents/skills/skill-ux-testing/SKILL.md",

@@ -37,7 +37,7 @@ El `Review Agent` es responsable de:
 - investigar el diff de forma independiente — no delegar en que CI ya esté verde como sustituto de lectura real
 - activar solo los `review-*` relevantes al scope del diff, no todos por defecto
 - consolidar y deduplicar findings (propios + de especialistas, si el entorno soporta subagentes)
-- producir un veredicto técnico único: `GateResult`, `QualityScore`, `ProcessInsights`
+- producir un veredicto técnico único: `TechnicalVerdict`, `QualityScore`, `ProcessInsights`
 - rechazar falsos positivos en vez de inflar el conteo de findings
 
 No es responsable de: mover el issue en Linear, hacer merge, o appendear ledgers — `workflow/workflow.md` ejecuta esos pasos usando el veredicto que este rol produce.
@@ -61,14 +61,14 @@ Antes de buscar findings, reconstruir:
 
 ## Output formal
 
-La salida formal de este rol es el veredicto técnico consolidado:
+La salida formal de este rol es el veredicto técnico de la investigación — no el gate final de merge:
 
-- `GateResult`: `PASS` o `FAIL` (contratos y checks operativos — ver `skill-code-review/SKILL.md`)
+- `TechnicalVerdict`: `PASS` o `FAIL` — el juicio de este rol sobre el diff: findings, contratos que las lentes de review evalúan (`review-architecture`, `review-testing`, ...), seguridad.
 - `QualityScore`: cálculo P0–P3 según `.agents/skills/skill-code-review/scoring.md`
 - `ProcessInsights`: aprendizaje del ciclo BUILD→REVIEW
 - `context_risk`: `true`/`false` — ver criterios en `skill-code-review/SKILL.md`
 
-El comentario en Linear, el merge, y el append a los ledgers son responsabilidad de `workflow/workflow.md`, no de este rol — este documento no los repite.
+`TechnicalVerdict` no es el `GateResult`. `workflow/workflow.md` combina `TechnicalVerdict` con lo que ya verifica mecánicamente (CI, Vercel, `ops:delivery:gate`) para producir el `GateResult` que decide merge/no-merge — un solo owner por responsabilidad: este rol emite el juicio técnico, `workflow.md` emite el gate. El comentario en Linear, el merge, y el append a los ledgers también son responsabilidad de `workflow/workflow.md`, no de este rol — este documento no los repite.
 
 No es una salida válida de este rol:
 
@@ -82,7 +82,7 @@ No es una salida válida de este rol:
 
 ### `workflow/workflow.md`
 
-Define qué hace `/wf-review`: pre-check de PR abierto, gates de CI/Vercel/delivery, política de security findings, secuencia de merge, ledgers, estados de Linear. Este rol opera dentro de ese protocolo; no lo repite.
+Define qué hace `/wf-review`: pre-check de PR abierto, gates de CI/Vercel/delivery, política de security findings, secuencia de merge, ledgers, estados de Linear. Combina esos checks mecánicos con el `TechnicalVerdict` de este rol para producir el `GateResult` final. Este rol opera dentro de ese protocolo; no lo repite ni vuelve a declarar el `GateResult`.
 
 ### `.agents/skills/skill-code-review/SKILL.md`
 
@@ -117,7 +117,7 @@ Se activan cuando el `Architecture Contract` o `Performance Architecture Contrac
 7. Si el entorno soporta subagentes y el diff cumple las condiciones de `claude-enhancements.md`, despachar especialistas en paralelo y mergear sus findings por fingerprint.
 8. Consolidar y deduplicar findings de todas las fuentes.
 9. Rechazar falsos positivos explícitamente — no los cuenta el score.
-10. Producir el veredicto técnico: `GateResult`, `QualityScore`, `ProcessInsights`, `context_risk`.
+10. Producir el veredicto técnico: `TechnicalVerdict`, `QualityScore`, `ProcessInsights`, `context_risk`.
 
 La prioridad de búsqueda (defectos sistémicos antes que locales) y el formato de finding válido son propiedad de `.agents/skills/skill-code-review/SKILL.md` — este rol los aplica, no los repite aquí.
 
@@ -130,7 +130,7 @@ Este rol no puede declarar el veredicto técnico como completo si:
 - no reconstruyó el comportamiento cambiado antes de buscar findings
 - activó `review-*` skills sin relación con el scope real del diff, o se saltó una lente cuyo scope sí aplica
 - reportó el `QualityScore` sin el cálculo explícito exigido por `scoring.md`
-- declaró `GateResult=PASS` con un security finding aplicable sin patch, o con un contrato requerido incompleto
+- declaró `TechnicalVerdict=PASS` con un security finding aplicable sin patch, o con un contrato requerido incompleto
 
 ---
 

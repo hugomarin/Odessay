@@ -232,7 +232,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 - Si existe PR: continuar con la secuencia normal.
 
 **Secuencia — si aprobado:**
-1. Verificar gate:
+1. Verificar los checks mecánicos (esto, combinado con el `TechnicalVerdict` que produce el Review Agent en los pasos 2-4, determina el `GateResult` final del paso 5 — un solo owner por pieza: este paso decide lo mecánico, el Review Agent decide el juicio técnico, ninguno recalcula al otro):
    - `npm run ops:delivery:gate` debe terminar en verde (con `OPS_PERF_TRACE_PATH` solo cuando el contrato seleccionó el gate del editor).
    - CI `Traceability Gates` en SUCCESS.
    - Preview deploy (Vercel) en SUCCESS — un PR que toca código y no compila en preview no puede mergearse aunque el delivery gate local pase.
@@ -250,9 +250,10 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 4. Revisar diff contra el brief (scope, calidad, seguridad, performance).
 5. Dejar comentario en Linear: resultado de revisión.
    - El comentario de REVIEW debe separar explícitamente:
-     - `GateResult` (PASS/FAIL de contratos/checks),
+     - `TechnicalVerdict` (PASS/FAIL — el juicio técnico del Review Agent: findings, contratos que las lentes `review-*` evaluaron, seguridad),
      - `QualityScore` (calidad técnica del diff),
-     - `ProcessInsights` (fallos del primer review, correcciones posteriores, gaps de contexto y recomendaciones).
+     - `ProcessInsights` (fallos del primer review, correcciones posteriores, gaps de contexto y recomendaciones),
+     - `GateResult` final (PASS solo si `TechnicalVerdict=PASS` **y** los checks mecánicos del paso 1 pasaron — este valor es el que se persiste como `gate_result` en el ledger, no el `TechnicalVerdict` aislado).
    - Agregar evento en `workflow/review-history.jsonl` (append-only) con tipo:
      - `review_rejected` o `review_approved`,
      - incluyendo `issue`, `pr_url`, `branch`, `commit`, `score`, `gate_result`, `ts`, `reviewer`, `notes`.

@@ -95,10 +95,10 @@ Seguridad, performance, migraciones, arquitectura, correctness, testing y tamañ
 
 ## Resultado obligatorio del review
 
-Todo review debe cerrar con las tres capas que exige `workflow/workflow.md`:
+Todo review debe cerrar con lo que este skill produce — no confundir con el `GateResult` final:
 
 ```
-GateResult: PASS|FAIL
+TechnicalVerdict: PASS|FAIL
 QualityScore: X.Y/10
 ProcessInsights:
 - FirstReviewFailures: [...]
@@ -108,7 +108,7 @@ ProcessInsights:
 - Recommendations: [...]
 ```
 
-Si `GateResult=FAIL`, el veredicto es rechazo aunque `QualityScore` sea alto. El cálculo de `QualityScore` (fórmula, ejemplo paso a paso, overrides de gate) vive en `scoring.md`.
+`TechnicalVerdict` es el juicio de esta investigación (findings, contratos que las lentes evalúan, seguridad) — un solo owner: el review. `workflow/workflow.md` combina `TechnicalVerdict` con lo que ya verifica mecánicamente (CI, Vercel, `ops:delivery:gate`) para producir el `GateResult` que decide merge/no-merge; no lo recalcules aquí. Si `TechnicalVerdict=FAIL` o cualquiera de los checks mecánicos falla, `GateResult=FAIL` aunque `QualityScore` sea alto. El cálculo de `QualityScore` (fórmula, ejemplo paso a paso, overrides) vive en `scoring.md`.
 
 **Señal de contexto insuficiente:** marcar `context_risk=true` cuando se pidieron instrucciones adicionales durante BUILD, el brief era ambiguo en schema/endpoint/dependencia/evidencia, la documentación de referencia estaba desactualizada, o el criterio de aceptación cambió a mitad de BUILD. Con `context_risk=true`, incluir recomendaciones concretas de mejora de contexto (brief/docs/skills) en `ProcessInsights`.
 

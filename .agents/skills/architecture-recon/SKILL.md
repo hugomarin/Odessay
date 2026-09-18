@@ -30,7 +30,7 @@ No hace falta para fixes de una línea, ajustes de copy/estilo aislados o cambio
 
 ## Regla de contexto
 
-`wf-build` no carga documentación adicional por intuición. Esta skill es la excepción controlada a esa regla: autoriza **repository reconnaissance dirigido y acotado** — código, no documentos — para responder owner/siblings/consumers/tests. No autoriza leer documentación de producto, roadmap o features fuera de lo que el brief ya citó en `Reference docs`.
+Leer el código relevante para resolver owner/siblings/consumers/tests es parte normal de BUILD, no una excepción — esta skill define cómo hacerlo de forma dirigida y acotada (**repository reconnaissance**, código, no documentos). La restricción real es otra: `wf-build` no carga documentación de producto adicional por intuición. Esa restricción sigue firme y aplica solo a documentos — nunca a código. Esta skill no autoriza leer documentación de producto, roadmap o features fuera de lo que el brief ya citó en `Reference docs`.
 
 ---
 

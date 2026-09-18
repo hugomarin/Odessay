@@ -45,7 +45,7 @@ Para cada función/componente nuevo o modificado:
 
 ## Relación con `specialists/testing.md`
 
-`.agents/skills/skill-code-review/specialists/testing.md` es la variante de esta misma lente formateada para dispatch a subagente con output JSON estricto (modo Claude Enhancement, ver `claude-enhancements.md`). Cuando el entorno soporta subagentes y el diff cumple el umbral de líneas, se puede usar esa variante en paralelo. El contenido cognitivo es el mismo — no lo dupliques ni lo diverjas; si agregas un check aquí, replícalo ahí y viceversa.
+Este skill es el **canonical owner** del criterio de testing review. `.agents/skills/skill-code-review/specialists/testing.md` es solo el adapter de ejecución: aplica este mismo criterio con output JSON estricto para dispatch a subagente (modo Claude Enhancement, ver `claude-enhancements.md`) — no vuelve a declarar el checklist. Si agregas o cambias un criterio, hazlo aquí; el adapter no necesita actualizarse salvo que cambie el formato de output JSON.
 
 ## Output
 
