@@ -21,6 +21,12 @@ name: blocking-ci
 
 on:
   pull_request:
+    # Default types (opened/synchronize/reopened) never refire on a label
+    # change alone — a PR labeled `process`/`infra` after opening would keep
+    # the traceability gate reading a stale, label-less event snapshot until
+    # the next push. Adding labeled/unlabeled makes the infra/process
+    # exemption actually take effect when the label is what changed.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     branches:
       - main
 
