@@ -1,9 +1,18 @@
 name: blocking-ci
 
 # Único entrypoint de merge. La composición interna (quality/process-checks/
-# scoped-ci/repo-checks) puede cambiar sin tener que reconfigurar branch
-# protection cada vez — el único check que se marca como required en GitHub
-# Settings es "CI required".
+# repo-checks) puede cambiar sin tener que reconfigurar branch protection
+# cada vez — el único check que se marca como required en GitHub Settings es
+# "CI required".
+#
+# Estrategia de costo: `CI required` solo agrega checks baratos y
+# deterministas (traceability, process sync, ledgers/drift, architecture
+# ratchets, typecheck/lint/unit/build). Playwright/E2E y performance capture
+# quedan fuera del blocking universal — ver scoped-ci.yml (reusable/manual,
+# ya no referenciado aquí) y workflow/testing/critical-capabilities-testing.md
+# para el principio ("test at the lowest-cost boundary that can falsify the
+# failure mode we care about") y cuándo sí conviene escalar a esas
+# herramientas.
 
 on:
   pull_request:
@@ -54,7 +63,7 @@ jobs:
             echo "Hay archivos fuera de docs/skills/roles, o uno de los archivos acoplados a ops:process:sync — corre CI completo."
           else
             echo "app_changed=false" >> "${GITHUB_OUTPUT}"
-            echo "Solo cambiaron docs/skills/roles sin acoplamiento a process-sync — se salta quality/process-checks/scoped-ci."
+            echo "Solo cambiaron docs/skills/roles sin acoplamiento a process-sync — se salta quality/process-checks/repo-checks."
           fi
 
   quality:
@@ -69,22 +78,20 @@ jobs:
     uses: ./.github/workflows/process-checks.yml
     secrets: inherit
 
-  scoped-ci:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.app_changed == 'true'
-    uses: ./.github/workflows/scoped-ci.yml
-    secrets: inherit
-
   repo-checks:
     needs: detect-changes
     if: needs.detect-changes.outputs.app_changed == 'true'
     uses: ./.github/workflows/repo-checks.yml
     secrets: inherit
 
+  # scoped-ci.yml (Playwright E2E) ya no es parte de la composición blocking:
+  # ver el comentario de costo arriba. Sigue existiendo como workflow reusable
+  # (`workflow_dispatch` + `workflow_call`) para invocación manual/futura.
+
   required:
     name: CI required
     if: always()
-    needs: [detect-changes, quality, process-checks, scoped-ci, repo-checks]
+    needs: [detect-changes, quality, process-checks, repo-checks]
     runs-on: ubuntu-latest
     steps:
       - name: Check all required jobs passed or were skipped

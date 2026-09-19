@@ -21,7 +21,7 @@ Para cada función/componente nuevo o modificado:
 2. verificar error paths: input inválido (Zod rejection, null, undefined), error de red/timeout, error de base de datos, auth fallida;
 3. verificar edge cases: colección vacía, un solo elemento, límite de longitud, condición de carrera (doble submit, operación concurrente);
 4. verificar que el test cubre el estado intermedio cuando el comportamiento correcto depende de él (ver `review-correctness` — un test que solo asserta "al final está bien" no detecta flicker transitorio);
-5. para flujos críticos (auto-save, apertura de documento, sync), verificar que existe cobertura E2E, no solo unitaria.
+5. para flujos críticos (auto-save, apertura de documento, sync), verificar que existe cobertura al **nivel mínimo que pueda falsificar el failure mode real** — contract o integration con servicios reales suele demostrarlo sin browser. Ver `workflow/testing/critical-capabilities-testing.md` (canonical owner del principio "test at the lowest-cost boundary" y de cuándo Playwright sí/no es la primera opción). Un test E2E no es más válido por sí solo que un integration test que demuestra el mismo contrato — exigirlo por defecto es el anti-pattern que ese documento corrige.
 
 ## Calidad de los tests, no solo su existencia
 
@@ -41,7 +41,7 @@ Para cada función/componente nuevo o modificado:
 
 - [ ] Auto-save verificado con reload real, no solo con el estado en memoria.
 - [ ] Mobile: lectura funciona, escritura bloqueada (si el flujo toca mobile).
-- [ ] Los flujos críticos afectados por este diff específico tienen test E2E, no solo los que ya existían antes.
+- [ ] Los flujos críticos afectados por este diff específico tienen evidencia al nivel mínimo suficiente (no necesariamente E2E — ver `workflow/testing/critical-capabilities-testing.md`); si el brief justificó explícitamente por qué el failure mode requiere E2E o performance, esa evidencia existe.
 
 ## Relación con `specialists/testing.md`
 

@@ -1,193 +1,25 @@
 #!/usr/bin/env node
 
+// Thin wrapper kept for backward compatibility with docs/workflows that
+// still say `ops:delivery:gate`. Traceability now lives in its own script
+// (scripts/check-traceability-gate.mjs, `ops:traceability:gate`) with no
+// performance dependency — CI calls that one directly. This wrapper adds
+// back the optional performance gate for local/manual use: `wf-build`/
+// `wf-ship` still invoke this one so `OPS_PERF_TRACE_PATH` keeps working
+// exactly as before when a Performance Architecture Contract selected it.
+
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolveTraceabilityRange } from "./lib/traceability-refs.mjs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
-function fail(message) {
-  console.error(`[ops:delivery:gate] ${message}`);
-  process.exit(1);
-}
+// Resolved relative to this file, not process.cwd() — this script (and its
+// tests) can run with a working directory other than the repo root.
+const traceabilityGatePath = join(dirname(fileURLToPath(import.meta.url)), "check-traceability-gate.mjs");
 
-const range = resolveTraceabilityRange();
-
-const branch =
-  process.env.GITHUB_HEAD_REF?.trim() ||
-  execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-    encoding: "utf8",
-  }).trim();
-
-if (branch === "main" || branch === "HEAD") {
-  fail(`Run this gate from an issue branch, current branch is "${branch}".`);
-}
-
-// Infra/process PRs (harness, CI, skills/roles, ops scripts) don't touch a
-// feature with its own issue, so ODE-XX would be filler. The exemption only
-// holds when BOTH are true: the PR self-identifies as infra/process (branch
-// prefix or PR label — name alone isn't proof of content) AND every changed
-// file is inside the explicit infra/process allowlist below. Any product
-// code outside that allowlist puts the ODE-XX requirement right back.
-const INFRA_PROCESS_BRANCH_PREFIXES = ["infra/", "process/"];
-const INFRA_PROCESS_LABELS = new Set(["infra", "process"]);
-const INFRA_PROCESS_PATH_PATTERNS = [
-  /^\.github\//,
-  /^\.agents\//,
-  /^\.claude\//,
-  /^architecture\//,
-  /^tests\/architecture\//,
-  /^docs\//,
-  /^workflow\//,
-  /^README\.md$/,
-  /^AGENTS\.md$/,
-  /\/AGENTS\.md$/,
-  /^scripts\/lib\//,
-  /^scripts\/check-process-sync\.mjs$/,
-  /^scripts\/check-traceability-refs\.mjs$/,
-  /^scripts\/check-status-drift\.mjs$/,
-  /^scripts\/check-delivery-gate\.mjs$/,
-  /^scripts\/check-performance-gate\.mjs$/,
-  /^scripts\/check-network-budget\.mjs$/,
-  /^scripts\/validate-workflow-json\.mjs$/,
-  /^scripts\/workflow-ledger\.mjs$/,
-];
-
-function pullRequestLabels() {
-  const eventPath = process.env.GITHUB_EVENT_PATH?.trim();
-  if (!eventPath) return [];
-  try {
-    const event = JSON.parse(readFileSync(eventPath, "utf8"));
-    const labels = event?.pull_request?.labels;
-    return Array.isArray(labels)
-      ? labels.map((label) => String(label?.name ?? "").toLowerCase())
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-const isInfraProcessCategory =
-  INFRA_PROCESS_BRANCH_PREFIXES.some((prefix) => branch.startsWith(prefix)) ||
-  pullRequestLabels().some((label) => INFRA_PROCESS_LABELS.has(label));
-
-function changedFiles() {
-  const mergeBase = execFileSync("git", ["merge-base", range.head, range.base], {
-    encoding: "utf8",
-  }).trim();
-  return execFileSync("git", ["diff", "--name-only", `${mergeBase}..${range.head}`], {
-    encoding: "utf8",
-  })
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function extractIssueIds(branchName) {
-  const singleMatch = branchName.match(/ODE-(\d+)/i);
-  if (!singleMatch) {
-    return [];
-  }
-
-  const startIndex = singleMatch.index ?? branchName.indexOf(singleMatch[0]);
-  const sequence = branchName.slice(startIndex);
-  const numbers = sequence
-    .replace(/^ODE-/i, "")
-    .split("-")
-    .map((part) => part.trim())
-    .filter((part) => /^\d+$/.test(part));
-
-  return Array.from(new Set(numbers.map((num) => `ODE-${num}`)));
-}
-
-const pinnedIssueIds = (process.env.TRACEABILITY_ISSUE_IDS ?? "")
-  .split(",")
-  .map((issue) => issue.trim().toUpperCase())
-  .filter((issue) => /^ODE-\d+$/.test(issue));
-const issueIds = Array.from(new Set([...extractIssueIds(branch), ...pinnedIssueIds]));
-
-let infraProcessExempt = false;
-if (issueIds.length === 0) {
-  if (!isInfraProcessCategory) {
-    fail(
-      `Branch "${branch}" does not include an issue ID (expected ODE-XX in branch name).`,
-    );
-  }
-
-  const outOfScope = changedFiles().filter(
-    (filePath) => !INFRA_PROCESS_PATH_PATTERNS.some((pattern) => pattern.test(filePath)),
-  );
-  if (outOfScope.length > 0) {
-    const listed = outOfScope.map((filePath) => `- ${filePath}`).join("\n");
-    fail(
-      `Branch "${branch}" is marked infra/process (branch prefix or PR label) but the diff touches paths outside the infra/process allowlist:\n${listed}\nAdd an ODE-XX issue id instead, or scope this PR to infra/process paths only.`,
-    );
-  }
-
-  infraProcessExempt = true;
-  console.log(
-    `[ops:delivery:gate] OK - infra/process category, diff limited to the infra/process allowlist. ODE-XX not required.`,
-  );
-}
-const baseRef = range.base;
-const headRef = range.head;
-console.log(`[ops:delivery:gate] Comparing ${baseRef}..${headRef}.`);
-async function githubPullRequestCommitSubjects() {
-  const repository = process.env.GITHUB_REPOSITORY?.trim();
-  if (
-    process.env.GITHUB_ACTIONS !== "true" ||
-    !repository ||
-    range.source !== "pull-request-event"
-  ) {
-    return null;
-  }
-
-  const response = await fetch(
-    `https://api.github.com/repos/${repository}/compare/${baseRef}...${headRef}`,
-    {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "User-Agent": "odessay-delivery-gate",
-        ...(process.env.GITHUB_TOKEN
-          ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
-          : {}),
-      },
-    },
-  );
-  if (!response.ok) {
-    fail(`GitHub compare API failed with ${response.status}.`);
-  }
-  const comparison = await response.json();
-  if (!Array.isArray(comparison.commits)) {
-    fail("GitHub compare API returned no commit list.");
-  }
-  return comparison.commits.map((entry) => entry.commit.message.split("\n")[0]);
-}
-
-// A pinned CI merge range is intentionally evaluated from local immutable
-// objects. Event-only fallback may use GitHub compare; local runs use git.
-// Infra/process exemptions have no issueIds to check commits against, so
-// this whole check is meaningless (and would falsely flag every commit) once
-// exempt — skip it entirely in that case.
-if (!infraProcessExempt) {
-  const commitSubjects = (
-    (await githubPullRequestCommitSubjects()) ??
-    execFileSync("git", ["log", "--pretty=%s", `${baseRef}..${headRef}`], {
-      encoding: "utf8",
-    }).split("\n")
-  )
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !line.startsWith("Merge "));
-
-  const commitsWithoutIssue = commitSubjects.filter(
-    (subject) => !issueIds.some((id) => subject.includes(id)),
-  );
-
-  if (commitsWithoutIssue.length > 0) {
-    const listed = commitsWithoutIssue.map((subject) => `- ${subject}`).join("\n");
-    fail(
-      `Commits in this branch must reference one of ${issueIds.join(", ")}. Fix commit messages:\n${listed}`,
-    );
-  }
+try {
+  execFileSync("node", [traceabilityGatePath], { stdio: "inherit" });
+} catch (error) {
+  process.exit(error.status ?? 1);
 }
 
 const perfTracePath = process.env.OPS_PERF_TRACE_PATH?.trim() ?? "";
@@ -209,17 +41,15 @@ if (perfTracePath) {
     perfArgs.push("--budgets", perfBudgetsPath);
   }
 
-  execFileSync("node", perfArgs, { stdio: "inherit" });
+  try {
+    execFileSync("node", perfArgs, { stdio: "inherit" });
+  } catch (error) {
+    process.exit(error.status ?? 1);
+  }
 } else {
   console.log(
     "[ops:delivery:gate] Performance gate skipped (set OPS_PERF_TRACE_PATH to enforce perf budgets).",
   );
 }
 
-if (!infraProcessExempt) {
-  console.log(
-    // El ledger lo verifica `ops:status:drift`, no este gate: acá solo se
-    // comprueba rama y trazabilidad de commits.
-    `[ops:delivery:gate] OK - ${issueIds.join(", ")} have branch and commit traceability.`,
-  );
-}
+console.log("[ops:delivery:gate] OK - traceability gate passed.");

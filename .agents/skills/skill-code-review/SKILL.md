@@ -125,7 +125,7 @@ Este skill es la orquestación técnica, no el protocolo completo. Quien busque 
 | Fórmula de `QualityScore`, formato de finding, confidence, categorías | `scoring.md` |
 | Checklist de correctness (transiciones, estado, AI por scope, velocidad percibida) | `review-correctness/SKILL.md` |
 | Checklist de arquitectura, `Architecture Contract`, bundle desktop/Tauri, docs por scope | `review-architecture/SKILL.md` |
-| Checklist de testing (cobertura, anti-patterns, E2E) | `review-testing/SKILL.md` |
+| Checklist de testing (cobertura, anti-patterns, nivel de evidencia mínimo — unit/contract/integration/E2E) | `review-testing/SKILL.md` (nivel mínimo suficiente, no E2E por defecto — canonical owner del principio: `workflow/testing/critical-capabilities-testing.md`) |
 | Si el PR debió dividirse en stages más pequeños | `review-change-size/SKILL.md` |
 | Dispatch automatizado a subagentes especialistas | `claude-enhancements.md` + `specialists/*.md` |
 | Seguridad (OWASP, RLS, AI/LLM security) | `specialists/security.md` |

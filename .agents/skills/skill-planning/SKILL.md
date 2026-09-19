@@ -309,6 +309,21 @@ Formato: prosa corta por operación. `not required` exige justificación ("el is
 
 Este campo no es solo autochequeo: es el contrato que `.agents/skills/review-correctness/SKILL.md` verifica en `/wf-review` (transición co-owned, estado intermedio no modelado, identidad creada en hot path, update optimista sin rollback, colapso de colección sobre output de LLM). Un brief que responde bien estas cuatro preguntas reduce directamente los findings de esa lente.
 
+## Validation requirements
+
+Por cada Requirement/Failure mode declarado arriba, elegir el **nivel mínimo de evidencia que pueda falsificarlo** — no el nivel que "se usa normalmente". La taxonomía (unit / contract / integration / E2E / performance) y el principio rector ("test at the lowest-cost boundary that can falsify the failure mode we care about") viven en `workflow/testing/critical-capabilities-testing.md`; este campo no los repite, los aplica.
+
+Formato: por cada propiedad crítica del issue, una línea `<qué se falsifica> → <nivel elegido>`. E2E y Performance no son el default — cuando se seleccionan, la línea debe justificar por qué el nivel inferior no basta (qué failure mode real requiere browser, o qué hot path requiere un Performance Contract). "Hagamos E2E para estar seguros" no es una justificación válida.
+
+Ejemplo:
+
+```text
+- Export a DOCX no corrompe Unicode → contract test sobre el adapter, sin UI.
+- Modal de reasignación de Workspace se cierra correctamente tras confirmar → E2E — el failure mode es choreography de foco/cierre que un test bajo el componente no modela razonablemente.
+```
+
+`.agents/skills/review-testing/SKILL.md` verifica en `/wf-review` que la evidencia entregada corresponde al nivel declarado aquí, y que toda escalada a E2E/performance vino con justificación — no exige Playwright por defecto.
+
 ## Performance Architecture Review
 
 La arquitectura de performance vive en `.agents/skills/skill-performance/SKILL.md`. Este skill no duplica sus tablas, umbrales ni patrones: decide cuándo debe consultarse y exige que el resultado forme parte del brief.
