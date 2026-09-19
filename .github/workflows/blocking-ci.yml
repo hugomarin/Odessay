@@ -1,9 +1,9 @@
 name: blocking-ci
 
 # Único entrypoint de merge. La composición interna (quality/process-checks/
-# scoped-ci/repo-checks cuando exista) puede cambiar sin tener que
-# reconfigurar branch protection cada vez — el único check que se marca
-# como required en GitHub Settings es "CI required".
+# scoped-ci/repo-checks) puede cambiar sin tener que reconfigurar branch
+# protection cada vez — el único check que se marca como required en GitHub
+# Settings es "CI required".
 
 on:
   pull_request:
@@ -41,12 +41,20 @@ jobs:
           # corre dentro de process-checks.
           SAFE_PATTERN='^(\.agents/|docs/|README\.md$|AGENTS\.md$|.*/AGENTS\.md$|\.claude/commands/)'
 
-          if echo "${CHANGED}" | grep -qvE "${SAFE_PATTERN}"; then
+          # skill-planning/SKILL.md y skill-code-review/SKILL.md viven bajo
+          # .agents/ (matchean SAFE_PATTERN) pero scripts/check-process-sync.mjs
+          # los acopla a workflow/workflow.md: un cambio aislado a cualquiera de
+          # los tres exige que los otros dos se toquen también. Si el fast-path
+          # los tratara como safe, un PR que solo tocara uno de ellos se saltaría
+          # el gate hecho específicamente para protegerlos.
+          PROCESS_COUPLED_PATTERN='^\.agents/skills/skill-planning/SKILL\.md$|^\.agents/skills/skill-code-review/SKILL\.md$'
+
+          if echo "${CHANGED}" | grep -qvE "${SAFE_PATTERN}" || echo "${CHANGED}" | grep -qE "${PROCESS_COUPLED_PATTERN}"; then
             echo "app_changed=true" >> "${GITHUB_OUTPUT}"
-            echo "Hay archivos fuera de docs/skills/roles — corre CI completo."
+            echo "Hay archivos fuera de docs/skills/roles, o uno de los archivos acoplados a ops:process:sync — corre CI completo."
           else
             echo "app_changed=false" >> "${GITHUB_OUTPUT}"
-            echo "Solo cambiaron docs/skills/roles — se salta quality/process-checks/scoped-ci."
+            echo "Solo cambiaron docs/skills/roles sin acoplamiento a process-sync — se salta quality/process-checks/scoped-ci."
           fi
 
   quality:
@@ -67,10 +75,16 @@ jobs:
     uses: ./.github/workflows/scoped-ci.yml
     secrets: inherit
 
+  repo-checks:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.app_changed == 'true'
+    uses: ./.github/workflows/repo-checks.yml
+    secrets: inherit
+
   required:
     name: CI required
     if: always()
-    needs: [detect-changes, quality, process-checks, scoped-ci]
+    needs: [detect-changes, quality, process-checks, scoped-ci, repo-checks]
     runs-on: ubuntu-latest
     steps:
       - name: Check all required jobs passed or were skipped
