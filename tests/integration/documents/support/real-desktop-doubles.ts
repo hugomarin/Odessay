@@ -192,8 +192,7 @@ export async function tauriWorkspaceSyncDouble(
 
 // ─── catalog tauri-commands doubles (real in-memory row store) ────────────
 
-export async function tauriCatalogDualWriteDouble(dbPath: string, input: DesktopCatalogDualWriteInput): Promise<void> {
-  const rows = rowsFor(dbPath)
+function applyDualWrite(rows: Map<string, DesktopCatalogRow>, input: DesktopCatalogDualWriteInput): void {
   const prior = rows.get(input.document.id)
   const row: DesktopCatalogRow = {
     ...input.document,
@@ -208,6 +207,27 @@ export async function tauriCatalogDualWriteDouble(dbPath: string, input: Desktop
     excerptContentHash: prior?.excerptContentHash ?? null,
   }
   rows.set(row.id, row)
+}
+
+export async function tauriCatalogDualWriteDouble(dbPath: string, input: DesktopCatalogDualWriteInput): Promise<void> {
+  applyDualWrite(rowsFor(dbPath), input)
+}
+
+/** Set to make the next tauriCatalogBulkDualWrite reject before applying any row — a real bulk write is one transaction, so a failure must not partially land. Auto-clears after firing once. */
+let nextBulkDualWriteFailure: (() => never) | null = null
+export function failNextBulkDualWrite(makeError: () => never): void {
+  nextBulkDualWriteFailure = makeError
+}
+
+export async function tauriCatalogBulkDualWriteDouble(dbPath: string, inputs: DesktopCatalogDualWriteInput[]): Promise<string[]> {
+  if (nextBulkDualWriteFailure) {
+    const fail = nextBulkDualWriteFailure
+    nextBulkDualWriteFailure = null
+    fail()
+  }
+  const rows = rowsFor(dbPath)
+  for (const input of inputs) applyDualWrite(rows, input)
+  return inputs.map((input) => input.document.id)
 }
 
 export async function tauriCatalogGetByIdDouble(dbPath: string, id: string): Promise<DesktopCatalogRow | null> {
@@ -230,4 +250,40 @@ export async function tauriCatalogDetachLocalFileDouble(dbPath: string, id: stri
   const row = rows.get(id)
   if (!row) return
   rows.set(id, { ...row, bindingRootId: null, relativePath: null, canonicalPath: null, inode: null, contentHash: null, size: null, lastSeenAt: null })
+}
+
+// ─── settings tauri-commands doubles (real in-memory key/value store) ─────
+// Not the focus of any Proof Contract that uses this file (that's the JSON
+// blob DesktopSettingsService reads/writes vocabulary items from/to) — a
+// real, working, non-mocked store is still used rather than vi.fn() spies,
+// consistent with the rest of this file, but its own durability isn't
+// what's under test.
+
+const settingsByStore = new Map<string, unknown>()
+
+function settingsStoreKey(configDir: string, key: string): string {
+  return `${configDir}::${key}`
+}
+
+// These replace the *exported* tauriSettingsRead/Write (which already do
+// their own JSON.stringify/parse around the lower-level `invoke()` call) —
+// not the native "settings_read"/"settings_write" IPC commands themselves —
+// so this double stores/returns the plain value directly.
+export async function tauriSettingsReadDouble(configDir: string, key: string): Promise<unknown> {
+  return settingsByStore.get(settingsStoreKey(configDir, key)) ?? null
+}
+
+export async function tauriSettingsWriteDouble(configDir: string, key: string, value: unknown): Promise<void> {
+  // Round-trip through JSON, matching the real function's own serialization
+  // boundary — a live object reference held elsewhere must not let a test
+  // mutate "durable" settings state indirectly.
+  settingsByStore.set(settingsStoreKey(configDir, key), JSON.parse(JSON.stringify(value)))
+}
+
+export async function tauriSettingsDeleteDouble(configDir: string, key: string): Promise<void> {
+  settingsByStore.delete(settingsStoreKey(configDir, key))
+}
+
+export function resetSettingsStoreDouble(): void {
+  settingsByStore.clear()
 }

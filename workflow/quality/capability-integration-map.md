@@ -198,7 +198,7 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 | CONFIG-04 | Create document type | same as CONFIG-01 | Newly created type definition is usable end-to-end. | PARTIAL_INTEGRATION | HIGH | same as META-06 | — |
 | CONFIG-05 | Rename document type | same as CONFIG-01 | Rename preserves the underlying key/identity of the type. | PARTIAL_INTEGRATION | NORMAL | `tests/vocabulary/end-to-end-contract.test.ts` | Weaker than CONFIG-02 — no repaint test exists for a type rename (see META-07). |
 | CONFIG-06 | Delete document type | same as CONFIG-01 | Delete follows an explicit, safe transition rule. | PARTIAL_INTEGRATION | NORMAL | same as META-08 | Type-delete-with-matching-docs branch untested on desktop. |
-| CONFIG-07 | Existing documents survive schema change | schema rename/delete → real rewrite engine (Postgres fn / Rust-SQLite) → existing documents | A schema rename/delete must never corrupt or orphan documents already using the old value. | PARTIAL_INTEGRATION | CRITICAL *(upgraded — highest-leverage gap in this cluster)* | `supabase/migrations/20260903190000_create_vocabulary_items.sql` (`delete_vocabulary_item` RPC, real SQL); `lib/services/desktop/desktop-settings-service.ts:443` `rewriteCatalogToBaseValue` — both real rewrite engines are mocked in every test that touches them | The invariant is well-specified and its JS-side bookkeeping is well tested, but the two places that actually touch persisted documents — a Postgres function and a Rust/SQLite command — have zero real-engine coverage. Unlike other security-sensitive SQL in this repo, there is no pgTAP test for `delete_vocabulary_item`. Most concrete, highest-priority fix in the whole map. |
+| CONFIG-07 | Existing documents survive schema change | schema rename/delete → real rewrite engine (Postgres fn / desktop catalog) → existing documents | A schema rename/delete must never corrupt or orphan documents already using the old value. | INTEGRATION | CRITICAL | `supabase/tests/delete_vocabulary_item_rewrite.test.sql` (real Postgres function against a real local DB, via pgTAP); `tests/integration/vocabulary/schema-change-safety.test.ts` (real `DesktopSettingsService` against a real behavioral catalog test-double) | Both real rewrite engines now have direct proof. Postgres: `delete_vocabulary_item` run against a real local Supabase/Postgres instance (`supabase test db --local`) — proves the rewrite is scoped by `author_id`/RLS, not just by matching status text (a second user's writing with the *same* status string is unaffected), and that base-item/not-found rejections use the right SQLSTATE. Not wired into CI (no pgTAP test in this repo is yet — a pre-existing gap, not introduced here). Desktop: `DesktopSettingsService.deleteVocabularyItem` proves the matching-rows rewrite, the non-matching-rows-untouched case, and a FAILURE case (a failed bulk write leaves the catalog at prior values *and* the vocabulary item still defined — confirmed by reading the real production code path, not assumed: the item is only removed from the store after the rewrite succeeds, so there's no window where a thrown error leaves a half-applied state). Mutation-tested live on both: the Postgres test caught a `security definer` + missing-scope regression (3 rows rewritten instead of 2, cross-user corruption); the desktop test caught a dropped key-filter regression (rewrites every row instead of just matches). |
 | CONFIG-08 | Selectors/filtering reflect new definitions | same as CONFIG-01 | Selectors/filters reflect the current schema definition. | PARTIAL_INTEGRATION | NORMAL | `tests/vocabulary/consumers-repaint.test.tsx` | One consumer surface proven reactive; `filter-bar.tsx`, `artifact-type-selector.tsx`, `properties-panel.tsx` read the same catalog by architecture but have no equivalent test. |
 
 # L. Sharing
@@ -249,26 +249,29 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 |---|---|---|
 | NONE | 12 | 11% |
 | UNIT_ONLY | 17 | 16% |
-| CONTRACT | 10 | 9% |
-| PARTIAL_INTEGRATION | 55 | 52% |
-| INTEGRATION | 11 | 10% |
+| CONTRACT | 9 | 8% |
+| PARTIAL_INTEGRATION | 51 | 48% |
+| INTEGRATION | 16 | 15% |
 | RUNTIME | 0 | 0% |
 | RELEASE | 1 | 1% |
 
-**The headline finding matches the reported pain point exactly:** half of all scenarios (55/106) sit at `PARTIAL_INTEGRATION` — real collaborators tested on one side of a boundary, fakes on the other, never joined. This is precisely the shape of bug this initiative exists to catch: every piece passes its own tests, the seam between them doesn't. Zero scenarios have been validated against the real packaged Tauri runtime (`RUNTIME` = 0); only one (`VOICE-08`) reaches `RELEASE`.
+*(Mechanically re-verified against the table below by parsing each row's Status column — not hand-counted. This table went stale for one PR cycle: PR #438 upgraded DOC-02/03/04/06 without updating it here. Re-check it the same way after every status change, not just the change you're focused on.)*
+
+**The headline finding matches the reported pain point exactly:** nearly half of all scenarios (51/106) sit at `PARTIAL_INTEGRATION` — real collaborators tested on one side of a boundary, fakes on the other, never joined. This is precisely the shape of bug this initiative exists to catch: every piece passes its own tests, the seam between them doesn't. Zero scenarios have been validated against the real packaged Tauri runtime (`RUNTIME` = 0); only one (`VOICE-08`) reaches `RELEASE`.
 
 ## Critical gaps (NONE or UNIT_ONLY on a CRITICAL/HIGH-priority scenario)
 
 1. **SHARE-04 — Permission enforcement (security).** The test file's own header admits RLS is verified manually only. `NONE`, `CRITICAL`.
-2. **CONFIG-07 — Schema change safety for existing documents.** Both real rewrite engines (a Postgres function, a Rust/SQLite command) are mocked in every test that touches them. `PARTIAL_INTEGRATION` but functionally untested at the layer that matters — highest-leverage single fix in the map. `CRITICAL`.
-3. **WATCH-07 — Active document changes externally.** No test simulates an external edit to a currently-open document. `NONE`, `CRITICAL`.
-4. **AI-01 — Suggest title.** Confirmed blocking condition (untested client-side lifecycle gate) and a strong root-cause candidate for the reported broken behavior — not yet reproduced live end-to-end. `NONE` at the client layer, `CRITICAL`.
-5. **EXP-05 — Export failure behavior.** Zero coverage for dialog-cancel/write-failure; the product could report a successful export when nothing was written. `NONE`, `CRITICAL`.
-6. **STATE-05 / STATE-07 — Clean view state / cursor restore.** Same bug class as the already-partially-addressed scroll-position issue (STATE-03/04), but with no test at all. `NONE`, `HIGH`.
-7. **WS-06 — Workspace switch isolation.** No test drives two real Workspace roots at once. `NONE`, `HIGH`.
-8. **COL-06 — Delete collection without corrupting documents.** Schema-guaranteed, never tested. `NONE`, `HIGH`.
-9. **DOC-09 — Import document (desktop).** The actual wiring function has zero test references anywhere in the repo. `NONE`, `HIGH`.
-10. **SHARE-05 / SHARE-06 — Visibility persistence / reopen.** `NONE`, `HIGH`/`NORMAL`.
+2. **WATCH-07 — Active document changes externally.** No test simulates an external edit to a currently-open document. `NONE`, `CRITICAL`.
+3. **AI-01 — Suggest title.** Confirmed blocking condition (untested client-side lifecycle gate) and a strong root-cause candidate for the reported broken behavior — not yet reproduced live end-to-end. `NONE` at the client layer, `CRITICAL`.
+4. **EXP-05 — Export failure behavior.** Zero coverage for dialog-cancel/write-failure; the product could report a successful export when nothing was written. `NONE`, `CRITICAL`.
+5. **STATE-05 / STATE-07 — Clean view state / cursor restore.** Same bug class as the already-partially-addressed scroll-position issue (STATE-03/04), but with no test at all. `NONE`, `HIGH`.
+6. **WS-06 — Workspace switch isolation.** No test drives two real Workspace roots at once. `NONE`, `HIGH`.
+7. **COL-06 — Delete collection without corrupting documents.** Schema-guaranteed, never tested. `NONE`, `HIGH`.
+8. **DOC-09 — Import document (desktop).** The actual wiring function has zero test references anywhere in the repo. `NONE`, `HIGH`.
+9. **SHARE-05 / SHARE-06 — Visibility persistence / reopen.** `NONE`, `HIGH`/`NORMAL`.
+
+*(CONFIG-07 closed — see below — and removed from this list.)*
 
 ## Existing strong coverage (hold the line here)
 
@@ -279,10 +282,11 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 - **AI-04 — Generate corrections.** `INTEGRATION` up to a deterministic provider fake — the correct shape for AI capabilities generally.
 - **SYNC-08 — Metadata-only mutation safety.** `CONTRACT`, three explicit negative-shape assertions.
 - **COL-04 — Reopen preserves collection membership.** `INTEGRATION`, real IndexedDB + real hydration merge.
+- **CONFIG-07 — Existing documents survive schema change.** `INTEGRATION` on both real engines (Postgres RLS-scoped rewrite, desktop catalog rewrite) — the map's own former highest-priority gap, now closed with a cross-user RLS proof and a bulk-write failure-atomicity proof.
 
 ## V1 Implementation Plan (ordered — ties to the spec's own §10 plus the upgrades above)
 
-1. CONFIG-07 real-engine test (pgTAP for `delete_vocabulary_item`; a real-SQLite test for `rewriteCatalogToBaseValue`'s matching-rows branch).
+1. ~~CONFIG-07 real-engine test~~ — **done**, see `supabase/tests/delete_vocabulary_item_rewrite.test.sql` + `tests/integration/vocabulary/schema-change-safety.test.ts`.
 2. SHARE-04 real RLS/ownership test (cross-user access attempt against a real or test-scoped Supabase instance, not just route-level 401).
 3. Reproduce and, if confirmed, fix the AI-01 `local-only`/`syncing` lifecycle gate, with a regression test.
 4. WATCH-07 — external edit to an open/dirty document.
@@ -337,6 +341,7 @@ Capability Scenario
 | Scenario(s) | Status before → after | Test |
 |---|---|---|
 | DOC-02, DOC-03, DOC-04, DOC-06 | PARTIAL_INTEGRATION/CONTRACT → **INTEGRATION** | `tests/integration/documents/materialize-save-reopen.test.ts` |
+| CONFIG-07 | PARTIAL_INTEGRATION → **INTEGRATION** | `supabase/tests/delete_vocabulary_item_rewrite.test.sql` (Postgres) + `tests/integration/vocabulary/schema-change-safety.test.ts` (desktop) |
 
 Real collaborators used: `DesktopDocumentService`, `FilesystemDocumentService`, `SqliteDocumentCatalog`, `PersistenceCoordinator` (all real, unmodified production classes) against a real temp filesystem, entering saves through the coordinator's public API (`persist()` + `settle()`, never a raw `saveWriting()` call, per the declared chain). Precise framing (not "real SQLite"): this is application-side integration with the native Tauri/Rust/SQLite boundary replaced by a real (not spy-based) behavioral test double that mirrors the Rust side's row/binding consistency rules — `RUNTIME` stays reserved for TS → actual `invoke()` → real Rust/SQLite, which SYS-05/SYS-08 still track as a separate, open gap. Allowed fakes: that native transport itself (no bridge in Vitest) and the cloud sync flush (external network boundary).
 
@@ -345,7 +350,9 @@ Two rounds of review found real things, exactly what this phase is for:
 - **Product decision surfaced:** the FAILURE case's original assertions only checked the catalog, not the filesystem — a failed materialization can leave a real orphan `.md` file with no catalog row. Decided: accepted recoverable state owned by the reconciler (not rolled back by `persist()`); the test now asserts this explicitly instead of only checking half the state.
 - **API-contract correction:** the RACE case originally invented a private completion signal around `saveWriting` to work around `persist()`'s promise resolving before its own write landed. That's not a bug — `PersistenceCoordinator` documents `persist()` as optimistic/fire-and-forget and `settle()` as the API for durability confirmation. Both DOC-03 and DOC-04 now go through `persist()` + `settle()` exclusively.
 
-Remaining P0 items (per the earlier reviewer-proposed list): EXP-05, AI-01 (reproduce+fix), STATE-05, ANN-04/ANN-05 convergence, SYNC-03, WS-02/DOC-08 (+SYS-04/WATCH-04), CONFIG-07.
+**CONFIG-07 (real collaborators):** `delete_vocabulary_item` (real Postgres function, run against a real local Supabase/Postgres instance via `pg_prove`/pgTAP — the first pgTAP test in this repo actually verified locally as part of writing it, though still not wired into CI, matching the pre-existing pattern for all pgTAP tests here) on the Postgres side; `DesktopSettingsService` (real, unmodified) against the same real behavioral catalog double from the document-lifecycle cluster, extended with a real `tauriCatalogBulkDualWrite` double, on the desktop side. Allowed fakes: same native-transport boundary as above; RLS/`security invoker` themselves are real, not simulated. Mutation-tested live on both engines — the Postgres test's first fault injection (dropping the `author_id` filter alone) didn't actually reproduce a bug, because the `writings` table's own RLS UPDATE policy independently blocks cross-user rewrites regardless of the function's WHERE clause — a genuine defense-in-depth finding. A more realistic regression (`security definer`, which bypasses RLS, combined with the missing filter) did reproduce real cross-user corruption and the test caught it. The desktop test's fault injection (dropping the key filter in `rewriteCatalogToBaseValue`) caught the bug on the first attempt.
+
+Remaining P0 items (per the earlier reviewer-proposed list): EXP-05, AI-01 (reproduce+fix), STATE-05, ANN-04/ANN-05 convergence, SYNC-03, WS-02/DOC-08 (+SYS-04/WATCH-04).
 
 ## CI candidates (cheap, deterministic, high-value — matches the spec's §19 criteria)
 
