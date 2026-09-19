@@ -137,7 +137,7 @@ describe("useTauriMenuEvents save flow", () => {
   // `mocks.invoke` is called 3 times instead of the expected 2 — an extra
   // `invoke` call happens somewhere in the save-as -> save-to-disk flow that
   // this test's expectation was never updated for. Needs investigation into
-  // the actual save flow, not a CI change. Tracked as follow-up, not fixed here.
+  // the actual save flow, not a CI change. Tracked as follow-up in ODE-543, not fixed here.
   it.skip("falls back to a plain write when no move handler is provided", async () => {
     await mountHarness()
 

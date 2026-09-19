@@ -151,7 +151,7 @@ describe("buildDeskActivitySummary", () => {
   // boundary differently depending on timezone ("Created Mar 10" in CI vs
   // the hardcoded "Created Mar 9" expectation). Needs a real fix to either
   // the fixture or the date formatter, not a CI change. Tracked as
-  // follow-up, not fixed here.
+  // follow-up in ODE-543, not fixed here.
   it.skip("exposes document state for Desk rows and hero cards", () => {
     const summary = buildDeskActivitySummary(
       [

@@ -18,7 +18,7 @@ describe("studio shell contract", () => {
   // status-bar.tsx no longer uses `grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]`
   // at all — it was refactored to a flex layout and this contract test was
   // never updated to match. Needs a real fix to the assertion (or the
-  // component), not a CI change. Tracked as follow-up, not fixed here.
+  // component), not a CI change. Tracked as follow-up in ODE-543, not fixed here.
   it.skip("keeps the titlebar and the status bar as siblings of the middle band", () => {
     const titlebar = read("components/editor/editor-topbar.tsx")
     const statusBar = read("components/editor/status-bar.tsx")
