@@ -32,6 +32,7 @@
     "test:desktop:draft-lifecycle": "node scripts/check-desktop-draft-lifecycle.mjs",
     "seed:phase1": "npx tsx scripts/seed-phase-1.ts",
     "test": "vitest run",
+    "test:architecture": "vitest run tests/architecture",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "desktop:release": "node scripts/release-desktop.mjs",

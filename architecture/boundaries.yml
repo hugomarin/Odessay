@@ -1,0 +1,18 @@
+# Architecture ratchets — ver Odyssey Quality Harness spec §7.6 y
+# tests/architecture/persistence-boundary.test.ts, que aplica este archivo.
+#
+# Regla de convivencia con deuda existente:
+#   - violación ya en architecture/boundaries.baseline.json -> permitida (por ahora)
+#   - violación nueva (archivo no listado en el baseline)   -> FAIL
+#   - entrada de baseline que ya no viola                    -> permitida (mejora sin gate)
+
+boundaries:
+  ui-no-direct-persistence:
+    description: >
+      Componentes de UI/composición no llaman localDB.correctionBlocks
+      directamente cuando existe un owner canónico de esa persistencia.
+      Ver components/editor/AGENTS.md — deuda conocida documentada.
+    from:
+      - components
+    forbidPattern: "localDB.correctionBlocks"
+    canonicalOwner: lib/corrections/persistence.ts

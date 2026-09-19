@@ -1,9 +1,9 @@
 name: blocking-ci
 
 # Único entrypoint de merge. La composición interna (quality/process-checks/
-# scoped-ci/repo-checks cuando exista) puede cambiar sin tener que
-# reconfigurar branch protection cada vez — el único check que se marca
-# como required en GitHub Settings es "CI required".
+# scoped-ci/repo-checks) puede cambiar sin tener que reconfigurar branch
+# protection cada vez — el único check que se marca como required en GitHub
+# Settings es "CI required".
 
 on:
   pull_request:
@@ -67,10 +67,16 @@ jobs:
     uses: ./.github/workflows/scoped-ci.yml
     secrets: inherit
 
+  repo-checks:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.app_changed == 'true'
+    uses: ./.github/workflows/repo-checks.yml
+    secrets: inherit
+
   required:
     name: CI required
     if: always()
-    needs: [detect-changes, quality, process-checks, scoped-ci]
+    needs: [detect-changes, quality, process-checks, scoped-ci, repo-checks]
     runs-on: ubuntu-latest
     steps:
       - name: Check all required jobs passed or were skipped
