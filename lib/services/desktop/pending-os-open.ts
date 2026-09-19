@@ -20,7 +20,13 @@ export function drainPendingOsOpenPaths(onPath: (path: string) => Promise<void>)
     try {
       const { invoke } = await import("@tauri-apps/api/core")
       const paths = await invoke<string[]>("take_pending_open_paths").catch(() => [])
-      for (const path of paths) {
+      // `.catch()` only guards a rejected promise. A resolved-but-non-array
+      // value (e.g. a test mock's generic `mockResolvedValue(undefined)`
+      // covering many unrelated `invoke` calls) would otherwise throw here
+      // uncaught, since a `for...of` over a non-iterable is a sync throw
+      // inside an async function — an unhandled rejection that failed CI's
+      // `npm test` even when every assertion still passed (ODE-543).
+      for (const path of Array.isArray(paths) ? paths : []) {
         await onPath(path)
       }
     } finally {

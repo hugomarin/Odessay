@@ -1,9 +1,7 @@
-name: Traceability Gates
+name: Process Checks
 
 on:
-  pull_request:
-    branches:
-      - main
+  workflow_call:
 
 permissions:
   contents: read
@@ -68,9 +66,6 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: Check desktop draft lifecycle
-        run: npm run test:desktop:draft-lifecycle
-
       - name: Build app for perf capture
         run: npm run build
 
@@ -114,6 +109,11 @@ jobs:
 
           npm run ops:perf:capture -- --base-url http://127.0.0.1:4010 --output artifacts/perf/editor-ci-trace.json.gz
 
+      # NOTA: check-delivery-gate.mjs hoy también evalúa el performance gate
+      # cuando OPS_PERF_TRACE_PATH está seteado — conflacia traceability con
+      # performance en un solo script/gate. Separar esa responsabilidad es
+      # trabajo de una fase posterior del quality harness (no de este PR de
+      # reorganización de workflows); se preserva el comportamiento actual.
       - name: Check delivery gate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

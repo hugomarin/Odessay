@@ -1,0 +1,31 @@
+name: Scoped CI
+
+# Hoy corre incondicionalmente en cada PR (igual que el workflow monolítico
+# que reemplaza). El dispatch condicional por área tocada (desktop/editor/
+# perf/db vía changed-paths) es trabajo de una fase posterior del quality
+# harness — no se inventa aquí para mantener este PR acotado a reorganizar
+# los checks existentes.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop-draft-lifecycle:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: example-public-anon-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Check desktop draft lifecycle
+        run: npm run test:desktop:draft-lifecycle

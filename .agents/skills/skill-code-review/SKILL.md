@@ -121,7 +121,7 @@ Este skill es la orquestación técnica, no el protocolo completo. Quien busque 
 | Qué necesitas | Dónde vive |
 |---|---|
 | Rol que conduce `/wf-review`, secuencia de investigación | `.agents/agents/review-agent.md` |
-| Formato de PR, proof of work, gates de CI/Vercel/delivery, merge, ledgers, estados de Linear | `workflow/workflow.md` (`/wf-review`) |
+| Formato de PR, proof of work, gates de CI/Vercel/delivery, merge, ledgers, estados de Linear | `workflow/workflow.md` (`/wf-review`) — el check agregado que decide el gate es `CI required` (`.github/workflows/blocking-ci.yml`) |
 | Fórmula de `QualityScore`, formato de finding, confidence, categorías | `scoring.md` |
 | Checklist de correctness (transiciones, estado, AI por scope, velocidad percibida) | `review-correctness/SKILL.md` |
 | Checklist de arquitectura, `Architecture Contract`, bundle desktop/Tauri, docs por scope | `review-architecture/SKILL.md` |
