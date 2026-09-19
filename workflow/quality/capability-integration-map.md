@@ -60,11 +60,11 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 | ID | Capability | Chain | Invariant | Status | Priority | Evidence | Note |
 |---|---|---|---|---|---|---|---|
 | DOC-01 | Create new document | Editor → identity → draft/session owner | No duplicate identity; no accidental durable file for a truly blank ephemeral draft; identity stable after materialization. | PARTIAL_INTEGRATION | HIGH | `lib/editor/persistence-coordinator.ts` isBodyBlank guard; `tests/editor-persistence-coordinator.test.ts`; `tests/playwright/write-blank-lifecycle.e2e.ts` | Real coordinator runs E2E in-browser, but `createDesktopDraft` is a page-level fake counter — no real filesystem/catalog touched, so "no accidental durable file" is proven by call-count, not disk state. |
-| DOC-02 | Materialize first content | first input → createDesktopDraft → DocumentService → filesystem → binding → catalog | Exactly one durable document created; initial content preserved; UUID/binding/catalog/file agree. | PARTIAL_INTEGRATION | CRITICAL | `lib/services/document-service-factory.ts`; `tests/services/document-service-factory.test.ts`; `tests/playwright/write-new-first-paste.e2e.ts` | Ordering (save→manifest→catalog dual-write, exactly once) proven with every real collaborator mocked; E2E proves the same via a fake `createDesktopDraft`. No test runs real fs write + real SQLite commit together. |
-| DOC-03 | Save document | Editor → PersistenceCoordinator → DocumentService → filesystem → catalog → sync queue | No confirmed content lost; success implies durable recoverable state; identity/path stay coherent. | PARTIAL_INTEGRATION | CRITICAL | `tests/document-service.test.ts` (web, real fake-indexeddb store); `tests/services/document-service-factory.test.ts` (desktop, all collaborators mocked) | Web path is genuine integration against a real local store. Desktop path — the one with filesystem+manifest+catalog in the chain — only proves ordering with every real collaborator faked. |
-| DOC-04 | Sequential saves | save1 → save2 (async, may complete out of order) | The latest valid snapshot wins; an older async completion must not overwrite newer content. | CONTRACT | CRITICAL | `tests/editor-persistence-coordinator.test.ts` | Rigorously proven with deferred promises simulating real races, but `documentService.saveWriting` is a full fake — no real DocumentService/filesystem race exercised. |
+| DOC-02 | Materialize first content | first input → createDesktopDraft → DocumentService → filesystem → binding → catalog | Exactly one durable document created; initial content preserved; UUID/binding/catalog/file agree. | INTEGRATION | CRITICAL | `tests/integration/documents/materialize-save-reopen.test.ts` (+ prior: `tests/services/document-service-factory.test.ts`, `tests/playwright/write-new-first-paste.e2e.ts`) | Real `DesktopDocumentService`, `FilesystemDocumentService`, `PersistenceCoordinator` and a real `SqliteDocumentCatalog` class now save/read through real temp-fs, proving SYS-02 (UUID≠path) and the exactly-once catalog write inline — application-side integration with the native Tauri/Rust/SQLite boundary replaced by a real (not spy-based) behavioral test double, not the real database (see structural finding below and SYS-05/SYS-08; `RUNTIME` is reserved for TS → actual `invoke()` → real Rust/SQLite). Mutation-tested live: deleting `persist()`'s `if (fileResult.error) throw` check turns the FAILURE case red for the right reason. Real finding from writing this test, now a documented product decision: a failed materialization can leave a real orphan `.md` file (no catalog row) — accepted as recoverable state owned by the reconciler (SYS-06/07/08), not rolled back by `persist()` itself; the test asserts this explicitly. |
+| DOC-03 | Save document | Editor → PersistenceCoordinator → DocumentService → filesystem → catalog → sync queue | No confirmed content lost; success implies durable recoverable state; identity/path stay coherent. | INTEGRATION | CRITICAL | `tests/integration/documents/materialize-save-reopen.test.ts` (+ prior: `tests/document-service.test.ts` web path) | Same real-collaborator stack as DOC-02 (see its note on what's real vs. test-doubled), now entering through the coordinator (matching the declared chain) via `persist()` + `settle()` — the coordinator's own public API for "wait until this document's write has actually landed" — rather than a raw `saveWriting()` call. Verified with a reopen, not just a file read. Includes a RACE variant (see DOC-04). |
+| DOC-04 | Sequential saves | save1 → save2 (async, may complete out of order) | The latest valid snapshot wins; an older async completion must not overwrite newer content. | INTEGRATION | CRITICAL | `tests/integration/documents/materialize-save-reopen.test.ts` (DOC-03's RACE case; + prior: `tests/editor-persistence-coordinator.test.ts`) | The mocked-`documentService` version still exists and is more precise for coordinator-internal edge cases; this one proves the same invariant through a real `PersistenceCoordinator` + real `saveWriting` + real fs/catalog, awaiting `coordinator.settle({writingId})` — the coordinator's documented durability contract — rather than inventing a private completion signal, so the test tracks the public API instead of an implementation detail. |
 | DOC-05 | Save while switching tabs | Editor A → pending persistence → tab switch → Editor B → return A | Pending A state stays associated with A; the tab switch doesn't cancel/misroute save state; returning to A shows the latest content. | CONTRACT | CRITICAL | `tests/editor-persistence-coordinator.test.ts`; `tests/editor-session-store.test.ts` / `tests/editor-tabs.test.ts` | Well proven at coordinator-logic level with fakes; tab bookkeeping is separately unit-tested as pure state transitions with no I/O underneath. |
-| DOC-06 | Close and reopen | save → close → catalog → binding/path → filesystem → hydrate | Reopened content equals the latest confirmed durable content. | PARTIAL_INTEGRATION | CRITICAL | `tests/document-service.test.ts` (web, real round trip); `tests/services/document-service-factory.test.ts` (desktop, catalog+filesystem mocked) | Web path genuinely round-trips through a real store; desktop close/reopen (the chain the spec actually names) is contract-only. |
+| DOC-06 | Close and reopen | save → close → catalog → binding/path → filesystem → hydrate | Reopened content equals the latest confirmed durable content. | INTEGRATION | CRITICAL | `tests/integration/documents/materialize-save-reopen.test.ts` (+ prior: `tests/document-service.test.ts` web path) | Reopen now goes through the real catalog lookup + real file read + real `desktopDocumentEngine.parseSourceDocument`, proving byte-real content survives a save→reopen round trip on desktop, not just web. |
 | DOC-07 | Rename document | UUID → DocumentService → catalog → filesystem → binding | UUID stable; path/name changes coherently; catalog and filesystem agree. | PARTIAL_INTEGRATION | HIGH | `tests/filesystem-document-service.test.ts` (in-memory Map fake); `src-tauri/src/commands/workspace.rs` rename/inode tests (real fs+tempdir) | Rust layer genuinely proves identity survives rename on disk; the TS wrapper the app actually calls is Map/mock-tested only — never proven together. |
 | DOC-08 | Move document between workspaces | UUID → catalog → filesystem move → workspace index → binding → sync/reconciliation | Same document exists after move; no silent duplicate; old workspace no longer owns the binding; new workspace owns it correctly. | PARTIAL_INTEGRATION | HIGH | `lib/services/document-service-factory.ts` `relocateDesktopWriting`; `tests/services/document-service-factory.test.ts` ("ODE-402", all mocked) | Thoroughly contract-tested in TS; no Rust or TS test moves a file between two distinct real registered BindingRoots — weakest-evidenced scenario in the group. Shares the gap with WS-02/WATCH-04. |
 | DOC-09 | Import document | file → parser → identity → binding → catalog → document model | Content survives import; identity valid; catalog/path mapping coherent. | NONE | HIGH *(upgraded)* | `tests/import-writing.test.ts` (pure parser unit tests); `lib/services/document-service-factory.ts` `importDesktopWritingFile` — zero test references anywhere | Parser is UNIT_ONLY in isolation; the actual desktop file→identity→binding→catalog wiring (`importDesktopWritingFile`) has no test at all, which is why the whole-chain status is NONE, not UNIT_ONLY. |
@@ -287,11 +287,65 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 3. Reproduce and, if confirmed, fix the AI-01 `local-only`/`syncing` lifecycle gate, with a regression test.
 4. WATCH-07 — external edit to an open/dirty document.
 5. EXP-05 — export failure paths (dialog cancel, write failure).
-6. DOC-02/DOC-03/DOC-06 desktop path — one real integration test with a temp filesystem + real DocumentService + real SQLite catalog (currently the biggest "each side tested against a fake of the other" gap).
+6. ~~DOC-02/DOC-03/DOC-06 desktop path~~ — **done**, see `tests/integration/documents/materialize-save-reopen.test.ts` and the Phase 3 progress tracker below.
 7. STATE-05/06/07 — clean-slate and cursor/selection isolation, mirroring the STATE-03/04 E2E pattern already proven to work for scroll.
 8. SYS-05/SYS-08 — one TS-side integration test with real SqliteDocumentCatalog + real fs, replacing at least one of the fully-mocked contract tests.
 9. WS-06 / DOC-08 / WS-02 / WATCH-04 — the shared "move across two real Workspace roots" gap; one test here likely closes four scenarios at once.
 10. ANN-04/ANN-05 convergence test (both entry points, one assertion on final state).
+
+## Phase 3 — Critical Proofs: methodology
+
+Writing a capability integration test is not "convert the scenario row into a test file." Follow this sequence, and produce the Proof Contract *before* writing any test code:
+
+```text
+Capability Scenario
+  → Proof Contract (Property, Real collaborators, Allowed fakes, Given/When/Then, Failure/Then)
+  → pick the minimum-sufficient runtime (Vitest by default; cargo test for the
+    Rust/SQLite seam; a local Postgres/pgTAP for RLS/DB-function properties;
+    Playwright only when the property genuinely lives in the DOM)
+  → implement the test
+  → mutation-test it: reintroduce the exact bug the property guards against,
+    confirm the test goes red for that reason, then revert
+  → update this map's coverage_status/Evidence/Note for every scenario the
+    test closes (one test can legitimately close several IDs)
+```
+
+**Runtime is chosen by where the real integration lives, not by convention.** Vitest is the default and can express unit, contract, *or* integration proofs — what determines the level is which collaborators stay real, not which runner executes it. Reach for `cargo test` (real fs + real SQLite) when the property is specifically about the Rust side; a local Postgres/pgTAP harness when the property lives inside a database function or RLS policy (a Vitest mock of Supabase cannot prove either); Playwright only for properties that genuinely depend on DOM/browser choreography (scroll, focus, keyboard, drag) — and even then, try to separate the *ownership* logic (Vitest) from the *DOM mechanics* (Playwright, scoped) rather than handing the whole capability to Playwright.
+
+**A capability test is good exactly when: if you reintroduce the failure mode it exists to prevent, it fails for the right reason.** Passing today proves nothing on its own. Five supporting checks:
+1. Assert observable end-state (file content, catalog resolution, a rendered projection) — not `toHaveBeenCalled()` on the pieces you're supposed to be trusting.
+2. The collaborators the *declared chain* names are real, not mocked — a real `DocumentService` calling a mocked catalog and a mocked filesystem is still `CONTRACT`, not `INTEGRATION`, no matter how good the mocks are.
+3. The test crosses the boundary where bugs actually appear (the seam), not just one side of it.
+4. Failure/race variants exist when that's the actual risk — happy-path-only is insufficient for anything persistence-shaped.
+5. The test is deterministic — no `sleep`, no real external API, no shared/production state; temp dirs, deferred promises, and deterministic fakes only at genuinely external boundaries.
+
+**Formal bar for declaring `INTEGRATION` (all five, or the row stays `PARTIAL_INTEGRATION`):**
+```text
+1. The relevant entry point of the declared critical chain actually executes.
+2. The chain's internal collaborators are real, not mocked/spied.
+3. Only genuinely external boundaries are faked (network, third-party providers) —
+   never an internal collaborator the chain names.
+4. Observable state/artifact is verified, not just that functions were called.
+5. The identified failure mode would make the test fail if reintroduced —
+   verified live, not assumed.
+```
+
+**Test organization is by capability, not by source file** — `tests/integration/<capability-area>/<scenario-cluster>.test.ts` (e.g. `tests/integration/documents/materialize-save-reopen.test.ts`), so the unit of thought stays "what does the product need to keep doing," not "which class am I testing." One well-chosen test can legitimately close several scenario IDs at once (see DOC-03/DOC-04 below) — that's a feature, not scope creep, as long as each closed ID's Proof Contract is genuinely satisfied.
+
+### Phase 3 progress tracker
+
+| Scenario(s) | Status before → after | Test |
+|---|---|---|
+| DOC-02, DOC-03, DOC-04, DOC-06 | PARTIAL_INTEGRATION/CONTRACT → **INTEGRATION** | `tests/integration/documents/materialize-save-reopen.test.ts` |
+
+Real collaborators used: `DesktopDocumentService`, `FilesystemDocumentService`, `SqliteDocumentCatalog`, `PersistenceCoordinator` (all real, unmodified production classes) against a real temp filesystem, entering saves through the coordinator's public API (`persist()` + `settle()`, never a raw `saveWriting()` call, per the declared chain). Precise framing (not "real SQLite"): this is application-side integration with the native Tauri/Rust/SQLite boundary replaced by a real (not spy-based) behavioral test double that mirrors the Rust side's row/binding consistency rules — `RUNTIME` stays reserved for TS → actual `invoke()` → real Rust/SQLite, which SYS-05/SYS-08 still track as a separate, open gap. Allowed fakes: that native transport itself (no bridge in Vitest) and the cloud sync flush (external network boundary).
+
+Two rounds of review found real things, exactly what this phase is for:
+- **Mutation-testing, round 1:** the first fault-injection attempt on the FAILURE case passed for the wrong reason (it hit an unrelated placeholder write, not the write in the declared chain) — corrected to target the specific write by call number, then confirmed red/revert.
+- **Product decision surfaced:** the FAILURE case's original assertions only checked the catalog, not the filesystem — a failed materialization can leave a real orphan `.md` file with no catalog row. Decided: accepted recoverable state owned by the reconciler (not rolled back by `persist()`); the test now asserts this explicitly instead of only checking half the state.
+- **API-contract correction:** the RACE case originally invented a private completion signal around `saveWriting` to work around `persist()`'s promise resolving before its own write landed. That's not a bug — `PersistenceCoordinator` documents `persist()` as optimistic/fire-and-forget and `settle()` as the API for durability confirmation. Both DOC-03 and DOC-04 now go through `persist()` + `settle()` exclusively.
+
+Remaining P0 items (per the earlier reviewer-proposed list): EXP-05, AI-01 (reproduce+fix), STATE-05, ANN-04/ANN-05 convergence, SYNC-03, WS-02/DOC-08 (+SYS-04/WATCH-04), CONFIG-07.
 
 ## CI candidates (cheap, deterministic, high-value — matches the spec's §19 criteria)
 
