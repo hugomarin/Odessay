@@ -10,8 +10,11 @@ import { TextSelection } from "@tiptap/pm/state"
 import { useRouter } from "next/navigation"
 import { useManualCorrections } from "@/hooks/useManualCorrections"
 import {
+  formatSaveStateDiagnostic,
   mapLocalSyncStatusToSaveState,
   mapSyncLifecycleToSaveState,
+  reconcileSaveStateFromDurable,
+  saveStateToHasPendingSync,
   type EditorSaveState,
 } from "@/components/editor/save-state"
 import { WritingEditorContent } from "@/components/editor/editor-content"
@@ -562,6 +565,19 @@ export function EditorShell({
   if (hydrationGenerationOwnerRef.current === null) {
     hydrationGenerationOwnerRef.current = createHydrationGenerationOwner()
   }
+  // ODE-542: durable save-state projection. `syncStatus` state drives the
+  // status bar; this ref mirrors it synchronously so ephemeral sync events
+  // and catalog invalidations can reconcile against the vigente identity
+  // without depending on a captured `currentWritingId` closure.
+  const syncStatusRef = useRef<EditorSaveState>("saved")
+  // Single writer for the save-state projection: every transition — persist
+  // events, sync invalidations, hydration snapshots, catalog reconciliation —
+  // updates the ref and the state in the same tick, so a reconciliation
+  // running in the same synchronous block never reads a stale `current`.
+  const applySyncStatus = useCallback((next: EditorSaveState) => {
+    syncStatusRef.current = next
+    setSyncStatus(next)
+  }, [])
   const currentCanonicalPathRef = useRef<string | null>(null)
   const focusModeRestorationRef = useRef<{
     activePanel: EditorPanel
@@ -601,6 +617,66 @@ export function EditorShell({
       enterFocusMode()
     }
   }, [enterFocusMode, exitFocusMode, isFocusMode])
+
+  // ODE-542: reconcile the active editor + tab from the durable catalog.
+  // Sync CustomEvents are invalidations only: they trigger this O(1) snapshot
+  // read, never set terminal UI state directly. A lost event cannot leave the
+  // UI stale because materialization, hydration completion and catalog
+  // changes all converge through the same durable read. `error` (local write
+  // failure, ODE-461) is never auto-cleared by a cloud snapshot.
+  const reconcileActiveSaveState = useCallback(async (reason: string) => {
+    const writingId = currentWritingIdRef.current
+    if (!writingId) {
+      return
+    }
+
+    try {
+      const { getCatalogRecord } = await import("@/lib/queries/document-catalog")
+      const record = await getCatalogRecord(writingId)
+      if (!record || currentWritingIdRef.current !== writingId) {
+        return
+      }
+
+      const current = syncStatusRef.current
+      const next = reconcileSaveStateFromDurable({
+        current,
+        durable: { syncStatus: record.syncStatus, cloudPresent: record.cloudPresent },
+        isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
+      })
+
+      if (!next) {
+        return
+      }
+
+      console.info(
+        formatSaveStateDiagnostic({
+          writingId,
+          durableSyncStatus: record.syncStatus,
+          current,
+          next,
+          reason,
+        }),
+      )
+      applySyncStatus(next)
+      updateTabSaveState({
+        tabId: writingId,
+        saveState: next,
+        hasPendingSync: saveStateToHasPendingSync(next),
+      })
+    } catch (error) {
+      // A catalog read failure leaves the editor content open; the next
+      // catalog event, sync invalidation or document activation retries.
+      // Programming errors are surfaced instead of vanishing.
+      console.error("[editor:save-state] reconcile read failed", {
+        writingId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }, [])
+
+  const reconcileActiveSaveStateRef = useRef(reconcileActiveSaveState)
+  reconcileActiveSaveStateRef.current = reconcileActiveSaveState
+
   const navigatedToDraftRef = useRef(false)
   const identityEnsuredRef = useRef(false)
   const desktopWebHandoffAppliedRef = useRef(false)
@@ -753,17 +829,17 @@ export function EditorShell({
           }
 
           if (event.state === "persisting_local" || event.state === "dirty") {
-            setSyncStatus("saving")
+            applySyncStatus("saving")
             return
           }
 
           if (event.state === "failed") {
-            setSyncStatus("error")
+            applySyncStatus("error")
             return
           }
 
           if (event.state === "queued_remote") {
-            setSyncStatus(
+            applySyncStatus(
               event.created
                 ? "saved-local"
                 : mapLocalSyncStatusToSaveState(
@@ -835,6 +911,11 @@ export function EditorShell({
           setLifecycle("local-only")
           lifecycleRef.current = "local-only"
           navigatedToDraftRef.current = true
+          // ODE-542: the UUID definitivo now owns the editor. A `synced`
+          // already durable (fast flush, restored binding) must project
+          // before the first hydration snapshot; a still-pending durable is
+          // a no-op here and heals later via sync/catalog invalidation.
+          void reconcileActiveSaveStateRef.current("materialized")
         },
         onIdentityCreated: (writingId) => {
           const nextWritingSession = createNewWritingSessionState(writingId)
@@ -864,7 +945,7 @@ export function EditorShell({
               ? activeEditorTabIdRef.current === sourceTabId
               : event.writingId === currentWritingIdRef.current
             if (isSourceTabActive) {
-              setSyncStatus("error")
+              applySyncStatus("error")
             }
           }
 
@@ -2004,7 +2085,7 @@ export function EditorShell({
       setArtifactType("general")
       setWritingVisibility("private")
       setLifecycle("local-only")
-      setSyncStatus("saved-local")
+      applySyncStatus("saved-local")
       titleRef.current = nextTitle
       hasExplicitTitleRef.current = false
       versionRef.current = 1
@@ -2047,9 +2128,45 @@ export function EditorShell({
       .then(({ getCatalogRecord, subscribeToCatalog }) => {
         if (cancelled) return
 
-        const syncCurrentWritingState = async () => {
+        const syncCurrentWritingState = async (
+          reason: string,
+          mayReconcileSyncState: boolean,
+        ) => {
           const catalogRecord = await getCatalogRecord(currentWritingId)
           if (cancelled || !catalogRecord) return
+
+          // ODE-542: project the durable sync snapshot through the same
+          // one-way healing as sync-event invalidation. Only reconciliation-
+          // grade reads may project: a stale durable terminal from the
+          // PREVIOUS save must never upgrade a newer in-flight local save
+          // (`Saving...` is not necessarily behind the durable row). The
+          // initial read is safe (no save can be in flight for a document
+          // being activated); `cloud-snapshot` is emitted only after a
+          // flush confirmed the write it describes.
+          if (mayReconcileSyncState && currentWritingIdRef.current === currentWritingId) {
+            const reconciled = reconcileSaveStateFromDurable({
+              current: syncStatusRef.current,
+              durable: { syncStatus: catalogRecord.syncStatus, cloudPresent: catalogRecord.cloudPresent },
+              isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
+            })
+            if (reconciled) {
+              console.info(
+                formatSaveStateDiagnostic({
+                  writingId: currentWritingId,
+                  durableSyncStatus: catalogRecord.syncStatus,
+                  current: syncStatusRef.current,
+                  next: reconciled,
+                  reason,
+                }),
+              )
+              applySyncStatus(reconciled)
+              updateTabSaveState({
+                tabId: currentWritingId,
+                saveState: reconciled,
+                hasPendingSync: saveStateToHasPendingSync(reconciled),
+              })
+            }
+          }
 
           const nextCanonicalPath = catalogRecord.binding?.canonicalPath ?? null
           const previousCanonicalPath = currentCanonicalPathRef.current
@@ -2077,10 +2194,18 @@ export function EditorShell({
           setExternalFileNotice(null)
         }
 
-        void syncCurrentWritingState()
+        void syncCurrentWritingState("catalog-initial", true)
         unsubscribeCatalog = subscribeToCatalog((change) => {
           if (change.documentIds.includes(currentWritingId)) {
-            void syncCurrentWritingState()
+            // `excerpt`/`upsert`/`content`/`bulk`/`detach`/`migration` may
+            // arrive while a newer local save is still in flight with a
+            // durable row from the previous save — projecting then would
+            // show a false `Saved`. Only the flush-confirmed projection
+            // (`cloud-snapshot`) may heal the sync state.
+            void syncCurrentWritingState(
+              `catalog-${change.reason}`,
+              change.reason === "cloud-snapshot",
+            )
           }
         })
       })
@@ -2166,7 +2291,7 @@ export function EditorShell({
       setCreatedAt(null)
       setWritingSlug(null)
       setLifecycle("local-only")
-      setSyncStatus("saved")
+      applySyncStatus("saved")
       setExternalFileNotice(null)
       setPersistedCorrectionBlocks([])
       applyCorrectionSuggestionUpdate(() => [], { immediate: true })
@@ -2429,13 +2554,22 @@ export function EditorShell({
         setWritingVisibility(writing.visibility ?? "private")
         setLifecycle(hydratedLifecycle)
         setExternalFileNotice(null)
-        setSyncStatus(
+        applySyncStatus(
           mapLocalSyncStatusToSaveState(
             hydratedSyncStatus,
             hydratedLifecycle,
             typeof navigator === "undefined" ? true : navigator.onLine,
           ),
         )
+        // ODE-542: the one-shot snapshot above may predate a sync that
+        // completed during (or just before) this hydration — especially when
+        // no catalog record resolved it and the local-metadata fallback
+        // spoke. Re-read the durable catalog (O(1), once per hydration) so
+        // the projection converges without a tab switch. Stale generations
+        // return early and never touch the newly active document.
+        if (currentWritingIdRef.current === targetWritingId) {
+          void reconcileActiveSaveStateRef.current("post-hydration")
+        }
         updateDerivedEditorState(editor)
 
         const activeTab =
@@ -2546,7 +2680,7 @@ export function EditorShell({
         setWritingStatus("draft")
         setArtifactType("general")
         setWritingVisibility("private")
-        setSyncStatus("saved")
+        applySyncStatus("saved")
         setExternalFileNotice(null)
         setBodyText("")
         currentCanonicalPathRef.current = null
@@ -2585,41 +2719,86 @@ export function EditorShell({
     updateDerivedEditorState,
   ])
 
+  // ODE-542: single global sync subscription. Identity is resolved via refs
+  // at event time — never a captured `currentWritingId` — so a `synced` that
+  // lands during draft materialization or hydration resubscription cannot be
+  // dropped by an unsubscribe window. Events are invalidations: the active
+  // document re-reads its durable catalog snapshot (O(1)); background
+  // documents update only their own tab.
   useEffect(() => {
-    if (!currentWritingId) {
-      return
-    }
-
     return subscribeToSyncStatusChanges((event) => {
-      if (event.writingId !== currentWritingId) {
-        return
-      }
+      const activeWritingId = currentWritingIdRef.current
 
-      setSyncStatus(mapSyncLifecycleToSaveState(event.status))
-
-      if (event.status !== "synced") {
-        return
-      }
-
-      void (async () => {
-        const localWriting = await localDB.writings.get(currentWritingId)
-
-        if (!localWriting?.slug || routeWritingId === localWriting.slug) {
+      if (activeWritingId && event.writingId === activeWritingId) {
+        // Offline has no durable transition to re-read: the local commit is
+        // already durable and cloud is unreachable, so project Saved locally
+        // directly (unless a local failure owns the indicator).
+        if (event.status === "offline") {
+          if (syncStatusRef.current !== "error") {
+            applySyncStatus("saved-local")
+            updateTabSaveState({
+              tabId: activeWritingId,
+              saveState: "saved-local",
+              hasPendingSync: saveStateToHasPendingSync("saved-local"),
+            })
+          }
           return
         }
 
-        setWritingSlug(localWriting.slug)
-        if (isPerfHarness()) {
-          // ODE-389: a cold harness has no session, so a real navigation lands
-          // on /login and takes the editor down mid-test. Keep the URL in sync
-          // without leaving the harness route.
-          replaceEditorHistory(`/write/${localWriting.slug}`)
-        } else if (!isDesktopRuntime()) {
-          router.replace(`/write/${localWriting.slug}`)
+        void reconcileActiveSaveStateRef.current(`sync-${event.status}`)
+
+        if (event.status !== "synced") {
+          return
         }
-      })()
+
+        void (async () => {
+          const localWriting = await localDB.writings.get(activeWritingId)
+
+          if (!localWriting?.slug || routeWritingId === localWriting.slug) {
+            return
+          }
+
+          setWritingSlug(localWriting.slug)
+          if (isPerfHarness()) {
+            // ODE-389: a cold harness has no session, so a real navigation lands
+            // on /login and takes the editor down mid-test. Keep the URL in sync
+            // without leaving the harness route.
+            replaceEditorHistory(`/write/${localWriting.slug}`)
+          } else if (!isDesktopRuntime()) {
+            router.replace(`/write/${localWriting.slug}`)
+          }
+        })()
+        return
+      }
+
+      // Background document: converge its tab without touching the active
+      // status bar. A lost event heals on activation via hydration's durable
+      // re-read; `error` (local failure) is never cleared by a cloud event.
+      try {
+        const session = getEditorSessionState()
+        const tab = session.session.tabs.find(
+          (candidate) =>
+            candidate.writing_id === event.writingId || candidate.id === event.writingId,
+        )
+        if (!tab || tab.save_state === "error") {
+          return
+        }
+
+        const nextTabState = mapSyncLifecycleToSaveState(event.status)
+        if (tab.save_state === nextTabState) {
+          return
+        }
+
+        updateTabSaveState({
+          tabId: tab.id,
+          saveState: nextTabState,
+          hasPendingSync: saveStateToHasPendingSync(nextTabState),
+        })
+      } catch {
+        // Session read failures never block the active document path above.
+      }
     })
-  }, [currentWritingId, routeWritingId, router])
+  }, [routeWritingId, router])
 
   useEffect(() => {
     const correctionTimers = correctionTimersRef.current
@@ -3242,7 +3421,7 @@ export function EditorShell({
           window.clearTimeout(markdownSaveTimeoutRef.current)
         }
 
-        setSyncStatus("saving")
+        applySyncStatus("saving")
 
         if (!editor) {
           return
@@ -3950,7 +4129,7 @@ export function EditorShell({
         window.clearTimeout(markdownSaveTimeoutRef.current)
       }
 
-      setSyncStatus("saving")
+      applySyncStatus("saving")
 
       markdownSaveTimeoutRef.current = window.setTimeout(() => {
         if (modeRef.current !== "markdown") {
@@ -3996,7 +4175,7 @@ export function EditorShell({
           window.clearTimeout(markdownSaveTimeoutRef.current)
         }
 
-        setSyncStatus("saving")
+        applySyncStatus("saving")
 
         if (editor) {
           markdownSaveTimeoutRef.current = window.setTimeout(() => {
@@ -4084,7 +4263,7 @@ export function EditorShell({
 
       const nextMarkdown = markdownValue ? `${markdownValue}\n\n${tableMarkdown}\n` : `${tableMarkdown}\n`
       setMarkdownValue(nextMarkdown)
-      setSyncStatus("saving")
+      applySyncStatus("saving")
 
       if (!editor) {
         return
@@ -4126,7 +4305,7 @@ export function EditorShell({
         const nextSelectionStart = start + imageMarkdown.length
 
         setMarkdownValue(nextMarkdown)
-        setSyncStatus("saving")
+        applySyncStatus("saving")
 
         if (editor) {
           if (markdownSaveTimeoutRef.current) {
