@@ -60,47 +60,11 @@ No existe todavía un scheduler automático que decida esto por PR — se selecc
 
 ---
 
-## Critical Capabilities — prioridad para integration tests futuros
+## Critical Capabilities — canonical owner movido
 
-Esta lista declara las capabilities críticas de Odessay que **no** tienen hoy una suite de integration tests dedicada (más allá de la cobertura unitaria/contract existente) y son candidatas a priorizar. No se construyen en este documento — es la declaración de alcance para un trabajo futuro, issue por issue.
+La lista de capabilities priorizadas para integration tests ya no vive aquí como una lista comprimida A–G: se reemplazó por el inventario completo y auditado en **`workflow/quality/capability-integration-map.md`** — 106 escenarios con `coverage_status` real (leído del código de cada test, no inferido del nombre del archivo), prioridad, evidencia y gaps concretos.
 
-### A. Document lifecycle
-
-`create → materialize → save → reopen`.
-
-Objetivo futuro: probar con servicios reales y almacenamiento temporal (no IndexedDB del browser, no filesystem real del usuario), evitando browser por completo.
-
-### B. Persistence correctness
-
-`multiple saves → failure → retry → no content corruption`.
-
-Objetivo: demostrar que una escritura fallida no corrompe el estado local ni deja el documento en un estado intermedio inconsistente tras retry.
-
-### C. Document identity / catalog
-
-`UUID → catalog → binding → canonical path`.
-
-Objetivo: la cadena completa de resolución de identidad, sin depender de que el catálogo esté servido por un DMG real.
-
-### D. Move / rename
-
-Coherencia entre `filesystem ↔ binding ↔ catalog` tras mover o renombrar un documento — que las tres vistas del mismo documento no queden desincronizadas.
-
-### E. Export
-
-Para Markdown, DOCX y PDF: `writing identity → resolution → export service → artefacto real`, sin necesitar UI. Verificar el artefacto producido (no solo que la ruta de descarga respondió 200).
-
-### F. Voice
-
-Tres contratos separados, no uno solo:
-
-- **Recording** → lifecycle de Blob/MIME.
-- **Transcription** → Blob → request → response/error.
-- **Desktop runtime** → el host de producción nunca es localhost.
-
-### G. Sync
-
-`local save → queue → cloud mutation → success/failure/retry`.
+Ese documento es ahora el canonical owner de "qué capability priorizar después". Este documento sigue siendo el canonical owner de la taxonomía de niveles de test y el principio de menor costo (secciones arriba) — el capability map los referencia en vez de repetirlos.
 
 ---
 
