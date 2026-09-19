@@ -228,7 +228,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 **Secuencia — si aprobado:**
 1. Verificar los checks mecánicos (esto, combinado con el `TechnicalVerdict` que produce el Review Agent en los pasos 2-4, determina el `GateResult` final del paso 5 — un solo owner por pieza: este paso decide lo mecánico, el Review Agent decide el juicio técnico, ninguno recalcula al otro):
    - `npm run ops:delivery:gate` debe terminar en verde (con `OPS_PERF_TRACE_PATH` solo cuando el contrato seleccionó el gate del editor).
-   - CI `CI required` (`blocking-ci.yml`) en SUCCESS — agrega `quality`, `process-checks` y `scoped-ci`.
+   - CI `CI required` (`blocking-ci.yml`) en SUCCESS — agrega `quality`, `process-checks` y `repo-checks`. Playwright E2E y performance capture no son parte de este gate (ver `workflow/testing/critical-capabilities-testing.md`); `scoped-ci.yml` sigue existiendo como workflow reusable/manual, no referenciado desde `blocking-ci.yml`.
    - Preview deploy (Vercel) en SUCCESS — un PR que toca código y no compila en preview no puede mergearse aunque el delivery gate local pase.
    - **Excepción perf:** si el cambio no activó `skill-performance`, no se exige evidencia de performance. Si lo activó, los resultados se interpretan según el contrato y el instrumento seleccionado; un budget no seleccionado no bloquea el PR.
 2. Validar el `Performance Architecture Contract` contra evidencia objetiva cuando esté activo:

@@ -1,12 +1,32 @@
 name: blocking-ci
 
 # Único entrypoint de merge. La composición interna (quality/process-checks/
-# scoped-ci/repo-checks) puede cambiar sin tener que reconfigurar branch
-# protection cada vez — el único check que se marca como required en GitHub
-# Settings es "CI required".
+# repo-checks) puede cambiar sin tener que reconfigurar branch protection
+# cada vez — el único check que se marca como required en GitHub Settings es
+# "CI required".
+#
+# Estrategia de costo: `CI required` solo agrega checks baratos y
+# deterministas (traceability, process sync, ledgers/drift, architecture
+# ratchets, typecheck/lint/unit/build). Playwright/E2E y performance capture
+# quedan fuera del blocking universal — ver scoped-ci.yml (reusable/manual,
+# ya no referenciado aquí) y workflow/testing/critical-capabilities-testing.md
+# para el principio ("test at the lowest-cost boundary that can falsify the
+# failure mode we care about") y cuándo sí conviene escalar a esas
+# herramientas.
+#
+# Pre-flight real: `process-checks` corre primero (falla en segundos si falta
+# ODE-XX o hay drift de proceso). `quality` y `repo-checks` solo arrancan si
+# `process-checks` termina en SUCCESS — evita gastar runners en typecheck/
+# lint/test/build/architecture cuando el PR ya es inválido por trazabilidad.
 
 on:
   pull_request:
+    # Default types (opened/synchronize/reopened) never refire on a label
+    # change alone — a PR labeled `process`/`infra` after opening would keep
+    # the traceability gate reading a stale, label-less event snapshot until
+    # the next push. Adding labeled/unlabeled makes the infra/process
+    # exemption actually take effect when the label is what changed.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     branches:
       - main
 
@@ -54,14 +74,8 @@ jobs:
             echo "Hay archivos fuera de docs/skills/roles, o uno de los archivos acoplados a ops:process:sync — corre CI completo."
           else
             echo "app_changed=false" >> "${GITHUB_OUTPUT}"
-            echo "Solo cambiaron docs/skills/roles sin acoplamiento a process-sync — se salta quality/process-checks/scoped-ci."
+            echo "Solo cambiaron docs/skills/roles sin acoplamiento a process-sync — se salta quality/process-checks/repo-checks."
           fi
-
-  quality:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.app_changed == 'true'
-    uses: ./.github/workflows/quality.yml
-    secrets: inherit
 
   process-checks:
     needs: detect-changes
@@ -69,22 +83,26 @@ jobs:
     uses: ./.github/workflows/process-checks.yml
     secrets: inherit
 
-  scoped-ci:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.app_changed == 'true'
-    uses: ./.github/workflows/scoped-ci.yml
+  quality:
+    needs: [detect-changes, process-checks]
+    if: needs.detect-changes.outputs.app_changed == 'true' && needs.process-checks.result == 'success'
+    uses: ./.github/workflows/quality.yml
     secrets: inherit
 
   repo-checks:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.app_changed == 'true'
+    needs: [detect-changes, process-checks]
+    if: needs.detect-changes.outputs.app_changed == 'true' && needs.process-checks.result == 'success'
     uses: ./.github/workflows/repo-checks.yml
     secrets: inherit
+
+  # scoped-ci.yml (Playwright E2E) ya no es parte de la composición blocking:
+  # ver el comentario de costo arriba. Sigue existiendo como workflow reusable
+  # (`workflow_dispatch` + `workflow_call`) para invocación manual/futura.
 
   required:
     name: CI required
     if: always()
-    needs: [detect-changes, quality, process-checks, scoped-ci, repo-checks]
+    needs: [detect-changes, process-checks, quality, repo-checks]
     runs-on: ubuntu-latest
     steps:
       - name: Check all required jobs passed or were skipped
