@@ -208,7 +208,7 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 | SHARE-01 | Enable sharing | document → sharing owner → API/cloud → authorization → consumer view | Sharing state change is durably persisted and takes effect. | UNIT_ONLY | HIGH | `tests/api/sharing-cors.test.ts`; `tests/sharing-service.test.ts`; `tests/desktop-sharing-service.test.ts`; `tests/writing-shares.test.ts` | Every layer unit-tested with the adjacent layer mocked; no test performs a real Supabase write. |
 | SHARE-02 | Disable sharing | same as SHARE-01 | Same as SHARE-01, in reverse. | UNIT_ONLY | HIGH | same as SHARE-01 | — |
 | SHARE-03 | Generate/open preview link | same as SHARE-01 | A generated link resolves to the correct document under the intended authorization. | UNIT_ONLY | HIGH | `tests/sharing-service.test.ts`; `tests/api/margins-preview-route.test.ts`; `tests/playwright/preview-shared-margins.e2e.ts` | Richest unit/contract set in the cluster, but the e2e test intercepts the preview API entirely rather than resolving a real token — generation and lookup are never connected. |
-| SHARE-04 | Permission enforcement | same as SHARE-01 | Only authorized consumers can access a shared/unshared document. | NONE | CRITICAL *(upgraded — security)* | `tests/writing-shares.test.ts` — its own header states RLS enforcement is "verified manually via Supabase MCP ... requires live DB connection" | The code itself documents this gap. Only route-level "is there a session" (401) is automated — not cross-user ownership/RLS. |
+| SHARE-04 | Permission enforcement | same as SHARE-01 | Only authorized consumers can access a shared/unshared document. | INTEGRATION | CRITICAL | `supabase/tests/writing_shares_permission_enforcement.test.sql` (real Postgres RLS + real `list_incoming_shared_writings` security-definer RPC, via pgTAP against a real local instance); prior: `tests/writing-shares.test.ts` | Two real engines behind the same property, both proven: (1) `writings`/`writing_shares` table RLS via `can_read_writing` — a stranger cannot read a private or shared-with-someone-else writing even knowing its id, but genuinely can read a public one (positive control); only the owner can create/revoke a share grant, never the grantee (RLS insert check, `42501`); revoking a share actually removes access, not just the row. (2) The separate security-definer RPC desktop's "shared with me" list uses — a different real engine, since it re-implements its own `auth.uid()` scoping instead of relying on table RLS, and a scoping bug there is a full cross-user leak with nothing else to catch it. Mutation-tested live on both: loosening `can_read_writing` to treat `shared` like `public` was caught; dropping the RPC's `shared_with_id` filter (a full leak of every user's incoming shares to every other user) was caught. |
 | SHARE-05 | Visibility changes persist | same as SHARE-01 | A visibility change persists across sessions/reloads. | NONE | HIGH *(upgraded)* | none found | — |
 | SHARE-06 | Reopen preserves sharing state | same as SHARE-01 | Reopening a document shows its correct current sharing state. | NONE | NORMAL | none found | — |
 
@@ -247,31 +247,30 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 
 | Status | Count | % |
 |---|---|---|
-| NONE | 12 | 11% |
+| NONE | 11 | 10% |
 | UNIT_ONLY | 17 | 16% |
 | CONTRACT | 9 | 8% |
 | PARTIAL_INTEGRATION | 51 | 48% |
-| INTEGRATION | 16 | 15% |
+| INTEGRATION | 17 | 16% |
 | RUNTIME | 0 | 0% |
 | RELEASE | 1 | 1% |
 
-*(Mechanically re-verified against the table below by parsing each row's Status column — not hand-counted. This table went stale for one PR cycle: PR #438 upgraded DOC-02/03/04/06 without updating it here. Re-check it the same way after every status change, not just the change you're focused on.)*
+*(Mechanically re-verified against the table below by parsing each row's Status column — not hand-counted, every time a status changes. This table went stale once, for one PR cycle: PR #438 upgraded DOC-02/03/04/06 without updating it here — see the git history of this file for the correction.)*
 
 **The headline finding matches the reported pain point exactly:** nearly half of all scenarios (51/106) sit at `PARTIAL_INTEGRATION` — real collaborators tested on one side of a boundary, fakes on the other, never joined. This is precisely the shape of bug this initiative exists to catch: every piece passes its own tests, the seam between them doesn't. Zero scenarios have been validated against the real packaged Tauri runtime (`RUNTIME` = 0); only one (`VOICE-08`) reaches `RELEASE`.
 
 ## Critical gaps (NONE or UNIT_ONLY on a CRITICAL/HIGH-priority scenario)
 
-1. **SHARE-04 — Permission enforcement (security).** The test file's own header admits RLS is verified manually only. `NONE`, `CRITICAL`.
-2. **WATCH-07 — Active document changes externally.** No test simulates an external edit to a currently-open document. `NONE`, `CRITICAL`.
-3. **AI-01 — Suggest title.** Confirmed blocking condition (untested client-side lifecycle gate) and a strong root-cause candidate for the reported broken behavior — not yet reproduced live end-to-end. `NONE` at the client layer, `CRITICAL`.
-4. **EXP-05 — Export failure behavior.** Zero coverage for dialog-cancel/write-failure; the product could report a successful export when nothing was written. `NONE`, `CRITICAL`.
-5. **STATE-05 / STATE-07 — Clean view state / cursor restore.** Same bug class as the already-partially-addressed scroll-position issue (STATE-03/04), but with no test at all. `NONE`, `HIGH`.
-6. **WS-06 — Workspace switch isolation.** No test drives two real Workspace roots at once. `NONE`, `HIGH`.
-7. **COL-06 — Delete collection without corrupting documents.** Schema-guaranteed, never tested. `NONE`, `HIGH`.
-8. **DOC-09 — Import document (desktop).** The actual wiring function has zero test references anywhere in the repo. `NONE`, `HIGH`.
-9. **SHARE-05 / SHARE-06 — Visibility persistence / reopen.** `NONE`, `HIGH`/`NORMAL`.
+1. **WATCH-07 — Active document changes externally.** No test simulates an external edit to a currently-open document. `NONE`, `CRITICAL`.
+2. **AI-01 — Suggest title.** Confirmed blocking condition (untested client-side lifecycle gate) and a strong root-cause candidate for the reported broken behavior — not yet reproduced live end-to-end. `NONE` at the client layer, `CRITICAL`.
+3. **EXP-05 — Export failure behavior.** Zero coverage for dialog-cancel/write-failure; the product could report a successful export when nothing was written. `NONE`, `CRITICAL`.
+4. **STATE-05 / STATE-07 — Clean view state / cursor restore.** Same bug class as the already-partially-addressed scroll-position issue (STATE-03/04), but with no test at all. `NONE`, `HIGH`.
+5. **WS-06 — Workspace switch isolation.** No test drives two real Workspace roots at once. `NONE`, `HIGH`.
+6. **COL-06 — Delete collection without corrupting documents.** Schema-guaranteed, never tested. `NONE`, `HIGH`.
+7. **DOC-09 — Import document (desktop).** The actual wiring function has zero test references anywhere in the repo. `NONE`, `HIGH`.
+8. **SHARE-05 / SHARE-06 — Visibility persistence / reopen.** `NONE`, `HIGH`/`NORMAL`.
 
-*(CONFIG-07 closed — see below — and removed from this list.)*
+*(CONFIG-07 and SHARE-04 closed — see below — and removed from this list.)*
 
 ## Existing strong coverage (hold the line here)
 
@@ -283,11 +282,12 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 - **SYNC-08 — Metadata-only mutation safety.** `CONTRACT`, three explicit negative-shape assertions.
 - **COL-04 — Reopen preserves collection membership.** `INTEGRATION`, real IndexedDB + real hydration merge.
 - **CONFIG-07 — Existing documents survive schema change.** `INTEGRATION` on both real engines (Postgres RLS-scoped rewrite, desktop catalog rewrite) — the map's own former highest-priority gap, now closed with a cross-user RLS proof and a bulk-write failure-atomicity proof.
+- **SHARE-04 — Permission enforcement.** `INTEGRATION` on both real engines (table RLS via `can_read_writing`, and the separate `list_incoming_shared_writings` security-definer RPC) — a stranger genuinely cannot read a private or shared-with-someone-else writing, and genuinely can read a public one.
 
 ## V1 Implementation Plan (ordered — ties to the spec's own §10 plus the upgrades above)
 
 1. ~~CONFIG-07 real-engine test~~ — **done**, see `supabase/tests/delete_vocabulary_item_rewrite.test.sql` + `tests/integration/vocabulary/schema-change-safety.test.ts`.
-2. SHARE-04 real RLS/ownership test (cross-user access attempt against a real or test-scoped Supabase instance, not just route-level 401).
+2. ~~SHARE-04 real RLS/ownership test~~ — **done**, see `supabase/tests/writing_shares_permission_enforcement.test.sql`.
 3. Reproduce and, if confirmed, fix the AI-01 `local-only`/`syncing` lifecycle gate, with a regression test.
 4. WATCH-07 — external edit to an open/dirty document.
 5. EXP-05 — export failure paths (dialog cancel, write failure).
@@ -342,6 +342,7 @@ Capability Scenario
 |---|---|---|
 | DOC-02, DOC-03, DOC-04, DOC-06 | PARTIAL_INTEGRATION/CONTRACT → **INTEGRATION** | `tests/integration/documents/materialize-save-reopen.test.ts` |
 | CONFIG-07 | PARTIAL_INTEGRATION → **INTEGRATION** | `supabase/tests/delete_vocabulary_item_rewrite.test.sql` (Postgres) + `tests/integration/vocabulary/schema-change-safety.test.ts` (desktop) |
+| SHARE-04 | NONE → **INTEGRATION** | `supabase/tests/writing_shares_permission_enforcement.test.sql` (table RLS + security-definer RPC, both real Postgres) |
 
 Real collaborators used: `DesktopDocumentService`, `FilesystemDocumentService`, `SqliteDocumentCatalog`, `PersistenceCoordinator` (all real, unmodified production classes) against a real temp filesystem, entering saves through the coordinator's public API (`persist()` + `settle()`, never a raw `saveWriting()` call, per the declared chain). Precise framing (not "real SQLite"): this is application-side integration with the native Tauri/Rust/SQLite boundary replaced by a real (not spy-based) behavioral test double that mirrors the Rust side's row/binding consistency rules — `RUNTIME` stays reserved for TS → actual `invoke()` → real Rust/SQLite, which SYS-05/SYS-08 still track as a separate, open gap. Allowed fakes: that native transport itself (no bridge in Vitest) and the cloud sync flush (external network boundary).
 
@@ -352,7 +353,9 @@ Two rounds of review found real things, exactly what this phase is for:
 
 **CONFIG-07 (real collaborators):** `delete_vocabulary_item` (real Postgres function, run against a real local Supabase/Postgres instance via `pg_prove`/pgTAP — the first pgTAP test in this repo actually verified locally as part of writing it, though still not wired into CI, matching the pre-existing pattern for all pgTAP tests here) on the Postgres side; `DesktopSettingsService` (real, unmodified) against the same real behavioral catalog double from the document-lifecycle cluster, extended with a real `tauriCatalogBulkDualWrite` double, on the desktop side. Allowed fakes: same native-transport boundary as above; RLS/`security invoker` themselves are real, not simulated. Mutation-tested live on both engines — the Postgres test's first fault injection (dropping the `author_id` filter alone) didn't actually reproduce a bug, because the `writings` table's own RLS UPDATE policy independently blocks cross-user rewrites regardless of the function's WHERE clause — a genuine defense-in-depth finding. A more realistic regression (`security definer`, which bypasses RLS, combined with the missing filter) did reproduce real cross-user corruption and the test caught it. The desktop test's fault injection (dropping the key filter in `rewriteCatalogToBaseValue`) caught the bug on the first attempt.
 
-Remaining P0 items (per the earlier reviewer-proposed list): EXP-05, AI-01 (reproduce+fix), STATE-05, ANN-04/ANN-05 convergence, SYNC-03, WS-02/DOC-08 (+SYS-04/WATCH-04).
+**SHARE-04 (real collaborators):** the `writings`/`writing_shares` RLS policies and `can_read_writing()` (real Postgres, run under `set local role authenticated` + `request.jwt.claims` per user, same technique as every other real-DB proof here) — proves a stranger cannot read a private or shared-with-someone-else writing but genuinely can read a public one (the positive control matters: without it, "RLS blocks everything" would also pass a test that only checks denial). A second real engine for the same property: `list_incoming_shared_writings()`, a `security definer` RPC desktop's "shared with me" list depends on — it re-implements its own `auth.uid()` scoping instead of relying on table RLS, so a bug there is a full cross-user leak with nothing else to catch it. Mutation-tested live on both: loosening `can_read_writing` to treat `shared` the same as `public` was caught; dropping the RPC's `shared_with_id` filter (every user's incoming shares visible to every other user) was caught.
+
+Remaining P0 items (per the earlier reviewer-proposed list): AI-01 (reproduce+fix), WATCH-07, EXP-05, STATE-05, ANN-04/ANN-05 convergence, SYNC-03, WS-02/DOC-08 (+SYS-04/WATCH-04).
 
 ## CI candidates (cheap, deterministic, high-value — matches the spec's §19 criteria)
 
