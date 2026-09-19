@@ -61,6 +61,13 @@ function runGate(
   const env = {
     ...process.env,
     GITHUB_ACTIONS: "",
+    // Running this test itself inside a real GitHub Actions PR job means
+    // process.env.GITHUB_EVENT_PATH points at THIS PR's own event (which may
+    // carry a real "process"/"infra" label) — without clearing it here, that
+    // label would leak into scenarios that assume no PR label is present.
+    // Scenarios that want a label pass their own path via extraEnv, which
+    // overrides this below.
+    GITHUB_EVENT_PATH: "",
     TRACEABILITY_BASE_SHA: fixture.base,
     TRACEABILITY_MERGE_BASE_SHA: fixture.base,
     TRACEABILITY_HEAD_SHA: fixture.head,
