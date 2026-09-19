@@ -1,10 +1,13 @@
 # Architecture ratchets — ver Odyssey Quality Harness spec §7.6 y
 # tests/architecture/persistence-boundary.test.ts, que aplica este archivo.
 #
-# Regla de convivencia con deuda existente:
-#   - violación ya en architecture/boundaries.baseline.json -> permitida (por ahora)
-#   - violación nueva (archivo no listado en el baseline)   -> FAIL
-#   - entrada de baseline que ya no viola                    -> permitida (mejora sin gate)
+# El baseline debe ser exactamente el conjunto de violaciones actuales
+# toleradas — nunca un techo laxo. El ratchet es monotónico en ambas
+# direcciones:
+#   - violación actual no listada en el baseline -> FAIL (violación nueva)
+#   - violación actual listada en el baseline    -> PASS (deuda conocida)
+#   - entrada de baseline que ya no viola         -> FAIL (removerla del
+#     baseline; si se deja, la deuda puede reaparecer ahí sin que CI la note)
 
 boundaries:
   ui-no-direct-persistence:
