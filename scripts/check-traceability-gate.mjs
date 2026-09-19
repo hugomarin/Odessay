@@ -43,6 +43,9 @@ const INFRA_PROCESS_PATH_PATTERNS = [
   /^\.claude\//,
   /^architecture\//,
   /^tests\/architecture\//,
+  // Regression tests for the ops/process scripts themselves (this file
+  // included) — narrowly scoped to that naming, not a blanket tests/**.
+  /^tests\/traceability-.*\.test\.ts$/,
   /^docs\//,
   /^workflow\//,
   /^README\.md$/,
