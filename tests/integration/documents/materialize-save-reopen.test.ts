@@ -81,6 +81,23 @@ const { createPersistenceCoordinator } = await import("@/lib/editor/persistence-
 
 const bodyJson = (text: string) => ({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] })
 
+type WritingRecordLike = { id: string; createdAt: string; version: number; title: string | null; status: string; artifactType: string; visibility: string }
+
+function snapshotFor(record: WritingRecordLike, text: string) {
+  return {
+    writingId: record.id,
+    createdAt: record.createdAt,
+    version: record.version,
+    title: record.title ?? "Untitled",
+    bodyJson: bodyJson(text),
+    bodyText: text,
+    status: record.status as "draft",
+    artifactType: record.artifactType as "general",
+    visibility: record.visibility as "private",
+    lifecycle: "local-only" as const,
+  }
+}
+
 let workspaceRoot: string
 
 beforeAll(() => {
@@ -95,6 +112,15 @@ afterAll(() => {
 afterEach(() => {
   resetCatalogDoubles()
   resetWriteFileFailureState()
+  // getDocumentService() memoizes the runtime (same config/data dirs for the
+  // whole file, since it's keyed on the first resolveDesktopRuntimeServices()
+  // call), so the temp root itself can't be swapped per test — but leaving
+  // real files behind between tests would mean every test after the first
+  // starts with "catalog = clean, filesystem = leftovers from a previous
+  // test", which is exactly the kind of fs/catalog divergence this suite
+  // exists to catch. Clear the real content, keep the root.
+  rmSync(join(workspaceRoot, "data"), { recursive: true, force: true })
+  rmSync(join(workspaceRoot, "config"), { recursive: true, force: true })
 })
 
 /**
@@ -121,8 +147,13 @@ afterEach(() => {
  *     single record.
  *
  * Failure: the filesystem write fails (e.g. disk full).
- * Then: no success is reported, and no catalog row exists for that id
- * afterward — a failed materialization must not leave orphan durable state.
+ * Then: no success is reported, and no catalog row exists for that id.
+ * A real .md placeholder file *can* remain on disk (FilesystemDocumentService
+ * creates it before persist() attempts the content write) — that is an
+ * accepted, recoverable state by product decision, not a bug: a file with no
+ * catalog row is exactly what the reconciler exists to adopt or clean up
+ * (SYS-06/SYS-07/SYS-08 territory), so persist() does not roll it back
+ * itself. This test asserts that state precisely instead of ignoring it.
  */
 describe("DOC-02 — Materialize first content", () => {
   it("produces exactly one durable document, with UUID, file and catalog agreeing", async () => {
@@ -156,7 +187,7 @@ describe("DOC-02 — Materialize first content", () => {
     expect(resolvedByPath?.id).toBe(record.id)
   })
 
-  it("FAILURE — a filesystem write failure reports no success and leaves no orphan catalog row", async () => {
+  it("FAILURE — a filesystem write failure reports no success and leaves no catalog row (an orphan file may remain — accepted, see Proof Contract)", async () => {
     // FilesystemDocumentService.createDraft's own internal "# title\n\n"
     // placeholder write is real call #1 (DesktopDocumentService always
     // supplies a default title to it, so this fires even without one here).
@@ -183,39 +214,68 @@ describe("DOC-02 — Materialize first content", () => {
     // reached the catalog as a durable row.
     const failedAttemptIds = await allCatalogIds()
     expect(failedAttemptIds).toHaveLength(0)
+
+    // Accepted, documented current behavior (product decision — see Proof
+    // Contract above): FilesystemDocumentService.createDraft's placeholder
+    // write (call #1) already landed before persist()'s content write
+    // (call #2, the one that failed) — so a real orphan .md file remains,
+    // with no catalog row pointing to it. Asserting this explicitly, rather
+    // than only checking the catalog, is the point: the original version of
+    // this test only checked catalog rows and would have stayed green even
+    // if persist() started silently deleting files it shouldn't.
+    const files = await listWorkspaceFiles()
+    expect(files).toHaveLength(1)
   })
 })
 
 /**
- * DOC-03 — Save document (+ RACE variant)
+ * DOC-03 — Save document (+ RACE variant, DOC-04's property)
  *
  * Property: confirmed content is saved durably and recoverable; a stale
  * save that settles after a newer one must never overwrite it (DOC-04's
  * property, exercised here rather than as a separate scenario per the
  * capability map's "don't invent new capabilities for a variant" guidance).
  *
- * Real collaborators: PersistenceCoordinator (real), DesktopDocumentService
- * (real, via getDocumentService()), real fs, real catalog double.
+ * Real collaborators: PersistenceCoordinator (real) — the chain this
+ * scenario declares starts at the coordinator, not at DocumentService
+ * directly, so both cases below go through `coordinator.persist(...)` +
+ * `coordinator.settle(...)`, never a raw `service.saveWriting(...)` call.
+ * `settle()` is the coordinator's own public contract for "wait until
+ * nothing is in flight, debounced or queued for this document" — its JSDoc
+ * says exactly this is for a caller that needs to know a write has actually
+ * landed. An earlier version of this test invented a private signal around
+ * `saveWriting` instead of using it; that was unnecessary and coupled the
+ * test to an implementation detail instead of the coordinator's own API.
  * Allowed fakes: same as DOC-02, plus a controlled delay wrapped around the
- * *first* saveWriting call only — the delay itself is test control, not a
- * fake of behavior; the real save still executes underneath it.
+ * *first* saveWriting call only, for the RACE case — the delay itself is
+ * test control, not a fake of behavior; the real save still executes
+ * underneath it.
  */
 describe("DOC-03 — Save document", () => {
-  it("persists new content durably and it is recoverable from the real file", async () => {
+  it("persists new content durably through the coordinator and it is recoverable from the real file and via reopen", async () => {
     const draft = await createDesktopDraft({ title: "Save Target", initialBodyJson: bodyJson("v1") })
     const record = draft.data!
     const service = await getDocumentService()
 
-    const saved = await service.saveWriting({
-      writing: { ...record, content: { ...record.content, richText: bodyJson("v2"), plainText: "v2" } },
+    const coordinator = createPersistenceCoordinator({
+      runtime: "desktop",
+      persistenceDebounceMs: 0,
+      documentService: service,
+      createWritingId: () => crypto.randomUUID(),
+      now: () => new Date().toISOString(),
     })
 
-    expect(saved.error).toBeNull()
+    coordinator.persist(snapshotFor(record, "v2"))
+    await coordinator.settle({ writingId: record.id })
+
     const catalogRow = await getCatalogRecord(record.id)
     const canonicalPath = catalogRow!.binding!.canonicalPath
     const onDisk = await readFile(canonicalPath, "utf8")
     expect(onDisk).toContain("v2")
     expect(onDisk).not.toContain("v1")
+
+    const reopened = await service.openWriting(record.id)
+    expect(reopened.data!.content.plainText).toContain("v2")
   })
 
   it("RACE — a stale save that settles after a newer one does not overwrite the newer content", async () => {
@@ -225,29 +285,15 @@ describe("DOC-03 — Save document", () => {
 
     let releaseFirstSave: (() => void) | null = null
     let saveCallCount = 0
-    let resolveSecondCallSettled: (() => void) | null = null
-    const secondCallSettled = new Promise<void>((resolve) => {
-      resolveSecondCallSettled = resolve
-    })
     const realSaveWriting = service.saveWriting.bind(service)
     const delayedSaveWriting: typeof service.saveWriting = async (input) => {
       saveCallCount += 1
-      const myCall = saveCallCount
-      if (myCall === 1) {
+      if (saveCallCount === 1) {
         await new Promise<void>((resolve) => {
           releaseFirstSave = resolve
         })
       }
-      const result = await realSaveWriting(input)
-      // The coordinator's own persist() promise resolves once the request is
-      // handed off, not once THIS specific save's real disk/catalog write has
-      // actually landed — waiting on Promise.all([resultA, resultB]) alone
-      // let the assertions below run while call #2's write was still in
-      // flight (confirmed by adding this signal: without it, the test reads
-      // stale "SAVE A" content). Wait on this instead of trusting persist()'s
-      // timing for what "settled" means at the storage layer.
-      if (myCall === 2) resolveSecondCallSettled?.()
-      return result
+      return realSaveWriting(input)
     }
 
     const coordinator = createPersistenceCoordinator({
@@ -258,31 +304,21 @@ describe("DOC-03 — Save document", () => {
       now: () => new Date().toISOString(),
     })
 
-    const snapshotA = {
-      writingId: record.id,
-      createdAt: record.createdAt,
-      version: record.version,
-      title: record.title ?? "Untitled",
-      bodyJson: bodyJson("SAVE A — should lose the race"),
-      bodyText: "SAVE A — should lose the race",
-      status: record.status,
-      artifactType: record.artifactType,
-      visibility: record.visibility,
-      lifecycle: "local-only" as const,
-    }
-    const snapshotB = { ...snapshotA, bodyJson: bodyJson("SAVE B — should win the race"), bodyText: "SAVE B — should win the race" }
-
-    const resultA = coordinator.persist(snapshotA)
+    coordinator.persist(snapshotFor(record, "SAVE A — should lose the race"))
     await vi.waitFor(() => expect(saveCallCount).toBe(1))
 
-    const resultB = coordinator.persist(snapshotB)
+    coordinator.persist(snapshotFor(record, "SAVE B — should win the race"))
     // B must not have started its own saveWriting call yet — the coordinator
     // collapses it into the single pending slot for this document.
     expect(saveCallCount).toBe(1)
 
     releaseFirstSave!()
-    await Promise.all([resultA, resultB])
-    await secondCallSettled
+    // The coordinator's own public durability contract: wait until nothing
+    // is in flight, debounced or queued for this document, rather than
+    // trusting the timing of persist()'s own returned promises (persist()
+    // is documented as optimistic/fire-and-forget; settle() is the API for
+    // "I need to know it actually landed").
+    await coordinator.settle({ writingId: record.id })
 
     const catalogRow = await getCatalogRecord(record.id)
     const canonicalPath = catalogRow!.binding!.canonicalPath
