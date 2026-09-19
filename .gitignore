@@ -62,6 +62,7 @@ src-tauri/gen/
 
 # Supabase
 supabase/.temp/
+supabase/.branches/
 
 # Updater signing keys and generated signatures
 odessay-updater-key
