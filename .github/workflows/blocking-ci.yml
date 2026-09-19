@@ -13,6 +13,11 @@ name: blocking-ci
 # para el principio ("test at the lowest-cost boundary that can falsify the
 # failure mode we care about") y cuándo sí conviene escalar a esas
 # herramientas.
+#
+# Pre-flight real: `process-checks` corre primero (falla en segundos si falta
+# ODE-XX o hay drift de proceso). `quality` y `repo-checks` solo arrancan si
+# `process-checks` termina en SUCCESS — evita gastar runners en typecheck/
+# lint/test/build/architecture cuando el PR ya es inválido por trazabilidad.
 
 on:
   pull_request:
@@ -66,21 +71,21 @@ jobs:
             echo "Solo cambiaron docs/skills/roles sin acoplamiento a process-sync — se salta quality/process-checks/repo-checks."
           fi
 
-  quality:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.app_changed == 'true'
-    uses: ./.github/workflows/quality.yml
-    secrets: inherit
-
   process-checks:
     needs: detect-changes
     if: needs.detect-changes.outputs.app_changed == 'true'
     uses: ./.github/workflows/process-checks.yml
     secrets: inherit
 
+  quality:
+    needs: [detect-changes, process-checks]
+    if: needs.detect-changes.outputs.app_changed == 'true' && needs.process-checks.result == 'success'
+    uses: ./.github/workflows/quality.yml
+    secrets: inherit
+
   repo-checks:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.app_changed == 'true'
+    needs: [detect-changes, process-checks]
+    if: needs.detect-changes.outputs.app_changed == 'true' && needs.process-checks.result == 'success'
     uses: ./.github/workflows/repo-checks.yml
     secrets: inherit
 
@@ -91,7 +96,7 @@ jobs:
   required:
     name: CI required
     if: always()
-    needs: [detect-changes, quality, process-checks, repo-checks]
+    needs: [detect-changes, process-checks, quality, repo-checks]
     runs-on: ubuntu-latest
     steps:
       - name: Check all required jobs passed or were skipped

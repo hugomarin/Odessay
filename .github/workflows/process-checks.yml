@@ -65,7 +65,7 @@ jobs:
       - name: Check traceability gate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run ops:traceability:gate
+        run: node scripts/check-traceability-gate.mjs
 
       - name: Check process docs sync
         run: npm run ops:process:sync
