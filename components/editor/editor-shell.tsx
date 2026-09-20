@@ -2156,11 +2156,12 @@ export function EditorShell({
           // catalog's own cached body (it has none — only the hash).
           try {
             const opened = await (await getDocumentService()).openWriting(currentWritingId)
-            if (cancelled || !opened.data || !editor) return
+            const liveEditor = editorInstanceRef.current
+            if (cancelled || !opened.data || !liveEditor) return
             isApplyingContentRef.current = true
-            editor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
+            liveEditor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
             isApplyingContentRef.current = false
-            updateDerivedEditorState(editor)
+            updateDerivedEditorState(liveEditor)
             persistenceCoordinator.setDurableContentHash(currentWritingId, nextContentHash)
             setExternalFileNotice({ kind: "content-changed", path: nextCanonicalPath })
           } catch {
@@ -2193,7 +2194,7 @@ export function EditorShell({
       externalContentConflictRef.current = null
       setExternalContentConflict(null)
     }
-  }, [currentWritingId, persistenceCoordinator, editor, updateDerivedEditorState])
+  }, [currentWritingId, persistenceCoordinator, updateDerivedEditorState])
 
   useEffect(() => {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
