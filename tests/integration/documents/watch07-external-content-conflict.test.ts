@@ -73,7 +73,7 @@ const bodyJson = (text: string) => ({ type: "doc", content: [{ type: "paragraph"
 
 type WritingRecordLike = { id: string; createdAt: string; version: number; title: string | null; status: string; artifactType: string; visibility: string }
 
-function snapshotFor(record: WritingRecordLike, text: string, baselineContentHash: string | null) {
+function snapshotFor(record: WritingRecordLike, text: string) {
   return {
     writingId: record.id,
     createdAt: record.createdAt,
@@ -85,7 +85,6 @@ function snapshotFor(record: WritingRecordLike, text: string, baselineContentHas
     artifactType: record.artifactType as "general",
     visibility: record.visibility as "private",
     lifecycle: "local-only" as const,
-    baselineContentHash,
   }
 }
 
@@ -110,20 +109,25 @@ afterEach(() => {
 /**
  * WATCH-07 — the write-side conflict guard is the "final barrier" half of
  * the property: no save may durably overwrite a durable external edit
- * unless the caller explicitly chose to replace it. The watcher/reconciler/
- * catalog chain that detects this early and drives the UI is already real
- * and live (confirmed by reading desktop-workspace-reconciler.ts and
- * editor-shell.tsx directly, not assumed) — what this proof exercises is
- * the part that makes silent data loss structurally impossible even if a
- * UI-layer race slips past that detection: PersistenceCoordinator threading
- * a baseline content hash through to the real FilesystemDocumentService,
- * which refuses to write when the real on-disk content no longer matches it.
+ * unless the caller explicitly chose to replace it. `PersistenceCoordinator`
+ * owns the durable-content-hash baseline itself (getDurableContentHash /
+ * setDurableContentHash) and only ever advances it after a real durable
+ * commit — never optimistically from a caller's snapshot, and never frozen
+ * at persist()-call time — specifically so that a second save queued behind
+ * a first one sees the first save's own just-landed result, not a stale
+ * pre-first-save value (review caught this: the original version threaded a
+ * caller-supplied baseline through the snapshot object itself, which raced
+ * exactly that sequence).
  *
  * Real collaborators: PersistenceCoordinator (real), FilesystemDocumentService
  * (real class) — the same real fs + real behavioral tauriWriteFile double
- * used by DOC-02/03/06, now extended with the identical hash-comparison
- * logic the real Rust `write_file` command has (see
- * src-tauri/src/commands/document.rs's own cargo tests for that half).
+ * used by DOC-02/03/06, extended with the identical hash-comparison logic
+ * the real Rust `write_file` command has (see its own cargo tests for that
+ * half). The double's own manifest-sync hash (statAsWorkspaceFile) was
+ * corrected in this same change to use the same blake3 algorithm as the
+ * conflict check — it previously used SHA-256, which predates this guard
+ * and never needed to agree with anything outside itself; once seeded as a
+ * baseline, that mismatch alone made every second save look like a conflict.
  * Allowed fakes: same as DOC-02/03/06 (native Tauri transport, cloud sync).
  */
 describe("WATCH-07 — write-side conflict guard", () => {
@@ -131,10 +135,6 @@ describe("WATCH-07 — write-side conflict guard", () => {
     const draft = await createDesktopDraft({ title: "Clean Save", initialBodyJson: bodyJson("v1") })
     const record = draft.data!
     const service = await getDocumentService()
-    const catalogRow = await tauriCatalogGetByIdDouble(await desktopDbPath(), record.id)
-    const canonicalPath = catalogRow!.canonicalPath!
-    const currentContent = await readFile(canonicalPath, "utf8")
-    const baseline = await computeMarkdownContentHash(currentContent)
 
     const coordinator = createPersistenceCoordinator({
       runtime: "desktop",
@@ -144,9 +144,11 @@ describe("WATCH-07 — write-side conflict guard", () => {
       now: () => new Date().toISOString(),
     })
 
-    coordinator.persist(snapshotFor(record, "v2 — my edit", baseline))
+    coordinator.persist(snapshotFor(record, "v2 — my edit"))
     await coordinator.settle({ writingId: record.id })
 
+    const catalogRow = await tauriCatalogGetByIdDouble(await desktopDbPath(), record.id)
+    const canonicalPath = catalogRow!.canonicalPath!
     const onDisk = await readFile(canonicalPath, "utf8")
     expect(onDisk).toContain("v2 — my edit")
   })
@@ -159,13 +161,6 @@ describe("WATCH-07 — write-side conflict guard", () => {
     const canonicalPath = catalogRow!.canonicalPath!
     const originalContent = await readFile(canonicalPath, "utf8")
     const staleBaseline = await computeMarkdownContentHash(originalContent)
-
-    // Simulate the external edit: another process writes the file directly,
-    // bypassing the app entirely — exactly what the watcher would detect,
-    // except this test's point is that detection is *not* what prevents the
-    // overwrite; the write-side hash check is.
-    const fs = await import("node:fs/promises")
-    await fs.writeFile(canonicalPath, "# External Edit\n\nSomeone else's content.\n", "utf8")
 
     const errorEvents: Array<{ code?: string; message: string }> = []
     const coordinator = createPersistenceCoordinator(
@@ -182,11 +177,23 @@ describe("WATCH-07 — write-side conflict guard", () => {
         },
       },
     )
+    // Seed the coordinator's tracked baseline explicitly, as editor-shell.tsx
+    // would after opening the document — this is the value the RACE is
+    // against: the caller confirmed H1, then something else changed the
+    // file to H2 before this save's own write actually executes.
+    coordinator.setDurableContentHash(record.id, staleBaseline)
+
+    // Simulate the external edit: another process writes the file directly,
+    // bypassing the app entirely — exactly what the watcher would detect,
+    // except this test's point is that detection is *not* what prevents the
+    // overwrite; the write-side hash check is.
+    const fs = await import("node:fs/promises")
+    await fs.writeFile(canonicalPath, "# External Edit\n\nSomeone else's content.\n", "utf8")
 
     // Local edit was scheduled against the OLD (now-stale) baseline —
     // exactly the RACE: the caller read H1, the external write to H2
     // happened, and only *then* does this local persist actually run.
-    coordinator.persist(snapshotFor(record, "my conflicting local edit", staleBaseline))
+    coordinator.persist(snapshotFor(record, "my conflicting local edit"))
     await coordinator.settle({ writingId: record.id })
 
     const onDisk = await readFile(canonicalPath, "utf8")
@@ -211,14 +218,78 @@ describe("WATCH-07 — write-side conflict guard", () => {
       now: () => new Date().toISOString(),
     })
 
-    // No baselineContentHash provided at all — must behave exactly as before
+    // No setDurableContentHash call at all — must behave exactly as before
     // this guard existed.
-    coordinator.persist(snapshotFor(record, "v2", null))
+    coordinator.persist(snapshotFor(record, "v2"))
     await coordinator.settle({ writingId: record.id })
 
     const catalogRow = await tauriCatalogGetByIdDouble(await desktopDbPath(), record.id)
     const onDisk = await readFile(catalogRow!.canonicalPath!, "utf8")
     expect(onDisk).toContain("v2")
+  })
+
+  /**
+   * The exact scenario review required: two of the app's *own* sequential
+   * saves for the same document, the second queued behind the first while
+   * it's still in flight. Neither is external — this must never produce a
+   * spurious CONFLICT, and the coordinator's baseline must have advanced to
+   * A's real durable hash by the time B's write actually executes, or B
+   * would wrongly appear to conflict with its own predecessor.
+   */
+  it("SEQUENTIAL — a save queued behind an in-flight save for the same document advances the baseline correctly and never conflicts with itself", async () => {
+    const draft = await createDesktopDraft({ title: "Sequential Target", initialBodyJson: bodyJson("initial") })
+    const record = draft.data!
+    const service = await getDocumentService()
+
+    let releaseFirstSave: (() => void) | null = null
+    let saveCallCount = 0
+    const realSaveWriting = service.saveWriting.bind(service)
+    const delayedSaveWriting: typeof service.saveWriting = async (input) => {
+      saveCallCount += 1
+      if (saveCallCount === 1) {
+        await new Promise<void>((resolve) => {
+          releaseFirstSave = resolve
+        })
+      }
+      return realSaveWriting(input)
+    }
+
+    const errorEvents: Array<{ code?: string; message: string }> = []
+    const coordinator = createPersistenceCoordinator(
+      {
+        runtime: "desktop",
+        persistenceDebounceMs: 0,
+        documentService: { saveWriting: delayedSaveWriting },
+        createWritingId: () => crypto.randomUUID(),
+        now: () => new Date().toISOString(),
+      },
+      {
+        onError: (event) => {
+          if (event.error) errorEvents.push({ code: event.error.code, message: event.error.message })
+        },
+      },
+    )
+
+    const catalogRow = await tauriCatalogGetByIdDouble(await desktopDbPath(), record.id)
+    const canonicalPath = catalogRow!.canonicalPath!
+    const initialContent = await readFile(canonicalPath, "utf8")
+    coordinator.setDurableContentHash(record.id, await computeMarkdownContentHash(initialContent))
+
+    coordinator.persist(snapshotFor(record, "SAVE A — first, in flight"))
+    await vi.waitFor(() => expect(saveCallCount).toBe(1))
+
+    coordinator.persist(snapshotFor(record, "SAVE B — queued behind A"))
+    // B must not have started its own saveWriting call yet — the coordinator
+    // collapses it into the single pending slot for this document.
+    expect(saveCallCount).toBe(1)
+
+    releaseFirstSave!()
+    await coordinator.settle({ writingId: record.id })
+
+    expect(errorEvents).toEqual([])
+    const onDisk = await readFile(canonicalPath, "utf8")
+    expect(onDisk).toContain("SAVE B")
+    expect(onDisk).not.toContain("SAVE A")
   })
 })
 

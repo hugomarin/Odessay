@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest"
-import { resolveExternalContentChange } from "@/lib/editor/external-change-policy"
+import { isExternalReconciliationReason, resolveExternalContentChange } from "@/lib/editor/external-change-policy"
+
+describe("isExternalReconciliationReason", () => {
+  it("treats only 'bulk' (the reconciler's own reason) as external evidence", () => {
+    expect(isExternalReconciliationReason("bulk")).toBe(true)
+  })
+
+  it.each(["content", "upsert", "detach", "cloud-snapshot", "excerpt", "migration"] as const)(
+    "does not treat '%s' (the app's own writes) as external evidence",
+    (reason) => {
+      expect(isExternalReconciliationReason(reason)).toBe(false)
+    },
+  )
+
+  it("treats undefined (a direct, non-event-driven call) as non-external", () => {
+    expect(isExternalReconciliationReason(undefined)).toBe(false)
+  })
+})
 
 describe("resolveExternalContentChange (WATCH-07 policy)", () => {
   it("does nothing when the content hash has not changed", () => {
@@ -8,6 +25,7 @@ describe("resolveExternalContentChange (WATCH-07 policy)", () => {
         baselineContentHash: "blake3:aaa",
         currentContentHash: "blake3:aaa",
         hasPendingLocalEdit: false,
+        reason: "bulk",
       }),
     ).toEqual({ action: "none" })
   })
@@ -18,6 +36,7 @@ describe("resolveExternalContentChange (WATCH-07 policy)", () => {
         baselineContentHash: "blake3:aaa",
         currentContentHash: "blake3:bbb",
         hasPendingLocalEdit: false,
+        reason: "bulk",
       }),
     ).toEqual({ action: "auto-reload" })
   })
@@ -28,6 +47,7 @@ describe("resolveExternalContentChange (WATCH-07 policy)", () => {
         baselineContentHash: "blake3:aaa",
         currentContentHash: "blake3:bbb",
         hasPendingLocalEdit: true,
+        reason: "bulk",
       }),
     ).toEqual({ action: "conflict" })
   })
@@ -38,6 +58,7 @@ describe("resolveExternalContentChange (WATCH-07 policy)", () => {
         baselineContentHash: null,
         currentContentHash: "blake3:bbb",
         hasPendingLocalEdit: false,
+        reason: "bulk",
       }),
     ).toEqual({ action: "none" })
   })
@@ -47,6 +68,35 @@ describe("resolveExternalContentChange (WATCH-07 policy)", () => {
       resolveExternalContentChange({
         baselineContentHash: "blake3:aaa",
         currentContentHash: null,
+        hasPendingLocalEdit: false,
+        reason: "bulk",
+      }),
+    ).toEqual({ action: "none" })
+  })
+
+  // WATCH-07 regression: a normal local autosave commits with reason
+  // "content" (body-only) or "upsert" (metadata) for the very same
+  // document whose hash just changed — that must never be mistaken for an
+  // external edit, even though the hash comparison alone would say "changed".
+  it.each(["content", "upsert", "detach", "cloud-snapshot", "excerpt", "migration"] as const)(
+    "never reacts to the app's own '%s' catalog change, even if the hash differs and a local edit is pending",
+    (reason) => {
+      expect(
+        resolveExternalContentChange({
+          baselineContentHash: "blake3:aaa",
+          currentContentHash: "blake3:bbb",
+          hasPendingLocalEdit: true,
+          reason,
+        }),
+      ).toEqual({ action: "none" })
+    },
+  )
+
+  it("never reacts to a direct call with no reason (the initial sync)", () => {
+    expect(
+      resolveExternalContentChange({
+        baselineContentHash: "blake3:aaa",
+        currentContentHash: "blake3:bbb",
         hasPendingLocalEdit: false,
       }),
     ).toEqual({ action: "none" })

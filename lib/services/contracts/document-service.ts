@@ -43,6 +43,15 @@ export type WritingRecord = {
   metadataUpdatedAt?: string | null
   /** Runtime-neutral sync capability used by consumers such as Preview. */
   lifecycle?: WritingLifecycle
+  /**
+   * WATCH-07 write-side conflict guard (desktop only): the real, durable
+   * content hash the file has *after* this record was saved — sourced from
+   * the same manifest-sync content hash the catalog binding already tracks,
+   * never recomputed separately. `PersistenceCoordinator` captures this as
+   * the new baseline for the next save's `expectedContentHash`, so baseline
+   * ownership advances only after a real durable commit, never optimistically.
+   */
+  contentHash?: string | null
 }
 
 export type WritingSummary = Omit<WritingRecord, "content"> & {

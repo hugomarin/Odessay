@@ -197,7 +197,7 @@ import {
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { consumePendingOpenFile } from "@/lib/editor/pending-open-file"
 import { resolveExternalContentChange } from "@/lib/editor/external-change-policy"
-import { computeMarkdownContentHash } from "@/lib/content-hash"
+import type { CatalogChange } from "@/lib/services/contracts/document-catalog"
 import {
   describeOpenOutcome,
   isUnifiedOpenEnabled,
@@ -535,7 +535,8 @@ export function EditorShell({
   const [externalFileNotice, setExternalFileNotice] = useState<ExternalFileNotice | null>(null)
   const [externalContentConflict, setExternalContentConflict] = useState<ExternalContentConflict | null>(null)
   const externalContentConflictRef = useRef<ExternalContentConflict | null>(null)
-  const baselineContentHashRef = useRef<string | null>(null)
+  /** WATCH-07 — has this document's durable-content-hash baseline been seeded into the coordinator yet, for the currently watched writingId? */
+  const hasSeededBaselineRef = useRef(false)
   const [showCorrections, setShowCorrections] = useState(true)
   const [learnedWords, setLearnedWords] = useState<LearnedWordEntry[]>([])
   const [learnedWordsLoading, setLearnedWordsLoading] = useState(false)
@@ -1298,17 +1299,16 @@ export function EditorShell({
     async (
       editorInstance: Editor,
       overrides?: PersistenceSnapshotOverrides,
-      options?: { awaitDurability?: boolean; forceMaterialize?: boolean; forceOverwriteConflict?: boolean },
+      options?: { awaitDurability?: boolean; forceMaterialize?: boolean },
     ) => {
       const activeId = currentWritingIdRef.current
 
       // WATCH-07 DIRTY — a known external content conflict for this document
       // blocks every autosave (never silently overwrite the external edit
       // the debounce would otherwise write over) until the user explicitly
-      // resolves it. "Keep my version" passes forceOverwriteConflict to get
-      // through exactly once, against the external hash it saw.
-      const conflict = externalContentConflictRef.current
-      if (conflict && !options?.forceOverwriteConflict) {
+      // resolves it via the conflict banner's actions, both of which clear
+      // this ref themselves before calling back in here.
+      if (externalContentConflictRef.current) {
         return false
       }
 
@@ -1333,14 +1333,11 @@ export function EditorShell({
       const sourceTabId = activeEditorTabIdRef.current ?? (activeId ?? EDITOR_DRAFT_TAB_ID)
       const nextBodyJson = editorInstance.getJSON() as Record<string, unknown>
 
-      // WATCH-07 write-side guard: the baseline this save expects to still
-      // be durable on disk. Forcing through a resolved conflict targets the
-      // external hash the conflict was raised against (disk is at that
-      // version right now), never the stale pre-conflict baseline.
-      const baselineContentHash = options?.forceOverwriteConflict
-        ? conflict?.externalContentHash ?? baselineContentHashRef.current
-        : baselineContentHashRef.current
-
+      // WATCH-07 write-side guard: PersistenceCoordinator itself now owns
+      // resolving and advancing the durable baseline (see its own doc
+      // comment on getDurableContentHash for why — a caller-frozen baseline
+      // races a second save queued behind a first one). Nothing to pass
+      // through here any more.
       const result = await persistenceCoordinator.persist(
         {
           writingId: activeId,
@@ -1363,31 +1360,9 @@ export function EditorShell({
           // can't land until materialization already happened (ODE-478
           // follow-up).
           bodyIsEmpty: options?.forceMaterialize ? false : editorInstance.isEmpty,
-          baselineContentHash,
         },
         overrides,
       )
-
-      if (result && activeId) {
-        // The just-written content is now durable; it becomes the new
-        // baseline a future save's own conflict check compares against.
-        // richToSource operates on the already-mounted editorInstance (no
-        // new TipTap instance, unlike computeWritingContentHash's bodyJson
-        // path) and produces exactly the markdown DesktopDocumentService.
-        // serialize() wrote to disk, so the hash agrees with the real file.
-        if (isDesktopRuntime()) {
-          const serialized = desktopDocumentEngine.richToSource(editorInstance)
-          if (serialized.success) {
-            void computeMarkdownContentHash(serialized.markdown).then((hash) => {
-              baselineContentHashRef.current = hash
-            })
-          }
-        }
-        if (options?.forceOverwriteConflict) {
-          externalContentConflictRef.current = null
-          setExternalContentConflict(null)
-        }
-      }
 
       if (!options?.awaitDurability || !result) {
         return result
@@ -2108,7 +2083,7 @@ export function EditorShell({
       .then(({ getCatalogRecord, subscribeToCatalog }) => {
         if (cancelled) return
 
-        const syncCurrentWritingState = async () => {
+        const syncCurrentWritingState = async (reason?: CatalogChange["reason"]) => {
           const catalogRecord = await getCatalogRecord(currentWritingId)
           if (cancelled || !catalogRecord) return
 
@@ -2138,21 +2113,26 @@ export function EditorShell({
 
           // WATCH-07 — the file's content itself (not just its path/presence)
           // may have changed externally. The very first run for a freshly
-          // opened document has no baseline yet: only establish it here,
-          // never reload — the separate hydration effect already owns
-          // setting the editor's initial content for that case, and racing
-          // it here would double-apply the same content.
+          // opened document has no baseline yet: only seed the coordinator's
+          // own tracked baseline here, never reload — the separate hydration
+          // effect already owns setting the editor's initial content for
+          // that case, and racing it here would double-apply the same
+          // content. The coordinator (not a local ref) owns this baseline
+          // from here on — see its own getDurableContentHash doc comment
+          // for why a caller-local copy would race a queued second save.
           const nextContentHash = catalogRecord.binding?.contentHash ?? null
-          if (baselineContentHashRef.current === null) {
-            baselineContentHashRef.current = nextContentHash
+          if (!hasSeededBaselineRef.current) {
+            hasSeededBaselineRef.current = true
+            persistenceCoordinator.setDurableContentHash(currentWritingId, nextContentHash)
             setExternalFileNotice(null)
             return
           }
 
           const decision = resolveExternalContentChange({
-            baselineContentHash: baselineContentHashRef.current,
+            baselineContentHash: persistenceCoordinator.getDurableContentHash(currentWritingId),
             currentContentHash: nextContentHash,
             hasPendingLocalEdit: persistenceCoordinator.hasPending({ writingId: currentWritingId }),
+            reason,
           })
 
           if (decision.action === "none") {
@@ -2180,7 +2160,8 @@ export function EditorShell({
             isApplyingContentRef.current = true
             editor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
             isApplyingContentRef.current = false
-            baselineContentHashRef.current = nextContentHash
+            updateDerivedEditorState(editor)
+            persistenceCoordinator.setDurableContentHash(currentWritingId, nextContentHash)
             setExternalFileNotice({ kind: "content-changed", path: nextCanonicalPath })
           } catch {
             // Leave the stale content open and the previous notice in place;
@@ -2191,7 +2172,7 @@ export function EditorShell({
         void syncCurrentWritingState()
         unsubscribeCatalog = subscribeToCatalog((change) => {
           if (change.documentIds.includes(currentWritingId)) {
-            void syncCurrentWritingState()
+            void syncCurrentWritingState(change.reason)
           }
         })
       })
@@ -2208,11 +2189,11 @@ export function EditorShell({
       // as the "previous" value and flashes a false "file moved" notice.
       currentCanonicalPathRef.current = null
       setCanonicalPath(null)
-      baselineContentHashRef.current = null
+      hasSeededBaselineRef.current = false
       externalContentConflictRef.current = null
       setExternalContentConflict(null)
     }
-  }, [currentWritingId, persistenceCoordinator, editor])
+  }, [currentWritingId, persistenceCoordinator, editor, updateDerivedEditorState])
 
   useEffect(() => {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
@@ -6638,13 +6619,14 @@ export function EditorShell({
                 onClick={() => {
                   void (async () => {
                     const writingId = currentWritingIdRef.current
-                    if (!writingId) return
+                    if (!writingId || !editor) return
                     const opened = await (await getDocumentService()).openWriting(writingId)
                     if (!opened.data) return
                     isApplyingContentRef.current = true
-                    editor?.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
+                    editor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
                     isApplyingContentRef.current = false
-                    baselineContentHashRef.current = externalContentConflict.externalContentHash
+                    updateDerivedEditorState(editor)
+                    persistenceCoordinator.setDurableContentHash(writingId, externalContentConflict.externalContentHash)
                     externalContentConflictRef.current = null
                     setExternalContentConflict(null)
                     setExternalFileNotice({ kind: "content-changed", path: externalContentConflict.path })
@@ -6657,11 +6639,19 @@ export function EditorShell({
                 type="button"
                 size="sm"
                 onClick={() => {
-                  if (!editor) return
-                  void persistEditorSnapshot(editor, undefined, {
-                    awaitDurability: true,
-                    forceOverwriteConflict: true,
-                  })
+                  const writingId = currentWritingIdRef.current
+                  if (!editor || !writingId) return
+                  // Pre-seed the coordinator's tracked baseline to exactly
+                  // the external hash this conflict was raised against —
+                  // disk really is at that version right now, so the write
+                  // this triggers targets it precisely (one deliberate
+                  // overwrite, never a bypass of the guard itself). Clear
+                  // the conflict *before* persisting so persistEditorSnapshot's
+                  // own guard doesn't refuse this call too.
+                  persistenceCoordinator.setDurableContentHash(writingId, externalContentConflict.externalContentHash)
+                  externalContentConflictRef.current = null
+                  setExternalContentConflict(null)
+                  void persistEditorSnapshot(editor, undefined, { awaitDurability: true })
                 }}
               >
                 Keep my version

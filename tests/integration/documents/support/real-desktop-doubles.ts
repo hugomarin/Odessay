@@ -1,5 +1,5 @@
 import { promises as fs } from "node:fs"
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
 import { dirname, join } from "node:path"
 import type {
   DesktopCatalogDualWriteInput,
@@ -63,9 +63,20 @@ function bindingRootFor(rootPath: string): string {
   return id
 }
 
+/**
+ * Must agree with the real Rust `content_hash_for_markdown_file`
+ * (blake3 over CRLF-canonicalized markdown) — this is what feeds
+ * `binding.contentHash` in the catalog, which `PersistenceCoordinator`'s
+ * WATCH-07 write-side guard treats as the durable baseline. A different
+ * algorithm here (the original SHA-256 predates that guard and never needed
+ * to match anything outside itself) would make every second save on the
+ * same document look like a spurious external conflict, since the
+ * conflict-check double (tauriWriteFileDouble, below) already uses the
+ * real one.
+ */
 async function hashFile(path: string): Promise<string> {
   const content = await fs.readFile(path, "utf8")
-  return createHash("sha256").update(content).digest("hex")
+  return computeMarkdownContentHash(content)
 }
 
 async function statAsWorkspaceFile(rootPath: string, relativePath: string, documentId: string): Promise<DesktopWorkspaceFile> {

@@ -288,7 +288,7 @@ class DesktopDocumentService implements DocumentService {
       // The SQLite mutation is durable. The rescue ticker will retry if the
       // in-memory scheduler is unavailable during shutdown.
     })
-    return { ...record, title: nextTitle }
+    return { ...record, title: nextTitle, contentHash: nextContentHash }
   }
 
   async listWritings(input?: ListWritingsInput): Promise<ServiceResponse<WritingSummary[]>> {

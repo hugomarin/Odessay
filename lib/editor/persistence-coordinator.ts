@@ -52,16 +52,6 @@ export type PersistenceSnapshot = {
    * (ODE-478 follow-up).
    */
   bodyIsEmpty?: boolean
-  /**
-   * WATCH-07 write-side conflict guard: the content hash the caller believes
-   * is currently durable on disk for this document (desktop only — ignored
-   * for a draft that has no writingId yet, since there is nothing on disk to
-   * conflict with). Threaded straight through to `documentService.saveWriting`
-   * as `expectedContentHash`; a mismatch there surfaces as a `CONFLICT`
-   * `ServiceError`, not a silent overwrite. `null`/`undefined` skips the
-   * check (no known baseline yet).
-   */
-  baselineContentHash?: string | null
 }
 
 export type PersistenceStateEvent = {
@@ -147,6 +137,27 @@ export type PersistenceCoordinator = {
    * (e.g. closing a tab must not race an unsaved edit, ODE-478 case 5).
    */
   settle(target?: PersistenceSettleTarget): Promise<boolean>
+  /**
+   * WATCH-07 write-side conflict guard — the coordinator, not the caller,
+   * owns "what content hash is currently durable on disk for this document."
+   * It only ever advances after a real durable commit (inside `persistNow`,
+   * from the write's own authoritative result), never optimistically from a
+   * caller's snapshot: `persist()` can resolve `true` for a request merged
+   * into an already-in-flight write, before that content is actually
+   * written, so a caller-supplied "baseline" frozen into the snapshot would
+   * go stale exactly when a second save queues behind a first one — the
+   * queued save would see the *pre-first-save* baseline and misread the
+   * first save's own write as an external change. Reading this map fresh at
+   * the moment each write actually executes is what avoids that.
+   */
+  getDurableContentHash(writingId: string): string | null
+  /**
+   * Explicit re-baselining for a caller-observed event this coordinator has
+   * no other way to know about: the document was just opened (seed from the
+   * catalog), an external edit was auto-reloaded, or the user chose to keep
+   * an external version over a local one.
+   */
+  setDurableContentHash(writingId: string, hash: string | null): void
 }
 
 export type PersistenceSettleTarget = {
@@ -216,6 +227,10 @@ export function createPersistenceCoordinator(
   // before this map existed.
   const MATERIALIZED_DRAFTS_CACHE_LIMIT = 20
   const materializedDrafts = new Map<string, WritingRecord>()
+  // WATCH-07 — see getDurableContentHash's own doc comment on the returned
+  // object for why this must be read fresh at write time, not frozen into a
+  // snapshot at persist()-call time.
+  const durableContentHashByWritingId = new Map<string, string | null>()
 
   const isCurrent = (request: PersistenceRequest) => !disposed && request.generation === generation
 
@@ -432,6 +447,10 @@ export function createPersistenceCoordinator(
         }
 
         const materialized = result.data
+        // Seed the new document's baseline from its own first durable write,
+        // so its very next save already has a real precondition instead of
+        // treating the document as unconditionally writable exactly once.
+        durableContentHashByWritingId.set(materialized.id, materialized.contentHash ?? null)
         if (snapshot.draftWritingId) {
           materializedDrafts.set(snapshot.draftWritingId, materialized)
           rebindMaterializedDraftRequests(snapshot.draftWritingId, materialized)
@@ -516,10 +535,20 @@ export function createPersistenceCoordinator(
       lifecycle: snapshot.lifecycle,
     }
 
+    // WATCH-07 — resolved now, immediately before the write, not earlier:
+    // this is what makes a second save queued behind a first one see the
+    // first save's own just-landed durable hash instead of a pre-first-save
+    // value. snapshot.writingId (not the possibly-just-minted `writingId`
+    // above) is correct here: null means this is the document's first save,
+    // so there is nothing durable yet to conflict with.
+    const expectedContentHash = snapshot.writingId
+      ? durableContentHashByWritingId.get(snapshot.writingId) ?? null
+      : null
+
     try {
       const result = await deps.documentService.saveWriting({
         writing: record,
-        expectedContentHash: snapshot.baselineContentHash,
+        expectedContentHash,
       })
       const error = errorFromResponse(result)
       if (error || !result.data) {
@@ -527,6 +556,9 @@ export function createPersistenceCoordinator(
       }
 
       const savedRecord = result.data
+      // Only after a real durable commit — never optimistically, and never
+      // from the caller's own (possibly stale) belief about the content.
+      durableContentHashByWritingId.set(savedRecord.id, savedRecord.contentHash ?? null)
       const current = isCurrent(request)
       advancePendingVersions(savedRecord)
       const diagnostics: PersistenceDiagnostics = {
@@ -836,5 +868,12 @@ export function createPersistenceCoordinator(
 
     hasPending: hasPendingFor,
     settle,
+
+    getDurableContentHash(writingId) {
+      return durableContentHashByWritingId.get(writingId) ?? null
+    },
+    setDurableContentHash(writingId, hash) {
+      durableContentHashByWritingId.set(writingId, hash)
+    },
   }
 }
