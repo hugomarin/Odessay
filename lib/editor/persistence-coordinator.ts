@@ -52,6 +52,16 @@ export type PersistenceSnapshot = {
    * (ODE-478 follow-up).
    */
   bodyIsEmpty?: boolean
+  /**
+   * WATCH-07 write-side conflict guard: the content hash the caller believes
+   * is currently durable on disk for this document (desktop only — ignored
+   * for a draft that has no writingId yet, since there is nothing on disk to
+   * conflict with). Threaded straight through to `documentService.saveWriting`
+   * as `expectedContentHash`; a mismatch there surfaces as a `CONFLICT`
+   * `ServiceError`, not a silent overwrite. `null`/`undefined` skips the
+   * check (no known baseline yet).
+   */
+  baselineContentHash?: string | null
 }
 
 export type PersistenceStateEvent = {
@@ -507,7 +517,10 @@ export function createPersistenceCoordinator(
     }
 
     try {
-      const result = await deps.documentService.saveWriting({ writing: record })
+      const result = await deps.documentService.saveWriting({
+        writing: record,
+        expectedContentHash: snapshot.baselineContentHash,
+      })
       const error = errorFromResponse(result)
       if (error || !result.data) {
         throw error ?? new Error("Failed to save writing")

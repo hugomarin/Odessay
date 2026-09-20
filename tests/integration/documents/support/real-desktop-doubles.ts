@@ -9,6 +9,8 @@ import type {
   DesktopWorkspaceSnapshot,
   DesktopWorkspaceTouchResult,
 } from "@/lib/services/desktop/tauri-commands"
+import { WriteFileConflictError } from "@/lib/services/desktop/write-file-conflict-error"
+import { computeMarkdownContentHash } from "@/lib/content-hash"
 
 /**
  * Real (not mocked) stand-ins for the Tauri IPC boundary used by
@@ -120,7 +122,20 @@ export async function tauriCreateFileDouble(dir: string, filename: string): Prom
   return path
 }
 
-export async function tauriWriteFileDouble(path: string, content: string): Promise<void> {
+/**
+ * Mirrors the real Rust `write_file` command's WATCH-07 conflict guard: when
+ * `expectedContentHash` is provided, the file's *current* on-disk content
+ * (via the same `computeMarkdownContentHash` the app itself uses to compute
+ * baselines, so this double agrees with production code on what "changed"
+ * means) must match it, or the write is refused exactly like the real
+ * command refuses it — same error shape (`WriteFileConflictError`), same
+ * "disk stays untouched" guarantee.
+ */
+export async function tauriWriteFileDouble(
+  path: string,
+  content: string,
+  expectedContentHash?: string | null,
+): Promise<void> {
   writeFileCallCount += 1
   if (failingWriteFileCallNumber === writeFileCallCount) {
     const fail = writeFileFailureFactory!
@@ -128,6 +143,22 @@ export async function tauriWriteFileDouble(path: string, content: string): Promi
     writeFileFailureFactory = null
     fail()
   }
+
+  if (expectedContentHash) {
+    let actual: string
+    try {
+      const currentContent = await fs.readFile(path, "utf8")
+      actual = await computeMarkdownContentHash(currentContent)
+    } catch {
+      throw new WriteFileConflictError(`CONFLICT: ${path} no longer exists on disk (expected content hash ${expectedContentHash})`)
+    }
+    if (actual !== expectedContentHash) {
+      throw new WriteFileConflictError(
+        `CONFLICT: ${path} changed on disk since it was last read (expected ${expectedContentHash}, found ${actual})`,
+      )
+    }
+  }
+
   await fs.mkdir(dirname(path), { recursive: true })
   await fs.writeFile(path, content, "utf8")
 }

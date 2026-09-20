@@ -63,6 +63,16 @@ export type DownloadWritingInput = { writingId: string }
 
 export type SaveWritingInput = {
   writing: WritingRecord
+  /**
+   * WATCH-07 write-side conflict guard (desktop-only; ignored by the web
+   * adapter, which has no "another process edited the underlying file"
+   * scenario). When set, the desktop adapter refuses the write with a
+   * `CONFLICT` error if the file's actual on-disk content hash no longer
+   * matches this value — i.e. it changed externally since the caller last
+   * confirmed it. `null`/`undefined` skips the check (no known baseline yet,
+   * e.g. a brand-new document).
+   */
+  expectedContentHash?: string | null
 }
 
 export type UpdateWritingMetadataInput = {

@@ -924,7 +924,12 @@ pub fn workspace_compute_content_hash(markdown: String) -> Result<String, String
     Ok(format!("{CONTENT_HASH_PREFIX}:{}", digest.to_hex()))
 }
 
-fn content_hash_for_markdown_file(path: &Path) -> Result<String, String> {
+/// Exposed crate-wide (not just within this module) so `document::write_file`
+/// can compare a caller's expected baseline against the file's real current
+/// content before overwriting it — the write-side half of the WATCH-07
+/// conflict guard. The watcher/reconciler path below is the "detect early"
+/// half; this function is reused as the "final barrier" half.
+pub(crate) fn content_hash_for_markdown_file(path: &Path) -> Result<String, String> {
     let bytes =
         fs::read(path).map_err(|e| format!("workspace_sync read markdown for hash: {e}"))?;
     let markdown =
