@@ -257,7 +257,7 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 
 *(Mechanically re-verified against the table below by parsing each row's Status column — not hand-counted, every time a status changes. This table went stale once, for one PR cycle: PR #438 upgraded DOC-02/03/04/06 without updating it here — see the git history of this file for the correction.)*
 
-**The headline finding matches the reported pain point exactly:** nearly half of all scenarios (51/106) sit at `PARTIAL_INTEGRATION` — real collaborators tested on one side of a boundary, fakes on the other, never joined. This is precisely the shape of bug this initiative exists to catch: every piece passes its own tests, the seam between them doesn't. Zero scenarios have been validated against the real packaged Tauri runtime (`RUNTIME` = 0); only one (`VOICE-08`) reaches `RELEASE`.
+**The headline finding matches the reported pain point exactly:** nearly half of all scenarios (52/106) sit at `PARTIAL_INTEGRATION` — real collaborators tested on one side of a boundary, fakes on the other, never joined. This is precisely the shape of bug this initiative exists to catch: every piece passes its own tests, the seam between them doesn't. Zero scenarios have been validated against the real packaged Tauri runtime (`RUNTIME` = 0); only one (`VOICE-08`) reaches `RELEASE`.
 
 ## Critical gaps (NONE or UNIT_ONLY on a CRITICAL/HIGH-priority scenario)
 
