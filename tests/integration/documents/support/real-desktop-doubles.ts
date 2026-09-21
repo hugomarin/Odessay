@@ -1,5 +1,5 @@
 import { promises as fs } from "node:fs"
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
 import { dirname, join } from "node:path"
 import type {
   DesktopCatalogDualWriteInput,
@@ -9,6 +9,8 @@ import type {
   DesktopWorkspaceSnapshot,
   DesktopWorkspaceTouchResult,
 } from "@/lib/services/desktop/tauri-commands"
+import { WriteFileConflictError } from "@/lib/services/desktop/write-file-conflict-error"
+import { computeMarkdownContentHash } from "@/lib/content-hash"
 
 /**
  * Real (not mocked) stand-ins for the Tauri IPC boundary used by
@@ -61,9 +63,20 @@ function bindingRootFor(rootPath: string): string {
   return id
 }
 
+/**
+ * Must agree with the real Rust `content_hash_for_markdown_file`
+ * (blake3 over CRLF-canonicalized markdown) — this is what feeds
+ * `binding.contentHash` in the catalog, which `PersistenceCoordinator`'s
+ * WATCH-07 write-side guard treats as the durable baseline. A different
+ * algorithm here (the original SHA-256 predates that guard and never needed
+ * to match anything outside itself) would make every second save on the
+ * same document look like a spurious external conflict, since the
+ * conflict-check double (tauriWriteFileDouble, below) already uses the
+ * real one.
+ */
 async function hashFile(path: string): Promise<string> {
   const content = await fs.readFile(path, "utf8")
-  return createHash("sha256").update(content).digest("hex")
+  return computeMarkdownContentHash(content)
 }
 
 async function statAsWorkspaceFile(rootPath: string, relativePath: string, documentId: string): Promise<DesktopWorkspaceFile> {
@@ -120,7 +133,20 @@ export async function tauriCreateFileDouble(dir: string, filename: string): Prom
   return path
 }
 
-export async function tauriWriteFileDouble(path: string, content: string): Promise<void> {
+/**
+ * Mirrors the real Rust `write_file` command's WATCH-07 conflict guard: when
+ * `expectedContentHash` is provided, the file's *current* on-disk content
+ * (via the same `computeMarkdownContentHash` the app itself uses to compute
+ * baselines, so this double agrees with production code on what "changed"
+ * means) must match it, or the write is refused exactly like the real
+ * command refuses it — same error shape (`WriteFileConflictError`), same
+ * "disk stays untouched" guarantee.
+ */
+export async function tauriWriteFileDouble(
+  path: string,
+  content: string,
+  expectedContentHash?: string | null,
+): Promise<void> {
   writeFileCallCount += 1
   if (failingWriteFileCallNumber === writeFileCallCount) {
     const fail = writeFileFailureFactory!
@@ -128,6 +154,22 @@ export async function tauriWriteFileDouble(path: string, content: string): Promi
     writeFileFailureFactory = null
     fail()
   }
+
+  if (expectedContentHash) {
+    let actual: string
+    try {
+      const currentContent = await fs.readFile(path, "utf8")
+      actual = await computeMarkdownContentHash(currentContent)
+    } catch {
+      throw new WriteFileConflictError(`CONFLICT: ${path} no longer exists on disk (expected content hash ${expectedContentHash})`)
+    }
+    if (actual !== expectedContentHash) {
+      throw new WriteFileConflictError(
+        `CONFLICT: ${path} changed on disk since it was last read (expected ${expectedContentHash}, found ${actual})`,
+      )
+    }
+  }
+
   await fs.mkdir(dirname(path), { recursive: true })
   await fs.writeFile(path, content, "utf8")
 }

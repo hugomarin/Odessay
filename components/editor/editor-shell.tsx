@@ -14,6 +14,7 @@ import {
   mapSyncLifecycleToSaveState,
   type EditorSaveState,
 } from "@/components/editor/save-state"
+import { Button } from "@/components/ui/button"
 import { WritingEditorContent } from "@/components/editor/editor-content"
 import { ImagePresentationViewer } from "@/components/editor/image-presentation-viewer"
 import { EditorEmptyState } from "@/components/editor/editor-empty-state"
@@ -195,6 +196,8 @@ import {
 } from "@/lib/desktop/document-naming"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { consumePendingOpenFile } from "@/lib/editor/pending-open-file"
+import { computeHasPendingLocalEdit, resolveExternalContentChange } from "@/lib/editor/external-change-policy"
+import type { CatalogChange } from "@/lib/services/contracts/document-catalog"
 import {
   describeOpenOutcome,
   isUnifiedOpenEnabled,
@@ -308,6 +311,19 @@ type ExternalFileNotice =
   | { kind: "moved"; path: string | null }
   | { kind: "deleted"; path: string | null }
   | { kind: "relocate-failed"; path: string | null }
+  | { kind: "content-changed"; path: string | null }
+
+/**
+ * WATCH-07 — set only while there is BOTH a pending local edit AND a known
+ * external content change to the same document. Blocks persistEditorSnapshot
+ * from auto-saving (which would otherwise silently overwrite the external
+ * edit the moment the debounce fires) until the user explicitly resolves it
+ * via "Reload external" or "Keep my version".
+ */
+type ExternalContentConflict = {
+  externalContentHash: string
+  path: string | null
+}
 
 function replaceEditorHistory(nextHref: string) {
   if (typeof window === "undefined") {
@@ -517,6 +533,26 @@ export function EditorShell({
   const [automaticCorrectionSuggestions, setAutomaticCorrectionSuggestions] = useState<PublicationSuggestion[]>([])
   const [correctionToast, setCorrectionToast] = useState<CorrectionToastState | null>(null)
   const [externalFileNotice, setExternalFileNotice] = useState<ExternalFileNotice | null>(null)
+  const [externalContentConflict, setExternalContentConflict] = useState<ExternalContentConflict | null>(null)
+  const externalContentConflictRef = useRef<ExternalContentConflict | null>(null)
+  /** WATCH-07 — has this document's durable-content-hash baseline been seeded into the coordinator yet, for the currently watched writingId? */
+  const hasSeededBaselineRef = useRef(false)
+  /**
+   * WATCH-07 — true from the moment the editor's content genuinely diverges
+   * from the last known durable baseline (set in TipTap's own `onUpdate`,
+   * and the markdown-mode equivalents, on every real edit — never on a
+   * programmatic setContent, which is already guarded by
+   * isApplyingContentRef) until `persistEditorSnapshot` actually hands that
+   * content to `persistenceCoordinator.persist()`. `hasPending()` alone is
+   * NOT sufficient here: the desktop debounce (150ms rich /
+   * MARKDOWN_SAVE_DEBOUNCE_MS markdown) means there is a real window after a
+   * keystroke where the editor holds an unconfirmed edit but no persist
+   * request exists yet for the coordinator to report as pending. Cleared as
+   * soon as persist() is actually called — hasPending() is authoritative
+   * for durability from that point on, so this ref only needs to cover the
+   * gap before that call, not duplicate the coordinator's own tracking.
+   */
+  const hasUnconfirmedLocalEditRef = useRef(false)
   const [showCorrections, setShowCorrections] = useState(true)
   const [learnedWords, setLearnedWords] = useState<LearnedWordEntry[]>([])
   const [learnedWordsLoading, setLearnedWordsLoading] = useState(false)
@@ -1282,6 +1318,16 @@ export function EditorShell({
       options?: { awaitDurability?: boolean; forceMaterialize?: boolean },
     ) => {
       const activeId = currentWritingIdRef.current
+
+      // WATCH-07 DIRTY — a known external content conflict for this document
+      // blocks every autosave (never silently overwrite the external edit
+      // the debounce would otherwise write over) until the user explicitly
+      // resolves it via the conflict banner's actions, both of which clear
+      // this ref themselves before calling back in here.
+      if (externalContentConflictRef.current) {
+        return false
+      }
+
       const baseCreatedAt = createdAtRef.current
       const nextBodyText = editorInstance.getText()
       const nextDerivedTitle = deriveAutoTitle(nextBodyText, baseCreatedAt)
@@ -1301,14 +1347,26 @@ export function EditorShell({
 
       const draftWritingId = ephemeralDraftWritingIdRef.current
       const sourceTabId = activeEditorTabIdRef.current ?? (activeId ?? EDITOR_DRAFT_TAB_ID)
+      const nextBodyJson = editorInstance.getJSON() as Record<string, unknown>
 
+      // WATCH-07 write-side guard: PersistenceCoordinator itself now owns
+      // resolving and advancing the durable baseline (see its own doc
+      // comment on getDurableContentHash for why — a caller-frozen baseline
+      // races a second save queued behind a first one). Nothing to pass
+      // through here any more.
+      //
+      // Clear the "unconfirmed edit" flag now, synchronously, in the same
+      // tick as the call below — persist() registers this request with the
+      // coordinator's own pending/in-flight tracking synchronously too, so
+      // there is no window where neither signal reports the edit as unsaved.
+      hasUnconfirmedLocalEditRef.current = false
       const result = await persistenceCoordinator.persist(
         {
           writingId: activeId,
           createdAt: baseCreatedAt,
           version: versionRef.current,
           title: nextTitle,
-          bodyJson: editorInstance.getJSON() as Record<string, unknown>,
+          bodyJson: nextBodyJson,
           bodyText: nextBodyText,
           status: statusRef.current,
           artifactType: artifactTypeRef.current,
@@ -1517,6 +1575,9 @@ export function EditorShell({
           return
         }
 
+        // WATCH-07 — real edit, marked dirty immediately, well before the
+        // debounce below even schedules a persist() call.
+        hasUnconfirmedLocalEditRef.current = true
         richUpdateEditorRef.current = nextEditor
 
         if (richUpdateRafRef.current !== null) {
@@ -2047,7 +2108,7 @@ export function EditorShell({
       .then(({ getCatalogRecord, subscribeToCatalog }) => {
         if (cancelled) return
 
-        const syncCurrentWritingState = async () => {
+        const syncCurrentWritingState = async (reason?: CatalogChange["reason"]) => {
           const catalogRecord = await getCatalogRecord(currentWritingId)
           if (cancelled || !catalogRecord) return
 
@@ -2074,13 +2135,73 @@ export function EditorShell({
 
           currentCanonicalPathRef.current = nextCanonicalPath
           setCanonicalPath(nextCanonicalPath)
-          setExternalFileNotice(null)
+
+          // WATCH-07 — the file's content itself (not just its path/presence)
+          // may have changed externally. The very first run for a freshly
+          // opened document has no baseline yet: only seed the coordinator's
+          // own tracked baseline here, never reload — the separate hydration
+          // effect already owns setting the editor's initial content for
+          // that case, and racing it here would double-apply the same
+          // content. The coordinator (not a local ref) owns this baseline
+          // from here on — see its own getDurableContentHash doc comment
+          // for why a caller-local copy would race a queued second save.
+          const nextContentHash = catalogRecord.binding?.contentHash ?? null
+          if (!hasSeededBaselineRef.current) {
+            hasSeededBaselineRef.current = true
+            persistenceCoordinator.setDurableContentHash(currentWritingId, nextContentHash)
+            setExternalFileNotice(null)
+            return
+          }
+
+          const decision = resolveExternalContentChange({
+            baselineContentHash: persistenceCoordinator.getDurableContentHash(currentWritingId),
+            currentContentHash: nextContentHash,
+            hasPendingLocalEdit: computeHasPendingLocalEdit({
+              hasUnconfirmedLocalEdit: hasUnconfirmedLocalEditRef.current,
+              hasPendingPersistence: persistenceCoordinator.hasPending({ writingId: currentWritingId }),
+            }),
+            reason,
+          })
+
+          if (decision.action === "none") {
+            setExternalFileNotice(null)
+            return
+          }
+
+          if (decision.action === "conflict") {
+            // Never auto-reload over an unsaved edit, and never let it
+            // silently save over the external one either — persistEditorSnapshot
+            // checks externalContentConflictRef before scheduling any write.
+            const conflict: ExternalContentConflict = { externalContentHash: nextContentHash!, path: nextCanonicalPath }
+            externalContentConflictRef.current = conflict
+            setExternalContentConflict(conflict)
+            return
+          }
+
+          // CLEAN auto-reload: nothing local is at risk, so silently keeping
+          // stale content would be strictly worse than adopting the external
+          // version. Re-read from the real service rather than trusting the
+          // catalog's own cached body (it has none — only the hash).
+          try {
+            const opened = await (await getDocumentService()).openWriting(currentWritingId)
+            const liveEditor = editorInstanceRef.current
+            if (cancelled || !opened.data || !liveEditor) return
+            isApplyingContentRef.current = true
+            liveEditor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
+            isApplyingContentRef.current = false
+            updateDerivedEditorState(liveEditor)
+            persistenceCoordinator.setDurableContentHash(currentWritingId, nextContentHash)
+            setExternalFileNotice({ kind: "content-changed", path: nextCanonicalPath })
+          } catch {
+            // Leave the stale content open and the previous notice in place;
+            // the next catalog event or focus retries the reload.
+          }
         }
 
         void syncCurrentWritingState()
         unsubscribeCatalog = subscribeToCatalog((change) => {
           if (change.documentIds.includes(currentWritingId)) {
-            void syncCurrentWritingState()
+            void syncCurrentWritingState(change.reason)
           }
         })
       })
@@ -2097,8 +2218,12 @@ export function EditorShell({
       // as the "previous" value and flashes a false "file moved" notice.
       currentCanonicalPathRef.current = null
       setCanonicalPath(null)
+      hasSeededBaselineRef.current = false
+      hasUnconfirmedLocalEditRef.current = false
+      externalContentConflictRef.current = null
+      setExternalContentConflict(null)
     }
-  }, [currentWritingId])
+  }, [currentWritingId, persistenceCoordinator, updateDerivedEditorState])
 
   useEffect(() => {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
@@ -2673,6 +2798,11 @@ export function EditorShell({
       if (!editor) return false
 
       setMarkdownValue(normalizedMarkdown)
+      // WATCH-07 — a real content mutation (from the AI panel), not a
+      // programmatic re-sync; isApplyingContentRef only exists here to
+      // suppress a duplicate onUpdate-triggered persist, not to mark this as
+      // "nothing changed".
+      hasUnconfirmedLocalEditRef.current = true
       isApplyingContentRef.current = true
 
       const applied = applyPanelMarkdownChange(editor, materializeMarkdownForRichParser(normalizedMarkdown), {
@@ -3237,6 +3367,9 @@ export function EditorShell({
 
       const persistMarkdownDraft = (nextMarkdown: string) => {
         setMarkdownValue(nextMarkdown)
+        // WATCH-07 — see hasUnconfirmedLocalEditRef's own doc comment: real
+        // edit, marked dirty immediately, before the debounce below.
+        hasUnconfirmedLocalEditRef.current = true
 
         if (markdownSaveTimeoutRef.current) {
           window.clearTimeout(markdownSaveTimeoutRef.current)
@@ -3941,6 +4074,9 @@ export function EditorShell({
     (nextMarkdown: string) => {
       const normalizedMarkdown = convertHtmlTablesToMarkdown(nextMarkdown)
       setMarkdownValue(normalizedMarkdown)
+      // WATCH-07 — the markdown textarea's own onChange; see
+      // hasUnconfirmedLocalEditRef's doc comment.
+      hasUnconfirmedLocalEditRef.current = true
 
       if (!editor) {
         return
@@ -3991,6 +4127,7 @@ export function EditorShell({
         const nextSelectionEnd = start + 1 + linkText.length
 
         setMarkdownValue(nextMarkdown)
+        hasUnconfirmedLocalEditRef.current = true
 
         if (markdownSaveTimeoutRef.current) {
           window.clearTimeout(markdownSaveTimeoutRef.current)
@@ -4084,6 +4221,7 @@ export function EditorShell({
 
       const nextMarkdown = markdownValue ? `${markdownValue}\n\n${tableMarkdown}\n` : `${tableMarkdown}\n`
       setMarkdownValue(nextMarkdown)
+      hasUnconfirmedLocalEditRef.current = true
       setSyncStatus("saving")
 
       if (!editor) {
@@ -4126,6 +4264,7 @@ export function EditorShell({
         const nextSelectionStart = start + imageMarkdown.length
 
         setMarkdownValue(nextMarkdown)
+        hasUnconfirmedLocalEditRef.current = true
         setSyncStatus("saving")
 
         if (editor) {
@@ -6499,12 +6638,69 @@ export function EditorShell({
                 )}
                 .
               </span>
+            ) : externalFileNotice.kind === "content-changed" ? (
+              <span>Updated externally — the editor reloaded the latest version from disk.</span>
             ) : (
               <span>
                 This file was removed outside Artifact Studio. Your current content stays open here, but the
                 source file is no longer on disk.
               </span>
             )}
+          </div>
+        ) : null}
+
+        {!isFocusMode && externalContentConflict ? (
+          <div className="flex items-center justify-between gap-4 border-b-[0.5px] border-border bg-amber-50 px-6 py-3 text-sm text-ink dark:bg-amber-950/30">
+            <span>
+              This file changed outside Artifact Studio while you had unsaved edits here. Choose which version to
+              keep — saving is paused until you do.
+            </span>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void (async () => {
+                    const writingId = currentWritingIdRef.current
+                    if (!writingId || !editor) return
+                    const opened = await (await getDocumentService()).openWriting(writingId)
+                    if (!opened.data) return
+                    isApplyingContentRef.current = true
+                    editor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
+                    isApplyingContentRef.current = false
+                    updateDerivedEditorState(editor)
+                    persistenceCoordinator.setDurableContentHash(writingId, externalContentConflict.externalContentHash)
+                    externalContentConflictRef.current = null
+                    setExternalContentConflict(null)
+                    setExternalFileNotice({ kind: "content-changed", path: externalContentConflict.path })
+                  })()
+                }}
+              >
+                Reload external
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  const writingId = currentWritingIdRef.current
+                  if (!editor || !writingId) return
+                  // Pre-seed the coordinator's tracked baseline to exactly
+                  // the external hash this conflict was raised against —
+                  // disk really is at that version right now, so the write
+                  // this triggers targets it precisely (one deliberate
+                  // overwrite, never a bypass of the guard itself). Clear
+                  // the conflict *before* persisting so persistEditorSnapshot's
+                  // own guard doesn't refuse this call too.
+                  persistenceCoordinator.setDurableContentHash(writingId, externalContentConflict.externalContentHash)
+                  externalContentConflictRef.current = null
+                  setExternalContentConflict(null)
+                  void persistEditorSnapshot(editor, undefined, { awaitDurability: true })
+                }}
+              >
+                Keep my version
+              </Button>
+            </div>
           </div>
         ) : null}
 
