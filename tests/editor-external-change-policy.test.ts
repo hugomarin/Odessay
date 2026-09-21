@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { isExternalReconciliationReason, resolveExternalContentChange } from "@/lib/editor/external-change-policy"
+import {
+  computeHasPendingLocalEdit,
+  isExternalReconciliationReason,
+  resolveExternalContentChange,
+} from "@/lib/editor/external-change-policy"
 
 describe("isExternalReconciliationReason", () => {
   it("treats only 'bulk' (the reconciler's own reason) as external evidence", () => {
@@ -100,5 +104,55 @@ describe("resolveExternalContentChange (WATCH-07 policy)", () => {
         hasPendingLocalEdit: false,
       }),
     ).toEqual({ action: "none" })
+  })
+
+  /**
+   * WATCH-07 regression: the desktop persistence debounce (150ms rich mode,
+   * MARKDOWN_SAVE_DEBOUNCE_MS markdown mode) means there is a real window
+   * after a keystroke where the editor already holds an unconfirmed edit but
+   * persistenceCoordinator.hasPending() still correctly reports "nothing
+   * pending", because persist() hasn't been called yet at all. Using
+   * hasPending() alone here would let a CLEAN auto-reload silently discard
+   * that edit. computeHasPendingLocalEdit is exactly the combination that
+   * closes this — proven directly here, and then through
+   * resolveExternalContentChange's own branching on it below.
+   */
+  describe("document clean at H1, user types, debounce has NOT fired yet, external H2 arrives (WATCH-07 regression)", () => {
+    it("computeHasPendingLocalEdit is true from the unconfirmed-edit signal alone, even though the persistence-pending signal is still false", () => {
+      expect(
+        computeHasPendingLocalEdit({
+          hasUnconfirmedLocalEdit: true,
+          hasPendingPersistence: false,
+        }),
+      ).toBe(true)
+    })
+
+    it("resolveExternalContentChange raises a conflict (never auto-reload) for exactly that combined signal", () => {
+      const hasPendingLocalEdit = computeHasPendingLocalEdit({
+        hasUnconfirmedLocalEdit: true,
+        hasPendingPersistence: false,
+      })
+
+      expect(
+        resolveExternalContentChange({
+          baselineContentHash: "blake3:h1",
+          currentContentHash: "blake3:h2",
+          hasPendingLocalEdit,
+          reason: "bulk",
+        }),
+      ).toEqual({ action: "conflict" })
+    })
+  })
+
+  it("computeHasPendingLocalEdit is false only when neither signal reports an unsaved edit", () => {
+    expect(
+      computeHasPendingLocalEdit({ hasUnconfirmedLocalEdit: false, hasPendingPersistence: false }),
+    ).toBe(false)
+    expect(
+      computeHasPendingLocalEdit({ hasUnconfirmedLocalEdit: false, hasPendingPersistence: true }),
+    ).toBe(true)
+    expect(
+      computeHasPendingLocalEdit({ hasUnconfirmedLocalEdit: true, hasPendingPersistence: true }),
+    ).toBe(true)
   })
 })

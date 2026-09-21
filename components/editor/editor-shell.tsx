@@ -196,7 +196,7 @@ import {
 } from "@/lib/desktop/document-naming"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { consumePendingOpenFile } from "@/lib/editor/pending-open-file"
-import { resolveExternalContentChange } from "@/lib/editor/external-change-policy"
+import { computeHasPendingLocalEdit, resolveExternalContentChange } from "@/lib/editor/external-change-policy"
 import type { CatalogChange } from "@/lib/services/contracts/document-catalog"
 import {
   describeOpenOutcome,
@@ -537,6 +537,22 @@ export function EditorShell({
   const externalContentConflictRef = useRef<ExternalContentConflict | null>(null)
   /** WATCH-07 — has this document's durable-content-hash baseline been seeded into the coordinator yet, for the currently watched writingId? */
   const hasSeededBaselineRef = useRef(false)
+  /**
+   * WATCH-07 — true from the moment the editor's content genuinely diverges
+   * from the last known durable baseline (set in TipTap's own `onUpdate`,
+   * and the markdown-mode equivalents, on every real edit — never on a
+   * programmatic setContent, which is already guarded by
+   * isApplyingContentRef) until `persistEditorSnapshot` actually hands that
+   * content to `persistenceCoordinator.persist()`. `hasPending()` alone is
+   * NOT sufficient here: the desktop debounce (150ms rich /
+   * MARKDOWN_SAVE_DEBOUNCE_MS markdown) means there is a real window after a
+   * keystroke where the editor holds an unconfirmed edit but no persist
+   * request exists yet for the coordinator to report as pending. Cleared as
+   * soon as persist() is actually called — hasPending() is authoritative
+   * for durability from that point on, so this ref only needs to cover the
+   * gap before that call, not duplicate the coordinator's own tracking.
+   */
+  const hasUnconfirmedLocalEditRef = useRef(false)
   const [showCorrections, setShowCorrections] = useState(true)
   const [learnedWords, setLearnedWords] = useState<LearnedWordEntry[]>([])
   const [learnedWordsLoading, setLearnedWordsLoading] = useState(false)
@@ -1338,6 +1354,12 @@ export function EditorShell({
       // comment on getDurableContentHash for why — a caller-frozen baseline
       // races a second save queued behind a first one). Nothing to pass
       // through here any more.
+      //
+      // Clear the "unconfirmed edit" flag now, synchronously, in the same
+      // tick as the call below — persist() registers this request with the
+      // coordinator's own pending/in-flight tracking synchronously too, so
+      // there is no window where neither signal reports the edit as unsaved.
+      hasUnconfirmedLocalEditRef.current = false
       const result = await persistenceCoordinator.persist(
         {
           writingId: activeId,
@@ -1553,6 +1575,9 @@ export function EditorShell({
           return
         }
 
+        // WATCH-07 — real edit, marked dirty immediately, well before the
+        // debounce below even schedules a persist() call.
+        hasUnconfirmedLocalEditRef.current = true
         richUpdateEditorRef.current = nextEditor
 
         if (richUpdateRafRef.current !== null) {
@@ -2131,7 +2156,10 @@ export function EditorShell({
           const decision = resolveExternalContentChange({
             baselineContentHash: persistenceCoordinator.getDurableContentHash(currentWritingId),
             currentContentHash: nextContentHash,
-            hasPendingLocalEdit: persistenceCoordinator.hasPending({ writingId: currentWritingId }),
+            hasPendingLocalEdit: computeHasPendingLocalEdit({
+              hasUnconfirmedLocalEdit: hasUnconfirmedLocalEditRef.current,
+              hasPendingPersistence: persistenceCoordinator.hasPending({ writingId: currentWritingId }),
+            }),
             reason,
           })
 
@@ -2191,6 +2219,7 @@ export function EditorShell({
       currentCanonicalPathRef.current = null
       setCanonicalPath(null)
       hasSeededBaselineRef.current = false
+      hasUnconfirmedLocalEditRef.current = false
       externalContentConflictRef.current = null
       setExternalContentConflict(null)
     }
@@ -2769,6 +2798,11 @@ export function EditorShell({
       if (!editor) return false
 
       setMarkdownValue(normalizedMarkdown)
+      // WATCH-07 — a real content mutation (from the AI panel), not a
+      // programmatic re-sync; isApplyingContentRef only exists here to
+      // suppress a duplicate onUpdate-triggered persist, not to mark this as
+      // "nothing changed".
+      hasUnconfirmedLocalEditRef.current = true
       isApplyingContentRef.current = true
 
       const applied = applyPanelMarkdownChange(editor, materializeMarkdownForRichParser(normalizedMarkdown), {
@@ -3333,6 +3367,9 @@ export function EditorShell({
 
       const persistMarkdownDraft = (nextMarkdown: string) => {
         setMarkdownValue(nextMarkdown)
+        // WATCH-07 — see hasUnconfirmedLocalEditRef's own doc comment: real
+        // edit, marked dirty immediately, before the debounce below.
+        hasUnconfirmedLocalEditRef.current = true
 
         if (markdownSaveTimeoutRef.current) {
           window.clearTimeout(markdownSaveTimeoutRef.current)
@@ -4037,6 +4074,9 @@ export function EditorShell({
     (nextMarkdown: string) => {
       const normalizedMarkdown = convertHtmlTablesToMarkdown(nextMarkdown)
       setMarkdownValue(normalizedMarkdown)
+      // WATCH-07 — the markdown textarea's own onChange; see
+      // hasUnconfirmedLocalEditRef's doc comment.
+      hasUnconfirmedLocalEditRef.current = true
 
       if (!editor) {
         return
@@ -4087,6 +4127,7 @@ export function EditorShell({
         const nextSelectionEnd = start + 1 + linkText.length
 
         setMarkdownValue(nextMarkdown)
+        hasUnconfirmedLocalEditRef.current = true
 
         if (markdownSaveTimeoutRef.current) {
           window.clearTimeout(markdownSaveTimeoutRef.current)
@@ -4180,6 +4221,7 @@ export function EditorShell({
 
       const nextMarkdown = markdownValue ? `${markdownValue}\n\n${tableMarkdown}\n` : `${tableMarkdown}\n`
       setMarkdownValue(nextMarkdown)
+      hasUnconfirmedLocalEditRef.current = true
       setSyncStatus("saving")
 
       if (!editor) {
@@ -4222,6 +4264,7 @@ export function EditorShell({
         const nextSelectionStart = start + imageMarkdown.length
 
         setMarkdownValue(nextMarkdown)
+        hasUnconfirmedLocalEditRef.current = true
         setSyncStatus("saving")
 
         if (editor) {
