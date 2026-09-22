@@ -23,6 +23,7 @@ This document tracks the third. A capability with many unit tests but no integra
 
 **Relationship to other canonical docs (no duplication — read there first):**
 - `workflow/testing/critical-capabilities-testing.md` — canonical owner of the test-level taxonomy (Unit/Contract/Integration/E2E/Performance), the "test at the lowest-cost boundary" principle, and when Playwright is/isn't the right tool. This map does not restate those definitions.
+- `workflow/quality/capability-proof-contract.md` — **normative companion of this map.** Holds the MUST rules for *constructing* a proof (production-reachable entry point, real production transition sequence, real internal seams, scheduling ≠ completion, deferred-work ownership, full-contract doubles, swallowed errors, mutation test, status-as-output), the escape taxonomy and the pre-upgrade checklist. This map owns *what* must be proven and *how strong* the evidence is; that contract owns *how* the proof is built. Read it before writing or reviewing any proof.
 - `architecture/boundaries.yml` + `tests/architecture/*` — Architecture Contracts (how pieces are *allowed* to relate). This map is the complementary layer: Capability Integration Contracts (what those pieces must *accomplish together*). Architecture tests catch "built the wrong way"; this map catches "every piece looks correct, but the product no longer works."
 - `workflow/quality/quality-harness-spec-v2.1.md` — the original Quality Harness spec that started this whole rollout (Phases 1-5 of its §10 shipped close to as-written: PRs #433-#436). This map is **not** what that spec's §8 ("Remediation Plane", `architecture/remediation.yml`) describes — that plan was never built. This map is what got built instead, once the team reached that phase: a different mechanism (per-scenario `coverage_status`, not per-gap `disposition`) that ended up carrying the same "prioritize and close what's structurally weak" responsibility. See the spec's own "Estado de implementación" section for the full accounting of what shipped as planned vs. what diverged.
 
@@ -306,15 +307,21 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 
 Writing a capability integration test is not "convert the scenario row into a test file." Follow this sequence, and produce the Proof Contract *before* writing any test code:
 
+> **Normative companion — read before BUILD or REVIEW of any proof:** `workflow/quality/capability-proof-contract.md`. This section explains the method; that contract holds the MUST rules the Phase 3 PRs showed are not obvious from the method alone — production-path fidelity, scheduling ≠ completion, deferred-work ownership, full-contract doubles, swallowed errors, and **coverage status as an output, never a goal** — plus the escape taxonomy (`MOCKED_SEAM`, `WRONG_ASSERTION`, `NON_PRODUCTION_PATH`, `STALE_PROOF`, `ARCHITECTURE_GAP`) and the pre-upgrade checklist.
+
 ```text
 Capability Scenario
-  → Proof Contract (Property, Real collaborators, Allowed fakes, Given/When/Then, Failure/Then)
+  → Proof Contract (Property, Real collaborators, Allowed fakes, Given/When/Then, Failure/Then,
+                    Production path: entry point + preceding transitions that reach Given,
+                    Completion event: the exact point after which the invariant holds)
   → pick the minimum-sufficient runtime (Vitest by default; cargo test for the
     Rust/SQLite seam; a local Postgres/pgTAP for RLS/DB-function properties;
     Playwright only when the property genuinely lives in the DOM)
   → implement the test
   → mutation-test it: reintroduce the exact bug the property guards against,
     confirm the test goes red for that reason, then revert
+  → run the pre-upgrade checklist (capability-proof-contract.md), THEN derive
+    the status — the status is a conclusion of the evidence, never the target
   → update this map's coverage_status/Evidence/Note for every scenario the
     test closes (one test can legitimately close several IDs)
 ```
@@ -328,7 +335,7 @@ Capability Scenario
 4. Failure/race variants exist when that's the actual risk — happy-path-only is insufficient for anything persistence-shaped.
 5. The test is deterministic — no `sleep`, no real external API, no shared/production state; temp dirs, deferred promises, and deterministic fakes only at genuinely external boundaries.
 
-**Formal bar for declaring `INTEGRATION` (all five, or the row stays `PARTIAL_INTEGRATION`):**
+**Formal bar for declaring `INTEGRATION` (all seven, or the row stays `PARTIAL_INTEGRATION`):**
 ```text
 1. The relevant entry point of the declared critical chain actually executes.
 2. The chain's internal collaborators are real, not mocked/spied.
@@ -337,6 +344,12 @@ Capability Scenario
 4. Observable state/artifact is verified, not just that functions were called.
 5. The identified failure mode would make the test fail if reintroduced —
    verified live, not assumed.
+6. The starting state is reached through the transitions production actually
+   performs — not seeded — whenever those transitions can touch the property
+   (otherwise the escape is NON_PRODUCTION_PATH).
+7. The assertion runs after the event that establishes the invariant, not the
+   one that schedules it; no error inside the chain was swallowed by production
+   during the run.
 ```
 
 **Test organization is by capability, not by source file** — `tests/integration/<capability-area>/<scenario-cluster>.test.ts` (e.g. `tests/integration/documents/materialize-save-reopen.test.ts`), so the unit of thought stays "what does the product need to keep doing," not "which class am I testing." One well-chosen test can legitimately close several scenario IDs at once (see DOC-03/DOC-04 below) — that's a feature, not scope creep, as long as each closed ID's Proof Contract is genuinely satisfied.
