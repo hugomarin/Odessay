@@ -403,6 +403,11 @@
       "description": "Inventario canónico de capabilities de nivel integración: critical chain real y coverage_status auditado por scenario (A–N), escala NONE→RELEASE, modelo de prioridad, metodología de Critical Proofs y tracker de Fase 3. Es el registro que se actualiza cuando un proof cierra o degrada un scenario."
     },
     {
+      "path": "workflow/quality/editor-shell-decomposition-diagnostic.md",
+      "type": "ops",
+      "description": "Diagnóstico previo a la descomposición de components/editor/editor-shell.tsx: medición del archivo (7.3k líneas, 63 efectos, 19 espejos estado↔ref, 602 lecturas de refs), por qué la cobertura actual no sirve como red (los 3 tests que lo montan doblan @tiptap/react y piezas propias), qué clusters no se ejercitan por el shell, y el plan por fases: harness compartido → 3 pruebas de caracterización → cerrar gaps del capability map → extracción en dos tiempos. Leer antes de planear cualquier extracción de ese archivo."
+    },
+    {
       "path": "workflow/quality/capability-proof-contract.md",
       "type": "guardrail",
       "description": "Contrato normativo de construcción de capability proofs (reglas MUST): entry point alcanzable en producción, reproducir la secuencia de transiciones, seams internos reales, scheduling ≠ completion, ownership de trabajo diferido, doubles con el contrato completo del boundary, errores tragados no cuentan como ejecución, mutation test, y coverage status como output y no como meta. Incluye taxonomía de escapes (MOCKED_SEAM, WRONG_ASSERTION, NON_PRODUCTION_PATH, STALE_PROOF, ARCHITECTURE_GAP) y checklist de pre-upgrade. Leer en BUILD y REVIEW de cualquier proof."
