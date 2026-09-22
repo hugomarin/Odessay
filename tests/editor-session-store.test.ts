@@ -91,6 +91,89 @@ describe("editorSessionStore", () => {
     expect(tab?.view_state?.selectionTo).toBe(8);
   });
 
+  describe("STATE-05 — new tabs never inherit a sibling's view state", () => {
+    it("openWritingTab (web New Artifact path) starts the new tab clean and leaves the sibling untouched", async () => {
+      await initializeEditorSessionStore();
+      openWritingTab({ writingId: "writing-a", title: "Tab A" });
+      saveTabViewState({
+        tabId: "writing-a",
+        viewState: { mode: "rich", scrollTop: 3000, selectionFrom: 500, selectionTo: 500 },
+      });
+
+      openWritingTab({ writingId: "writing-b", title: "Tab B" });
+
+      const session = getEditorSessionState().session;
+      const tabB = session.tabs.find((tab) => tab.id === "writing-b");
+      expect(tabB?.view_state?.scrollTop).toBe(0);
+      expect(tabB?.view_state?.selectionFrom).toBeNull();
+      expect(tabB?.view_state?.selectionTo).toBeNull();
+
+      const tabA = session.tabs.find((tab) => tab.id === "writing-a");
+      expect(tabA?.view_state?.scrollTop).toBe(3000);
+      expect(tabA?.view_state?.selectionFrom).toBe(500);
+      expect(tabA?.view_state?.selectionTo).toBe(500);
+    });
+
+    it("openDraftTab (desktop New Artifact path) starts the draft tab clean and leaves the sibling untouched", async () => {
+      await initializeEditorSessionStore();
+      openWritingTab({ writingId: "writing-a", title: "Tab A" });
+      saveTabViewState({
+        tabId: "writing-a",
+        viewState: { mode: "rich", scrollTop: 3000, selectionFrom: 500, selectionTo: 500 },
+      });
+
+      openDraftTab("draft-writing-b");
+
+      const session = getEditorSessionState().session;
+      const draftTab = session.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID);
+      expect(draftTab?.view_state?.scrollTop).toBe(0);
+      expect(draftTab?.view_state?.selectionFrom).toBeNull();
+      expect(draftTab?.view_state?.selectionTo).toBeNull();
+
+      const tabA = session.tabs.find((tab) => tab.id === "writing-a");
+      expect(tabA?.view_state?.scrollTop).toBe(3000);
+      expect(tabA?.view_state?.selectionFrom).toBe(500);
+    });
+
+    it("openDraftTab reusing the draft slot for a new ephemeral identity resets its view_state (real bug, fixed)", async () => {
+      // handleCreateWorkspaceTab's desktop path hits exactly this: hitting
+      // "New Artifact" while already on a still-blank draft reuses the same
+      // EDITOR_DRAFT_TAB_ID slot under a fresh ephemeralDraftWritingIdRef,
+      // rather than creating a brand-new tab. That reused slot must be just
+      // as clean as a brand-new one — the old draft's scroll/cursor no
+      // longer belongs to what the user now sees as a different document.
+      await initializeEditorSessionStore();
+      openDraftTab("draft-a");
+      saveTabViewState({
+        tabId: EDITOR_DRAFT_TAB_ID,
+        viewState: { mode: "rich", scrollTop: 3000, selectionFrom: 500, selectionTo: 500 },
+      });
+
+      openDraftTab("draft-b");
+
+      const draftTab = getEditorSessionState().session.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID);
+      expect(draftTab?.draft_writing_id).toBe("draft-b");
+      expect(draftTab?.view_state?.scrollTop).toBe(0);
+      expect(draftTab?.view_state?.selectionFrom).toBeNull();
+      expect(draftTab?.view_state?.selectionTo).toBeNull();
+    });
+
+    it("openDraftTab without a new identity does not reset the current draft's view_state", async () => {
+      await initializeEditorSessionStore();
+      openDraftTab("draft-a");
+      saveTabViewState({
+        tabId: EDITOR_DRAFT_TAB_ID,
+        viewState: { mode: "rich", scrollTop: 3000, selectionFrom: 500, selectionTo: 500 },
+      });
+
+      openDraftTab("draft-a");
+
+      const draftTab = getEditorSessionState().session.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID);
+      expect(draftTab?.view_state?.scrollTop).toBe(3000);
+      expect(draftTab?.view_state?.selectionFrom).toBe(500);
+    });
+  });
+
   it("returns the next active tab when closing the current one", async () => {
     await initializeEditorSessionStore();
     openWritingTab({ writingId: "writing-4", title: "Fourth draft" });

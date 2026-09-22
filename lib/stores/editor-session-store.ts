@@ -6,6 +6,7 @@ import {
   createEditorSessionTab,
   createEmptyEditorSession,
   createRecentWritingEntry,
+  DEFAULT_VIEW_STATE,
   EDITOR_DRAFT_TAB_ID,
   EDITOR_SOFT_TAB_LIMIT,
   findTabIndexByWritingId,
@@ -183,6 +184,13 @@ export function openDraftTab(draftWritingId?: string | null) {
     ) {
       return current;
     }
+    // A reused draft slot taking on a new ephemeral identity (STATE-05,
+    // ODE-551) must not carry the previous identity's scroll/cursor/selection
+    // forward — that view_state belongs to a document that, from the user's
+    // perspective, no longer exists in this tab.
+    const draftIdentityChanged =
+      draftWritingId !== undefined && draftWritingId !== existingDraft?.draft_writing_id;
+
     const nextTabs = existingDraft
       ? current.tabs.map((tab) =>
           tab.id === existingDraft.id
@@ -190,6 +198,7 @@ export function openDraftTab(draftWritingId?: string | null) {
                 ...tab,
                 draft_writing_id: draftWritingId === undefined ? tab.draft_writing_id : draftWritingId,
                 last_touched_at: Date.now(),
+                view_state: draftIdentityChanged ? DEFAULT_VIEW_STATE : tab.view_state,
               }
             : tab,
         )
