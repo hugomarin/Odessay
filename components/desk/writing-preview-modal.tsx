@@ -75,7 +75,7 @@ type WritingPreviewModalProps = {
   onCreateWorkspace?: (writingId: string) => void | Promise<void>
   onTitleChange?: (writingId: string, title: string) => Promise<void>
   onOpenFullWriting?: (writingId: string) => void
-  onExportMarkdown?: (writingId: string) => Promise<void> | void
+  onExportMarkdown?: (writingId: string) => Promise<boolean | void> | boolean | void
   onExportDocument?: (writingId: string, format: PreviewExportFormat) => Promise<boolean | void>
   onShare?: (writingId: string) => Promise<PreviewShareResult>
   onOpenWebAction?: (writingId: string, action: "publish" | "share") => Promise<void>
@@ -260,7 +260,8 @@ export function WritingPreviewModal({
     setActionFeedback(null)
     setExportingFormat("markdown")
     try {
-      await onExportMarkdown(row.id)
+      const exported = await onExportMarkdown(row.id)
+      if (exported !== true) return
       setActionFeedback({ tone: "ok", message: "Markdown exported." })
     } catch (error) {
       setActionFeedback({

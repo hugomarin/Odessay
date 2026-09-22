@@ -30,21 +30,32 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 // target. A real fs write, not a scripted throw — so a "write failure" here
 // (e.g. a parent path component that is actually a file, not a directory)
 // is a genuine fs error, the same shape the real command would surface.
-async function tauriWriteBinaryFileDouble(path: string, bytes: Uint8Array): Promise<void> {
+const tauriWriteBinaryFileDouble = vi.hoisted(() => vi.fn())
+tauriWriteBinaryFileDouble.mockImplementation(async (path: string, bytes: Uint8Array): Promise<void> => {
   const parent = dirname(path)
   await fs.mkdir(parent, { recursive: true })
   const tmpPath = `${path}.tmp`
   await fs.writeFile(tmpPath, bytes)
   await fs.rename(tmpPath, path)
-}
+})
 
 vi.mock("@/lib/services/desktop/tauri-commands", () => ({
-  tauriWriteBinaryFile: (path: string, bytes: Uint8Array) => tauriWriteBinaryFileDouble(path, bytes),
+  tauriWriteBinaryFile: tauriWriteBinaryFileDouble,
 }))
+
+// isDesktopRuntime() must read `true` for saveBinaryArtifact() (below) to
+// dispatch to the desktop branch at all — real runtime-detection code,
+// driven by the same window global Tauri itself injects. This suite runs
+// under the "node" environment (no window by default), so both are set by
+// hand, exactly like tests/runtime-detect.test.ts does.
+// @ts-expect-error simulate the Tauri shell's injected window
+globalThis.window = globalThis
+;(globalThis as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {}
 
 const { DOCX_MIME_TYPE, getDialogFilterName, saveDesktopBinaryExport } = await import(
   "@/lib/services/desktop/export-delivery"
 )
+const { saveBinaryArtifact } = await import("@/lib/utils/download")
 
 describe("export-delivery", () => {
   describe("getDialogFilterName", () => {
@@ -80,6 +91,7 @@ describe("saveDesktopBinaryExport (real fs)", () => {
 
   afterEach(() => {
     saveDialogMock.mockReset()
+    tauriWriteBinaryFileDouble.mockClear()
   })
 
   const artifact = {
@@ -88,14 +100,16 @@ describe("saveDesktopBinaryExport (real fs)", () => {
     mimeType: "application/pdf",
   }
 
-  it("returns false and writes nothing when the dialog is canceled", async () => {
+  it("returns false and never invokes the writer when the dialog is canceled", async () => {
     saveDialogMock.mockResolvedValue(null)
 
     const result = await saveDesktopBinaryExport(artifact)
 
     expect(result).toBe(false)
-    const target = join(root, "cancel-check.pdf")
-    await expect(fs.access(target)).rejects.toThrow()
+    // The dialog never handed back a path to write to at all, so asserting
+    // against one specific never-selected path would prove little — what
+    // actually matters is that the write step was never reached.
+    expect(tauriWriteBinaryFileDouble).not.toHaveBeenCalled()
   })
 
   it("returns true and the exact bytes land on disk when the write succeeds", async () => {
@@ -120,5 +134,59 @@ describe("saveDesktopBinaryExport (real fs)", () => {
     saveDialogMock.mockResolvedValue(target)
 
     await expect(saveDesktopBinaryExport(artifact)).rejects.toThrow()
+  })
+})
+
+// EXP-05 review note: the scenarios above prove saveDesktopBinaryExport in
+// isolation; they never exercise the one hop between it and a real caller —
+// lib/utils/download.ts's saveBinaryArtifact(), which is what every actual
+// export call site (editor-shell.tsx, desk/page.tsx) invokes, and which
+// decides desktop vs. web dispatch via isDesktopRuntime(). Closing that hop
+// here (real saveBinaryArtifact -> real saveDesktopBinaryExport -> real fs,
+// only the native dialog/IPC faked) narrows, but does not close, the
+// documented EXP-05 gap: the callers themselves (exportBinary/exportMarkdown
+// in editor-shell.tsx, exportWritingDocument in desk/page.tsx) still are not
+// exercised by any test — see the EXP-05 row's scope note in
+// workflow/quality/capability-integration-map.md.
+describe("saveBinaryArtifact -> saveDesktopBinaryExport (real fs, desktop dispatch)", () => {
+  let root: string
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), "odessay-export-delivery-dispatch-"))
+  })
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  afterEach(() => {
+    saveDialogMock.mockReset()
+    tauriWriteBinaryFileDouble.mockClear()
+  })
+
+  const artifact = {
+    bytes: new TextEncoder().encode("%PDF-1.4 fake artifact bytes"),
+    fileName: "letter.pdf",
+    mimeType: "application/pdf",
+  }
+
+  it("dispatches to the real desktop writer and reports true only once bytes are actually on disk", async () => {
+    const target = join(root, "letter.pdf")
+    saveDialogMock.mockResolvedValue(target)
+
+    const result = await saveBinaryArtifact(artifact)
+
+    expect(result).toBe(true)
+    const written = await fs.readFile(target)
+    expect(new Uint8Array(written)).toEqual(artifact.bytes)
+  })
+
+  it("dispatches to the real desktop path and reports false, without writing, on a dialog cancel", async () => {
+    saveDialogMock.mockResolvedValue(null)
+
+    const result = await saveBinaryArtifact(artifact)
+
+    expect(result).toBe(false)
+    expect(tauriWriteBinaryFileDouble).not.toHaveBeenCalled()
   })
 })
