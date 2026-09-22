@@ -1,5 +1,5 @@
 import { localDB, type LocalDB } from "@/lib/local-db";
-import type { SyncMutation } from "@/lib/local-db/schema";
+import type { LocalWriting, SyncMutation } from "@/lib/local-db/schema";
 import { emitSyncStatusChange } from "@/lib/sync/events";
 import { canRetryMutation, getNextRetryAt } from "@/lib/sync/retry";
 import { mapRemoteWritingToLocal, type RemoteWritingRecord } from "@/lib/sync/remote-bootstrap";
@@ -284,13 +284,18 @@ class SyncWorker {
       return "superseded";
     }
 
+    // Hoisted out of the try block: the terminal-failure branch below needs
+    // the pre-attempt lifecycle (captured once here, never mutated) to
+    // revert the optimistic "syncing" flip when no further retry is coming.
+    let localWriting: LocalWriting | null = null;
+
     try {
       emitSyncStatusChange({
         writingId: mutation.entity_id,
         status: mutation.entity_kind === "writing" ? "syncing" : "pending",
       });
 
-      const localWriting =
+      localWriting =
         mutation.entity_kind === "writing"
           ? await this.localDb.writings.get(mutation.entity_id)
           : null;
@@ -356,6 +361,28 @@ class SyncWorker {
           writingId: mutation.entity_id,
           status: "retrying",
         });
+      }
+
+      // "syncing" must mean "a remote attempt is actively in flight," not
+      // "a retry is scheduled" — that already has its own signal (sync_status,
+      // the queue's attempts/next_retry_at, and the "retrying" event above).
+      // Reverting only on the terminal failure is not enough: a retryable
+      // failure that leaves lifecycle stuck on "syncing" makes every later
+      // attempt's own pre-attempt snapshot (`localWriting`, captured at the
+      // top of this function) also read "syncing", so the terminal branch's
+      // own `!== "syncing"` guard would never fire either — the bug survives
+      // the whole retry sequence, not just a single attempt. Reverting here,
+      // on every failure, keeps the next attempt's captured lifecycle a
+      // trustworthy pre-attempt baseline (local-only or server-confirmed)
+      // instead of "syncing" carried over from this failure.
+      if (localWriting && localWriting.lifecycle !== "syncing") {
+        const currentWriting = await this.localDb.writings.get(mutation.entity_id);
+        if (currentWriting && currentWriting.lifecycle === "syncing") {
+          await this.localDb.writings.save({
+            ...currentWriting,
+            lifecycle: localWriting.lifecycle,
+          });
+        }
       }
 
       if (!canRetryMutation(mutation.attempts + 1)) {
