@@ -75,8 +75,8 @@ type WritingPreviewModalProps = {
   onCreateWorkspace?: (writingId: string) => void | Promise<void>
   onTitleChange?: (writingId: string, title: string) => Promise<void>
   onOpenFullWriting?: (writingId: string) => void
-  onExportMarkdown?: (writingId: string) => Promise<void> | void
-  onExportDocument?: (writingId: string, format: PreviewExportFormat) => Promise<void>
+  onExportMarkdown?: (writingId: string) => Promise<boolean | void> | boolean | void
+  onExportDocument?: (writingId: string, format: PreviewExportFormat) => Promise<boolean | void>
   onShare?: (writingId: string) => Promise<PreviewShareResult>
   onOpenWebAction?: (writingId: string, action: "publish" | "share") => Promise<void>
   onDelete?: (writingId: string) => Promise<void>
@@ -260,7 +260,8 @@ export function WritingPreviewModal({
     setActionFeedback(null)
     setExportingFormat("markdown")
     try {
-      await onExportMarkdown(row.id)
+      const exported = await onExportMarkdown(row.id)
+      if (exported !== true) return
       setActionFeedback({ tone: "ok", message: "Markdown exported." })
     } catch (error) {
       setActionFeedback({
@@ -281,7 +282,8 @@ export function WritingPreviewModal({
       setActionFeedback(null)
       setExportingFormat(format)
       try {
-        await onExportDocument(row.id, format)
+        const exported = await onExportDocument(row.id, format)
+        if (exported !== true) return
         setActionFeedback({ tone: "ok", message: `${format.toUpperCase()} exported.` })
       } catch (error) {
         setActionFeedback({

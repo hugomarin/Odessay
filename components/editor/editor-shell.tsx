@@ -6491,7 +6491,7 @@ export function EditorShell({
   const exportBinary = useCallback(
     async (format: "pdf" | "docx") => {
       if (!currentWritingId) {
-        return
+        return false
       }
 
       const result = await (await getDocumentService()).exportWriting({ writingId: currentWritingId, format })

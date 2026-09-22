@@ -487,7 +487,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   const downloadWritingMarkdown = useCallback(async (writingId: string) => {
     const writing = await getWritingForEdit(writingId)
     if (!writing || writing.sync_status === "deleted") {
-      return
+      return false
     }
     const bodyJson = isDesktopRuntime()
       ? (await (await getDocumentService()).openWriting(writingId)).data?.content.richText
@@ -498,6 +498,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       blob,
       buildMarkdownDownloadName({ title: writing.title, bodyText: writing.body_text, writingId: writing.id }),
     )
+    return true
   }, [])
 
   const openRenameWriting = useCallback(async (writingId: string) => {
