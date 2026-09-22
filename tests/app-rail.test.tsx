@@ -114,14 +114,20 @@ afterEach(() => {
 })
 
 describe("geometry", () => {
-  it("expands to 244px, not the repo's old 292", () => {
+  it("expands to its default 210px width", () => {
     renderRail("expanded")
-    expect(rail().style.width).toBe("244px")
+    expect(rail().style.width).toBe("210px")
   })
 
   it("collapses to 52px", () => {
     renderRail("collapsed")
     expect(rail().style.width).toBe("52px")
+  })
+
+  it("hides its trailing hairline while collapsed", () => {
+    renderRail("collapsed")
+    expect(rail().className).not.toContain("border-r border-line-soft")
+    expect(rail().className).toContain("border-r-transparent")
   })
 
   it("publishes a compact content gutter only while the rail is collapsed", () => {
@@ -140,11 +146,11 @@ describe("geometry", () => {
     ).toBe("16px")
   })
 
-  it("sits on layer 0 — no background and no border of its own", () => {
+  it("carries its own faint background and a hairline trailing edge", () => {
     renderRail("expanded")
-    expect(rail().className).toContain("bg-transparent")
-    expect(rail().className).not.toContain("bg-sb")
-    expect(rail().className).not.toContain("border-r")
+    expect(rail().className).toContain("bg-[rgb(250,249,249)]")
+    expect(rail().className).toContain("border-r")
+    expect(rail().className).toContain("border-line-soft")
   })
 
   it("gives every item a 40px box at radius 9 with 18px icons", () => {
@@ -158,8 +164,9 @@ describe("geometry", () => {
       const item = navLink(section)
       expect(item.className).toContain("h-10")
       expect(item.className).toContain("rounded-[9px]")
-      expect(item.className).toContain("text-[14px]")
-      expect(item.className).toContain("font-medium")
+      expect(item.className).toContain("text-[15px]")
+      expect(item.className).toContain("font-semibold")
+      expect(item.className).toContain("tracking-[-0.3px]")
       expect(item.querySelector("svg")?.getAttribute("class")).toContain("h-[18px]")
     }
   })
@@ -275,7 +282,7 @@ describe("inventory and order", () => {
 describe("forced collapse below 900px", () => {
   it("collapses the rail without touching the stored preference", () => {
     renderRail("expanded")
-    expect(rail().style.width).toBe("244px")
+    expect(rail().style.width).toBe("210px")
 
     viewportWidth = 820
     act(() => fireMediaChange())
@@ -284,7 +291,7 @@ describe("forced collapse below 900px", () => {
     // Widening restores what the user chose, not a default.
     viewportWidth = 1440
     act(() => fireMediaChange())
-    expect(rail().style.width).toBe("244px")
+    expect(rail().style.width).toBe("210px")
   })
 
   it("removes the toggle while the width is what decides the state", () => {
@@ -333,16 +340,18 @@ describe("workspace folders", () => {
     ).toBe("/workspace?slug=client%20work%2F2026")
   })
 
-  it("hangs the folders off the Workspace item, indented past the icon column", () => {
+  it("hangs the folders off the Workspace item, their icon under its label", () => {
     railWorkspaces.mockReturnValue([{ slug: "narratif", name: "Narratif" }])
     renderRail("expanded")
 
     const block = container.querySelector<HTMLElement>('[data-testid="sidebar-workspace-folders"]')!
-    expect(block.className).toContain("pl-[50px]")
+    expect(block.className).toContain("pl-[30px]")
     expect(block.className).toContain("overflow-y-auto")
-    // It is a sibling of the Workspace row, not of Desk or Studio.
+    // It is a sibling of the Workspace row's own wrapper (not of Desk or
+    // Studio) — the row sits inside its own `relative` box one level in, so
+    // the chevron button positions against just the row, not this block too.
     const workspaceRow = navLink("sidebar-nav-workspace")
-    expect(workspaceRow.parentElement?.contains(block)).toBe(true)
+    expect(workspaceRow.parentElement?.parentElement?.contains(block)).toBe(true)
   })
 
   it("collapses the folder block to nothing with the rail", () => {

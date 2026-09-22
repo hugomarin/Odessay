@@ -2,7 +2,10 @@ import React from "react"
 import type { ReactNode } from "react"
 import { Document, Font, Image, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer"
 import type { WritingExportBlock, WritingExportDocument, WritingExportInline } from "./writing-export"
+import { fetchImageSafely, mapWithConcurrencyLimit, type SafeImageFetchResult } from "./safe-image-fetch"
 import * as S from "./styles"
+
+const IMAGE_FETCH_CONCURRENCY = 4
 
 type RenderPdfParams = {
   title: string
@@ -205,7 +208,13 @@ const renderInlineRuns = (runs: WritingExportInline[], keyPrefix: string, curren
     )
   })
 
-const renderBlock = (block: WritingExportBlock, index: number, currentStyles = styles, renderImages = true): ReactNode => {
+const renderBlock = (
+  block: WritingExportBlock,
+  index: number,
+  currentStyles = styles,
+  renderImages = true,
+  imageResults?: ReadonlyMap<number, SafeImageFetchResult>,
+): ReactNode => {
   switch (block.type) {
     case "paragraph":
       return (
@@ -281,21 +290,63 @@ const renderBlock = (block: WritingExportBlock, index: number, currentStyles = s
         </View>
       )
     }
-    case "image":
-      return renderImages ? (
-        // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image does not expose the DOM alt prop.
-        <Image key={`image-${index}`} src={block.image.src} style={currentStyles.image} />
-      ) : (
+    case "image": {
+      // ODE-522: react-pdf's <Image src={url}> fetches the URL itself with
+      // no scheme/destination/size validation. Images are pre-fetched
+      // through fetchImageSafely (see buildImageResults below) and only the
+      // validated bytes are ever handed to <Image> here — react-pdf never
+      // touches the network for a document image. react-pdf's buffer form
+      // only supports png/jpg; gif/bmp successes fall back to text too.
+      const fetched = renderImages ? imageResults?.get(index) : undefined
+      if (fetched?.ok && (fetched.format === "png" || fetched.format === "jpg")) {
+        return (
+          // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image does not expose the DOM alt prop.
+          <Image
+            key={`image-${index}`}
+            // react-pdf's TS type wants Buffer specifically, but its actual
+            // browser build (this file is bundled for the Tauri desktop app
+            // too, where `Buffer` does not exist) only needs a byte array —
+            // fetchImageSafely deliberately returns a plain Uint8Array so
+            // this file never has to construct a Node Buffer.
+            src={{ data: fetched.data as unknown as Buffer, format: fetched.format }}
+            style={currentStyles.image}
+          />
+        )
+      }
+      return (
         <Text key={`image-fallback-${index}`} style={currentStyles.imageFallback}>
           {block.image.alt?.trim() || "Image"}: {block.image.src}
         </Text>
       )
+    }
     default:
       return null
   }
 }
 
+/**
+ * ODE-522: resolves every image block's bytes up front, with bounded
+ * concurrency, so renderBlock never has to fetch anything itself.
+ */
+async function buildImageResults(
+  blocks: readonly WritingExportBlock[],
+): Promise<Map<number, SafeImageFetchResult>> {
+  const imageIndexes: number[] = []
+  blocks.forEach((block, index) => {
+    if (block.type === "image") imageIndexes.push(index)
+  })
+
+  const results = await mapWithConcurrencyLimit(imageIndexes, IMAGE_FETCH_CONCURRENCY, async (index) => {
+    const block = blocks[index] as Extract<WritingExportBlock, { type: "image" }>
+    return fetchImageSafely(block.image.src)
+  })
+
+  return new Map(imageIndexes.map((index, i) => [index, results[i] as SafeImageFetchResult]))
+}
+
 const renderWritingToPdfBlob = async ({ title, bodyText, document }: RenderPdfParams, renderImages = true) => {
+  const imageResults = renderImages ? await buildImageResults(document.blocks) : undefined
+
   const renderWithStyles = async (currentStyles: typeof styles) => {
     const footnoteBlocks = document.footnotes.length
       ? [
@@ -312,7 +363,9 @@ const renderWritingToPdfBlob = async ({ title, bodyText, document }: RenderPdfPa
       : []
 
     const bodyBlocks = document.blocks.length
-      ? document.blocks.flatMap((block, index) => renderBlock(block, index, currentStyles, renderImages) ?? [])
+      ? document.blocks.flatMap(
+          (block, index) => renderBlock(block, index, currentStyles, renderImages, imageResults) ?? [],
+        )
       : bodyText?.trim()
         ? [<Text key="fallback-body" style={currentStyles.paragraph}>{bodyText.trim()}</Text>]
         : []

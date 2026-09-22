@@ -43,11 +43,23 @@
         "https://github.com/hugomarin/Odessay/releases/latest/download/latest.json"
       ],
       "dialog": false
+    },
+    "shell": {
+      "open": "(/.+|file://.+)"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "fileAssociations": [
+      {
+        "ext": ["md"],
+        "name": "Markdown",
+        "mimeType": "text/markdown",
+        "contentTypes": ["net.daringfireball.markdown"],
+        "role": "Editor"
+      }
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

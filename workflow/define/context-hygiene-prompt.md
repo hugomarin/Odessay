@@ -11,7 +11,7 @@ Instrucciones para el agente:
    - `workflow/status.json` y los ledgers `workflow/built.jsonl` / `workflow/review-history.jsonl`
    - `workflow/context/features/odessay-ai-writing-assist.md`
    - `workflow/context/features/odessay-prosemirror-tiptap.md`
-   - skills: `skill-product-manager`, `skill-backend`, `skill-frontend`, `skill-code-review`, `skill-ux-testing`
+   - skills: `skill-planning`, `skill-backend`, `skill-frontend`, `skill-code-review`, `skill-ux-testing`
    - corpus desktop: `workflow/context/core/odessay-adr-identidad.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `workflow/agents.md` y `.agents/skills/skill-architecture/SKILL.md`
 2. Detecta y corrige referencias legacy o ambiguas:
    - nombres viejos del flujo (`publication review`) cuando el scope actual sea corrección mecánica,

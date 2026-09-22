@@ -2,11 +2,18 @@
 
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { BookOpen, Command } from "lucide-react"
 import { DeskArtifactList } from "@/components/desk/desk-artifact-list"
 import {
+  FirstRunEmptyState,
   NoArtifactsEmptyState,
-  STARTER_DOCUMENTS_UNAVAILABLE,
+  type StarterArtifact,
 } from "@/components/shared/view-empty-states"
+import {
+  STARTER_DOCUMENTS,
+  STARTER_DOCUMENT_IDS,
+  seedStarterDocuments,
+} from "@/lib/services/desktop/starter-documents"
 import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { DeskHeader } from "@/components/desk/desk-header"
@@ -89,22 +96,29 @@ const EMPTY_SUMMARY: DeskActivitySummary = {
   total: 0,
 }
 
+const STARTER_ICONS_BY_ID: Record<string, typeof BookOpen> = Object.fromEntries(
+  STARTER_DOCUMENTS.map((doc) => [doc.id, doc.icon === "book-open" ? BookOpen : Command]),
+)
+const STARTER_METADATA_BY_ID = new Map(STARTER_DOCUMENTS.map((doc) => [doc.id, doc]))
+
 /**
  * "No artifacts at all" — state 2 of `docs/design/views/empty-states.md`,
  * rendered inside the sheet so the header, its primary action and the rail all
- * stay put (requirement 4).
- *
- * "Restore starter documents" has no mechanism behind it yet: the repo has no
- * starter-document seeding at all, so the button states that in `title` rather
- * than pretending. Raised as a Context Gap on ODE-438.
+ * stay put (requirement 4). "Restore starter documents" (ODE-449) recreates
+ * whichever starter documents are currently missing.
  */
-function DeskEmptyState({ onCreate }: { onCreate: () => void }) {
+function DeskEmptyState({
+  onCreate,
+  onRestoreStarters,
+  status,
+}: {
+  onCreate: () => void
+  onRestoreStarters: () => void
+  status: { tone: "info" | "error"; message: string } | null
+}) {
   return (
     <div data-testid="desk-empty">
-      <NoArtifactsEmptyState
-        onCreate={onCreate}
-        restoreDisabledReason={STARTER_DOCUMENTS_UNAVAILABLE}
-      />
+      <NoArtifactsEmptyState onCreate={onCreate} onRestoreStarters={onRestoreStarters} status={status} />
     </div>
   )
 }
@@ -129,6 +143,9 @@ export default function DeskPage() {
   const [workspaceOptions, setWorkspaceOptions] = useState<WorkspaceAssignmentOption[]>([])
   const [workspaceAssignments, setWorkspaceAssignments] = useState<WorkspaceAssignmentMap>({})
   const [workspaceAvailable, setWorkspaceAvailable] = useState(false)
+  const [restoreStatus, setRestoreStatus] = useState<{ tone: "info" | "error"; message: string } | null>(
+    null,
+  )
   const recipientPreviewsRef = useRef(recipientPreviewsByWritingId)
   const workspaceAssignmentsRef = useRef(workspaceAssignments)
   const workspaceOptionsRef = useRef(workspaceOptions)
@@ -619,6 +636,48 @@ export default function DeskPage() {
     return filteredSummary.groups.flatMap((group) => group.rows)
   }, [filteredSummary])
 
+  // First run (ODE-449): the only artifacts that exist anywhere are the two
+  // starter documents. `loadDeskCatalogData` has no filter on which
+  // BindingRoot a row lives in, so seeded rows appear here like any other —
+  // this is a derived condition, not a persisted "seeded" flag (see
+  // starter-documents.ts).
+  const isFirstRun =
+    !hasActiveFilters &&
+    previewRows.length > 0 &&
+    previewRows.every((row) => STARTER_DOCUMENT_IDS.has(row.id))
+
+  const starterArtifacts: StarterArtifact[] = useMemo(() => {
+    if (!isFirstRun) return []
+    return previewRows.map((row) => {
+      const metadata = STARTER_METADATA_BY_ID.get(row.id)
+      return {
+        id: row.id,
+        icon: STARTER_ICONS_BY_ID[row.id] ?? BookOpen,
+        title: row.title,
+        description: metadata?.description ?? "",
+        onOpen: row.destinationHref ? () => router.push(row.destinationHref!) : undefined,
+      }
+    })
+  }, [isFirstRun, previewRows, router])
+
+  const handleRestoreStarters = useCallback(async () => {
+    const result = await seedStarterDocuments()
+    if (result.failed.length > 0) {
+      setRestoreStatus({
+        tone: "error",
+        message: `Couldn't create ${result.failed.map((f) => f.title).join(", ")}. Try again.`,
+      })
+    } else if (result.created.length > 0) {
+      setRestoreStatus({
+        tone: "info",
+        message: `Created ${result.created.length} starter document${result.created.length === 1 ? "" : "s"}.`,
+      })
+    } else {
+      setRestoreStatus({ tone: "info", message: "Both starter documents already exist." })
+    }
+    void loadDeskActivity()
+  }, [loadDeskActivity])
+
   /**
    * The row shows a relative date and carries the absolute one in `title`. Both
    * come from the catalog records already loaded for the view — no extra query.
@@ -763,11 +822,12 @@ export default function DeskPage() {
     const payload = getWritingMarkdownPayload(writingId)
 
     if (!payload) {
-      return
+      return false
     }
 
     const blob = new Blob([payload.markdown], { type: "text/markdown;charset=utf-8" })
     downloadBlob(blob, payload.filename)
+    return true
   }, [getWritingMarkdownPayload])
 
   const exportWritingDocument = useCallback(async (writingId: string, format: "pdf" | "docx") => {
@@ -777,7 +837,7 @@ export default function DeskPage() {
       throw new Error(result.error?.message ?? `Failed to export ${format.toUpperCase()}.`)
     }
 
-    await saveBinaryArtifact(result.data)
+    return saveBinaryArtifact(result.data)
   }, [])
 
   const shareWritingFromPreview = useCallback(
@@ -877,39 +937,47 @@ export default function DeskPage() {
             data-testid="desk-sheet"
             className="relative mb-4 ml-[var(--app-shell-content-gutter,16px)] mr-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-sb shadow-float"
           >
-            <DeskArtifactList
-              groups={filteredSummary.groups}
-              isLoading={isLoading}
-              emptyState={
-                hasActiveFilters ? (
-                  <DeskFilterEmptyState onClear={clearFilters} />
-                ) : (
-                  <DeskEmptyState onCreate={() => router.push("/write?new=1")} />
-                )
-              }
-              selectedIds={selectedIds}
-              onToggleSelection={toggleSelection}
-              onActivate={(row) => {
-                if (row.destinationHref) router.push(row.destinationHref)
-              }}
-              onStatusChange={changeWritingStatus}
-              onArtifactTypeChange={changeWritingArtifactType}
-              workspaceOptions={workspaceOptions}
-              workspaceAvailable={workspaceAvailable}
-              onAssignWorkspace={assignWorkspace}
-              onUnassignWorkspace={unassignWorkspace}
-              onCreateWorkspace={createWorkspaceAndAssign}
-              onRenameWriting={openRenameWriting}
-              onPreviewWriting={openWritingPreview}
-              onCopyMarkdown={copyWritingMarkdown}
-              onDownloadMarkdown={downloadWritingMarkdown}
-              onDeleteRequest={async (id) => {
-                await deleteWriting(id)
-                await loadDeskActivity()
-                void loadRecipientPreviewsAsync()
-              }}
-              absoluteDates={absoluteDatesByWritingId}
-            />
+            {isFirstRun ? (
+              <FirstRunEmptyState artifacts={starterArtifacts} />
+            ) : (
+              <DeskArtifactList
+                groups={filteredSummary.groups}
+                isLoading={isLoading}
+                emptyState={
+                  hasActiveFilters ? (
+                    <DeskFilterEmptyState onClear={clearFilters} />
+                  ) : (
+                    <DeskEmptyState
+                      onCreate={() => router.push("/write?new=1")}
+                      onRestoreStarters={handleRestoreStarters}
+                      status={restoreStatus}
+                    />
+                  )
+                }
+                selectedIds={selectedIds}
+                onToggleSelection={toggleSelection}
+                onActivate={(row) => {
+                  if (row.destinationHref) router.push(row.destinationHref)
+                }}
+                onStatusChange={changeWritingStatus}
+                onArtifactTypeChange={changeWritingArtifactType}
+                workspaceOptions={workspaceOptions}
+                workspaceAvailable={workspaceAvailable}
+                onAssignWorkspace={assignWorkspace}
+                onUnassignWorkspace={unassignWorkspace}
+                onCreateWorkspace={createWorkspaceAndAssign}
+                onRenameWriting={openRenameWriting}
+                onPreviewWriting={openWritingPreview}
+                onCopyMarkdown={copyWritingMarkdown}
+                onDownloadMarkdown={downloadWritingMarkdown}
+                onDeleteRequest={async (id) => {
+                  await deleteWriting(id)
+                  await loadDeskActivity()
+                  void loadRecipientPreviewsAsync()
+                }}
+                absoluteDates={absoluteDatesByWritingId}
+              />
+            )}
 
             {hasSelection && (
               <BulkActionBar

@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { ChevronDown } from "lucide-react"
+import { Check, ChevronDown } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { WritingStatus } from "@/lib/writings/status"
 import { getWritingStatusLabel } from "@/lib/writings/status"
@@ -44,7 +44,7 @@ function StatusPickerItem({
         <WritingStatusIcon status={status} className="h-[12px] w-[12px]" />
       </VocabularyChip>
       <span>{getWritingStatusLabel(status)}</span>
-      {selected ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-ink" /> : null}
+      {selected ? <Check className="ml-auto h-3.5 w-3.5 shrink-0" strokeWidth={2} /> : null}
     </button>
   )
 }

@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Check,
   Clipboard,
   Download,
   Eye,
@@ -263,10 +264,7 @@ export function DeskActivityTable({
                     {getWritingStatusLabel(status)}
                   </span>
                   {row.stateTone === status ? (
-                    <span
-                      className="h-2.5 w-2.5 rounded-full bg-ink"
-                      aria-hidden="true"
-                    />
+                    <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
                   ) : null}
                 </DropdownMenuItem>
               ))}
@@ -315,10 +313,7 @@ export function DeskActivityTable({
                     {getArtifactTypeLabel(artifactType)}
                   </span>
                   {(row.artifactType ?? "general") === artifactType ? (
-                    <span
-                      className="h-2.5 w-2.5 rounded-full bg-ink"
-                      aria-hidden="true"
-                    />
+                    <Check className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
                   ) : null}
                 </DropdownMenuItem>
               ))}

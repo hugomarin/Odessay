@@ -42,13 +42,17 @@ describe("EditorNavigationSidebar", () => {
       ),
     );
     const aside = container.querySelector("aside");
-    // ODE-433: the panel is a 236px column of the band, not an absolute overlay
-    // over the sheet — transparent, clipped, and never rounded.
+    // ODE-433: the panel is a column of the band, not an absolute overlay over
+    // the sheet — transparent, clipped, and never rounded. Its width is now
+    // drag-resizable (own feature pass), defaulting to the old fixed 236px.
     expect(aside?.dataset.open).toBe("true");
-    expect(aside?.className).toContain("w-[var(--size-panel-left)]");
+    expect(aside?.style.width).toBe("236px");
     expect(aside?.className).toContain("overflow-hidden");
     expect(aside?.className).toContain("bg-transparent");
     expect(aside?.className).not.toContain("rounded");
+    expect(
+      container.querySelector('[role="separator"][aria-label="Resize Contents"]'),
+    ).not.toBeNull();
     // One header row now: the mode pills and the close button. The title row
     // with its count badge is gone, so the mode name reaches assistive tech
     // through the close button instead of a visible heading.
@@ -95,6 +99,8 @@ describe("EditorNavigationSidebar", () => {
     // The toggles a closed panel used to hold now live in the sheet's ghost
     // rail and header row, so the collapsed column takes no space at all.
     expect(aside?.className).toContain("p-0");
+    // A closed panel has nothing to resize.
+    expect(container.querySelector('[role="separator"]')).toBeNull();
   });
 
   it("contains the scroll gesture of the open panel", () => {

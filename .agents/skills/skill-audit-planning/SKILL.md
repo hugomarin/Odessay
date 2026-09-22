@@ -16,7 +16,7 @@ Este skill aplica a:
 
 No reemplaza:
 
-- `skill-product-manager` — producir roadmap/briefs/issues
+- `skill-planning` — producir roadmap/briefs/issues
 - `skill-architecture` — clasificar layer/runtime/owner y boundaries
 
 Este skill responde otra pregunta:
@@ -46,7 +46,7 @@ El audit de planning debe revisar, como mínimo:
 1. `workflow/define/roadmap.md`
 2. `workflow/define/dod-[fase].md`
 3. `workflow/status.json` (fase activa; para entregas usar `npm run ops:ledger -- built --phase "Fase N" --brief`)
-4. `.agents/skills/skill-product-manager/SKILL.md`
+4. `.agents/skills/skill-planning/SKILL.md`
 5. Si la fase toca desktop, multi-runtime, shared core, save path, sync, parser/serializer o services:
    - `.agents/skills/skill-architecture/SKILL.md`
    - la secuencia `odessay-desktop-*`

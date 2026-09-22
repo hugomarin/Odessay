@@ -3,6 +3,11 @@
   "_comment": "Inventario completo de todos los documentos del proyecto. Un documento que no aparece aquí es un nodo huérfano — no tiene ruta de entrada para ningún agente. Actualizar este archivo cuando se agregue, mueva o elimine cualquier documento.",
   "registry": [
     {
+      "path": "AGENTS.md",
+      "type": "guardrail",
+      "description": "Canonical owner de las reglas universales de construcción, invariantes y guardrails del repositorio (incluye herramientas que no encadenan a workflow/agents.md, ej. Codex): reuse-before-creation, one-owner, architecture-before-locality (con activación acotada), proteger hotspots, smallest coherent change, descubrir AGENTS.md locales, y el guardrail no negociable de arquitectura documental desktop con criterio explícito de cuándo cargar cada doc (ADR identidad vs. catálogo desktop)."
+    },
+    {
       "path": "workflow/context/core/odessay-fundacional.md",
       "type": "core",
       "description": "Por qué existe Odessay, para quién es y qué problema resuelve. Los tres modos (Escribir/Leer/Organizar) y los principios de producto no negociables. No contiene código ni specs técnicas."
@@ -57,7 +62,7 @@
       "type": "feature",
       "scope": "runtime-web-actual",
       "state": "canonical-feature-doc-with-desktop-bounds",
-      "description": "Comportamiento técnico y de UX del editor TipTap en el runtime actual: extensiones activas, shortcuts, modelo Rich Text con paridad Markdown, auto-save, modales, FootnoteExtension y layout de columnas. Para contrato documental futuro ver la secuencia desktop."
+      "description": "Comportamiento técnico y de UX del editor TipTap en el runtime actual: extensiones activas, shortcuts, bubble contextual único, modelo Rich Text con paridad Markdown, auto-save, modales, FootnoteExtension y layout. El Markdown base usa tiptap-markdown dentro del adapter; el perfil controlado y el round-trip completo pertenecen al Document Engine compartido."
     },
     {
       "path": "workflow/context/features/odessay-prosemirror-tiptap.md",
@@ -274,7 +279,7 @@
     {
       "path": "workflow/agents.md",
       "type": "ops",
-      "description": "Fuente de verdad para todos los LLMs usados en Odessay. Define recursos, operación, ramas y el guardrail obligatorio del catálogo documental desktop: precedencia ADR/spec, invariantes de manifest/SQLite/DocumentCatalog/OpenDocument y protocolo de Context Gap ante docs o código contradictorios."
+      "description": "Instrucciones operativas del sistema /wf-* para todos los LLMs usados en Odessay: recursos disponibles, roles de agente por comando, carga de contexto, ramas y estados de Linear. Referencia el guardrail de arquitectura documental desktop — su canonical owner es AGENTS.md (raíz), no lo repite aquí."
     },
     {
       "path": "workflow/workflow.md",
@@ -378,6 +383,11 @@
       "description": "Gate de cierre de Fase 11 — Artifact Studio: Agente de Workspace. Exige una capa de herramientas autorizada (leer/escribir/mover/editar/eliminar) gateada por aprobación explícita por acción, contexto leído del sustrato ya existente (catálogo, anotaciones, vocabulary, collections, learned words), workflow.md como acción del propio agente, panel que se expande en el lugar (nunca modal/sheet), y el wireframe interactivo tratado como referencia de interacción, nunca de visual final."
     },
     {
+      "path": "workflow/define/dod-fase-12.md",
+      "type": "ops",
+      "description": "Gate de cierre de Fase 12 — Artifact Studio: Componentes Documentales. Exige un único perfil y Document IR para Markdown puro, semántica propia y componentes MDX-like controlados; round-trip TipTap/Markdown, invocación en Studio, paridad de preview/lectura, proyecciones body_text/PDF/DOCX, seguridad, performance y rollout beta reader-first."
+    },
+    {
       "path": "workflow/define/dod-fase-8.md",
       "type": "ops",
       "description": "Gate de cierre de Fase 8 — Biblioteca, Preview y Calidad de Producto: checklist de cierre post-convergencia para Biblioteca (Desk/Workspace), Preview, sharing nativo desktop, identidad de documento D1-D10 y calidad de correcciones/anotaciones."
@@ -478,9 +488,34 @@
       "description": "Convención mínima para roles de agente en Odessay: ubicación, frontmatter requerido, naming, responsabilidades y relación entre workflow, agent roles y skills."
     },
     {
-      "path": ".agents/agents/product-manager.md",
+      "path": ".agents/agents/planning-agent.md",
       "type": "agent",
-      "description": "Rol de agente para `/wf-define`: orquesta la planeación de fases, usa skill-product-manager como marco principal, convoca especialistas cuando hace falta y consolida roadmap, DoD y briefs en una sola voz."
+      "description": "Rol de agente para `/wf-define`: resuelve la topología de ejecución (capabilities, dependencias, critical path, smallest coherent stages) antes de escribir briefs, usa skill-planning como marco principal para endurecer cada issue, convoca especialistas cuando hace falta y consolida roadmap, DoD y briefs en una sola voz. Simétrico a build-agent.md/review-agent.md."
+    },
+    {
+      "path": ".agents/agents/build-agent.md",
+      "type": "agent",
+      "description": "Rol de agente para `/wf-build`: ejecuta Architecture Recon antes de implementar, decide entre extender owner existente, reutilizar abstracción, extraer de hotspot o crear nuevo, y protege hotspots de orquestación de ownership nuevo."
+    },
+    {
+      "path": ".agents/agents/review-agent.md",
+      "type": "agent",
+      "description": "Rol de agente para `/wf-review`: reconstruye el comportamiento cambiado antes de buscar findings, activa solo las lentes review-* relevantes al scope del diff, consolida findings y produce TechnicalVerdict/QualityScore/ProcessInsights. No calcula el GateResult final (eso combina TechnicalVerdict con CI/Vercel/delivery en workflow.md) ni repite merge, ledgers o Linear."
+    },
+    {
+      "path": "components/editor/AGENTS.md",
+      "type": "guardrail",
+      "description": "Reglas locales del hotspot editor: editor-shell.tsx es composition boundary, no owner de persistencia/identidad/dominio; documenta la deuda conocida de localDB.correctionBlocks directo como no-plantilla; ownership de estado y descubrimiento de patrón existente antes de agregar comportamiento."
+    },
+    {
+      "path": "src-tauri/AGENTS.md",
+      "type": "guardrail",
+      "description": "Reglas locales del runtime desktop: commands como capa delgada, index.rs/workspace.rs como hotspots con disposition ratchet+staged-extraction, native owners en módulo propio, SQLite (rusqlite) como único catálogo, sin dependencias de runtime web."
+    },
+    {
+      "path": ".agents/skills/architecture-recon/SKILL.md",
+      "type": "skill",
+      "description": "Localiza owner canónico, siblings, consumers, contratos y tests reales en el código antes de implementar. Complementa a skill-architecture (qué debería ser verdad) confrontándolo contra dónde vive hoy la responsabilidad. Leer código relevante es parte normal de BUILD — la restricción de 'no cargar contexto adicional por intuición' sigue aplicando solo a documentación, nunca a código."
     },
     {
       "path": ".agents/skills/skill-design/SKILL.md",
@@ -513,9 +548,9 @@
       "description": "Guía de base de datos: convenciones de migración SQL, RLS policies, triggers, índices, naming de tablas y cómo actualizar odessay-modelo-datos.md después de un cambio de schema."
     },
     {
-      "path": ".agents/skills/skill-product-manager/SKILL.md",
+      "path": ".agents/skills/skill-planning/SKILL.md",
       "type": "skill",
-      "description": "Workflow de PM en Linear: cómo escribir issues ejecutables, jerarquía de proyectos/milestones, template con areas_affected y proof of work requerido. Incluye §Verificación de definición (reconciliar el spec citado contra el código antes del brief; contradicción = bloqueante, consistencia ≠ corrección), §Visual / UX Contract (paridad visual verificable para UI) y aceptación de resultado del dueño (demo de outcome además del proof of work de código). Leer antes de crear o modificar issues."
+      "description": "Método para endurecer cada issue en un Issue Brief ejecutable: schema, jerarquía de proyectos/milestones, template con areas_affected y proof of work requerido. Incluye §Verificación de definición (reconciliar el spec citado contra el código antes del brief; contradicción = bloqueante, consistencia ≠ corrección), §Visual / UX Contract, contratos de Architecture/Performance, revisión por domain skills, y el schema canónico de Execution Trace. La orquestación de la fase (topología, síntesis) vive en planning-agent.md, no aquí."
     },
     {
       "path": ".agents/skills/skill-performance/SKILL.md",
@@ -554,7 +589,27 @@
     {
       "path": ".agents/skills/skill-code-review/SKILL.md",
       "type": "skill",
-      "description": "Checklist pre-PR: typecheck, lint, tests hermético, calidad de código, seguridad y performance. Define el estándar mínimo que debe cumplir cualquier entrega antes de abrir un PR."
+      "description": "Orquestación técnica del review: qué evidencia leer, tabla de dispatch de las lentes review-*, formato de finding válido, prioridad de búsqueda (defectos sistémicos primero) y mapa de qué vive en cada otra capa. No repite protocolo de Linear/merge/ledgers (workflow.md) ni la fórmula de score (scoring.md)."
+    },
+    {
+      "path": ".agents/skills/review-correctness/SKILL.md",
+      "type": "skill",
+      "description": "Lente de review para regresiones lógicas y failure modes: transición co-owned, estado intermedio no modelado, identidad creada en hot path, update optimista sin rollback, colapso de colección sobre output de LLM, contrato AI violado por scope, velocidad percibida como invariante de producto."
+    },
+    {
+      "path": ".agents/skills/review-architecture/SKILL.md",
+      "type": "skill",
+      "description": "Lente de review para ownership/boundaries y validación de Architecture Contract, incluido el checklist de bundle desktop/Tauri (CSP ipc, keyring backend, supabase-js vs ssr, DevTools, isTauriBuild) y coherencia de documentación por scope."
+    },
+    {
+      "path": ".agents/skills/review-testing/SKILL.md",
+      "type": "skill",
+      "description": "Lente de review para cobertura de testing: happy path, error paths, edge cases, calidad de tests y anti-patterns. Canonical owner del criterio — specialists/testing.md es solo su adapter de ejecución JSON, no una copia paralela."
+    },
+    {
+      "path": ".agents/skills/review-change-size/SKILL.md",
+      "type": "skill",
+      "description": "Lente de review para si el diff sigue siendo una unidad coherente y revisable o debió dividirse en stages más pequeños. Distinto de los umbrales de dispatch de claude-enhancements.md (costo de despachar especialistas, no revisabilidad)."
     },
     {
       "path": ".agents/skills/skill-code-review/claude-enhancements.md",
@@ -584,7 +639,7 @@
     {
       "path": ".agents/skills/skill-code-review/specialists/testing.md",
       "type": "skill",
-      "description": "Checklist especializado de testing review: happy paths, error paths, edge cases, calidad de tests, anti-patterns y output JSON estricto."
+      "description": "Adapter de ejecución JSON para review-testing/SKILL.md (canonical owner del criterio) — no repite el checklist, lo aplica contra el diff con output estricto para dispatch a subagente."
     },
     {
       "path": ".agents/skills/skill-ux-testing/SKILL.md",
@@ -630,6 +685,27 @@
       "path": "docs/design/globals-additions.css",
       "type": "design-reference",
       "description": "CSS listo para pegar del rediseño: tokens de color, tamaño y sombra de la capa de producto, bloque scoped [data-layer=marketing] y keyframes. Fuente de los tokens — se fusiona en app/globals.css en ODE-425 (producto) y ODE-440 (marketing), nunca se anexa entero."
+    },
+    {
+      "path": "docs/design/document-components-playground.md",
+      "type": "design-reference",
+      "scope": "exploracion-de-componentes-documentales",
+      "state": "editable-design-exploration",
+      "description": "Laboratorio editable para alinear sintaxis, atributos, render e inserción de highlight, annotation, Tip, Card, CardGroup, Steps, CodeGroup y bloques Mermaid. No es todavía el contrato de producción del parser."
+    },
+    {
+      "path": "docs/design/document-components-implementation-plan.md",
+      "type": "design-reference",
+      "scope": "exploracion-de-componentes-documentales",
+      "state": "phase-12-defined",
+      "description": "Plan revisado de implementación del perfil documental MDX-like controlado, con ownership en Fase 12: contrato Markdown, Document IR, adapters TipTap, invocación, render compartido, persistencia y rollout. Incluye contratos de performance, failure modes, trazabilidad a los briefs ODE-528–ODE-539 y gates de aceptación. La fase está planificada en Linear, no activa."
+    },
+    {
+      "path": "prototypes/document-components-playground.html",
+      "type": "design-reference",
+      "scope": "exploracion-de-componentes-documentales",
+      "state": "editable-visual-prototype",
+      "description": "Playground HTML standalone con editor de source, preview renderizado, inspector de atributos y notas de decisión locales para los componentes documentales."
     },
     {
       "path": "docs/design/reference/",

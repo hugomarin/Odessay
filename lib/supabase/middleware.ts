@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { type NextRequest, NextResponse } from "next/server"
+import { sanitizeAuthRedirectPath } from "@/lib/auth/redirect"
 import { supabasePublicKey, supabaseUrl } from "@/lib/supabase/shared"
 
 const AUTH_ROUTES = ["/login", "/signup"]
@@ -8,18 +9,6 @@ const AUTH_CONFIRM_TYPES = new Set(["email", "recovery", "email_change", "invite
 
 const matchesRoute = (pathname: string, routes: string[]) =>
   routes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
-
-const sanitizeRedirectPath = (candidate: string | null, fallback: string) => {
-  if (!candidate) {
-    return fallback
-  }
-
-  if (!candidate.startsWith("/") || candidate.startsWith("//") || candidate.includes("://")) {
-    return fallback
-  }
-
-  return candidate
-}
 
 const getDefaultNextForAuthType = (type: string) => {
   switch (type) {
@@ -32,7 +21,7 @@ const getDefaultNextForAuthType = (type: string) => {
   }
 }
 
-export function extractMalformedAuthRedirect(pathname: string, search: string) {
+export function extractMalformedAuthRedirect(pathname: string, search: string, appOrigin: string) {
   if (!pathname.startsWith("/&token_hash=")) {
     return null
   }
@@ -49,13 +38,13 @@ export function extractMalformedAuthRedirect(pathname: string, search: string) {
   return {
     tokenHash,
     type,
-    next: sanitizeRedirectPath(params.get("next"), getDefaultNextForAuthType(type)),
+    next: sanitizeAuthRedirectPath(params.get("next"), appOrigin, getDefaultNextForAuthType(type)),
   }
 }
 
 export const updateSession = async (request: NextRequest) => {
-  const { pathname, search } = request.nextUrl
-  const malformedAuthRedirect = extractMalformedAuthRedirect(pathname, search)
+  const { pathname, search, origin } = request.nextUrl
+  const malformedAuthRedirect = extractMalformedAuthRedirect(pathname, search, origin)
 
   if (malformedAuthRedirect) {
     const redirectUrl = request.nextUrl.clone()

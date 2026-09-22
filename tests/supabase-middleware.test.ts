@@ -27,8 +27,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { extractMalformedAuthRedirect, updateSession } from "@/lib/supabase/middleware"
 
 describe("extractMalformedAuthRedirect", () => {
+  const appOrigin = "https://example.com"
+
   it("returns null for normal app paths", () => {
-    expect(extractMalformedAuthRedirect("/settings/account", "")).toBeNull()
+    expect(extractMalformedAuthRedirect("/settings/account", "", appOrigin)).toBeNull()
   })
 
   it("recovers malformed email-change links that fell back to the site root", () => {
@@ -36,6 +38,7 @@ describe("extractMalformedAuthRedirect", () => {
       extractMalformedAuthRedirect(
         "/&token_hash=abc123&type=email_change",
         "",
+        appOrigin,
       ),
     ).toEqual({
       tokenHash: "abc123",
@@ -49,6 +52,7 @@ describe("extractMalformedAuthRedirect", () => {
       extractMalformedAuthRedirect(
         "/&token_hash=abc123&type=recovery&next=%2Freset-password",
         "",
+        appOrigin,
       ),
     ).toEqual({
       tokenHash: "abc123",
@@ -58,7 +62,21 @@ describe("extractMalformedAuthRedirect", () => {
   })
 
   it("rejects malformed auth links with unsupported types", () => {
-    expect(extractMalformedAuthRedirect("/&token_hash=abc123&type=unknown", "")).toBeNull()
+    expect(extractMalformedAuthRedirect("/&token_hash=abc123&type=unknown", "", appOrigin)).toBeNull()
+  })
+
+  it("falls back to the type's default when the next param is an off-origin backslash bypass", () => {
+    expect(
+      extractMalformedAuthRedirect(
+        "/&token_hash=abc123&type=recovery&next=%2F%5Cattacker.invalid",
+        "",
+        appOrigin,
+      ),
+    ).toEqual({
+      tokenHash: "abc123",
+      type: "recovery",
+      next: "/reset-password",
+    })
   })
 })
 

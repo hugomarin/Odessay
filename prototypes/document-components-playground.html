@@ -1,0 +1,1444 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Odessay · Document Components Lab</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --bg: hsl(38 12% 98%);
+        --surface: hsl(0 0% 100%);
+        --muted: hsl(38 8% 93%);
+        --muted-hover: hsl(38 8% 90%);
+        --border: hsl(38 8% 90%);
+        --border-strong: hsl(35 8% 82%);
+        --ink: hsl(25 18% 10%);
+        --ink-2: hsl(25 12% 22%);
+        --ink-3: hsl(25 10% 38%);
+        --ink-4: hsl(25 8% 52%);
+        --ink-5: hsl(30 9.8% 67.8%);
+        --cursor: hsl(22 55% 38%);
+        --cursor-soft: hsl(22 55% 95%);
+        --highlight: hsl(45 90% 84%);
+        --highlight-active: hsl(45 90% 74%);
+        --success: hsl(145 46% 33.5%);
+        --code-bg: hsl(30 15% 12%);
+        --code-ink: hsl(38 28% 91%);
+        --shadow-float: 0 2px 12px hsla(25 18% 12% / 0.06), 0 1px 3px hsla(25 18% 12% / 0.04);
+        --shadow-panel: 0 8px 32px hsla(25 18% 12% / 0.08), 0 2px 8px hsla(25 18% 12% / 0.04);
+        --font-ui: "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-prose: Lora, Georgia, "Times New Roman", serif;
+        --font-mono: "Roboto Mono", "SFMono-Regular", Consolas, monospace;
+      }
+
+      * { box-sizing: border-box; }
+
+      html { min-width: 1120px; background: var(--bg); }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        background: var(--bg);
+        font-family: var(--font-ui);
+      }
+
+      button, textarea, input { font: inherit; }
+
+      button {
+        border: 0;
+        cursor: pointer;
+        color: inherit;
+      }
+
+      .app {
+        min-height: 100vh;
+        display: grid;
+        grid-template-rows: 46px 1fr;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 0 24px;
+        background: var(--surface);
+        border-bottom: 0.5px solid var(--border);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-family: var(--font-prose);
+        font-size: 17px;
+      }
+
+      .brand-mark {
+        width: 20px;
+        height: 20px;
+        display: grid;
+        place-items: center;
+        border: 0.5px solid var(--ink);
+        border-radius: 50%;
+        font-family: var(--font-mono);
+        font-size: 10px;
+      }
+
+      .topbar-meta {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--ink-4);
+        font-size: 12px;
+      }
+
+      .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--success);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 244px minmax(0, 1fr);
+        min-height: calc(100vh - 46px);
+      }
+
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        padding: 28px 14px 20px;
+        background: var(--surface);
+        border-right: 0.5px solid var(--border);
+      }
+
+      .sidebar-scroll {
+        min-height: 0;
+        flex: 1;
+        display: grid;
+        align-content: start;
+        gap: 12px;
+        overflow: auto;
+      }
+
+      .sidebar-heading {
+        padding: 0 10px;
+        color: var(--ink-4);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .component-list {
+        display: grid;
+        gap: 4px;
+      }
+
+      .component-button {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 10px;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--ink-3);
+        text-align: left;
+        font-size: 13px;
+        transition: background 160ms ease, color 160ms ease;
+      }
+
+      .component-button:hover { background: var(--muted-hover); color: var(--ink); }
+
+      .component-button.active {
+        background: var(--muted);
+        color: var(--ink);
+        font-weight: 500;
+      }
+
+      .component-glyph {
+        width: 24px;
+        height: 24px;
+        display: grid;
+        place-items: center;
+        border: 0.5px solid var(--border-strong);
+        border-radius: 6px;
+        color: var(--cursor);
+        font-family: var(--font-mono);
+        font-size: 10px;
+      }
+
+      .component-kind {
+        color: var(--ink-5);
+        font-family: var(--font-mono);
+        font-size: 9px;
+        text-transform: uppercase;
+      }
+
+      .sidebar-note {
+        margin-top: auto;
+        padding: 14px 12px;
+        border: 0.5px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg);
+        color: var(--ink-3);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .sidebar-note strong { color: var(--ink); font-weight: 500; }
+
+      .main {
+        min-width: 0;
+        padding: 30px 34px 42px;
+        overflow: auto;
+      }
+
+      .page-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 28px;
+        margin-bottom: 24px;
+      }
+
+      .eyebrow {
+        margin-bottom: 8px;
+        color: var(--cursor);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-family: var(--font-prose);
+        font-size: 32px;
+        font-weight: 500;
+        letter-spacing: -0.025em;
+        line-height: 1.18;
+      }
+
+      .page-description {
+        max-width: 720px;
+        margin: 10px 0 0;
+        color: var(--ink-3);
+        font-family: var(--font-prose);
+        font-size: 16px;
+        line-height: 1.65;
+      }
+
+      .header-actions { display: flex; gap: 8px; padding-top: 4px; }
+
+      .button {
+        height: 32px;
+        padding: 0 12px;
+        border: 0.5px solid var(--border-strong);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--ink-2);
+        font-size: 12px;
+        transition: background 160ms ease, border-color 160ms ease;
+      }
+
+      .button:hover { background: var(--muted); border-color: var(--border-strong); }
+
+      .button.primary { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+
+      .button.primary:hover { background: var(--ink-2); }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        align-items: start;
+      }
+
+      .workspace-main { min-width: 0; display: grid; gap: 16px; }
+
+      .card-shell {
+        overflow: hidden;
+        border: 0.5px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+        box-shadow: var(--shadow-float);
+      }
+
+      .shell-head {
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 0 16px;
+        border-bottom: 0.5px solid var(--border);
+      }
+
+      .shell-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .tag-label {
+        padding: 3px 6px;
+        border-radius: 6px;
+        background: var(--cursor-soft);
+        color: var(--cursor);
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 400;
+      }
+
+      .shell-meta { color: var(--ink-4); font-size: 11px; }
+
+      .editor-wrap { padding: 14px; }
+
+      .source-editor {
+        width: 100%;
+        min-height: 286px;
+        display: block;
+        resize: vertical;
+        padding: 16px;
+        border: 0.5px solid var(--border);
+        border-radius: 8px;
+        outline: none;
+        background: hsl(38 12% 97%);
+        color: var(--ink-2);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        line-height: 1.7;
+        tab-size: 2;
+      }
+
+      .source-editor:focus { border-color: var(--cursor); box-shadow: 0 0 0 3px hsl(22 55% 38% / 0.08); }
+
+      .editor-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 10px 2px 0;
+        color: var(--ink-4);
+        font-size: 11px;
+      }
+
+      .editor-footer-actions { display: flex; gap: 6px; }
+
+      .link-button {
+        padding: 3px 4px;
+        background: transparent;
+        color: var(--cursor);
+        font-size: 11px;
+      }
+
+      .link-button:hover { text-decoration: underline; }
+
+      .preview-wrap { padding: 22px 24px 28px; }
+
+      .preview-label {
+        margin-bottom: 18px;
+        color: var(--ink-5);
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .preview-canvas { min-height: 250px; }
+
+      .prose {
+        color: var(--ink-2);
+        font-family: var(--font-prose);
+        font-size: 17px;
+        line-height: 1.9;
+      }
+
+      .prose p { max-width: 68ch; margin: 0 0 1.1em; }
+
+      .hl {
+        padding: 0 2px;
+        border-radius: 2px;
+        background: var(--highlight);
+        box-decoration-break: clone;
+      }
+
+      .hl-amber { background: hsl(45 90% 84%); }
+      .hl-blue { background: hsl(210 80% 86%); }
+      .hl-green { background: hsl(140 55% 84%); }
+
+      .annotation-anchor {
+        padding: 0 2px;
+        border-bottom: 1.5px solid hsl(35 80% 55%);
+        background: var(--highlight);
+        box-decoration-break: clone;
+      }
+
+      .annotation-layout { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 24px; align-items: start; }
+
+      .annotation-bubble {
+        padding: 12px 14px;
+        border: 0.5px solid var(--border);
+        border-left: 2px solid var(--cursor);
+        border-radius: 10px;
+        background: var(--surface);
+        box-shadow: var(--shadow-panel);
+        font-family: var(--font-ui);
+      }
+
+      .annotation-bubble p { margin: 9px 0 0; color: var(--ink-2); font-size: 12px; line-height: 1.5; }
+
+      .bubble-meta { display: flex; justify-content: space-between; color: var(--ink-4); font-size: 10px; }
+
+      .protected-layout, .entity-layout { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 24px; align-items: start; }
+
+      .protected-anchor {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        padding: 0 3px;
+        border-bottom: 0.5px dashed var(--ink-4);
+        border-radius: 2px;
+        background: hsl(38 12% 94%);
+        cursor: not-allowed;
+      }
+
+      .protected-badge, .entity-type {
+        color: var(--ink-4);
+        font-family: var(--font-ui);
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .protected-notice, .entity-bubble {
+        padding: 12px 14px;
+        border: 0.5px solid var(--border);
+        border-left: 0.5px solid var(--ink-4);
+        border-radius: 10px;
+        background: var(--surface);
+        box-shadow: var(--shadow-panel);
+        font-family: var(--font-ui);
+      }
+
+      .protected-notice p, .entity-bubble p { margin: 9px 0 0; color: var(--ink-2); font-size: 12px; line-height: 1.5; }
+
+      .entity-anchor {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 7px;
+        padding: 0 3px;
+        border-bottom: 0.5px dotted var(--cursor);
+        border-radius: 2px;
+        background: var(--cursor-soft);
+        cursor: pointer;
+      }
+
+      .entity-type { color: var(--cursor); }
+
+      .tip {
+        --tip-accent: var(--cursor);
+        padding: 18px 20px;
+        border: 0.5px solid hsl(35 45% 82%);
+        border-left: 3px solid var(--tip-accent);
+        border-radius: 9px;
+        background: hsl(38 50% 97%);
+        color: var(--ink-2);
+        font-family: var(--font-prose);
+        font-size: 16px;
+        line-height: 1.7;
+      }
+
+      .tip-accent-amber { --tip-accent: hsl(35 75% 45%); }
+      .tip-accent-blue { --tip-accent: hsl(210 60% 43%); }
+      .tip-variant-info { background: hsl(210 55% 97%); border-color: hsl(210 45% 83%); }
+      .tip-variant-warning { background: hsl(42 65% 97%); border-color: hsl(42 55% 80%); }
+
+      .tip-heading { margin-bottom: 5px; color: var(--tip-accent); font-family: var(--font-ui); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+
+      .accordion-group { overflow: hidden; border: 0.5px solid var(--border); border-radius: 10px; background: var(--surface); }
+
+      .accordion { border-bottom: 0.5px solid var(--border); }
+
+      .accordion:last-child { border-bottom: 0; }
+
+      .accordion-summary { display: flex; align-items: center; gap: 10px; padding: 15px 16px; color: var(--ink); cursor: pointer; font-family: var(--font-ui); font-size: 15px; font-weight: 600; list-style: none; }
+
+      .accordion-summary::-webkit-details-marker { display: none; }
+
+      .accordion-summary::before { content: ""; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid var(--ink-3); transition: transform 180ms ease; }
+
+      .accordion[open] .accordion-summary::before { transform: rotate(90deg); }
+
+      .accordion-summary:hover { background: hsl(38 20% 99%); }
+
+      .accordion-body { padding: 0 16px 18px 32px; color: var(--ink-3); font-family: var(--font-prose); font-size: 15px; line-height: 1.65; }
+
+      .accordion-body p { margin: 0; }
+
+      .content-tabs { overflow: hidden; border: 0.5px solid var(--border); border-radius: 9px; background: var(--surface); }
+
+      .content-tab-row { display: flex; gap: 4px; padding: 6px 8px 0; border-bottom: 0.5px solid var(--border); background: var(--bg); }
+
+      .content-tab { padding: 9px 12px; border-bottom: 0.5px solid transparent; color: var(--ink-4); font-family: var(--font-ui); font-size: 12px; }
+
+      .content-tab:hover { color: var(--ink-2); }
+
+      .content-tab.active { border-bottom-color: var(--cursor); color: var(--ink); font-weight: 600; }
+
+      .content-tab-panel { padding: 18px; color: var(--ink-2); font-family: var(--font-prose); font-size: 15px; line-height: 1.65; }
+
+      .content-tab-panel p { margin: 0; }
+
+      .card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+
+      .card-grid.columns-1 { grid-template-columns: 1fr; }
+      .card-grid.columns-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+      .doc-card {
+        min-height: 150px;
+        display: flex;
+        flex-direction: column;
+        padding: 18px;
+        border: 0.5px solid var(--border-strong);
+        border-radius: 10px;
+        background: var(--surface);
+        transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+      }
+
+      .doc-card:hover { border-color: var(--cursor); background: hsl(38 20% 99%); transform: translateY(-1px); }
+
+      .doc-card { --card-accent: var(--cursor); }
+
+      .doc-card-icon { color: var(--card-accent); font-family: var(--font-mono); font-size: 13px; }
+
+      .card-accent-amber { --card-accent: hsl(35 75% 45%); }
+      .card-accent-blue { --card-accent: hsl(210 60% 43%); }
+
+      .doc-card h3 { margin: 22px 0 6px; color: var(--ink); font-size: 16px; font-weight: 600; }
+
+      .doc-card p { margin: 0; color: var(--ink-3); font-family: var(--font-prose); font-size: 14px; line-height: 1.55; }
+
+      .doc-card-link { margin-top: auto; padding-top: 16px; color: var(--cursor); font-size: 11px; }
+
+      .steps { display: grid; gap: 0; }
+
+      .step { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 14px; position: relative; padding-bottom: 24px; }
+
+      .step:last-child { padding-bottom: 0; }
+
+      .step:not(:last-child)::before { content: ""; position: absolute; top: 30px; bottom: 0; left: 17px; width: 0.5px; background: var(--border-strong); }
+
+      .step-number { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--muted); color: var(--ink); font-size: 13px; font-weight: 600; z-index: 1; }
+
+      .step h3 { margin: 3px 0 6px; font-size: 16px; font-weight: 600; }
+
+      .step p { margin: 0; color: var(--ink-3); font-family: var(--font-prose); font-size: 15px; line-height: 1.65; }
+
+      .inline-code-group { margin-top: 12px; overflow: hidden; border: 0.5px solid var(--border); border-radius: 8px; background: var(--code-bg); }
+
+      .tab-row { display: flex; gap: 2px; padding: 5px 6px 0; background: hsl(30 15% 17%); }
+
+      .code-tab { padding: 7px 10px; border-radius: 6px 6px 0 0; background: transparent; color: hsl(38 10% 64%); font-family: var(--font-mono); font-size: 10px; }
+
+      .code-tab.active { background: var(--code-bg); color: var(--code-ink); }
+
+      pre { margin: 0; overflow: auto; padding: 15px; color: var(--code-ink); font-family: var(--font-mono); font-size: 11px; line-height: 1.7; }
+
+      .code-group { overflow: hidden; border: 0.5px solid var(--border); border-radius: 8px; background: var(--code-bg); }
+
+      .code-group .tab-row { padding-top: 6px; }
+
+      .code-block-shell { overflow: hidden; border: 0.5px solid var(--border); border-radius: 8px; background: var(--code-bg); }
+
+      .code-block-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; background: hsl(30 15% 17%); color: hsl(38 10% 64%); font-family: var(--font-mono); font-size: 10px; }
+
+      .code-block-language { color: var(--code-ink); }
+
+      .code-block-settings { color: hsl(38 10% 64%); }
+
+      .mermaid-layout { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 14px; }
+
+      .mermaid-preview { min-height: 210px; position: relative; padding: 18px; overflow: hidden; border: 0.5px solid var(--border); border-radius: 8px; background: hsl(38 12% 99%); }
+
+      .diagram-title { color: var(--ink-4); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+      .diagram-track { display: grid; gap: 22px; margin-top: 22px; }
+
+      .diagram-row { display: grid; grid-template-columns: 80px 1fr 100px; gap: 8px; align-items: center; }
+
+      .participant { padding: 6px 7px; border: 0.5px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--ink-2); font-family: var(--font-mono); font-size: 9px; text-align: center; }
+
+      .message { position: relative; height: 18px; border-top: 0.5px solid var(--cursor); }
+
+      .message::after { content: ""; position: absolute; top: -5px; right: 0; width: 9px; height: 9px; border-top: 0.5px solid var(--cursor); border-right: 0.5px solid var(--cursor); transform: rotate(45deg); }
+
+      .message-label { position: absolute; left: 50%; top: -18px; transform: translateX(-50%); color: var(--ink-3); font-size: 10px; white-space: nowrap; }
+
+      .decision-notes { width: 100%; min-height: 108px; resize: vertical; padding: 10px; border: 0.5px solid var(--border); border-radius: 7px; outline: none; background: var(--bg); color: var(--ink-2); font-size: 12px; line-height: 1.5; }
+
+      .decision-notes:focus { border-color: var(--cursor); }
+
+      .decision-notes-wrap { padding: 14px 16px 16px; }
+
+      .source-actions { display: flex; align-items: center; gap: 8px; }
+
+      .source-settings { height: 28px; padding: 0 9px; border: 0.5px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: var(--ink-3); font-size: 11px; }
+
+      .source-settings:hover { background: var(--muted); color: var(--ink); }
+
+      .source-settings[hidden] { display: none; }
+
+      .config-overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: hsl(25 18% 10% / 0.22); backdrop-filter: blur(4px); }
+
+      .config-overlay[hidden] { display: none; }
+
+      .config-modal { width: min(440px, 100%); overflow: hidden; border: 0.5px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-panel); }
+
+      .config-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 18px 14px; border-bottom: 0.5px solid var(--border); }
+
+      .config-modal-title { margin: 0; color: var(--ink); font-size: 16px; font-weight: 600; }
+
+      .config-modal-description { margin: 5px 0 0; color: var(--ink-3); font-family: var(--font-prose); font-size: 13px; line-height: 1.5; }
+
+      .modal-close { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 6px; background: transparent; color: var(--ink-4); font-size: 18px; line-height: 1; }
+
+      .modal-close:hover { background: var(--muted); color: var(--ink); }
+
+      .config-fields { display: grid; gap: 14px; padding: 18px; }
+
+      .config-field { display: grid; gap: 6px; }
+
+      .config-field label { color: var(--ink-3); font-size: 11px; font-weight: 600; }
+
+      .config-field input, .config-field select, .config-field textarea { width: 100%; padding: 9px 10px; border: 0.5px solid var(--border); border-radius: 7px; outline: none; background: var(--bg); color: var(--ink-2); font-size: 12px; }
+
+      .config-field textarea { min-height: 74px; resize: vertical; line-height: 1.5; }
+
+      .config-field input:focus, .config-field select:focus, .config-field textarea:focus { border-color: var(--cursor); box-shadow: 0 0 0 3px hsl(22 55% 38% / 0.08); }
+
+      .config-help { color: var(--ink-4); font-size: 10px; line-height: 1.4; }
+
+      .config-modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 18px 16px; border-top: 0.5px solid var(--border); }
+
+      .config-modal-hint { margin-right: auto; color: var(--ink-5); font-size: 10px; }
+
+      .save-status { display: block; margin-top: 8px; color: var(--ink-5); font-size: 10px; }
+
+      .empty-preview { display: grid; min-height: 250px; place-items: center; color: var(--ink-4); font-family: var(--font-prose); font-size: 16px; }
+
+      .markdown-preview { color: var(--ink-2); font-family: var(--font-prose); font-size: 17px; line-height: 1.75; }
+      .markdown-preview p { max-width: 68ch; margin: 0 0 16px; }
+      .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { margin: 0 0 12px; color: var(--ink); font-weight: 500; letter-spacing: -0.02em; }
+      .markdown-preview h1 { font-size: 30px; line-height: 1.2; }
+      .markdown-preview h2 { font-size: 24px; line-height: 1.25; }
+      .markdown-preview h3 { font-size: 20px; line-height: 1.3; }
+      .markdown-preview blockquote { max-width: 54ch; margin: 0; padding-left: 18px; border-left: 1.5px solid var(--cursor); color: var(--ink-3); font-style: italic; }
+      .markdown-preview ul, .markdown-preview ol { max-width: 68ch; margin: 0; padding-left: 24px; }
+      .markdown-preview li { margin: 6px 0; }
+      .markdown-preview a { color: var(--cursor); text-decoration: underline; text-decoration-thickness: 0.5px; text-underline-offset: 3px; }
+      .markdown-preview code { padding: 2px 5px; border-radius: 4px; background: var(--muted); color: var(--ink-2); font-family: var(--font-mono); font-size: 0.76em; }
+      .markdown-preview pre { overflow: auto; margin: 0; padding: 16px; border-radius: 8px; background: var(--code-bg); color: var(--code-ink); font-family: var(--font-mono); font-size: 11px; line-height: 1.7; }
+      .markdown-preview table { width: 100%; border-collapse: collapse; font-family: var(--font-ui); font-size: 12px; }
+      .markdown-preview th, .markdown-preview td { padding: 9px 10px; border-bottom: 0.5px solid var(--border); text-align: left; }
+      .markdown-preview th { color: var(--ink-4); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+      .markdown-preview hr { margin: 12px 0; border: 0; border-top: 0.5px solid var(--border-strong); }
+      .markdown-image { display: grid; min-height: 150px; place-items: center; border: 0.5px dashed var(--border-strong); border-radius: 8px; background: var(--bg); color: var(--ink-4); font-family: var(--font-ui); font-size: 12px; }
+      .footnote-preview { margin-top: 18px; padding-top: 12px; border-top: 0.5px solid var(--border); color: var(--ink-4); font-family: var(--font-ui); font-size: 12px; line-height: 1.5; }
+      .footnote-preview sup { color: var(--cursor); }
+
+      @media (max-width: 1180px) {
+        html { min-width: 0; }
+        .layout { grid-template-columns: 204px minmax(0, 1fr); }
+        .sidebar { padding-inline: 10px; }
+        .main { padding-inline: 24px; }
+        .workspace { grid-template-columns: minmax(0, 1fr); }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark">O</span><span>Odessay</span></div>
+        <div class="topbar-meta"><span class="status-dot"></span><span>Editable design artifact · local only</span></div>
+      </header>
+
+      <div class="layout">
+        <aside class="sidebar">
+          <div class="sidebar-heading">MDX components</div>
+          <div class="sidebar-scroll">
+            <nav class="component-list" id="component-list" aria-label="Document components"></nav>
+            <div class="sidebar-heading">Markdown nativo</div>
+            <nav class="component-list" id="markdown-list" aria-label="Markdown native"></nav>
+          </div>
+          <div class="sidebar-note">
+            <strong>Explora</strong><br />
+            Edita el source y revisa cómo se verá al leerlo.
+          </div>
+        </aside>
+
+        <main class="main">
+          <header class="page-header">
+            <div>
+              <div class="eyebrow">Exploración de formato</div>
+              <h1>Componentes del documento</h1>
+              <p class="page-description">Edita Markdown o MDX y revisa el resultado de lectura. Las etiquetas se mantienen como texto al editar.</p>
+            </div>
+            <div class="header-actions">
+              <button class="button" id="reset-all" type="button">Restablecer ejemplos</button>
+              <button class="button primary" id="copy-markdown" type="button">Copiar source</button>
+            </div>
+          </header>
+
+          <div class="workspace">
+            <section class="workspace-main">
+              <article class="card-shell">
+                <div class="shell-head">
+                  <div class="source-actions">
+                    <div class="shell-title"><span>Source Markdown / MDX</span><span class="tag-label" id="source-tag">&lt;Annotation&gt;</span></div>
+                    <button class="source-settings" id="configure-source" type="button" hidden>Configurar</button>
+                  </div>
+                  <span class="shell-meta">texto editable</span>
+                </div>
+                <div class="editor-wrap">
+                  <textarea class="source-editor" id="source-editor" spellcheck="false" aria-label="Editable component source"></textarea>
+                  <div class="editor-footer">
+                    <span id="source-help">Los cambios actualizan la vista de lectura.</span>
+                    <div class="editor-footer-actions"><button class="link-button" id="reset-current" type="button">Restablecer ejemplo</button></div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="card-shell">
+                <div class="shell-head">
+                  <div class="shell-title"><span>Vista de lectura</span><span class="tag-label" id="preview-tag">&lt;Annotation&gt;</span></div>
+                  <span class="shell-meta">así lo verá quien lee</span>
+                </div>
+                <div class="preview-wrap">
+                  <div class="preview-canvas" id="preview-canvas"></div>
+                </div>
+              </article>
+              <section class="card-shell decision-card">
+                <div class="shell-head">
+                  <label class="shell-title" for="decision-notes">Notas para decidir</label>
+                  <span class="shell-meta">guardadas localmente</span>
+                </div>
+                <div class="decision-notes-wrap">
+                  <textarea class="decision-notes" id="decision-notes" placeholder="¿Qué cambiarías de este elemento?"></textarea>
+                  <span class="save-status" id="save-status" aria-live="polite">Guardadas en este navegador.</span>
+                </div>
+              </section>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <div class="config-overlay" id="config-overlay" hidden>
+      <section class="config-modal" role="dialog" aria-modal="true" aria-labelledby="config-modal-title">
+        <div class="config-modal-head">
+          <div>
+            <h2 class="config-modal-title" id="config-modal-title">Configurar</h2>
+            <p class="config-modal-description" id="config-modal-description"></p>
+          </div>
+          <button class="modal-close" id="close-config" type="button" aria-label="Cerrar configuración">×</button>
+        </div>
+        <div class="config-fields" id="config-fields"></div>
+        <div class="config-modal-foot">
+          <span class="config-modal-hint" id="config-modal-hint">Actualiza metadata, no el cuerpo.</span>
+          <button class="button" id="cancel-config" type="button">Cancelar</button>
+          <button class="button primary" id="apply-config" type="button">Aplicar</button>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const fence = "```";
+      const samples = {
+        annotation: {
+          label: "Annotation",
+          glyph: "@",
+          kind: "inline",
+          tag: "<Annotation>",
+          source: '<Annotation id="ann-123" type="personal" comment="Este comentario queda vinculado a la selección.">por ejemplo este texto es un solo mensaje</Annotation>',
+          properties: [
+            ["id", "Stable identity; generated automatically."],
+            ["type", "personal · ai · footnote"],
+            ["comment", "Optional associated comment; no separate note tag."],
+          ],
+          insertion: ["Select text and choose AI from the selection popup.", "Write the comment in the floating annotation composer.", "Render the anchor as a marked passage and the comment in the margin."],
+          render(source) {
+            const comment = attr(source, "comment", "Comentario asociado.");
+            const type = attr(source, "type", "personal");
+            const id = attr(source, "id", "ann-123");
+            const text = tagBody(source, "Annotation") || "por ejemplo este texto es un solo mensaje";
+            return '<div class="annotation-layout"><div class="prose"><p>Una selección puede conservar su identidad sin marcadores ambiguos: <span class="annotation-anchor">' + esc(text) + '</span> y continuar siendo parte normal del texto.</p></div><aside class="annotation-bubble"><div class="bubble-meta"><span>' + esc(type) + '</span><span>' + esc(id) + '</span></div><p>' + esc(comment) + '</p></aside></div>';
+          },
+        },
+        protected: {
+          label: "Protected text",
+          glyph: "⊘",
+          kind: "inline",
+          tag: "<ProtectedText>",
+          source: '<ProtectedText id="lock-123" reason="System-managed">Este texto no se puede editar ni eliminar.</ProtectedText>',
+          properties: [
+            ["id", "Stable identity; generated automatically."],
+            ["reason", "Optional explanation shown in the editor."],
+            ["body", "Selected text preserved as read-only content."],
+          ],
+          insertion: ["Select text and choose Protect from the selection popup.", "Apply protection immediately; do not create an empty protected node.", "Show a read-only affordance and explain why the text cannot be changed."],
+          render(source) {
+            const id = attr(source, "id", "lock-123");
+            const reason = attr(source, "reason", "This text is managed and cannot be changed.");
+            const text = tagBody(source, "ProtectedText") || "Este texto no se puede editar ni eliminar.";
+            return '<div class="protected-layout"><div class="prose"><p>Este fragmento permanece visible, pero queda fuera de la edición normal: <span class="protected-anchor"><span>' + esc(text) + '</span><span class="protected-badge">protected</span></span>.</p></div><aside class="protected-notice"><div class="bubble-meta"><span>Read-only</span><span>' + esc(id) + '</span></div><p>' + esc(reason) + '</p></aside></div>';
+          },
+        },
+        entity: {
+          label: "Entity",
+          glyph: "◇",
+          kind: "inline",
+          tag: "<Entity>",
+          source: '<Entity id="ent-123" type="company">Aplyca</Entity>',
+          properties: [
+            ["id", "Stable identity for this entity mention."],
+            ["type", "company · person · place · product · event · custom"],
+            ["body", "The selected surface text, for example Aplyca."],
+          ],
+          insertion: ["Select a text range and choose Entity from the selection popup.", "Choose the entity type in a small configuration modal.", "Keep the selected text as the visible label and preserve the type as node metadata."],
+          render(source) {
+            const id = attr(source, "id", "ent-123");
+            const type = attr(source, "type", "company");
+            const text = tagBody(source, "Entity") || "Aplyca";
+            const label = entityTypeLabel(type);
+            return '<div class="entity-layout"><div class="prose"><p>La selección se conserva como texto normal, pero ahora tiene una clasificación: <span class="entity-anchor"><span>' + esc(text) + '</span><span class="entity-type">' + esc(label) + '</span></span>.</p></div><aside class="entity-bubble"><div class="bubble-meta"><span>Entity</span><span>' + esc(id) + '</span></div><p>' + esc(text) + ' está clasificada como ' + esc(label) + '.</p></aside></div>';
+          },
+        },
+        highlight: {
+          label: "Highlight",
+          glyph: "H",
+          kind: "inline",
+          tag: "<Highlight>",
+          source: '<Highlight id="hl-123" color="yellow">texto simplemente resaltado</Highlight>',
+          properties: [["id", "Optional stable identity."], ["color", "yellow · amber · custom token"], ["body", "Selected text inside the tag."]],
+          insertion: ["Select text and choose Highlight.", "Apply the default color immediately.", "Use a small popover for color changes; no modal needed."],
+          render(source) {
+            const text = tagBody(source, "Highlight") || "texto simplemente resaltado";
+            const color = attr(source, "color", "yellow").toLowerCase();
+            const colorClass = color === "blue" ? "hl-blue" : color === "green" ? "hl-green" : "hl-amber";
+            return '<div class="prose"><p>Este es un marcado visual: <span class="hl ' + colorClass + '">' + esc(text) + '</span> y el resto del párrafo mantiene su ritmo.</p></div>';
+          },
+        },
+        tip: {
+          label: "Tip",
+          glyph: "!",
+          kind: "block",
+          tag: "<Tip>",
+          source: '<Tip>Recuerda validar el cierre de cada etiqueta.</Tip>',
+          properties: [["type", "Optional only if we add note/warning variants."], ["body", "Markdown content inside the block."]],
+          insertion: ["Choose Insert → Tip; the editor inserts paired <Tip> tags as plain text.", "The cursor lands between the tags so you can write the body.", "The callout styling appears only in the reader preview; no setup modal."],
+          render(source) {
+            const text = tagBody(source, "Tip") || "Recuerda validar el cierre de cada etiqueta.";
+            const type = attr(source, "type", "default").toLowerCase();
+            const color = attr(source, "color", "inherit").toLowerCase();
+            const typeClass = type === "info" ? "tip-variant-info" : type === "warning" ? "tip-variant-warning" : "";
+            const colorClass = color === "amber" ? "tip-accent-amber" : color === "blue" ? "tip-accent-blue" : "";
+            return '<div class="tip ' + typeClass + ' ' + colorClass + '"><div class="tip-heading">Tip</div><div>' + esc(text) + '</div></div>';
+          },
+        },
+        info: {
+          label: "Info",
+          glyph: "i",
+          kind: "block",
+          tag: "<Info>",
+          source: '<Info>Una información importante para entender este documento.</Info>',
+          properties: [["body", "Markdown content inside the callout."], ["style", "Shared callout style with Info semantics."], ["config", "No extra configuration in the first version."]],
+          insertion: ["Choose Insert → Info; the editor inserts paired <Info> tags as text.", "Write the content between the opening and closing tags.", "Use Info for context or prerequisites; keep Tip for optional recommendations."],
+          render(source) {
+            const text = tagBody(source, "Info") || "Una información importante para entender este documento.";
+            return '<div class="tip tip-variant-info tip-accent-blue"><div class="tip-heading">Info</div><div>' + esc(text) + '</div></div>';
+          },
+        },
+        accordion: {
+          label: "Accordion",
+          glyph: "▸",
+          kind: "block",
+          tag: "<Accordion>",
+          source: '<Accordion title="New Accordion" defaultOpen="true">Este contenido aparece al abrir el acordeón.</Accordion>',
+          properties: [["title", "Visible heading in the summary row."], ["defaultOpen", "Optional initial open state."], ["body", "Markdown content revealed on demand."]],
+          insertion: ["Choose Insert → Accordion; the editor inserts the paired tags.", "Edit title=\"…\" inline and write the content between the tags.", "Use defaultOpen only when the content should be visible initially."],
+          render(source) {
+            const title = attr(source, "title", "New Accordion");
+            const body = tagBody(source, "Accordion") || "Este contenido aparece al abrir el acordeón.";
+            const open = attr(source, "defaultOpen", "false").toLowerCase() === "true";
+            return '<details class="accordion" ' + (open ? "open" : "") + '><summary class="accordion-summary">' + esc(title) + '</summary><div class="accordion-body"><p>' + esc(body) + '</p></div></details>';
+          },
+        },
+        accordionGroup: {
+          label: "Accordion group",
+          glyph: "▾▾",
+          kind: "container",
+          tag: "<AccordionGroup>",
+          source: '<AccordionGroup>\n  <Accordion title="Getting started" defaultOpen="true">Puedes incluir contenido relacionado dentro del grupo.</Accordion>\n  <Accordion title="Advanced features">Las secciones secundarias permanecen cerradas hasta que se necesitan.</Accordion>\n</AccordionGroup>',
+          properties: [["Accordion.title", "Visible heading per row."], ["Accordion.defaultOpen", "Optional initial open state."], ["content", "Each child can contain Markdown or another supported component."]],
+          insertion: ["Choose Insert → Accordion group; the editor inserts a group with two Accordion children.", "Edit each title and body inline in the source.", "Use a group when the accordions belong to the same topic."],
+          render(source) {
+            const accordions = [];
+            const re = /<Accordion\b([^>]*)>([\s\S]*?)<\/Accordion>/gi;
+            let match;
+            while ((match = re.exec(source))) accordions.push({ title: attr(match[1], "title", "New Accordion"), body: clean(match[2]), open: attr(match[1], "defaultOpen", "false").toLowerCase() === "true" });
+            if (!accordions.length) accordions.push({ title: "Getting started", body: "Puedes incluir contenido relacionado dentro del grupo.", open: true }, { title: "Advanced features", body: "Las secciones secundarias permanecen cerradas hasta que se necesitan.", open: false });
+            return '<div class="accordion-group">' + accordions.map((item) => '<details class="accordion" ' + (item.open ? "open" : "") + '><summary class="accordion-summary">' + esc(item.title) + '</summary><div class="accordion-body"><p>' + esc(item.body) + '</p></div></details>').join("") + '</div>';
+          },
+        },
+        tabs: {
+          label: "Tabs",
+          glyph: "[]",
+          kind: "container",
+          tag: "<Tabs>",
+          source: '<Tabs>\n  <Tab title="Tab 1">Contenido de la primera alternativa.</Tab>\n  <Tab title="Tab 2">Contenido de la segunda alternativa.</Tab>\n</Tabs>',
+          properties: [["Tab.title", "Required label for each tab."], ["defaultTab", "Optional initial tab; first tab is the default."], ["content", "Each tab can contain Markdown or supported components."]],
+          insertion: ["Choose Insert → Tabs; the editor inserts a Tabs wrapper and two Tab children.", "Edit each title=\"…\" inline and write the panel content between the tags.", "Use tabs for alternatives, not for content readers should compare at once."],
+          render(source) {
+            const tabs = [];
+            const re = /<Tab\b([^>]*)>([\s\S]*?)<\/Tab>/gi;
+            let match;
+            while ((match = re.exec(source))) tabs.push({ title: attr(match[1], "title", "Tab"), body: clean(match[2]) });
+            if (!tabs.length) tabs.push({ title: "Tab 1", body: "Contenido de la primera alternativa." }, { title: "Tab 2", body: "Contenido de la segunda alternativa." });
+            return '<div class="content-tabs"><div class="content-tab-row">' + tabs.map((tab, index) => '<button class="content-tab ' + (index === 0 ? "active" : "") + '" type="button" data-content-tab="' + index + '">' + esc(tab.title) + '</button>').join("") + '</div>' + tabs.map((tab, index) => '<div class="content-tab-panel" data-content-panel="' + index + '" ' + (index ? "hidden" : "") + '><p>' + esc(tab.body) + '</p></div>').join("") + '</div>';
+          },
+        },
+        card: {
+          label: "Card",
+          glyph: "□",
+          kind: "block",
+          tag: "<Card>",
+          source: '<Card title="Build a Server" icon="server" href="/docs/build-server" accent="terracotta">Create MCP servers.</Card>',
+          properties: [["title", "Visible heading."], ["icon", "Icon name from the allowed icon map."], ["href", "Optional destination URL."], ["accent", "Optional presentation token."], ["body", "Markdown content inside the card."]],
+          insertion: ["Choose Insert → Card; the editor inserts the MDX structure as text.", "Type the title in title=\"…\" and the description between the tags.", "Optional icon and href are attributes in the opening tag; no properties modal."],
+          render(source) {
+            const title = attr(source, "title", "Build a Server");
+            const icon = attr(source, "icon", "server");
+            const accent = attr(source, "accent", "terracotta").toLowerCase();
+            const href = attr(source, "href", "#");
+            const body = tagBody(source, "Card") || "Create MCP servers.";
+            const accentClass = accent === "amber" ? "card-accent-amber" : accent === "blue" ? "card-accent-blue" : "";
+            return '<div class="card-grid columns-1"><article class="doc-card ' + accentClass + '"><div class="doc-card-icon">' + esc(icon) + '</div><h3>' + esc(title) + '</h3><p>' + esc(body) + '</p><div class="doc-card-link">' + esc(href) + ' ↗</div></article></div>';
+          },
+        },
+        cardGroup: {
+          label: "Card group",
+          glyph: "▦",
+          kind: "block",
+          tag: "<CardGroup>",
+          source: '<CardGroup columns="2">\n  <Card title="Build a Server" icon="server" href="/docs/build-server">Create MCP servers.</Card>\n  <Card title="Build a Client" icon="computer" href="/docs/build-client">Connect to MCP servers.</Card>\n</CardGroup>',
+          properties: [["columns", "1 · 2 · 3; default is still open."], ["Card.title", "Visible heading."], ["Card.icon", "Icon name from the allowed icon map."], ["Card.href", "Optional destination URL."]],
+          insertion: ["Choose Insert → Card group to insert <CardGroup> and its child <Card> tags.", "Set columns and each Card's title/icon/href in the opening tags.", "Source order determines card order; the grid appears only in reader preview."],
+          render(source) {
+            const cards = [];
+            const re = /<Card\b([^>]*)>([\s\S]*?)<\/Card>/gi;
+            const columns = Math.min(3, Math.max(1, Number(attr(source, "columns", "2")) || 2));
+            let match;
+            while ((match = re.exec(source))) cards.push({ title: attr(match[1], "title", "Untitled card"), icon: attr(match[1], "icon", "•"), href: attr(match[1], "href", "#"), accent: attr(match[1], "accent", "terracotta"), body: clean(match[2]) });
+            if (!cards.length) cards.push({ title: "Build a Server", icon: "server", href: "#", accent: "terracotta", body: "Create MCP servers." }, { title: "Build a Client", icon: "computer", href: "#", accent: "terracotta", body: "Connect to MCP servers." });
+            return '<div class="card-grid columns-' + columns + '">' + cards.map((card) => { const accent = card.accent.toLowerCase() === "amber" ? "card-accent-amber" : card.accent.toLowerCase() === "blue" ? "card-accent-blue" : ""; return '<article class="doc-card ' + accent + '"><div class="doc-card-icon">' + esc(card.icon) + '</div><h3>' + esc(card.title) + '</h3><p>' + esc(card.body) + '</p><div class="doc-card-link">Open resource ↗</div></article>'; }).join("") + '</div>';
+          },
+        },
+        steps: {
+          label: "Steps",
+          glyph: "1–",
+          kind: "block",
+          tag: "<Steps>",
+          source: '<Steps>\n  <Step title="Discovery">El cliente descubre las capacidades del servidor.</Step>\n  <Step title="Authorization">El cliente obtiene un token válido.</Step>\n</Steps>',
+          properties: [["Step.title", "Required visible heading."], ["order", "Derived from child order; never typed manually."], ["content", "Markdown blocks inside each step."]],
+          insertion: ["Choose Insert → Steps to insert <Steps> with an initial <Step>.", "Write each title in title=\"…\" and its body between the Step tags.", "Source order drives front-end numbering; no setup modal."],
+          render(source) {
+            const steps = [];
+            const re = /<Step\b([^>]*)>([\s\S]*?)<\/Step>/gi;
+            let match;
+            while ((match = re.exec(source))) steps.push({ title: attr(match[1], "title", "Untitled step"), body: clean(match[2]) });
+            if (!steps.length) steps.push({ title: "Discovery", body: "El cliente descubre las capacidades del servidor." }, { title: "Authorization", body: "El cliente obtiene un token válido." });
+            return '<div class="steps">' + steps.map((step, index) => '<div class="step"><div class="step-number">' + (index + 1) + '</div><div><h3>' + esc(step.title) + '</h3><p>' + esc(step.body) + '</p></div></div>').join("") + '</div>';
+          },
+        },
+        codeGroup: {
+          label: "Code group",
+          glyph: "[]",
+          kind: "block",
+          tag: "<CodeGroup>",
+          source: '<CodeGroup>\n  ' + fence + 'json Discover Request\n  { "method": "server/discover" }\n  ' + fence + '\n\n  ' + fence + 'json Discover Response\n  { "resultType": "complete" }\n  ' + fence + '\n</CodeGroup>',
+          properties: [["tabs", "One tab per fenced code block."], ["language", "Taken from each fence info string."], ["content", "Opaque code; never parse inner markers."]],
+          insertion: ["Choose Insert → Code group to insert the wrapper and code fences as text.", "Each fence carries its language and optional tab title.", "The reader renderer turns the fences into tabs; no group setup modal."],
+          render(source) {
+            const blocks = parseFences(source);
+            if (!blocks.length) blocks.push({ language: "json", title: "Discover Request", code: '{ "method": "server/discover" }' }, { language: "json", title: "Discover Response", code: '{ "resultType": "complete" }' });
+            return '<div class="code-group"><div class="tab-row">' + blocks.map((block, index) => '<button class="code-tab ' + (index === 0 ? "active" : "") + '" type="button" data-code-tab="' + index + '">' + esc(block.title || block.language) + '</button>').join("") + '</div>' + blocks.map((block, index) => '<pre data-code-panel="' + index + '" ' + (index ? 'hidden' : '') + '><code>' + esc(block.code) + '</code></pre>').join("") + '</div>';
+          },
+        },
+        mermaid: {
+          label: "Mermaid block",
+          glyph: "↝",
+          kind: "code",
+          tag: "```mermaid",
+          source: fence + 'mermaid\nsequenceDiagram\n    participant C as Client\n    participant M as MCP Server\n    C->>M: MCP request\n    M-->>C: MCP response\n' + fence,
+          properties: [["language", "Fixed to mermaid for this renderer."], ["source", "Canonical diagram code."], ["view", "Code · diagram · split preview."], ["theme", "Prefer inherited document/app theme for v1."]],
+          insertion: ["Choose Text → Code in the editor toolbar.", "Set Mermaid as the language in the code-block configuration.", "Toggle code and diagram preview from the block inspector."],
+          render(source) {
+            const block = parseFences(source)[0] || { code: "sequenceDiagram\\n    C->>M: MCP request" };
+            return '<div class="mermaid-layout"><div class="code-group"><div class="tab-row"><button class="code-tab active" type="button">Mermaid</button></div><pre><code>' + esc(block.code) + '</code></pre></div><div class="mermaid-preview"><div class="diagram-title">Diagram preview</div><div class="diagram-track"><div class="diagram-row"><div class="participant">Client</div><div class="message"><span class="message-label">MCP request</span></div><div class="participant">MCP Server</div></div><div class="diagram-row"><div class="participant">Client</div><div class="message"><span class="message-label">MCP response</span></div><div class="participant">MCP Server</div></div></div></div></div>';
+          },
+        },
+        paragraph: {
+          label: "Paragraph",
+          glyph: "¶",
+          kind: "markdown",
+          tag: "paragraph",
+          source: "A paragraph remains ordinary Markdown text and carries the document's reading rhythm.",
+          properties: [["syntax", "Plain text separated by a blank line."], ["render", "Prose body at the shared reading scale."], ["config", "No component configuration."]],
+          insertion: ["Type directly in the editor.", "Press Enter twice to create a new paragraph.", "No modal or special node configuration."],
+          render(source) { return '<div class="markdown-preview"><p>' + inlineMarkdown(source || "A paragraph remains ordinary Markdown text.") + '</p></div>'; },
+        },
+        bold: {
+          label: "Bold",
+          glyph: "B",
+          kind: "markdown",
+          tag: "**bold**",
+          source: "This is **bold text** inside a paragraph.",
+          properties: [["syntax", "Double asterisks around inline text."], ["render", "Strong emphasis; no modal."], ["scope", "Inline mark."]],
+          insertion: ["Select text and press Bold in the toolbar.", "The editor inserts Markdown syntax on serialization.", "The selection remains in the paragraph."],
+          render(source) { return '<div class="markdown-preview"><p>' + inlineMarkdown(source || "This is **bold text** inside a paragraph.") + '</p></div>'; },
+        },
+        italic: {
+          label: "Italic",
+          glyph: "I",
+          kind: "markdown",
+          tag: "*italic*",
+          source: "This is *italic text* inside a paragraph.",
+          properties: [["syntax", "Single asterisks around inline text."], ["render", "Italic emphasis; no modal."], ["scope", "Inline mark."]],
+          insertion: ["Select text and press Italic in the toolbar.", "The editor inserts Markdown syntax on serialization.", "The selection remains in the paragraph."],
+          render(source) { return '<div class="markdown-preview"><p>' + inlineMarkdown(source || "This is *italic text* inside a paragraph.") + '</p></div>'; },
+        },
+        heading1: {
+          label: "H1",
+          glyph: "H1",
+          kind: "markdown",
+          tag: "# H1",
+          source: "# A primary heading",
+          properties: [["syntax", "One hash followed by a space."], ["render", "30px editorial heading."], ["structure", "Document-level heading."]],
+          insertion: ["Place the cursor in a paragraph.", "Choose Text → Heading 1 from the editor toolbar.", "Keep the heading as a block node."],
+          render(source) { return '<div class="markdown-preview"><h1>' + esc(source.replace(/^#\s*/, "") || "A primary heading") + '</h1><p>Heading spacing is part of the shared content contract.</p></div>'; },
+        },
+        heading2: {
+          label: "H2",
+          glyph: "H2",
+          kind: "markdown",
+          tag: "## H2",
+          source: "## A secondary heading",
+          properties: [["syntax", "Two hashes followed by a space."], ["render", "24px editorial heading."], ["structure", "Section heading."]],
+          insertion: ["Place the cursor in a paragraph.", "Choose Text → Heading 2 from the editor toolbar.", "Keep the heading as a block node."],
+          render(source) { return '<div class="markdown-preview"><h2>' + esc(source.replace(/^##\s*/, "") || "A secondary heading") + '</h2><p>Sections can contain ordinary paragraphs and other blocks.</p></div>'; },
+        },
+        heading3: {
+          label: "H3",
+          glyph: "H3",
+          kind: "markdown",
+          tag: "### H3",
+          source: "### A tertiary heading",
+          properties: [["syntax", "Three hashes followed by a space."], ["render", "20px editorial heading."], ["structure", "Subsection heading."]],
+          insertion: ["Place the cursor in a paragraph.", "Choose Text → Heading 3 from the editor toolbar.", "Keep the heading as a block node."],
+          render(source) { return '<div class="markdown-preview"><h3>' + esc(source.replace(/^###\s*/, "") || "A tertiary heading") + '</h3><p>Use H3 for a subsection below an H2.</p></div>'; },
+        },
+        blockquote: {
+          label: "Quote",
+          glyph: "“",
+          kind: "markdown",
+          tag: "> quote",
+          source: "> A sentence worth carrying into the next paragraph.",
+          properties: [["syntax", "Greater-than sign at the beginning of the line."], ["render", "Editorial quote with left rule."], ["content", "Can span multiple lines."]],
+          insertion: ["Place the cursor in a paragraph.", "Choose Text → Blockquote from the editor toolbar.", "Press Enter twice to leave the quote."],
+          render(source) { return '<div class="markdown-preview"><blockquote>' + esc(source.split(/\n/).map((line) => line.replace(/^>\s?/, "")).join(" ") || "A sentence worth carrying into the next paragraph.") + '</blockquote></div>'; },
+        },
+        bulletList: {
+          label: "Bullet list",
+          glyph: "•",
+          kind: "markdown",
+          tag: "- item",
+          source: "- First item\n- Second item\n- Third item",
+          properties: [["syntax", "Dash followed by a space per item."], ["render", "Unordered list with editorial rhythm."], ["structure", "List items are block children."]],
+          insertion: ["Choose Lists → • List from the editor toolbar.", "Enter creates the next item.", "Press Enter twice to exit the list."],
+          render(source) { return '<div class="markdown-preview"><ul>' + source.split(/\n/).filter(Boolean).map((line) => '<li>' + esc(line.replace(/^[-*+]\s+/, "")) + '</li>').join("") + '</ul></div>'; },
+        },
+        orderedList: {
+          label: "Numbered list",
+          glyph: "1.",
+          kind: "markdown",
+          tag: "1. item",
+          source: "1. First step\n2. Second step\n3. Third step",
+          properties: [["syntax", "Number, period and space per item."], ["render", "Ordered list with derived numbering."], ["structure", "Order is derived, not a semantic attribute."]],
+          insertion: ["Choose Lists → # List from the editor toolbar.", "Enter creates the next item.", "The editor derives numbering on render."],
+          render(source) { return '<div class="markdown-preview"><ol>' + source.split(/\n/).filter(Boolean).map((line) => '<li>' + esc(line.replace(/^\d+\.\s+/, "")) + '</li>').join("") + '</ol></div>'; },
+        },
+        link: {
+          label: "Link",
+          glyph: "↗",
+          kind: "markdown",
+          tag: "[text](url)",
+          source: "Read the [MCP documentation](https://modelcontextprotocol.io) for context.",
+          properties: [["syntax", "[label](destination)"], ["render", "Underlined link in cursor color."], ["config", "Text and URL are edited in the link form modal."]],
+          insertion: ["Select text and choose Insert → Link.", "The link form modal asks for text and destination.", "The label stays in the paragraph."],
+          render(source) { return '<div class="markdown-preview"><p>' + inlineMarkdown(source || "Read the [MCP documentation](https://modelcontextprotocol.io) for context.") + '</p></div>'; },
+        },
+        inlineCode: {
+          label: "Inline code",
+          glyph: "<> ",
+          kind: "markdown",
+          tag: "`code`",
+          source: "Call `server/discover` before the next request.",
+          properties: [["syntax", "Single backticks around inline code."], ["render", "Monospace pill inside prose."], ["scope", "Inline mark."]],
+          insertion: ["Select text and press Inline code in the format toolbar.", "The selected text becomes literal code.", "No modal is required."],
+          render(source) { return '<div class="markdown-preview"><p>' + inlineMarkdown(source || "Call `server/discover` before the next request.") + '</p></div>'; },
+        },
+        strike: {
+          label: "Strike",
+          glyph: "S̶",
+          kind: "markdown",
+          tag: "~~strike~~",
+          source: "This is ~~discarded text~~ in a revision.",
+          properties: [["syntax", "Double tildes around inline text."], ["render", "Struck text; no modal."], ["scope", "Inline mark."]],
+          insertion: ["Select text and press Strike in the format toolbar.", "The editor keeps the mark inline.", "No configuration is required."],
+          render(source) { return '<div class="markdown-preview"><p>' + inlineMarkdown(source || "This is ~~discarded text~~ in a revision.") + '</p></div>'; },
+        },
+        codeBlock: {
+          label: "Code block",
+          glyph: "{}",
+          kind: "markdown",
+          tag: "```code",
+          source: fence + "json\n{\n  \"resultType\": \"complete\"\n}\n" + fence,
+          properties: [["syntax", "Fenced block with an optional language."], ["render", "Opaque monospace block."], ["content", "Never reinterpret inner Markdown marks."]],
+          insertion: ["Choose Text → Code from the editor toolbar; the trigger becomes Code when active.", "Choose the language in the block settings.", "Edit the code as literal content; Mermaid can opt into diagram preview."],
+          render(source) { const block = parseFences(source)[0] || { language: "json", code: '{\n  "resultType": "complete"\n}' }; return '<div class="markdown-preview"><div class="code-block-shell"><div class="code-block-head"><span class="code-block-language">' + esc(block.language) + '</span><span class="code-block-settings">Code settings · preview</span></div><pre><code>' + esc(block.code) + '</code></pre></div></div>'; },
+        },
+        table: {
+          label: "Table",
+          glyph: "▦",
+          kind: "markdown",
+          tag: "| table |",
+          source: "| Primitive | Form |\n| --- | --- |\n| Bold | Inline |\n| Card | Block |",
+          properties: [["syntax", "Pipe-separated rows with a delimiter row."], ["render", "Scrollable table using the shared contract."], ["config", "Cell editing is inline in the editor."]],
+          insertion: ["Choose Insert → Table from the editor toolbar.", "Set rows and columns in the table grid modal.", "Edit cells inline after insertion."],
+          render(source) {
+            const rows = source.split(/\n/).filter((line) => line.includes("|"));
+            const cells = (line) => line.split("|").map((cell) => cell.trim()).filter(Boolean);
+            const header = cells(rows[0] || "| Primitive | Form |");
+            const body = rows.slice(2).map(cells);
+            return '<div class="markdown-preview"><table><thead><tr>' + header.map((cell) => '<th>' + esc(cell) + '</th>').join("") + '</tr></thead><tbody>' + body.map((row) => '<tr>' + row.map((cell) => '<td>' + esc(cell) + '</td>').join("") + '</tr>').join("") + '</tbody></table></div>';
+          },
+        },
+        image: {
+          label: "Image",
+          glyph: "▧",
+          kind: "markdown",
+          tag: "![alt](src)",
+          source: "![Reference screenshot](assets/reference.png)",
+          properties: [["syntax", "![alt text](source)"], ["render", "Responsive image with alt text."], ["config", "Source and alt text use an image popover."]],
+          insertion: ["Choose Insert → Image from the editor toolbar.", "Select a local asset or paste a source URL in the image modal.", "Edit alt text before inserting."],
+          render(source) { const match = /!\[([^\]]*)\]\(([^)]+)\)/.exec(source); const alt = match ? match[1] : "Reference screenshot"; const src = match ? match[2] : "assets/reference.png"; return '<div class="markdown-preview"><div class="markdown-image"><span>' + esc(alt) + ' · ' + esc(src) + '</span></div></div>'; },
+        },
+        footnote: {
+          label: "Footnote",
+          glyph: "¹",
+          kind: "markdown+",
+          tag: "[^1]",
+          source: "The response can be cached.[^1]\n\n[^1]: The cache duration is defined by the server.",
+          properties: [["syntax", "Footnote reference plus definition."], ["render", "Reference marker with a notes section."], ["scope", "Markdown extension already supported by Odessay."]],
+          insertion: ["Place the cursor after a sentence and use the Notes action.", "The footnote form modal captures the note text.", "The reference and definition are then available in the Notes panel."],
+          render(source) { const lines = source.split(/\n/); const reference = lines.find((line) => /^\[\^\d+\]:/.test(line)); const text = lines.filter((line) => line && !/^\[\^\d+\]:/.test(line)).join(" "); const note = reference ? reference.replace(/^\[\^\d+\]:\s*/, "") : "The cache duration is defined by the server."; return '<div class="markdown-preview"><p>' + esc(text || "The response can be cached.") + '<sup>1</sup></p><div class="footnote-preview"><sup>1</sup> ' + esc(note) + '</div></div>'; },
+        },
+        horizontalRule: {
+          label: "Divider",
+          glyph: "—",
+          kind: "markdown",
+          tag: "---",
+          source: "Before the divider.\n\n---\n\nAfter the divider.",
+          properties: [["syntax", "Three hyphens on their own line."], ["render", "Subtle horizontal rule."], ["scope", "Block separator."]],
+          insertion: ["Type --- on its own line or invoke the horizontal-rule command.", "Insert it between two blocks.", "No configuration is required; toolbar exposure is still open."],
+          render(source) { const parts = source.split(/\n\s*---\s*\n/); return '<div class="markdown-preview"><p>' + esc(parts[0] || "Before the divider.") + '</p><hr /><p>' + esc(parts[1] || "After the divider.") + '</p></div>'; },
+        },
+      };
+
+      const richKeys = ["annotation", "protected", "entity", "highlight", "tip", "info", "card", "cardGroup", "accordion", "accordionGroup", "tabs", "steps", "codeGroup", "mermaid"];
+      const markdownKeys = ["paragraph", "bold", "italic", "heading1", "heading2", "heading3", "blockquote", "bulletList", "orderedList", "link", "inlineCode", "strike", "codeBlock", "table", "image", "footnote", "horizontalRule"];
+
+      const state = { selected: "card", sources: {}, notes: {}, presentation: {} };
+      const list = document.getElementById("component-list");
+      const markdownList = document.getElementById("markdown-list");
+      const sourceEditor = document.getElementById("source-editor");
+      const previewCanvas = document.getElementById("preview-canvas");
+      const decisionNotes = document.getElementById("decision-notes");
+      const configureSource = document.getElementById("configure-source");
+      const configOverlay = document.getElementById("config-overlay");
+      const configModalTitle = document.getElementById("config-modal-title");
+      const configModalDescription = document.getElementById("config-modal-description");
+      const configModalHint = document.getElementById("config-modal-hint");
+      const configFields = document.getElementById("config-fields");
+
+      try {
+        const stored = JSON.parse(localStorage.getItem("odessay-document-components-lab") || "{}");
+        state.sources = stored.sources || {};
+        state.notes = stored.notes || {};
+      } catch (_) {}
+
+      function esc(value) {
+        return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+      }
+
+      function clean(value) {
+        return String(value).replace(/<[^>]+>/g, "").replace(/```[\s\S]*?```/g, "Code block").replace(/\s+/g, " ").trim();
+      }
+
+      function entityTypeLabel(value) {
+        return ({ company: "Compañía", person: "Persona", place: "Lugar", product: "Producto", event: "Evento", custom: "Personalizada" }[String(value).toLowerCase()] || String(value || "Personalizada"));
+      }
+
+      function attr(source, name, fallback) {
+        const match = new RegExp(name + '="([^"]*)"', "i").exec(String(source));
+        return match ? match[1] : fallback;
+      }
+
+      function tagBody(source, tag) {
+        const match = new RegExp("<" + tag + "\\b[^>]*>([\\s\\S]*?)</" + tag + ">", "i").exec(String(source));
+        return match ? clean(match[1]) : "";
+      }
+
+      function parseFences(source) {
+        const blocks = [];
+        const re = new RegExp(fence + "([^\\n]*)\\n([\\s\\S]*?)" + fence, "g");
+        let match;
+        while ((match = re.exec(String(source)))) {
+          const info = match[1].trim().split(/\s+/);
+          blocks.push({ language: info.shift() || "text", title: info.join(" "), code: match[2].trim() });
+        }
+        return blocks;
+      }
+
+      function inlineMarkdown(source) {
+        let output = esc(String(source));
+        output = output.replace(/`([^`]+)`/g, '<code>$1</code>');
+        output = output.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        output = output.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+        output = output.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
+        output = output.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+        return output;
+      }
+
+      function persist() {
+        localStorage.setItem("odessay-document-components-lab", JSON.stringify({ sources: state.sources, notes: state.notes }));
+        document.getElementById("save-status").textContent = "Guardadas en este navegador.";
+      }
+
+      function renderList() {
+        const renderButtons = (keys) => keys.map((key) => {
+          const sample = samples[key];
+          return '<button class="component-button ' + (key === state.selected ? "active" : "") + '" type="button" data-component="' + key + '"><span class="component-glyph">' + esc(sample.glyph) + '</span><span>' + esc(sample.label) + '</span><span class="component-kind">' + esc(sample.kind) + '</span></button>';
+        }).join("");
+        list.innerHTML = renderButtons(richKeys);
+        markdownList.innerHTML = renderButtons(markdownKeys);
+      }
+
+      const configMeta = {
+        annotation: ["Configurar Annotation", "El comentario y el tipo permanecen como metadata de la anotación.", "Actualiza metadata, no el texto seleccionado."],
+        entity: ["Configurar entidad", "Clasifica la selección sin cambiar el texto visible.", "Actualiza el tipo de entidad."],
+        highlight: ["Configurar highlight", "El texto permanece igual; sólo cambia su presentación.", "Actualiza el color."],
+        codeBlock: ["Configurar bloque de código", "El lenguaje se guarda en la información del fence.", "Actualiza metadata del bloque, no el código."],
+        mermaid: ["Configurar Mermaid", "El source del diagrama sigue siendo un bloque de código.", "Actualiza la forma de mostrar el preview."],
+      };
+
+      function escapeSourceAttribute(value) {
+        return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+      }
+
+      function updateOpeningTagAttribute(openingTag, name, value) {
+        const text = String(value).trim();
+        const attributePattern = new RegExp('(' + name + '\\s*=\\s*")[^"]*(")', "i");
+        if (!text) return openingTag.replace(new RegExp("\\s+" + name + '\\s*=\\s*"[^"]*"', "i"), "");
+        if (attributePattern.test(openingTag)) return openingTag.replace(attributePattern, "$1" + escapeSourceAttribute(text) + "$2");
+        return openingTag.replace(/\/?>(\s*)$/, ' ' + name + '="' + escapeSourceAttribute(text) + '"$&');
+      }
+
+      function updateTagAttribute(source, tag, name, value) {
+        return String(source).replace(new RegExp("<" + tag + "\\b[^>]*>", "i"), (openingTag) => updateOpeningTagAttribute(openingTag, name, value));
+      }
+
+      function updateFirstFence(source, language) {
+        return String(source).replace(new RegExp(fence + "[^\\n]*\\n"), fence + (String(language).trim() || "text") + "\n");
+      }
+
+      function getConfigFields(key, source) {
+        const firstFence = parseFences(source)[0] || { language: "json" };
+        if (key === "annotation") return [
+          { key: "type", label: "Tipo", kind: "select", value: attr(source, "type", "personal"), options: ["personal", "ai", "footnote"] },
+          { key: "comment", label: "Comentario", kind: "textarea", value: attr(source, "comment", "") },
+        ];
+        if (key === "entity") return [{ key: "type", label: "Tipo de entidad", kind: "select", value: attr(source, "type", "company"), options: [
+          { value: "company", label: "Company / Compañía" }, { value: "person", label: "Person / Persona" }, { value: "place", label: "Place / Lugar" }, { value: "product", label: "Product / Producto" }, { value: "event", label: "Event / Evento" }, { value: "custom", label: "Custom / Personalizada" },
+        ] }];
+        if (key === "highlight") return [{ key: "color", label: "Color", kind: "select", value: attr(source, "color", "yellow"), options: ["yellow", "blue", "green"] }];
+        if (key === "codeBlock") return [{ key: "language", label: "Lenguaje / tipo", kind: "select", value: firstFence.language, options: ["text", "json", "javascript", "typescript", "python", "bash", "mermaid"] }];
+        if (key === "mermaid") return [
+          { key: "view", label: "Vista", kind: "select", value: state.presentation.mermaid?.view || "split", options: ["code", "diagram", "split"] },
+          { key: "theme", label: "Tema", kind: "select", value: state.presentation.mermaid?.theme || "document", options: ["document", "light", "dark"] },
+        ];
+        return [];
+      }
+
+      function renderLabels() {
+        const sample = samples[state.selected];
+        document.getElementById("source-tag").textContent = sample.tag;
+        document.getElementById("preview-tag").textContent = sample.tag;
+        configureSource.hidden = !configMeta[state.selected];
+        decisionNotes.value = state.notes[state.selected] || "";
+      }
+
+      function render() {
+        const sample = samples[state.selected];
+        sourceEditor.value = state.sources[state.selected] || sample.source;
+        previewCanvas.innerHTML = sample.render(sourceEditor.value);
+        renderList();
+        renderLabels();
+        bindCodeTabs();
+      }
+
+      function handleComponentClick(event) {
+        const button = event.target.closest("[data-component]");
+        if (!button) return;
+        state.sources[state.selected] = sourceEditor.value;
+        state.selected = button.dataset.component;
+        closeConfiguration();
+        persist();
+        render();
+      }
+
+      list.addEventListener("click", handleComponentClick);
+      markdownList.addEventListener("click", handleComponentClick);
+
+      function openConfiguration() {
+        const meta = configMeta[state.selected];
+        if (!meta) return;
+        configModalTitle.textContent = meta[0];
+        configModalDescription.textContent = meta[1];
+        configModalHint.textContent = meta[2];
+        const fields = getConfigFields(state.selected, sourceEditor.value);
+        configFields.innerHTML = fields.map((field) => {
+          const control = field.kind === "textarea"
+            ? '<textarea data-config-field="' + esc(field.key) + '">' + esc(field.value) + '</textarea>'
+            : '<select data-config-field="' + esc(field.key) + '">' + field.options.map((option) => { const optionValue = typeof option === "string" ? option : option.value; const optionLabel = typeof option === "string" ? option : option.label; return '<option value="' + esc(optionValue) + '" ' + (optionValue === field.value ? "selected" : "") + '>' + esc(optionLabel) + '</option>'; }).join("") + '</select>';
+          return '<div class="config-field"><label>' + esc(field.label) + '</label>' + control + '</div>';
+        }).join("");
+        configOverlay.hidden = false;
+        configFields.querySelector("[data-config-field]")?.focus();
+      }
+
+      function closeConfiguration() {
+        configOverlay.hidden = true;
+      }
+
+      function applyConfiguration() {
+        const key = state.selected;
+        const values = {};
+        configFields.querySelectorAll("[data-config-field]").forEach((field) => { values[field.dataset.configField] = field.value; });
+        let source = sourceEditor.value;
+        if (key === "annotation") {
+          source = updateTagAttribute(source, "Annotation", "type", values.type);
+          source = updateTagAttribute(source, "Annotation", "comment", values.comment);
+        } else if (key === "entity") {
+          source = updateTagAttribute(source, "Entity", "type", values.type);
+        } else if (key === "highlight") {
+          source = updateTagAttribute(source, "Highlight", "color", values.color);
+        } else if (key === "codeBlock") {
+          source = updateFirstFence(source, values.language);
+        } else if (key === "mermaid") {
+          state.presentation.mermaid = { view: values.view, theme: values.theme };
+        }
+        state.sources[key] = source;
+        closeConfiguration();
+        render();
+        persist();
+      }
+
+      configureSource.addEventListener("click", openConfiguration);
+      document.getElementById("close-config").addEventListener("click", closeConfiguration);
+      document.getElementById("cancel-config").addEventListener("click", closeConfiguration);
+      document.getElementById("apply-config").addEventListener("click", applyConfiguration);
+      configOverlay.addEventListener("click", (event) => {
+        if (event.target === configOverlay) closeConfiguration();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !configOverlay.hidden) closeConfiguration();
+      });
+
+      sourceEditor.addEventListener("input", () => {
+        state.sources[state.selected] = sourceEditor.value;
+        previewCanvas.innerHTML = samples[state.selected].render(sourceEditor.value);
+        persist();
+        bindCodeTabs();
+      });
+
+      decisionNotes.addEventListener("input", () => {
+        state.notes[state.selected] = decisionNotes.value;
+        persist();
+      });
+
+      document.getElementById("reset-current").addEventListener("click", () => {
+        delete state.sources[state.selected];
+        render();
+        persist();
+      });
+
+      document.getElementById("reset-all").addEventListener("click", () => {
+        state.sources = {};
+        state.notes = {};
+        render();
+        persist();
+      });
+
+      document.getElementById("copy-markdown").addEventListener("click", async (event) => {
+        await navigator.clipboard?.writeText(sourceEditor.value);
+        const button = event.currentTarget;
+        const original = button.textContent;
+        button.textContent = "Copiado";
+        setTimeout(() => { button.textContent = original; }, 1200);
+      });
+
+      function bindCodeTabs() {
+        previewCanvas.querySelectorAll("[data-code-tab]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const index = button.dataset.codeTab;
+            previewCanvas.querySelectorAll("[data-code-tab]").forEach((tab) => tab.classList.toggle("active", tab === button));
+            previewCanvas.querySelectorAll("[data-code-panel]").forEach((panel) => { panel.hidden = panel.dataset.codePanel !== index; });
+          });
+        });
+        previewCanvas.querySelectorAll("[data-content-tab]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const index = button.dataset.contentTab;
+            previewCanvas.querySelectorAll("[data-content-tab]").forEach((tab) => tab.classList.toggle("active", tab === button));
+            previewCanvas.querySelectorAll("[data-content-panel]").forEach((panel) => { panel.hidden = panel.dataset.contentPanel !== index; });
+          });
+        });
+      }
+
+      render();
+      bindCodeTabs();
+    </script>
+  </body>
+</html>

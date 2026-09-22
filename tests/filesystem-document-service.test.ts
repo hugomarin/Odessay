@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import JSZip from "jszip"
 import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-document-service"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
+import { WriteFileConflictError } from "@/lib/services/desktop/write-file-conflict-error"
 
 // ─── Mock Tauri commands (no real filesystem in test env) ─────────────────────
 
@@ -123,7 +124,39 @@ describe("FilesystemDocumentService", () => {
     expect(vi.mocked(tauriCommandsMod.tauriWriteFile)).toHaveBeenCalledWith(
       writing.id,
       writing.content.markdown,
+      undefined,
     )
+    vi.useFakeTimers()
+  })
+
+  it("saveWriting passes expectedContentHash through to tauriWriteFile (WATCH-07)", async () => {
+    vi.useRealTimers()
+    const writing = makeWritingRecord()
+    mockFiles.set(writing.id, "")
+    await service.saveWriting({ writing, expectedContentHash: "blake3:baseline" })
+    expect(vi.mocked(tauriCommandsMod.tauriWriteFile)).toHaveBeenCalledWith(
+      writing.id,
+      writing.content.markdown,
+      "blake3:baseline",
+    )
+    vi.useFakeTimers()
+  })
+
+  it("saveWriting maps a WriteFileConflictError to a CONFLICT ServiceError (WATCH-07)", async () => {
+    vi.useRealTimers()
+    const writing = makeWritingRecord()
+    vi.mocked(tauriCommandsMod.tauriWriteFile).mockRejectedValueOnce(
+      new WriteFileConflictError("CONFLICT: changed on disk since it was last read"),
+    )
+
+    const result = await service.saveWriting({ writing, expectedContentHash: "blake3:stale" })
+
+    expect(result.data).toBeNull()
+    expect(result.error).toEqual({
+      code: "CONFLICT",
+      message: "CONFLICT: changed on disk since it was last read",
+      retryable: false,
+    })
     vi.useFakeTimers()
   })
 
@@ -183,7 +216,14 @@ describe("FilesystemDocumentService", () => {
     expect(result.data!.content.markdown).toBe(md)
     expect(result.data!.title).toBe("My Writing")
     expect(result.data!.content.canonicalSource).toBe("markdown")
+    // richText stays null here on purpose: DesktopDocumentService.openWriting
+    // (the real caller behind getDocumentService()) parses this class's
+    // returned markdown itself via desktopDocumentEngine.parseSourceDocument
+    // and never reads this class's own richText/plainText. Parsing it a
+    // second time here doubled the TipTap Editor cost of every real
+    // document open for no benefit — see derivePlainText.
     expect(result.data!.content.richText).toBeNull()
+    expect(result.data!.content.plainText).toBe(md)
     vi.useFakeTimers()
   })
 
@@ -228,6 +268,7 @@ describe("FilesystemDocumentService", () => {
     expect(vi.mocked(tauriCommandsMod.tauriWriteFile)).toHaveBeenCalledWith(
       path,
       "# Save Test\n\nNew content.",
+      undefined,
     )
     vi.useFakeTimers()
   })

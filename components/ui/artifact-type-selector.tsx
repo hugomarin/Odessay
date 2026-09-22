@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronDown } from "lucide-react"
+import { Check, ChevronDown } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon"
 import { VocabularyChip } from "@/components/ui/vocabulary-chip"
@@ -38,7 +38,7 @@ function ArtifactTypeItem({
         <ArtifactTypeIcon artifactType={artifactType} className="h-[12px] w-[12px]" />
       </VocabularyChip>
       <span>{getArtifactTypeLabel(artifactType)}</span>
-      {selected ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-ink" /> : null}
+      {selected ? <Check className="ml-auto h-3.5 w-3.5 shrink-0" strokeWidth={2} /> : null}
     </button>
   )
 }

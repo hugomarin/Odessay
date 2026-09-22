@@ -24,15 +24,6 @@ Si el MCP no está disponible en la sesión, usar la API GraphQL como fallback:
 - Mover estado: `mutation { issueUpdate(id: "...", input: { stateId: "..." }) { success } }`
 - Comentar: `mutation { commentCreate(input: { issueId: "...", body: "..." }) { success } }`
 
-### Autoridad de estado y evidencia
-
-- **Linear gobierna “en qué estamos”**: su estado vigente es la autoridad operacional del issue. `Done` significa outcome aceptado según el contrato del issue; no se infiere de un commit, un PR abierto ni un merge.
-- **GitHub gobierna la evidencia técnica y el estado de integración**: branch, SHA, checks, PR y merge se registran como evidencia, pero no sustituyen el estado de Linear.
-- **Los ledgers del repo son evidencia del checkout**, no un espejo live global de Linear. `workflow/built.jsonl` registra trabajo construido/validado en una rama; `workflow/review-history.jsonl` registra eventos de build/review. Cada entry nuevo debe incluir el estado Linear observado al registrarlo.
-- `built`, `build_completed` o `ready_for_review` describen BUILD. `shipped` se reserva para una release realmente distribuida/deployada y nunca se usa como sinónimo de build, PR abierto o `Done`.
-- `workflow/status.json` resume la fase y el plan del checkout. Se actualiza en DEFINE o en una reconciliación deliberada de fase; no se muta por cada issue de BUILD.
-- Los eventos históricos `ship_completed` se conservan por ser append-only, pero se interpretan como el antiguo “build completado en rama”, no como prueba de merge, despliegue ni release.
-
 ---
 
 ## `/wf-define [fase?]` o `wf-define [fase?]` — PLAN
@@ -43,9 +34,9 @@ Si el roadmap de la fase y su DoD ya existen y están alineados, `wf-define` no 
 
 PLAN no parte de issues existentes — parte de una fase definida en el roadmap. El output es el conjunto de issues que el agente de BUILD va a ejecutar.
 
-**Agente responsable:** `/wf-define` lo conduce el rol definido en `.agents/agents/product-manager.md`.
+**Agente responsable:** `/wf-define` lo conduce el rol definido en `.agents/agents/planning-agent.md`.
 
-Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal y activa skills especializados según el contexto de la fase. `workflow.md` define el protocolo; el documento del agente define la estrategia de orquestación.
+Ese rol resuelve la topología de ejecución (capabilities, dependencias, critical path, smallest coherent stages) antes de escribir ningún brief, y usa `.agents/skills/skill-planning/SKILL.md` para endurecer cada issue de esa topología. `workflow.md` define el protocolo — qué contexto cargar, qué pasos ejecutar, qué gate cierra PLAN; no define cómo pensar la topología ni el schema del Issue Brief.
 
 **Resolución de fase:**
 - Con argumento (`/wf-define fase-2`): usar la fase indicada.
@@ -55,7 +46,7 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 1. `workflow/status.json` — fase activa y plan de fases. Para saber qué está construido, consultar el ledger: `npm run ops:ledger -- built --phase "Fase N" --brief` (no leer `workflow/built.jsonl` entero).
 2. `workflow/define/roadmap.md` — alcance y dependencias de la fase.
 3. El subconjunto estricto de documentos de `workflow/context/` citados en la línea `Referencia` de cada issue del roadmap.
-4. `.agents/skills/skill-product-manager/SKILL.md` — cómo estructurar issues ejecutables, jerarquía en Linear y template de Issue Brief.
+4. `.agents/skills/skill-planning/SKILL.md` — cómo estructurar issues ejecutables, jerarquía en Linear y template de Issue Brief.
 
 **No cargar por defecto:** skills técnicos (frontend, backend, database), testing. Solo si un issue de la fase los requiere explícitamente.
 
@@ -75,25 +66,19 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 3. Actualizar `workflow/status.json` definiendo explícitamente la `active_phase` actual.
 4. Buscar si existe un documento `workflow/define/dod-[fase].md` (ej. `dod-fase-1.md`) para la fase actual.
 5. **Si no existe el DoD:** Pausar y co-crear el DoD iterando con el humano, basándose en el roadmap y los objetivos de experiencia.
-6. **Si existe el DoD:** El agente cruza el Roadmap contra el DoD. Si hay asimetrías de alcance, el agente dialoga con el humano para **complementar** el Roadmap y/o el DoD. Nada se borra, se enriquece el contrato.
-7. Una vez que ambos documentos están alineados y el humano da luz verde, proceder. Si la fase ya estaba estratégicamente definida, este paso marca el cambio explícito a planeación táctica de issues.
-8. Leer `.agents/skills/skill-product-manager/SKILL.md`.
+6. **Si existe el DoD:** el Planning Agent cruza el Roadmap contra el DoD. Si hay asimetrías de alcance, dialoga con el humano para **complementar** el Roadmap y/o el DoD. Nada se borra, se enriquece el contrato.
+7. Una vez que ambos documentos están alineados y el humano da luz verde, ejecutar el Planning Agent: resuelve la topología de la fase (capabilities, dependencias, critical path, smallest coherent stages — ver `.agents/agents/planning-agent.md`) antes de escribir ningún brief. Si la fase ya estaba estratégicamente definida, este paso marca el cambio explícito a planeación táctica de issues.
+8. Para cada nodo de la topología, el Planning Agent usa `.agents/skills/skill-planning/SKILL.md` para endurecerlo en un Issue Brief — incluida la revisión por los domain skills que ese brief active.
 9. Si algún issue de la fase toca arquitectura o runtime boundaries, leer `.agents/skills/skill-architecture/SKILL.md` antes de fijar ownership y `Reference docs`.
-10. Descomponer la fase en issues atómicos. **Para cada issue, leer ÚNICAMENTE los documentos de contexto listados en su línea `Referencia:`**.
-11. Redactar el Issue Brief estructurándolo según las guías de `.agents/skills/skill-product-manager/SKILL.md`. El agente DEBE inyectar como *Proof of Work/Acceptance Criteria* las pruebas rigurosas exigidas por el DoD para ese alcance.
+10. **Para cada issue, leer ÚNICAMENTE los documentos de contexto listados en su línea `Referencia:`**. El agente DEBE inyectar como *Proof of Work/Acceptance Criteria* las pruebas rigurosas exigidas por el DoD para ese alcance.
     - Si el issue toca presentación de texto, incluir explícitamente `Presentation Contract` cross-mode (`/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}`) con criterios verificables.
     - Si el issue toca arquitectura, runtime boundaries, desktop/shared-core, save path, sync/hydration, parser/serializer o extracción de servicios, agregar en el brief un `Architecture Contract` obligatorio con: `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants`, `Required docs`.
-12. Crear los issues en Linear con su brief incluido.
+11. Crear o actualizar el proyecto de la fase y los issues en Linear con su brief incluido.
+12. Verificar que cada brief creado está completo antes de cerrar: `Definition check` sin contradicción abierta y `Skill reviews` sin objeciones pendientes (ver `skill-planning`).
 13. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
-14. Entregar una `Execution Trace` explícita del proceso con:
-    - `Planning role`
-    - `Skills loaded`
-    - `Specialist consults`
-    - `Audit run`
-    - `Artifacts created`
-    - `Why`
+14. Entregar **una** `Execution Trace` para toda esta ejecución de `wf-define` — no una por issue. El schema de campos lo define `.agents/skills/skill-planning/SKILL.md`; este paso solo exige que exista y esté completa, no repite el schema aquí.
 
-**Gate de salida:** los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo. Sin brief por issue no hay BUILD. Si un issue es arquitectónico y no incluye `Architecture Contract`, DEFINE no está completo.
+**Gate de salida:** todos los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo, **más** la única `Execution Trace` de la ejecución presente y completa. Sin brief por issue no hay BUILD. Si un issue es arquitectónico y no incluye `Architecture Contract`, DEFINE no está completo.
 
 **No es un output válido de DEFINE:** dejar un breakdown táctico solo en markdown dentro del repo sin persistirlo en Linear.
 **No es un output trazable suficiente de DEFINE:** decir que “se usó” un rol o skill sin declararlo en la `Execution Trace`.
@@ -108,18 +93,24 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 
 **Estado Linear:** `Todo` o `Backlog` (con brief) → `In Progress` al iniciar → `In Review` al dejar PR listo.
 
+**Agente responsable:** `/wf-build` lo conduce el rol definido en `.agents/agents/build-agent.md`.
+
+Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/siblings/consumers/tests antes de implementar, y activa skills de dominio según lo que encuentre. `workflow.md` define el protocolo; el documento del agente define el orden de construcción.
+
 **Resolución de issue:**
 - Con argumento (`/wf-build ODE-22`): usar el issue indicado.
 - Sin argumento (`/wf-build`): consultar Linear → buscar issues en estado `Todo` o `Backlog` que tengan Issue Brief y pertenezcan a la fase activa en `status.json` → tomar el de mayor prioridad según orden del roadmap → confirmar al humano el issue seleccionado antes de iniciar.
 
 **Contexto a cargar:**
-1. El Issue Brief desde Linear.
-2. Los documentos listados en la sección `Reference docs` del brief — son los únicos que aplican. No cargar nada adicional por deducción propia.
+1. Leer el Issue Brief desde Linear.
+2. Para contexto normativo y de producto, cargar únicamente los documentos listados en `Reference docs` del brief. No buscar documentación adicional por intuición.
+3. Para entender cómo está implementado actualmente el sistema, ejecutar repository reconnaissance dirigido sobre el código según `.agents/skills/architecture-recon/SKILL.md`. Está permitido inspeccionar owner, reusable APIs/abstractions, siblings, consumers, contracts, hotspots y tests relevantes al cambio.
+4. Architecture Recon no autoriza ampliar el contexto documental. Si el código revela que falta una decisión o documento necesario para resolver ownership o contracts, declarar `Context Gap — Architecture Recon` en lugar de buscar documentación adicional por cuenta propia.
 
 **Excepción obligatoria por gap de contexto arquitectónico:**
 - Si el brief toca desktop, shared core, runtime boundaries, filesystem local, `.md` como contrato documental, extracción de servicios (`DocumentService`, `SyncService`, etc.) o migración web → desktop, el agente debe validar el brief contra su `Architecture Contract`.
 - Si falta `Architecture Contract`, o le falta cualquiera de estos campos: `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants`, `Required docs`, BUILD debe detenerse con `Context Gap` bloqueante. No inferir ese contrato desde el diff ni desde el código existente.
-- Si `Required docs` o `Reference docs` no son suficientes para ejecutar sin inferir arquitectura desde el código, BUILD debe detenerse con `Context Gap` bloqueante y pedir corrección del brief según el criterio de `skill-product-manager` + `skill-architecture`.
+- Si `Required docs` o `Reference docs` no son suficientes para ejecutar sin inferir arquitectura desde el código, BUILD debe detenerse con `Context Gap` bloqueante y pedir corrección del brief según el criterio de `skill-planning` + `skill-architecture`.
 - Regla específica: si el trabajo depende del estado actual del codebase, del save path real, de restricciones del runtime desktop vigente o de gaps de migración ya diagnosticados, entonces `workflow/context/features/odessay-desktop-migration-diagnostic.md` debe aparecer explícitamente en `Required docs`/`Reference docs`. Si no aparece, el brief está incompleto.
 
 **Secuencia:**
@@ -133,25 +124,26 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
    - Si aparece un identificador histórico inválido o huérfano, registrarlo en `workflow/status.json.traceability_exceptions.ignored_issue_ids` con razón concreta. No volver a copiar ese falso positivo en notas de `status.json`, PRs o reviews posteriores.
 
 **Ejecución**
-4. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
+4. Architecture Recon: si el cambio no es trivial (ver criterios de activación en `.agents/skills/architecture-recon/SKILL.md`), ejecutar Recon antes de escribir código — owner canónico, reusable API/abstraction, canonical reference/sibling, siblings, consumers, contratos, hotspots y tests canónicos — y declarar el output completo en el contexto de ejecución del propio Build Agent (no se persiste como documento del repo). Si Recon revela ambigüedad material de ownership o contrato, detener BUILD con `Context Gap — Architecture Recon` en vez de resolverlo por inferencia. Declarar `Construction order` (extender owner → reutilizar API/abstraction → seguir canonical reference/sibling si hace falta algo nuevo → extraer de hotspot → crear abstraction nueva) según `.agents/agents/build-agent.md`.
+5. Implementar según el brief y el Recon declarado. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`. Si el diff real se desvía materialmente del change surface declarado en Recon, o revela un owner distinto, detener la edición, actualizar Recon y solo entonces continuar.
 
 **Validación**
-5. `npm run typecheck` + `npm run lint` + `npm test`. Si el `Performance Architecture Contract` seleccionó evidencia ejecutable, generarla con el instrumento correspondiente. Guardar outputs — van en el body del PR.
-6. `npm run ops:delivery:gate` (con `OPS_PERF_TRACE_PATH=...` solo cuando el contrato seleccionó el gate del editor). Debe terminar en verde.
+6. `npm run typecheck` + `npm run lint` + `npm test`. Si el `Performance Architecture Contract` seleccionó evidencia ejecutable, generarla con el instrumento correspondiente. Guardar outputs — van en el body del PR.
+7. `npm run ops:delivery:gate` (con `OPS_PERF_TRACE_PATH=...` solo cuando el contrato seleccionó el gate del editor). Debe terminar en verde.
 
 **Entrega**
-7. `git push -u origin {rama}`. Abrir el PR con body completo (link al issue, qué se hizo, cómo testear, outputs del paso 5). Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`. Si falla, editar con `gh pr edit {n} --body "..."` antes de continuar.
-8. Confirmar PR en OPEN: `gh pr view {número} --json state`. Appendear en la rama de feature la evidencia de BUILD a `workflow/built.jsonl` (`delivery_state: "built"`, `linear_status: "In Review"`) y el evento `build_completed` a `workflow/review-history.jsonl`; validar ambos JSONL y pushear. Luego mover el issue a `In Review` en Linear y dejar comentario con Context Report completo:
+8. `git push -u origin {rama}`. Abrir el PR con body completo (link al issue, qué se hizo, cómo testear, outputs del paso 6). Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`. Si falla, editar con `gh pr edit {n} --body "..."` antes de continuar.
+9. Confirmar PR en OPEN: `gh pr view {número} --json state`. Mover issue a `In Review` en Linear. Dejar comentario con Context Report completo:
    - `Context Gaps Detected = yes` si faltó o fue ambiguo al menos uno de: alcance, contrato de datos, evidencia requerida, dependencias, referencias documentales.
    - `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
    - `Additional Instructions Requested`: listar las instrucciones extra pedidas al humano durante BUILD.
    - `Decisions Made During Build`: decisiones tomadas para destrabar ejecución.
    - `Recommended Context Fixes`: cambios concretos en issue brief/docs/skills para prevenir repetición.
-9. Emitir `BUILD completado` en la conversación. Si algún paso anterior falló y no se pudo resolver, emitir `HANDOFF REQUERIDO — [motivo exacto]`.
+10. Emitir `BUILD completado` en la conversación. Si algún paso anterior falló y no se pudo resolver, emitir `HANDOFF REQUERIDO — [motivo exacto]`.
 
-**Restricción de workflow en BUILD:** la rama de feature puede appendear únicamente entradas nuevas a `workflow/built.jsonl` y `workflow/review-history.jsonl`, ambos protegidos por `merge=union`; no edita ni reordena entradas existentes. `workflow/status.json` no se toca durante BUILD.
+**Restricción de workflow en BUILD:** la rama de feature **no toca** `workflow/built.jsonl`, `workflow/review-history.jsonl` ni `workflow/status.json`. Se actualizan únicamente en `main` post-merge durante REVIEW. Esto elimina conflictos de merge cuando múltiples worktrees corren en paralelo.
 
-**Gate de salida:** pasos 5 y 6 en verde + PR abierto con body completo (paso 7) + evidencia `built`/`build_completed` append-only + issue en `In Review` (paso 8). Sin eso, el issue no puede estar en `In Review` ni emitirse `BUILD completado`.
+**Gate de salida:** pasos 6 y 7 en verde + PR abierto con body completo (paso 8) + issue en `In Review` (paso 9). Sin eso, el issue no puede estar en `In Review` ni emitirse `BUILD completado`.
 
 ---
 
@@ -208,7 +200,11 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 
 **Objetivo:** verificar calidad del PR y cerrar la trazabilidad del issue.
 
-**Estado Linear:** `In Review` → `Done` si el review pasa y el outcome está aceptado, `In Review` si el review técnico pasa pero falta aceptación, o `In Progress` si es rechazado. El merge no decide por sí solo la transición.
+**Estado Linear:** `In Review` → `Done` (si aprobado, el agente hace merge y cierra) o `In Progress` (si rechazado).
+
+**Agente responsable:** `/wf-review` lo conduce el rol definido en `.agents/agents/review-agent.md`.
+
+Ese rol usa `.agents/skills/skill-code-review/SKILL.md` para orquestar la investigación técnica y activa las lentes `review-correctness`, `review-architecture`, `review-testing`, `review-change-size` según el scope real del diff. `workflow.md` define el protocolo (gates, merge, ledgers, Linear); el documento del agente y sus skills definen cómo se investiga el diff.
 
 **Resolución de issue:**
 - Con argumento (`/wf-review ODE-22`): usar el issue indicado.
@@ -217,10 +213,10 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 **Contexto a cargar:**
 1. El Issue Brief desde Linear.
 2. El diff del PR.
-3. `.agents/skills/skill-code-review/SKILL.md`.
+3. `.agents/skills/skill-code-review/SKILL.md` — orquesta cuáles de `review-correctness`, `review-architecture`, `review-testing`, `review-change-size` activar según el diff.
 4. Si el brief tiene `Performance Architecture Contract` activo: solo los artefactos que ese contrato seleccionó (trace, report o output de gate).
 5. Si el brief tiene `Presentation Contract` requerido: evidencia cross-mode (`write`, `preview`, `shared`, `public`) con foco en tablas, `pre/code`, URLs largas y overflow.
-6. Si el brief toca desktop/shared core/runtime boundaries/save path/sync/parser/serializer/servicios: `.agents/skills/skill-architecture/SKILL.md` + el `Architecture Contract` del brief.
+6. Si el brief toca desktop/shared core/runtime boundaries/save path/sync/parser/serializer/servicios: `.agents/skills/skill-architecture/SKILL.md` + el `Architecture Contract` del brief (la lente `review-architecture` aplica este checklist, incluido el bloque de bundle desktop/Tauri).
 
 **No cargar por defecto:** documentos core, features, roadmap.
 
@@ -230,9 +226,9 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 - Si existe PR: continuar con la secuencia normal.
 
 **Secuencia — si aprobado:**
-1. Verificar gate:
+1. Verificar los checks mecánicos (esto, combinado con el `TechnicalVerdict` que produce el Review Agent en los pasos 2-4, determina el `GateResult` final del paso 5 — un solo owner por pieza: este paso decide lo mecánico, el Review Agent decide el juicio técnico, ninguno recalcula al otro):
    - `npm run ops:delivery:gate` debe terminar en verde (con `OPS_PERF_TRACE_PATH` solo cuando el contrato seleccionó el gate del editor).
-   - CI `Traceability Gates` en SUCCESS.
+   - CI `CI required` (`blocking-ci.yml`) en SUCCESS — agrega `quality`, `process-checks` y `repo-checks`. Playwright E2E y performance capture no son parte de este gate (ver `workflow/testing/critical-capabilities-testing.md`); `scoped-ci.yml` sigue existiendo como workflow reusable/manual, no referenciado desde `blocking-ci.yml`.
    - Preview deploy (Vercel) en SUCCESS — un PR que toca código y no compila en preview no puede mergearse aunque el delivery gate local pase.
    - **Excepción perf:** si el cambio no activó `skill-performance`, no se exige evidencia de performance. Si lo activó, los resultados se interpretan según el contrato y el instrumento seleccionado; un budget no seleccionado no bloquea el PR.
 2. Validar el `Performance Architecture Contract` contra evidencia objetiva cuando esté activo:
@@ -248,24 +244,33 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 4. Revisar diff contra el brief (scope, calidad, seguridad, performance).
 5. Dejar comentario en Linear: resultado de revisión.
    - El comentario de REVIEW debe separar explícitamente:
-     - `GateResult` (PASS/FAIL de contratos/checks),
+     - `TechnicalVerdict` (PASS/FAIL — el juicio técnico del Review Agent: findings, contratos que las lentes `review-*` evaluaron, seguridad),
      - `QualityScore` (calidad técnica del diff),
-     - `ProcessInsights` (fallos del primer review, correcciones posteriores, gaps de contexto y recomendaciones).
+     - `ProcessInsights` (fallos del primer review, correcciones posteriores, gaps de contexto y recomendaciones),
+     - `GateResult` final (PASS solo si `TechnicalVerdict=PASS` **y** los checks mecánicos del paso 1 pasaron — este valor es el que se persiste como `gate_result` en el ledger, no el `TechnicalVerdict` aislado).
    - Agregar evento en `workflow/review-history.jsonl` (append-only) con tipo:
      - `review_rejected` o `review_approved`,
      - incluyendo `issue`, `pr_url`, `branch`, `commit`, `score`, `gate_result`, `ts`, `reviewer`, `notes`.
 6. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
 7. Volver a `main`: `git switch main`.
 8. Sincronizar `main` local con remoto: `git pull --ff-only origin main`.
-9. En `main`, appendear `review_approved` a `workflow/review-history.jsonl` (append-only) con los datos del review (score, gate_result, reviewer, findings). El evento `build_completed` y la línea de `built.jsonl` ya deben existir en la rama integrada. Antes de commitear, validar que `workflow/review-history.jsonl` y `workflow/status.json` sean parseables:
+9. En `main`, appendear **ambos** eventos a `workflow/review-history.jsonl` (append-only): primero `build_submitted` con los datos del PR (branch, commit HEAD, PR URL, notas de BUILD), luego `review_approved` con los datos del review (score, gate_result, reviewer, findings). Antes de commitear, validar que `workflow/review-history.jsonl` y `workflow/status.json` sean parseables:
    ```bash
    node scripts/validate-workflow-json.mjs
    git add workflow/review-history.jsonl
-   git commit -m "chore(workflow): append review_approved for {ISSUE-ID} [{ISSUE-ID}]"
+   git commit -m "chore(workflow): append build_submitted + review_approved for {ISSUE-ID} [{ISSUE-ID}]"
    git push origin main
    ```
-10. Verificar que `workflow/built.jsonl` contiene el SHA construido. Si la fase cambió por decisión de producto, actualizar `active_phase` y `last_updated` en `workflow/status.json` mediante una reconciliación separada.
-11. Mover el issue a `Done` en Linear solo cuando el outcome esté aceptado. Un merge por sí solo no autoriza esta transición; si falta aceptación, dejarlo en `In Review`.
+   > El evento `build_submitted` se aplaza a REVIEW para evitar que la rama de feature toque archivos de workflow, eliminando conflictos de merge en worktrees paralelos.
+10. Appendear el issue completado al ledger `workflow/built.jsonl` (una línea JSON: `what`, `phase`, `issue`, `linear_url`, `pr_url`, `commit`, `date`, `notes`), especificando la fase terminada. Si la fase cambió, actualizar además `active_phase` y `last_updated` en `workflow/status.json`. Antes de commitear, validar que los ledgers son parseables:
+   ```bash
+   npm run ops:ledger -- append-built '{"what":"...","phase":"...","issue":"{ISSUE-ID}","linear_url":"...","pr_url":"...","commit":"...","date":"YYYY-MM-DD","notes":"..."}'
+   node scripts/validate-workflow-json.mjs
+   git add workflow/built.jsonl workflow/status.json
+   git commit -m "chore(workflow): record {ISSUE-ID} in the built ledger [{ISSUE-ID}]"
+   git push origin main
+   ```
+11. Mover issue a `Done` en Linear.
 
 **Nota:** el agente ejecuta el merge directamente. No requiere confirmación del humano salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
 
@@ -320,11 +325,11 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 
 ---
 
-## `/wf-ship [issue-id]` o `wf-ship [issue-id]` — BUILD-TO-REVIEW (alias legado)
+## `/wf-ship [issue-id]` o `wf-ship [issue-id]` — SHIP
 
-**Objetivo:** implementar sobre el brief aprobado, abrir PR y dejar el issue listo para revisión sin tocar `main`. El nombre del comando se conserva por compatibilidad; no significa release ni despliegue.
+**Objetivo:** implementar sobre el brief aprobado, abrir PR y cerrar el issue en Linear sin pasar por wf-review. El PR queda abierto para que el humano decida cuándo mergear.
 
-**Estado Linear:** `Todo` o `Backlog` (con brief) → `In Progress` al iniciar → `In Review` al confirmar PR y evidencia. `Done` requiere aceptación posterior del outcome.
+**Estado Linear:** `Todo` o `Backlog` (con brief) → `In Progress` al iniciar → `Done` al confirmar PR.
 
 **Resolución de issue:**
 - Con argumento (`/wf-ship ODE-22`): usar el issue indicado.
@@ -368,16 +373,16 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 9. Confirmar PR en OPEN: `gh pr view {número} --json state`.
 10. Appendear a los ledgers en la **rama de feature** (no en main):
     - `workflow/built.jsonl` — la entrega del issue en la fase activa.
-    - `workflow/review-history.jsonl` — el evento `build_completed`.
+    - `workflow/review-history.jsonl` — el evento `ship_completed`.
     ```bash
-    npm run ops:ledger -- append-built '{"what":"...","phase":"...","issue":"{ISSUE-ID}","linear_url":"...","pr_url":"...","commit":"...","date":"YYYY-MM-DD","delivery_state":"built","linear_status":"In Review","notes":"..."}'
-    npm run ops:ledger -- append-review '{"ts":"...","type":"build_completed","issue":"{ISSUE-ID}","branch":"...","pr_url":"...","commit":"...","linear_status":"In Review","gate_result":"PASS","reviewer":"...","notes":"..."}'
+    npm run ops:ledger -- append-built '{"what":"...","phase":"...","issue":"{ISSUE-ID}","linear_url":"...","pr_url":"...","commit":"...","date":"YYYY-MM-DD","notes":"..."}'
+    npm run ops:ledger -- append-review '{"ts":"...","type":"ship_completed","issue":"{ISSUE-ID}","branch":"...","pr_url":"...","commit":"...","score":0,"gate_result":"PASS","reviewer":"...","notes":"..."}'
     node scripts/validate-workflow-json.mjs
     git add workflow/built.jsonl workflow/review-history.jsonl
-    git commit -m "chore(workflow): record {ISSUE-ID} build_completed [{ISSUE-ID}]"
+    git commit -m "chore(workflow): record {ISSUE-ID} ship_completed [{ISSUE-ID}]"
     git push origin {rama}
     ```
-    Ambos son ledgers JSONL append-only con `merge=union` (ver `.gitattributes`): dos builds paralelos que appendean **no conflictúan** — git conserva las dos líneas. Por eso este flujo puede escribirlos en la rama de feature sin reintroducir el problema que resolvió ODE-184. No editar líneas existentes ni reordenar el archivo: eso sí conflictúa.
+    Ambos son ledgers JSONL append-only con `merge=union` (ver `.gitattributes`): dos ships paralelos que appendean **no conflictúan** — git conserva las dos líneas. Por eso SHIP puede escribirlos en la rama de feature sin reintroducir el problema que resolvió ODE-184. No editar líneas existentes ni reordenar el archivo: eso sí conflictúa.
 11. Dejar comentario en Linear con Context Report completo. **Este paso es obligatorio — no avanzar al paso 12 hasta confirmar que el comentario fue creado** (MCP retorna el ID del comentario; GraphQL retorna `success: true`):
     - `Context Gaps Detected = yes | no`
     - `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
@@ -386,13 +391,13 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
     - `Recommended Context Fixes`: cambios concretos en issue brief/docs para prevenir repetición.
     - Outputs de validación: typecheck, lint, vitest, delivery gate.
     - Link al PR.
-    Si la llamada falla o no retorna confirmación: reintentar una vez. Si sigue fallando: reportar el bloqueo al humano y no mover a `In Review` hasta resolverlo.
-12. Mover issue a `In Review` en Linear. Solo ejecutar este paso tras haber recibido confirmación del comentario en el paso 11.
-13. Emitir `BUILD completado — PR #{número} abierto, listo para revisión; main no fue modificado.`
+    Si la llamada falla o no retorna confirmación: reintentar una vez. Si sigue fallando: reportar el bloqueo al humano y no mover a Done hasta resolverlo.
+12. Mover issue a `Done` en Linear. Solo ejecutar este paso tras haber recibido confirmación del comentario en el paso 11.
+13. Emitir `SHIP completado — PR #{número} abierto, listo para merge manual.`
 
-**Restricción:** NO hacer `gh pr merge`. NO hacer `git switch main`. NO tocar `main`. Los ledgers `workflow/built.jsonl` y `workflow/review-history.jsonl` se appendean en la **rama de feature** como evidencia de build, igual que en BUILD. Esto es seguro únicamente porque son JSONL con `merge=union`; `workflow/status.json` sigue sin tocarse en ramas de feature.
+**Restricción:** NO hacer `gh pr merge`. NO hacer `git switch main`. NO tocar `main`. Los ledgers `workflow/built.jsonl` y `workflow/review-history.jsonl` se appendean en la **rama de feature** (no en main), a diferencia del flujo BUILD+REVIEW. Esto es seguro únicamente porque son JSONL con `merge=union`; `workflow/status.json` sigue sin tocarse en ramas de feature.
 
-**Gate de salida:** pasos 6 y 7 en verde + PR abierto con body completo (paso 8) + `workflow/built.jsonl` y `review-history.jsonl` appendeados en la rama de feature (paso 10) + comentario Context Report confirmado en Linear con ID retornado (paso 11) + issue en `In Review` (paso 12).
+**Gate de salida:** pasos 6 y 7 en verde + PR abierto con body completo (paso 8) + `workflow/built.jsonl` y `review-history.jsonl` appendeados en la rama de feature (paso 10) + comentario Context Report confirmado en Linear con ID retornado (paso 11) + issue en `Done` (paso 12).
 
 ---
 

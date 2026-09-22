@@ -5,6 +5,7 @@
 - **Decide:** Hugo (esta es la decisión que ningún skill/doc estaba facultado para tomar)
 - **Reemplaza:** el marco "de transición" que aplazaba la polaridad A1/A2/A3
 - **Gobernanza:** este ADR es la **fuente de verdad de la arquitectura de documento**. Los cuatro `odessay-desktop-*` y los skills de arquitectura/backend/database deben referenciarlo.
+- **Enmienda D2/D3 (2026-09-16):** adopta `<Annotation>` como sintaxis canónica de anotación en el markdown-fuente y relega `==texto==[@n: comentario]` a entrada de migración. Define además la proyección limpia de los componentes editoriales y separa el contenido portable de la anotación de su estado colaborativo cloud.
 - **Enmienda D9 (2026-07-18):** distingue ausencia observada de una acción confirmada: el watcher nunca archiva cloud por inferencia; el caso de uso confirmado compone borrado local y soft-delete cloud según presencia, y el hard-delete queda en Settings > Archivados.
 - **Enmienda D10 (2026-07-09):** el catálogo operacional desktop y la reconciliación de identidad se especifican en `workflow/context/features/odessay-desktop-document-catalog.md`. SQLite sustituye a IndexedDB como catálogo/cola objetivo de desktop; `.odessay/index.json` se reconoce como ledger durable del binding local, no como caché equivalente a SQLite.
 - **Estado del corpus vs. código:** este ADR y los docs reconciliados son **normativos y van por delante del código**. D3 (id inline), D5 (UUID único), D6/D11 (`content_hash` en índice y nube), D7 (repliegue de `rehome`) describen el **destino**, no el runtime actual (hoy el código corre el modelo A+B). Leer los docs de feature como contrato objetivo, no como descripción del estado vigente; cada brecha doc↔código está marcada como trabajo bloqueante en §Consecuencias.
@@ -30,22 +31,31 @@ En desktop, el archivo `.md` en disco es la verdad durable. `body_json` (TipTap)
 
 ### D2 — Un markdown, dos roles (no dos formatos)
 
-Un solo perfil de markdown, dos roles: **markdown-fuente** (desktop, round-trip `.md ⇄ body_json` obligatorio) y **markdown-export** (web, `body_json → .md` de una vía, limpio). Al sacar la metadata del frontmatter (D4), ambos comparten el mismo cuerpo y la ausencia de frontmatter. **No convergen del todo:** el markdown-fuente sigue cargando las anotaciones inline (con su id), que el export limpio puede remover. Esa es la única diferencia restante.
+Un solo perfil de markdown, dos roles: **markdown-fuente** (desktop, round-trip `.md ⇄ body_json` obligatorio) y **markdown-export** (web, `body_json → .md` de una vía, limpio). Al sacar la metadata del frontmatter (D4), ambos comparten el mismo cuerpo y la ausencia de frontmatter.
+
+El markdown-fuente puede contener el vocabulario controlado de componentes documentales de Odessay. El markdown-export aplica una **proyección limpia por componente**: conserva el contenido humano y elimina la semántica de authoring que no deba publicarse. Para `Annotation`, la proyección limpia conserva el texto anclado y elimina el wrapper y el comentario. No existen dos parsers ni dos formatos; existe un perfil y dos políticas de serialización sobre el mismo modelo documental.
 
 ### D3 — Anotaciones: ancla + id estable inline; payload en la nube
 
-El modelo canónico de una anotación es **`==texto==[@n: comentario]`**: un span resaltado (la marca Highlight, `==..==`) que define el rango, seguido de un **marcador puntual** cuyo texto es el comentario.
+El modelo canónico de una anotación en el markdown-fuente es una etiqueta balanceada y explícita:
 
-- El **rango (anchor) se deriva del span `==highlight==`** que precede al marcador (`collectAnnotationNodes` en `footnote-extension.ts`); no se almacena aparte y **no se pierde** en el round-trip mientras `==..==` round-trippee.
-- El **id de la anotación debe codificarse inline** en el `.md`, junto a `type/index/text`. Hoy NO está, y el round-trip lo regenera (`crypto.randomUUID` en cada parse). **El daño es DESTRUCTIVO, no cosmético:** la tabla `margins` se reconstruye desde `body_json` por id en cada save (`syncMarginsFromBodyJson` hace upsert por id y **borra toda fila cuyo id ya no exista**), así que cada ciclo `.md → body_json → .md` **borra la fila de `margins` de cada anotación** y con ella su estado de colaboración (`resolved`, `shared`, `shared_at`, `archived`), que NO vive en `body_json`. **Trabajo bloqueante y de máxima prioridad para D1/D2:** modificar el serializador/parser (`footnote-node.ts`) para que el id sobreviva el round-trip.
-- El **payload rico** (rango, tipo, texto, `reader_id`, `shared`, `resolved`, timestamps) vive en la tabla `margins` del **registro de nube** (ya vive ahí hoy), atado por ese id estable. No en disco.
-- Todo el contenido cabe en el perfil markdown (verificado). Las sugerencias IA (CorrectionTrigger/PublicationSuggestion) son **decoraciones de runtime** y no se persisten en el `.md`.
+```mdx
+<Annotation id="ann-123" type="personal" comment="Revisar esta idea.">texto anotado</Annotation>
+```
+
+- El contenido entre apertura y cierre es el **ancla legible**. No se introducen hijos `<Anchor>` ni `<Body>`.
+- `id` es obligatorio, estable y se acuña una sola vez fuera del parser. `type` y `comment` forman parte del contenido portable de la anotación y deben sobrevivir `.md → body_json → .md`.
+- El `.md` gobierna `id`, `type`, `comment` y el texto anclado. La tabla `margins`, enlazada por `id`, conserva la proyección consultable y el **estado colaborativo** que no pertenece al archivo: `reader_id`, `shared`, `resolved`, `shared_at`, `archived` y timestamps. Al reconciliar, el source actualiza los campos de contenido reflejados; la nube conserva los campos colaborativos.
+- El markdown-export limpio y las superficies públicas eliminan el wrapper y `comment`, pero conservan el texto anclado. Incluir comentarios en una copia para AI o en una exportación enriquecida requiere una acción explícita distinta.
+- La sintaxis `==texto==[@n: comentario]` y sus variantes existentes son **entrada legacy únicamente**. El parser puede leerlas para migración y producir el mismo modelo intermedio, pero el serializer canónico nunca vuelve a emitirlas.
+- Un error de parseo o un tag desconocido debe conservar el source de forma recuperable. Mientras un documento tenga errores estructurales de componentes, la reconciliación no puede interpretar la ausencia de una anotación como intención de borrado ni podar su fila de `margins`.
+- Las sugerencias IA (CorrectionTrigger/PublicationSuggestion) son **decoraciones de runtime** y no se persisten en el `.md`.
 
 ### D4 — El `.md` es puro contenido; la metadata vive en la nube
 
 El `.md` no cumple ninguna función de identificación ni de metadata de Odessay. Es **solo contenido**. Si un archivo tiene frontmatter (un skill con `name/description`, un agent con `name/role/scope`), ese frontmatter es **contenido propio del archivo**, no un casillero de Odessay. Trato **uniforme para todos los archivos**: Odessay **nunca escribe en el frontmatter de ningún archivo** (no hay "reglas distintas según el tipo"). Esto elimina la corrupción de artifacts de raíz.
 
-La metadata de Odessay (`id/slug/status/visibility/version`) y el payload de anotaciones viven en el **registro del documento en la nube** (el writing, con espejo local en IndexedDB para trabajar sin conexión, sincronizado a Supabase). **No hay sidecar de metadata en disco.**
+La metadata de Odessay (`id/slug/status/visibility/version`) y el estado colaborativo de las anotaciones viven en el **registro del documento en la nube** (el writing, con espejo local en IndexedDB para trabajar sin conexión, sincronizado a Supabase). La representación portable de una anotación definida en D3 sí forma parte del contenido del `.md`; no es metadata del documento. **No hay sidecar de metadata en disco.**
 
 Lo único local en disco, además del propio `.md`, es un **índice de binding delgado** (ruta + inode + huella + UUID) cuyo único trabajo es decir "este archivo = este documento de la nube". No es metadata. **Matiz importante:** el caché de recientes/títulos sí es regenerable desde los `.md`, pero el mapeo ruta↔UUID NO se regenera localmente una vez que el id sale del archivo — se **recupera re-emparejando contra la nube por content_hash** (ver D11). Los archivos ajenos que solo se trackean (skills/agents) entran en ese índice pero **no reciben registro de metadata** ni se tocan: son puro contenido.
 
@@ -128,10 +138,10 @@ Quitar el `id` del frontmatter (D4) elimina lo único que hoy hace portable la i
 
 ## Consecuencias / trabajo derivado (alimenta el plan de fases de código)
 
-1. Modificar serializador/parser para id de anotación estable inline (bloquea D1/D2).
+1. Implementar el perfil controlado de componentes y migrar anotaciones a `<Annotation>` con id estable inline; el parser lee temporalmente ambas sintaxis y el serializer sólo escribe la nueva (bloquea el cierre de D1/D2).
 2. Unificar acuñación de UUID: workspace adopta el id del writing (D5).
 3. Agregar content_hash (BLAKE3) al índice local **y al registro de nube** (D6/D11); reconciliación ruta-primero; supresión de auto-escrituras.
-4. Dejar de escribir frontmatter en cualquier archivo; metadata en el registro del documento; payload de anotaciones en `margins`, atado por el id inline (D3/D4); estandarizar `.odessay` (D8).
+4. Dejar de escribir frontmatter en cualquier archivo; metadata y estado colaborativo de anotaciones en `margins`, atados por el id inline, mientras el contenido portable de `Annotation` vive en el `.md` (D3/D4); estandarizar `.odessay` (D8).
 5. Reconciliación en pull por hash + materialización in-place; replegar rehome/writingsDir (D7).
 6. Migración de datos: **cosechar `frontmatter.id` ANTES de cortar el frontmatter** (registrarlo en índice de binding + nube); luego limpiar el frontmatter de Odessay de los `.md`.
 7. Especificar el **camino de guardado** (orden de escritura y manejo de fallas entre `.md`, SQLite, IndexedDB y Supabase) y la detección de divergencia por huella; evaluar guardado atómico (D10).

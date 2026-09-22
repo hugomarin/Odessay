@@ -1,0 +1,274 @@
+add @img/sharp-wasm32 0.35.4
+add @img/sharp-win32-x64 0.35.4
+add @img/sharp-win32-ia32 0.35.4
+add @img/sharp-win32-arm64 0.35.4
+add @img/sharp-webcontainers-wasm32 0.35.4
+add @img/sharp-linuxmusl-x64 0.35.4
+add @img/sharp-linuxmusl-arm64 0.35.4
+add @img/sharp-linux-x64 0.35.4
+add @img/sharp-linux-s390x 0.35.4
+add @img/sharp-linux-riscv64 0.35.4
+add @img/sharp-linux-ppc64 0.35.4
+add @img/sharp-linux-arm64 0.35.4
+add @img/sharp-linux-arm 0.35.4
+add @img/sharp-libvips-linuxmusl-x64 1.3.3
+add @img/sharp-libvips-linuxmusl-arm64 1.3.3
+add @img/sharp-libvips-linux-x64 1.3.3
+add @img/sharp-libvips-linux-s390x 1.3.3
+add @img/sharp-libvips-linux-riscv64 1.3.3
+add @img/sharp-libvips-linux-ppc64 1.3.3
+add @img/sharp-libvips-linux-arm64 1.3.3
+add @img/sharp-libvips-linux-arm 1.3.3
+add @img/sharp-libvips-darwin-x64 1.3.3
+add @img/sharp-freebsd-wasm32 0.35.4
+add @img/sharp-darwin-x64 0.35.4
+add @next/swc-win32-x64-msvc 15.5.25
+add @next/swc-win32-arm64-msvc 15.5.25
+add @next/swc-linux-x64-musl 15.5.25
+add @next/swc-linux-x64-gnu 15.5.25
+add @next/swc-linux-arm64-musl 15.5.25
+add @next/swc-linux-arm64-gnu 15.5.25
+add @next/swc-darwin-x64 15.5.25
+add lightningcss-win32-x64-msvc 1.31.1
+add lightningcss-win32-arm64-msvc 1.31.1
+add lightningcss-linux-x64-musl 1.31.1
+add lightningcss-linux-x64-gnu 1.31.1
+add lightningcss-linux-arm64-musl 1.31.1
+add lightningcss-linux-arm64-gnu 1.31.1
+add lightningcss-linux-arm-gnueabihf 1.31.1
+add lightningcss-freebsd-x64 1.31.1
+add lightningcss-darwin-x64 1.31.1
+add lightningcss-android-arm64 1.31.1
+add @unrs/resolver-binding-win32-x64-msvc 1.11.1
+add @unrs/resolver-binding-win32-ia32-msvc 1.11.1
+add @unrs/resolver-binding-win32-arm64-msvc 1.11.1
+add @unrs/resolver-binding-wasm32-wasi 1.11.1
+add @unrs/resolver-binding-linux-x64-musl 1.11.1
+add @unrs/resolver-binding-linux-x64-gnu 1.11.1
+add @unrs/resolver-binding-linux-s390x-gnu 1.11.1
+add @unrs/resolver-binding-linux-riscv64-musl 1.11.1
+add @unrs/resolver-binding-linux-riscv64-gnu 1.11.1
+add @unrs/resolver-binding-linux-ppc64-gnu 1.11.1
+add @unrs/resolver-binding-linux-arm64-musl 1.11.1
+add @unrs/resolver-binding-linux-arm64-gnu 1.11.1
+add @unrs/resolver-binding-linux-arm-musleabihf 1.11.1
+add @unrs/resolver-binding-linux-arm-gnueabihf 1.11.1
+add @unrs/resolver-binding-freebsd-x64 1.11.1
+add @unrs/resolver-binding-darwin-x64 1.11.1
+add @unrs/resolver-binding-android-arm64 1.11.1
+add @unrs/resolver-binding-android-arm-eabi 1.11.1
+add @tauri-apps/cli-win32-x64-msvc 2.11.2
+add @tauri-apps/cli-win32-ia32-msvc 2.11.2
+add @tauri-apps/cli-win32-arm64-msvc 2.11.2
+add @tauri-apps/cli-linux-x64-musl 2.11.2
+add @tauri-apps/cli-linux-x64-gnu 2.11.2
+add @tauri-apps/cli-linux-riscv64-gnu 2.11.2
+add @tauri-apps/cli-linux-arm64-musl 2.11.2
+add @tauri-apps/cli-linux-arm64-gnu 2.11.2
+add @tauri-apps/cli-linux-arm-gnueabihf 2.11.2
+add @tauri-apps/cli-darwin-x64 2.11.2
+add @tailwindcss/oxide-win32-x64-msvc 4.2.1
+add @tailwindcss/oxide-win32-arm64-msvc 4.2.1
+add @tailwindcss/oxide-wasm32-wasi 4.2.1
+add @tailwindcss/oxide-linux-x64-musl 4.2.1
+add @tailwindcss/oxide-linux-x64-gnu 4.2.1
+add @tailwindcss/oxide-linux-arm64-musl 4.2.1
+add @tailwindcss/oxide-linux-arm64-gnu 4.2.1
+add @tailwindcss/oxide-linux-arm-gnueabihf 4.2.1
+add @tailwindcss/oxide-freebsd-x64 4.2.1
+add @tailwindcss/oxide-darwin-x64 4.2.1
+add @tailwindcss/oxide-android-arm64 4.2.1
+add @rolldown/binding-win32-x64-msvc 1.0.0-rc.9
+add @rolldown/binding-win32-arm64-msvc 1.0.0-rc.9
+add @rolldown/binding-wasm32-wasi 1.0.0-rc.9
+add @napi-rs/wasm-runtime 1.1.1
+add @rolldown/binding-openharmony-arm64 1.0.0-rc.9
+add @rolldown/binding-linux-x64-musl 1.0.0-rc.9
+add @rolldown/binding-linux-x64-gnu 1.0.0-rc.9
+add @rolldown/binding-linux-s390x-gnu 1.0.0-rc.9
+add @rolldown/binding-linux-ppc64-gnu 1.0.0-rc.9
+add @rolldown/binding-linux-arm64-musl 1.0.0-rc.9
+add @rolldown/binding-linux-arm64-gnu 1.0.0-rc.9
+add @rolldown/binding-linux-arm-gnueabihf 1.0.0-rc.9
+add @rolldown/binding-freebsd-x64 1.0.0-rc.9
+add @rolldown/binding-darwin-x64 1.0.0-rc.9
+add @rolldown/binding-android-arm64 1.0.0-rc.9
+add @napi-rs/wasm-runtime 0.2.12
+add @esbuild/win32-x64 0.27.7
+add @esbuild/win32-ia32 0.27.7
+add @esbuild/win32-arm64 0.27.7
+add @esbuild/sunos-x64 0.27.7
+add @esbuild/openharmony-arm64 0.27.7
+add @esbuild/openbsd-x64 0.27.7
+add @esbuild/openbsd-arm64 0.27.7
+add @esbuild/netbsd-x64 0.27.7
+add @esbuild/netbsd-arm64 0.27.7
+add @esbuild/linux-x64 0.27.7
+add @esbuild/linux-s390x 0.27.7
+add @esbuild/linux-riscv64 0.27.7
+add @esbuild/linux-ppc64 0.27.7
+add @esbuild/linux-mips64el 0.27.7
+add @esbuild/linux-loong64 0.27.7
+add @esbuild/linux-ia32 0.27.7
+add @esbuild/linux-arm64 0.27.7
+add @esbuild/linux-arm 0.27.7
+add @esbuild/freebsd-x64 0.27.7
+add @esbuild/freebsd-arm64 0.27.7
+add @esbuild/darwin-x64 0.27.7
+add @esbuild/android-x64 0.27.7
+add @esbuild/android-arm64 0.27.7
+add @esbuild/android-arm 0.27.7
+add @esbuild/aix-ppc64 0.27.7
+change @next/swc-darwin-arm64 15.5.13 => 15.5.25
+change @next/env 15.5.13 => 15.5.25
+change @img/sharp-libvips-darwin-arm64 1.2.4 => 1.3.3
+change @img/sharp-darwin-arm64 0.34.5 => 0.35.4
+change @emnapi/runtime 1.9.0 => 1.11.3
+change ws 8.19.0 => 8.21.3
+add lightningcss-win32-x64-msvc 1.32.0
+add lightningcss-win32-arm64-msvc 1.32.0
+add lightningcss-linux-x64-musl 1.32.0
+add lightningcss-linux-x64-gnu 1.32.0
+add lightningcss-linux-arm64-musl 1.32.0
+add lightningcss-linux-arm64-gnu 1.32.0
+add lightningcss-linux-arm-gnueabihf 1.32.0
+add lightningcss-freebsd-x64 1.32.0
+add lightningcss-darwin-x64 1.32.0
+add lightningcss-android-arm64 1.32.0
+change sharp 0.34.5 => 0.35.4
+change semver 7.7.4 => 7.8.5
+change postcss 8.5.8 => 8.5.28
+change next 15.5.13 => 15.5.25
+change nanoid 3.3.11 => 3.3.19
+change markdown-it 14.1.1 => 14.3.2
+change linkify-it 5.0.0 => 5.0.2
+change js-yaml 4.1.1 => 4.3.2
+change nanoid 5.1.7 => 5.1.16
+
+added 131 packages, changed 15 packages, and audited 774 packages in 3s
+
+243 packages are looking for funding
+  run `npm fund` for details
+
+# npm audit report
+
+@tiptap/core  <=3.30.4
+Severity: high
+Tiptap: mergeAttributes() turns an own __proto__ key into inherited executable DOM attributes - https://github.com/advisories/GHSA-cp6q-959q-f8rh
+Tiptap: Quadratic ReDoS in block and inline Markdown attribute parsing - https://github.com/advisories/GHSA-j95f-988m-3j2f
+fix available via `npm audit fix`
+node_modules/@tiptap/core
+  @tiptap/extension-horizontal-rule  <=3.0.0-next.8 || 3.22.4 - 3.30.3
+  Depends on vulnerable versions of @tiptap/core
+  node_modules/@tiptap/extension-horizontal-rule
+  @tiptap/extension-image  <=3.0.0-next.8 || 3.22.4 - 3.30.3
+  Depends on vulnerable versions of @tiptap/core
+  node_modules/@tiptap/extension-image
+
+js-yaml  4.0.0 - 4.3.1
+Severity: high
+JS-YAML: Quadratic-complexity DoS in merge key handling via repeated aliases - https://github.com/advisories/GHSA-h67p-54hq-rp68
+js-yaml: YAML merge-key chains can force quadratic CPU consumption - https://github.com/advisories/GHSA-52cp-r559-cp3m
+JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x) — CVE-2026-59870 fix not backported - https://github.com/advisories/GHSA-5p4m-2wfm-xmqj
+js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources - https://github.com/advisories/GHSA-2883-xcg3-v3hh
+fix available via `npm audit fix`
+
+
+linkify-it  <=5.0.1
+Severity: high
+LinkifyIt#match scan loop has quadratic algorithmic complexity - https://github.com/advisories/GHSA-22p9-wv53-3rq4
+linkify-it: Quadratic-complexity DoS via the `mailto:` validator scan-loop on attacker text - https://github.com/advisories/GHSA-v245-v573-v5vm
+fix available via `npm audit fix`
+
+
+markdown-it  <=14.1.1
+Severity: moderate
+markdown-it: Quadratic complexity DoS in smartquotes rule via replaceAt string operations - https://github.com/advisories/GHSA-6v5v-wf23-fmfq
+fix available via `npm audit fix`
+
+
+nanoid  <=3.3.17 || 4.0.0 - 5.1.15
+Severity: high
+nanoid: non-secure generators can loop indefinitely with negative size - https://github.com/advisories/GHSA-28wg-ghj8-5hjv
+nanoid: non-secure generators can loop indefinitely with negative size - https://github.com/advisories/GHSA-28wg-ghj8-5hjv
+nanoid: custom generators can loop indefinitely when size is zero - https://github.com/advisories/GHSA-2v37-7h3g-55p8
+nanoid: Integer Overflow or Wraparound - https://github.com/advisories/GHSA-xwg4-73v4-xw9w
+nanoid: Integer Overflow or Wraparound - https://github.com/advisories/GHSA-xwg4-73v4-xw9w
+fix available via `npm audit fix`
+
+
+
+next  9.3.4-canary.0 - 16.3.0-preview.10
+Severity: critical
+Next.js: Unbounded next/image disk cache growth can exhaust storage - https://github.com/advisories/GHSA-3x4c-7xq6-9pq8
+Next.js has a Denial of Service with Server Components - https://github.com/advisories/GHSA-q4gf-8mx6-v5v3
+Next.js Vulnerable to Denial of Service with Server Components - https://github.com/advisories/GHSA-8h8q-6873-q5fj
+Next.js has a Middleware / Proxy bypass in App Router applications via segment-prefetch routes - Incomplete Fix Follow-Up - https://github.com/advisories/GHSA-26hh-7cqf-hhc6
+Next.js's Middleware / Proxy redirects can be cache-poisoned - https://github.com/advisories/GHSA-3g8h-86w9-wvmq
+Next.js vulnerable to cross-site scripting in App Router applications using CSP nonces - https://github.com/advisories/GHSA-ffhc-5mcf-pf4q
+Next.js vulnerable to cache poisoning via collisions in React Server Component cache-busting - https://github.com/advisories/GHSA-vfv6-92ff-j949
+Next.js has cross-site scripting in beforeInteractive scripts with untrusted input - https://github.com/advisories/GHSA-gx5p-jg67-6x7h
+Next.js vulnerable to Denial of Service via connection exhaustion in applications using Cache Components - https://github.com/advisories/GHSA-mg66-mrh9-m8jx
+Next.js has a Denial of Service in the Image Optimization API - https://github.com/advisories/GHSA-h64f-5h5j-jqjh
+Next.js vulnerable to server-side request forgery in applications using WebSocket upgrades - https://github.com/advisories/GHSA-c4j6-fc7j-m34r
+Next.js has a Middleware / Proxy bypass through dynamic route parameter injection - https://github.com/advisories/GHSA-492v-c6pp-mqqv
+Next.js vulnerable to cache poisoning in React Server Component responses - https://github.com/advisories/GHSA-wfc6-r584-vfw7
+Next.js has a Middleware / Proxy bypass in App Router applications via segment-prefetch routes - https://github.com/advisories/GHSA-267c-6grr-h53f
+Next.js has a Middleware / Proxy bypass in Pages Router applications using i18n - https://github.com/advisories/GHSA-36qx-fr4f-26g5
+Next.js: Denial of Service in App Router using Server Actions - https://github.com/advisories/GHSA-m99w-x7hq-7vfj
+Next.js: Server-Side Request Forgery in Server Actions on custom servers - https://github.com/advisories/GHSA-89xv-2m56-2m9x
+Next.js: Cache confusion of response bodies for requests with bodies - https://github.com/advisories/GHSA-68g3-v927-f742
+Next.js: Cache confusion of response bodies for requests with bodies containing invalid UTF-8 byte sequences - https://github.com/advisories/GHSA-4633-3j49-mh5q
+Next.js: Unbounded Server Action payload in Edge runtime - https://github.com/advisories/GHSA-4c39-4ccg-62r3
+Next.js: Server-Side Request Forgery in rewrites via attacker-controlled destination hostname - https://github.com/advisories/GHSA-p9j2-gv94-2wf4
+Next.js: Denial of Service in the Image Optimization API using SVGs - https://github.com/advisories/GHSA-q8wf-6r8g-63ch
+Next.js: Unauthenticated disclosure of internal Server Function endpoints - https://github.com/advisories/GHSA-955p-x3mx-jcvp
+Next.js: Unauthenticated Remote Code Execution on windows-hosted servers - https://github.com/advisories/GHSA-p293-qw3h-jr36
+Next.js: Unauthenticated Remote Code Execution in Image Optimization API when AVIF files are used - https://github.com/advisories/GHSA-2xp9-vwfh-vxw4
+Depends on vulnerable versions of postcss
+Depends on vulnerable versions of sharp
+fix available via `npm audit fix`
+
+node_modules/next
+
+postcss  <=8.5.22
+Severity: high
+PostCSS has XSS via Unescaped </style> in its CSS Stringify Output - https://github.com/advisories/GHSA-qx2v-qp2m-jg93
+PostCSS: Arbitrary file read and information disclosure via attacker-controlled sourceMappingURL in CSS comments - https://github.com/advisories/GHSA-6g55-p6wh-862q
+PostCSS: incomplete fix of GHSA-6g55-p6wh-862q — attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset - https://github.com/advisories/GHSA-fxqj-rqcc-2cmp
+PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure - https://github.com/advisories/GHSA-r28c-9q8g-f849
+fix available via `npm audit fix`
+
+node_modules/next/node_modules/postcss
+
+sharp  <=0.35.4-rc.0
+Severity: high
+sharp inherited vulnerabilities in libvips: CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591 - https://github.com/advisories/GHSA-f88m-g3jw-g9cj
+sharp: Vulnerabilities in libheif: GHSA-g89c-p67h-r497 and GHSA-2jg2-4ch7-h545 - https://github.com/advisories/GHSA-rgj7-g3m4-5g8c
+fix available via `npm audit fix`
+
+
+uuid  <11.1.1
+Severity: moderate
+uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided - https://github.com/advisories/GHSA-w5hq-g745-h8pq
+fix available via `npm audit fix --force`
+Will install @tiptap/extension-table-of-contents@3.31.3, which is outside the stated dependency range
+node_modules/uuid
+  @tiptap/extension-table-of-contents  <=3.22.5
+  Depends on vulnerable versions of uuid
+  node_modules/@tiptap/extension-table-of-contents
+
+ws  8.0.0 - 8.20.1
+Severity: high
+ws: Uninitialized memory disclosure - https://github.com/advisories/GHSA-58qx-3vcg-4xpx
+ws: Memory exhaustion DoS from tiny fragments and data chunks - https://github.com/advisories/GHSA-96hv-2xvq-fx4p
+fix available via `npm audit fix`
+
+
+13 vulnerabilities (5 moderate, 7 high, 1 critical)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues, run:
+  npm audit fix --force

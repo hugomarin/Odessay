@@ -96,7 +96,7 @@ Variables de entorno, cómo levantar el proyecto, tools requeridos, permisos nec
 
 Estructura de issues ejecutables, Definition of Done verificable, validaciones que el agente puede correr (typecheck, lint, tests), criterios de revisión antes del PR. El agente no decide por su cuenta cuándo algo está listo.
 
-**Tipo de documento:** `skill-product-manager.md` + `skill-code-review.md` + comandos ejecutables en `SETUP.md`
+**Tipo de documento:** `skill-planning.md` + `skill-code-review.md` + comandos ejecutables en `SETUP.md`
 
 ---
 
@@ -122,7 +122,7 @@ Estructura de issues ejecutables, Definition of Done verificable, validaciones q
   skill-frontend/      → pregunta 5
   skill-backend/       → pregunta 7
   skill-database/      → pregunta 7
-  skill-product-manager/ → pregunta 10
+  skill-planning/ → pregunta 10
   skill-code-review/   → pregunta 10
 
 /workflow/reference             → pregunta 3 (prototipos y screenshots)

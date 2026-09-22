@@ -307,52 +307,14 @@ describe("webAIService", () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it("blocks suggestTitle for local-only writings when writingId is provided", async () => {
-    localDBMock.writings.get.mockResolvedValue({
-      id: "writing-1",
-      lifecycle: "local-only",
-    })
-
-    const result = await webAIService.suggestTitle({
-      currentTitle: "Untitled",
-      bodyText: "Some text.",
-      writingId: "writing-1",
-    })
-
-    expect(result.error).toEqual({
-      code: "INVALID_INPUT",
-      message: expect.stringContaining("local-only"),
-      retryable: false,
-    })
-    expect(result.data).toBeNull()
-  })
-
-  it("blocks suggestTitle for syncing writings when writingId is provided", async () => {
-    localDBMock.writings.get.mockResolvedValue({
-      id: "writing-1",
-      lifecycle: "syncing",
-    })
-
-    const result = await webAIService.suggestTitle({
-      currentTitle: "Untitled",
-      bodyText: "Some text.",
-      writingId: "writing-1",
-    })
-
-    expect(result.error).toEqual({
-      code: "INVALID_INPUT",
-      message: expect.stringContaining("syncing"),
-      retryable: false,
-    })
-    expect(result.data).toBeNull()
-  })
-
-  it("allows suggestTitle for server-confirmed writings when writingId is provided", async () => {
-    localDBMock.writings.get.mockResolvedValue({
-      id: "writing-1",
-      lifecycle: "server-confirmed",
-    })
-
+  // AI-01: suggestTitle deliberately does NOT gate on lifecycle (unlike
+  // hydrateCorrectionBlocks below) — the title-suggestions route never
+  // reads writingId, so blocking on local-only/syncing only produced false
+  // negatives on real, brand-new drafts. See
+  // tests/integration/ai/suggest-title-lifecycle.test.ts for the full
+  // table-driven proof (all three lifecycle values + no-writingId) and the
+  // capability map's AI-01 row for the investigation that found this.
+  it("does not consult local writing lifecycle for suggestTitle at all", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
@@ -372,6 +334,7 @@ describe("webAIService", () => {
       writingId: "writing-1",
     })
 
+    expect(localDBMock.writings.get).not.toHaveBeenCalled()
     expect(result.error).toBeNull()
     expect(result.data).toEqual({
       title: "Allowed",

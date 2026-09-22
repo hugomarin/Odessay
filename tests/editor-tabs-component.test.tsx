@@ -25,6 +25,8 @@ const renderTabs = (overrides: Partial<React.ComponentProps<typeof EditorTabs>> 
     activeTabId: "writing-1",
     onSelectTab: vi.fn(),
     onCloseTab: vi.fn(),
+    onCloseOtherTabs: vi.fn(),
+    onCloseAllTabs: vi.fn(),
     onRenameTab: vi.fn(),
     onReorderTab: vi.fn(),
     onNewTab: vi.fn(),

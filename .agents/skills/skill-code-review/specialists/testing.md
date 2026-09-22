@@ -1,41 +1,17 @@
 # Specialist: Testing Review
 
-Checklist especializado para revisar cobertura de testing. Aplicar contra el diff.
+Este especialista aplica `.agents/skills/review-testing/SKILL.md`; no define un checklist paralelo de cobertura, calidad de tests o anti-patterns.
 
----
+## Revisión del diff
 
-## Cobertura obligatoria
+Para cada función/componente nuevo o modificado en el diff, verificar contra el criterio de `review-testing`:
 
-Para cada función/componente nuevo o modificado:
+- happy path, error paths (input inválido, red, DB, auth) y edge cases (colección vacía, límite, condición de carrera) cubiertos;
+- el estado intermedio está cubierto cuando el comportamiento correcto depende de él, no solo el resultado final;
+- flujos críticos (auto-save, apertura de documento, sync) tienen cobertura E2E, no solo unitaria;
+- los tests usan mocks/fixtures (nunca staging o producción), son independientes entre sí, y no caen en los anti-patterns listados en `review-testing` (`toBeDefined()` sin verificar comportamiento, `setTimeout` en vez de `waitFor`, render mount sin interacción real).
 
-### Happy path
-- [ ] ¿Existe un test que verifique el comportamiento esperado con input válido?
-
-### Error paths
-- [ ] ¿Hay test para input inválido (Zod rejection, null, undefined)?
-- [ ] ¿Hay test para error de red/timeout?
-- [ ] ¿Hay test para error de base de datos?
-- [ ] ¿Hay test para autenticación fallida (401/403)?
-
-### Edge cases
-- [ ] ¿Empty array / empty string?
-- [ ] ¿Array con 1 elemento / string con 1 carácter?
-- [ ] ¿Límite de longitud (máximo input)?
-- [ ] ¿Race condition posible (doble submit, operación concurrente)?
-
-## Calidad de tests
-
-- [ ] Los tests usan mocks para Supabase, nunca conectan a staging.
-- [ ] Los tests usan fixtures, no hardcodean datos en cada test.
-- [ ] Cada test es independiente (no depende del estado de otro).
-- [ ] Los tests nombran qué comportamiento verifican, no qué función llaman.
-
-## Anti-patterns de testing (rechazar si aparecen)
-
-- `expect(x).toBeDefined()` — no prueba comportamiento.
-- Test que solo verifica que no lanza error — sin assertions de resultado.
-- Test que usa `setTimeout` o `sleep` sin `waitFor` de testing-library.
-- Test de componente que no simula user interaction (solo render mount).
+Los detalles del criterio — qué cuenta como edge case, qué anti-pattern rechazar, cuándo exigir E2E — viven en `review-testing/SKILL.md`. Este archivo solo adapta ese criterio al formato de dispatch.
 
 ## Output esperado
 

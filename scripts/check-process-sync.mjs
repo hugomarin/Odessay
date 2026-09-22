@@ -5,7 +5,7 @@ import { resolveTraceabilityRange } from "./lib/traceability-refs.mjs";
 
 const PROCESS_FILES = [
   "workflow/workflow.md",
-  ".agents/skills/skill-product-manager/SKILL.md",
+  ".agents/skills/skill-planning/SKILL.md",
   ".agents/skills/skill-code-review/SKILL.md",
 ];
 
@@ -43,5 +43,5 @@ if (touchedProcessFiles.length !== PROCESS_FILES.length) {
 }
 
 console.log(
-  "[ops:process:sync] OK - process files updated together (workflow + PM + Code Review).",
+  "[ops:process:sync] OK - process files updated together (workflow + Planning + Code Review).",
 );

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlignLeft, Bot, Scan } from "lucide-react"
+import { Bot, FileSliders, Scan } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { EditorTabs } from "@/components/editor/editor-tabs"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -29,6 +29,10 @@ type EditorTopbarProps = {
   activeTabId: string | null
   onSelectTab: (tabId: string) => void
   onCloseTab: (tabId: string) => void
+  onCloseOtherTabs: (tabId: string) => void
+  onCloseAllTabs: () => void
+  /** Undefined on web — the tab context menu hides "Reveal in Finder" then. */
+  onRevealTab?: (tabId: string) => void
   onRenameTab: (tabId: string) => void
   onReorderTab: (tabId: string, targetTabId: string) => void
   onNewTab: () => void
@@ -52,6 +56,9 @@ export function EditorTopbar({
   activeTabId,
   onSelectTab,
   onCloseTab,
+  onCloseOtherTabs,
+  onCloseAllTabs,
+  onRevealTab,
   onRenameTab,
   onReorderTab,
   onNewTab,
@@ -112,6 +119,9 @@ export function EditorTopbar({
               activeTabId={activeTabId}
               onSelectTab={onSelectTab}
               onCloseTab={onCloseTab}
+              onCloseOtherTabs={onCloseOtherTabs}
+              onCloseAllTabs={onCloseAllTabs}
+              onRevealTab={onRevealTab}
               onRenameTab={onRenameTab}
               onReorderTab={onReorderTab}
               onNewTab={onNewTab}
@@ -148,7 +158,7 @@ export function EditorTopbar({
               aria-label="Properties panel"
               aria-pressed={activePanel === "properties"}
             >
-              <AlignLeft className="h-[18px] w-[18px]" strokeWidth={1.5} />
+              <FileSliders className="h-[18px] w-[18px]" strokeWidth={1.5} />
             </button>
           </ActionTooltip>
 

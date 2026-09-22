@@ -75,8 +75,8 @@ type WritingPreviewModalProps = {
   onCreateWorkspace?: (writingId: string) => void | Promise<void>
   onTitleChange?: (writingId: string, title: string) => Promise<void>
   onOpenFullWriting?: (writingId: string) => void
-  onExportMarkdown?: (writingId: string) => Promise<void> | void
-  onExportDocument?: (writingId: string, format: PreviewExportFormat) => Promise<void>
+  onExportMarkdown?: (writingId: string) => Promise<boolean | void> | boolean | void
+  onExportDocument?: (writingId: string, format: PreviewExportFormat) => Promise<boolean | void>
   onShare?: (writingId: string) => Promise<PreviewShareResult>
   onOpenWebAction?: (writingId: string, action: "publish" | "share") => Promise<void>
   onDelete?: (writingId: string) => Promise<void>
@@ -260,7 +260,8 @@ export function WritingPreviewModal({
     setActionFeedback(null)
     setExportingFormat("markdown")
     try {
-      await onExportMarkdown(row.id)
+      const exported = await onExportMarkdown(row.id)
+      if (exported !== true) return
       setActionFeedback({ tone: "ok", message: "Markdown exported." })
     } catch (error) {
       setActionFeedback({
@@ -281,7 +282,8 @@ export function WritingPreviewModal({
       setActionFeedback(null)
       setExportingFormat(format)
       try {
-        await onExportDocument(row.id, format)
+        const exported = await onExportDocument(row.id, format)
+        if (exported !== true) return
         setActionFeedback({ tone: "ok", message: `${format.toUpperCase()} exported.` })
       } catch (error) {
         setActionFeedback({
@@ -548,7 +550,7 @@ export function WritingPreviewModal({
         <DialogDescription className="sr-only">Read-only artifact preview from Desk.</DialogDescription>
 
         <DocumentStateTooltipProvider>
-        <div className="flex h-full min-h-0 flex-col">
+        <div className="flex h-full min-h-0 min-w-0 flex-col">
           {/* Layer 0 — the chrome row. */}
           <div
             data-testid="preview-chrome"
@@ -636,8 +638,8 @@ export function WritingPreviewModal({
           ) : null}
 
           {/* Layer 1 — the two sheets. */}
-          <div className="flex min-h-0 flex-1 gap-2">
-            <main className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-sb shadow-float">
+          <div className="flex min-h-0 min-w-0 flex-1 gap-2">
+            <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-sb shadow-float">
               <div
                 data-testid="preview-sheet-header"
                 className="flex-shrink-0 border-b-[0.5px] border-line-soft px-10 pb-[22px] pt-[26px]"
@@ -699,7 +701,7 @@ export function WritingPreviewModal({
                   <div className="h-4 w-5/6 animate-pulse rounded bg-muted" />
                 </div>
               ) : preview ? (
-                <div className="od-scroll min-h-0 flex-1 overflow-y-auto px-10 pb-[60px] pt-[30px]">
+                <div className="od-scroll min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-10 pb-[60px] pt-[30px]">
                   <WritingContentFrame
                     title={preview.title}
                     bodyHtml={preview.bodyHtml}

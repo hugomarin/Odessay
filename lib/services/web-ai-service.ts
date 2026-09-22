@@ -117,18 +117,12 @@ function unavailable<T>(message: string, code: ServiceError["code"] = "UNAVAILAB
 
 export const webAIService: AIService = {
   async suggestTitle(input: TitleSuggestionRequest) {
-    if (input.writingId) {
-      const lifecycleCheck = await checkWritingLifecycleForRemoteAI(input.writingId)
-
-      if (!lifecycleCheck.allowed) {
-        return err<TitleSuggestion>({
-          code: "INVALID_INPUT",
-          message: `Cannot suggest a title for a writing that has not been synced yet. (${lifecycleCheck.reason})`,
-          retryable: false,
-        })
-      }
-    }
-
+    // No lifecycle gate here (unlike hydrateCorrectionBlocks below): the
+    // title-suggestions route never reads writingId at all — it only takes
+    // currentTitle/bodyText — so gating on sync lifecycle blocks real,
+    // synceable requests (every brand-new draft is local-only until its
+    // first sync) without protecting anything server-side. See AI-01 in
+    // workflow/quality/capability-integration-map.md.
     try {
       const response = await fetch("/api/ai/title-suggestions", {
         method: "POST",

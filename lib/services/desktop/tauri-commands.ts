@@ -1,6 +1,9 @@
 import { invoke } from "@tauri-apps/api/core"
 import { markOdessaySelfWritePath } from "@/lib/services/desktop/tauri-fs-watch"
 import type { DocumentCatalogReference } from "@/lib/services/contracts/document-catalog"
+import { WriteFileConflictError } from "@/lib/services/desktop/write-file-conflict-error"
+
+export { WriteFileConflictError }
 
 export type DesktopFileMetadata = {
   path: string
@@ -107,7 +110,13 @@ export async function tauriWriteNewFile(path: string, content: string): Promise<
   markOdessaySelfWritePath(path)
 }
 
-export async function tauriWriteFile(path: string, content: string): Promise<void> {
+const CONFLICT_ERROR_PREFIX = "CONFLICT:"
+
+export async function tauriWriteFile(
+  path: string,
+  content: string,
+  expectedContentHash?: string | null,
+): Promise<void> {
   // `write_file` (Rust) writes to `${path}.tmp` then renames it onto `path` —
   // the watcher reports a `create` and a `rename` for the .tmp sibling before
   // the final rename onto `path` itself. Only marking `path` left those two
@@ -115,7 +124,14 @@ export async function tauriWriteFile(path: string, content: string): Promise<voi
   // BindingRoot scan for a change that was entirely our own write.
   markOdessaySelfWritePath(path)
   markOdessaySelfWritePath(`${path}.tmp`)
-  await invoke<void>("write_file", { path, content })
+  try {
+    await invoke<void>("write_file", { path, content, expectedContentHash: expectedContentHash ?? null })
+  } catch (error) {
+    if (typeof error === "string" && error.startsWith(CONFLICT_ERROR_PREFIX)) {
+      throw new WriteFileConflictError(error)
+    }
+    throw error
+  }
   markOdessaySelfWritePath(path)
 }
 

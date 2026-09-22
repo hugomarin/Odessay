@@ -5,6 +5,8 @@ Lee `workflow/define/dod-fase-4.md`, `workflow/define/validacion-fase-4.md` y la
 
 Este documento analiza las fallas de Fase 4 que ya fueron corregidas (ODE-198 a ODE-202), clasifica cuáles fueron puramente bugs de implementación y cuáles fueron amplificadas por contratos operativos implícitos o débiles, y fija los contratos mínimos que deben existir explícitamente para que fases futuras no repitan los mismos patrones.
 
+> **Nota histórica D2/D3 — 2026-09-16:** las referencias de este audit a `==texto==[@…]` describen el contrato vigente durante Fase 4. El ADR actual adopta `<Annotation>` como sintaxis canónica objetivo y mantiene la forma anterior sólo como entrada de migración.
+
 ---
 
 ## 1) Resumen ejecutivo
@@ -164,11 +166,11 @@ local-only  →  pending  →  synced  →  conflict
 
 **Qué gobierna:** la relación entre la notación de anotación inline del documento y la tabla `margins`.
 
-> Reconciliado con `workflow/context/core/odessay-adr-identidad.md` (D3).
+> Contrato histórico de Fase 4. La enmienda D2/D3 de 2026-09-16 conserva estos invariantes de autoridad e identidad, pero cambia la representación source a `<Annotation>`.
 
 **Invariantes:**
 
-1. El **documento canónico** (`.md` con anotaciones inline `==texto==[@n:..]`) es la fuente de verdad del contenido anotado; `body_json` es la copia de trabajo.
+1. El **documento canónico** es la fuente de verdad del contenido anotado; `body_json` es la copia de trabajo. En Fase 4 la representación era `==texto==[@n:..]`; el contrato objetivo usa `<Annotation>`.
 2. `margins` es el payload/índice en la nube para listar, filtrar y compartir, y conserva el estado de colaboración (`resolved/shared/shared_at`) que no vive en el documento.
 3. Cada `save` extrae las anotaciones de la copia de trabajo, hace upsert por `id` en `margins`, y elimina filas cuyo `id` ya no existe. **Bloqueante (D3):** el `id` debe codificarse inline para sobrevivir el round-trip; hoy se regenera y este paso borra el estado de colaboración.
 4. Durante una transición de schema de `margins`, el adapter debe soportar tanto el schema legacy (`note`) como el schema moderno (`type`, `text`, `archived`, `resolved`).

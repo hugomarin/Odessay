@@ -12,13 +12,18 @@ import {
 } from "@/lib/ai/title-suggestions";
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors";
+import { logAiAdmissionEvent, releaseAiAdmission, tryAcquireAiAdmission } from "@/lib/ai/admission";
 
 const requestSchema = z.object({
   currentTitle: z.string().trim().max(160).default("Untitled artifact"),
   bodyText: z.string().max(50000).default(""),
 });
 
-const jsonError = (status: number, code: string, message: string) =>
+// ODE-524: this route had no timeout at all — an unresponsive provider could
+// hold an admitted concurrency slot open indefinitely.
+const PROVIDER_REQUEST_TIMEOUT_MS = 45_000;
+
+const jsonError = (status: number, code: string, message: string, headers?: HeadersInit) =>
   NextResponse.json(
     {
       data: null,
@@ -27,7 +32,7 @@ const jsonError = (status: number, code: string, message: string) =>
         message,
       },
     },
-    { status },
+    { status, headers },
   );
 
 async function requestTitleSuggestion(requestBody: z.infer<typeof requestSchema>) {
@@ -37,31 +42,40 @@ async function requestTitleSuggestion(requestBody: z.infer<typeof requestSchema>
     bodyText: requestBody.bodyText,
   });
 
-  const response = await fetch(config.chatCompletionsUrl, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "authorization": `Bearer ${config.apiKey}`,
-      "user-agent": "ArtifactStudio/1.0",
-    },
-    body: JSON.stringify({
-      model: config.model,
-      max_tokens: 256,
-      temperature: 0.4,
-      top_p: config.topP,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: buildTitleSuggestionSystemPrompt(),
-        },
-        {
-          role: "user",
-          content: promptText,
-        },
-      ],
-    }),
-  });
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), PROVIDER_REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(config.chatCompletionsUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "authorization": `Bearer ${config.apiKey}`,
+        "user-agent": "ArtifactStudio/1.0",
+      },
+      body: JSON.stringify({
+        model: config.model,
+        max_tokens: 256,
+        temperature: 0.4,
+        top_p: config.topP,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: buildTitleSuggestionSystemPrompt(),
+          },
+          {
+            role: "user",
+            content: promptText,
+          },
+        ],
+      }),
+      signal: abortController.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const errorPayload = await response.text();
@@ -109,6 +123,19 @@ export async function POST(request: Request) {
     return withCorsHeaders(jsonError(422, "INVALID_INPUT", "Write a little more before asking AI for a title."), request);
   }
 
+  const admission = await tryAcquireAiAdmission({ accountId: userId, routeKey: "title-suggestions" });
+  if (!admission.admitted) {
+    return withCorsHeaders(
+      jsonError(
+        429,
+        admission.reason === "rate_limited" ? "RATE_LIMITED" : "CONCURRENCY_LIMITED",
+        "Too many AI requests right now. Try again shortly.",
+        { "Retry-After": String(admission.retryAfterSeconds) },
+      ),
+      request,
+    );
+  }
+
   try {
     const suggestion = await requestTitleSuggestion(parsed.data);
     return withCorsHeaders(NextResponse.json({
@@ -116,8 +143,19 @@ export async function POST(request: Request) {
       error: null,
     }), request);
   } catch (error) {
+    const isAbort = error instanceof Error && error.name === "AbortError";
+    logAiAdmissionEvent({ event: isAbort ? "timeout" : "provider_error", routeKey: "title-suggestions" });
     console.error("[title-suggestions]", error);
-    return withCorsHeaders(jsonError(502, "AI_REQUEST_FAILED", "Could not suggest a name right now."), request);
+    return withCorsHeaders(
+      jsonError(
+        isAbort ? 504 : 502,
+        "AI_REQUEST_FAILED",
+        isAbort ? "Title suggestion timed out." : "Could not suggest a name right now.",
+      ),
+      request,
+    );
+  } finally {
+    await releaseAiAdmission(admission.leaseId);
   }
 }
 

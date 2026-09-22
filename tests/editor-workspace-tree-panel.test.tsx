@@ -26,6 +26,14 @@ vi.mock("@/lib/services/workspace-service", () => ({
   },
 }));
 
+// The preview modal's collections plumbing (loaded on mount) is out of scope
+// for these tree-rendering tests — stub it so the panel doesn't reach for
+// IndexedDB in happy-dom.
+vi.mock("@/lib/queries/desk-catalog-source", () => ({
+  loadCollectionState: async () => ({ collections: [], writingCollections: [] }),
+  getLocalDBScope: () => "anonymous",
+}));
+
 /** Emit a catalog change the way the SQLite catalog does after a save. */
 function emitCatalogChange(
   documentIds: string[],
@@ -59,6 +67,7 @@ function workspaceWith(
   return {
     slug: "aplyca",
     name: "Aplyca",
+    rootPath: "/Users/test/Aplyca",
     status: "ready",
     missingReason: null,
     documents,
@@ -76,6 +85,10 @@ const activeDocument = {
   name: "aplyca-analisis.md",
   relativePath: "03-analisis/aplyca-analisis.md",
   state: "synced" as const,
+  status: "draft" as const,
+  artifactType: "general",
+  excerpt: null,
+  modifiedAt: 0,
   openable: true,
 };
 
@@ -84,6 +97,10 @@ const siblingDocument = {
   name: "sesion.md",
   relativePath: "04-sesiones/sesion.md",
   state: "synced" as const,
+  status: "draft" as const,
+  artifactType: "general",
+  excerpt: null,
+  modifiedAt: 0,
   openable: true,
 };
 
@@ -138,16 +155,32 @@ describe("WorkspaceTreePanel", () => {
     render(ACTIVE_ID);
     await settle();
 
-    const rows = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
+    // Row labels only — a status icon's own text (a Material Symbols
+    // ligature, e.g. "pending") is part of the button's textContent too, so
+    // matching against the whole row would false-positive/negative on it.
+    const treeItems = () =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'));
+    const rowLabels = () =>
+      treeItems().map((row) => row.querySelector(".flex-1.overflow-hidden.whitespace-nowrap")?.textContent?.trim());
+    // Folders appear, collapsed by default.
+    expect(rowLabels()).toContain("03-analisis");
+    expect(rowLabels()).toContain("04-sesiones");
+    expect(rowLabels()).not.toContain("aplyca-analisis");
+    expect(rowLabels()).not.toContain("sesion");
+
+    // Files appear once their folder is expanded (not foldersOnly).
+    const folder03 = treeItems().find(
+      (row) => row.querySelector(".flex-1.overflow-hidden.whitespace-nowrap")?.textContent?.trim() === "03-analisis",
     );
-    const rowText = rows.map((row) => row.textContent?.trim());
-    // Folders appear
-    expect(rowText.some((name) => name?.includes("03-analisis"))).toBe(true);
-    expect(rowText.some((name) => name?.includes("04-sesiones"))).toBe(true);
-    // Files also appear in Studio mode (not foldersOnly)
-    expect(rowText.some((name) => name?.includes("aplyca-analisis"))).toBe(true);
-    expect(rowText.some((name) => name?.includes("sesion"))).toBe(true);
+    const folder04 = treeItems().find(
+      (row) => row.querySelector(".flex-1.overflow-hidden.whitespace-nowrap")?.textContent?.trim() === "04-sesiones",
+    );
+    await act(async () => {
+      folder03?.click();
+      folder04?.click();
+    });
+    expect(rowLabels()).toContain("aplyca-analisis");
+    expect(rowLabels()).toContain("sesion");
   });
 
   it("shows a non-actionable empty state when there is no active writing", async () => {
@@ -311,7 +344,7 @@ describe("WorkspaceTreePanel", () => {
     expect(container.textContent).not.toContain("Loading workspace");
   });
 
-  it("keeps folders the author collapsed across a tree rebuild", async () => {
+  it("keeps folders the author expanded across a tree rebuild", async () => {
     const nested = {
       ...siblingDocument,
       relativePath: "04-sesiones/sesion.md",
@@ -321,21 +354,32 @@ describe("WorkspaceTreePanel", () => {
     render(ACTIVE_ID);
     await settle();
 
-    const folder = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
-    ).find((row) => row.textContent?.includes("04-sesiones"));
-    await act(async () => {
-      folder?.click();
-    });
-    expect(folder?.getAttribute("aria-expanded")).toBe("false");
+    // Row labels only — a status icon's own text (a Material Symbols
+    // ligature, e.g. "pending") is part of the button's textContent too, so
+    // matching against the whole row would false-positive/negative on it.
+    const findFolder = () =>
+      Array.from(
+        container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
+      ).find(
+        (row) => row.querySelector(".flex-1.overflow-hidden.whitespace-nowrap")?.textContent?.trim() === "04-sesiones",
+      );
     const documentRows = () =>
       Array.from(
         container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
-      ).map((row) => row.textContent?.trim());
+      ).map((row) => row.querySelector(".flex-1.overflow-hidden.whitespace-nowrap")?.textContent?.trim());
+
+    // Folders open collapsed by default.
+    expect(findFolder()?.getAttribute("aria-expanded")).toBe("false");
     expect(documentRows()).not.toContain("sesion");
 
+    await act(async () => {
+      findFolder()?.click();
+    });
+    expect(findFolder()?.getAttribute("aria-expanded")).toBe("true");
+    expect(documentRows()).toContain("sesion");
+
     // A reconciled add/move/remove legitimately rebuilds the tree. The author's
-    // collapsed folders must survive it.
+    // expanded folders must survive it.
     refreshContextualWorkspaceDocuments.mockResolvedValueOnce(
       workspaceWith([
         activeDocument,
@@ -345,6 +389,10 @@ describe("WorkspaceTreePanel", () => {
           name: "nuevo.md",
           relativePath: "nuevo.md",
           state: "synced" as const,
+          status: "draft" as const,
+          artifactType: "general",
+          excerpt: null,
+          modifiedAt: 0,
           openable: true,
         },
       ]),
@@ -355,11 +403,8 @@ describe("WorkspaceTreePanel", () => {
     });
     await settle();
 
-    // Root-level files are not shown in foldersOnly mode, but the folder
-    // collapse state must survive the rebuild.
-    const rebuilt = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
-    ).find((row) => row.textContent?.includes("04-sesiones"));
-    expect(rebuilt?.getAttribute("aria-expanded")).toBe("false");
+    // The folder's expanded state must survive the rebuild.
+    expect(findFolder()?.getAttribute("aria-expanded")).toBe("true");
+    expect(documentRows()).toContain("sesion");
   });
 });

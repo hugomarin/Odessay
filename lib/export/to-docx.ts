@@ -15,6 +15,7 @@ import {
   ShadingType,
 } from "docx"
 import type { WritingExportBlock, WritingExportDocument, WritingExportInline } from "./writing-export"
+import { fetchImageSafely, mapWithConcurrencyLimit } from "./safe-image-fetch"
 import * as S from "./styles"
 
 type RenderDocxParams = {
@@ -43,20 +44,6 @@ const inlineRunToDocx = (run: WritingExportInline) => {
   })
 }
 
-const readImageType = (src: string, contentType: string | null): "png" | "jpg" | "gif" | "bmp" => {
-  const normalizedType = contentType?.toLowerCase() ?? ""
-  if (normalizedType.includes("jpeg") || normalizedType.includes("jpg")) return "jpg"
-  if (normalizedType.includes("gif")) return "gif"
-  if (normalizedType.includes("bmp")) return "bmp"
-  if (normalizedType.includes("png")) return "png"
-
-  const pathname = src.split("?")[0]?.toLowerCase() ?? ""
-  if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "jpg"
-  if (pathname.endsWith(".gif")) return "gif"
-  if (pathname.endsWith(".bmp")) return "bmp"
-  return "png"
-}
-
 const imageFallbackParagraph = (src: string, alt?: string | null) =>
   new Paragraph({
     children: [
@@ -77,40 +64,35 @@ const imageFallbackParagraph = (src: string, alt?: string | null) =>
     spacing: { after: S.PARAGRAPH_MARGIN_BOTTOM_DOCX },
   })
 
-const IMAGE_FETCH_TIMEOUT_MS = 10_000
-
+// ODE-522: the raw `fetch(src)` this replaced followed redirects
+// automatically, trusted Content-Type without decoding, and had no size
+// cap — the audit reproduced a redirect to loopback and non-image bytes
+// embedded straight into the document. fetchImageSafely is the one place
+// that validates scheme, destination and bytes for both export formats.
 const imageBlockToDocx = async (block: Extract<WritingExportBlock, { type: "image" }>) => {
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS)
-
-  try {
-    const response = await fetch(block.image.src, { signal: controller.signal })
-    if (!response.ok) {
-      return [imageFallbackParagraph(block.image.src, block.image.alt)]
-    }
-
-    const data = await response.arrayBuffer()
-    return [
-      new Paragraph({
-        children: [
-          new ImageRun({
-            type: readImageType(block.image.src, response.headers.get("content-type")),
-            data,
-            transformation: {
-              width: S.IMAGE_MAX_WIDTH_PX,
-              height: S.IMAGE_MAX_HEIGHT_PX,
-            },
-          }),
-        ],
-        spacing: { after: S.PARAGRAPH_MARGIN_BOTTOM_DOCX },
-      }),
-    ]
-  } catch {
+  const result = await fetchImageSafely(block.image.src)
+  if (!result.ok) {
     return [imageFallbackParagraph(block.image.src, block.image.alt)]
-  } finally {
-    clearTimeout(timeoutId)
   }
+
+  return [
+    new Paragraph({
+      children: [
+        new ImageRun({
+          type: result.format,
+          data: result.data,
+          transformation: {
+            width: S.IMAGE_MAX_WIDTH_PX,
+            height: S.IMAGE_MAX_HEIGHT_PX,
+          },
+        }),
+      ],
+      spacing: { after: S.PARAGRAPH_MARGIN_BOTTOM_DOCX },
+    }),
+  ]
 }
+
+const IMAGE_FETCH_CONCURRENCY = 4
 
 const codeBlockRunsToDocx = (code: string) =>
   code.split("\n").map(
@@ -308,8 +290,15 @@ const blockToElementsAsync = async (block: WritingExportBlock): Promise<(Paragra
 }
 
 const buildDocxDocument = async ({ title, bodyText, document }: RenderDocxParams) => {
+  // ODE-522: bounded concurrency, not one Promise.all fetching every image
+  // in the document at once — a document with many images must not open
+  // an unbounded number of simultaneous outbound connections.
   const bodyElements = document.blocks.length
-    ? (await Promise.all(document.blocks.map((block) => blockToElementsAsync(block)))).flat()
+    ? (
+        await mapWithConcurrencyLimit(document.blocks, IMAGE_FETCH_CONCURRENCY, (block) =>
+          blockToElementsAsync(block),
+        )
+      ).flat()
     : bodyText?.trim()
       ? [
           new Paragraph({

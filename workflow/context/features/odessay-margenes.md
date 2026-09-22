@@ -3,6 +3,8 @@
 **Documento de referencia para agentes de desarrollo.**
 Lee `odessay-fundacional.md` para la visión, `odessay-flujos.md` para los flujos de escritura y lectura, y `odessay-ai-editor.md` para el agente AI.
 
+> **Actualización D2/D3 — 2026-09-16:** el ADR reemplaza la notación `==texto==[@…]` por `<Annotation>` como sintaxis canónica objetivo. Las secciones técnicas que todavía describen highlight + marcador puntual documentan el runtime legacy y la entrada de migración; el estado colaborativo continúa en `margins`, enlazado por el mismo `id` estable.
+
 ---
 
 ## Qué son los márgenes
@@ -127,18 +129,18 @@ Los márgenes compartidos no se convierten en un writing independiente en v1 —
 
 La relación entre la notación de anotación inline en el documento y la tabla materializada `margins` debe ser explícita y verificable.
 
-> **Reconciliado con `workflow/context/core/odessay-adr-identidad.md` (D3).** La fuente de verdad del contenido anotado es el **documento canónico** (el `.md` con `==texto==[@n: comentario]` inline), no `body_json`. `body_json` es la copia de trabajo del editor. `margins` es el **payload en la nube**, atado al `id` estable de cada anotación.
+> **Reconciliado con `workflow/context/core/odessay-adr-identidad.md` (D3).** La fuente de verdad del contenido anotado es el **documento canónico** (el `.md` con `<Annotation>`), no `body_json`. `body_json` es la copia de trabajo del editor. `margins` conserva la proyección consultable y el estado colaborativo cloud, atado al `id` estable de cada anotación.
 
 ### Invariantes
 
-1. **El documento canónico es la fuente de verdad del contenido anotado.** La notación inline (`==highlight==` define el rango, el marcador lleva el comentario) determina qué anotaciones existen, dónde están y de qué tipo son. El `anchor` (rango) se **deriva del span `==highlight==`** que precede al marcador — no se almacena aparte ni se pierde en el round-trip mientras `==..==` round-trippee.
-2. **`margins` es un payload/índice en la nube.** Su propósito es listar, filtrar y compartir anotaciones, y conservar el estado de colaboración (`resolved/shared/shared_at`) que NO vive en el documento. Reconstruible desde el documento salvo ese estado.
-3. **Sincronización por `save`.** Cada `save` extrae las anotaciones de la copia de trabajo, hace upsert por `id` en `margins`, y elimina las filas cuyo `id` ya no existe. **Riesgo bloqueante (D3):** como el `id` no se codifica inline y el round-trip lo regenera, hoy este paso **borra** el estado de colaboración de cada anotación en cada ciclo. Codificar el `id` estable inline es prerrequisito.
+1. **El documento canónico es la fuente de verdad del contenido anotado.** `<Annotation>` contiene el `id`, `type`, `comment` y el texto anclado. El parser no reconstruye el anchor por proximidad ni genera identidad.
+2. **`margins` es una proyección/índice en la nube.** Su propósito es listar, filtrar y compartir anotaciones, y conservar el estado de colaboración (`resolved/shared/shared_at`) que NO vive en el documento. El contenido reflejado es reconstruible desde el documento; el estado colaborativo no.
+3. **Sincronización por `save`.** Cada `save` válido extrae las anotaciones del Document IR, hace upsert por `id` en `margins` y elimina las filas cuyo `id` ya no existe. Si hay errores estructurales o source opaco, la ausencia no se interpreta como borrado y no se ejecuta la poda. Durante la migración, el reader legacy debe producir el mismo IR y conservar el mismo `id`.
 4. **Transición de schema.** Durante una transición de schema de `margins`, el adapter debe soportar tanto el schema legacy (`note`) como el schema moderno (`type`, `text`, `archived`, `resolved`). El código debe detectar qué schema está activo y adaptar la query sin fallar.
 
-### Hallazgo ODE-294 — derivación real de anchors
+### Hallazgo histórico ODE-294 — derivación de anchors en el runtime legacy
 
-La revisión de código confirma D3: el rango de una anotación **no se almacena aparte en el marcador puntual**. Se deriva del texto con marca `highlight` inmediatamente anterior al nodo `annotationReference` / `footnoteReference`.
+La revisión de código documentó el runtime anterior a la enmienda D2/D3: el rango de una anotación no se almacenaba aparte en el marcador puntual y se derivaba del texto con marca `highlight` inmediatamente anterior al nodo `annotationReference` / `footnoteReference`. Esta cadena se conserva como evidencia para construir la migración, no como diseño objetivo.
 
 Cadena actual verificable:
 
@@ -151,7 +153,7 @@ Cadena actual verificable:
 7. El símbolo real que reconstruye la tabla materializada desde `body_json` sí es `syncMarginsFromBodyJson`; hace `upsert` por `id` y luego borra filas del mismo `writing_id`/`reader_id` cuyo `id` ya no está en el documento (`lib/margins/margins.ts:403`, `lib/margins/margins.ts:415`, `lib/margins/margins.ts:418`, `lib/margins/margins.ts:440`, `lib/margins/margins.ts:441`, `lib/margins/margins.ts:444`, `lib/margins/margins.ts:447`).
 8. El save path web invoca esa reconstrucción al persistir `body_json` en `PATCH /api/writings/[id]` y en la ruta de anotación (`app/api/writings/[id]/route.ts:130`, `app/api/writings/[id]/route.ts:171`, `app/api/writings/[id]/route.ts:191`, `app/api/writings/[id]/annotate/route.ts:74`).
 
-Conclusión: D3 queda confirmado en la derivación del rango. El gap destructivo no está en `anchor_start` / `anchor_end`, sino en identidad: el markdown inline actual porta `type/index/text`, pero no porta el `id`, y por eso un round-trip markdown vuelve a generar ids y hace que `syncMarginsFromBodyJson` elimine las filas previas de `margins`.
+Conclusión histórica: el runtime legacy derivaba correctamente el rango, pero no preservaba identidad de forma segura. La enmienda D2/D3 reemplaza esa representación por `<Annotation>` con `id` inline y exige que la poda de `margins` se suspenda ante errores de parseo.
 
 ### Reglas de schema transition
 

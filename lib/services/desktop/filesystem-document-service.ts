@@ -19,7 +19,7 @@ import {
   titleToFilename,
   UNTITLED_DOCUMENT_NAME,
 } from "@/lib/desktop/document-naming"
-import { parseDocumentFileToSnapshot } from "@/lib/editor/document-serialization"
+import { parseDocumentFileToSnapshot, type DocumentSerializationSnapshot } from "@/lib/editor/document-serialization"
 import { renderWritingToDocxBytes } from "@/lib/export/to-docx"
 import { renderWritingToPdfBytes } from "@/lib/export/to-pdf"
 import { buildWritingExportDocument } from "@/lib/export/writing-export"
@@ -31,6 +31,7 @@ import {
   tauriWriteFile,
 } from "@/lib/services/desktop/tauri-commands"
 import type { DesktopFileMetadata } from "@/lib/services/desktop/tauri-commands"
+import { WriteFileConflictError } from "@/lib/services/desktop/write-file-conflict-error"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -46,13 +47,22 @@ function isoNow(): string {
   return new Date().toISOString()
 }
 
-function extractPlainText(markdown: string): string {
-  return markdown
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/[*_`~]+/g, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/\n{2,}/g, " ")
-    .trim()
+/**
+ * Deliberately does NOT run markdown through parseDocumentFileToSnapshot
+ * (a real TipTap Editor instantiation) here. The only production caller —
+ * DesktopDocumentService.openWriting/renameWriting, behind
+ * getDocumentService() — already does that parse itself (via
+ * desktopDocumentEngine.parseSourceDocument) and never reads this class's
+ * own richText/plainText at all; an earlier pass added a real parse here
+ * too, which meant every document open/rename on the real app paid for two
+ * full Editor instantiations over the same markdown instead of one, on the
+ * hottest path in the whole app (every tab switch, every workspace-tree
+ * open). Parsing has exactly one owner; this stays a cheap, non-throwing
+ * placeholder for direct/test callers of this class that don't go through
+ * that owner.
+ */
+function derivePlainText(markdown: string): { richText: DocumentSerializationSnapshot["bodyJson"] | null; plainText: string } {
+  return { richText: null, plainText: markdown }
 }
 
 function fileMetadataToSummary(meta: DesktopFileMetadata): WritingSummary {
@@ -274,7 +284,10 @@ export class FilesystemDocumentService implements DocumentService {
       const markdown = await tauriOpenFile(writingId)
       const filename = writingId.split("/").pop() ?? writingId
       const title = filenameToTitle(filename)
-      const plainText = extractPlainText(markdown)
+      // See derivePlainText: parsing markdown into richText belongs to
+      // DesktopDocumentService.openWriting (the real caller), which already
+      // does it via desktopDocumentEngine.parseSourceDocument.
+      const { richText, plainText } = derivePlainText(markdown)
       const now = isoNow()
       const writing: WritingRecord = {
         id: writingId,
@@ -282,7 +295,7 @@ export class FilesystemDocumentService implements DocumentService {
         title,
         content: {
           markdown,
-          richText: null,
+          richText,
           plainText,
           canonicalSource: "markdown",
         },
@@ -308,10 +321,10 @@ export class FilesystemDocumentService implements DocumentService {
    * Emits a "saved" event after the file is fully persisted.
    */
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
-    const { writing } = input
+    const { writing, expectedContentHash } = input
     const markdown = writing.content.markdown ?? ""
     try {
-      await tauriWriteFile(writing.id, markdown)
+      await tauriWriteFile(writing.id, markdown, expectedContentHash)
       const savedRecord: WritingRecord = {
         ...writing,
         updatedAt: isoNow(),
@@ -320,6 +333,9 @@ export class FilesystemDocumentService implements DocumentService {
       this.emitSaved(writing.id)
       return ok(savedRecord)
     } catch (e) {
+      if (e instanceof WriteFileConflictError) {
+        return err("CONFLICT", e.message)
+      }
       return err("STORAGE_ERROR", e instanceof Error ? e.message : "Failed to save writing")
     }
   }
@@ -350,6 +366,9 @@ export class FilesystemDocumentService implements DocumentService {
       const resolvedNewPath = await tauriRenameFile(writingId, newPath)
 
       const markdown = await tauriOpenFile(resolvedNewPath)
+      // See derivePlainText: DesktopDocumentService.renameWriting is the
+      // real caller and doesn't read this class's richText/plainText either.
+      const { richText, plainText } = derivePlainText(markdown)
       const now = isoNow()
       const renamedRecord: WritingRecord = {
         id: resolvedNewPath,
@@ -357,8 +376,8 @@ export class FilesystemDocumentService implements DocumentService {
         title: filenameToTitle(resolvedNewPath),
         content: {
           markdown,
-          richText: null,
-          plainText: extractPlainText(markdown),
+          richText,
+          plainText,
           canonicalSource: "markdown",
         },
         slug: null,
