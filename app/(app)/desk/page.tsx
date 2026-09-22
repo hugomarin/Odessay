@@ -836,7 +836,7 @@ export default function DeskPage() {
       throw new Error(result.error?.message ?? `Failed to export ${format.toUpperCase()}.`)
     }
 
-    await saveBinaryArtifact(result.data)
+    return saveBinaryArtifact(result.data)
   }, [])
 
   const shareWritingFromPreview = useCallback(

@@ -324,15 +324,15 @@ export function PropertiesPanel({
       try {
         if (format === "markdown") {
           const exported = await onExportMarkdown()
-          if (exported === false) return
+          if (exported !== true) return
           setExportFeedback("Markdown export generated.")
         } else if (format === "pdf") {
           const exported = await onExportPdf()
-          if (exported === false) return
+          if (exported !== true) return
           setExportFeedback("PDF export generated.")
         } else {
           const exported = await onExportDocx()
-          if (exported === false) return
+          if (exported !== true) return
           setExportFeedback("Word export generated.")
         }
       } catch (error) {

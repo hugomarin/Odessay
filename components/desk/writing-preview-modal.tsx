@@ -76,7 +76,7 @@ type WritingPreviewModalProps = {
   onTitleChange?: (writingId: string, title: string) => Promise<void>
   onOpenFullWriting?: (writingId: string) => void
   onExportMarkdown?: (writingId: string) => Promise<void> | void
-  onExportDocument?: (writingId: string, format: PreviewExportFormat) => Promise<void>
+  onExportDocument?: (writingId: string, format: PreviewExportFormat) => Promise<boolean | void>
   onShare?: (writingId: string) => Promise<PreviewShareResult>
   onOpenWebAction?: (writingId: string, action: "publish" | "share") => Promise<void>
   onDelete?: (writingId: string) => Promise<void>
@@ -281,7 +281,8 @@ export function WritingPreviewModal({
       setActionFeedback(null)
       setExportingFormat(format)
       try {
-        await onExportDocument(row.id, format)
+        const exported = await onExportDocument(row.id, format)
+        if (exported !== true) return
         setActionFeedback({ tone: "ok", message: `${format.toUpperCase()} exported.` })
       } catch (error) {
         setActionFeedback({
