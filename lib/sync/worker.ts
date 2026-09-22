@@ -363,24 +363,29 @@ class SyncWorker {
         });
       }
 
-      if (!canRetryMutation(mutation.attempts + 1)) {
-        // No further attempt will ever run mapRemoteWritingToLocal to move
-        // this writing's lifecycle forward, so the optimistic "syncing"
-        // flip above must be undone here — otherwise a document whose sync
-        // retries are exhausted stays permanently stuck on "syncing",
-        // silently blocking anything gated on lifecycle (e.g.
-        // hydrateCorrectionBlocks) even after connectivity returns and a
-        // later, unrelated mutation for the same document succeeds.
-        if (localWriting && localWriting.lifecycle !== "syncing") {
-          const currentWriting = await this.localDb.writings.get(mutation.entity_id);
-          if (currentWriting && currentWriting.lifecycle === "syncing") {
-            await this.localDb.writings.save({
-              ...currentWriting,
-              lifecycle: localWriting.lifecycle,
-            });
-          }
+      // "syncing" must mean "a remote attempt is actively in flight," not
+      // "a retry is scheduled" — that already has its own signal (sync_status,
+      // the queue's attempts/next_retry_at, and the "retrying" event above).
+      // Reverting only on the terminal failure is not enough: a retryable
+      // failure that leaves lifecycle stuck on "syncing" makes every later
+      // attempt's own pre-attempt snapshot (`localWriting`, captured at the
+      // top of this function) also read "syncing", so the terminal branch's
+      // own `!== "syncing"` guard would never fire either — the bug survives
+      // the whole retry sequence, not just a single attempt. Reverting here,
+      // on every failure, keeps the next attempt's captured lifecycle a
+      // trustworthy pre-attempt baseline (local-only or server-confirmed)
+      // instead of "syncing" carried over from this failure.
+      if (localWriting && localWriting.lifecycle !== "syncing") {
+        const currentWriting = await this.localDb.writings.get(mutation.entity_id);
+        if (currentWriting && currentWriting.lifecycle === "syncing") {
+          await this.localDb.writings.save({
+            ...currentWriting,
+            lifecycle: localWriting.lifecycle,
+          });
         }
+      }
 
+      if (!canRetryMutation(mutation.attempts + 1)) {
         await this.localDb.syncQueue.markFailed(mutation.id, message, Number.MAX_SAFE_INTEGER);
         return "failure";
       }
