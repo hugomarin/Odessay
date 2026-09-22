@@ -2,6 +2,8 @@
 
 Eres un agente de desarrollo trabajando en **Odessay**, un editor epistolar digital construido con Next.js 15, TipTap, Supabase y un provider AI server-side configurable.
 
+Las reglas universales de construcción, invariantes y guardrails del repositorio viven en `AGENTS.md` (raíz) — es su canonical owner. Este documento no las repite: define las instrucciones operativas del sistema `/wf-*` — qué hace cada comando, qué contexto carga, qué roles de agente usa, y cómo interactúa con Linear, ramas y estados.
+
 ## Lo que tienes disponible
 
 - `workflow/docs.json`: El inventario completo del proyecto. Contiene la ruta y descripción de cada archivo en `workflow/` y `.agents/skills/`. Consúltalo para ubicarte.
@@ -16,9 +18,13 @@ Cuando recibas un comando `/wf-*`, lee `workflow/workflow.md` y sigue la secuenc
 
 Los **roles de agente** viven en `.agents/agents/`.
 
-- Para `/wf-define`, usar `.agents/agents/product-manager.md` como rol de orquestación.
+- Para `/wf-define`, usar `.agents/agents/planning-agent.md` como rol de orquestación. Resuelve la topología de ejecución (capabilities, dependencias, critical path) antes de escribir briefs, y usa `.agents/skills/skill-planning/SKILL.md` para endurecer cada issue de esa topología.
+- Para `/wf-build`, usar `.agents/agents/build-agent.md` como rol de orquestación. Ejecuta `.agents/skills/architecture-recon/SKILL.md` antes de implementar cualquier cambio no trivial, para localizar owner/siblings/consumers/tests reales antes de escribir código.
+- Para `/wf-review`, usar `.agents/agents/review-agent.md` como rol de orquestación. Usa `.agents/skills/skill-code-review/SKILL.md` para decidir qué lentes activar (`review-correctness`, `review-architecture`, `review-testing`, `review-change-size`) según el scope real del diff — no todas por defecto.
 - La convención de formato para roles vive en `.agents/agents/README.md`.
 - Los skills en `.agents/skills/` complementan al rol; no lo reemplazan.
+
+Antes de modificar `components/editor/**` o `src-tauri/**`, leer también el `AGENTS.md` local de ese subtree — trae las reglas específicas del hotspot (qué no debe absorber, qué deuda ya está identificada y no debe copiarse).
 
 Si el prompt o task habla de desktop, portabilidad multi-runtime, shared core, adapters, `.md` como documento canónico, o extracción de servicios, empieza por `workflow/docs.json` y sigue la secuencia documental de desktop:
 
@@ -33,50 +39,9 @@ Si además la pregunta es “dónde debe vivir esto” o “qué capa toca”, c
 
 ## Guardrail no negociable — catálogo e identidad documental desktop
 
-Para cualquier trabajo que toque desktop, Desk, Workspace, Open Document, watcher, filesystem, SQLite, IndexedDB, sync/hydration, identidad o apertura documental, la carga mínima obligatoria es:
+Los invariantes de identidad/catálogo, su precedencia (ADR → spec del catálogo → target architecture/plan → código) y el protocolo `Context Gap — Desktop Document Architecture` viven en `AGENTS.md` (raíz) — es el canonical owner de este contrato. Leerlo ahí antes de tocar desktop, Desk, Workspace, Open Document, watcher, filesystem, SQLite, IndexedDB, sync/hydration, identidad o apertura documental. No se repiten aquí para evitar que ambos archivos diverjan con el tiempo.
 
-1. `workflow/context/core/odessay-adr-identidad.md` — autoridad de identidad, contenido y metadata.
-2. `workflow/context/features/odessay-desktop-document-catalog.md` — autoridad del catálogo, BindingRoots, reconciliación, apertura y migración desktop.
-3. La secuencia desktop de cuatro documentos indicada arriba para clasificar estado actual, arquitectura objetivo y plan.
-
-### Precedencia
-
-1. El ADR prevalece en identidad, fuente de verdad y metadata.
-2. El spec del catálogo prevalece en operación desktop: manifests, SQLite, watcher/reconciliador, superficies de consulta, apertura y retiro de IndexedDB.
-3. Target architecture, migration plan y docs de feature se subordinan a ambos.
-4. El código vigente es evidencia del estado actual; no invalida un contrato aceptado. Un camino que lo contradice se clasifica como legacy hasta que migre.
-
-### Invariantes obligatorios
-
-- **Contenido:** el `.md` materializado es la autoridad. SQLite, IndexedDB y Supabase solo guardan proyecciones, metadata o copias según su contrato.
-- **Binding:** `.odessay/index.json` es el ledger durable `ruta relativa ↔ UUID ↔ inode ↔ content_hash` dentro de un `BindingRoot`; no es metadata ni caché descartable de UUIDs local-only.
-- **Catálogo desktop:** SQLite es el único `DocumentCatalog` consultable y la cola durable de sync. No se particiona por usuario ni gobierna el contenido.
-- **Nube:** Supabase gobierna metadata y existencia cloud; auth habilita capacidades cloud, no existencia local.
-- **Reconciliación:** el watcher solo detecta eventos. Un `WorkspaceReconciler` global, montado fuera de las vistas, resuelve identidad y escribe primero manifest atómico y después SQLite en transacción.
-- **Superficies:** Desk, Workspace, Search, Recent y Open Document consultan el mismo `DocumentCatalog`. Ninguna descubre documentos mediante una fuente paralela.
-- **Workspace:** es una vista/filtro organizativo sobre catálogo y `BindingRoots`, no un pipeline documental distinto.
-- **BindingRoot externo:** abrir un archivo fuera de roots requiere confirmación para registrar su carpeta padre; `selectedPaths` empieza limitado al archivo y `visible_as_workspace` no se activa por defecto.
-- **IndexedDB:** sigue siendo el adapter local-first de web. En desktop es compatibilidad transitoria y se retira solo tras cosechar todos los scopes, bindings y mutaciones pendientes.
-- **Apertura:** la entrada pública puede ser `{ kind: "id" }` o `{ kind: "path" }`, pero debe agotar reconciliación antes de acuñar identidad y converger a `OpenDocument(UUID)` antes de hidratar el editor. Workspace no hace seed manual de IndexedDB.
-- **Delegación entre servicios:** un UUID nunca se trata como ruta de filesystem. Toda operación que necesite delegar a un adapter de filesystem resuelve primero `UUID → canonical_path` mediante el `DocumentCatalog`; esta regla aplica dentro de servicios y no solo en la UI.
-- **Guardado:** el orden desktop es `.md` atómico → manifest atómico → SQLite + enqueue en transacción → sync cloud en background.
-- **Boundaries:** la UI no depende directamente de SQLite, manifests, IndexedDB, Supabase, Tauri ni rutas de filesystem para decidir identidad o estado.
-- **Errores:** `NOT_FOUND`, binding huérfano, hash ambiguo o falla de filesystem son resultados recuperables; nunca crean un draft ni otro estado durable como fallback.
-
-### Protocolo ante contradicciones
-
-Si código, brief o documentación contradice un invariante:
-
-1. Emitir `Context Gap — Desktop Document Architecture` antes de implementar la interpretación contradictoria.
-2. Citar el archivo/brief y la conducta exacta; nombrar el invariante vulnerado.
-3. Clasificar el hallazgo: `stale-doc`, `legacy-code`, `incomplete-brief` o `normative-conflict`.
-4. No “promediar” contratos ni asumir que el código actual gana por existir.
-5. Si es `stale-doc`, corregirlo solo cuando la tarea autorice documentación y sincronizar `workflow/docs.json` si aplica.
-6. Si es `legacy-code`, no expandirlo; ejecutarlo solo cuando el issue actual posea explícitamente esa migración. En otro caso, crear/actualizar el follow-up en Linear antes de continuar.
-7. Si es `incomplete-brief`, detener BUILD/SHIP hasta que el Architecture Contract y Required docs queden completos.
-8. Si ADR y spec se contradicen entre sí, clasificar `normative-conflict`, detenerse y pedir una decisión humana; ningún agente puede resolverlo por inferencia.
-
-Un camino legacy no bloquea automáticamente el trabajo si el issue actual existe precisamente para retirarlo y el brief declara migración, rollback y evidencia. Sí bloquea usar ese camino como fundamento de arquitectura nueva.
+Este archivo agrega, sobre esa base, la secuencia de cuatro documentos para clasificar estado actual, arquitectura objetivo y plan de migración — ver arriba.
 
 ## Regla de ramas y commits
 

@@ -822,11 +822,12 @@ export default function DeskPage() {
     const payload = getWritingMarkdownPayload(writingId)
 
     if (!payload) {
-      return
+      return false
     }
 
     const blob = new Blob([payload.markdown], { type: "text/markdown;charset=utf-8" })
     downloadBlob(blob, payload.filename)
+    return true
   }, [getWritingMarkdownPayload])
 
   const exportWritingDocument = useCallback(async (writingId: string, format: "pdf" | "docx") => {
@@ -836,7 +837,7 @@ export default function DeskPage() {
       throw new Error(result.error?.message ?? `Failed to export ${format.toUpperCase()}.`)
     }
 
-    await saveBinaryArtifact(result.data)
+    return saveBinaryArtifact(result.data)
   }, [])
 
   const shareWritingFromPreview = useCallback(

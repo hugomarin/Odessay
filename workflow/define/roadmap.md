@@ -1,7 +1,7 @@
 # ODESSAY — Roadmap
 
 **Documento de referencia para agentes de desarrollo y product management.**
-Lee `workflow/context/core/odessay-fundacional.md` para la visión, `.agents/skills/skill-product-manager/SKILL.md` para el proceso de creación y ejecución de issues.
+Lee `workflow/context/core/odessay-fundacional.md` para la visión, `.agents/skills/skill-planning/SKILL.md` para el proceso de creación y ejecución de issues.
 
 Este documento define el alcance completo del producto: fases, los issues macro que componen cada fase y sus dependencias. Es la fuente de verdad del qué y el cuándo. El cómo vive en los skills.
 
@@ -12,7 +12,7 @@ Este documento define el alcance completo del producto: fases, los issues macro 
 - `workflow/context/features/odessay-desktop-target-architecture.md`
 - `workflow/context/features/odessay-desktop-migration-plan.md`
 
-**Estructura en Linear:** cada fase es un **proyecto independiente** dentro del team Odessay. No hay un proyecto paraguas "Odessay" — el team ya cumple ese rol. Ver `.agents/skills/skill-product-manager/SKILL.md` §Jerarquía de Linear para el contrato completo.
+**Estructura en Linear:** cada fase es un **proyecto independiente** dentro del team Odessay. No hay un proyecto paraguas "Odessay" — el team ya cumple ese rol. Ver `.agents/skills/skill-planning/SKILL.md` §Jerarquía de Linear para el contrato completo.
 
 ---
 
@@ -400,7 +400,7 @@ Web y desktop ya no compiten entre sí; son dos superficies del mismo sistema.
 
 - abrir nuevas líneas de producto antes de cerrar la convergencia
 
-Referencia: `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `workflow/context/features/odessay-prosemirror-tiptap.md`, `workflow/context/core/odessay-stack.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
+Referencia: `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `workflow/context/features/odessay-prosemirror-tiptap.md`, `workflow/context/core/odessay-stack.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-planning/SKILL.md`.
 
 ---
 
@@ -464,7 +464,7 @@ Origen: revisión completa del subsistema en `docs/revision-correcciones-anotaci
 
 Referencia del track: `docs/revision-correcciones-anotaciones-2026-07.md`, `.agents/skills/skill-corrections/SKILL.md`, `workflow/context/features/odessay-ai-writing-assist.md`.
 
-Referencia general: `workflow/context/core/odessay-adr-identidad.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
+Referencia general: `workflow/context/core/odessay-adr-identidad.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-planning/SKILL.md`.
 
 ---
 
@@ -501,7 +501,7 @@ Existe evidencia de producto y arquitectura suficiente para decidir si `Workspac
 
 - `ODE-245` — exploración MVP de Workspace / watched folders, reposicionado como validación post-convergencia y no como trabajo de cierre de Fase 7
 
-Referencia: `workflow/context/core/odessay-watched-folders.md`, `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
+Referencia: `workflow/context/core/odessay-watched-folders.md`, `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-planning/SKILL.md`.
 
 ---
 
@@ -561,7 +561,7 @@ Artifact Studio integra filesystem y nube mediante un catálogo, un binding y un
 
 `ODE-368` y `ODE-369` son auditorías transversales: alimentan la reconciliación y el plan de retiro, pero no sustituyen ninguna entrega de producto.
 
-Referencia: `workflow/define/dod-fase-9.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `workflow/context/core/odessay-adr-identidad.md`, `workflow/context/core/odessay-watched-folders.md`, `workflow/context/features/odessay-workspace.md`, `workflow/context/features/odessay-workspace-diagnostic.md`, `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-migration-diagnostic.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `workflow/context/features/odessay-sync.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
+Referencia: `workflow/define/dod-fase-9.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `workflow/context/core/odessay-adr-identidad.md`, `workflow/context/core/odessay-watched-folders.md`, `workflow/context/features/odessay-workspace.md`, `workflow/context/features/odessay-workspace-diagnostic.md`, `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-migration-diagnostic.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `workflow/context/features/odessay-sync.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-planning/SKILL.md`.
 
 ---
 
@@ -625,7 +625,7 @@ Artifact Studio tiene una identidad visual única y verificable en todas sus sup
 
 Fase 10 corre en paralelo al cierre de Fase 9: `ODE-372` sigue siendo el gate DoD de esa fase y no se absorbe aquí.
 
-Referencia: `workflow/define/dod-fase-10.md`, `docs/design/migration-plan.md`, `docs/design/system-app.md`, `docs/design/layout.md`, `docs/design/overlays.md`, `docs/design/icons.md`, `docs/design/brand.md`, `docs/design/views/*.md`, `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-design/vistas.md`, `.agents/skills/skill-design/tipografia.md`, `.agents/skills/skill-design-landing/SKILL.md`, `.agents/skills/skill-frontend/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`, `workflow/agents.md`.
+Referencia: `workflow/define/dod-fase-10.md`, `docs/design/migration-plan.md`, `docs/design/system-app.md`, `docs/design/layout.md`, `docs/design/overlays.md`, `docs/design/icons.md`, `docs/design/brand.md`, `docs/design/views/*.md`, `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-design/vistas.md`, `.agents/skills/skill-design/tipografia.md`, `.agents/skills/skill-design-landing/SKILL.md`, `.agents/skills/skill-frontend/SKILL.md`, `.agents/skills/skill-planning/SKILL.md`, `workflow/agents.md`.
 
 ---
 
@@ -683,7 +683,7 @@ El agente resuelve enlaces rotos, sugiere tipo/estatus, señala candidatos a arc
 7. **M6 — chrome dual y drag-and-drop:** montaje en Studio y Workspace, arrastrar archivos/carpetas como contexto.
 8. **M7 — gate:** traducción visual contra `skill-design`, matriz de evidencia y aceptación explícita del dueño.
 
-Referencia: `workflow/define/dod-fase-11.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `lib/queries/document-catalog.ts`, `lib/vocabulary/catalog.ts`, `lib/margins/margins.ts`, `lib/collections/collections.ts`, `lib/workspace/types.ts`, `components/editor/panels/editor-right-panel-tabs.tsx`, `components/workspace/workspace-detail.tsx`, `docs/design/system-app.md`, `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`, `workflow/agents.md`.
+Referencia: `workflow/define/dod-fase-11.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `lib/queries/document-catalog.ts`, `lib/vocabulary/catalog.ts`, `lib/margins/margins.ts`, `lib/collections/collections.ts`, `lib/workspace/types.ts`, `components/editor/panels/editor-right-panel-tabs.tsx`, `components/workspace/workspace-detail.tsx`, `docs/design/system-app.md`, `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-planning/SKILL.md`, `workflow/agents.md`.
 
 ---
 
@@ -747,7 +747,7 @@ El autor puede aplicar semántica a una selección e insertar estructuras editor
 
 Las dependencias entre issues, no milestones artificiales, deben hacer cumplir esta secuencia. `ProtectedText`, invocación, render cross-surface y exportación se mantienen como briefs separados cuando sus criterios de entrega sean independientes.
 
-Referencia: `workflow/define/dod-fase-12.md`, `docs/design/document-components-implementation-plan.md`, `docs/design/document-components-playground.md`, `prototypes/document-components-playground.html`, `workflow/context/core/odessay-adr-identidad.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-prosemirror-tiptap.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-performance/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`, `workflow/agents.md`.
+Referencia: `workflow/define/dod-fase-12.md`, `docs/design/document-components-implementation-plan.md`, `docs/design/document-components-playground.md`, `prototypes/document-components-playground.html`, `workflow/context/core/odessay-adr-identidad.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-prosemirror-tiptap.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-performance/SKILL.md`, `.agents/skills/skill-planning/SKILL.md`, `workflow/agents.md`.
 
 ---
 

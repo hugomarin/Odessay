@@ -12,8 +12,9 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { getAssetService } from "@/lib/services/asset-service-factory"
+import { sanitizeSvgMarkup } from "@/lib/security/sanitize-svg"
 
-const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]
+const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/svg+xml"]
 const MAX_SIZE = 5 * 1024 * 1024
 
 type InsertImageModalProps = {
@@ -44,7 +45,7 @@ export function InsertImageModal({ open, writingId, onOpenChange, onConfirm }: I
     if (!selected) return
 
     if (!ALLOWED_TYPES.includes(selected.type)) {
-      setError("Invalid file type. Allowed: png, jpg, jpeg, webp, gif.")
+      setError("Invalid file type. Allowed: png, jpg, jpeg, webp, gif, svg.")
       setFile(null)
       if (inputRef.current) inputRef.current.value = ""
       return
@@ -68,12 +69,16 @@ export function InsertImageModal({ open, writingId, onOpenChange, onConfirm }: I
     setUploading(true)
     setError(null)
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer())
+      let bytes = new Uint8Array(await file.arrayBuffer())
+      if (file.type === "image/svg+xml") {
+        const sanitized = sanitizeSvgMarkup(new TextDecoder().decode(bytes))
+        bytes = new TextEncoder().encode(sanitized)
+      }
       const result = await getAssetService().uploadImageAsset({
         writingId,
         fileName: file.name,
         contentType: file.type,
-        sizeBytes: file.size,
+        sizeBytes: bytes.length,
         bytes,
         alt: alt.trim() || null,
       })
@@ -106,7 +111,7 @@ export function InsertImageModal({ open, writingId, onOpenChange, onConfirm }: I
             <Input
               ref={inputRef}
               type="file"
-              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,image/svg+xml"
               onChange={handleFileChange}
               required
             />

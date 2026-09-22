@@ -41,6 +41,10 @@ const allowedImports = new Set([
   "@/lib/services/contracts/service-types",
   "@/lib/services/desktop/tauri-commands",
   "@/lib/services/desktop/tauri-fs-watch",
+  // WATCH-07 — the write-side conflict guard's error type lives in its own
+  // module (not exported from tauri-commands.ts) so it survives that
+  // module being vi.mock-replaced wholesale in desktop integration tests.
+  "@/lib/services/desktop/write-file-conflict-error",
   "@/lib/services/desktop/desktop-settings-service",
   // ODE-370 — desktop catalog reconciliation (M2)
   "@/lib/services/desktop/workspace-reconciler",

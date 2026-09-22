@@ -15,7 +15,7 @@ Referencias:
 - `docs/design/document-components-playground.md` y `prototypes/document-components-playground.html` — referencia editable de interacción y representación, no parser de producción.
 - `.agents/skills/skill-architecture/SKILL.md`
 - `.agents/skills/skill-performance/SKILL.md`
-- `.agents/skills/skill-product-manager/SKILL.md`
+- `.agents/skills/skill-planning/SKILL.md`
 - `workflow/define/roadmap.md`
 
 ---

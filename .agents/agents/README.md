@@ -44,8 +44,7 @@ Cada archivo debe describir:
 - Un archivo por rol.
 - Formato: Markdown.
 - Nombre recomendado: kebab-case, orientado al rol.
-  - ejemplo: `product-manager.md`
-  - ejemplo futuro: `build-agent.md`
+  - patrón actual del repo, simétrico por etapa: `planning-agent.md` (PLAN), `build-agent.md` (BUILD), `review-agent.md` (REVIEW)
 
 ---
 
@@ -55,7 +54,7 @@ Todo rol de agente debe abrir con frontmatter YAML:
 
 ```yaml
 ---
-name: agent-product-manager
+name: agent-planning
 role: planning-agent
 scope: wf-define
 description: "Rol de agente para la planeación de fases en Odessay."
@@ -78,12 +77,12 @@ Ejemplo:
 
 ```yaml
 ---
-name: agent-product-manager
+name: agent-planning
 role: planning-agent
 scope: wf-define
 description: "Orquesta roadmap, DoD y briefs."
 uses_skills:
-  - skill-product-manager
+  - skill-planning
   - skill-architecture
 commands:
   - /wf-define

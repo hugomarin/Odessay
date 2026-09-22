@@ -1,5 +1,7 @@
 # ODESSAY — Catálogo Operativo de Playwright
 
+**Antes de crear un test nuevo, decidir primero si Playwright es la herramienta correcta** — eso vive en `workflow/testing/critical-capabilities-testing.md` (principio "test at the lowest-cost boundary that can falsify the failure mode we care about" + cuándo Playwright sí/no es la primera opción). Este catálogo asume que la respuesta ya fue "sí" y resuelve el segundo problema: qué asset de Playwright reutilizar.
+
 Este documento organiza los tests y scripts de Playwright que ya existen en Odessay para evitar dos problemas recurrentes:
 
 1. crear tests nuevos sin revisar si ya existe un harness o helper que resuelve el flujo

@@ -200,7 +200,7 @@ Revisar la forma de crecimiento y el sistema completo, no solo el archivo modifi
 
 ## Integración con otros skills
 
-- `skill-product-manager`: activa este skill antes de cerrar briefs con carga, datos, runtime o integración global.
+- `skill-planning`: activa este skill antes de cerrar briefs con carga, datos, runtime o integración global.
 - `skill-audit-planning`: usa este skill para detectar acumulación, overlaps y huecos sistémicos entre issues.
 - `skill-architecture`: lo consulta para clasificar boundaries, runtime y capabilities.
 - `skill-frontend` y `skill-backend`: lo aplican a sus implementaciones sin duplicar sus reglas generales.

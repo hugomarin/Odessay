@@ -54,7 +54,19 @@ export const keychainStorage = {
       return cached
     }
 
-    const value = await withTimeout(tauriKeychainRead(key), `getItem(${key})`)
+    // Mirrors removeItem's rationale: never let an unresponsive store plugin
+    // surface as an unhandled rejection through Supabase's session-loading
+    // internals (ODE-543) — a read failure is architecturally equivalent to
+    // "value not found", which getItem's `string | null` contract already
+    // represents. setItem/removeItem still throw/warn as before; only the
+    // read path degrades this way.
+    let value: string | null
+    try {
+      value = await withTimeout(tauriKeychainRead(key), `getItem(${key})`)
+    } catch (err) {
+      console.warn("[secure-storage] getItem failed, treating as absent:", err)
+      value = null
+    }
     cache.set(key, value)
     return value
   },

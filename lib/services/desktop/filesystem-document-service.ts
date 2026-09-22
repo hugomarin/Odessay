@@ -31,6 +31,7 @@ import {
   tauriWriteFile,
 } from "@/lib/services/desktop/tauri-commands"
 import type { DesktopFileMetadata } from "@/lib/services/desktop/tauri-commands"
+import { WriteFileConflictError } from "@/lib/services/desktop/write-file-conflict-error"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -320,10 +321,10 @@ export class FilesystemDocumentService implements DocumentService {
    * Emits a "saved" event after the file is fully persisted.
    */
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
-    const { writing } = input
+    const { writing, expectedContentHash } = input
     const markdown = writing.content.markdown ?? ""
     try {
-      await tauriWriteFile(writing.id, markdown)
+      await tauriWriteFile(writing.id, markdown, expectedContentHash)
       const savedRecord: WritingRecord = {
         ...writing,
         updatedAt: isoNow(),
@@ -332,6 +333,9 @@ export class FilesystemDocumentService implements DocumentService {
       this.emitSaved(writing.id)
       return ok(savedRecord)
     } catch (e) {
+      if (e instanceof WriteFileConflictError) {
+        return err("CONFLICT", e.message)
+      }
       return err("STORAGE_ERROR", e instanceof Error ? e.message : "Failed to save writing")
     }
   }

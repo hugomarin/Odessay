@@ -1,9 +1,14 @@
-name: Traceability Gates
+name: Process Checks
+
+# Invariantes de proceso livianos: trazabilidad, sincronía de docs de proceso,
+# validez de ledgers, drift de status. Nada de browser/build/perf aquí — eso
+# es trabajo opcional/on-demand (ver .agents/skills/skill-performance/SKILL.md
+# y scripts/capture-editor-trace.mjs), no parte del blocking universal.
+# Ninguno de estos checks importa dependencias de npm (solo node builtins +
+# scripts/lib/**), así que este job no necesita `npm ci`.
 
 on:
-  pull_request:
-    branches:
-      - main
+  workflow_call:
 
 permissions:
   contents: read
@@ -11,10 +16,6 @@ permissions:
 jobs:
   traceability:
     runs-on: ubuntu-latest
-    env:
-      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: example-public-anon-key
-      ODESSAY_PERF_HARNESS_ENABLED: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,29 +54,18 @@ jobs:
             echo "TRACEABILITY_ISSUE_IDS=${ISSUE_IDS}"
           } >> "${GITHUB_ENV}"
 
-      - name: Diagnose traceability refs before build
+      - name: Diagnose traceability refs
         run: npm run ops:traceability:refs
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version-file: package.json
-          cache: npm
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
-
-      - name: Check desktop draft lifecycle
-        run: npm run test:desktop:draft-lifecycle
-
-      - name: Build app for perf capture
-        run: npm run build
-
-      - name: Diagnose traceability refs after build
-        run: npm run ops:traceability:refs
+      - name: Check traceability gate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-traceability-gate.mjs
 
       - name: Check process docs sync
         run: npm run ops:process:sync
@@ -88,44 +78,3 @@ jobs:
 
       - name: Check status drift
         run: npm run ops:status:drift:strict
-
-      - name: Capture editor trace
-        run: |
-          set -euo pipefail
-
-          npm run start -- --hostname 127.0.0.1 --port 4010 > /tmp/odessay-start.log 2>&1 &
-          APP_SERVER_PID=$!
-
-          cleanup() {
-            kill "${APP_SERVER_PID}" || true
-            wait "${APP_SERVER_PID}" 2>/dev/null || true
-          }
-
-          trap cleanup EXIT
-
-          for i in {1..90}; do
-            if curl -fsS http://127.0.0.1:4010/perf/editor-harness > /dev/null; then
-              break
-            fi
-            sleep 1
-          done
-
-          curl -fsS http://127.0.0.1:4010/perf/editor-harness > /dev/null
-
-          npm run ops:perf:capture -- --base-url http://127.0.0.1:4010 --output artifacts/perf/editor-ci-trace.json.gz
-
-      - name: Check delivery gate
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPS_PERF_TRACE_PATH: artifacts/perf/editor-ci-trace.json.gz
-          OPS_PERF_REPORT_PATH: artifacts/perf/editor-ci-report.json
-          OPS_PERF_METRICS_PATH: artifacts/perf/editor-ci-metrics.json
-        run: npm run ops:delivery:gate
-
-      - name: Upload perf artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: editor-perf-gate-${{ github.run_id }}
-          path: artifacts/perf/
-          if-no-files-found: warn

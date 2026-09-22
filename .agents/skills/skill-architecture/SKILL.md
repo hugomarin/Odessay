@@ -351,7 +351,7 @@ Required action: <corregir doc | actualizar brief | issue de migración | decisi
 
 ## Relación con otros skills
 
-- `skill-product-manager` usa este skill para decidir en qué capa vive un issue y qué docs debe citar
+- `skill-planning` usa este skill para decidir en qué capa vive un issue y qué docs debe citar
 - `skill-frontend` lo consulta cuando el cambio deja de ser solo UI
 - `skill-backend` lo consulta cuando una route o servicio cruza core/adapters
 - `skill-database` lo consulta cuando schema y contrato documental empiezan a divergir

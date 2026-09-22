@@ -43,6 +43,15 @@ export type WritingRecord = {
   metadataUpdatedAt?: string | null
   /** Runtime-neutral sync capability used by consumers such as Preview. */
   lifecycle?: WritingLifecycle
+  /**
+   * WATCH-07 write-side conflict guard (desktop only): the real, durable
+   * content hash the file has *after* this record was saved — sourced from
+   * the same manifest-sync content hash the catalog binding already tracks,
+   * never recomputed separately. `PersistenceCoordinator` captures this as
+   * the new baseline for the next save's `expectedContentHash`, so baseline
+   * ownership advances only after a real durable commit, never optimistically.
+   */
+  contentHash?: string | null
 }
 
 export type WritingSummary = Omit<WritingRecord, "content"> & {
@@ -63,6 +72,16 @@ export type DownloadWritingInput = { writingId: string }
 
 export type SaveWritingInput = {
   writing: WritingRecord
+  /**
+   * WATCH-07 write-side conflict guard (desktop-only; ignored by the web
+   * adapter, which has no "another process edited the underlying file"
+   * scenario). When set, the desktop adapter refuses the write with a
+   * `CONFLICT` error if the file's actual on-disk content hash no longer
+   * matches this value — i.e. it changed externally since the caller last
+   * confirmed it. `null`/`undefined` skips the check (no known baseline yet,
+   * e.g. a brand-new document).
+   */
+  expectedContentHash?: string | null
 }
 
 export type UpdateWritingMetadataInput = {

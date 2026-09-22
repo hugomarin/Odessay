@@ -121,7 +121,7 @@ Variables de entorno, cómo levantar el proyecto, tools requeridos, permisos, Gi
 
 **10. ¿Cómo sé que terminé?**
 Estructura de issues ejecutables, Definition of Done verificable, validaciones que el agente puede correr, criterios de revisión.
-*Documentos tipo: `skill-product-manager/SKILL.md` + `skill-code-review/SKILL.md`*
+*Documentos tipo: `skill-planning/SKILL.md` + `skill-code-review/SKILL.md`*
 
 ### Cómo auditar el framework de un proyecto
 
@@ -222,7 +222,7 @@ Cada documento tiene un scope que determina cuándo lo lee el agente:
 
 **Paso 3 — Contexto condicional.** Leer los documentos activados por los triggers del issue.
 
-**Paso 4 — Pre-PR.** Antes de abrir un PR, leer `skill-product-manager` y `skill-code-review`.
+**Paso 4 — Pre-PR.** Antes de abrir un PR, leer `skill-planning` y `skill-code-review`.
 
 ### WORKFLOW.md — instrucciones de issue específico
 
