@@ -1,8 +1,11 @@
 /** @vitest-environment happy-dom */
 /**
- * WS-02 / DOC-08 / SYS-04 / WATCH-04 — moving a document between two real,
+ * WS-02 / DOC-08 / SYS-04 — moving a document between two real,
  * independently-registered Workspace roots converges to a single consistent
- * state.
+ * state. (WATCH-04 shares the same *conceptual* gap but is a genuinely
+ * different code path — an externally-triggered move reconciled by the
+ * watcher, which never calls `relocateDesktopWriting` — and is intentionally
+ * NOT closed here; see its own row in the capability map.)
  *
  * Real entry point: `DesktopWorkspaceService.assignToWorkspace` (the real
  * "Assign to Workspace" UI action in Desk) -> real `relocateDesktopWriting`
@@ -10,7 +13,9 @@
  * -> two distinct real temp directories standing in for two distinct
  * registered Workspaces. Only the native Tauri IPC transport is faked, via
  * the same real-fs/real-in-memory-catalog doubles DOC-02/03/06 and WATCH-07
- * already use.
+ * already use, plus a per-root manifest map (see `tauriWorkspaceSyncDouble`
+ * in the shared support module) that proves real Workspace-manifest
+ * convergence, not just filesystem/catalog convergence.
  *
  * Prior state: `tests/services/document-service-factory.test.ts` (ODE-402)
  * and `tests/services/workspace-service.test.ts` (ODE-403) mock every
@@ -18,8 +23,7 @@
  * either. This is the first test to actually move a real file between two
  * real, distinct BindingRoots.
  *
- * See workflow/quality/capability-integration-map.md (WS-02, DOC-08, SYS-04,
- * WATCH-04).
+ * See workflow/quality/capability-integration-map.md (WS-02, DOC-08, SYS-04).
  */
 import { randomUUID } from "node:crypto"
 import { mkdtempSync, rmSync } from "node:fs"
@@ -170,7 +174,7 @@ async function catalogRow(id: string) {
   return tauriCatalogGetByIdDouble(dbPath, id)
 }
 
-describe("WS-02/DOC-08/SYS-04/WATCH-04 — move a document between two real Workspace roots", () => {
+describe("WS-02/DOC-08/SYS-04 — move a document between two real Workspace roots", () => {
   it("converges to a single consistent binding after A -> B, leaving nothing behind in A", async () => {
     const { rootA, rootB, workspaceService } = await registerTwoWorkspaces()
 
@@ -215,6 +219,18 @@ describe("WS-02/DOC-08/SYS-04/WATCH-04 — move a document between two real Work
     await expect(readFile(rowInA!.canonicalPath!, "utf8")).rejects.toThrow()
     const rootAEntries = await readdir(rootA)
     expect(rootAEntries).toHaveLength(0)
+
+    // Workspace-manifest convergence, not just filesystem/catalog: calling
+    // tauriWorkspaceSync with no explicit ids — production's own "rescan/
+    // reconcile this root" form, exercised for real here (see the double's
+    // fix) — proves A's manifest no longer claims this document, and B's
+    // manifest claims it at the same path the catalog already agreed on.
+    const rescanA = await tauriWorkspaceSyncDouble(rootA, undefined, undefined)
+    expect(rescanA.files.some((file) => file.id === id)).toBe(false)
+    const rescanB = await tauriWorkspaceSyncDouble(rootB, undefined, undefined)
+    const fileInB = rescanB.files.find((file) => file.id === id)
+    expect(fileInB).toBeDefined()
+    expect(fileInB!.path).toBe(rowInB!.canonicalPath)
   })
 
   it("round-trips B -> A without orphaning or duplicating the document", async () => {
@@ -240,6 +256,13 @@ describe("WS-02/DOC-08/SYS-04/WATCH-04 — move a document between two real Work
 
     const rootBEntries = await readdir(rootB)
     expect(rootBEntries).toHaveLength(0)
+
+    const rescanB = await tauriWorkspaceSyncDouble(rootB, undefined, undefined)
+    expect(rescanB.files.some((file) => file.id === id)).toBe(false)
+    const rescanA = await tauriWorkspaceSyncDouble(rootA, undefined, undefined)
+    const fileInA = rescanA.files.find((file) => file.id === id)
+    expect(fileInA).toBeDefined()
+    expect(fileInA!.path).toBe(finalRow!.canonicalPath)
 
     const content = await readFile(finalRow!.canonicalPath!, "utf8")
     expect(content).toContain("Round-trip content.")

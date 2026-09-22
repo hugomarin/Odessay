@@ -33,6 +33,15 @@ let dataDir = ""
 
 const catalogsByDb = new Map<string, Map<string, DesktopCatalogRow>>()
 const bindingRootIdsByRoot = new Map<string, string>()
+// Per-root durable manifest state (relativePath -> document id), real enough
+// to prove Workspace-manifest convergence (WS-02): an explicit-IDs call binds
+// entries into it; a no-IDs call (production's own "rescan/reconcile this
+// root" form) drops any entry whose file no longer exists on real disk —
+// exactly what a real directory rescan would find after a relocate moved the
+// file elsewhere. Not a full manifest file/versioning model (that stays out
+// of scope, per the note below) — just enough state to answer "does this
+// root still claim this document" truthfully.
+const manifestsByRoot = new Map<string, Map<string, string>>()
 
 /** Point the `@tauri-apps/api/path` double at a real temp directory. Call once per test file, before the first production call that resolves desktop runtime services. */
 export function configureRealDesktopDoubles(baseDir: string): void {
@@ -44,6 +53,16 @@ export function configureRealDesktopDoubles(baseDir: string): void {
 export function resetCatalogDoubles(): void {
   catalogsByDb.clear()
   bindingRootIdsByRoot.clear()
+  manifestsByRoot.clear()
+}
+
+function manifestFor(rootPath: string): Map<string, string> {
+  let manifest = manifestsByRoot.get(rootPath)
+  if (!manifest) {
+    manifest = new Map()
+    manifestsByRoot.set(rootPath, manifest)
+  }
+  return manifest
 }
 
 function rowsFor(dbPath: string): Map<string, DesktopCatalogRow> {
@@ -254,11 +273,35 @@ export async function tauriWorkspaceTouchFileDouble(
 export async function tauriWorkspaceSyncDouble(
   rootPath: string,
   _selectedPaths: string[] | undefined,
-  documentIds: Record<string, string>,
+  documentIds?: Record<string, string>,
 ): Promise<DesktopWorkspaceSnapshot> {
-  const entries = Object.entries(documentIds)
+  const manifest = manifestFor(rootPath)
+
+  // Explicit-IDs form (the destination bind: relocateDesktopWriting passes
+  // `{ [relativePath]: id }` for the file it just moved in) — durably record
+  // the association, not just this one call's transient result.
+  if (documentIds) {
+    for (const [relativePath, id] of Object.entries(documentIds)) {
+      manifest.set(relativePath, id)
+    }
+  }
+
+  // No-IDs form (the origin-root resync: `tauriWorkspaceSync(sourceRootPath)`
+  // alone) is production's own "rescan/reconcile this root" call. A real
+  // rescan would simply no longer find a file that just moved elsewhere —
+  // mirror that by dropping any manifest entry whose file isn't on real disk
+  // any more, rather than requiring (and previously crashing on the absence
+  // of) an explicit id map for this call shape.
+  for (const relativePath of [...manifest.keys()]) {
+    const stillExists = await fs
+      .stat(join(rootPath, relativePath))
+      .then(() => true)
+      .catch(() => false)
+    if (!stillExists) manifest.delete(relativePath)
+  }
+
   const files = await Promise.all(
-    entries.map(([relativePath, id]) => statAsWorkspaceFile(rootPath, relativePath, id)),
+    [...manifest.entries()].map(([relativePath, id]) => statAsWorkspaceFile(rootPath, relativePath, id)),
   )
   const bindingRootId = bindingRootFor(rootPath)
   return {
