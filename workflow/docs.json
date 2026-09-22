@@ -77,6 +77,55 @@
       "description": "El AI editor residente: qué es (editor literario con criterio propio, no generador de texto), cuándo habla, qué observa, tipos de respuesta posibles y regla de SILENCIO."
     },
     {
+      "path": "workflow/context/features/agents/README.md",
+      "type": "feature",
+      "scope": "agent-platform-index",
+      "state": "architecture-proposal-2026-09-06",
+      "description": "Índice y frontera de la documentación de agentes: Workspace Agent, contexto, ejecución, tools, workflows, cache, runtime OpenAI Responses y relación con el AI Editor residente y AI Writing Assist."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-architecture.md",
+      "type": "feature",
+      "scope": "workspace-agent-target-architecture",
+      "state": "architecture-proposal-2026-09-07",
+      "description": "Arquitectura objetivo del Workspace Agent: capas, ownership, runtimes, Agent Application, tools, workflows, AgentResponse, Card/Modal y boundaries con DocumentCatalog y adapters. 'Estado actual frente al objetivo' distingue lo ya implementado (ContextEnvelope, cache, adquisición lazy del documento enfocado) de lo pendiente (Intent Router, registry, AgentResponse compartido)."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-context.md",
+      "type": "feature",
+      "scope": "workspace-agent-context-contract",
+      "state": "partially-implemented-2026-09-07",
+      "description": "Contrato de AgentInvocation, RuntimeContext, LocationContext, ContextEnvelope, composición, precedencia, adquisición lazy, reconstrucción e invalidación del contexto. ContextEnvelope y la adquisición lazy del documento enfocado ya son código real (lib/agent/context-envelope.ts); Intent Router formal y precedencia completa siguen pendientes."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-execution.md",
+      "type": "feature",
+      "scope": "workspace-agent-execution-contract",
+      "state": "partially-implemented-2026-09-07",
+      "description": "Routing por intención, diferencia entre consultas libres, tools y workflows, registry, validación, propuestas, aprobación, mutaciones y presentación de AgentResponse. suggestedAction (askWorkspace) es una implementación real y acotada de los kinds tool/workflow para las 5 acciones predeterminadas; no hay AgentIntent formal, Router separado, registry ni AgentResponse compartido."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-context-cache.md",
+      "type": "feature",
+      "scope": "workspace-agent-context-cost-cache",
+      "state": "implemented-2026-09-07",
+      "description": "Artifacts de contexto versionados, cache semántica, presupuesto de tokens, costo, ledger de consumo, invalidación y ownership de los adapters de cache y AI provider. ContextArtifactStore/ContextLedger son código real desde ODE-501; solo el registro explícito de los workflows predeterminados a través de ContextEnvelope sigue pendiente."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-openai-runtime.md",
+      "type": "feature",
+      "scope": "workspace-agent-openai-runtime-observability",
+      "state": "implemented-with-context-continuity-2026-09-13",
+      "description": "Decisión de alcance y runtime implementados: OpenAI Responses almacenadas para trazabilidad, chat efímero con previous_response_id, contexto explícito de documentos, loop semántico y compactación nativa. Delimita observabilidad ODE-513, background nativo ODE-514 y semántica ODE-509/510/511."
+    },
+    {
+      "path": "workflow/context/features/agents/odessay-agent-conversation-compaction.md",
+      "type": "feature",
+      "scope": "workspace-agent-conversation-compaction-and-evidence",
+      "state": "canonical-partially-implemented-2026-09-13",
+      "description": "Contrato operativo del Workspace Agent: alcance explícito, contenido completo, continuidad, compactación, comparación semántica y capacidad por registry/override/capacity_unknown. Márgenes externos y learned words son enriquecimiento futuro; los gaps de implementación se rastrean en Linear."
+    },
+    {
       "path": "workflow/context/features/odessay-ai-writing-assist.md",
       "type": "feature",
       "description": "Contrato operativo del AI assist del editor: correcciones mecánicas vía endpoint JSON request/response, learned words, persistencia de correction blocks, guardrails de matching/admisión, memoria de reject/manual-fix, stale handling y sugerencia de título con invocación explícita."
@@ -120,15 +169,15 @@
       "path": "workflow/context/features/odessay-desktop-app.md",
       "type": "feature",
       "scope": "desktop-direction",
-      "state": "normative-entrypoint",
-      "description": "Dirección objetivo para Desktop App: Markdown-first y filesystem-first, con `.md` como fuente de verdad, `.txt` como compatibilidad, TipTap como vista rica del documento canónico, auth opcional, sync/backup secundario y perfil Markdown compartido entre web y desktop."
+      "state": "product-direction-subordinate-to-identity-and-catalog",
+      "description": "Dirección de producto para Desktop App, con contexto histórico explícito. El ADR de identidad y el spec del catálogo desktop prevalecen para identidad, apertura, guardado y sync; las afirmaciones de implementación deben verificarse contra código antes de BUILD."
     },
     {
       "path": "workflow/context/features/odessay-desktop-migration-diagnostic.md",
       "type": "feature",
       "scope": "desktop-migration-diagnostic",
-      "state": "normative-sequence-step-2",
-      "description": "Diagnóstico arquitectónico del codebase para la migración a desktop: mapa de responsabilidades, runtimes, portabilidad, diferencias entre tauri dev y el DMG instalado, límites de capabilities nativas y permisos de BindingRoot, hotspots de acoplamiento, tensiones del modelo documental actual, secuencia recomendada de extracción de servicios y herramientas read-only de cosecha/verificación de identidades históricas (ODE-374)."
+      "state": "historical-diagnostic-sequence-step-2",
+      "description": "Diagnóstico histórico del codebase al planear desktop. Conserva mapa de responsabilidades y riesgos, pero no representa estado live; ADR de identidad y catálogo desktop prevalecen y toda afirmación en presente requiere verificación contra código."
     },
     {
       "path": "docs/desktop-distribution.md",
@@ -148,8 +197,8 @@
       "path": "workflow/context/features/odessay-desktop-target-architecture.md",
       "type": "feature",
       "scope": "desktop-target-architecture",
-      "state": "normative-sequence-step-3",
-      "description": "Arquitectura objetivo multi-runtime para Odessay: shared core, adapters web/desktop/mobile, contratos de servicio —incluidos DocumentCatalog/DocumentBindingStore/WorkspaceReconciler—, reglas de dependencia, modelo documental objetivo y §Auth comparativa web vs desktop."
+      "state": "target-architecture-subordinate-to-identity-and-catalog",
+      "description": "Arquitectura objetivo multi-runtime y reglas de dependencia. Para identidad y operación documental desktop prevalecen el ADR y el catálogo; las secciones de transición/estado actual son históricas y se verifican contra código."
     },
     {
       "path": "workflow/context/features/odessay-desktop-document-catalog.md",
@@ -162,8 +211,8 @@
       "path": "workflow/context/features/odessay-desktop-migration-plan.md",
       "type": "feature",
       "scope": "desktop-migration-plan",
-      "state": "normative-sequence-step-4",
-      "description": "Plan técnico de migración a la arquitectura desktop/multi-runtime: fases, dependencias, entregables, riesgos, gates y orden recomendado de refactors antes de tocar shell desktop."
+      "state": "historical-migration-sequence-step-4",
+      "description": "Plan histórico de migración y dependencias. No representa el estado live de cada slice; antes de BUILD se reconcilia con código y Linear, y el ADR de identidad/catálogo desktop prevalece."
     },
     {
       "path": "workflow/context/features/odessay-workspace.md",
@@ -276,6 +325,12 @@
       "path": "workflow/define/plan-correcciones-contexto.md",
       "type": "ops",
       "description": "Plan de trabajo para reconciliar el corpus de documentación (context, specs, skills) con el ADR de identidad (odessay-adr-identidad.md): inventario de docs a corregir, secuencia, reglas de la pasada y criterio de cierre. No es el plan de implementación de código."
+    },
+    {
+      "path": "workflow/define/validation-prompt-workspace-agent-context-drift.md",
+      "type": "ops",
+      "state": "historical-audit-executed-2026-09-13",
+      "description": "Prompt histórico usado para auditar drift entre Workflow, DoD, Linear, código y evidencia del Workspace Agent. No es spec de BUILD; las decisiones posteriores viven en el DoD de Fase 11 y el contrato canónico de conversación/compactación."
     },
     {
       "path": "workflow/define/dod-fase-1.md",

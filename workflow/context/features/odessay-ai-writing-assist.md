@@ -191,6 +191,12 @@ Variables mínimas para flujo Fireworks:
 - `FIREWORKS_MODEL`
 - `FIREWORKS_MAX_TOKENS` (opcional — override del presupuesto; default 4096 en `provider-config.ts`)
 
+La vertical semántica del Workspace Agent usa OpenAI de forma independiente:
+- `OPENAI_API_KEY` es la única variable requerida para habilitarla.
+- `OPENAI_WORKSPACE_MODEL` es opcional y por defecto usa `gpt-5.6-luna`.
+- `OPENAI_WORKSPACE_REASONING_EFFORT` y `OPENAI_WORKSPACE_MAX_OUTPUT_TOKENS` son overrides operativos opcionales.
+- Esta route no usa `FIREWORKS_API_KEY` ni hace fallback a Fireworks.
+
 Política:
 - Cambios de modelo son operativos (env), no cambios de código.
 - Los docs y briefs deben tratar el modelo como variable temporal, no como constante funcional.

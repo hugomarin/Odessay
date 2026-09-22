@@ -163,6 +163,14 @@ SUPABASE_SERVICE_ROLE_KEY=
 ANTHROPIC_API_KEY=
 FIREWORKS_API_KEY=
 FIREWORKS_MODEL=
+OPENAI_API_KEY=
+# Workspace Agent semantic classification defaults to gpt-5.6-luna; optional overrides:
+OPENAI_WORKSPACE_MODEL=gpt-5.6-luna
+OPENAI_WORKSPACE_REASONING_EFFORT=none
+OPENAI_WORKSPACE_MAX_OUTPUT_TOKENS=16384
+# Optional real deployment capability used for staged context and native compaction:
+OPENAI_WORKSPACE_CONTEXT_WINDOW_TOKENS=
+OPENAI_WORKSPACE_COMPACTION_THRESHOLD_TOKENS=
 # Solo para emails no-auth enviados desde la app. Auth email usa Supabase Dashboard SMTP.
 RESEND_API_KEY=
 

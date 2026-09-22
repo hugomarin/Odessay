@@ -63,4 +63,12 @@ describe("desktop file-io — capabilities and service boundary", () => {
   it("tauri-commands.ts exists (desktop FS Tauri command bridge)", () => {
     expect(existsSync(tauriCommands)).toBe(true)
   })
+
+  it("registers the native Workspace agent path guard", () => {
+    const lib = readFileSync(resolve(root, "src-tauri/src/lib.rs"), "utf8")
+    const workspace = readFileSync(resolve(root, "src-tauri/src/commands/workspace.rs"), "utf8")
+    expect(lib).toContain("commands::workspace::workspace_agent_validate_path")
+    expect(workspace).toContain("pub fn workspace_agent_validate_path")
+    expect(workspace).toContain("canonicalize_workspace_agent_candidate")
+  })
 })

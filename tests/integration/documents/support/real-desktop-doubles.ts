@@ -247,6 +247,8 @@ function applyDualWrite(rows: Map<string, DesktopCatalogRow>, input: DesktopCata
     lastSeenAt: input.binding?.lastSeenAt ?? prior?.lastSeenAt ?? null,
     excerpt: prior?.excerpt ?? null,
     excerptContentHash: prior?.excerptContentHash ?? null,
+    referenceTargets: prior?.referenceTargets ?? null,
+    referenceTargetsContentHash: prior?.referenceTargetsContentHash ?? null,
   }
   rows.set(row.id, row)
 }

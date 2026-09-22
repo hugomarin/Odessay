@@ -55,6 +55,12 @@ function pressEscape() {
   })
 }
 
+function pressEscapeFrom(element: HTMLElement) {
+  act(() => {
+    element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+  })
+}
+
 const noop = () => {}
 
 describe("visibility by selection count", () => {
@@ -177,6 +183,21 @@ describe("keyboard", () => {
     render(<SelectionBar selectedCount={0} onDeselectAll={onDeselectAll} actions={[]} />)
 
     pressEscape()
+    expect(onDeselectAll).not.toHaveBeenCalled()
+  })
+
+  it("keeps selection when Escape closes a popover or composer", () => {
+    const onDeselectAll = vi.fn()
+    const popover = document.createElement("div")
+    popover.setAttribute("data-radix-popper-content-wrapper", "")
+    const closeButton = document.createElement("button")
+    popover.appendChild(closeButton)
+    document.body.appendChild(popover)
+    closeButton.focus()
+    render(<SelectionBar selectedCount={2} onDeselectAll={onDeselectAll} actions={[]} />)
+
+    pressEscapeFrom(closeButton)
+
     expect(onDeselectAll).not.toHaveBeenCalled()
   })
 

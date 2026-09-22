@@ -34,6 +34,7 @@ import {
   tauriRelocateFile,
   tauriWorkspaceSync,
   tauriWorkspaceTouchFile,
+  tauriWriteNewFile,
   tauriWriteFile,
   type DesktopCatalogDualWriteInput,
   type DesktopWorkspaceFile,
@@ -59,6 +60,8 @@ type DesktopDraftOptions = {
   preferredPath?: string | null
   initialBodyJson?: Record<string, unknown> | null
   initialBodyText?: string
+  /** Agent-only create path: fail if the physical destination already exists. */
+  expectedAbsent?: boolean
 }
 
 function ok<T>(data: T): ServiceResponse<T> { return { data, error: null } }
@@ -164,18 +167,23 @@ class DesktopDocumentService implements DocumentService {
     canonicalPath: string,
     operation: "upsert" | "delete" = "upsert",
     expectedContentHash?: string | null,
+    expectedAbsent = false,
   ): Promise<WritingRecord> {
     const markdown = this.serialize(record)
     if (operation === "upsert") {
-      const fileResult = await this.runtime.filesystem.saveWriting({
-        writing: {
-          ...record,
-          id: canonicalPath,
-          content: { markdown, richText: null, plainText: record.content.plainText, canonicalSource: "markdown" },
-        },
-        expectedContentHash,
-      })
-      if (fileResult.error) throw fileResult.error
+      if (expectedAbsent) {
+        await tauriWriteNewFile(canonicalPath, markdown)
+      } else {
+        const fileResult = await this.runtime.filesystem.saveWriting({
+          writing: {
+            ...record,
+            id: canonicalPath,
+            content: { markdown, richText: null, plainText: record.content.plainText, canonicalSource: "markdown" },
+          },
+          expectedContentHash,
+        })
+        if (fileResult.error) throw fileResult.error
+      }
     }
 
     const catalogBefore = await this.runtime.catalog.getById(record.id)
@@ -438,7 +446,7 @@ class DesktopDocumentService implements DocumentService {
         visibility: options.visibility ?? "private", parentId: null, correspondenceId: null,
         version: 1, deletedAt: null, createdAt: now, updatedAt: now,
       }
-      return ok(await this.persist(record, allocation.path))
+      return ok(await this.persist(record, allocation.path, "upsert", null, options.expectedAbsent === true))
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 
@@ -964,5 +972,6 @@ export async function importDesktopWritingFile(path: string, content: string) {
     writingId: createWritingId(), title: filenameToTitle(path), preferredPath: path,
     initialBodyJson: parsed.document.snapshot.bodyJson as Record<string, unknown>,
     initialBodyText: parsed.document.snapshot.bodyText,
+    expectedAbsent: true,
   })
 }

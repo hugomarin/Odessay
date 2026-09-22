@@ -57,11 +57,55 @@ pub fn create_file(dir: String, filename: String) -> Result<String, String> {
         fs::create_dir_all(dir_path).map_err(|e| format!("create_dir_all: {e}"))?;
     }
     let file_path = dir_path.join(&filename);
-    if file_path.exists() {
-        return Err(format!("file already exists: {}", file_path.display()));
-    }
-    fs::write(&file_path, "").map_err(|e| format!("create_file write: {e}"))?;
+    write_new_file_atomically(&file_path, "", "create_file")?;
     Ok(file_path.to_string_lossy().to_string())
+}
+
+/// Create a file without replacing a file that appears after the caller's
+/// catalog preflight. The payload is fully written to a unique sibling first;
+/// the hard-link publication is atomic and fails when the destination exists.
+fn write_new_file_atomically(target: &Path, content: &str, operation: &str) -> Result<(), String> {
+    if let Some(parent) = target.parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent).map_err(|e| format!("{operation} create_dir_all: {e}"))?;
+        }
+    }
+
+    let file_name = target
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("document");
+    let temp_path = target
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join(format!(".{file_name}.{}.tmp", Uuid::new_v4()));
+
+    if let Err(error) = fs::write(&temp_path, content) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("{operation} temp write: {error}"));
+    }
+
+    let publish = fs::hard_link(&temp_path, target);
+    let cleanup = fs::remove_file(&temp_path);
+    match publish {
+        Ok(()) => {
+            if let Err(error) = cleanup {
+                let _ = fs::remove_file(target);
+                return Err(format!("{operation} temp cleanup: {error}"));
+            }
+            Ok(())
+        }
+        Err(error) => {
+            let _ = cleanup;
+            Err(format!("{operation} destination was not absent: {error}"))
+        }
+    }
+}
+
+/// Atomically create a new file, never replacing an existing destination.
+#[tauri::command]
+pub fn write_new_file(path: String, content: String) -> Result<(), String> {
+    write_new_file_atomically(Path::new(&path), &content, "write_new_file")
 }
 
 /// Atomically write `content` to `path` by writing a .tmp sibling then renaming.
@@ -458,9 +502,49 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_dir(test_name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("odessay-relocate-{test_name}-{}", Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("odessay-relocate-{test_name}-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).expect("create temp dir");
         root
+    }
+
+    #[test]
+    fn write_new_file_publishes_complete_content_without_overwriting() {
+        let root = temp_dir("write-new-file");
+        let target = root.join("Draft.md");
+
+        write_new_file(
+            target.to_string_lossy().to_string(),
+            "# Draft\n".to_string(),
+        )
+        .expect("new file should be created");
+
+        assert_eq!(
+            fs::read_to_string(&target).expect("read created file"),
+            "# Draft\n"
+        );
+        assert_eq!(fs::read_dir(&root).expect("read root").count(), 1);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_new_file_rejects_a_destination_that_appears_after_preflight() {
+        let root = temp_dir("write-new-file-collision");
+        let target = root.join("Draft.md");
+        fs::write(&target, "Existing\n").expect("write existing file");
+
+        let result = write_new_file(
+            target.to_string_lossy().to_string(),
+            "Replacement\n".to_string(),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(
+            fs::read_to_string(&target).expect("read existing file"),
+            "Existing\n"
+        );
+        assert_eq!(fs::read_dir(&root).expect("read root").count(), 1);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -605,7 +689,10 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert!(!root.join("Dest.md").exists(), "no partial state on failure");
+        assert!(
+            !root.join("Dest.md").exists(),
+            "no partial state on failure"
+        );
 
         let _ = fs::remove_dir_all(root);
     }

@@ -133,6 +133,14 @@ function findSheet(from: HTMLElement): HTMLElement | null {
   return null
 }
 
+function isEscapeInsideInteractiveLayer(event: KeyboardEvent): boolean {
+  const elements = [event.target, document.activeElement]
+    .filter((element): element is Element => element instanceof Element)
+  return elements.some((element) => Boolean(element.closest(
+    "input, textarea, select, [contenteditable=\"true\"], [role=\"dialog\"], [role=\"menu\"], [role=\"listbox\"], [data-radix-popper-content-wrapper]",
+  )))
+}
+
 export function SelectionBar({
   selectedCount,
   countLabel = (count) => `${count} selected`,
@@ -153,7 +161,10 @@ export function SelectionBar({
   React.useEffect(() => {
     if (!hasSelection) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onDeselectAll()
+      // Escape closes a focused popover/dialog or exits the composer. It must
+      // not also clear the document selection that grounds the Workspace
+      // agent's next turn.
+      if (event.key === "Escape" && !isEscapeInsideInteractiveLayer(event)) onDeselectAll()
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)

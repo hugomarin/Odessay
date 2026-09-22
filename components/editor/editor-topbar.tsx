@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { FileSliders, Scan } from "lucide-react"
+import { Bot, FileSliders, Scan } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { EditorTabs } from "@/components/editor/editor-tabs"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -22,6 +22,7 @@ import type { WritingStatus } from "@/lib/writings/status"
 type EditorTopbarProps = {
   isFocusMode: boolean
   activePanel: "notes" | "properties" | "grammar" | "share" | null
+  isAgentPanelOpen: boolean
   tabs: LocalEditorSessionTab[]
   /** Editorial state per tab id, drawn as each tab's glyph. */
   tabStatuses?: Record<string, WritingStatus | null>
@@ -37,6 +38,7 @@ type EditorTopbarProps = {
   onNewTab: () => void
   onToggleFocusMode: () => void
   onTogglePanel: (panel: "notes" | "properties" | "grammar") => void
+  onToggleAgent: () => void
   isTabBarVisible?: boolean
 }
 
@@ -48,6 +50,7 @@ const TITLEBAR_BUTTON_ACTIVE_CLASS = "bg-surface-selected text-ink"
 export function EditorTopbar({
   isFocusMode,
   activePanel,
+  isAgentPanelOpen,
   tabs,
   tabStatuses,
   activeTabId,
@@ -61,6 +64,7 @@ export function EditorTopbar({
   onNewTab,
   onToggleFocusMode,
   onTogglePanel,
+  onToggleAgent,
   isTabBarVisible = true,
 }: EditorTopbarProps) {
   /**
@@ -155,6 +159,18 @@ export function EditorTopbar({
               aria-pressed={activePanel === "properties"}
             >
               <FileSliders className="h-[18px] w-[18px]" strokeWidth={1.5} />
+            </button>
+          </ActionTooltip>
+
+          <ActionTooltip label={isAgentPanelOpen ? "Close Workspace agent" : "Open Workspace agent"} side="bottom">
+            <button
+              type="button"
+              onClick={onToggleAgent}
+              className={cn(TITLEBAR_BUTTON_CLASS, isAgentPanelOpen && TITLEBAR_BUTTON_ACTIVE_CLASS)}
+              aria-label="Workspace agent"
+              aria-pressed={isAgentPanelOpen}
+            >
+              <Bot className="h-[18px] w-[18px]" strokeWidth={1.5} />
             </button>
           </ActionTooltip>
         </div>

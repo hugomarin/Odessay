@@ -3,6 +3,11 @@ import type { WritingStatus } from "@/lib/writings/status"
 
 export type CatalogSyncStatus = "local-only" | "pending" | "synced" | "conflict" | "failed" | "deleted"
 
+export type DocumentCatalogReference = {
+  value: string
+  kind: "path" | "slug"
+}
+
 export type DocumentCatalogRecord = {
   id: string
   localPresent: boolean
@@ -21,6 +26,8 @@ export type DocumentCatalogRecord = {
   modifiedAt: number | null
   /** Rebuildable content-derived preview; never a source of document truth. */
   excerpt?: string | null
+  /** Rebuildable outbound-reference projection; never document body text. */
+  referenceTargets?: DocumentCatalogReference[] | null
   binding: DocumentBindingRecord | null
 }
 
@@ -58,7 +65,7 @@ export type RegisterBindingInput = {
   binding: DocumentBindingRecord
 }
 
-export type CloudDocumentSnapshot = Omit<DocumentCatalogRecord, "binding" | "localPresent" | "excerpt"> & {
+export type CloudDocumentSnapshot = Omit<DocumentCatalogRecord, "binding" | "localPresent" | "excerpt" | "referenceTargets"> & {
   localPresent?: boolean
   contentHash?: string | null
 }
@@ -67,6 +74,8 @@ export interface DocumentCatalog {
   getById(id: string): Promise<DocumentCatalogRecord | null>
   resolvePath(path: string): Promise<PathResolution>
   list(query?: DocumentCatalogQuery): Promise<DocumentCatalogRecord[]>
+  /** Optional desktop-only rebuild of content-derived metadata projections. */
+  hydrateContentProjections?(): Promise<void>
   registerBinding(input: RegisterBindingInput): Promise<DocumentCatalogRecord>
   detachLocalFile(id: string): Promise<void>
   applyCloudSnapshot(snapshot: CloudDocumentSnapshot): Promise<void>

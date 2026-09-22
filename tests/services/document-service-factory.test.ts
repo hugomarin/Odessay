@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   dualWrite: vi.fn(),
   bulkDualWrite: vi.fn(),
   tauriOpen: vi.fn(),
+  tauriWriteNew: vi.fn(),
   tauriWrite: vi.fn(),
   tauriRelocate: vi.fn(),
   getBindingRoots: vi.fn(async () => [] as unknown[]),
@@ -88,6 +89,7 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriWorkspaceTouchFile: mocks.workspaceTouch,
   tauriCatalogDualWrite: mocks.dualWrite,
   tauriOpenFile: mocks.tauriOpen,
+  tauriWriteNewFile: mocks.tauriWriteNew,
   tauriWriteFile: mocks.tauriWrite,
   tauriRelocateFile: mocks.tauriRelocate,
 }))
@@ -168,6 +170,7 @@ describe("desktop document service after compatibility retirement", () => {
       error: null,
     })
     mocks.saveFile.mockResolvedValue({ data: writing, error: null })
+    mocks.tauriWriteNew.mockResolvedValue(undefined)
     mocks.deleteFile.mockResolvedValue({
       data: { ...writing, deletedAt: "2026-01-02T00:00:00.000Z" },
       error: null,
@@ -241,6 +244,16 @@ describe("desktop document service after compatibility retirement", () => {
         .toBeLessThan(mocks.workspaceSync.mock.invocationCallOrder[0])
       expect(mocks.workspaceSync.mock.invocationCallOrder[0])
         .toBeLessThan(mocks.dualWrite.mock.invocationCallOrder[0])
+    })
+
+    it("uses an exclusive native write for an imported destination", async () => {
+      const { importDesktopWritingFile } = await import("@/lib/services/document-service-factory")
+
+      const result = await importDesktopWritingFile(path, "# Imported\n")
+
+      expect(result.error).toBeNull()
+      expect(mocks.tauriWriteNew).toHaveBeenCalledWith(path, expect.stringContaining("# Imported"))
+      expect(mocks.saveFile).not.toHaveBeenCalled()
     })
   })
 

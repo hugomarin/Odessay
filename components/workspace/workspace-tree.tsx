@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEventHandler, type ReactNode } from "react";
 import { ChevronDown, Eye, FileText, Folder, FolderOpen, Home } from "lucide-react";
 import { buildWorkspaceFolderTree } from "@/lib/workspace/folder-tree";
 import type { WorkspaceFolderTreeNode } from "@/lib/workspace/folder-tree";
+import { startWorkspaceAgentDrag } from "@/components/agent/workspace-agent-drag";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
 import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon";
 import { useVocabulary } from "@/hooks/useVocabulary";
@@ -38,6 +39,13 @@ const TREE_LABEL_FADE_STYLE = TEXT_FADE_MASK_STYLE;
 
 export type WorkspaceTreeMode = "studio" | "detail";
 
+export type WorkspaceTreeDragPayload = {
+  kind: "folder" | "file";
+  id?: string;
+  path: string;
+  label: string;
+};
+
 /** "folder" (default) nests by path; "status"/"type" flatten into vocabulary groups instead. */
 export type WorkspaceTreeGroupBy = "folder" | "status" | "type";
 
@@ -64,6 +72,7 @@ export type WorkspaceTreeProps = {
   /** Shows a hover-revealed eye button on file rows that opens the quick-look preview. */
   onPreviewFile?: (id: string) => void;
   onSelectFolder?: (path: string) => void;
+  onDragStart?: (payload: WorkspaceTreeDragPayload) => void;
   onCountChange?: (count?: number) => void;
   emptyState?: React.ReactNode;
   className?: string;
@@ -116,6 +125,7 @@ function FileRow({
   fileActions,
   onOpen,
   onPreview,
+  onPointerDown,
 }: {
   depth: number;
   id: string;
@@ -129,6 +139,7 @@ function FileRow({
   fileActions?: WorkspaceTreeFileActions;
   onOpen?: () => void;
   onPreview?: () => void;
+  onPointerDown?: PointerEventHandler<HTMLButtonElement>;
 }) {
   const row = (
     <li className="group relative">
@@ -138,6 +149,7 @@ function FileRow({
         aria-selected={active}
         aria-current={active ? "page" : undefined}
         disabled={disabled}
+        onPointerDown={onPointerDown}
         onClick={onOpen}
         style={{ paddingLeft: `${8 + depth * 18}px` }}
         className={cn(
@@ -204,6 +216,7 @@ function TreeRow({
   onOpenFile,
   onPreviewFile,
   onSelectFolder,
+  onDragStart,
 }: {
   depth: number;
   node: WorkspaceFolderTreeNode;
@@ -222,6 +235,7 @@ function TreeRow({
   onOpenFile?: (id: string) => void;
   onPreviewFile?: (id: string) => void;
   onSelectFolder?: (path: string) => void;
+  onDragStart?: (payload: WorkspaceTreeDragPayload) => void;
 }) {
   if (node.kind === "file") {
     if (foldersOnly) return null;
@@ -250,6 +264,16 @@ function TreeRow({
         }
         onOpen={() => onOpenFile?.(fileId)}
         onPreview={onPreviewFile ? () => onPreviewFile(fileId) : undefined}
+        onPointerDown={onDragStart ? (event) => {
+          const payload: WorkspaceTreeDragPayload = {
+            kind: "file",
+            id: fileId,
+            path: node.path,
+            label: previewLabel,
+          };
+          startWorkspaceAgentDrag(event, payload);
+          onDragStart(payload);
+        } : undefined}
       />
     );
   }
@@ -270,6 +294,15 @@ function TreeRow({
         aria-expanded={hasChildren ? expanded : undefined}
         aria-selected={isSelected}
         disabled={folderDisabled}
+        onPointerDown={onDragStart ? (event) => {
+          const payload: WorkspaceTreeDragPayload = {
+            kind: "folder",
+            path: node.path,
+            label: node.name,
+          };
+          startWorkspaceAgentDrag(event, payload);
+          onDragStart(payload);
+        } : undefined}
         onClick={() => {
           if (mode === "detail") {
             onSelectFolder?.(node.path);
@@ -328,6 +361,7 @@ function TreeRow({
               onOpenFile={onOpenFile}
               onPreviewFile={onPreviewFile}
               onSelectFolder={onSelectFolder}
+              onDragStart={onDragStart}
             />
           ))}
         </ul>
@@ -358,6 +392,7 @@ export function WorkspaceTree({
   onOpenFile,
   onPreviewFile,
   onSelectFolder,
+  onDragStart,
   onCountChange,
   emptyState,
   className,
@@ -587,7 +622,8 @@ export function WorkspaceTree({
               onToggleFolder={handleToggleFolder}
               onOpenFile={onOpenFile}
               onPreviewFile={onPreviewFile}
-              onSelectFolder={onSelectFolder}
+            onSelectFolder={onSelectFolder}
+            onDragStart={onDragStart}
             />
           ))}
         </ul>

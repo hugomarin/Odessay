@@ -1,5 +1,7 @@
 # ODESSAY — Desktop Migration Plan
 
+> **Plan histórico por etapas (2026-09-13):** este documento conserva la secuencia de migración, no el estado live de cada slice. Para identidad, catálogo, apertura, guardado y sync desktop prevalecen `workflow/context/core/odessay-adr-identidad.md` y `workflow/context/features/odessay-desktop-document-catalog.md`; validar el estado real en código y Linear antes de ejecutar BUILD.
+
 **Plan técnico de migración hacia la arquitectura multi-runtime de Odessay.**
 Lee `workflow/context/features/odessay-desktop-app.md` para la dirección de producto, `workflow/context/features/odessay-desktop-migration-diagnostic.md` para el diagnóstico del codebase actual y `workflow/context/features/odessay-desktop-target-architecture.md` para la arquitectura objetivo.
 

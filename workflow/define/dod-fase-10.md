@@ -3,7 +3,7 @@
 Este documento define el gate de cierre de **Fase 10 — Artifact Studio: la superficie**.
 Si un punto no está cumplido, el rediseño no se considera terminado, aunque las vistas "se vean bien".
 
-Fase 9 unificó el modelo documental desktop: un catálogo, un binding, una apertura. Fase 10 no lo toca. Fase 10 cambia lo que el usuario ve y cómo se nombra el producto: dos capas visuales explícitas (producto y marketing), un shell de dos capas, un inventario cerrado de overlays, una marca regenerada y un solo vocabulario — **artifact**.
+Fase 9 unificó el modelo documental desktop: un catálogo, un binding, una apertura. Fase 10 no lo toca. Fase 10 cambia lo que el usuario ve y cómo se nombra el producto: dos capas visuales explícitas (producto y marketing), un shell de dos capas, un inventario cerrado de overlays, una marca regenerada y un solo vocabulario — **artifact**. El gate incorpora además el cierre de los ocho hallazgos confirmados por la revisión de seguridad del 2026-09-05.
 
 El paquete de diseño aprobado vive en `docs/design/` (originado en `handoff-artifact-studio-handsoff/`). Los prototipos `.dc.html` son referencia visual, nunca código a copiar.
 
@@ -134,6 +134,18 @@ ver el propio archivo de evidencia para el detalle y los pasos que faltan.
 - Matriz trazable desde cada bloque de este DoD a un test, una prueba manual reproducible o la aceptación explícita del dueño.
 - Cada issue con comportamiento visible cierra con **demo de outcome aceptado por el dueño**, no solo con proof of work verde.
 
+## 11) Los hallazgos bloqueantes de seguridad están cerrados
+
+- La RPC `rotate_test_preview_link` no es ejecutable por `PUBLIC`, `anon` ni `authenticated`; la ACL efectiva y la propiedad del writing se comprueban en staging.
+- Las políticas INSERT/UPDATE de `invitations` exigen que el invitador sea dueño del writing, y el lector privilegiado de preview aplica la misma defensa.
+- Un `annotationReference.id` controlado desde `body_json` no puede actualizar, trasladar ni reclamar una anotación cuyo lector o writing original no corresponda.
+- La exportación no recupera URLs arbitrarias ni redes privadas, valida redirecciones y contenido, y limita bytes, concurrencia y tiempo antes de incrustar imágenes.
+- Archivar un writing público impide emitir nuevas URLs firmadas para sus assets a terceros.
+- Las rutas remotas de AI y transcripción aplican cuota y concurrencia por cuenta antes de llamar al proveedor; la transcripción limita tamaño y duración del audio.
+- Los redirects de confirmación auth solo aceptan destinos del mismo origen y rechazan backslashes, caracteres de control y URLs protocol-relative.
+- `npm audit --omit=dev` no deja advisories de producción sin una remediación o una excepción de alcanzabilidad documentada y fechada; Next y TipTap quedan en versiones corregidas compatibles.
+- Las pruebas adversariales de la revisión pasan como regresiones negativas y no se realiza ninguna operación contra producción desde los agentes.
+
 ## Gate de cierre de fase
 
-Fase 10 se marca `Done` solo si los diez bloques anteriores están evidenciados, no quedan issues bloqueantes abiertos en el proyecto Linear de Fase 10, el paquete de diseño en `docs/design/` describe exactamente lo enviado, y `skill-design` + `skill-design-landing` son la única fuente de verdad visual del repositorio.
+Fase 10 se marca `Done` solo si los once bloques anteriores están evidenciados, no quedan issues bloqueantes abiertos en el proyecto Linear de Fase 10, el paquete de diseño en `docs/design/` describe exactamente lo enviado, y `skill-design` + `skill-design-landing` son la única fuente de verdad visual del repositorio.

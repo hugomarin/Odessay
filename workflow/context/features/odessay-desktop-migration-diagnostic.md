@@ -1,5 +1,7 @@
 # ODESSAY — Desktop Migration Diagnostic
 
+> **Contexto histórico, no estado live (2026-09-13):** este diagnóstico describe el codebase observado al planear la migración. Para identidad, catálogo, apertura, guardado y sync desktop prevalecen `workflow/context/core/odessay-adr-identidad.md` y `workflow/context/features/odessay-desktop-document-catalog.md`. Verificar cualquier afirmación en presente contra el código antes de usarla en BUILD.
+
 **Documento de diagnóstico para planear la migración arquitectónica a desktop.**
 Lee `workflow/context/features/odessay-desktop-app.md` para la dirección objetivo, `workflow/context/core/odessay-arquitectura.md` para el estado canónico del producto y `workflow/context/features/odessay-sync.md` para la capa local-first vigente.
 
