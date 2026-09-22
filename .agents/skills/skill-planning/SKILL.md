@@ -324,6 +324,8 @@ Ejemplo:
 
 `.agents/skills/review-testing/SKILL.md` verifica en `/wf-review` que la evidencia entregada corresponde al nivel declarado aquí, y que toda escalada a E2E/performance vino con justificación — no exige Playwright por defecto.
 
+**Si el issue produce o modifica evidencia de una fila del `workflow/quality/capability-integration-map.md`:** el brief declara el *failure mode* a cerrar, nunca un `coverage_status` objetivo — `"mover DOC-03 a INTEGRATION"` es un criterio de aceptación inválido, `"endurecer la evidencia de DOC-03 para el failure mode X"` es el válido; el status se deriva de la evidencia al cerrar. Además, este campo nombra el **entry point de producción** por el que el proof debe entrar y el **completion event** cuando la cadena incluye trabajo async o diferido. Las reglas de construcción viven en `workflow/quality/capability-proof-contract.md`: este skill no las duplica, exige que el brief las respete.
+
 ## Performance Architecture Review
 
 La arquitectura de performance vive en `.agents/skills/skill-performance/SKILL.md`. Este skill no duplica sus tablas, umbrales ni patrones: decide cuándo debe consultarse y exige que el resultado forme parte del brief.
