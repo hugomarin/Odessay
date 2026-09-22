@@ -749,6 +749,67 @@ describe("ODE-478 follow-up — closing a tab whose own materialization complete
   })
 })
 
+describe("ODE-555 follow-up — a failed hydration must not leave `hydrationWritingId` permanently stuck", () => {
+  it("publishes tab state again after an open-error, proving hydrationWritingId cleared back to null", async () => {
+    persistedSession.value = {
+      id: "workspace",
+      active_tab_id: "doc-a",
+      tabs: [
+        { id: "doc-a", writing_id: "doc-a", slug: null, title: "Doc A", save_state: "saved", has_pending_sync: false, last_touched_at: 2, view_state: null },
+        { id: "doc-b", writing_id: "doc-b", slug: null, title: "Doc B", save_state: "saved", has_pending_sync: false, last_touched_at: 1, view_state: null },
+      ],
+      recent_writings: [],
+      updated_at: 1,
+    }
+
+    // doc-a opens fine; doc-b fails every time it's attempted with a
+    // non-NOT_FOUND error, which resolveHydrationOutcome resolves as
+    // "open-error" (see editor-hydration-coordinator.test.ts) rather than
+    // "unavailable" (NOT_FOUND's tab-reconciliation path).
+    mocks.openWriting.mockImplementation(((id?: string) => {
+      if (id === "doc-b") {
+        return Promise.resolve({ error: { code: "UNAVAILABLE", message: "db down", retryable: true }, data: null })
+      }
+      return Promise.resolve({
+        error: null,
+        data: { ...desktopDraftRecord, id: id ?? "unknown", title: "Doc A", content: { ...desktopDraftRecord.content, plainText: "Doc A body" } },
+      })
+    }) as never)
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+    await vi.waitFor(() => expect(mocks.openWriting).toHaveBeenCalledWith("doc-a"))
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    await act(async () => {
+      topbarState.onSelectTab?.("doc-b")
+    })
+    await vi.waitFor(() => expect(mocks.openWriting).toHaveBeenCalledWith("doc-b"))
+    expect(errorSpy).toHaveBeenCalled()
+
+    // publishTabState's own effect guards on `hydrationWritingId === null`
+    // (editor-shell.tsx, ~line 5410) specifically so it never runs mid-flight
+    // and can't be confused with any OTHER effect (the main hydration effect
+    // reruns on every tab click regardless, since `editorSession.tabs` is
+    // one of its own dependencies and every select touches that array — that
+    // makes retried openWriting calls a poor signal for this specific fix).
+    // Without finishHydration() running on the open-error branch,
+    // `hydrationWritingId` stays pinned at "doc-b" forever, so this guard
+    // never lifts and publishTabState never runs again for doc-b -- the
+    // session tab's title stays whatever it was BEFORE doc-b was even
+    // selected (its own persisted "Doc B"), instead of being overwritten by
+    // the app's current (stale, still doc-a's) displayTitle the way a
+    // completed hydration cycle always does once the guard passes.
+    await vi.waitFor(() => {
+      const tab = getEditorSessionState().session.tabs.find((t) => t.id === "doc-b")
+      expect(tab?.title).toBe("Doc A")
+    })
+
+    errorSpy.mockRestore()
+  })
+})
+
 describe("ODE-478 follow-up — closing one tab while a different tab's draft materializes mid-close", () => {
   it("opens the renamed background tab, not a stale/blank fallback", async () => {
     persistedSession.value = {

@@ -681,6 +681,17 @@ export function EditorShell({
     shellScrollLeft?: number
     windowScrollX?: number
     windowScrollY?: number
+    // Cross-document-leak guard (ODE-555 follow-up): this queue is shared by
+    // every caller (typing, hydration, ...), and its deferred rAF has no
+    // built-in notion of "which document this was for" — without a guard, a
+    // hydration restore queued for A that hasn't fired yet would apply to
+    // whatever document/DOM is current by the time the frame runs, even a
+    // different one the user already switched to. Callers that care (only
+    // hydration does today) pass `isStillValid`; callers that don't (plain
+    // typing, always operating on the currently-active document) omit it and
+    // get the prior, unguarded behavior.
+    isStillValid?: () => boolean
+    onSettled?: () => void
   } | null>(null)
   const suppressNextSelectionPopupRef = useRef(false)
   const currentDocumentMarkdownRef = useRef("")
@@ -1455,6 +1466,8 @@ export function EditorShell({
         shellScrollLeft?: number
         windowScrollX?: number
         windowScrollY?: number
+        isStillValid?: () => boolean
+        onSettled?: () => void
       },
     ) => {
       pendingMarkdownSelectionRef.current = { start, end, ...options }
@@ -1473,9 +1486,18 @@ export function EditorShell({
           return
         }
 
+        // Checked at fire time, not schedule time: the document this
+        // restore was queued for may no longer be current by the time this
+        // frame actually runs (see the ref's own comment above).
+        if (pendingSelection.isStillValid && !pendingSelection.isStillValid()) {
+          pendingSelection.onSettled?.()
+          return
+        }
+
         const nextTextarea = markdownTextareaRef.current
 
         if (!nextTextarea) {
+          pendingSelection.onSettled?.()
           return
         }
 
@@ -1495,6 +1517,25 @@ export function EditorShell({
           nextTextarea.scrollLeft = pendingSelection.scrollLeft
         }
 
+        // Each scroll target re-applies itself a second frame later (layout
+        // can still settle after the first write) — that second write is
+        // the true "last write wins" moment, so it needs the same validity
+        // re-check (time has passed since the outer frame ran) and is what
+        // onSettled must actually wait for, not the outer frame itself.
+        let pendingNestedFrames = 0
+        const scheduleNestedApply = (apply: () => void) => {
+          pendingNestedFrames += 1
+          window.requestAnimationFrame(() => {
+            if (!pendingSelection.isStillValid || pendingSelection.isStillValid()) {
+              apply()
+            }
+            pendingNestedFrames -= 1
+            if (pendingNestedFrames === 0) {
+              pendingSelection.onSettled?.()
+            }
+          })
+        }
+
         const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
 
         if (
@@ -1512,7 +1553,7 @@ export function EditorShell({
           }
 
           applyViewportScroll()
-          window.requestAnimationFrame(applyViewportScroll)
+          scheduleNestedApply(applyViewportScroll)
         }
 
         const shellViewport = document.querySelector<HTMLElement>("main")
@@ -1531,7 +1572,7 @@ export function EditorShell({
           }
 
           applyShellScroll()
-          window.requestAnimationFrame(applyShellScroll)
+          scheduleNestedApply(applyShellScroll)
         }
 
         if (typeof pendingSelection.windowScrollX === "number" || typeof pendingSelection.windowScrollY === "number") {
@@ -1543,13 +1584,19 @@ export function EditorShell({
           }
 
           applyWindowScroll()
-          window.requestAnimationFrame(applyWindowScroll)
+          scheduleNestedApply(applyWindowScroll)
         }
 
         markdownSelectionRef.current = {
           start: pendingSelection.start,
           end: pendingSelection.end,
           text: nextTextarea.value.slice(pendingSelection.start, pendingSelection.end),
+        }
+
+        // No scroll target was scheduled (a plain selection-only restore) —
+        // this frame's write was the last one, so settle now.
+        if (pendingNestedFrames === 0) {
+          pendingSelection.onSettled?.()
         }
       })
     },
@@ -2319,6 +2366,39 @@ export function EditorShell({
     const generationOwner = hydrationGenerationOwnerRef.current!
     const generation = generationOwner.start(targetWritingId)
 
+    // Marking hydration "done" flips `hydrationWritingId` to null, which is
+    // this effect's own dependency — so calling it cancels this exact
+    // generation (see the cleanup below) once React processes the state
+    // update. The scroll/selection restore further down is deliberately
+    // deferred a frame (twice, for rich mode; markdown mode's own queue has
+    // its own deferred re-applies) so the DOM has settled after setContent;
+    // calling finishHydration() before that deferred work has actually run
+    // cancels its own generation out from under it, racing the still-queued
+    // requestAnimationFrame callback against React's cleanup with no
+    // ordering guarantee. Confirmed live (ODE-555): when the cleanup won
+    // that race, `generation.run()` silently no-op'd and the scroll restore
+    // was dropped in ~30-50% of runs, with no error and no other visible
+    // symptom. Every path through `hydrateEditor` below must call this
+    // exactly once — including its own failure paths (e.g. `open-error`,
+    // ODE-555 follow-up) — synchronously when there's no deferred restore to
+    // wait for, or from inside the deepest deferred callback that actually
+    // performs one. (Paths that `return` on staleness, e.g. `outcomeResult.
+    // status === "stale"`, are the one exception: staleness means a newer
+    // generation already owns `hydrationWritingId`, so this one has nothing
+    // left to clear.)
+    const finishHydration = () => {
+      generation.run(() => {
+        const restoreTiming = desktopSessionRestoreTimingRef.current
+        if (restoreTiming?.writingId === targetWritingId) {
+          console.info(
+            `[editor:session-restore] hydrated ${targetWritingId} duration_ms=${Math.round(performance.now() - restoreTiming.startedAt)}`,
+          )
+          desktopSessionRestoreTimingRef.current = null
+        }
+        setHydrationWritingId(null)
+      })
+    }
+
     const hydrateEditor = async () => {
       let hydratedWriting: EditorHydrationRecord | null = null
       const localCorrectionBlocksResult = await generation.runAsync(
@@ -2422,6 +2502,7 @@ export function EditorShell({
 
       if (outcome.status === "open-error") {
         console.error(`[editor] openWriting failed for ${targetWritingId}`, outcome.error)
+        finishHydration()
         return
       }
 
@@ -2600,6 +2681,16 @@ export function EditorShell({
                   shellScrollLeft: viewState.shellScrollLeft,
                   windowScrollX: viewState.windowScrollX,
                   windowScrollY: viewState.windowScrollY,
+                  // queueMarkdownSelectionRestore's own deferred writes (its
+                  // rAF, plus each scroll target's second re-apply frame)
+                  // are not otherwise generation-aware — without this, a
+                  // restore queued for A that hasn't fired yet could still
+                  // apply to B's now-current DOM after a fast A->B switch
+                  // (found on review, ODE-555). finishHydration only fires
+                  // once the restore has genuinely settled (applied or
+                  // skipped as stale), never before or twice.
+                  isStillValid: () => generation.isCurrent(),
+                  onSettled: finishHydration,
                 },
               )
             })
@@ -2658,9 +2749,12 @@ export function EditorShell({
                   applyShellScroll()
                   applyEditorScroll()
                 })
+                finishHydration()
               })
             }),
           )
+        } else {
+          finishHydration()
         }
       } else {
         setTitle(UNTITLED_WRITING_TITLE)
@@ -2676,18 +2770,8 @@ export function EditorShell({
         setBodyText("")
         currentCanonicalPathRef.current = null
         setCanonicalPath(null)
+        finishHydration()
       }
-
-      generation.run(() => {
-        const restoreTiming = desktopSessionRestoreTimingRef.current
-        if (restoreTiming?.writingId === targetWritingId) {
-          console.info(
-            `[editor:session-restore] hydrated ${targetWritingId} duration_ms=${Math.round(performance.now() - restoreTiming.startedAt)}`,
-          )
-          desktopSessionRestoreTimingRef.current = null
-        }
-        setHydrationWritingId(null)
-      })
     }
 
     void hydrateEditor()
