@@ -5,6 +5,7 @@ import type {
   DesktopCatalogDualWriteInput,
   DesktopCatalogRow,
   DesktopFileMetadata,
+  DesktopRetiredBindingRoot,
   DesktopWorkspaceFile,
   DesktopWorkspaceSnapshot,
   DesktopWorkspaceTouchResult,
@@ -178,6 +179,47 @@ export async function tauriOpenFileDouble(path: string): Promise<string> {
   return fs.readFile(path, "utf8")
 }
 
+/**
+ * Mirrors the real Rust `relocate_file` (document.rs): the source must
+ * exist, the destination's parent directories are created as needed, saving
+ * onto the file's own current (canonical) location is a no-op rather than a
+ * collision, and any real collision at the requested path resolves to the
+ * next free "Name 2.md"/"Name 3.md" — a real `fs.rename`, never a copy, so a
+ * cross-BindingRoot move genuinely leaves nothing behind at the old path.
+ */
+export async function tauriRelocateFileDouble(oldPath: string, newPath: string): Promise<string> {
+  const sourceStat = await fs.stat(oldPath).catch(() => null)
+  if (!sourceStat || !sourceStat.isFile()) {
+    throw new Error(`relocate_file: source not found: ${oldPath}`)
+  }
+
+  await fs.mkdir(dirname(newPath), { recursive: true })
+
+  const [canonicalSource, canonicalRequested] = await Promise.all([
+    fs.realpath(oldPath).catch(() => null),
+    fs.realpath(newPath).catch(() => null),
+  ])
+  if (canonicalSource && canonicalRequested && canonicalSource === canonicalRequested) {
+    return newPath
+  }
+
+  let target = newPath
+  if (await fs.stat(target).then(() => true).catch(() => false)) {
+    const ext = target.includes(".") ? target.slice(target.lastIndexOf(".")) : ""
+    const withoutExt = ext ? target.slice(0, -ext.length) : target
+    let counter = 2
+    let candidate = `${withoutExt} ${counter}${ext}`
+    while (await fs.stat(candidate).then(() => true).catch(() => false)) {
+      counter += 1
+      candidate = `${withoutExt} ${counter}${ext}`
+    }
+    target = candidate
+  }
+
+  await fs.rename(oldPath, target)
+  return target
+}
+
 export async function tauriListRecentFilesDouble(dir: string, limit = 200): Promise<DesktopFileMetadata[]> {
   await fs.mkdir(dir, { recursive: true })
   const names = await fs.readdir(dir)
@@ -285,6 +327,17 @@ export async function tauriCatalogResolvePathDouble(dbPath: string, path: string
 
 export async function tauriCatalogListDouble(dbPath: string): Promise<DesktopCatalogRow[]> {
   return [...rowsFor(dbPath).values()]
+}
+
+/**
+ * No test using this double ever retires a BindingRoot, so this always
+ * returns empty — a real, minimal shape of "nothing to recover," not a
+ * shortcut around the property under test. `DesktopWorkspaceService.
+ * readRecords()` calls this on every read via `recoverInterruptedWorkspaceRemovals`
+ * and short-circuits immediately when it's empty.
+ */
+export async function tauriCatalogListRetiredBindingRootsDouble(_dbPath: string): Promise<DesktopRetiredBindingRoot[]> {
+  return []
 }
 
 export async function tauriCatalogDetachLocalFileDouble(dbPath: string, id: string): Promise<void> {
