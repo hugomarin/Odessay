@@ -35,6 +35,8 @@ No es necesario releer toda la documentación de producto — solo lo que el `Ar
 | `review-testing` | casi siempre que el diff introduce o modifica comportamiento observable | ¿los tests demuestran el comportamiento, no solo que no explota? |
 | `review-change-size` | el diff mezcla dominios no relacionados o supera ~150–200 líneas sin razón estructural | ¿sigue siendo una unidad coherente y revisable? |
 
+`review-testing` se vuelve **obligatoria, no discrecional**, cuando el diff produce o modifica evidencia de una fila del `workflow/quality/capability-integration-map.md` — o sube su `coverage_status`. En ese caso la lente aplica además el contrato de construcción (`workflow/quality/capability-proof-contract.md`): fidelidad al camino de producción, completion vs. scheduling, y checklist de pre-upgrade antes de aceptar la subida.
+
 No cargar una lente por defecto en diffs triviales o de una línea. Cargar solo las que el scope real del diff activa.
 
 **Dispatch automatizado a subagentes (opcional):** si el agente ejecutor soporta `Agent` (subagentes), `.agents/skills/skill-code-review/claude-enhancements.md` define umbrales de líneas y scope para despachar en paralelo los especialistas de `specialists/security.md`, `specialists/performance.md`, `specialists/data-migration.md`, `specialists/testing.md` — output JSON estricto, mergeado por fingerprint. Es un mecanismo de paralelización, no un sustituto del review base: el review debe ser completo sin él.
