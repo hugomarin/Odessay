@@ -72,4 +72,5 @@ Ese documento es ahora el canonical owner de "qué capability priorizar después
 
 - Al escribir un brief (`Validation requirements`, ver `skill-planning`): elegir el nivel mínimo de esta taxonomía que falsifica el failure mode declarado, y justificar por escrito si se escala a E2E o Performance.
 - En review (`review-testing`): un integration/contract test que demuestra el contrato directamente es evidencia válida — no exigir Playwright por defecto.
+- Al construir (o revisar) un test que sirve como evidencia de una fila del capability map: leer `workflow/quality/capability-proof-contract.md` antes de escribirlo. Elegir bien el nivel no basta — ese contrato define las reglas MUST de construcción (entry point real, secuencia de producción, seams internos reales, scheduling ≠ completion, doubles con el contrato completo, status como output).
 - Al priorizar trabajo nuevo de testing: `workflow/quality/capability-integration-map.md`'s V1 Implementation Plan es la lista candidata, en el orden en que está declarado salvo que un incidente real reordene la prioridad.

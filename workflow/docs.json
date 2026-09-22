@@ -398,6 +398,21 @@
       "description": "Propuesta histórica de mejoras para el modal de Preview. No es contrato vigente; requiere revisión de PM para promoción, archivo o descarte."
     },
     {
+      "path": "workflow/quality/capability-integration-map.md",
+      "type": "ops",
+      "description": "Inventario canónico de capabilities de nivel integración: critical chain real y coverage_status auditado por scenario (A–N), escala NONE→RELEASE, modelo de prioridad, metodología de Critical Proofs y tracker de Fase 3. Es el registro que se actualiza cuando un proof cierra o degrada un scenario."
+    },
+    {
+      "path": "workflow/quality/capability-proof-contract.md",
+      "type": "guardrail",
+      "description": "Contrato normativo de construcción de capability proofs (reglas MUST): entry point alcanzable en producción, reproducir la secuencia de transiciones, seams internos reales, scheduling ≠ completion, ownership de trabajo diferido, doubles con el contrato completo del boundary, errores tragados no cuentan como ejecución, mutation test, y coverage status como output y no como meta. Incluye taxonomía de escapes (MOCKED_SEAM, WRONG_ASSERTION, NON_PRODUCTION_PATH, STALE_PROOF, ARCHITECTURE_GAP) y checklist de pre-upgrade. Leer en BUILD y REVIEW de cualquier proof."
+    },
+    {
+      "path": "workflow/quality/quality-harness-spec-v2.1.md",
+      "type": "spec",
+      "description": "Spec original del Quality Harness (skills, agents, AGENTS.md, CI, remediation plane, learning loop) con su Estado de implementación reconciliado: qué shippeó como se planeó y qué divergió al Capability Integration Map. Documento de dirección, no contrato de BUILD."
+    },
+    {
       "path": "workflow/testing/playwright-catalog.md",
       "type": "ops",
       "description": "Catálogo operativo de assets Playwright del repo: organiza tests, helpers y scripts por familia, clasifica qué reutilizar, qué evitar, cómo prevenir proliferación de suites solapadas, y reglas de mapeo servicio-contrato. Incluye §Regla de mapeo servicio-contrato para vincular tests a contratos operativos explícitos."
@@ -724,6 +739,7 @@
     "workflow/context/core/": "Verdades estables del producto. Descripción del qué, para quién, cómo se ve y cómo funciona.",
     "workflow/context/features/": "Spec de cada feature con complejidad propia. Un documento por feature.",
     "workflow/define/": "Artefactos de planificación y definición (roadmap, DoD, debrief e issue briefs).",
+    "workflow/quality/": "Capa de calidad estructural: inventario de capabilities y su cobertura real, contrato normativo de construcción de proofs, y la spec del Quality Harness. Es donde se decide qué evidencia cuenta, no cómo se escribe un test.",
     "workflow/testing/": "Documentación operativa de testing y catálogos de assets reutilizables, especialmente Playwright/harnesses y políticas para evitar suites duplicadas.",
     "workflow/perf/": "Instrumentos históricos o especializados de performance; su routing y ownership conceptual viven en skill-performance.",
     "workflow/context/framework/": "Framework MECE genérico. No es específico de Odessay.",

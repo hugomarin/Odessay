@@ -5,6 +5,7 @@ import type {
   DesktopCatalogDualWriteInput,
   DesktopCatalogRow,
   DesktopFileMetadata,
+  DesktopRetiredBindingRoot,
   DesktopWorkspaceFile,
   DesktopWorkspaceSnapshot,
   DesktopWorkspaceTouchResult,
@@ -32,6 +33,15 @@ let dataDir = ""
 
 const catalogsByDb = new Map<string, Map<string, DesktopCatalogRow>>()
 const bindingRootIdsByRoot = new Map<string, string>()
+// Per-root durable manifest state (relativePath -> document id), real enough
+// to prove Workspace-manifest convergence (WS-02): an explicit-IDs call binds
+// entries into it; a no-IDs call (production's own "rescan/reconcile this
+// root" form) drops any entry whose file no longer exists on real disk —
+// exactly what a real directory rescan would find after a relocate moved the
+// file elsewhere. Not a full manifest file/versioning model (that stays out
+// of scope, per the note below) — just enough state to answer "does this
+// root still claim this document" truthfully.
+const manifestsByRoot = new Map<string, Map<string, string>>()
 
 /** Point the `@tauri-apps/api/path` double at a real temp directory. Call once per test file, before the first production call that resolves desktop runtime services. */
 export function configureRealDesktopDoubles(baseDir: string): void {
@@ -43,6 +53,16 @@ export function configureRealDesktopDoubles(baseDir: string): void {
 export function resetCatalogDoubles(): void {
   catalogsByDb.clear()
   bindingRootIdsByRoot.clear()
+  manifestsByRoot.clear()
+}
+
+function manifestFor(rootPath: string): Map<string, string> {
+  let manifest = manifestsByRoot.get(rootPath)
+  if (!manifest) {
+    manifest = new Map()
+    manifestsByRoot.set(rootPath, manifest)
+  }
+  return manifest
 }
 
 function rowsFor(dbPath: string): Map<string, DesktopCatalogRow> {
@@ -178,6 +198,47 @@ export async function tauriOpenFileDouble(path: string): Promise<string> {
   return fs.readFile(path, "utf8")
 }
 
+/**
+ * Mirrors the real Rust `relocate_file` (document.rs): the source must
+ * exist, the destination's parent directories are created as needed, saving
+ * onto the file's own current (canonical) location is a no-op rather than a
+ * collision, and any real collision at the requested path resolves to the
+ * next free "Name 2.md"/"Name 3.md" — a real `fs.rename`, never a copy, so a
+ * cross-BindingRoot move genuinely leaves nothing behind at the old path.
+ */
+export async function tauriRelocateFileDouble(oldPath: string, newPath: string): Promise<string> {
+  const sourceStat = await fs.stat(oldPath).catch(() => null)
+  if (!sourceStat || !sourceStat.isFile()) {
+    throw new Error(`relocate_file: source not found: ${oldPath}`)
+  }
+
+  await fs.mkdir(dirname(newPath), { recursive: true })
+
+  const [canonicalSource, canonicalRequested] = await Promise.all([
+    fs.realpath(oldPath).catch(() => null),
+    fs.realpath(newPath).catch(() => null),
+  ])
+  if (canonicalSource && canonicalRequested && canonicalSource === canonicalRequested) {
+    return newPath
+  }
+
+  let target = newPath
+  if (await fs.stat(target).then(() => true).catch(() => false)) {
+    const ext = target.includes(".") ? target.slice(target.lastIndexOf(".")) : ""
+    const withoutExt = ext ? target.slice(0, -ext.length) : target
+    let counter = 2
+    let candidate = `${withoutExt} ${counter}${ext}`
+    while (await fs.stat(candidate).then(() => true).catch(() => false)) {
+      counter += 1
+      candidate = `${withoutExt} ${counter}${ext}`
+    }
+    target = candidate
+  }
+
+  await fs.rename(oldPath, target)
+  return target
+}
+
 export async function tauriListRecentFilesDouble(dir: string, limit = 200): Promise<DesktopFileMetadata[]> {
   await fs.mkdir(dir, { recursive: true })
   const names = await fs.readdir(dir)
@@ -212,11 +273,35 @@ export async function tauriWorkspaceTouchFileDouble(
 export async function tauriWorkspaceSyncDouble(
   rootPath: string,
   _selectedPaths: string[] | undefined,
-  documentIds: Record<string, string>,
+  documentIds?: Record<string, string>,
 ): Promise<DesktopWorkspaceSnapshot> {
-  const entries = Object.entries(documentIds)
+  const manifest = manifestFor(rootPath)
+
+  // Explicit-IDs form (the destination bind: relocateDesktopWriting passes
+  // `{ [relativePath]: id }` for the file it just moved in) — durably record
+  // the association, not just this one call's transient result.
+  if (documentIds) {
+    for (const [relativePath, id] of Object.entries(documentIds)) {
+      manifest.set(relativePath, id)
+    }
+  }
+
+  // Reconcile-delete: runs on EVERY call, not just the no-IDs (origin-root
+  // resync) form above — production's real rescan drops entries for files
+  // it can no longer find on disk regardless of whether this same call also
+  // carried an explicit id map, so this double does too, rather than
+  // requiring (and previously crashing on the absence of) an explicit id map
+  // whenever `documentIds` is omitted.
+  for (const relativePath of [...manifest.keys()]) {
+    const stillExists = await fs
+      .stat(join(rootPath, relativePath))
+      .then(() => true)
+      .catch(() => false)
+    if (!stillExists) manifest.delete(relativePath)
+  }
+
   const files = await Promise.all(
-    entries.map(([relativePath, id]) => statAsWorkspaceFile(rootPath, relativePath, id)),
+    [...manifest.entries()].map(([relativePath, id]) => statAsWorkspaceFile(rootPath, relativePath, id)),
   )
   const bindingRootId = bindingRootFor(rootPath)
   return {
@@ -285,6 +370,17 @@ export async function tauriCatalogResolvePathDouble(dbPath: string, path: string
 
 export async function tauriCatalogListDouble(dbPath: string): Promise<DesktopCatalogRow[]> {
   return [...rowsFor(dbPath).values()]
+}
+
+/**
+ * No test using this double ever retires a BindingRoot, so this always
+ * returns empty — a real, minimal shape of "nothing to recover," not a
+ * shortcut around the property under test. `DesktopWorkspaceService.
+ * readRecords()` calls this on every read via `recoverInterruptedWorkspaceRemovals`
+ * and short-circuits immediately when it's empty.
+ */
+export async function tauriCatalogListRetiredBindingRootsDouble(_dbPath: string): Promise<DesktopRetiredBindingRoot[]> {
+  return []
 }
 
 export async function tauriCatalogDetachLocalFileDouble(dbPath: string, id: string): Promise<void> {

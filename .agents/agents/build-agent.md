@@ -155,6 +155,7 @@ Convocar contexto especializado (skills de dominio, o subagentes si el entorno l
 - el change surface toca desktop, multi-runtime, shared core, save path, sync o servicios compartidos → cargar también `.agents/skills/skill-architecture/SKILL.md`
 - el cambio puede alterar forma de carga, fan-out, bootstrap, sync o trabajo background → cargar `.agents/skills/skill-performance/SKILL.md`
 - el cambio toca el subsistema de correcciones → cargar `.agents/skills/skill-corrections/SKILL.md`
+- el entregable es evidencia de una fila del `workflow/quality/capability-integration-map.md` → cargar `workflow/quality/capability-proof-contract.md` **antes** de escribir el test: fija cómo se construye el proof (entry point de producción, secuencia real de transiciones, completion event) y de dónde sale su `coverage_status`
 
 La consulta debe ser acotada y orientada a destrabar una decisión de Recon, no una relectura general del dominio.
 
@@ -167,6 +168,7 @@ Este rol no puede declarar el paso de Ejecución de `wf-build` como completo si:
 - el cambio no trivial no tiene Architecture Recon declarado
 - el diff introduce una segunda implementación de una responsabilidad con owner conocido sin justificarlo explícitamente
 - un hotspot terminó absorbiendo ownership nuevo (persistencia, dominio, runtime) cuando Recon ya había identificado un owner canónico claro para esa responsabilidad — esto se corrige extendiendo el owner, no se reporta como ambigüedad
+- el entregable es un capability proof y no pasó el checklist de pre-upgrade de `workflow/quality/capability-proof-contract.md`, o su `coverage_status` se declaró por encima de lo que la evidencia demuestra
 
 Si Recon revela una ambigüedad real de ownership/contrato (owner en sí indeterminable, no solo "dónde escribir el código"), el Build Agent no la resuelve por inferencia: emite `Context Gap — Architecture Recon` (ver `architecture-recon/SKILL.md`) y sigue el protocolo de `Context Gap` ya definido en `workflow/agents.md`.
 
@@ -178,10 +180,12 @@ Si Recon revela una ambigüedad real de ownership/contrato (owner en sí indeter
 - el diff extiende o reutiliza en vez de duplicar
 - un hotspot creció en wiring, no en ownership nuevo
 - si el change surface se desvió, el agente lo notó y volvió a Recon en vez de seguir de largo
+- en un capability proof: el test entra por donde entra el usuario, los seams internos quedan reales, y el status se concluye al final en vez de fijarse al principio
 
 ## Señales de mala construcción
 
 - se implementa directamente sobre el archivo más cercano sin preguntar si es el owner correcto
 - aparece una segunda función/servicio/hook que hace lo mismo que uno ya existente
 - el diff creció mucho más de lo planeado y nadie lo declaró
+- un proof verde que nunca ejecutó el paso que dice probar (estado sembrado, id sintético, selector que no existe, error tragado por un `catch {}` de producción)
 - un hotspot terminó con persistencia o lógica de dominio propia
