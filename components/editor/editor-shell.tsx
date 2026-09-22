@@ -2445,6 +2445,33 @@ export function EditorShell({
 
       if (!generation.isCurrent()) return
 
+      // Marking hydration "done" flips `hydrationWritingId` to null, which is
+      // this effect's own dependency — so calling it cancels this exact
+      // generation (see the cleanup below) once React processes the state
+      // update. The scroll/selection restore further down is deliberately
+      // deferred a frame (twice, for rich mode) so the DOM has settled after
+      // setContent; calling finishHydration() before that deferred work has
+      // actually run cancels its own generation out from under it, racing
+      // the still-queued requestAnimationFrame callback against React's
+      // cleanup with no ordering guarantee. Confirmed live (ODE-555): when
+      // the cleanup won that race, `generation.run()` silently no-op'd and
+      // the scroll restore was dropped in ~30-50% of runs, with no error and
+      // no other visible symptom. finishHydration() must only be called
+      // once — synchronously when there's no deferred restore to wait for,
+      // or from inside the deepest rAF callback that actually performs one.
+      const finishHydration = () => {
+        generation.run(() => {
+          const restoreTiming = desktopSessionRestoreTimingRef.current
+          if (restoreTiming?.writingId === targetWritingId) {
+            console.info(
+              `[editor:session-restore] hydrated ${targetWritingId} duration_ms=${Math.round(performance.now() - restoreTiming.startedAt)}`,
+            )
+            desktopSessionRestoreTimingRef.current = null
+          }
+          setHydrationWritingId(null)
+        })
+      }
+
       if (hydratedWriting) {
         const { writing, canonicalPath, lifecycle: hydratedLifecycle, syncStatus: hydratedSyncStatus } =
           hydratedWriting
@@ -2603,6 +2630,7 @@ export function EditorShell({
                 },
               )
             })
+            finishHydration()
           })
         } else if (viewState) {
           modeRef.current = "rich"
@@ -2658,9 +2686,12 @@ export function EditorShell({
                   applyShellScroll()
                   applyEditorScroll()
                 })
+                finishHydration()
               })
             }),
           )
+        } else {
+          finishHydration()
         }
       } else {
         setTitle(UNTITLED_WRITING_TITLE)
@@ -2676,18 +2707,8 @@ export function EditorShell({
         setBodyText("")
         currentCanonicalPathRef.current = null
         setCanonicalPath(null)
+        finishHydration()
       }
-
-      generation.run(() => {
-        const restoreTiming = desktopSessionRestoreTimingRef.current
-        if (restoreTiming?.writingId === targetWritingId) {
-          console.info(
-            `[editor:session-restore] hydrated ${targetWritingId} duration_ms=${Math.round(performance.now() - restoreTiming.startedAt)}`,
-          )
-          desktopSessionRestoreTimingRef.current = null
-        }
-        setHydrationWritingId(null)
-      })
     }
 
     void hydrateEditor()
