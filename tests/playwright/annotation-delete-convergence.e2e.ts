@@ -61,4 +61,16 @@ test("typed-annotation and standalone-highlight deletes converge to the same fin
   await expect(reloadedEditor).toContainText("AI anchor")
   await expect(reloadedEditor).toContainText("Standalone anchor")
   await expect(reloadedEditor.locator("mark")).toHaveCount(0)
+
+  // Same convergence claim, but against the durable canonical representation
+  // (Markdown), not just the rendered DOM: both anchors' text survives, the
+  // typed path's reference token is gone, and neither anchor is still
+  // wrapped in highlight syntax.
+  await switchToMarkdown(page)
+  const reloadedMarkdown = await markdownTextarea(page)
+  await expect(reloadedMarkdown).toHaveValue(/AI anchor/)
+  await expect(reloadedMarkdown).toHaveValue(/Standalone anchor/)
+  await expect(reloadedMarkdown).not.toHaveValue(/ann-ai/)
+  await expect(reloadedMarkdown).not.toHaveValue(/==AI anchor==/)
+  await expect(reloadedMarkdown).not.toHaveValue(/==Standalone anchor==/)
 })
