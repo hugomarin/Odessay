@@ -66,6 +66,21 @@ function err<T>(code: ServiceError["code"], message: string): ServiceResponse<T>
   return { data: null, error: { code, message, retryable: false } }
 }
 function unexpected(error: unknown, fallback: ServiceError["code"] = "UNAVAILABLE"): ServiceError {
+  // A caller inside this class (persist()) can throw an already-well-formed
+  // ServiceError — e.g. the WATCH-07 CONFLICT from a write-side hash
+  // mismatch — and that specific code must survive to the outer
+  // ServiceResponse, not collapse into a generic fallback the way a plain
+  // Error's message-only info would.
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    "message" in error &&
+    typeof (error as { code: unknown }).code === "string" &&
+    typeof (error as { message: unknown }).message === "string"
+  ) {
+    return error as ServiceError
+  }
   return { code: fallback, message: error instanceof Error ? error.message : "Unexpected error", retryable: false }
 }
 function createWritingId() { return crypto.randomUUID() }
@@ -148,6 +163,7 @@ class DesktopDocumentService implements DocumentService {
     record: WritingRecord,
     canonicalPath: string,
     operation: "upsert" | "delete" = "upsert",
+    expectedContentHash?: string | null,
   ): Promise<WritingRecord> {
     const markdown = this.serialize(record)
     if (operation === "upsert") {
@@ -157,8 +173,9 @@ class DesktopDocumentService implements DocumentService {
           id: canonicalPath,
           content: { markdown, richText: null, plainText: record.content.plainText, canonicalSource: "markdown" },
         },
+        expectedContentHash,
       })
-      if (fileResult.error) throw new Error(fileResult.error.message)
+      if (fileResult.error) throw fileResult.error
     }
 
     const catalogBefore = await this.runtime.catalog.getById(record.id)
@@ -271,7 +288,7 @@ class DesktopDocumentService implements DocumentService {
       // The SQLite mutation is durable. The rescue ticker will retry if the
       // in-memory scheduler is unavailable during shutdown.
     })
-    return { ...record, title: nextTitle }
+    return { ...record, title: nextTitle, contentHash: nextContentHash }
   }
 
   async listWritings(input?: ListWritingsInput): Promise<ServiceResponse<WritingSummary[]>> {
@@ -315,7 +332,7 @@ class DesktopDocumentService implements DocumentService {
     try {
       const existing = await this.runtime.catalog.getById(input.writing.id)
       if (!existing?.binding?.canonicalPath) return err("NOT_FOUND", `Writing ${input.writing.id} has no local binding`)
-      return ok(await this.persist(input.writing, existing.binding.canonicalPath))
+      return ok(await this.persist(input.writing, existing.binding.canonicalPath, "upsert", input.expectedContentHash))
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 

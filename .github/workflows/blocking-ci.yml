@@ -1,0 +1,118 @@
+name: blocking-ci
+
+# Único entrypoint de merge. La composición interna (quality/process-checks/
+# repo-checks) puede cambiar sin tener que reconfigurar branch protection
+# cada vez — el único check que se marca como required en GitHub Settings es
+# "CI required".
+#
+# Estrategia de costo: `CI required` solo agrega checks baratos y
+# deterministas (traceability, process sync, ledgers/drift, architecture
+# ratchets, typecheck/lint/unit/build). Playwright/E2E y performance capture
+# quedan fuera del blocking universal — ver scoped-ci.yml (reusable/manual,
+# ya no referenciado aquí) y workflow/testing/critical-capabilities-testing.md
+# para el principio ("test at the lowest-cost boundary that can falsify the
+# failure mode we care about") y cuándo sí conviene escalar a esas
+# herramientas.
+#
+# Pre-flight real: `process-checks` corre primero (falla en segundos si falta
+# ODE-XX o hay drift de proceso). `quality` y `repo-checks` solo arrancan si
+# `process-checks` termina en SUCCESS — evita gastar runners en typecheck/
+# lint/test/build/architecture cuando el PR ya es inválido por trazabilidad.
+
+on:
+  pull_request:
+    # Default types (opened/synchronize/reopened) never refire on a label
+    # change alone — a PR labeled `process`/`infra` after opening would keep
+    # the traceability gate reading a stale, label-less event snapshot until
+    # the next push. Adding labeled/unlabeled makes the infra/process
+    # exemption actually take effect when the label is what changed.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      app_changed: ${{ steps.detect.outputs.app_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          CHANGED="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
+          echo "Changed files:"
+          echo "${CHANGED}"
+
+          # Rutas que nunca afectan app code, scripts, CI o los gates de
+          # proceso (ops:process:sync, ledgers, drift) — solo contenido de
+          # skills/roles/docs. workflow/workflow.md y workflow/agents.md
+          # quedan deliberadamente fuera: ops:process:sync los acopla a
+          # cambios en skill-planning/skill-code-review, y ese gate solo
+          # corre dentro de process-checks.
+          SAFE_PATTERN='^(\.agents/|docs/|README\.md$|AGENTS\.md$|.*/AGENTS\.md$|\.claude/commands/)'
+
+          # skill-planning/SKILL.md y skill-code-review/SKILL.md viven bajo
+          # .agents/ (matchean SAFE_PATTERN) pero scripts/check-process-sync.mjs
+          # los acopla a workflow/workflow.md: un cambio aislado a cualquiera de
+          # los tres exige que los otros dos se toquen también. Si el fast-path
+          # los tratara como safe, un PR que solo tocara uno de ellos se saltaría
+          # el gate hecho específicamente para protegerlos.
+          PROCESS_COUPLED_PATTERN='^\.agents/skills/skill-planning/SKILL\.md$|^\.agents/skills/skill-code-review/SKILL\.md$'
+
+          if echo "${CHANGED}" | grep -qvE "${SAFE_PATTERN}" || echo "${CHANGED}" | grep -qE "${PROCESS_COUPLED_PATTERN}"; then
+            echo "app_changed=true" >> "${GITHUB_OUTPUT}"
+            echo "Hay archivos fuera de docs/skills/roles, o uno de los archivos acoplados a ops:process:sync — corre CI completo."
+          else
+            echo "app_changed=false" >> "${GITHUB_OUTPUT}"
+            echo "Solo cambiaron docs/skills/roles sin acoplamiento a process-sync — se salta quality/process-checks/repo-checks."
+          fi
+
+  process-checks:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.app_changed == 'true'
+    uses: ./.github/workflows/process-checks.yml
+    secrets: inherit
+
+  quality:
+    needs: [detect-changes, process-checks]
+    if: needs.detect-changes.outputs.app_changed == 'true' && needs.process-checks.result == 'success'
+    uses: ./.github/workflows/quality.yml
+    secrets: inherit
+
+  repo-checks:
+    needs: [detect-changes, process-checks]
+    if: needs.detect-changes.outputs.app_changed == 'true' && needs.process-checks.result == 'success'
+    uses: ./.github/workflows/repo-checks.yml
+    secrets: inherit
+
+  # scoped-ci.yml (Playwright E2E) ya no es parte de la composición blocking:
+  # ver el comentario de costo arriba. Sigue existiendo como workflow reusable
+  # (`workflow_dispatch` + `workflow_call`) para invocación manual/futura.
+
+  required:
+    name: CI required
+    if: always()
+    needs: [detect-changes, process-checks, quality, repo-checks]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all required jobs passed or were skipped
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "One or more required jobs failed."
+            exit 1
+          fi
+          if [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more required jobs were cancelled."
+            exit 1
+          fi
+          echo "All required jobs passed or were correctly skipped."

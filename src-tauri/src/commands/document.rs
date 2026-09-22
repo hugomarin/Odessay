@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 use tauri_plugin_fs::FsExt;
 use uuid::Uuid;
 
@@ -19,6 +19,14 @@ pub struct FileMetadata {
 #[tauri::command]
 pub fn open_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| format!("open_file: {e}"))
+}
+
+/// Drains file paths macOS asked us to open (Finder "Open With" / a Dock
+/// drop) before the frontend had a `menu:os-open-path` listener registered.
+/// Called once at boot so a cold-start open isn't lost to that race.
+#[tauri::command]
+pub fn take_pending_open_paths(state: State<crate::PendingOpenPaths>) -> Vec<String> {
+    std::mem::take(&mut *state.0.lock().unwrap())
 }
 
 /// Grant the native fs watcher access to a user-confirmed BindingRoot.
@@ -59,9 +67,43 @@ pub fn create_file(dir: String, filename: String) -> Result<String, String> {
 /// Atomically write `content` to `path` by writing a .tmp sibling then renaming.
 /// Creates parent directories if they don't exist.
 /// The promise resolves only after the file is fully persisted.
+///
+/// `expected_content_hash` is the WATCH-07 write-side conflict guard: the
+/// watcher/reconciler path (TS side) detects an external edit early and
+/// drives the UI, but that path always has a window between "detected" and
+/// "the next save actually runs" where a caller could still overwrite an
+/// external edit it never saw. This is the final barrier: immediately before
+/// the rename that makes a write durable, the file's *current* on-disk
+/// content hash is recomputed and compared against what the caller expected
+/// when it started this save. A mismatch (or the file having disappeared)
+/// means the file changed since the caller last knew about it, and the write
+/// is refused with a `CONFLICT: ` prefixed error instead of silently
+/// clobbering someone else's edit. `None` skips the check entirely — used
+/// for a brand-new file with no prior baseline to compare against.
 #[tauri::command]
-pub fn write_file(path: String, content: String) -> Result<(), String> {
+pub fn write_file(
+    path: String,
+    content: String,
+    expected_content_hash: Option<String>,
+) -> Result<(), String> {
     let target = Path::new(&path);
+
+    if let Some(expected) = expected_content_hash {
+        if !target.exists() {
+            return Err(format!(
+                "CONFLICT: {} no longer exists on disk (expected content hash {expected})",
+                target.display()
+            ));
+        }
+        let actual = crate::commands::workspace::content_hash_for_markdown_file(target)?;
+        if actual != expected {
+            return Err(format!(
+                "CONFLICT: {} changed on disk since it was last read (expected {expected}, found {actual})",
+                target.display()
+            ));
+        }
+    }
+
     if let Some(parent) = target.parent() {
         if !parent.exists() {
             fs::create_dir_all(parent).map_err(|e| format!("create_dir_all: {e}"))?;
@@ -637,6 +679,93 @@ mod tests {
         let persisted = fs::read(&target).expect("binary export should be readable");
         assert_eq!(persisted, bytes);
 
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_file_without_expected_hash_always_succeeds() {
+        let root = temp_dir("write-no-precondition");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+
+        write_file(target.to_string_lossy().to_string(), "Replaced\n".into(), None)
+            .expect("write with no baseline should never be refused");
+
+        assert_eq!(fs::read_to_string(&target).expect("read target"), "Replaced\n");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_file_with_matching_expected_hash_succeeds() {
+        let root = temp_dir("write-matching-hash");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+        let baseline = crate::commands::workspace::content_hash_for_markdown_file(&target)
+            .expect("compute baseline hash");
+
+        write_file(
+            target.to_string_lossy().to_string(),
+            "Updated by me\n".into(),
+            Some(baseline),
+        )
+        .expect("write with a correct baseline should succeed");
+
+        assert_eq!(
+            fs::read_to_string(&target).expect("read target"),
+            "Updated by me\n"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// The WATCH-07 property this test exists to prove: once another process
+    /// has changed the file since the caller's baseline was taken, the write
+    /// must be refused — never silently applied over the external edit.
+    #[test]
+    fn write_file_with_stale_expected_hash_is_refused_and_leaves_disk_untouched() {
+        let root = temp_dir("write-stale-hash");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+        let stale_baseline = crate::commands::workspace::content_hash_for_markdown_file(&target)
+            .expect("compute stale baseline hash");
+
+        // Another process edits the file after the baseline was taken.
+        fs::write(&target, "Changed by another app\n").expect("simulate external edit");
+
+        let result = write_file(
+            target.to_string_lossy().to_string(),
+            "My conflicting edit\n".into(),
+            Some(stale_baseline),
+        );
+
+        let error = result.expect_err("a stale baseline must refuse the write");
+        assert!(
+            error.starts_with("CONFLICT:"),
+            "error must be identifiable as a conflict, got: {error}"
+        );
+        assert_eq!(
+            fs::read_to_string(&target).expect("read target"),
+            "Changed by another app\n",
+            "the external edit must remain completely untouched"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_file_with_expected_hash_but_missing_file_is_a_conflict() {
+        let root = temp_dir("write-missing-file");
+        let target = root.join("Letter.md");
+        // Never created — simulates the file being deleted externally between
+        // the caller's baseline read and this save.
+
+        let result = write_file(
+            target.to_string_lossy().to_string(),
+            "My edit\n".into(),
+            Some("blake3:0000000000000000000000000000000000000000000000000000000000000000".into()),
+        );
+
+        let error = result.expect_err("a missing file with an expected baseline must conflict, not silently create");
+        assert!(error.starts_with("CONFLICT:"), "got: {error}");
+        assert!(!target.exists(), "no partial write must happen on conflict");
         let _ = fs::remove_dir_all(root);
     }
 }

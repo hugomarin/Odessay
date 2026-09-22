@@ -12,7 +12,7 @@ Referencias:
 - `workflow/context/features/odessay-desktop-app.md`
 - `workflow/context/features/odessay-desktop-target-architecture.md`
 - `.agents/skills/skill-architecture/SKILL.md`
-- `.agents/skills/skill-product-manager/SKILL.md`
+- `.agents/skills/skill-planning/SKILL.md`
 
 ---
 

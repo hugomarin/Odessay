@@ -15,7 +15,7 @@ Referencias:
 - `workflow/context/features/odessay-prosemirror-tiptap.md`
 - `workflow/context/core/odessay-stack.md`
 - `.agents/skills/skill-architecture/SKILL.md`
-- `.agents/skills/skill-product-manager/SKILL.md`
+- `.agents/skills/skill-planning/SKILL.md`
 
 ---
 
