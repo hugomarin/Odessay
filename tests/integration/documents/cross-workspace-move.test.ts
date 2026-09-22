@@ -30,7 +30,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { readdir, readFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 
 import {
   configureRealDesktopDoubles,
@@ -133,7 +133,7 @@ afterAll(() => {
   rmSync(baseDir, { recursive: true, force: true })
 })
 
-beforeEach(() => {
+afterEach(() => {
   resetCatalogDoubles()
   resetSettingsStoreDouble()
 })

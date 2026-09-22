@@ -286,12 +286,12 @@ export async function tauriWorkspaceSyncDouble(
     }
   }
 
-  // No-IDs form (the origin-root resync: `tauriWorkspaceSync(sourceRootPath)`
-  // alone) is production's own "rescan/reconcile this root" call. A real
-  // rescan would simply no longer find a file that just moved elsewhere —
-  // mirror that by dropping any manifest entry whose file isn't on real disk
-  // any more, rather than requiring (and previously crashing on the absence
-  // of) an explicit id map for this call shape.
+  // Reconcile-delete: runs on EVERY call, not just the no-IDs (origin-root
+  // resync) form above — production's real rescan drops entries for files
+  // it can no longer find on disk regardless of whether this same call also
+  // carried an explicit id map, so this double does too, rather than
+  // requiring (and previously crashing on the absence of) an explicit id map
+  // whenever `documentIds` is omitted.
   for (const relativePath of [...manifest.keys()]) {
     const stillExists = await fs
       .stat(join(rootPath, relativePath))
