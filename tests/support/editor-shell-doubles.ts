@@ -40,6 +40,15 @@ export type HarnessWorld = {
   network: NetworkHandler
   /** El editor real de TipTap, capturado (no sustituido). */
   editor: EditorHandle | null
+  /**
+   * Errores no manejados durante el test (excepciones y promesas rechazadas).
+   *
+   * Existe porque un `catch {}` de producción o una promesa rechazada en un
+   * efecto no rompen el render: el test sigue, ve una pantalla vacía y falla
+   * mucho más tarde por un síntoma que no explica nada. Regla 7 del
+   * capability-proof-contract: un error tragado no es ejecución exitosa.
+   */
+  unhandledErrors: Array<{ kind: "error" | "rejection"; message: string }>
 }
 
 export type EditorHandle = {
@@ -78,6 +87,7 @@ export const world: HarnessWorld = {
   networkCalls: [],
   network: defaultNetwork(),
   editor: null,
+  unhandledErrors: [],
 }
 
 /* ------------------------------------------------------------------ *
