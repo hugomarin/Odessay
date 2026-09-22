@@ -24,7 +24,6 @@ This document tracks the third. A capability with many unit tests but no integra
 **Relationship to other canonical docs (no duplication — read there first):**
 - `workflow/testing/critical-capabilities-testing.md` — canonical owner of the test-level taxonomy (Unit/Contract/Integration/E2E/Performance), the "test at the lowest-cost boundary" principle, and when Playwright is/isn't the right tool. This map does not restate those definitions.
 - `architecture/boundaries.yml` + `tests/architecture/*` — Architecture Contracts (how pieces are *allowed* to relate). This map is the complementary layer: Capability Integration Contracts (what those pieces must *accomplish together*). Architecture tests catch "built the wrong way"; this map catches "every piece looks correct, but the product no longer works."
-- `workflow/quality/quality-harness-spec-v2.1.md` — the original Quality Harness spec that started this whole rollout (Phases 1-5 of its §10 shipped close to as-written: PRs #433-#436). This map is **not** what that spec's §8 ("Remediation Plane", `architecture/remediation.yml`) describes — that plan was never built. This map is what got built instead, once the team reached that phase: a different mechanism (per-scenario `coverage_status`, not per-gap `disposition`) that ended up carrying the same "prioritize and close what's structurally weak" responsibility. See the spec's own "Estado de implementación" section for the full accounting of what shipped as planned vs. what diverged.
 
 ## Coverage status — exactly one per scenario
 

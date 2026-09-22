@@ -3,7 +3,7 @@
 Este documento es el **canonical owner** de dos cosas que antes vivían implícitas o repetidas en distintos lugares:
 
 1. la taxonomía de niveles de test y el principio que decide cuál usar;
-2. hasta 2026-09-19, la lista de Critical Capabilities de Odessay sin integration tests dedicados — movida desde entonces a `workflow/quality/capability-integration-map.md` (ver "Critical Capabilities — canonical owner movido" abajo).
+2. la lista de Critical Capabilities de Odessay que aún no tienen una suite de integration tests dedicada — la base para priorizar qué construir después.
 
 `.agents/skills/skill-planning/SKILL.md` (sección `Validation requirements`) y `.agents/skills/review-testing/SKILL.md` referencian este documento en vez de repetir la regla. `workflow/testing/playwright-catalog.md` sigue siendo el catálogo operativo de Playwright — cuándo Playwright es la herramienta correcta se decide aquí; qué asset de Playwright reutilizar se decide ahí.
 
@@ -72,4 +72,4 @@ Ese documento es ahora el canonical owner de "qué capability priorizar después
 
 - Al escribir un brief (`Validation requirements`, ver `skill-planning`): elegir el nivel mínimo de esta taxonomía que falsifica el failure mode declarado, y justificar por escrito si se escala a E2E o Performance.
 - En review (`review-testing`): un integration/contract test que demuestra el contrato directamente es evidencia válida — no exigir Playwright por defecto.
-- Al priorizar trabajo nuevo de testing: `workflow/quality/capability-integration-map.md`'s V1 Implementation Plan es la lista candidata, en el orden en que está declarado salvo que un incidente real reordene la prioridad.
+- Al priorizar trabajo nuevo de testing: las Critical Capabilities de arriba son la lista candidata, en el orden en que están declaradas salvo que un incidente real reordene la prioridad.
