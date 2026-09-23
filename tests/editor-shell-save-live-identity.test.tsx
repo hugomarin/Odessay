@@ -70,6 +70,7 @@ const {
   resetDesktopWorkspace,
 } = await import("./support/editor-shell-desktop-doubles")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
+const { EDITOR_DRAFT_TAB_ID } = await import("@/lib/local-db/editor-sessions")
 
 const TEST_TIMEOUT_MS = 60_000
 
@@ -133,6 +134,28 @@ async function clickTab(writingId: string) {
   }
 }
 
+/**
+ * Espera a que el documento activo tenga identidad materializada y la
+ * devuelve.
+ *
+ * Leer `active_tab_id` justo después de escribir no basta: hasta que la
+ * materialización reconcilia la pestaña, el id activo sigue siendo el
+ * marcador de borrador (`EDITOR_DRAFT_TAB_ID`). Bajo carga (CI) esa ventana
+ * se ensancha y el test buscaba después una pestaña `draft` que ya no existe.
+ */
+async function waitForMaterializedWritingId() {
+  return waitFor(
+    () => {
+      const { session } = getEditorSessionState()
+      const active = session.tabs.find((tab) => tab.id === session.active_tab_id)
+      const writingId = active?.writing_id
+      if (!writingId || writingId === EDITOR_DRAFT_TAB_ID) return null
+      return writingId
+    },
+    { label: "identidad materializada del documento activo", timeoutMs: 15_000 },
+  )
+}
+
 /** Espera a que el texto aparezca en algún `.md` del workspace y devuelve su ruta. */
 async function waitForMarkdownContaining(needle: string, timeoutMs = 20_000) {
   const deadline = Date.now() + timeoutMs
@@ -160,13 +183,13 @@ describe("ODE-556 — edición en vuelo y cambio de identidad (desktop)", () => 
       await clickNewArtifact()
       await typeInEditor(TEXT_A)
       const fileA = await waitForMarkdownContaining(TEXT_A)
-      const writingA = getEditorSessionState().session.active_tab_id!
+      const writingA = await waitForMaterializedWritingId()
 
       // Documento B: mismo camino, documento distinto.
       await clickNewArtifact()
       await typeInEditor(TEXT_B)
       const fileB = await waitForMarkdownContaining(TEXT_B)
-      const writingB = getEditorSessionState().session.active_tab_id!
+      const writingB = await waitForMaterializedWritingId()
 
       expect(writingA).not.toBe(writingB)
       expect(fileA.path).not.toBe(fileB.path)
