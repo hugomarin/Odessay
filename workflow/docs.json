@@ -418,6 +418,11 @@
       "description": "Spec original del Quality Harness (skills, agents, AGENTS.md, CI, remediation plane, learning loop) con su Estado de implementación reconciliado: qué shippeó como se planeó y qué divergió al Capability Integration Map. Documento de dirección, no contrato de BUILD."
     },
     {
+      "path": "workflow/testing/integration-harness-catalog.md",
+      "type": "ops",
+      "description": "Catálogo operativo de andamiajes de pruebas de integración y componente bajo Vitest (hermano de playwright-catalog.md): ficha de cada módulo de soporte (qué resuelve, qué deja real, qué dobla, cuándo NO usarlo), criterio para elegir entre nivel servicio y nivel componente, las trampas ya pagadas (ciclo de vi.mock, capturar en vez de sustituir, drivers que verifican su propio efecto, orden del trabajo diferido, estado persistente entre tests), el protocolo antes de montar un escenario nuevo y la auditoría clasificada de la suite. Regla principal: el criterio no es cuántos dobles declara un test, sino cuáles y qué dice ser."
+    },
+    {
       "path": "workflow/testing/playwright-catalog.md",
       "type": "ops",
       "description": "Catálogo operativo de assets Playwright del repo: organiza tests, helpers y scripts por familia, clasifica qué reutilizar, qué evitar, cómo prevenir proliferación de suites solapadas, y reglas de mapeo servicio-contrato. Incluye §Regla de mapeo servicio-contrato para vincular tests a contratos operativos explícitos."

@@ -792,17 +792,25 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
 
     // Mismo timeout extendido que la espera anterior de este test: el cierre
     // atraviesa persistencia debounced, y con la suite completa compitiendo
-    // por CPU el default de 1s de vi.waitFor se queda corto. La aserción no
-    // cambia -- sigue exigiendo cero pestañas y sin activa (ODE-557: este
-    // test empezó a fallar de forma intermitente en CI al sumarse pruebas que
-    // montan el shell real).
+    // por CPU el default de 1s de vi.waitFor se queda corto.
+    //
+    // El presupuesto no es arbitrario: cerrar una pestaña espera a la
+    // escritura local de ese documento **incluyendo un guardado todavía en
+    // debounce**, y en desktop ese debounce es DESKTOP_PERSISTENCE_DEBOUNCE_MS
+    // = 4.000 ms. Darle 4.500 ms era rozar el límite: bastaba que la suite
+    // completa robara medio segundo de CPU para que el cierre no hubiera
+    // ocurrido todavía (ODE-557 lo subió a 4.500 y siguió intermitente;
+    // ODE-560 diagnosticó la causa). Un presupuesto de espera tiene que
+    // superar con margen al debounce que espera, no empatarlo.
+    //
+    // La aserción no cambia: sigue exigiendo cero pestañas y ninguna activa.
     await vi.waitFor(() => {
       const session = getEditorSessionState().session
       expect(session.tabs).toHaveLength(0)
       expect(session.active_tab_id).toBeNull()
-    }, { timeout: 4500 })
+    }, { timeout: 15_000 })
     expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1)
-  }, 12_000)
+  }, 25_000)
 
 })
 

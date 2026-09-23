@@ -1,0 +1,10 @@
+{
+  "threshold": 12,
+  "_comment": "Archivos de test que declaran más de `threshold` dobles de módulo propios. Estar aquí NO significa que el test esté mal: significa que alguien lo miró y dejó escrito por qué monta su propio escenario. El conteo es una señal de arranque, no un veredicto — ver workflow/testing/integration-harness-catalog.md §Regla principal. El ratchet es monotónico en ambas direcciones: un archivo nuevo por encima del umbral falla, y una entrada que ya no viola también, para que la deuda pagada no reaparezca en silencio.",
+  "allowed": {
+    "tests/desk-workspace-catalog-integration.test.tsx": "Contract test declarado: monta Desk y Workspace reales sobre un DocumentCatalog doblado a propósito, y lo dice en su cabecera. El fake está nombrado, no escondido (auditoría ODE-560).",
+    "tests/editor-empty-draft-persistence.test.tsx": "Decorado propio previo al banco de pruebas, con editor de cartón. Pendiente de reescritura sobre tests/support/ — requirement 3 de ODE-556.",
+    "tests/editor-save-to-disk-relocate.test.tsx": "Decorado propio previo al banco de pruebas, con editor de cartón. Pendiente de reescritura sobre tests/support/ — requirement 3 de ODE-556.",
+    "tests/editor-shell-tab-switch-persistence.test.tsx": "Decorado propio previo al banco de pruebas, con editor de cartón. Pendiente de reescritura sobre tests/support/ — requirement 3 de ODE-556."
+  }
+}
