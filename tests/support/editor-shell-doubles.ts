@@ -12,6 +12,8 @@
  */
 import { vi } from "vitest"
 
+import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
+
 /* ------------------------------------------------------------------ *
  * Estado compartido de los dobles
  * ------------------------------------------------------------------ */
@@ -46,6 +48,10 @@ export type HarnessWorld = {
   aiReview: (input: AiReviewInput) => Promise<AiReviewResult>
   /** Peticiones de review realmente emitidas, en orden. */
   aiReviewCalls: AiReviewInput[]
+  /** Palabras que el proveedor devuelve como aprendidas por el usuario. */
+  learnedWords: LearnedWordEntry[]
+  /** Veces que el shell pidió la lista de palabras aprendidas. */
+  learnedWordsCalls: number
   /** El editor real de TipTap, capturado (no sustituido). */
   editor: EditorHandle | null
   /**
@@ -116,6 +122,8 @@ export const world: HarnessWorld = {
   unhandledErrors: [],
   aiReview: async () => ({ error: null, data: { corrections: [] } }),
   aiReviewCalls: [],
+  learnedWords: [],
+  learnedWordsCalls: 0,
 }
 
 /* ------------------------------------------------------------------ *
@@ -195,7 +203,14 @@ export function runtimeDetectionDouble() {
 export function aiServiceDouble() {
   return {
     getAIService: () => ({
-      listLearnedWords: async () => ({ items: [] }),
+      // Contrato real de AIService: `{ error, data: { items, nextCursor } }`.
+      // La forma anterior (`{ items: [] }`) hacía que el loader lanzara y la
+      // carga de palabras aprendidas fallara en silencio en todo el harness
+      // (ODE-562).
+      listLearnedWords: async () => {
+        world.learnedWordsCalls += 1
+        return { error: null, data: { items: [...world.learnedWords], nextCursor: null } }
+      },
       learnWord: async () => ({ error: null }),
       deleteLearnedWord: async () => ({ error: null }),
       reviewPublication: async (input: AiReviewInput) => {
