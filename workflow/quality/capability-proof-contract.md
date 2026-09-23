@@ -34,6 +34,10 @@ If you cannot answer all three from the real code (call sites, not intuition), y
 
 8. **Mutation-test the plausible failure mode** — the historical bug, or the most likely one — and confirm the proof goes red *for that reason*, live, before claiming it.
 
+   **A proof that asserts an absence needs a positive control first.** Before asserting that something does *not* happen (no stale write, no leaked suggestion, no wrong-document save), prove in the same test — or in a sibling test on the same setup — that the thing *does* happen when it should. Otherwise the assertion holds for a reason that has nothing to do with the invariant, and the mutation test comes back green because the effect was never reachable to begin with.
+
+   *Grounding:* ODE-556 paid this twice. A corrections-isolation proof asserted "document B shows no suggestions from A" and stayed green through two separate mutations — because the test double's payload did not match the canonical contract, so the analysis failed silently and *no* suggestions were ever produced, for any document. The positive control is what exposed it.
+
 9. **Derive coverage status after the proof.** Status is an output of the evidence, never a delivery target (see *Status-closing bias* below).
 
 10. **When the real critical chain cannot be proven in scope, declare `PARTIAL_INTEGRATION` and name the exact unproven seam** in the map row's `Note`. A named gap is a valid deliverable; an overstated status is not.
@@ -144,6 +148,7 @@ Answer every item before changing a row's `coverage_status` upward. Any "no" or 
 □ Is the assertion made after the completion event, not the scheduling event?
 □ Can deferred work execute after an identity change — and is that covered?
 □ Would the plausible (or historical) bug turn this proof red? Verified live?
+□ If the assertion is an absence: is there a positive control proving the effect is reachable at all?
 □ Am I measuring canonical state, or only that control flow finished?
 □ Is the status a conclusion drawn from the above, rather than the goal I started with?
 ```
