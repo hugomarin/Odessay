@@ -26,6 +26,16 @@ Método:  inventario de declaraciones + conteo mecánico sobre el archivo real,
     8 llamadas directas a localDB.correctionBlocks (deuda ya declarada en components/editor/AGENTS.md)
 ```
 
+**Actualización (2026-09-23, ODE-558):** la cola automática de correcciones resultó ser **código inalcanzable** y se eliminó. El archivo y el cluster quedan así:
+
+```text
+6,664 líneas        (-660)
+   61 useEffect     (-2)    84 useCallback (-8)    19 useRef (-11)
+  481 lecturas de refs      (-121)
+  305 referencias a corrections   (-228, era el cluster más grande)
+    8 llamadas directas a localDB.correctionBlocks   (sin cambio: todas viven en el camino manual)
+```
+
 El tamaño no es el hallazgo — `components/editor/AGENTS.md` ya establece que el tamaño por sí solo no es un finding de review. Los dos números que importan son los del medio.
 
 ## 2. Hallazgo 1 — cada dato tiene dos dueños
@@ -56,7 +66,7 @@ Tres problemas, en orden de gravedad:
 
 | Cluster | Peso aprox. | Capabilities | Cobertura vía shell |
 |---|---|---|---|
-| Correcciones (cola, reintentos, circuit breaker, persistencia) | ~533 refs, 15 refs propios | AI-05 | **ninguna** |
+| Correcciones (persistencia y aplicación de sugerencias del análisis manual) | ~305 refs *(era ~533; ODE-558 eliminó la cola automática inalcanzable)* | AI-05 | humo del camino real (`editor-shell-corrections-path.test.tsx`) |
 | Save / persistencia | ~317 refs | WATCH-07, DOC-02/03/06 | **ninguna** (el coordinator sí, por debajo) |
 | Hidratación / identidad | ~104 refs, 7 efectos | STATE-01/03/04/05 | 1 e2e + unit del coordinator |
 | Find / replace | ~122 refs | — | unit de `lib/editor/find-replace.ts` |
@@ -111,7 +121,7 @@ Los cuatro del §4, en este orden: STATE-07 (cero cobertura hoy), STATE-05 (seam
 Orden propuesto:
 
 1. **Hidratación / identidad** — el que más fallos reales ha producido y el que falla en silencio.
-2. **Correcciones** — el cluster más grande y el único con owner canónico ya existente (`lib/corrections/persistence.ts`), lo que lo hace el de mayor retorno; cierra además las 8 llamadas directas que hoy son deuda declarada.
+2. **Correcciones** — ya no es el cluster más grande: ODE-558 eliminó la mitad automática por inalcanzable (~228 referencias menos). Lo que queda es la aplicación y persistencia de sugerencias del análisis manual, con owner canónico ya existente (`lib/corrections/persistence.ts`); cierra además las 8 llamadas directas que hoy son deuda declarada. Antes de extraer aquí, ver ODE-559: el invariante de identidad de ese camino todavía no es falsificable.
 3. **Tabs / sesión y wiring desktop.**
 4. **Chrome** (TOC, find/replace, modales, focus mode) — mayormente puro; riesgo tipográfico, no semántico.
 

@@ -79,7 +79,6 @@ import {
   setPublicationSuggestions as setEditorPublicationSuggestions,
 } from "@/lib/editor/publication-suggestion-extension"
 import { getResolvedCorrectionText, resolveCorrectionDecorationRanges } from "@/lib/editor/ai-correction-decorations"
-import { getHydrateMissCorrectionBlocks, isCorrectionBlockEligible } from "@/lib/editor/correction-analysis"
 import { createCorrectionSuggestionBatcher } from "@/lib/editor/correction-suggestion-batcher"
 import {
   collectCorrectionBlocks,
@@ -112,8 +111,6 @@ import {
   createStableFingerprint,
   stableFingerprintFromStoredFingerprint,
 } from "@/lib/corrections/engine/identity"
-import { adaptCorrectionsContract } from "@/lib/ai/corrections-contract-adapter"
-import { CORRECTION_BLOCK_BATCH_SIZE, CORRECTION_ENGINE_REVISION } from "@/lib/ai/corrections-config"
 import {
   getMissingCorrectionBlockIds,
   takeCorrectionBatch,
@@ -169,7 +166,7 @@ import {
   upsertCachedLearnedWord,
 } from "@/lib/corrections/learned-words-loader"
 import { buildLearnWordRollbackState } from "@/lib/corrections/learned-words-rollback"
-import { getLocalDBScope, localDB, subscribeToLocalDBChanges, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
+import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
   ArtifactType,
   LocalCorrectionBlock,
@@ -695,24 +692,10 @@ export function EditorShell({
   } | null>(null)
   const suppressNextSelectionPopupRef = useRef(false)
   const currentDocumentMarkdownRef = useRef("")
-  const correctionsEnabledRef = useRef(false)
   const automaticCorrectionSuggestionsRef = useRef<PublicationSuggestion[]>([])
   const learnedWordsRef = useRef<LearnedWordEntry[]>([])
   const learnedWordsLoadedRef = useRef(false)
   const persistedCorrectionBlocksRef = useRef(new Map<string, LocalCorrectionBlock>())
-  const enqueueCorrectionBlockRef = useRef<((block: CorrectionTriggerBlock, reason?: "edit" | "hydrate-miss") => void) | null>(null)
-  const correctionQueueRef = useRef<CorrectionTriggerBlock[]>([])
-  const correctionProcessingRef = useRef(false)
-  const processCorrectionQueueRef = useRef<(() => void) | null>(null)
-  const correctionQueueTotalRef = useRef(0)
-  const correctionQueueCompletedRef = useRef(0)
-  const correctionBatchRetryRef = useRef(new Set<string>())
-  const correctionQueueFailureVisibleRef = useRef(false)
-  const correctionReviewCircuitOpenUntilRef = useRef(0)
-  const correctionFailureRetryRef = useRef(new Map<string, number>())
-  const correctionFailureRetryTimersRef = useRef(new Map<string, number>())
-  const correctionTimersRef = useRef(new Map<string, { timer: number; pos: number }>())
-  const correctionStaleTimersRef = useRef(new Map<string, number>())
   const correctionToastDismissRef = useRef<number | null>(null)
   const suppressCorrectionAnalysisUntilRef = useRef(0)
   const deferredSuppressedCorrectionBlocksRef = useRef<DeferredCorrectionBlocksState<CorrectionTriggerBlock>>({
@@ -939,39 +922,22 @@ export function EditorShell({
 
   useEffect(() => () => persistenceCoordinator.dispose(), [persistenceCoordinator])
 
+  /**
+   * Al cambiar de documento se descarta el trabajo de correcciones pendiente
+   * del anterior. Tras ODE-558 solo queda el flush diferido de bloques
+   * suprimidos y el toast: la cola automatica, sus timers, reintentos y
+   * circuit breaker eran inalcanzables y se eliminaron.
+   */
   const resetCorrectionQueueState = useCallback(() => {
-    for (const { timer } of correctionTimersRef.current.values()) {
-      window.clearTimeout(timer)
-    }
-
-    for (const timer of correctionStaleTimersRef.current.values()) {
-      window.clearTimeout(timer)
-    }
-
-    for (const timer of correctionFailureRetryTimersRef.current.values()) {
-      window.clearTimeout(timer)
-    }
-
     if (suppressedCorrectionFlushTimerRef.current !== null) {
       window.clearTimeout(suppressedCorrectionFlushTimerRef.current)
       suppressedCorrectionFlushTimerRef.current = null
     }
 
-    correctionTimersRef.current.clear()
-    correctionStaleTimersRef.current.clear()
-    correctionBatchRetryRef.current.clear()
-    correctionQueueFailureVisibleRef.current = false
-    correctionReviewCircuitOpenUntilRef.current = 0
-    correctionFailureRetryRef.current.clear()
-    correctionFailureRetryTimersRef.current.clear()
     deferredSuppressedCorrectionBlocksRef.current = {
       blocksById: new Map(),
       flushAt: null,
     }
-    correctionQueueRef.current = []
-    correctionQueueTotalRef.current = 0
-    correctionQueueCompletedRef.current = 0
-    correctionProcessingRef.current = false
     setCorrectionToast(null)
   }, [])
 
@@ -2588,37 +2554,6 @@ export function EditorShell({
           suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
         }
 
-        const cachedBlockHashes = new Set(localCorrectionBlocks.map((block) => block.blockHash))
-        const uncachedBlocks = getHydrateMissCorrectionBlocks(
-          currentDocBlocks,
-          cachedBlockHashes,
-        )
-
-        for (const block of uncachedBlocks) {
-          const existingTimer = correctionTimersRef.current.get(block.id)
-
-          if (existingTimer) {
-            window.clearTimeout(existingTimer.timer)
-            correctionTimersRef.current.delete(block.id)
-          }
-
-          const timer = window.setTimeout(() => {
-            generation.run(() => {
-              correctionTimersRef.current.delete(block.id)
-
-              if (!correctionsEnabledRef.current) return
-
-              const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
-
-              if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) return
-
-              enqueueCorrectionBlockRef.current?.(currentBlock, "hydrate-miss")
-            })
-          }, 2000)
-
-          correctionTimersRef.current.set(block.id, { timer, pos: block.pos })
-        }
-
         const loadedTitle = writing.title?.trim() || UNTITLED_WRITING_TITLE
         const loadedHasExplicitTitle = isExplicitWritingTitle(
           loadedTitle,
@@ -2831,9 +2766,6 @@ export function EditorShell({
   }, [currentWritingId, routeWritingId, router])
 
   useEffect(() => {
-    const correctionTimers = correctionTimersRef.current
-    const correctionFailureRetryTimers = correctionFailureRetryTimersRef.current
-
     return () => {
       if (markdownSaveTimeoutRef.current) {
         window.clearTimeout(markdownSaveTimeoutRef.current)
@@ -2851,14 +2783,6 @@ export function EditorShell({
         window.cancelAnimationFrame(markdownSelectionRafRef.current)
       }
 
-      for (const { timer } of correctionTimers.values()) {
-        window.clearTimeout(timer)
-      }
-
-      for (const timer of correctionFailureRetryTimers.values()) {
-        window.clearTimeout(timer)
-      }
-
       if (correctionToastDismissRef.current !== null) {
         window.clearTimeout(correctionToastDismissRef.current)
       }
@@ -2868,9 +2792,6 @@ export function EditorShell({
       richUpdateEditorRef.current = null
       markdownSelectionRafRef.current = null
       pendingMarkdownSelectionRef.current = null
-      correctionTimers.clear()
-      correctionFailureRetryTimers.clear()
-      correctionQueueRef.current = []
       persistCurrentWorkspaceViewState()
     }
   }, [persistCurrentWorkspaceViewState])
@@ -4602,534 +4523,6 @@ export function EditorShell({
     [],
   )
 
-  const finishCorrectionQueueIfIdle = useCallback(() => {
-    if (
-      correctionQueueRef.current.length > 0 ||
-      correctionProcessingRef.current ||
-      correctionFailureRetryTimersRef.current.size > 0 ||
-      correctionQueueFailureVisibleRef.current
-    ) {
-      return
-    }
-
-    showCorrectionToast({
-      phase: "complete",
-      completed: correctionQueueCompletedRef.current,
-      total: correctionQueueTotalRef.current,
-    }, 2000)
-    window.setTimeout(() => {
-      correctionQueueTotalRef.current = 0
-      correctionQueueCompletedRef.current = 0
-    }, 2000)
-  }, [showCorrectionToast])
-
-  const dropStaleSuggestionsForQueuedBlock = useCallback(
-    (blockId: string) => {
-      applyCorrectionSuggestionUpdate((current) => {
-        const transition = dropStaleSuggestionsForBlock(current, blockId)
-
-        for (const suggestionId of transition.droppedIds) {
-          logCorrectionEvent({
-            type: "stale:drop",
-            blockId,
-            suggestionId,
-          })
-        }
-
-        return transition.suggestions
-      }, { immediate: true })
-    },
-    [applyCorrectionSuggestionUpdate],
-  )
-
-  const showCorrectionFailureToast = useCallback((message: string) => {
-    showCorrectionToast({
-      phase: "error",
-      completed: correctionQueueCompletedRef.current,
-      total: correctionQueueTotalRef.current,
-      message,
-    }, 5000)
-  }, [showCorrectionToast])
-
-  const clearPendingCorrectionReviewWork = useCallback(() => {
-    correctionQueueRef.current = []
-
-    for (const timer of correctionFailureRetryTimersRef.current.values()) {
-      window.clearTimeout(timer)
-    }
-    correctionFailureRetryTimersRef.current.clear()
-  }, [])
-
-  const openCorrectionFailureCircuit = useCallback((message: string) => {
-    correctionReviewCircuitOpenUntilRef.current = Date.now() + CORRECTION_REVIEW_FAILURE_COOLDOWN_MS
-    correctionQueueFailureVisibleRef.current = true
-    clearPendingCorrectionReviewWork()
-    showCorrectionFailureToast(message)
-  }, [clearPendingCorrectionReviewWork, showCorrectionFailureToast])
-
-  const scheduleCorrectionFailureRetry = useCallback(
-    ({
-      batchKey,
-      blocks,
-      delayMs,
-    }: {
-      batchKey: string
-      blocks: CorrectionTriggerBlock[]
-      delayMs: number
-    }) => {
-      const existingTimer = correctionFailureRetryTimersRef.current.get(batchKey)
-
-      if (existingTimer) {
-        window.clearTimeout(existingTimer)
-      }
-
-      const retryTimer = window.setTimeout(() => {
-        correctionFailureRetryTimersRef.current.delete(batchKey)
-
-        if (
-          !correctionsEnabledRef.current ||
-          currentWritingIdRef.current === null ||
-          !editor ||
-          Date.now() < correctionReviewCircuitOpenUntilRef.current
-        ) {
-          correctionFailureRetryRef.current.delete(batchKey)
-          return
-        }
-
-        const queuedIds = new Set(correctionQueueRef.current.map((block) => block.id))
-        const retryBlocks = blocks
-          .map((block) => getCurrentCorrectionBlock(editor.state.doc, block.id) ?? block)
-          .filter((block) => block.text.trim().length > 0 && !queuedIds.has(block.id))
-
-        if (retryBlocks.length === 0) {
-          return
-        }
-
-        correctionQueueRef.current.push(...retryBlocks)
-        correctionQueueTotalRef.current += retryBlocks.length
-        setCorrectionToast({
-          phase: "running",
-          completed: correctionQueueCompletedRef.current,
-          total: correctionQueueTotalRef.current,
-          message: "Retrying corrections...",
-        })
-        processCorrectionQueueRef.current?.()
-      }, delayMs)
-
-      correctionFailureRetryTimersRef.current.set(batchKey, retryTimer)
-    },
-    [editor],
-  )
-
-  const processCorrectionQueue = useCallback(async () => {
-    if (correctionProcessingRef.current || !editor) {
-      return
-    }
-
-    if (!correctionsEnabledRef.current) {
-      correctionQueueRef.current = []
-      correctionQueueTotalRef.current = 0
-      correctionQueueCompletedRef.current = 0
-      setCorrectionToast(null)
-      return
-    }
-
-    if (isPerfHarness()) {
-      correctionQueueRef.current = []
-      correctionQueueTotalRef.current = 0
-      correctionQueueCompletedRef.current = 0
-      setCorrectionToast(null)
-      return
-    }
-
-    if (Date.now() < correctionReviewCircuitOpenUntilRef.current) {
-      clearPendingCorrectionReviewWork()
-      showCorrectionFailureToast("Corrections are temporarily unavailable. Try again in a moment.")
-      return
-    }
-
-    correctionQueueFailureVisibleRef.current = false
-    correctionReviewCircuitOpenUntilRef.current = 0
-    correctionProcessingRef.current = true
-    logCorrectionEvent({
-      type: "queue:flush",
-      batchSize: correctionQueueRef.current.length,
-      blockIds: correctionQueueRef.current.map((queuedBlock) => queuedBlock.id),
-    })
-
-    while (correctionQueueRef.current.length > 0) {
-      const queuedBatch = takeCorrectionBatch(correctionQueueRef.current, CORRECTION_BLOCK_BATCH_SIZE)
-      const currentBatch: CorrectionTriggerBlock[] = []
-
-      for (const block of queuedBatch) {
-        const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
-
-        if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
-          correctionQueueCompletedRef.current += 1
-          continue
-        }
-
-        currentBatch.push(currentBlock)
-      }
-
-      if (currentBatch.length === 0) {
-        continue
-      }
-
-      setCorrectionToast({
-        phase: "running",
-        completed: correctionQueueCompletedRef.current,
-        total: correctionQueueTotalRef.current,
-      })
-
-      const batchId = buildCorrectionReviewRetryKey(currentBatch)
-      const requestStartedAt = Date.now()
-      const requestWritingId = currentWritingIdRef.current
-
-      try {
-        logCorrectionEvent({
-          type: "request:start",
-          batchId,
-          blockIds: currentBatch.map((block) => block.id),
-        })
-
-        const result = await getAIService().reviewPublication({
-          writingId: requestWritingId ?? undefined,
-          title: titleRef.current,
-          markdown: currentBatch.map((block) => block.text).join("\n\n"),
-          bodyText: currentBatch.map((block) => block.text).join("\n\n"),
-          sourceHash: hashPublicationSource(currentBatch.map((block) => block.hash).join("|")),
-          stream: false,
-          correctionBlocks: currentBatch.map((block) => ({
-            id: block.id,
-            text: block.text,
-            hash: block.hash,
-          })),
-          correctionMemory: {
-            entries: readCorrectionMemory(),
-          },
-          learnedWords: {
-            entries: learnedWordsRef.current.map((item) => ({
-              word: item.word,
-              language: item.language,
-            })),
-          },
-        })
-
-        if (result.error || !result.data) {
-          const attempts = correctionFailureRetryRef.current.get(batchId) ?? 0
-          const retryDecision = decideCorrectionReviewRetry({
-            error: result.error,
-            previousAttempts: attempts,
-            maxRetries: CORRECTION_REVIEW_MAX_RETRIES,
-          })
-          console.info(
-            `[corrections] block analysis failed code=${result.error?.code ?? "unknown"} retryable=${result.error?.retryable ?? false} decision=${retryDecision.action} attempt=${retryDecision.attempt}`,
-          )
-          for (const block of currentBatch) {
-            dropStaleSuggestionsForQueuedBlock(block.id)
-          }
-
-          if (retryDecision.action === "retry") {
-            correctionFailureRetryRef.current.set(batchId, retryDecision.attempt)
-            correctionQueueRef.current = []
-            scheduleCorrectionFailureRetry({
-              batchKey: batchId,
-              blocks: currentBatch,
-              delayMs: retryDecision.delayMs,
-            })
-          } else {
-            correctionFailureRetryRef.current.delete(batchId)
-            openCorrectionFailureCircuit("Corrections are temporarily unavailable. Try again in a moment.")
-          }
-          continue
-        }
-
-        if (!correctionsEnabledRef.current) {
-          for (const block of currentBatch) {
-            dropStaleSuggestionsForQueuedBlock(block.id)
-          }
-          continue
-        }
-
-        if (currentWritingIdRef.current !== requestWritingId) {
-          for (const block of currentBatch) {
-            dropStaleSuggestionsForQueuedBlock(block.id)
-          }
-          logCorrectionEvent({
-            type: "request:end",
-            batchId,
-            latencyMs: Date.now() - requestStartedAt,
-            suggestions: 0,
-            missing: currentBatch.map((block) => block.id),
-          })
-          continue
-        }
-
-        const adapted = adaptCorrectionsContract({
-          summary: result.data.summary,
-          language:
-            result.data.language === "es" ||
-            result.data.language === "en" ||
-            result.data.language === "mixed" ||
-            result.data.language === "unknown"
-              ? result.data.language
-              : "unknown",
-          corrections: result.data.corrections,
-          uncertain: result.data.uncertain,
-        })
-        correctionFailureRetryRef.current.delete(batchId)
-        correctionQueueFailureVisibleRef.current = false
-        const retryTimer = correctionFailureRetryTimersRef.current.get(batchId)
-        if (retryTimer) {
-          window.clearTimeout(retryTimer)
-          correctionFailureRetryTimersRef.current.delete(batchId)
-        }
-        const suggestionsByBlockId = new Map<string, PublicationSuggestion[]>()
-        for (const suggestion of adapted.legacy.suggestions) {
-          if (!suggestion.block_id) continue
-          const blockSuggestions = suggestionsByBlockId.get(suggestion.block_id) ?? []
-          blockSuggestions.push(suggestion)
-          suggestionsByBlockId.set(suggestion.block_id, blockSuggestions)
-        }
-        const missingBlockIds = getMissingCorrectionBlockIds(currentBatch, result.data.corrections)
-        const missingBlockIdSet = new Set(missingBlockIds)
-        let persistedSuggestionsCount = 0
-
-        for (const block of currentBatch) {
-          const stillCurrentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
-
-          if (!stillCurrentBlock || stillCurrentBlock.hash !== block.hash || stillCurrentBlock.text !== block.text) {
-            dropStaleSuggestionsForQueuedBlock(block.id)
-            continue
-          }
-
-          if (missingBlockIdSet.has(block.id)) {
-            const retryKey = `${block.id}:${block.hash}`
-
-            if (!correctionBatchRetryRef.current.has(retryKey)) {
-              correctionBatchRetryRef.current.add(retryKey)
-              correctionQueueRef.current.push(block)
-              correctionQueueTotalRef.current += 1
-              logCorrectionEvent({
-                type: "queue:enqueue",
-                blockId: block.id,
-                reason: "edit",
-              })
-              continue
-            }
-          }
-
-          correctionBatchRetryRef.current.delete(`${block.id}:${block.hash}`)
-
-          const normalizedSuggestions = admitCorrectionSuggestions(
-            (suggestionsByBlockId.get(block.id) ?? []).map((suggestion) =>
-              normalizeAutomaticSuggestion(block, suggestion),
-            ),
-            [stillCurrentBlock],
-          )
-          const nextCorrectionBlock: LocalCorrectionBlock | null = requestWritingId
-            ? {
-                id: createCorrectionBlockRecordId(requestWritingId, block.hash),
-                writingId: requestWritingId,
-                blockId: block.id,
-                blockHash: block.hash,
-                suggestions: normalizedSuggestions,
-                model: result.data.usage?.model ?? "web-route",
-                engineRevision: result.data.engineRevision ?? CORRECTION_ENGINE_REVISION,
-                createdAt: new Date().toISOString(),
-                latencyMs: Date.now() - requestStartedAt,
-                promptTokens: result.data.usage?.promptTokens ?? null,
-                completionTokens: result.data.usage?.completionTokens ?? null,
-                syncedAt: null,
-              }
-            : null
-
-          const replacement = replaceBlockSuggestions(
-            automaticCorrectionSuggestionsRef.current,
-            block.id,
-            normalizedSuggestions,
-          )
-
-          const existingStaleTimer = correctionStaleTimersRef.current.get(block.id)
-
-          if (existingStaleTimer) {
-            window.clearTimeout(existingStaleTimer)
-            correctionStaleTimersRef.current.delete(block.id)
-          }
-
-          for (const suggestionId of replacement.replacedIds) {
-            logCorrectionEvent({
-              type: "stale:drop",
-              blockId: block.id,
-              suggestionId,
-            })
-          }
-
-          for (const suggestion of normalizedSuggestions) {
-            logCorrectionEvent({
-              type: "stale:keep",
-              blockId: block.id,
-              suggestionId: suggestion.id,
-            })
-          }
-
-          applyCorrectionSuggestionUpdate((current) =>
-            replaceBlockSuggestions(current, block.id, normalizedSuggestions).suggestions,
-          )
-
-          if (nextCorrectionBlock) {
-            await persistCorrectionBlockWriteThrough(nextCorrectionBlock)
-          }
-
-          persistedSuggestionsCount += normalizedSuggestions.length
-        }
-
-        logCorrectionEvent({
-          type: "request:end",
-          batchId,
-          latencyMs: Date.now() - requestStartedAt,
-          suggestions: persistedSuggestionsCount,
-          missing: missingBlockIds,
-        })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "block correction failed"
-        console.info(`[corrections] block analysis skipped message=${message}`)
-        for (const block of currentBatch) {
-          dropStaleSuggestionsForQueuedBlock(block.id)
-        }
-        correctionFailureRetryRef.current.delete(batchId)
-        openCorrectionFailureCircuit("Corrections are temporarily unavailable. Try again in a moment.")
-      } finally {
-        correctionQueueCompletedRef.current += currentBatch.length
-
-        if (correctionsEnabledRef.current && !correctionQueueFailureVisibleRef.current) {
-          setCorrectionToast({
-            phase: "running",
-            completed: correctionQueueCompletedRef.current,
-            total: correctionQueueTotalRef.current,
-          })
-        }
-      }
-    }
-
-    correctionProcessingRef.current = false
-    if (correctionsEnabledRef.current) {
-      finishCorrectionQueueIfIdle()
-    }
-  }, [
-    applyCorrectionSuggestionUpdate,
-    admitCorrectionSuggestions,
-    editor,
-    finishCorrectionQueueIfIdle,
-    normalizeAutomaticSuggestion,
-    persistCorrectionBlockWriteThrough,
-    dropStaleSuggestionsForQueuedBlock,
-    clearPendingCorrectionReviewWork,
-    openCorrectionFailureCircuit,
-    scheduleCorrectionFailureRetry,
-    showCorrectionFailureToast,
-  ])
-
-  useEffect(() => {
-    processCorrectionQueueRef.current = () => {
-      void processCorrectionQueue()
-    }
-
-    return () => {
-      if (processCorrectionQueueRef.current) {
-        processCorrectionQueueRef.current = null
-      }
-    }
-  }, [processCorrectionQueue])
-
-  const enqueueCorrectionBlock = useCallback(
-    (block: CorrectionTriggerBlock, reason: "edit" | "hydrate-miss" = "edit") => {
-      if (!correctionsEnabledRef.current) {
-        return
-      }
-
-      if (Date.now() < correctionReviewCircuitOpenUntilRef.current) {
-        dropStaleSuggestionsForQueuedBlock(block.id)
-        showCorrectionFailureToast("Corrections are temporarily unavailable. Try again in a moment.")
-        return
-      }
-
-      const cachedBlock = persistedCorrectionBlocksRef.current.get(block.hash)
-      const hasMemorySuggestion = getBlockSuggestions(block.id, block.hash).length > 0
-
-      if (cachedBlock) {
-        logCorrectionEvent({
-          type: "cache:hit",
-          blockId: block.id,
-          source: cachedBlock.syncedAt ? "supabase" : "idb",
-        })
-
-        const cachedSuggestions = admitCorrectionSuggestions(
-          restorePendingSuggestions(cachedBlock.suggestions),
-          [block],
-        )
-
-        applyCorrectionSuggestionUpdate((current) =>
-          replaceBlockSuggestions(current, block.id, cachedSuggestions).suggestions,
-        )
-
-        const existingStaleTimer = correctionStaleTimersRef.current.get(block.id)
-
-        if (existingStaleTimer) {
-          window.clearTimeout(existingStaleTimer)
-          correctionStaleTimersRef.current.delete(block.id)
-        }
-
-        return
-      }
-
-      logCorrectionEvent(
-        hasMemorySuggestion
-          ? {
-              type: "cache:hit",
-              blockId: block.id,
-              source: "memory",
-            }
-          : {
-              type: "cache:miss",
-              blockId: block.id,
-            },
-      )
-
-      const currentIds = new Set(correctionQueueRef.current.map((item) => item.id))
-
-      if (!currentIds.has(block.id)) {
-        correctionQueueRef.current.push(block)
-        correctionQueueTotalRef.current += 1
-        logCorrectionEvent({
-          type: "queue:enqueue",
-          blockId: block.id,
-          reason,
-        })
-      }
-
-      setCorrectionToast({
-        phase: "running",
-        completed: correctionQueueCompletedRef.current,
-        total: correctionQueueTotalRef.current,
-      })
-
-      void processCorrectionQueue()
-    },
-    [
-      admitCorrectionSuggestions,
-      applyCorrectionSuggestionUpdate,
-      dropStaleSuggestionsForQueuedBlock,
-      getBlockSuggestions,
-      processCorrectionQueue,
-      showCorrectionFailureToast,
-    ],
-  )
-
-  useEffect(() => {
-    enqueueCorrectionBlockRef.current = enqueueCorrectionBlock
-  }, [enqueueCorrectionBlock])
 
   useEffect(() => {
     if (!editor) {
@@ -5168,33 +4561,6 @@ export function EditorShell({
       }, Math.max(0, flushAt - Date.now()))
     }
 
-    const scheduleStaleTimeout = (block: CorrectionTriggerBlock) => {
-      const existingStaleTimer = correctionStaleTimersRef.current.get(block.id)
-
-      if (existingStaleTimer) {
-        window.clearTimeout(existingStaleTimer)
-      }
-
-      const staleTimer = window.setTimeout(() => {
-        correctionStaleTimersRef.current.delete(block.id)
-        applyCorrectionSuggestionUpdate((current) => {
-          const transition = dropExpiredStaleSuggestions(current, Date.now())
-
-          for (const suggestionId of transition.droppedIds) {
-            logCorrectionEvent({
-              type: "stale:drop",
-              blockId: block.id,
-              suggestionId,
-            })
-          }
-
-          return transition.suggestions
-        }, { immediate: true })
-      }, CORRECTION_STALE_TIMEOUT_MS)
-
-      correctionStaleTimersRef.current.set(block.id, staleTimer)
-    }
-
     const processDirtyCorrectionBlocks = (blocks: CorrectionTriggerBlock[]) => {
       for (const block of blocks) {
         if (currentWritingIdRef.current) {
@@ -5225,38 +4591,12 @@ export function EditorShell({
           })
         }
 
-        if (!isCorrectionBlockEligible(block)) {
-          applyStaleInvalidation(correctionsEnabledRef.current)
-          continue
-        }
-
-        if (!correctionsEnabledRef.current) {
-          applyStaleInvalidation(false)
-          continue
-        }
-
-        const existingTimer = correctionTimersRef.current.get(block.id)
-
-        if (existingTimer) {
-          window.clearTimeout(existingTimer.timer)
-          correctionTimersRef.current.delete(block.id)
-        }
-
-        applyStaleInvalidation()
-        scheduleStaleTimeout(block)
-
-        const timer = window.setTimeout(() => {
-          correctionTimersRef.current.delete(block.id)
-          const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
-
-          if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
-            return
-          }
-
-          enqueueCorrectionBlock(currentBlock)
-        }, 2000)
-
-        correctionTimersRef.current.set(block.id, { timer, pos: block.pos })
+        // Un bloque editado invalida sus sugerencias vigentes, sin marcarlas
+        // como "resolubles como stale": eso ultimo solo tenia sentido cuando
+        // el analisis automatico iba a volver a revisar el bloque por su
+        // cuenta. El analisis manual lo dispara el usuario, asi que la
+        // sugerencia vieja se cae y punto (ODE-558).
+        applyStaleInvalidation(false)
       }
     }
 
@@ -5291,7 +4631,7 @@ export function EditorShell({
         suppressedCorrectionFlushTimerRef.current = null
       }
     }
-  }, [applyCorrectionSuggestionUpdate, deletePersistedBlocksForPosition, editor, enqueueCorrectionBlock, getBlockSuggestions])
+  }, [applyCorrectionSuggestionUpdate, deletePersistedBlocksForPosition, editor])
 
   useEffect(() => {
     const handleOnline = () => {
