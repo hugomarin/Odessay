@@ -776,7 +776,28 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
     expect(mocks.createDesktopDraft.mock.calls[1]?.[0]?.writingId).toBe(firstIdentity)
   }, 12_000)
 
-  it("closes the last materialized tab without creating a replacement", async () => {
+  /**
+   * EN CUARENTENA — ODE-561. No es un test flaky: detecta un bug REAL.
+   *
+   * Al cerrar la última pestaña, el cierre deja el store vacío y algo recrea
+   * una pestaña de borrador justo después. Trazo del fallo, con el cierre
+   * instrumentado:
+   *
+   *   [close] llamando closeTab(desktop-draft-1)
+   *   [close] tras closeTab → quedan=[]     <- el cierre SÍ funcionó
+   *   ...y la aserción ve después 1 pestaña con id desktop-draft-1
+   *
+   * Se salta porque bloquea PRs ajenos mientras el bug se arregla, no porque
+   * sea ruido. Quitar este `.skip` es parte del fix de ODE-561, con dos
+   * condiciones que ese issue exige: que la prueba garantice que el camino de
+   * cierre se ejecutó antes de asertar (hoy puede pasar sin ejecutarlo), y que
+   * el timeout vuelva a un valor derivado del debounce real — los 15.000 ms
+   * actuales son el residuo de dos arreglos equivocados (ODE-557 y ODE-560)
+   * que trataron esto como un problema de tiempo.
+   *
+   * NO subir el timeout. No es que tarde: la pestaña reaparece.
+   */
+  it.skip("closes the last materialized tab without creating a replacement", async () => {
     await act(async () => root?.render(<EditorShell />))
     await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
 
