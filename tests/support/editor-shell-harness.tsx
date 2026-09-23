@@ -116,6 +116,45 @@ function installBrowserGaps() {
 }
 
 /**
+ * Recoge errores no manejados. Sin esto, una promesa rechazada dentro de un
+ * efecto deja la UI a medias en silencio y el test falla después por un
+ * síntoma que no explica la causa.
+ */
+function installErrorCollector() {
+  if (errorCollectorInstalled) return
+  errorCollectorInstalled = true
+  window.addEventListener("error", (event) => {
+    world.unhandledErrors.push({ kind: "error", message: String((event as ErrorEvent).message) })
+  })
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = (event as PromiseRejectionEvent).reason
+    world.unhandledErrors.push({
+      kind: "rejection",
+      message: reason instanceof Error ? `${reason.message}\n${reason.stack ?? ""}` : String(reason),
+    })
+  })
+  const originalOnError = console.error
+  console.error = (...args: unknown[]) => {
+    const first = args[0]
+    if (first instanceof Error) {
+      world.unhandledErrors.push({ kind: "error", message: `${first.message}\n${first.stack ?? ""}` })
+    }
+    originalOnError(...(args as []))
+  }
+}
+
+let errorCollectorInstalled = false
+
+/** Lanza si el shell tragó algún error durante el test. */
+export function assertNoUnhandledErrors() {
+  if (world.unhandledErrors.length === 0) return
+  throw new Error(
+    `El shell produjo ${world.unhandledErrors.length} error(es) no manejado(s):\n` +
+      world.unhandledErrors.map((entry) => `- [${entry.kind}] ${entry.message}`).join("\n"),
+  )
+}
+
+/**
  * Deja el mundo en estado limpio entre tests. Llamar en `beforeEach`.
  *
  * Nota: NO limpia `fake-indexeddb` por defecto. La base local es un
@@ -138,8 +177,11 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
 
   Object.assign(world, overrides)
 
+  world.unhandledErrors = []
+
   resetEditorSessionStoreForTests()
   installBrowserGaps()
+  installErrorCollector()
   installNetworkDouble()
 }
 

@@ -790,11 +790,17 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
       topbarState.onCloseTab?.("desktop-draft-1")
     })
 
+    // Mismo timeout extendido que la espera anterior de este test: el cierre
+    // atraviesa persistencia debounced, y con la suite completa compitiendo
+    // por CPU el default de 1s de vi.waitFor se queda corto. La aserción no
+    // cambia -- sigue exigiendo cero pestañas y sin activa (ODE-557: este
+    // test empezó a fallar de forma intermitente en CI al sumarse pruebas que
+    // montan el shell real).
     await vi.waitFor(() => {
       const session = getEditorSessionState().session
       expect(session.tabs).toHaveLength(0)
       expect(session.active_tab_id).toBeNull()
-    })
+    }, { timeout: 4500 })
     expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1)
   }, 12_000)
 
