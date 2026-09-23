@@ -155,6 +155,7 @@ Convocar contexto especializado (skills de dominio, o subagentes si el entorno l
 - el change surface toca desktop, multi-runtime, shared core, save path, sync o servicios compartidos → cargar también `.agents/skills/skill-architecture/SKILL.md`
 - el cambio puede alterar forma de carga, fan-out, bootstrap, sync o trabajo background → cargar `.agents/skills/skill-performance/SKILL.md`
 - el cambio toca el subsistema de correcciones → cargar `.agents/skills/skill-corrections/SKILL.md`
+- el entregable incluye montar un escenario de prueba de integración o de componente → cargar `workflow/testing/integration-harness-catalog.md` antes de escribir el andamiaje: dice qué existe ya, cuál es su canonical owner y qué trampas están pagadas
 - el entregable es evidencia de una fila del `workflow/quality/capability-integration-map.md` → cargar `workflow/quality/capability-proof-contract.md` **antes** de escribir el test: fija cómo se construye el proof (entry point de producción, secuencia real de transiciones, completion event) y de dónde sale su `coverage_status`
 
 La consulta debe ser acotada y orientada a destrabar una decisión de Recon, no una relectura general del dominio.
