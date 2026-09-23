@@ -9,7 +9,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { EditorShell } from "@/components/editor/editor-shell"
+import { DESKTOP_PERSISTENCE_DEBOUNCE_MS, EditorShell } from "@/components/editor/editor-shell"
 import { EDITOR_DRAFT_TAB_ID } from "@/lib/local-db/editor-sessions"
 import {
   getEditorSessionState,
@@ -108,6 +108,12 @@ const topbarState = vi.hoisted(() => ({
   onCloseTab: null as ((tabId: string) => void) | null,
   onNewTab: null as (() => void) | null,
   onRenameTab: null as ((tabId: string) => void) | null,
+  onSelectTab: null as ((tabId: string) => void) | null,
+  // Called from a layout effect of the (mocked) topbar, which the shell
+  // renders on every one of its own renders. Layout effects run after a
+  // commit and before that commit's passive effects, so this is the exact
+  // window in which ODE-561 lived (see the "commit window" tests below).
+  onCommit: null as ((props: { tabs: { id: string; writing_id: string | null }[] }) => void) | null,
 }))
 
 const renameModalState = vi.hoisted(() => ({
@@ -390,18 +396,27 @@ vi.mock("@/lib/editor/footnote-node", () => ({
   AnnotationType: { PERSONAL: "personal", EDITORIAL: "editorial", READER: "reader" },
 }))
 
-vi.mock("@/components/editor/editor-topbar", () => ({
-  EditorTopbar: (props: {
-    onCloseTab?: (tabId: string) => void
-    onNewTab?: () => void
-    onRenameTab?: (tabId: string) => void
-  }) => {
-    topbarState.onCloseTab = props.onCloseTab ?? null
-    topbarState.onNewTab = props.onNewTab ?? null
-    topbarState.onRenameTab = props.onRenameTab ?? null
-    return null
-  },
-}))
+vi.mock("@/components/editor/editor-topbar", async () => {
+  const { useLayoutEffect } = await import("react")
+  return {
+    EditorTopbar: (props: {
+      tabs: { id: string; writing_id: string | null }[]
+      onCloseTab?: (tabId: string) => void
+      onNewTab?: () => void
+      onRenameTab?: (tabId: string) => void
+      onSelectTab?: (tabId: string) => void
+    }) => {
+      topbarState.onCloseTab = props.onCloseTab ?? null
+      topbarState.onNewTab = props.onNewTab ?? null
+      topbarState.onRenameTab = props.onRenameTab ?? null
+      topbarState.onSelectTab = props.onSelectTab ?? null
+      useLayoutEffect(() => {
+        topbarState.onCommit?.(props)
+      })
+      return null
+    },
+  }
+})
 vi.mock("@/components/editor/editor-sheet-header", () => ({
   EditorSheetHeader: (props: { onRunAction?: (action: string) => void }) => {
     sheetHeaderState.onRunAction = props.onRunAction ?? null
@@ -484,6 +499,8 @@ beforeEach(async () => {
   topbarState.onCloseTab = null
   topbarState.onNewTab = null
   topbarState.onRenameTab = null
+  topbarState.onSelectTab = null
+  topbarState.onCommit = null
   renameModalState.onConfirm = null
   setContentCommand.mockClear()
   mocks.createDesktopDraft.mockReset()
@@ -776,63 +793,132 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
     expect(mocks.createDesktopDraft.mock.calls[1]?.[0]?.writingId).toBe(firstIdentity)
   }, 12_000)
 
-  /**
-   * EN CUARENTENA — ODE-561. No es un test flaky: detecta un bug REAL.
-   *
-   * Al cerrar la última pestaña, el cierre deja el store vacío y algo recrea
-   * una pestaña de borrador justo después. Trazo del fallo, con el cierre
-   * instrumentado:
-   *
-   *   [close] llamando closeTab(desktop-draft-1)
-   *   [close] tras closeTab → quedan=[]     <- el cierre SÍ funcionó
-   *   ...y la aserción ve después 1 pestaña con id desktop-draft-1
-   *
-   * Se salta porque bloquea PRs ajenos mientras el bug se arregla, no porque
-   * sea ruido. Quitar este `.skip` es parte del fix de ODE-561, con dos
-   * condiciones que ese issue exige: que la prueba garantice que el camino de
-   * cierre se ejecutó antes de asertar (hoy puede pasar sin ejecutarlo), y que
-   * el timeout vuelva a un valor derivado del debounce real — los 15.000 ms
-   * actuales son el residuo de dos arreglos equivocados (ODE-557 y ODE-560)
-   * que trataron esto como un problema de tiempo.
-   *
-   * NO subir el timeout. No es que tarde: la pestaña reaparece.
-   */
-  it.skip("closes the last materialized tab without creating a replacement", async () => {
+  it("closes the last materialized tab without creating a replacement", async () => {
     await act(async () => root?.render(<EditorShell />))
     await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
 
     await simulateEditorInput("Existing content")
+    // Materialization waits out the real desktop persistence debounce.
     await vi.waitFor(() => {
-      expect(getEditorSessionState().session.tabs).toHaveLength(1)
+      expect(getEditorSessionState().session.tabs.map((tab) => tab.id)).toEqual(["desktop-draft-1"])
       expect(topbarState.onCloseTab).not.toBeNull()
-    }, { timeout: 4500 })
+    }, { timeout: DESKTOP_PERSISTENCE_DEBOUNCE_MS + 2_000 })
 
+    // Positive control (ODE-561): the close path must have actually run.
+    // This used to pass without the handler ever reaching `closeTab` — an
+    // absence of tabs proves nothing unless the tab was there and the close
+    // removed it.
+    expect(getEditorSessionState().session.active_tab_id).toBe("desktop-draft-1")
     await act(async () => {
-      topbarState.onCloseTab?.("desktop-draft-1")
+      await topbarState.onCloseTab?.("desktop-draft-1")
     })
+    expect(getEditorSessionState().session.tabs).toHaveLength(0)
 
-    // Mismo timeout extendido que la espera anterior de este test: el cierre
-    // atraviesa persistencia debounced, y con la suite completa compitiendo
-    // por CPU el default de 1s de vi.waitFor se queda corto.
-    //
-    // El presupuesto no es arbitrario: cerrar una pestaña espera a la
-    // escritura local de ese documento **incluyendo un guardado todavía en
-    // debounce**, y en desktop ese debounce es DESKTOP_PERSISTENCE_DEBOUNCE_MS
-    // = 4.000 ms. Darle 4.500 ms era rozar el límite: bastaba que la suite
-    // completa robara medio segundo de CPU para que el cierre no hubiera
-    // ocurrido todavía (ODE-557 lo subió a 4.500 y siguió intermitente;
-    // ODE-560 diagnosticó la causa). Un presupuesto de espera tiene que
-    // superar con margen al debounce que espera, no empatarlo.
-    //
-    // La aserción no cambia: sigue exigiendo cero pestañas y ninguna activa.
-    await vi.waitFor(() => {
-      const session = getEditorSessionState().session
-      expect(session.tabs).toHaveLength(0)
-      expect(session.active_tab_id).toBeNull()
-    }, { timeout: 15_000 })
+    // And it stays closed once every deferred effect has had its turn. A
+    // late publish used to bring it back here; no wait budget fixes that,
+    // which is why this is a fixed settle and not a longer waitFor.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    })
+    const session = getEditorSessionState().session
+    expect(session.tabs).toHaveLength(0)
+    expect(session.active_tab_id).toBeNull()
     expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1)
-  }, 25_000)
+  }, DESKTOP_PERSISTENCE_DEBOUNCE_MS + 6_000)
+})
 
+/**
+ * ODE-561 — un documento cerrado no vuelve solo.
+ *
+ * El efecto de la shell que publica el estado del documento actual en su
+ * pestaña es un efecto pasivo. Un render que hizo commit con el documento A
+ * todavía activo deja ese efecto pendiente; si el autor cierra A en esa
+ * ventana, el cierre muta el store directamente (React no vacía los efectos
+ * pendientes antes) y la publicación llega después, con A en su closure:
+ * recreaba la pestaña, o convertía en A el borrador que quedaba abierto.
+ *
+ * Qué commit carga el efecto rezagado es un detalle de implementación, así
+ * que estas pruebas barren las ventanas en vez de apostar por una. Una
+ * ventana que ya no existe falla por timeout en vez de pasar en vacío.
+ *
+ * Mutation test: quitar el guard de `removedWritingIds` en `publishTabState`
+ * pone en rojo casi todas las ventanas de ambos escenarios.
+ */
+describe("ODE-561 — closing inside a commit window never resurrects the tab", () => {
+  const COMMIT_WINDOWS = [1, 2, 3, 4, 5]
+
+  function closeAtCommit(targetCommit: number, writingId: string) {
+    const probe = { armed: false, commits: 0, closed: false }
+    topbarState.onCommit = (props) => {
+      if (!probe.armed || probe.closed) return
+      if (!props.tabs.some((tab) => tab.writing_id === writingId)) return
+      probe.commits += 1
+      if (probe.commits !== targetCommit) return
+      probe.closed = true
+      void topbarState.onCloseTab?.(writingId)
+      // Positive control: the close ran synchronously, inside the window.
+      expect(getEditorSessionState().session.tabs.some((tab) => tab.writing_id === writingId)).toBe(false)
+    }
+    return probe
+  }
+
+  async function settleDeferredWork() {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    })
+  }
+
+  it.each(COMMIT_WINDOWS)("last tab: closed in commit window %i stays closed", async (targetCommit) => {
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+
+    const probe = closeAtCommit(targetCommit, "desktop-draft-1")
+    probe.armed = true
+    await simulateEditorInput("Existing content")
+    await vi.waitFor(() => expect(probe.closed).toBe(true), {
+      timeout: DESKTOP_PERSISTENCE_DEBOUNCE_MS + 3_000,
+    })
+    await settleDeferredWork()
+
+    const session = getEditorSessionState().session
+    expect(session.tabs).toHaveLength(0)
+    expect(session.active_tab_id).toBeNull()
+  }, DESKTOP_PERSISTENCE_DEBOUNCE_MS + 8_000)
+
+  it.each(COMMIT_WINDOWS)(
+    "with a draft open: closing A in commit window %i neither brings A back nor consumes the draft",
+    async (targetCommit) => {
+      await act(async () => root?.render(<EditorShell />))
+      await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+
+      await simulateEditorInput("Existing content")
+      await vi.waitFor(() => {
+        expect(getEditorSessionState().session.tabs.map((tab) => tab.id)).toEqual(["desktop-draft-1"])
+      }, { timeout: DESKTOP_PERSISTENCE_DEBOUNCE_MS + 2_000 })
+      await settleDeferredWork()
+
+      await act(async () => {
+        await topbarState.onNewTab?.()
+      })
+      await vi.waitFor(() => {
+        expect(getEditorSessionState().session.active_tab_id).toBe(EDITOR_DRAFT_TAB_ID)
+      })
+
+      const probe = closeAtCommit(targetCommit, "desktop-draft-1")
+      probe.armed = true
+      await act(async () => {
+        await topbarState.onSelectTab?.("desktop-draft-1")
+      })
+      await vi.waitFor(() => expect(probe.closed).toBe(true), { timeout: 5_000 })
+      await settleDeferredWork()
+
+      const session = getEditorSessionState().session
+      expect(session.tabs.map((tab) => tab.writing_id)).not.toContain("desktop-draft-1")
+      expect(session.tabs.map((tab) => tab.id)).toEqual([EDITOR_DRAFT_TAB_ID])
+      expect(session.active_tab_id).toBe(EDITOR_DRAFT_TAB_ID)
+    },
+    DESKTOP_PERSISTENCE_DEBOUNCE_MS + 10_000,
+  )
 })
 
 describe("ODE-461 — desktop save reliability", () => {

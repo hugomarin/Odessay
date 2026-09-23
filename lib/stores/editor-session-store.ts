@@ -71,6 +71,23 @@ let state: EditorSessionState = DEFAULT_STATE;
 const listeners = new Set<EditorSessionListener>();
 let loadPromise: Promise<void> | null = null;
 
+/**
+ * Writings whose tab was removed (closed by the author, or dropped because
+ * the file became unavailable) and not explicitly opened again since.
+ *
+ * `publishTabState` runs from a React passive effect, so it can fire with a
+ * `writingId` captured by a render that committed *before* the tab was closed
+ * — the close mutates this store directly and React does not flush pending
+ * passive effects first. Without this record, that late publish either
+ * recreates the tab or promotes an open draft into it: the closed document
+ * comes back and, in the draft case, the draft is lost (ODE-561).
+ *
+ * A removed writing can only return through an explicit open
+ * (`openWritingTab`, `reconcileMaterializedDraftTab`), which clears the mark.
+ * Publishing reflects state onto a tab; it never reopens one.
+ */
+const removedWritingIds = new Set<string>();
+
 const emitChange = () => {
   listeners.forEach((listener) => listener());
 };
@@ -230,6 +247,7 @@ export function openWritingTab({
   replaceDraft = false,
 }: OpenWritingInput) {
   let opened = true;
+  removedWritingIds.delete(writingId);
 
   setSessionState((current) => {
     const existingIndex = findTabIndexByWritingId(current.tabs, writingId);
@@ -324,6 +342,7 @@ export function reconcileMaterializedDraftTab({
   saveState?: EditorTabSaveState;
   hasPendingSync?: boolean;
 }) {
+  removedWritingIds.delete(writingId);
   setSessionState((current) => {
     if (findTabIndexByWritingId(current.tabs, writingId) >= 0) {
       return current;
@@ -410,6 +429,10 @@ export function publishTabState({
   saveState,
   hasPendingSync,
 }: PublishTabInput) {
+  if (writingId && removedWritingIds.has(writingId)) {
+    return;
+  }
+
   const now = Date.now();
 
   setSessionState((current) => {
@@ -515,6 +538,11 @@ export function closeTab(tabId: string) {
       return current;
     }
 
+    const closedWritingId = current.tabs[index]!.writing_id;
+    if (closedWritingId) {
+      removedWritingIds.add(closedWritingId);
+    }
+
     const remainingTabs = current.tabs.filter((tab) => tab.id !== tabId);
     nextActiveTabId =
       current.active_tab_id === tabId
@@ -551,6 +579,7 @@ export function reconcileUnavailableWritingTab(writingId: string): ReconcileUnav
     }
 
     const staleTab = current.tabs[staleIndex]!;
+    removedWritingIds.add(writingId);
     const remainingTabs = current.tabs.filter((_, index) => index !== staleIndex);
     const removedActive = current.active_tab_id === staleTab.id;
 
@@ -652,5 +681,6 @@ export function syncWritingTitlesFromCatalog(titlesByWritingId: ReadonlyMap<stri
 export function resetEditorSessionStoreForTests() {
   state = DEFAULT_STATE;
   loadPromise = null;
+  removedWritingIds.clear();
   emitChange();
 }
