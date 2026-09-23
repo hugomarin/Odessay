@@ -17,5 +17,6 @@ boundaries:
       Ver components/editor/AGENTS.md — deuda conocida documentada.
     from:
       - components
+      - hooks
     forbidPattern: "localDB.correctionBlocks"
     canonicalOwner: lib/corrections/persistence.ts

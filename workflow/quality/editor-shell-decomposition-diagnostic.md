@@ -36,6 +36,19 @@ Método:  inventario de declaraciones + conteo mecánico sobre el archivo real,
     8 llamadas directas a localDB.correctionBlocks   (sin cambio: todas viven en el camino manual)
 ```
 
+**Actualización (2026-09-23, ODE-562 — primer corte, hidratación):** el efecto de hidratación (~456 líneas) salió tal cual a `hooks/useDocumentHydration.ts`. Mudanza mecánica: mismas 12 dependencias y mismas guardas de generación; la shell llama al hook en la posición que ocupaba el efecto y los refs espejo siguen siendo suyos. Diferencias medidas contra `main` con el mismo método antes y después:
+
+```text
+6,265 líneas        (-399)
+   60 useEffect     (-1)
+  -25 lecturas de refs (el efecto las lleva consigo; siguen leyendo los mismos refs)
+    8 llamadas directas a localDB.correctionBlocks   (sin cambio, a propósito: las dos de la
+                                                      hidratación se inyectan desde la shell, donde
+                                                      la deuda está declarada; pagarla es el corte 2)
+```
+
+La red que lo protege: 4a, 4b, los humos desktop y corrections, ODE-464 y los barridos de ODE-561, más dos pruebas nuevas previas al corte (restauración de selección, STATE-07, y admisión de sugerencias hidratadas desde caché). Las tres mutaciones de referencia se repitieron sobre el hook y siguen poniéndose en rojo. La regla `ui-no-direct-persistence` escanea ahora también `hooks/`.
+
 El tamaño no es el hallazgo — `components/editor/AGENTS.md` ya establece que el tamaño por sí solo no es un finding de review. Los dos números que importan son los del medio.
 
 ## 2. Hallazgo 1 — cada dato tiene dos dueños

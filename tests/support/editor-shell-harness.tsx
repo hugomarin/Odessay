@@ -56,6 +56,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 
 import { EditorShell } from "@/components/editor/editor-shell"
+import { resetLearnedWordsCacheForTest } from "@/lib/corrections/learned-words-loader"
 import { resetEditorSessionStoreForTests } from "@/lib/stores/editor-session-store"
 
 import { type EditorHandle, type HarnessWorld, defaultNetwork, world } from "./editor-shell-doubles"
@@ -176,12 +177,17 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
   world.editor = null
   world.aiReview = async () => ({ error: null, data: { corrections: [] } })
   world.aiReviewCalls = []
+  world.learnedWords = []
+  world.learnedWordsCalls = 0
 
   Object.assign(world, overrides)
 
   world.unhandledErrors = []
 
   resetEditorSessionStoreForTests()
+  // Caché de módulo de la app: sin esto, la lista de un test se filtra al
+  // siguiente, igual que el store de sesión.
+  resetLearnedWordsCacheForTest()
   installBrowserGaps()
   installErrorCollector()
   installNetworkDouble()
