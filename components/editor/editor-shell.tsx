@@ -375,7 +375,7 @@ const DESKTOP_EDITOR_OUTPUT_DEBOUNCE_MS = 150
 // need to track keystrokes in near-real-time — content lives in TipTap's
 // in-memory state regardless. Coalescing it to once per 4s of typing pause
 // keeps that pipeline from running once per pause during sustained typing.
-const DESKTOP_PERSISTENCE_DEBOUNCE_MS = 4_000
+export const DESKTOP_PERSISTENCE_DEBOUNCE_MS = 4_000
 
 const AUTO_TITLE_MAX_CHARS = 48
 const UNTITLED_WRITING_TITLE = "Untitled artifact"

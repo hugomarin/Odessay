@@ -431,3 +431,80 @@ describe("editorSessionStore", () => {
     });
   });
 });
+
+describe("editorSessionStore — a removed writing only returns through an explicit open (ODE-561)", () => {
+  const publishFor = (writingId: string) =>
+    publishTabState({
+      routeWritingId: null,
+      writingId,
+      title: "Late publish",
+      saveState: "saved-local",
+      hasPendingSync: false,
+    });
+
+  it("a late publish for a closed writing does not recreate its tab", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-a", title: "A" });
+
+    closeTab("writing-a");
+    publishFor("writing-a");
+
+    const session = getEditorSessionState().session;
+    expect(session.tabs).toHaveLength(0);
+    expect(session.active_tab_id).toBeNull();
+  });
+
+  it("a late publish for a closed writing does not take over the open draft", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-a", title: "A" });
+    openDraftTab();
+    focusTabBackTo("writing-a");
+
+    closeTab("writing-a");
+    publishFor("writing-a");
+
+    const session = getEditorSessionState().session;
+    expect(session.tabs.map((tab) => tab.id)).toEqual([EDITOR_DRAFT_TAB_ID]);
+    expect(session.active_tab_id).toBe(EDITOR_DRAFT_TAB_ID);
+  });
+
+  it("a late publish for a writing dropped as unavailable does not bring it back", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-a", title: "A" });
+
+    reconcileUnavailableWritingTab("writing-a");
+    publishFor("writing-a");
+
+    expect(getEditorSessionState().session.tabs).toHaveLength(0);
+  });
+
+  it("an explicit open lifts the mark, so publishing reflects onto the reopened tab again", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-a", title: "A" });
+    closeTab("writing-a");
+
+    openWritingTab({ writingId: "writing-a", title: "A" });
+    publishFor("writing-a");
+
+    const tab = getEditorSessionState().session.tabs.find((item) => item.writing_id === "writing-a");
+    expect(tab?.title).toBe("Late publish");
+  });
+
+  it("still promotes the draft for a writing that never had a tab (web first save)", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-a", title: "A" });
+    closeTab("writing-a");
+    openDraftTab();
+
+    publishFor("writing-new");
+
+    const session = getEditorSessionState().session;
+    expect(session.tabs.map((tab) => tab.writing_id)).toEqual(["writing-new"]);
+    expect(session.active_tab_id).toBe("writing-new");
+  });
+});
+
+function focusTabBackTo(writingId: string) {
+  openWritingTab({ writingId, title: "A" });
+  expect(getEditorSessionState().session.active_tab_id).toBe(writingId);
+}
