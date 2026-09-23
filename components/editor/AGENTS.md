@@ -15,6 +15,20 @@ No debe ser el owner canónico de:
 
 El tamaño del archivo no es, por sí solo, un finding de review — ver `Hotspots` en `.agents/agents/build-agent.md` y `review-architecture/SKILL.md`. Que absorba una responsabilidad nueva de las listadas arriba sí lo es.
 
+## Correcciones: solo existe el camino manual
+
+El análisis de correcciones lo dispara el usuario desde el panel
+(`hooks/useManualCorrections.ts`). La cola **automática** que vivía en
+`editor-shell.tsx` —timers por bloque, reintentos, circuit breaker, toast de
+progreso— era inalcanzable (`correctionsEnabledRef` nunca se ponía a `true`) y
+se eliminó en ODE-558. No reintroducir análisis automático dentro del shell:
+si vuelve a hacer falta, va detrás de una bandera real y con su propio owner,
+no colgando de un ref del hotspot.
+
+Lo que sí sigue vivo aquí: invalidar las sugerencias de un bloque cuando el
+usuario lo edita, el aplazamiento de esa invalidación mientras hay
+supresión activa, y la persistencia de bloques de corrección.
+
 ## Deuda conocida — no usar como plantilla
 
 `editor-shell.tsx` hoy llama `localDB.correctionBlocks.*` directamente en varios puntos (save/delete/evictOldest/getByWriting). Es una violación de boundary ya identificada (`architecture/remediation` — disposition: planned; ver Gap Matrix del quality harness). No es un patrón a copiar.
