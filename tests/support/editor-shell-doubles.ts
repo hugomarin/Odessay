@@ -38,6 +38,14 @@ export type HarnessWorld = {
   /** Peticiones HTTP salientes y su router. */
   networkCalls: Array<{ url: string; method: string }>
   network: NetworkHandler
+  /**
+   * Handler del review de correcciones. Devolver una promesa pendiente deja
+   * la petición "en vuelo", que es donde vive la carrera de identidad: la
+   * respuesta puede llegar cuando el documento activo ya es otro.
+   */
+  aiReview: (input: AiReviewInput) => Promise<AiReviewResult>
+  /** Peticiones de review realmente emitidas, en orden. */
+  aiReviewCalls: AiReviewInput[]
   /** El editor real de TipTap, capturado (no sustituido). */
   editor: EditorHandle | null
   /**
@@ -49,6 +57,24 @@ export type HarnessWorld = {
    * capability-proof-contract: un error tragado no es ejecución exitosa.
    */
   unhandledErrors: Array<{ kind: "error" | "rejection"; message: string }>
+}
+
+export type AiReviewInput = {
+  writingId?: string
+  correctionBlocks?: Array<{ id: string; text: string; hash: string }>
+  [key: string]: unknown
+}
+
+export type AiReviewResult = {
+  error: unknown
+  data:
+    | {
+        summary?: unknown
+        language?: string
+        corrections?: unknown[]
+        [key: string]: unknown
+      }
+    | null
 }
 
 export type EditorHandle = {
@@ -88,6 +114,8 @@ export const world: HarnessWorld = {
   network: defaultNetwork(),
   editor: null,
   unhandledErrors: [],
+  aiReview: async () => ({ error: null, data: { corrections: [] } }),
+  aiReviewCalls: [],
 }
 
 /* ------------------------------------------------------------------ *
@@ -170,7 +198,10 @@ export function aiServiceDouble() {
       listLearnedWords: async () => ({ items: [] }),
       learnWord: async () => ({ error: null }),
       deleteLearnedWord: async () => ({ error: null }),
-      reviewPublication: async () => ({ error: null, data: { suggestions: [] } }),
+      reviewPublication: async (input: AiReviewInput) => {
+        world.aiReviewCalls.push(input)
+        return world.aiReview(input)
+      },
       suggestTitle: async () => ({ error: null, data: null }),
       hydrateCorrectionBlocks: async () => ({ error: null, data: [] }),
     }),
