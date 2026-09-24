@@ -678,6 +678,27 @@ export function EditorShell({
     }
   }, [])
   const markdownSaveTimeoutRef = useRef<number | null>(null)
+  // El guardado de markdown pendiente (ODE-573): se guarda junto al timer para
+  // poder ejecutarlo al desmontar en vez de perderlo.
+  const pendingMarkdownSaveRef = useRef<(() => void) | null>(null)
+  const scheduleMarkdownSave = useCallback((run: () => void) => {
+    pendingMarkdownSaveRef.current = run
+    return window.setTimeout(() => {
+      pendingMarkdownSaveRef.current = null
+      run()
+    }, MARKDOWN_SAVE_DEBOUNCE_MS)
+  }, [])
+  /** Ejecuta ya el guardado de markdown pendiente, si su timer sigue vivo. */
+  const flushPendingMarkdownSave = useCallback(() => {
+    const run = pendingMarkdownSaveRef.current
+    pendingMarkdownSaveRef.current = null
+    if (markdownSaveTimeoutRef.current === null || !run) {
+      return
+    }
+    window.clearTimeout(markdownSaveTimeoutRef.current)
+    markdownSaveTimeoutRef.current = null
+    run()
+  }, [])
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
   const activeEditorTabIdRef = useRef<string | null>(editorSession.active_tab_id)
@@ -1042,7 +1063,24 @@ export function EditorShell({
     persistenceCoordinator.activateDocument(currentWritingId)
   }, [currentWritingId, persistenceCoordinator])
 
-  useEffect(() => () => persistenceCoordinator.dispose(), [persistenceCoordinator])
+  // Lo que la shell tenga en cola hacia el coordinador al desmontarse: la
+  // edición rich en su debounce de desktop (150 ms) y el guardado de markdown
+  // (800 ms). Lo asigna un efecto más abajo,
+  // donde vive la función; se lee aquí, al cerrar el coordinador.
+  const flushPendingEditOnUnmountRef = useRef<(() => void) | null>(null)
+
+  useEffect(
+    () => () => {
+      // ODE-573: volcar ANTES de cerrar el coordinador. Este efecto está
+      // declarado antes que la limpieza que cancela las colas de la shell, y
+      // React ejecuta las limpiezas en ese orden: si el volcado fuera después,
+      // el coordinador ya cerrado rechazaría el guardado y se perdería lo
+      // escrito en los últimos 150 ms (rich) u 800 ms (markdown).
+      flushPendingEditOnUnmountRef.current?.()
+      persistenceCoordinator.dispose()
+    },
+    [persistenceCoordinator],
+  )
 
   /**
    * Al cambiar de documento se descarta el trabajo de correcciones pendiente
@@ -1525,6 +1563,13 @@ export function EditorShell({
 
     runRichModeUpdateSideEffects(queuedEditor)
   }, [runRichModeUpdateSideEffects])
+
+  useEffect(() => {
+    flushPendingEditOnUnmountRef.current = () => {
+      flushQueuedRichModeUpdate()
+      flushPendingMarkdownSave()
+    }
+  }, [flushPendingMarkdownSave, flushQueuedRichModeUpdate])
 
   const scheduleQueuedRichModeUpdate = useCallback(() => {
     richUpdateRafRef.current = null
@@ -3066,7 +3111,7 @@ export function EditorShell({
           return
         }
 
-        markdownSaveTimeoutRef.current = window.setTimeout(() => {
+        markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
           if (modeRef.current !== "markdown") {
             markdownSaveTimeoutRef.current = null
             return
@@ -3078,7 +3123,7 @@ export function EditorShell({
           setBodyText(editor.getText())
           void persistEditorSnapshot(editor)
           markdownSaveTimeoutRef.current = null
-        }, MARKDOWN_SAVE_DEBOUNCE_MS)
+        })
       }
 
       const toggleMarkdownWrap = (marker: string) => {
@@ -3451,6 +3496,7 @@ export function EditorShell({
       persistEditorSnapshot,
       queueMarkdownSelectionRestore,
       router,
+      scheduleMarkdownSave,
       toggleFocusMode,
     ],
   )
@@ -3773,7 +3819,7 @@ export function EditorShell({
 
       setSyncStatus("saving")
 
-      markdownSaveTimeoutRef.current = window.setTimeout(() => {
+      markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
         if (modeRef.current !== "markdown") {
           markdownSaveTimeoutRef.current = null
           return
@@ -3791,9 +3837,9 @@ export function EditorShell({
         setBodyText(editor.getText())
         void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
-      }, MARKDOWN_SAVE_DEBOUNCE_MS)
+      })
     },
-    [editor, persistEditorSnapshot],
+    [editor, persistEditorSnapshot, scheduleMarkdownSave],
   )
 
   const handleInsertLink = useCallback(
@@ -3821,7 +3867,7 @@ export function EditorShell({
         setSyncStatus("saving")
 
         if (editor) {
-          markdownSaveTimeoutRef.current = window.setTimeout(() => {
+          markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
             if (modeRef.current !== "markdown") {
               markdownSaveTimeoutRef.current = null
               return
@@ -3833,7 +3879,7 @@ export function EditorShell({
             setBodyText(editor.getText())
             void persistEditorSnapshot(editor)
             markdownSaveTimeoutRef.current = null
-          }, MARKDOWN_SAVE_DEBOUNCE_MS)
+          })
         }
 
         queueMarkdownSelectionRestore(nextSelectionStart, nextSelectionEnd)
@@ -3870,7 +3916,7 @@ export function EditorShell({
           .run()
       }
     },
-    [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore],
+    [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, scheduleMarkdownSave],
   )
 
   useEffect(() => {
@@ -3920,7 +3966,7 @@ export function EditorShell({
       // Debounce parse + persist exactly like handleMarkdownChange, but do NOT call
       // updateDerivedEditorState — that would overwrite markdownValue with TipTap's
       // serialization of the table nodes, which can include HTML instead of GFM syntax.
-      markdownSaveTimeoutRef.current = window.setTimeout(() => {
+      markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
         if (modeRef.current !== "markdown") {
           markdownSaveTimeoutRef.current = null
           return
@@ -3931,9 +3977,9 @@ export function EditorShell({
         isApplyingContentRef.current = false
         void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
-      }, MARKDOWN_SAVE_DEBOUNCE_MS)
+      })
     },
-    [mode, editor, markdownValue, persistEditorSnapshot],
+    [mode, editor, markdownValue, persistEditorSnapshot, scheduleMarkdownSave],
   )
 
   const handleInsertImage = useCallback(
@@ -3956,7 +4002,7 @@ export function EditorShell({
           if (markdownSaveTimeoutRef.current) {
             window.clearTimeout(markdownSaveTimeoutRef.current)
           }
-          markdownSaveTimeoutRef.current = window.setTimeout(() => {
+          markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
             if (modeRef.current !== "markdown") {
               markdownSaveTimeoutRef.current = null
               return
@@ -3967,7 +4013,7 @@ export function EditorShell({
             setBodyText(editor.getText())
             void persistEditorSnapshot(editor)
             markdownSaveTimeoutRef.current = null
-          }, MARKDOWN_SAVE_DEBOUNCE_MS)
+          })
         }
 
         queueMarkdownSelectionRestore(nextSelectionStart, nextSelectionStart)
@@ -3985,7 +4031,7 @@ export function EditorShell({
         .run()
       void persistEditorSnapshot(editor)
     },
-    [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore],
+    [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, scheduleMarkdownSave],
   )
 
   const handleBackupLocalImage = useCallback(async () => {

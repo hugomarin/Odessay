@@ -8,18 +8,19 @@
  * llega al `.md` del documento, por poco tiempo que haya pasado desde la
  * última tecla.
  *
- * Por qué existe: en desktop la edición espera 150 ms en una cola propia
+ * Por qué existe: en desktop la edición rich espera 150 ms en una cola propia
  * (`DESKTOP_EDITOR_OUTPUT_DEBOUNCE_MS`) antes de llegar al coordinador de
- * persistencia. La limpieza de desmontaje cancelaba esa cola sin volcarla, y
- * el coordinador, que se cierra antes (su efecto está declarado antes), ya no
- * podía recibirla. Se perdía lo escrito en esa ventana (ODE-573).
+ * persistencia, y la de markdown 800 ms (`MARKDOWN_SAVE_DEBOUNCE_MS`). La
+ * limpieza de desmontaje cancelaba las dos colas sin volcarlas, y el
+ * coordinador, que se cierra antes (su efecto está declarado antes), ya no
+ * podía recibirlas. Se perdía lo escrito en esa ventana (ODE-573).
  *
  * Camino de producción: "New Artifact" real, escritura real, desmontaje real
  * (o remontaje por `key` como `DesktopWriteEntry`) y guardado real a `.md` en
  * un directorio temporal.
  *
- * Mutation test (ODE-573): quitar el volcado de la cola antes de cerrar el
- * coordinador pone en rojo los dos casos.
+ * Mutation test (ODE-573): volcar DESPUÉS de cerrar el coordinador pone en
+ * rojo los tres casos; quitar el volcado de markdown pone en rojo el suyo.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -52,8 +53,16 @@ vi.mock("@/lib/sync/sync-service-factory", async () =>
   (await import("./support/editor-shell-desktop-doubles")).syncServiceDouble(),
 )
 
-const { advance, clickNewArtifact, mountEditorShell, resetEditorShellWorld, typeInEditor, waitForMarkdownContaining } =
-  await import("./support/editor-shell-harness")
+const {
+  advance,
+  clickNewArtifact,
+  flush,
+  mountEditorShell,
+  resetEditorShellWorld,
+  typeInEditor,
+  waitForMarkdownContaining,
+} = await import("./support/editor-shell-harness")
+const { act } = await import("react")
 const { createDesktopWorkspace, destroyDesktopWorkspace, resetDesktopWorkspace } = await import(
   "./support/editor-shell-desktop-doubles"
 )
@@ -113,6 +122,41 @@ describe("ODE-573 — la edición en cola se vuelca al desmontar", () => {
 
       const file = await waitForMarkdownContaining("ODE573-ULTIMA-EDICION")
       expect(file.contents).toContain("ODE573-DOCUMENTO")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "salir justo después de escribir en modo markdown guarda el texto",
+    async () => {
+      mounted = await mountEditorShell()
+      await clickNewArtifact(mounted.container)
+      await typeInEditor("ODE573-BASE")
+      await advance(6_000)
+      await waitForMarkdownContaining("ODE573-BASE")
+
+      const markdownToggle = [...mounted.container.querySelectorAll("button")].find(
+        (button) => button.textContent?.trim() === "Markdown",
+      )
+      expect(markdownToggle, "el botón real de modo markdown").toBeTruthy()
+      await act(async () => {
+        markdownToggle!.click()
+      })
+      await flush(3)
+      const textarea = mounted.container.querySelector<HTMLTextAreaElement>("textarea")
+      expect(textarea, "el área de texto real del modo markdown").toBeTruthy()
+
+      await act(async () => {
+        const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!
+        setValue.call(textarea, `${textarea!.value} ODE573-MARKDOWN`)
+        textarea!.dispatchEvent(new Event("input", { bubbles: true }))
+      })
+      // Dentro de la ventana de 800 ms del guardado de markdown.
+      await advance(50)
+      await mounted.unmount()
+      mounted = null
+
+      await waitForMarkdownContaining("ODE573-MARKDOWN")
     },
     TEST_TIMEOUT_MS,
   )
