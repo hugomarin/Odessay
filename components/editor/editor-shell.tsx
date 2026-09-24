@@ -8,7 +8,7 @@ import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
 import { TextSelection } from "@tiptap/pm/state"
 import { useRouter } from "next/navigation"
-import { useDocumentHydration, type DocumentMetadataPatch } from "@/hooks/useDocumentHydration"
+import { useDocumentHydration, type ActivationReason, type DocumentMetadataPatch } from "@/hooks/useDocumentHydration"
 import { useManualCorrections } from "@/hooks/useManualCorrections"
 import {
   mapLocalSyncStatusToSaveState,
@@ -655,6 +655,37 @@ export function EditorShell({
     currentWritingIdRef.current = writingId
     setCurrentWritingId(writingId)
   }, [])
+  /**
+   * Único punto de entrada de toda transición del documento activo (ADR
+   * `odessay-adr-documento-activo.md`, Fase 1 — ODE-567).
+   *
+   * Fase 1 es una MUDANZA: escribe exactamente los mismos portadores que cada
+   * handler escribía a mano, en el mismo orden (identidad → hidratación →
+   * ruta). La fuente todavía no cambia; eso es la Fase 2. `reason` no altera
+   * nada aún: documenta la transición y es la base de la Fase 4 (decidir la
+   * hidratación por motivo en vez de handler por handler).
+   *
+   * - `hydrationWritingId`: `undefined` = no se toca; `null` = sin hidratar.
+   * - `href`: proyección de la ruta con `replaceEditorHistory`; omitido = la
+   *   transición no toca la URL (o la toca con otro mecanismo, declarado en
+   *   su sitio).
+   */
+  const activateDocument = useCallback(
+    (
+      target: { writingId: string | null; hydrationWritingId?: string | null; href?: string },
+      reason: ActivationReason,
+    ) => {
+      void reason
+      setActiveWritingId(target.writingId)
+      if (target.hydrationWritingId !== undefined) {
+        setHydrationWritingId(target.hydrationWritingId)
+      }
+      if (target.href !== undefined) {
+        replaceEditorHistory(target.href)
+      }
+    },
+    [setActiveWritingId],
+  )
   const hydrationGenerationOwnerRef = useRef<ReturnType<typeof createHydrationGenerationOwner> | null>(null)
   if (hydrationGenerationOwnerRef.current === null) {
     hydrationGenerationOwnerRef.current = createHydrationGenerationOwner()
@@ -903,9 +934,8 @@ export function EditorShell({
             return
           }
 
-          setActiveWritingId(record.id)
+          activateDocument({ writingId: record.id, hydrationWritingId: record.id }, "materialize")
           ephemeralDraftWritingIdRef.current = null
-          setHydrationWritingId(record.id)
           applyDocumentMetadata({
             createdAt: record.createdAt,
             title: materializedTitle,
@@ -921,8 +951,15 @@ export function EditorShell({
         },
         onIdentityCreated: (writingId) => {
           const nextWritingSession = createNewWritingSessionState(writingId)
-          setActiveWritingId(nextWritingSession.activeWritingId)
-          setHydrationWritingId(nextWritingSession.hydrationWritingId)
+          // La ruta de esta transición es una navegación real de Next
+          // (`router.replace`), no una proyección: se mantiene aquí abajo.
+          activateDocument(
+            {
+              writingId: nextWritingSession.activeWritingId,
+              hydrationWritingId: nextWritingSession.hydrationWritingId,
+            },
+            "identity",
+          )
 
           if (!routeWritingIdRef.current && !navigatedToDraftRef.current) {
             navigatedToDraftRef.current = true
@@ -965,7 +1002,7 @@ export function EditorShell({
         },
       )
     },
-    [setActiveWritingId, applyDocumentMetadata, createDesktopDraftFn],
+    [activateDocument, applyDocumentMetadata, createDesktopDraftFn],
   )
 
   useEffect(() => {
@@ -1814,6 +1851,33 @@ export function EditorShell({
     })
   }, [editor])
 
+  /**
+   * Protocolo de salida del documento activo (ADR documento activo, Hecho 4;
+   * Fase 1 — ODE-567). Antes estaba copiado en cada handler de transición.
+   *
+   * Los tres pasos son explícitos porque hoy NO todas las transiciones hacen
+   * los mismos, y la Fase 1 es una mudanza, no un cambio de comportamiento:
+   * cada sitio declara lo que ya hacía. Uniformizarlos es una decisión aparte.
+   * Va separado de `activateDocument` porque algunas transiciones (cerrar,
+   * abrir) salen ANTES de un `await` y activan DESPUÉS.
+   */
+  const prepareDocumentExit = useCallback(
+    (steps: { flushPendingEdit: boolean; snapshotDraft: boolean; saveViewState: boolean }) => {
+      // La edición en cola todavía apunta al editor del documento saliente:
+      // volcarla antes de que cambie la identidad (ODE-478 caso 2).
+      if (steps.flushPendingEdit) {
+        flushQueuedRichModeUpdate()
+      }
+      if (steps.snapshotDraft) {
+        snapshotOutgoingDraftContent()
+      }
+      if (steps.saveViewState) {
+        persistCurrentWorkspaceViewState()
+      }
+    },
+    [flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, snapshotOutgoingDraftContent],
+  )
+
   useEffect(() => {
     void initializeEditorSessionStore()
   }, [])
@@ -1909,10 +1973,12 @@ export function EditorShell({
       return
     }
 
-    setActiveWritingId(nextExternalLoad.activeWritingId)
-    setHydrationWritingId(nextExternalLoad.hydrationWritingId)
+    activateDocument(
+      { writingId: nextExternalLoad.activeWritingId, hydrationWritingId: nextExternalLoad.hydrationWritingId },
+      "route",
+    )
     navigatedToDraftRef.current = false
-  }, [setActiveWritingId, routeWritingId])
+  }, [activateDocument, routeWritingId])
 
   useEffect(() => {
     activeEditorTabIdRef.current = editorSession.active_tab_id
@@ -1962,12 +2028,14 @@ export function EditorShell({
       if (restoreTransition.target === "desktop-hydration") {
         // Explicit desktop handoff: history is only a projection in the static
         // bundle, so identity must transition before hydration/fallback effects.
-        setActiveWritingId(restoreTransition.writingId)
         desktopSessionRestoreTimingRef.current = {
           writingId: restoreTransition.writingId,
           startedAt: performance.now(),
         }
-        setHydrationWritingId(restoreTransition.writingId)
+        activateDocument(
+          { writingId: restoreTransition.writingId, hydrationWritingId: restoreTransition.writingId },
+          "restore",
+        )
         console.info(`[editor:session-restore] restorable ${restoreTransition.writingId}`)
       } else if (restoreTransition.target === "history") {
         replaceEditorHistory(nextHref)
@@ -1987,7 +2055,7 @@ export function EditorShell({
 
     navigatedToDraftRef.current = true
     openDraftTab(ephemeralDraftWritingIdRef.current)
-  }, [setActiveWritingId, createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
+  }, [activateDocument, createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
   // Eagerly create a stable local identity for blank /write so the first
   // paste/input never races against identity creation. This is the explicit
@@ -2032,7 +2100,7 @@ export function EditorShell({
           if (result.error || !result.data) {
             throw new Error(result.error?.message ?? "Failed to create desktop draft")
           }
-          setActiveWritingId(result.data.id)
+          activateDocument({ writingId: result.data.id, hydrationWritingId: null }, "create")
         } else {
           await (await getDocumentService()).saveWriting({
             writing: {
@@ -2059,7 +2127,7 @@ export function EditorShell({
               metadataUpdatedAt: nowIso,
             },
           })
-          setActiveWritingId(nextId)
+          activateDocument({ writingId: nextId, hydrationWritingId: null }, "create")
         }
       } catch {
         // If the save fails (e.g., scope change in progress), fall back to
@@ -2076,7 +2144,6 @@ export function EditorShell({
         replaceDraft: true,
       })
 
-      setHydrationWritingId(null)
       applyDocumentMetadata({
         title: nextTitle,
         hasExplicitTitle: false,
@@ -2099,7 +2166,7 @@ export function EditorShell({
     }
 
     void ensureIdentity()
-  }, [setActiveWritingId, applyDocumentMetadata, createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
+  }, [activateDocument, applyDocumentMetadata, createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
   useEffect(() => {
     setSidebarMode("collapsed")
@@ -2299,7 +2366,7 @@ export function EditorShell({
     setBodyText,
     setSyncStatus,
     setIsBodyHydrating,
-    setActiveWritingId,
+    activateDocument,
     applyDocumentMetadata,
     setExternalFileNotice,
     setCanonicalPath,
@@ -2312,7 +2379,6 @@ export function EditorShell({
     setPersistedCorrectionBlocks,
     readLocalCorrectionBlocks,
     deleteLocalCorrectionBlocks,
-    replaceEditorHistory,
     untitledWritingTitle: UNTITLED_WRITING_TITLE,
     isExplicitWritingTitle,
   })
@@ -4704,26 +4770,26 @@ export function EditorShell({
       // Flushing it here — before currentWritingIdRef changes below — makes
       // sure that content lands on the document it was actually typed into,
       // not on whatever tab we're about to switch to (ODE-478 case 2).
-      flushQueuedRichModeUpdate()
-      snapshotOutgoingDraftContent()
-
-      persistCurrentWorkspaceViewState()
+      prepareDocumentExit({ flushPendingEdit: true, snapshotDraft: true, saveViewState: true })
       activeEditorTabIdRef.current = tabId
       focusTab(tabId)
       navigatedToDraftRef.current = false
 
       if (nextTab.writing_id) {
-        setActiveWritingId(nextTab.writing_id)
-        setHydrationWritingId(nextTab.writing_id)
-        replaceEditorHistory(buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }))
+        activateDocument(
+          {
+            writingId: nextTab.writing_id,
+            hydrationWritingId: nextTab.writing_id,
+            href: buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }),
+          },
+          "select",
+        )
         return
       }
 
-      setActiveWritingId(null)
-      setHydrationWritingId(null)
-      replaceEditorHistory("/write")
+      activateDocument({ writingId: null, hydrationWritingId: null, href: "/write" }, "select")
     },
-    [setActiveWritingId, editorSession.tabs, flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, snapshotOutgoingDraftContent],
+    [activateDocument, editorSession.tabs, prepareDocumentExit],
   )
 
   const handleCloseWorkspaceTab = useCallback(
@@ -4740,18 +4806,14 @@ export function EditorShell({
 
       // Same reasoning as handleSelectWorkspaceTab: flush before this tab's
       // identity can change under a still-queued update (ODE-478 case 2).
-      flushQueuedRichModeUpdate()
-      snapshotOutgoingDraftContent()
-
+      // The view state is only worth saving for the tab being left.
       const isClosingActiveTab = activeEditorTabIdRef.current === tabId
+      prepareDocumentExit({ flushPendingEdit: true, snapshotDraft: true, saveViewState: isClosingActiveTab })
+
       const persistenceTarget = {
         writingId: targetTab.writing_id,
         draftWritingId: targetTab.writing_id === null ? ephemeralDraftWritingIdRef.current : null,
         sourceTabId: tabId,
-      }
-
-      if (isClosingActiveTab) {
-        persistCurrentWorkspaceViewState()
       }
 
       // A close waits for this tab's local write, including a still-debounced
@@ -4793,22 +4855,23 @@ export function EditorShell({
       const nextTab = getEditorSessionState().session.tabs.find((tab) => tab.id === nextActiveTabId)
       navigatedToDraftRef.current = false
       if (nextTab?.writing_id) {
-        setActiveWritingId(nextTab.writing_id)
-        setHydrationWritingId(nextTab.writing_id)
-        replaceEditorHistory(buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }))
+        activateDocument(
+          {
+            writingId: nextTab.writing_id,
+            hydrationWritingId: nextTab.writing_id,
+            href: buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }),
+          },
+          "close",
+        )
         return
       }
 
-      setActiveWritingId(null)
-      setHydrationWritingId(null)
-      replaceEditorHistory("/write")
+      activateDocument({ writingId: null, hydrationWritingId: null, href: "/write" }, "close")
     },
     [
-      setActiveWritingId,
-      flushQueuedRichModeUpdate,
-      persistCurrentWorkspaceViewState,
+      activateDocument,
       persistenceCoordinator,
-      snapshotOutgoingDraftContent,
+      prepareDocumentExit,
     ],
   )
 
@@ -5061,10 +5124,7 @@ export function EditorShell({
       // discarded just because the user hit New Tab before the next
       // frame/save landed (ODE-478 follow-up — this handler never got the
       // original case 2/4 fix).
-      flushQueuedRichModeUpdate()
-      snapshotOutgoingDraftContent()
-
-      persistCurrentWorkspaceViewState()
+      prepareDocumentExit({ flushPendingEdit: true, snapshotDraft: true, saveViewState: true })
 
       // Detach the previous document before the draft tab can receive focus.
       // Merely changing the active session tab leaves TipTap and the save path
@@ -5072,8 +5132,9 @@ export function EditorShell({
       // can otherwise append to (and persist over) the previous document.
       persistenceCoordinator.cancel()
       persistenceCoordinator.activateDocument(null)
-      setActiveWritingId(null)
-      setHydrationWritingId(null)
+      // La ruta de esta transición se proyecta más abajo, después de abrir la
+      // pestaña borrador; se mantiene en su sitio para no reordenar (Fase 1).
+      activateDocument({ writingId: null, hydrationWritingId: null }, "create")
       ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
       navigatedToDraftRef.current = false
 
@@ -5100,7 +5161,9 @@ export function EditorShell({
     // synchronously so persistEditorSnapshot never races against it.
     isCreatingWorkspaceTabRef.current = true
 
-    persistCurrentWorkspaceViewState()
+    // Web: el volcado no aplica (la cola del editor se vacía de forma síncrona
+    // en web) y el borrador no se conserva aquí; solo la vista saliente.
+    prepareDocumentExit({ flushPendingEdit: false, snapshotDraft: false, saveViewState: true })
     const activeDraftTabId = currentWritingId ?? EDITOR_DRAFT_TAB_ID
     const isActiveDraft =
       !currentWritingId ||
@@ -5112,9 +5175,10 @@ export function EditorShell({
 
     // Claim ownership of the blank-draft -> identified-local-writing transition
     // synchronously so persistEditorSnapshot never races against it.
-    setActiveWritingId(nextWritingId)
-    setHydrationWritingId(nextWritingId)
-    replaceEditorHistory(`/write/${nextWritingId}`)
+    activateDocument(
+      { writingId: nextWritingId, hydrationWritingId: nextWritingId, href: `/write/${nextWritingId}` },
+      "create",
+    )
 
     const finishCreation = () => {
       isCreatingWorkspaceTabRef.current = false
@@ -5150,8 +5214,7 @@ export function EditorShell({
       } catch {
         // If save fails, revert the optimistic claim so persistEditorSnapshot
         // can fall back to identity-on-first-input.
-        setActiveWritingId(null)
-        setHydrationWritingId(null)
+        activateDocument({ writingId: null, hydrationWritingId: null }, "revert")
         return
       } finally {
         finishCreation()
@@ -5178,8 +5241,7 @@ export function EditorShell({
     try {
       await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
     } catch {
-      setActiveWritingId(null)
-      setHydrationWritingId(null)
+      activateDocument({ writingId: null, hydrationWritingId: null }, "revert")
       return
     } finally {
       finishCreation()
@@ -5199,14 +5261,12 @@ export function EditorShell({
       })
     })
   }, [
-    setActiveWritingId,
+    activateDocument,
     currentWritingId,
     editor,
     editorSession.tabs,
-    flushQueuedRichModeUpdate,
     persistenceCoordinator,
-    persistCurrentWorkspaceViewState,
-    snapshotOutgoingDraftContent,
+    prepareDocumentExit,
     updateDerivedEditorState,
   ])
   createWorkspaceTabRef.current = handleCreateWorkspaceTab
@@ -5217,18 +5277,21 @@ export function EditorShell({
     // currently active, so a still-queued edit or unmaterialized draft must
     // not be discarded just because the user opened a different document via
     // search/recents instead of the tab bar (ODE-478 follow-up).
-    flushQueuedRichModeUpdate()
-    snapshotOutgoingDraftContent()
+    //
+    // `saveViewState: false` es el comportamiento vigente, no un olvido de la
+    // mudanza: a diferencia de los otros handlers, esta transición nunca guardó
+    // la vista saliente. Cambiarlo es un cambio visible y no tiene camino de
+    // producción barato en el harness todavía (ODE-567, decisión documentada).
+    prepareDocumentExit({ flushPendingEdit: true, snapshotDraft: true, saveViewState: false })
 
     const outcome = await openDocumentById(documentId)
     if (outcome.status !== "opened" && outcome.status !== "conflict") {
       throw new Error(describeOpenOutcome(outcome))
     }
     const openedTitle = outcome.record.title ?? UNTITLED_WRITING_TITLE
-    setActiveWritingId(documentId)
-    setHydrationWritingId(documentId)
+    activateDocument({ writingId: documentId, hydrationWritingId: documentId }, "open")
     openWritingTab({ writingId: documentId, slug: outcome.record.slug, title: openedTitle, saveState: "saved-local", hasPendingSync: false })
-  }, [setActiveWritingId, flushQueuedRichModeUpdate, snapshotOutgoingDraftContent])
+  }, [activateDocument, prepareDocumentExit])
 
   selectAdjacentTabRef.current = (direction) => {
     const tabs = editorSession.tabs
@@ -5260,10 +5323,7 @@ export function EditorShell({
       // Same reasoning as the other document-switching handlers: the OS
       // "Open File" menu also detaches from whatever is currently active
       // (ODE-478 follow-up).
-      flushQueuedRichModeUpdate()
-      snapshotOutgoingDraftContent()
-
-      persistCurrentWorkspaceViewState()
+      prepareDocumentExit({ flushPendingEdit: true, snapshotDraft: true, saveViewState: true })
 
       // Unified opener (ODE-375 M3): desktop Open Document converges path → UUID
       // through the catalog before hydration and never mints a fresh id per open,
@@ -5289,8 +5349,7 @@ export function EditorShell({
         }
 
         const openedId = result.documentId
-        setActiveWritingId(openedId)
-        setHydrationWritingId(openedId)
+        activateDocument({ writingId: openedId, hydrationWritingId: openedId }, "open")
         const openedTitle = result.record.title ?? filenameToTitle(_path)
         applyDocumentMetadata({ title: openedTitle })
         openWritingTab({
@@ -5341,8 +5400,7 @@ export function EditorShell({
           if (result.error || !result.data) {
             throw new Error(result.error?.message ?? "Failed to import desktop file")
           }
-          setActiveWritingId(result.data.id)
-          setHydrationWritingId(result.data.id)
+          activateDocument({ writingId: result.data.id, hydrationWritingId: result.data.id }, "open")
           applyDocumentMetadata({ title: result.data.title ?? nextTitle })
         } else {
           await (await getDocumentService()).saveWriting({ writing: record })
@@ -5352,8 +5410,7 @@ export function EditorShell({
       }
 
       const openedWritingId = currentWritingIdRef.current ?? nextWritingId
-      setActiveWritingId(openedWritingId)
-      setHydrationWritingId(openedWritingId)
+      activateDocument({ writingId: openedWritingId, hydrationWritingId: openedWritingId }, "open")
       openWritingTab({
         writingId: openedWritingId,
         title: isDesktopRuntime() ? titleRef.current || nextTitle : nextTitle,
@@ -5367,7 +5424,7 @@ export function EditorShell({
         router.push(`/write/${nextWritingId}`)
       }
     },
-    [setActiveWritingId, applyDocumentMetadata, flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, router, snapshotOutgoingDraftContent],
+    [activateDocument, applyDocumentMetadata, prepareDocumentExit, router],
   )
 
   const handleMenuNewFile = useCallback(() => {
