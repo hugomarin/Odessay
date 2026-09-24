@@ -369,6 +369,8 @@ const [hydrationPhase, setHydrationPhase] = useState<
 >('idle')
 // La transición es: idle → loading → ready
 // Cada fase tiene un handler único y un cleanup explícito.
+// En EditorShell: `hydrationPhase` ("loading" | "ready"), que solo pone en
+// "loading" activateDocument según el motivo (ODE-570).
 ```
 
 ### Prohibición de crear identidad en el hot path
