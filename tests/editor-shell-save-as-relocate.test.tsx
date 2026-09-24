@@ -105,30 +105,48 @@ function activeTab() {
   return session.tabs.find((tab) => tab.id === session.active_tab_id)
 }
 
+function hydrationPhase() {
+  return document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") ?? null
+}
+
 async function exists(path: string) {
   return stat(path).then(() => true).catch(() => false)
 }
 
-/** Crea un documento real con contenido y devuelve su `.md` y su título. */
+/**
+ * Crea un documento real con contenido y devuelve su `.md` y su título.
+ *
+ * Tras materializarse, el documento se REABRE POR RUTA (remontaje por `key`,
+ * como una entrada desde Desk). Bajo carga la shell a veces no adopta el
+ * borrador recién materializado (ODE-577); entonces `handleSaveToDisk` no ve
+ * documento y materializa otro con el nombre elegido. Esta prueba es sobre
+ * Save As, no sobre esa carrera.
+ */
 async function createDocument() {
   mounted = await mountEditorShell()
-  // Esperar a que cargue la sesión antes de "New Artifact". Pulsarlo durante
-  // la carga deja la shell sin adoptar el documento cuando se materializa
-  // (hallazgo de ODE-574, registrado aparte); esta prueba es sobre Save As.
   await waitFor(() => getEditorSessionState().loaded, { label: "sesión cargada" })
   await flush(3)
   await clickNewArtifact(mounted.container)
   await typeInEditor(BODY)
   await advance(6_000)
   const file = await waitForMarkdownContaining(BODY)
-  const tab = await waitFor(
+  const created = await waitFor(
     () => {
       const current = activeTab()
-      return current?.writing_id && current.writing_id !== EDITOR_DRAFT_TAB_ID ? current : null
+      return current?.writing_id && current.writing_id !== EDITOR_DRAFT_TAB_ID ? current.writing_id : null
     },
     { label: "documento materializado", timeoutMs: 15_000 },
   )
-  return { file, title: tab.title }
+
+  await mounted.render({ key: created, writingId: created })
+  await waitFor(() => mounted!.editor().getText().includes(BODY), { label: "documento abierto por ruta" })
+  // El título se lee con la hidratación terminada: antes, la pestaña aún
+  // muestra el título previo a la reapertura.
+  await waitFor(() => hydrationPhase() === "ready", { label: "hidratación terminada" })
+  const tab = await waitFor(() => (activeTab()?.writing_id === created ? activeTab() : null), {
+    label: "pestaña del documento activa",
+  })
+  return { file, title: tab!.title }
 }
 
 describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
