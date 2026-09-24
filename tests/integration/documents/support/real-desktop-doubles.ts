@@ -4,6 +4,7 @@ import { dirname, join } from "node:path"
 import type {
   DesktopCatalogDualWriteInput,
   DesktopCatalogRow,
+  DesktopCloudSnapshotInput,
   DesktopFileMetadata,
   DesktopRetiredBindingRoot,
   DesktopWorkspaceFile,
@@ -355,6 +356,62 @@ export async function tauriCatalogBulkDualWriteDouble(dbPath: string, inputs: De
   const rows = rowsFor(dbPath)
   for (const input of inputs) applyDualWrite(rows, input)
   return inputs.map((input) => input.document.id)
+}
+
+/**
+ * Espejo de `catalog_apply_cloud_snapshots` (src-tauri/src/commands/index.rs).
+ * Un snapshot de la nube actualiza los campos cloud, pero **no** mueve una
+ * fila `pending`/`failed`/`conflict` a `synced`: eso lo hace la confirmación
+ * de su mutación. Una fila sin estado pendiente pasa a `synced` si la nube la
+ * tiene. Una fila que no existía entra como solo-nube.
+ */
+export async function tauriCatalogApplyCloudSnapshotsDouble(
+  dbPath: string,
+  snapshots: DesktopCloudSnapshotInput[],
+): Promise<void> {
+  const rows = rowsFor(dbPath)
+  for (const snapshot of snapshots) {
+    const prior = rows.get(snapshot.id)
+    const keepsPending = prior && ["pending", "failed", "conflict"].includes(prior.syncStatus)
+    const syncStatus = keepsPending ? prior.syncStatus : snapshot.cloudPresent ? "synced" : (prior?.syncStatus ?? "local-only")
+    rows.set(snapshot.id, {
+      ...(prior ?? {
+        id: snapshot.id,
+        localPresent: false,
+        bindingRootId: null,
+        relativePath: null,
+        canonicalPath: null,
+        inode: null,
+        contentHash: null,
+        size: null,
+        lastSeenAt: null,
+        excerpt: null,
+        excerptContentHash: null,
+      }),
+      cloudPresent: snapshot.cloudPresent,
+      cloudAccountId: snapshot.cloudAccountId,
+      title: snapshot.title ?? prior?.title ?? null,
+      slug: snapshot.slug ?? prior?.slug ?? null,
+      status: snapshot.status ?? prior?.status ?? null,
+      syncStatus,
+    } as DesktopCatalogRow)
+  }
+}
+
+/**
+ * Espejo del efecto de `catalog_update_mutation_status(…, "synced")` sobre el
+ * documento de una mutación **upsert** confirmada (src-tauri/src/commands/index.rs):
+ * `sync_status='synced'` y `cloud_present=1`. En producción lo escribe el
+ * servicio de sync de desktop al confirmar el write en la nube, y **no emite
+ * ningún CatalogChange**: la única señal es el evento efímero `synced`
+ * (ODE-542). Las pruebas lo usan como el efecto en disco de ese servicio, que
+ * es el boundary doblado.
+ */
+export function confirmCatalogUpsertSyncedDouble(documentId: string): void {
+  for (const rows of catalogsByDb.values()) {
+    const row = rows.get(documentId)
+    if (row) rows.set(documentId, { ...row, syncStatus: "synced", cloudPresent: true })
+  }
 }
 
 export async function tauriCatalogGetByIdDouble(dbPath: string, id: string): Promise<DesktopCatalogRow | null> {
