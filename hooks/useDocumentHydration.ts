@@ -96,6 +96,26 @@ export type ActivationReason =
   | "revert"
 
 /**
+ * Fase de hidratación del documento activo (ADR documento activo, Fase 4 —
+ * ODE-570). El `idle → switching → loading → ready` del ADR queda así:
+ * "switching" es síncrono (`prepareDocumentExit` → `activateDocument` en el
+ * mismo handler) y nunca llega a un render; sin documento que cargar, la fase
+ * es "ready". Un fallo al abrir también sale a "ready" (y, si el documento no
+ * está disponible, a la recuperación de la pestaña).
+ */
+export type HydrationPhase = "loading" | "ready"
+
+/**
+ * ¿Esta activación carga el documento en el editor? La regla que antes repetía
+ * cada handler, derivada del motivo: toda activación con documento hidrata,
+ * salvo `"identity"`, en la que la identidad nace del contenido que ya está en
+ * el editor (primer guardado web, `ensureIdentity`) y cargarlo lo pisaría.
+ */
+export function activationHydrates(writingId: string | null, reason: ActivationReason): boolean {
+  return writingId !== null && reason !== "identity"
+}
+
+/**
  * Cambio parcial de los metadatos del documento. Lo aplica el dueño único de
  * la shell (`applyDocumentMetadata`), que escribe estado y ref a la vez
  * (ODE-563).
@@ -115,7 +135,7 @@ export type DocumentMetadataPatch = {
 export type DocumentHydrationInput = {
   editor: Editor | null
   currentWritingId: string | null
-  hydrationWritingId: string | null
+  hydrationPhase: HydrationPhase
   routeWritingId: string | null
   editorSession: { tabs: LocalEditorSessionTab[] }
 
@@ -130,7 +150,7 @@ export type DocumentHydrationInput = {
   draftContentSnapshotRef: RefObject<{ draftId: string; bodyJson: Record<string, unknown> } | null>
   suppressCorrectionAnalysisUntilRef: RefObject<number>
 
-  setHydrationWritingId: Setter<string | null>
+  setHydrationPhase: Setter<HydrationPhase>
   setMode: Setter<EditorMode>
   setMarkdownValue: Setter<string>
   setBodyText: Setter<string>
@@ -141,7 +161,7 @@ export type DocumentHydrationInput = {
    * documento activo, Fase 1 — ODE-567).
    */
   activateDocument: (
-    target: { writingId: string | null; hydrationWritingId?: string | null; href?: string },
+    target: { writingId: string | null; href?: string },
     reason: ActivationReason,
   ) => void
   /** Único camino para cambiar metadatos del documento (ODE-563). */
@@ -179,7 +199,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
   const {
     editor,
     currentWritingId,
-    hydrationWritingId,
+    hydrationPhase,
     routeWritingId,
     editorSession,
     modeRef,
@@ -190,7 +210,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     ephemeralDraftWritingIdRef,
     draftContentSnapshotRef,
     suppressCorrectionAnalysisUntilRef,
-    setHydrationWritingId,
+    setHydrationPhase,
     setMode,
     setMarkdownValue,
     setBodyText,
@@ -261,15 +281,17 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
 
     updateDerivedEditorState(editor)
 
-    if (!hydrationWritingId) {
+    if (hydrationPhase !== "loading") {
       return
     }
 
-    const targetWritingId = hydrationWritingId
+    // Lo que se carga es el documento activo: solo `activateDocument` pone la
+    // fase en "loading", y lo hace en el mismo paso que fija la identidad.
+    const targetWritingId = currentWritingId
     const generationOwner = hydrationGenerationOwnerRef.current!
     const generation = generationOwner.start(targetWritingId)
 
-    // Marking hydration "done" flips `hydrationWritingId` to null, which is
+    // Marking hydration "done" flips `hydrationPhase` to "ready", which is
     // this effect's own dependency — so calling it cancels this exact
     // generation (see the cleanup below) once React processes the state
     // update. The scroll/selection restore further down is deliberately
@@ -287,7 +309,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     // wait for, or from inside the deepest deferred callback that actually
     // performs one. (Paths that `return` on staleness, e.g. `outcomeResult.
     // status === "stale"`, are the one exception: staleness means a newer
-    // generation already owns `hydrationWritingId`, so this one has nothing
+    // generation already owns `hydrationPhase`, so this one has nothing
     // left to clear.)
     const finishHydration = () => {
       generation.run(() => {
@@ -298,7 +320,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
           )
           desktopSessionRestoreTimingRef.current = null
         }
-        setHydrationWritingId(null)
+        setHydrationPhase("ready")
       })
     }
 
@@ -330,13 +352,14 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
           writingId: tab.writing_id,
           slug: tab.slug,
         })))
-        setHydrationWritingId(null)
+        // La hidratación de este documento termina aquí; si la recuperación
+        // activa otro, `activateDocument` vuelve a fijar la fase.
+        setHydrationPhase("ready")
 
         if (recovery.status === "activate-writing") {
           activateDocument(
             {
               writingId: recovery.writingId,
-              hydrationWritingId: recovery.writingId,
               href: buildWritingRouteHref("/write", { id: recovery.writingId, slug: recovery.slug }),
             },
             "recover",
@@ -667,7 +690,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     editorSession.tabs,
     flattenPersistedSuggestions,
     flushPendingCorrectionBlocks,
-    hydrationWritingId,
+    hydrationPhase,
     queueMarkdownSelectionRestore,
     routeWritingId,
     setPersistedCorrectionBlocks,
