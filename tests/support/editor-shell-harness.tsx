@@ -52,7 +52,7 @@
  */
 import "fake-indexeddb/auto"
 
-import { act } from "react"
+import { act, type ComponentProps } from "react"
 import { createRoot, type Root } from "react-dom/client"
 
 import { EditorShell } from "@/components/editor/editor-shell"
@@ -228,6 +228,13 @@ export type MountedEditorShell = {
 export type EditorShellTestProps = {
   writingId?: string
   forceNewWriting?: boolean
+  /**
+   * `key` de React, como la ponen las entradas reales (`/write/[id]`,
+   * `DesktopWriteEntry`): cambiarla entre renders remonta la shell (ODE-571).
+   */
+  key?: string
+  /** Sustituto de la creación de borradores desktop, para controlar su tiempo. */
+  createDesktopDraftOverride?: ComponentProps<typeof EditorShell>["createDesktopDraftOverride"]
 }
 
 /**
@@ -244,8 +251,9 @@ export async function mountEditorShell(
   const root: Root = createRoot(container)
 
   const render = async (next: EditorShellTestProps = props) => {
+    const { key, ...shellProps } = next
     await act(async () => {
-      root.render(<EditorShell {...next} />)
+      root.render(<EditorShell key={key} {...shellProps} />)
     })
     await flush()
   }

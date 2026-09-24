@@ -478,7 +478,7 @@ En el editor, el owner de la transición "cambiar de documento activo" es una so
 La dimensión "writing activo" tiene una fuente por alcance (ADR `odessay-adr-documento-activo.md`, D1 enmendado en ODE-568):
 
 - **Entre entradas y fuera de la shell:** la pestaña activa del store de sesión (`lib/stores/editor-session-store.ts`), es decir, su `writing_id` o el `draft_writing_id` de la pestaña borrador. Es lo que persiste, lo que restaura la sesión y lo que leen Studio y Recientes.
-- **Dentro de una instancia montada de `EditorShell`:** su identidad de instancia (`currentWritingId` / `currentWritingIdRef`), que leen la hidratación, el guardado, las correcciones y las limpiezas de esa instancia. Solo la escribe `activateDocument`, en la misma transición que escribe el store.
+- **Dentro de una instancia montada de `EditorShell`:** su identidad de instancia (`currentWritingId` / `currentWritingIdRef`), que leen la hidratación, el guardado, las correcciones y las limpiezas de esa instancia. Solo la escribe `activateDocument`, en la misma transición que escribe el store. Lo mismo vale para la identidad del borrador sin materializar (`ephemeralDraftWritingIdRef`, ODE-571): el `onMaterialized` tardío de una instancia ya desmontada la lee y la borra, así que no puede vivir en un sitio compartido.
 
 La URL refleja el documento activo pero no lo controla: las proyecciones van por `activateDocument({ href })` y las navegaciones a un documento por `navigateToWriting`. Los paneles no derivan el writing activo de sus props.
 
