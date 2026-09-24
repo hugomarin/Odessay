@@ -8,7 +8,7 @@ import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
 import { TextSelection } from "@tiptap/pm/state"
 import { useRouter } from "next/navigation"
-import { useDocumentHydration } from "@/hooks/useDocumentHydration"
+import { useDocumentHydration, type DocumentMetadataPatch } from "@/hooks/useDocumentHydration"
 import { useManualCorrections } from "@/hooks/useManualCorrections"
 import {
   mapLocalSyncStatusToSaveState,
@@ -584,10 +584,58 @@ export function EditorShell({
   const hasExplicitTitleRef = useRef(hasExplicitTitle)
   const versionRef = useRef(version)
   const createdAtRef = useRef<string | null>(createdAt)
-  const writingSlugRef = useRef<string | null>(null)
   const statusRef = useRef<WritingStatus>(writingStatus)
   const artifactTypeRef = useRef<ArtifactType>(artifactType)
   const visibilityRef = useRef<WritingVisibility>(writingVisibility)
+  /**
+   * Único dueño de los metadatos del documento (ODE-563).
+   *
+   * Cada metadato vive dos veces: en estado (para renderizar) y en un ref
+   * (lo que lee `persistEditorSnapshot` desde callbacks de larga vida).
+   * Antes, un efecto espejo copiaba el estado al ref DESPUÉS del commit y
+   * además varios caminos escribían el ref a mano; entre medias, el ref
+   * podía llevar el valor del documento anterior. Aquí se escriben los dos
+   * en el mismo paso, y es la única forma permitida de cambiarlos.
+   *
+   * `slug` no tiene ref: nadie lo leía (solo se escribía).
+   */
+  const applyDocumentMetadata = useCallback((patch: DocumentMetadataPatch) => {
+    if (patch.title !== undefined) {
+      titleRef.current = patch.title
+      setTitle(patch.title)
+    }
+    if (patch.hasExplicitTitle !== undefined) {
+      hasExplicitTitleRef.current = patch.hasExplicitTitle
+      setHasExplicitTitle(patch.hasExplicitTitle)
+    }
+    if (patch.version !== undefined) {
+      versionRef.current = patch.version
+      setVersion(patch.version)
+    }
+    if (patch.createdAt !== undefined) {
+      createdAtRef.current = patch.createdAt
+      setCreatedAt(patch.createdAt)
+    }
+    if (patch.slug !== undefined) {
+      setWritingSlug(patch.slug)
+    }
+    if (patch.status !== undefined) {
+      statusRef.current = patch.status
+      setWritingStatus(patch.status)
+    }
+    if (patch.artifactType !== undefined) {
+      artifactTypeRef.current = patch.artifactType
+      setArtifactType(patch.artifactType)
+    }
+    if (patch.visibility !== undefined) {
+      visibilityRef.current = patch.visibility
+      setWritingVisibility(patch.visibility)
+    }
+    if (patch.lifecycle !== undefined) {
+      lifecycleRef.current = patch.lifecycle
+      setLifecycle(patch.lifecycle)
+    }
+  }, [])
   const markdownSaveTimeoutRef = useRef<number | null>(null)
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
@@ -736,10 +784,7 @@ export function EditorShell({
         // returned to. Only update the active editor when its identity
         // matches; never let another document overwrite these refs.
         if (isSourceTabActive && currentWritingIdRef.current === record.id) {
-          versionRef.current = record.version
-          setVersion(record.version)
-          createdAtRef.current = record.createdAt
-          setCreatedAt(record.createdAt)
+          applyDocumentMetadata({ version: record.version, createdAt: record.createdAt })
         }
       }
 
@@ -847,24 +892,17 @@ export function EditorShell({
           ephemeralDraftWritingIdRef.current = null
           setCurrentWritingId(record.id)
           setHydrationWritingId(record.id)
-          createdAtRef.current = record.createdAt
-          setCreatedAt(record.createdAt)
-          setTitle(materializedTitle)
-          titleRef.current = materializedTitle
-          setHasExplicitTitle(false)
-          hasExplicitTitleRef.current = false
-          versionRef.current = record.version
-          setVersion(record.version)
-          setWritingSlug(null)
-          writingSlugRef.current = null
-          setWritingStatus("draft")
-          statusRef.current = "draft"
-          setArtifactType("general")
-          artifactTypeRef.current = "general"
-          setWritingVisibility("private")
-          visibilityRef.current = "private"
-          setLifecycle("local-only")
-          lifecycleRef.current = "local-only"
+          applyDocumentMetadata({
+            createdAt: record.createdAt,
+            title: materializedTitle,
+            hasExplicitTitle: false,
+            version: record.version,
+            slug: null,
+            status: "draft",
+            artifactType: "general",
+            visibility: "private",
+            lifecycle: "local-only",
+          })
           navigatedToDraftRef.current = true
         },
         onIdentityCreated: (writingId) => {
@@ -914,7 +952,7 @@ export function EditorShell({
         },
       )
     },
-    [createDesktopDraftFn],
+    [applyDocumentMetadata, createDesktopDraftFn],
   )
 
   useEffect(() => {
@@ -1827,10 +1865,6 @@ export function EditorShell({
   }, [currentWritingId, resetCorrectionQueueState])
 
   useEffect(() => {
-    titleRef.current = title
-  }, [title])
-
-  useEffect(() => {
     if (!isDesktopRuntime() || hydrationWritingId !== null || !currentWritingId) {
       return
     }
@@ -1844,47 +1878,16 @@ export function EditorShell({
       // On desktop the filename is the canonical human title. Mirror the
       // catalog projection into the active editor without feeding session
       // writes back into this effect (which would create an update loop).
-      titleRef.current = catalogTitle
-      setTitle(catalogTitle)
-      setHasExplicitTitle(catalogTitle !== UNTITLED_WRITING_TITLE)
+      applyDocumentMetadata({
+        title: catalogTitle,
+        hasExplicitTitle: catalogTitle !== UNTITLED_WRITING_TITLE,
+      })
     }
 
     applyCatalogTitle()
     window.addEventListener(CATALOG_TITLE_CHANGE_EVENT, applyCatalogTitle)
     return () => window.removeEventListener(CATALOG_TITLE_CHANGE_EVENT, applyCatalogTitle)
-  }, [currentWritingId, hydrationWritingId])
-
-  useEffect(() => {
-    hasExplicitTitleRef.current = hasExplicitTitle
-  }, [hasExplicitTitle])
-
-  useEffect(() => {
-    versionRef.current = version
-  }, [version])
-
-  useEffect(() => {
-    createdAtRef.current = createdAt
-  }, [createdAt])
-
-  useEffect(() => {
-    writingSlugRef.current = writingSlug
-  }, [writingSlug])
-
-  useEffect(() => {
-    statusRef.current = writingStatus
-  }, [writingStatus])
-
-  useEffect(() => {
-    artifactTypeRef.current = artifactType
-  }, [artifactType])
-
-  useEffect(() => {
-    visibilityRef.current = writingVisibility
-  }, [writingVisibility])
-
-  useEffect(() => {
-    lifecycleRef.current = lifecycle
-  }, [lifecycle])
+  }, [applyDocumentMetadata, currentWritingId, hydrationWritingId])
 
   useEffect(() => {
     const nextExternalLoad = resolveExternalWritingLoad(currentWritingIdRef.current, routeWritingId)
@@ -2068,26 +2071,19 @@ export function EditorShell({
 
       setCurrentWritingId(currentWritingIdRef.current ?? nextId)
       setHydrationWritingId(null)
-      setTitle(nextTitle)
-      setHasExplicitTitle(false)
+      applyDocumentMetadata({
+        title: nextTitle,
+        hasExplicitTitle: false,
+        version: 1,
+        createdAt: nowIso,
+        slug: null,
+        status: "draft",
+        artifactType: "general",
+        visibility: "private",
+        lifecycle: "local-only",
+      })
       setBodyText("")
-      setVersion(1)
-      createdAtRef.current = nowIso
-      setCreatedAt(nowIso)
-      setWritingSlug(null)
-      setWritingStatus("draft")
-      setArtifactType("general")
-      setWritingVisibility("private")
-      setLifecycle("local-only")
       setSyncStatus("saved-local")
-      titleRef.current = nextTitle
-      hasExplicitTitleRef.current = false
-      versionRef.current = 1
-      writingSlugRef.current = null
-      statusRef.current = "draft"
-      artifactTypeRef.current = "general"
-      visibilityRef.current = "private"
-      lifecycleRef.current = "local-only"
       navigatedToDraftRef.current = true
       if (isPerfHarness()) {
         replaceEditorHistory(`/write/${currentWritingIdRef.current ?? nextId}`)
@@ -2097,7 +2093,7 @@ export function EditorShell({
     }
 
     void ensureIdentity()
-  }, [createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
+  }, [applyDocumentMetadata, createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
   useEffect(() => {
     setSidebarMode("collapsed")
@@ -2283,13 +2279,7 @@ export function EditorShell({
     hydrationWritingId,
     routeWritingId,
     editorSession,
-    lifecycleRef,
     modeRef,
-    titleRef,
-    hasExplicitTitleRef,
-    versionRef,
-    createdAtRef,
-    writingSlugRef,
     isApplyingContentRef,
     currentWritingIdRef,
     hydrationGenerationOwnerRef,
@@ -2300,20 +2290,12 @@ export function EditorShell({
     suppressCorrectionAnalysisUntilRef,
     setCurrentWritingId,
     setHydrationWritingId,
-    setTitle,
-    setHasExplicitTitle,
     setMode,
     setMarkdownValue,
     setBodyText,
     setSyncStatus,
-    setVersion,
-    setCreatedAt,
-    setWritingSlug,
-    setWritingStatus,
-    setArtifactType,
-    setWritingVisibility,
-    setLifecycle,
     setIsBodyHydrating,
+    applyDocumentMetadata,
     setExternalFileNotice,
     setCanonicalPath,
     updateDerivedEditorState,
@@ -2353,7 +2335,7 @@ export function EditorShell({
           return
         }
 
-        setWritingSlug(localWriting.slug)
+        applyDocumentMetadata({ slug: localWriting.slug })
         if (isPerfHarness()) {
           // ODE-389: a cold harness has no session, so a real navigation lands
           // on /login and takes the editor down mid-test. Keep the URL in sync
@@ -2364,7 +2346,7 @@ export function EditorShell({
         }
       })()
     })
-  }, [currentWritingId, routeWritingId, router])
+  }, [applyDocumentMetadata, currentWritingId, routeWritingId, router])
 
   useEffect(() => {
     return () => {
@@ -5026,8 +5008,10 @@ export function EditorShell({
           // materialize through the same path typing already uses — not
           // silently no-op (ODE-478 case 3).
           if (!editor) return false
-          setTitle(nextTitle)
-          setHasExplicitTitle(nextTitle !== DESKTOP_UNTITLED_WRITING_TITLE)
+          applyDocumentMetadata({
+            title: nextTitle,
+            hasExplicitTitle: nextTitle !== DESKTOP_UNTITLED_WRITING_TITLE,
+          })
           return persistEditorSnapshot(editor, { title: nextTitle }, { awaitDurability: true })
         }
 
@@ -5038,20 +5022,24 @@ export function EditorShell({
         })
         if (result.error || !result.data) return false
 
-        setTitle(result.data.title ?? nextTitle)
-        setHasExplicitTitle((result.data.title ?? nextTitle) !== UNTITLED_WRITING_TITLE)
+        applyDocumentMetadata({
+          title: result.data.title ?? nextTitle,
+          hasExplicitTitle: (result.data.title ?? nextTitle) !== UNTITLED_WRITING_TITLE,
+        })
         return true
       }
 
-      setTitle(nextTitle)
-      setHasExplicitTitle(nextTitle !== UNTITLED_WRITING_TITLE)
+      applyDocumentMetadata({
+        title: nextTitle,
+        hasExplicitTitle: nextTitle !== UNTITLED_WRITING_TITLE,
+      })
 
       if (editor) {
         return persistEditorSnapshot(editor, { title: nextTitle }, { awaitDurability: true })
       }
       return true
     },
-    [editor, persistEditorSnapshot],
+    [applyDocumentMetadata, editor, persistEditorSnapshot],
   )
 
   const handleCreateWorkspaceTab = useCallback(async (options?: { skipConfirm?: boolean }) => {
@@ -5307,7 +5295,7 @@ export function EditorShell({
         setCurrentWritingId(openedId)
         setHydrationWritingId(openedId)
         const openedTitle = result.record.title ?? filenameToTitle(_path)
-        setTitle(openedTitle)
+        applyDocumentMetadata({ title: openedTitle })
         openWritingTab({
           writingId: openedId,
           title: titleRef.current || openedTitle,
@@ -5359,7 +5347,7 @@ export function EditorShell({
           currentWritingIdRef.current = result.data.id
           setCurrentWritingId(result.data.id)
           setHydrationWritingId(result.data.id)
-          setTitle(result.data.title ?? nextTitle)
+          applyDocumentMetadata({ title: result.data.title ?? nextTitle })
         } else {
           await (await getDocumentService()).saveWriting({ writing: record })
         }
@@ -5383,7 +5371,7 @@ export function EditorShell({
         router.push(`/write/${nextWritingId}`)
       }
     },
-    [flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, router, snapshotOutgoingDraftContent],
+    [applyDocumentMetadata, flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, router, snapshotOutgoingDraftContent],
   )
 
   const handleMenuNewFile = useCallback(() => {
@@ -5419,13 +5407,15 @@ export function EditorShell({
       return false
     }
     const filenameTitle = filenameToTitle(result.path)
-    setTitle(filenameTitle)
-    setHasExplicitTitle(filenameTitle !== DESKTOP_UNTITLED_WRITING_TITLE)
+    applyDocumentMetadata({
+      title: filenameTitle,
+      hasExplicitTitle: filenameTitle !== DESKTOP_UNTITLED_WRITING_TITLE,
+    })
     currentCanonicalPathRef.current = result.path
     setCanonicalPath(result.path)
     setExternalFileNotice(null)
     return result.path
-  }, [editor, persistEditorSnapshot])
+  }, [applyDocumentMetadata, editor, persistEditorSnapshot])
 
   useTauriEditorMenuEvents(handleRunAction)
 
@@ -6086,7 +6076,7 @@ export function EditorShell({
                     return
                   }
 
-                  setWritingStatus(nextStatus)
+                  applyDocumentMetadata({ status: nextStatus })
                   void applyPanelMetaChange(editor, { status: nextStatus }, {
                     persistSnapshot: (overrides) => {
                       if (!editor) {
@@ -6102,7 +6092,7 @@ export function EditorShell({
                     return
                   }
 
-                  setArtifactType(nextArtifactType)
+                  applyDocumentMetadata({ artifactType: nextArtifactType })
                   void applyPanelMetaChange(editor, { artifactType: nextArtifactType }, {
                     persistSnapshot: (overrides) => {
                       if (!editor) {
@@ -6118,7 +6108,7 @@ export function EditorShell({
                     return
                   }
 
-                  setWritingVisibility(nextVisibility)
+                  applyDocumentMetadata({ visibility: nextVisibility })
                   void applyPanelMetaChange(editor, { visibility: nextVisibility }, {
                     persistSnapshot: (overrides) => {
                       if (!editor) {

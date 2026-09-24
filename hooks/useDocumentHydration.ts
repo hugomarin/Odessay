@@ -77,6 +77,23 @@ type MarkdownSelectionRestoreOptions = {
   onSettled?: () => void
 }
 
+/**
+ * Cambio parcial de los metadatos del documento. Lo aplica el dueño único de
+ * la shell (`applyDocumentMetadata`), que escribe estado y ref a la vez
+ * (ODE-563).
+ */
+export type DocumentMetadataPatch = {
+  title?: string
+  hasExplicitTitle?: boolean
+  version?: number
+  createdAt?: string | null
+  slug?: string | null
+  status?: WritingStatus
+  artifactType?: ArtifactType
+  visibility?: WritingVisibility
+  lifecycle?: WritingLifecycle
+}
+
 export type DocumentHydrationInput = {
   editor: Editor | null
   currentWritingId: string | null
@@ -84,14 +101,9 @@ export type DocumentHydrationInput = {
   routeWritingId: string | null
   editorSession: { tabs: LocalEditorSessionTab[] }
 
-  // Refs espejo: siguen siendo de la shell (segundo tiempo, otro issue).
-  lifecycleRef: RefObject<WritingLifecycle>
+  // Refs espejo que siguen siendo de la shell. Los de metadatos ya no llegan
+  // aquí: se escriben por `applyDocumentMetadata` (ODE-563).
   modeRef: RefObject<EditorMode>
-  titleRef: RefObject<string>
-  hasExplicitTitleRef: RefObject<boolean>
-  versionRef: RefObject<number>
-  createdAtRef: RefObject<string | null>
-  writingSlugRef: RefObject<string | null>
   isApplyingContentRef: RefObject<boolean>
   currentWritingIdRef: RefObject<string | null>
   hydrationGenerationOwnerRef: RefObject<ReturnType<typeof createHydrationGenerationOwner> | null>
@@ -103,20 +115,13 @@ export type DocumentHydrationInput = {
 
   setCurrentWritingId: Setter<string | null>
   setHydrationWritingId: Setter<string | null>
-  setTitle: Setter<string>
-  setHasExplicitTitle: Setter<boolean>
   setMode: Setter<EditorMode>
   setMarkdownValue: Setter<string>
   setBodyText: Setter<string>
   setSyncStatus: Setter<EditorSaveState>
-  setVersion: Setter<number>
-  setCreatedAt: Setter<string | null>
-  setWritingSlug: Setter<string | null>
-  setWritingStatus: Setter<WritingStatus>
-  setArtifactType: Setter<ArtifactType>
-  setWritingVisibility: Setter<WritingVisibility>
-  setLifecycle: Setter<WritingLifecycle>
   setIsBodyHydrating: Setter<boolean>
+  /** Único camino para cambiar metadatos del documento (ODE-563). */
+  applyDocumentMetadata: (patch: DocumentMetadataPatch) => void
   /** Este efecto solo limpia el aviso; nunca lo fija. */
   setExternalFileNotice: (notice: null) => void
   setCanonicalPath: Setter<string | null>
@@ -154,13 +159,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     hydrationWritingId,
     routeWritingId,
     editorSession,
-    lifecycleRef,
     modeRef,
-    titleRef,
-    hasExplicitTitleRef,
-    versionRef,
-    createdAtRef,
-    writingSlugRef,
     isApplyingContentRef,
     currentWritingIdRef,
     hydrationGenerationOwnerRef,
@@ -171,20 +170,12 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     suppressCorrectionAnalysisUntilRef,
     setCurrentWritingId,
     setHydrationWritingId,
-    setTitle,
-    setHasExplicitTitle,
     setMode,
     setMarkdownValue,
     setBodyText,
     setSyncStatus,
-    setVersion,
-    setCreatedAt,
-    setWritingSlug,
-    setWritingStatus,
-    setArtifactType,
-    setWritingVisibility,
-    setLifecycle,
     setIsBodyHydrating,
+    applyDocumentMetadata,
     setExternalFileNotice,
     setCanonicalPath,
     updateDerivedEditorState,
@@ -224,25 +215,21 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
       editor.commands.setContent(restorable?.bodyJson ?? EMPTY_EDITOR_JSON)
       isApplyingContentRef.current = false
       updateDerivedEditorState(editor)
-      setWritingStatus("draft")
-      setArtifactType("general")
-      setWritingVisibility("private")
-      setTitle(UNTITLED_WRITING_TITLE)
-      setHasExplicitTitle(false)
-      setVersion(1)
-      setCreatedAt(null)
-      setWritingSlug(null)
-      setLifecycle("local-only")
+      applyDocumentMetadata({
+        status: "draft",
+        artifactType: "general",
+        visibility: "private",
+        title: UNTITLED_WRITING_TITLE,
+        hasExplicitTitle: false,
+        version: 1,
+        createdAt: null,
+        slug: null,
+        lifecycle: "local-only",
+      })
       setSyncStatus("saved")
       setExternalFileNotice(null)
       setPersistedCorrectionBlocks([])
       applyCorrectionSuggestionUpdate(() => [], { immediate: true })
-      titleRef.current = UNTITLED_WRITING_TITLE
-      hasExplicitTitleRef.current = false
-      versionRef.current = 1
-      createdAtRef.current = null
-      writingSlugRef.current = null
-      lifecycleRef.current = "local-only"
       currentCanonicalPathRef.current = null
       setCanonicalPath(null)
       window.requestAnimationFrame(() => {
@@ -489,15 +476,17 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
           writing.content.plainText,
           writing.createdAt,
         )
-        setTitle(loadedTitle)
-        setHasExplicitTitle(loadedHasExplicitTitle)
-        setVersion(writing.version)
-        setCreatedAt(writing.createdAt)
-        setWritingSlug(writing.slug ?? null)
-        setWritingStatus(writing.status ?? "draft")
-        setArtifactType(writing.artifactType ?? "general")
-        setWritingVisibility(writing.visibility ?? "private")
-        setLifecycle(hydratedLifecycle)
+        applyDocumentMetadata({
+          title: loadedTitle,
+          hasExplicitTitle: loadedHasExplicitTitle,
+          version: writing.version,
+          createdAt: writing.createdAt,
+          slug: writing.slug ?? null,
+          status: writing.status ?? "draft",
+          artifactType: writing.artifactType ?? "general",
+          visibility: writing.visibility ?? "private",
+          lifecycle: hydratedLifecycle,
+        })
         setExternalFileNotice(null)
         setSyncStatus(
           mapLocalSyncStatusToSaveState(
@@ -621,14 +610,16 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
           finishHydration()
         }
       } else {
-        setTitle(UNTITLED_WRITING_TITLE)
-        setHasExplicitTitle(false)
-        setVersion(0)
-        setCreatedAt(null)
-        setWritingSlug(null)
-        setWritingStatus("draft")
-        setArtifactType("general")
-        setWritingVisibility("private")
+        applyDocumentMetadata({
+          title: UNTITLED_WRITING_TITLE,
+          hasExplicitTitle: false,
+          version: 0,
+          createdAt: null,
+          slug: null,
+          status: "draft",
+          artifactType: "general",
+          visibility: "private",
+        })
         setSyncStatus("saved")
         setExternalFileNotice(null)
         setBodyText("")

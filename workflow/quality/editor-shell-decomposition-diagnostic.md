@@ -49,6 +49,18 @@ Método:  inventario de declaraciones + conteo mecánico sobre el archivo real,
 
 La red que lo protege: 4a, 4b, los humos desktop y corrections, ODE-464 y los barridos de ODE-561, más dos pruebas nuevas previas al corte (restauración de selección, STATE-07, y admisión de sugerencias hidratadas desde caché). Las tres mutaciones de referencia se repitieron sobre el hook y siguen poniéndose en rojo. La regla `ui-no-direct-persistence` escanea ahora también `hooks/`.
 
+**Actualización (2026-09-24, ODE-563 — segundo tiempo del primer corte):** los 9 metadatos del documento (título, título explícito, versión, fecha de creación, slug, estado, tipo, visibilidad, ciclo de vida) tienen ahora un solo dueño, `applyDocumentMetadata`, que escribe estado y ref en el mismo paso. Se eliminaron sus 9 efectos espejo y todas sus escrituras a mano; `writingSlugRef` desapareció, porque nadie lo leía. Contra `main`, con el mismo método:
+
+```text
+6,255 líneas        (-10; el dueño único compensa casi todo lo que se borró)
+   51 useEffect     (-9)
+    8 efectos espejo restantes   (17 → 8; quedan identidad, modo, pestaña activa,
+                                  TOC y los de correcciones/learned words)
+  -22 lecturas de refs
+```
+
+Lo que importa no es el recuento de líneas: los refs de metadatos ya no pueden llevar el valor del documento anterior entre una escritura y el commit siguiente. Efecto colateral: el menú Abrir archivo leía `titleRef` justo después de `setTitle` y le ponía a la pestaña nueva el título del documento anterior; ahora lee el nuevo.
+
 El tamaño no es el hallazgo — `components/editor/AGENTS.md` ya establece que el tamaño por sí solo no es un finding de review. Los dos números que importan son los del medio.
 
 ## 2. Hallazgo 1 — cada dato tiene dos dueños
