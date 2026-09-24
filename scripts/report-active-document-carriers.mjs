@@ -12,6 +12,12 @@
  * `useEffect` que encierra cada escritura por indentación. Suficiente para
  * contar y comparar entre fases; ante una duda concreta, abrir el código.
  *
+ * La URL se cuenta en dos columnas (ODE-569): `project` es una proyección
+ * escrita a mano (`replaceEditorHistory`, lo que `activateDocument({ href })`
+ * ya hace por la transición); `navigate` es una navegación del router de Next
+ * (`navigateToWriting`), que no es un portador del documento activo sino ir a
+ * otra página, y por eso no suma al total.
+ *
  * Uso: node scripts/report-active-document-carriers.mjs
  */
 import { readFileSync } from "node:fs"
@@ -27,7 +33,8 @@ const CARRIERS = [
   ["store", /\b(focusTab|openWritingTab|closeTab|openDraftTab|reconcileMaterializedDraftTab|reconcileUnavailableWritingTab|publishTabState)\(/],
   ["tabRef", /\bactiveEditorTabIdRef\.current\s*=[^=]/],
   ["hydration", /\bsetHydrationWritingId\(/],
-  ["route", /\breplaceEditorHistory\(|\brouter(Ref\.current)?\.(replace|push)\(/],
+  ["project", /\breplaceEditorHistory\(/],
+  ["navigate", /\bnavigateToWriting\(|\brouter(Ref\.current)?\.(replace|push)\(/],
 ]
 
 const ENCLOSING = [
@@ -52,7 +59,8 @@ const rows = new Map()
 for (const file of FILES) {
   const lines = readFileSync(file, "utf8").split("\n")
   lines.forEach((line, index) => {
-    if (line.trim().startsWith("//")) return
+    const trimmed = line.trim()
+    if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return
     for (const [carrier, pattern] of CARRIERS) {
       if (!pattern.test(line)) continue
       const name = `${enclosingName(lines, index)}${file.includes("hooks/") ? " (hook)" : ""}`
@@ -70,12 +78,13 @@ const identityRows = [...rows.entries()].filter(
 identityRows.sort((a, b) => b[1].size - a[1].size || a[0].localeCompare(b[0]))
 
 const names = CARRIERS.map(([carrier]) => carrier)
-// "total" cuenta solo portadores escritos a mano (sin la columna activate).
+// "total" cuenta solo portadores escritos a mano (sin activate ni navigate).
+const NOT_CARRIERS = new Set(["activate", "navigate"])
 const width = Math.max(...identityRows.map(([name]) => name.length), 10)
 console.log(`${"transición".padEnd(width)}  ${names.map((n) => n.padEnd(11)).join("")}total`)
 for (const [name, carriers] of identityRows) {
   const cells = names.map((n) => (carriers.has(n) ? "✓" : "·").padEnd(11)).join("")
-  const direct = [...carriers].filter((carrier) => carrier !== "activate").length
+  const direct = [...carriers].filter((carrier) => !NOT_CARRIERS.has(carrier)).length
   console.log(`${name.padEnd(width)}  ${cells}${direct}`)
 }
 
@@ -87,8 +96,12 @@ const mirrors = shell.filter(
     /^\s+\}, \[/.test(shell[i + 2] ?? ""),
 ).length
 console.log(`\ntransiciones que cambian la identidad: ${identityRows.length}`)
-const directCount = (carriers) => [...carriers].filter((carrier) => carrier !== "activate").length
+const directCount = (carriers) => [...carriers].filter((carrier) => !NOT_CARRIERS.has(carrier)).length
 const viaActivate = identityRows.filter(([, carriers]) => carriers.has("activate")).length
 console.log(`pasan por activateDocument: ${viaActivate}/${identityRows.length}`)
 console.log(`portadores escritos a mano por transición (media): ${(identityRows.reduce((s, [, c]) => s + directCount(c), 0) / identityRows.length).toFixed(1)}`)
+const projections = identityRows.filter(([, carriers]) => carriers.has("project")).length
+const navigations = identityRows.filter(([, carriers]) => carriers.has("navigate")).length
+console.log(`proyecciones de URL escritas a mano: ${projections}`)
+console.log(`transiciones que además navegan (navigateToWriting): ${navigations}`)
 console.log(`efectos espejo en editor-shell.tsx: ${mirrors}`)
