@@ -70,7 +70,7 @@ Campos requeridos:
 
 Campos opcionales recomendados:
 
-- `uses_skills` — lista de skills principales que usa
+- `uses_skills` — lista no exhaustiva de skills habituales del rol; el scope de la tarea decide cuáles se leen
 - `commands` — lista de comandos o workflows donde aplica
 
 Ejemplo:

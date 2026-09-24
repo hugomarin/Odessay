@@ -16,7 +16,7 @@ Referencias:
 - `docs/design/icons.md` — el único listado de iconos del que un implementador puede elegir.
 - `docs/design/brand.md` + `docs/design/views/*.md`
 - `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-design/vistas.md`, `.agents/skills/skill-design/tipografia.md`
-- `.agents/skills/skill-design-landing/SKILL.md` + `design.md`
+- `.agents/skills/skill-design/specialties/marketing-system.md` + `marketing-page.md`
 - `AGENTS.md` / `workflow/agents.md` — guardrails de arquitectura documental, no negociables en esta fase.
 - `workflow/define/roadmap.md`
 
@@ -35,7 +35,7 @@ Referencias:
 - Newsreader se carga únicamente en el layout del grupo de marketing. En cualquier ruta de app, `document.fonts.check('200 44px Newsreader')` es `false`; en la home es `true`.
 - Ningún archivo bajo `components/marketing/` usa `shadow-float*`, `bg-card`, `bg-sb`, `text-ink-*` ni radios de app (8/10/12); ningún archivo de app usa tokens `--mkt-*`. Ambas direcciones se verifican por grep en REVIEW.
 - La regla `body { @apply bg-bg text-ink }` no se modifica; el wrapper de marketing pinta su propio fondo.
-- Las dos skills de diseño coexisten sin ambigüedad: `skill-design` es autoridad de producto, `skill-design-landing` de marketing, y ningún valor vive en ambas sin estar marcado.
+- `skill-design` selecciona la especialidad visual por superficie: sus reglas de producto y sus recursos de marketing conservan tokens, tipografía y valores propios de cada capa.
 
 ## 3) El sistema de producto tiene una sola definición
 
@@ -136,4 +136,4 @@ ver el propio archivo de evidencia para el detalle y los pasos que faltan.
 
 ## Gate de cierre de fase
 
-Fase 10 se marca `Done` solo si los diez bloques anteriores están evidenciados, no quedan issues bloqueantes abiertos en el proyecto Linear de Fase 10, el paquete de diseño en `docs/design/` describe exactamente lo enviado, y `skill-design` + `skill-design-landing` son la única fuente de verdad visual del repositorio.
+Fase 10 se marca `Done` solo si los diez bloques anteriores están evidenciados, no quedan issues bloqueantes abiertos en el proyecto Linear de Fase 10, el paquete de diseño en `docs/design/` describe exactamente lo enviado, y `skill-design` con sus especialidades de producto y marketing es la fuente de verdad visual del repositorio.

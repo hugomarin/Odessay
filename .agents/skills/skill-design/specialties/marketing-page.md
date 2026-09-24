@@ -1,6 +1,6 @@
-# design.md — Artifact Studio landing
+# Especificación de la landing de Artifact Studio
 
-Full specification of the marketing layer. Companion to `skill-design-landing`. Source: `docs/design/reference/Artifact Studio Landing.dc.html` (approved prototype) + `docs/design/reference/Artifact Studio UI Kit.dc.html` §8.
+Esta especialidad describe la landing de Artifact Studio sección por sección y complementa el [sistema visual de marketing](marketing-system.md) del skill [Design](../SKILL.md). Fuentes: `docs/design/reference/Artifact Studio Landing.dc.html` (prototipo aprobado) y `docs/design/reference/Artifact Studio UI Kit.dc.html` §8.
 
 ---
 

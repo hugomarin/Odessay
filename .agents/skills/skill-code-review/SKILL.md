@@ -1,20 +1,30 @@
 ---
 name: skill-code-review
 description: |
-  Orquesta la investigación técnica de un PR: qué evidencia leer, cuándo activar cada review-*
-  y cómo se ve un finding válido. No repite protocolo de Linear/merge/ledgers (workflow.md),
-  ni la fórmula de score (scoring.md), ni el checklist de dominio (review-*, specialists/*).
+  Investiga un PR mediante lentes de corrección, arquitectura, testing y tamaño de cambio;
+  selecciona evidencia y produce findings y un veredicto técnico. El workflow gobierna
+  merge y estados; scoring.md gobierna la puntuación.
 ---
 
-# Skill: Code Review (orquestación)
+# Code Review
 
-## Principio rector
+## 1. Objetivo
+
+Code Review organiza la investigación técnica de un diff y produce un veredicto sustentado en comportamiento, contratos y evidencia.
+
+### Principio rector
 
 Un PR debe ser mergeable por alguien que no escribió el código. CI en verde es evidencia de que las reglas mecánicas pasaron — no evidencia de corrección lógica. El review no reejecuta lo que CI ya prueba; investiga lo que CI no puede probar.
 
 ---
 
-## Evidencia a leer
+## 2. Ámbito y activación
+
+Activar para la revisión técnica de un cambio. Seleccionar cada lente por el riesgo real del diff; el protocolo local gobierna la apertura, gates y cierre del PR.
+
+## 3. Entradas y fuentes de autoridad
+
+### Evidencia a leer
 
 Antes de buscar findings:
 
@@ -24,18 +34,22 @@ Antes de buscar findings:
 
 No es necesario releer toda la documentación de producto — solo lo que el `Architecture Contract` o `Performance Architecture Contract` del brief ya citó como `Required docs`.
 
+En Odessay, `.agents/skills/skill-code-review/specialties/review-contracts.md` vincula las lentes con los contratos de producto, el bundle desktop y la evidencia de capacidades. Cargar la parte que el diff active.
+
 ---
 
-## Dispatch — cuándo activar cada lente
+## 4. Método y criterios
+
+### Dispatch — cuándo activar cada lente
 
 | Lente | Activar cuando | Pregunta |
 |---|---|---|
-| `review-correctness` | el diff toca transiciones críticas, estado async, filtros de negocio o procesa output de LLM | ¿qué comportamiento de producción puede volverse incorrecto? |
-| `review-architecture` | el diff toca desktop/multi-runtime, shared core, adapters, contratos de servicio, o trae `Architecture Contract` | ¿extiende el owner canónico o crea uno paralelo? |
-| `review-testing` | casi siempre que el diff introduce o modifica comportamiento observable | ¿los tests demuestran el comportamiento, no solo que no explota? |
-| `review-change-size` | el diff mezcla dominios no relacionados o supera ~150–200 líneas sin razón estructural | ¿sigue siendo una unidad coherente y revisable? |
+| [Corrección](references/correctness.md) | el diff toca transiciones críticas, estado async, filtros de negocio o procesa output de LLM | ¿qué comportamiento de producción puede volverse incorrecto? |
+| [Arquitectura](references/architecture.md) | el diff cambia ownership, contratos, fuente de verdad, runtime o boundaries, o trae `Architecture Contract` | ¿extiende el owner canónico o crea uno paralelo? |
+| [Testing](references/testing.md) | el diff introduce o modifica comportamiento observable | ¿los tests demuestran el comportamiento, no solo que no explota? |
+| [Tamaño del cambio](references/change-size.md) | el diff mezcla dominios no relacionados o supera ~150–200 líneas sin razón estructural | ¿sigue siendo una unidad coherente y revisable? |
 
-`review-testing` se vuelve **obligatoria, no discrecional**, cuando el diff produce o modifica evidencia de una fila del `workflow/quality/capability-integration-map.md` — o sube su `coverage_status`. En ese caso la lente aplica además el contrato de construcción (`workflow/quality/capability-proof-contract.md`): fidelidad al camino de producción, completion vs. scheduling, y checklist de pre-upgrade antes de aceptar la subida.
+La lente de testing se vuelve **obligatoria, no discrecional**, cuando el diff produce o modifica evidencia de una fila del `workflow/quality/capability-integration-map.md` — o sube su `coverage_status`. En ese caso aplica además el contrato de construcción (`workflow/quality/capability-proof-contract.md`): fidelidad al camino de producción, completion vs. scheduling, y checklist de pre-upgrade antes de aceptar la subida.
 
 No cargar una lente por defecto en diffs triviales o de una línea. Cargar solo las que el scope real del diff activa.
 
@@ -43,17 +57,7 @@ No cargar una lente por defecto en diffs triviales o de una línea. Cargar solo 
 
 ---
 
-## Qué es un finding válido
-
-Debe identificar comportamiento/riesgo concreto, `archivo:línea`, causa, condición de falla y dirección de fix.
-
-No es válido: preferencia de estilo, hallazgo hipotético sin path de ejecución concreto, o repetición de algo que lint/typecheck ya cubre.
-
-El formato exacto, las severidades, la calibración de confidence y el fingerprint viven en `.agents/skills/skill-code-review/scoring.md` — no se repiten aquí.
-
----
-
-## Prioridad de búsqueda
+### Prioridad de búsqueda
 
 Buscar defectos sistémicos antes que defectos locales:
 
@@ -68,34 +72,19 @@ Un finding sistémico cambia cómo se debe corregir el PR entero, no solo una l�
 
 ---
 
-## Baseline mecánico (no requiere lente dedicada)
+## 5. Resultado y evidencia
 
-Verificación rápida, no investigación profunda:
+### Qué es un finding válido
 
-- [ ] TypeScript estricto: sin `any` nuevo, sin `@ts-ignore` sin justificar
-- [ ] Sin `console.log` residual (solo `console.error` intencional)
-- [ ] Sin código comentado — si no se usa, se borra
-- [ ] Dependencias nuevas justificadas en el PR
-- [ ] Nombres descriptivos en inglés, componentes con una sola responsabilidad
-- [ ] Nomenclatura semántica: `id`, `data-page`, `data-section`, `data-testid` en módulos nuevos; clases BEM en PascalCase
-- [ ] No se operó contra producción durante el desarrollo/testing del cambio
+Debe identificar comportamiento/riesgo concreto, `archivo:línea`, causa, condición de falla y dirección de fix.
 
-Esta lista es candidata a convertirse en lint/CI (Fase 3 del quality harness); mientras eso no exista, el review la verifica manualmente.
+No es válido: preferencia de estilo, hallazgo hipotético sin path de ejecución concreto, o repetición de algo que lint/typecheck ya cubre.
 
-## Consistencia con Odessay (checklist declarativo)
-
-- [ ] Respeta la simplicidad radical — no agrega UI que el issue no pidió
-- [ ] No introduce métricas visibles para el usuario
-- [ ] Tipografía y spacing consistentes con `.agents/skills/skill-design/SKILL.md`; si toca presentación textual, cumple `.agents/skills/skill-design/tipografia.md` (paridad `.odessay-editor-content` / `.prose-odessay`)
-- [ ] Se preserva overflow de tablas grandes (`tableWrapper`, `width:max-content`, scroll horizontal interno)
-- [ ] ShadCN customizado para la marca, no defaults sin tocar
-- [ ] Bordes `0.5px`, iconos con `strokeWidth={1.5}`
-
-Seguridad, performance, migraciones, arquitectura, correctness, testing y tamaño del cambio tienen su propia lente dedicada (ver `Dispatch`) — no repetir esos checklists aquí.
+El formato exacto, las severidades, la calibración de confidence y el fingerprint viven en `.agents/skills/skill-code-review/scoring.md` — no se repiten aquí.
 
 ---
 
-## Resultado obligatorio del review
+### Resultado obligatorio del review
 
 Todo review debe cerrar con lo que este skill produce — no confundir con el `GateResult` final:
 
@@ -116,7 +105,13 @@ ProcessInsights:
 
 ---
 
-## Relación con otras capas
+## 6. Manejo de fallos e incertidumbre
+
+Registrar `context_risk` cuando la definición, las fuentes o la aceptación cambian durante BUILD; identificar la fuente de incertidumbre y una corrección de contexto concreta. Rechazar findings sin path de ejecución verificable o ya cubiertos por un check mecánico.
+
+## 7. Relaciones y ownership
+
+### Relación con otras capas
 
 Este skill es la orquestación técnica, no el protocolo completo. Quien busque otra pieza del review, la encuentra aquí:
 
@@ -125,13 +120,20 @@ Este skill es la orquestación técnica, no el protocolo completo. Quien busque 
 | Rol que conduce `/wf-review`, secuencia de investigación | `.agents/agents/review-agent.md` |
 | Formato de PR, proof of work, gates de CI/Vercel/delivery, merge, ledgers, estados de Linear | `workflow/workflow.md` (`/wf-review`) — el check agregado que decide el gate es `CI required` (`.github/workflows/blocking-ci.yml`) |
 | Fórmula de `QualityScore`, formato de finding, confidence, categorías | `scoring.md` |
-| Checklist de correctness (transiciones, estado, AI por scope, velocidad percibida) | `review-correctness/SKILL.md` |
-| Checklist de arquitectura, `Architecture Contract`, bundle desktop/Tauri, docs por scope | `review-architecture/SKILL.md` |
-| Checklist de testing (cobertura, anti-patterns, nivel de evidencia mínimo — unit/contract/integration/E2E) | `review-testing/SKILL.md` (nivel mínimo suficiente, no E2E por defecto — canonical owner del principio: `workflow/testing/critical-capabilities-testing.md`) |
-| Si el PR debió dividirse en stages más pequeños | `review-change-size/SKILL.md` |
+| Criterio de corrección (transiciones, estado, AI por scope, velocidad percibida) | `references/correctness.md` |
+| Criterio de arquitectura, `Architecture Contract`, bundle desktop/Tauri, docs por scope | `references/architecture.md` |
+| Criterio de testing (nivel mínimo suficiente — unit/contract/integration/E2E) | `references/testing.md`; el principio de nivel de menor costo vive en `workflow/testing/critical-capabilities-testing.md` |
+| Si el PR debió dividirse en stages más pequeños | `references/change-size.md` |
 | Dispatch automatizado a subagentes especialistas | `claude-enhancements.md` + `specialists/*.md` |
 | Seguridad (OWASP, RLS, AI/LLM security) | `specialists/security.md` |
 | Performance (aplica `skill-performance`, no define política paralela) | `specialists/performance.md` |
 | Migraciones de base de datos | `specialists/data-migration.md` |
 
 `/wf-review` en `workflow/workflow.md` es el único protocolo operativo para revisar y cerrar un PR — no existe una ruta alterna. Si encuentras un documento o script que describe otro flujo de merge/ledger para review, es legacy y debe alinearse a `workflow.md`, no seguirse en paralelo.
+
+## 8. Recursos asociados
+
+- **Lentes:** cargar únicamente las [referencias de corrección, arquitectura, testing o tamaño](references/correctness.md) que active el diff según la tabla de la sección 4; aplicar sus criterios al código, consumers y pruebas para producir findings concretos. Las cuatro rutas individuales están en esa tabla.
+- **Contrato local:** al revisar un PR de Odessay, cargar las partes pertinentes de [review-contracts.md](specialties/review-contracts.md) para comprobar reglas de producto, bundle desktop y evidencia de capacidades junto a la lente seleccionada.
+- **Puntuación:** al redactar o consolidar un finding, consultar [scoring.md](scoring.md) para usar la severidad, confidence, fingerprint y formato comunes.
+- **Ejecución especializada:** solo si el entorno dispone de workers y el dispatch aporta valor, seguir [claude-enhancements.md](claude-enhancements.md) y el `specialists/*.md` del dominio afectado; el especialista adapta el formato de ejecución y aplica la lente existente.

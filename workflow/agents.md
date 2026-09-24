@@ -9,7 +9,7 @@ Las reglas universales de construcción, invariantes y guardrails del repositori
 - `workflow/docs.json`: El inventario completo del proyecto. Contiene la ruta y descripción de cada archivo en `workflow/` y `.agents/skills/`. Consúltalo para ubicarte.
 - `workflow/workflow.md`: El protocolo maestro. Define qué hace cada comando `/wf-*` (como `/wf-define` o `/wf-build`). Léelo SIEMPRE que recibas un comando.
 - `.agents/skills/`: Directorio que contiene el "cómo" (instrucciones técnicas, snippets y checklists por dominio de ingeniería o producto).
-- `.agents/skills/skill-architecture/SKILL.md`: La capa de clasificación arquitectónica. Úsala cuando la tarea toque desktop, multi-runtime, shared core, save path, sync, parser/serializer o boundaries entre frontend/backend.
+- `.agents/skills/skill-architecture/SKILL.md`: Clasifica responsabilidades, contratos y runtimes. Úsala cuando el cambio requiera decidir ownership, fuente de verdad o boundaries; las operaciones desktop, shared core, save, sync y parser/serializer la activan cuando afectan esas decisiones, según `AGENTS.md`.
 
 ## Cómo operar
 
@@ -20,20 +20,13 @@ Los **roles de agente** viven en `.agents/agents/`.
 
 - Para `/wf-define`, usar `.agents/agents/planning-agent.md` como rol de orquestación. Resuelve la topología de ejecución (capabilities, dependencias, critical path) antes de escribir briefs, y usa `.agents/skills/skill-planning/SKILL.md` para endurecer cada issue de esa topología.
 - Para `/wf-build`, usar `.agents/agents/build-agent.md` como rol de orquestación. Ejecuta `.agents/skills/architecture-recon/SKILL.md` antes de implementar cualquier cambio no trivial, para localizar owner/siblings/consumers/tests reales antes de escribir código.
-- Para `/wf-review`, usar `.agents/agents/review-agent.md` como rol de orquestación. Usa `.agents/skills/skill-code-review/SKILL.md` para decidir qué lentes activar (`review-correctness`, `review-architecture`, `review-testing`, `review-change-size`) según el scope real del diff — no todas por defecto.
+- Para `/wf-review`, usar `.agents/agents/review-agent.md` como rol de orquestación. Usa `.agents/skills/skill-code-review/SKILL.md` y sus referencias de corrección, arquitectura, testing y tamaño del cambio según el scope real del diff.
 - La convención de formato para roles vive en `.agents/agents/README.md`.
 - Los skills en `.agents/skills/` complementan al rol; no lo reemplazan.
 
 Antes de modificar `components/editor/**` o `src-tauri/**`, leer también el `AGENTS.md` local de ese subtree — trae las reglas específicas del hotspot (qué no debe absorber, qué deuda ya está identificada y no debe copiarse).
 
-Si el prompt o task habla de desktop, portabilidad multi-runtime, shared core, adapters, `.md` como documento canónico, o extracción de servicios, empieza por `workflow/docs.json` y sigue la secuencia documental de desktop:
-
-1. `workflow/context/features/odessay-desktop-app.md`
-2. `workflow/context/features/odessay-desktop-migration-diagnostic.md`
-3. `workflow/context/features/odessay-desktop-target-architecture.md`
-4. `workflow/context/features/odessay-desktop-migration-plan.md`
-
-Esa secuencia de cuatro documentos es la ruta normativa. `odessay-desktop-docs-corrections-log.md` es solo histórico y no reemplaza ninguno de los cuatro pasos.
+Si el trabajo afecta identidad, contenido, metadata, binding o lifecycle documental, cargar el ADR de identidad según `AGENTS.md`. Si afecta catálogo, reconciliación, apertura, save o sync desktop, cargar además el spec del catálogo. `workflow/docs.json` permite localizar esas fuentes y los documentos de apoyo; dirección desktop, diagnóstico, target architecture y migration plan se consultan cuando la pregunta requiere producto, estado vigente, diseño objetivo o secuencia de transición, respectivamente. La precedencia normativa vive en `AGENTS.md`.
 
 Si además la pregunta es “dónde debe vivir esto” o “qué capa toca”, carga también `.agents/skills/skill-architecture/SKILL.md` antes de decidir si el trabajo cae en frontend, backend o database.
 
@@ -41,7 +34,7 @@ Si además la pregunta es “dónde debe vivir esto” o “qué capa toca”, c
 
 Los invariantes de identidad/catálogo, su precedencia (ADR → spec del catálogo → target architecture/plan → código) y el protocolo `Context Gap — Desktop Document Architecture` viven en `AGENTS.md` (raíz) — es el canonical owner de este contrato. Leerlo ahí antes de tocar desktop, Desk, Workspace, Open Document, watcher, filesystem, SQLite, IndexedDB, sync/hydration, identidad o apertura documental. No se repiten aquí para evitar que ambos archivos diverjan con el tiempo.
 
-Este archivo agrega, sobre esa base, la secuencia de cuatro documentos para clasificar estado actual, arquitectura objetivo y plan de migración — ver arriba.
+Los documentos de apoyo se seleccionan por la pregunta concreta y conservan la precedencia declarada en `AGENTS.md`.
 
 ## Regla de ramas y commits
 

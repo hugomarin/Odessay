@@ -13,7 +13,7 @@ No debe ser el owner canónico de:
 - acceso a filesystem,
 - semántica de sync.
 
-El tamaño del archivo no es, por sí solo, un finding de review — ver `Hotspots` en `.agents/agents/build-agent.md` y `review-architecture/SKILL.md`. Que absorba una responsabilidad nueva de las listadas arriba sí lo es.
+El tamaño del archivo no es, por sí solo, un finding de review — ver `Hotspots` en `.agents/agents/build-agent.md` y la [referencia de arquitectura de Code Review](../../.agents/skills/skill-code-review/references/architecture.md). Que absorba una responsabilidad nueva de las listadas arriba sí lo es.
 
 ## Correcciones: solo existe el camino manual
 
@@ -43,7 +43,7 @@ Usar el owner de persistencia canónico para el dominio que se está tocando. Co
 
 Antes de introducir estado nuevo, determinar su owner y su lifecycle.
 
-No representar el mismo estado semántico en params + estado de componente + store + refs sin lifecycles distintos y explícitos para cada uno. Si dos mecanismos pueden decidir el resultado de la misma transición, es una `Transición co-owned` — ver `review-correctness/SKILL.md`.
+No representar el mismo estado semántico en params + estado de componente + store + refs sin lifecycles distintos y explícitos para cada uno. Si dos mecanismos pueden decidir el resultado de la misma transición, es una `Transición co-owned` — ver la [referencia de corrección de Code Review](../../.agents/skills/skill-code-review/references/correctness.md).
 
 ## Antes de agregar comportamiento
 

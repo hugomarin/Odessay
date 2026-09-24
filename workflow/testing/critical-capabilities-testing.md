@@ -5,7 +5,7 @@ Este documento es el **canonical owner** de dos cosas que antes vivían implíci
 1. la taxonomía de niveles de test y el principio que decide cuál usar;
 2. hasta 2026-09-19, la lista de Critical Capabilities de Odessay sin integration tests dedicados — movida desde entonces a `workflow/quality/capability-integration-map.md` (ver "Critical Capabilities — canonical owner movido" abajo).
 
-`.agents/skills/skill-planning/SKILL.md` (sección `Validation requirements`) y `.agents/skills/review-testing/SKILL.md` referencian este documento en vez de repetir la regla. `workflow/testing/playwright-catalog.md` sigue siendo el catálogo operativo de Playwright — cuándo Playwright es la herramienta correcta se decide aquí; qué asset de Playwright reutilizar se decide ahí.
+`.agents/skills/skill-planning/specialties/issue-brief-schema.md` (sección `Validation requirements`) y `.agents/skills/skill-code-review/references/testing.md` referencian este documento en vez de repetir la regla. `workflow/testing/playwright-catalog.md` sigue siendo el catálogo operativo de Playwright — cuándo Playwright es la herramienta correcta se decide aquí; qué asset de Playwright reutilizar se decide ahí.
 
 ---
 
@@ -71,6 +71,6 @@ Ese documento es ahora el canonical owner de "qué capability priorizar después
 ## Cómo usar este documento
 
 - Al escribir un brief (`Validation requirements`, ver `skill-planning`): elegir el nivel mínimo de esta taxonomía que falsifica el failure mode declarado, y justificar por escrito si se escala a E2E o Performance.
-- En review (`review-testing`): un integration/contract test que demuestra el contrato directamente es evidencia válida — no exigir Playwright por defecto.
+- En review (lente de testing de Code Review): un integration/contract test que demuestra el contrato directamente es evidencia válida — no exigir Playwright por defecto.
 - Al construir (o revisar) un test que sirve como evidencia de una fila del capability map: leer `workflow/quality/capability-proof-contract.md` antes de escribirlo. Elegir bien el nivel no basta — ese contrato define las reglas MUST de construcción (entry point real, secuencia de producción, seams internos reales, scheduling ≠ completion, doubles con el contrato completo, status como output).
 - Al priorizar trabajo nuevo de testing: `workflow/quality/capability-integration-map.md`'s V1 Implementation Plan es la lista candidata, en el orden en que está declarado salvo que un incidente real reordene la prioridad.

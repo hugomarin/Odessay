@@ -17,18 +17,20 @@ Antes de crear un service, store, hook, helper, state machine, serializer o path
 En BUILD esto lo ejecuta `.agents/skills/architecture-recon/SKILL.md` — no es un paso opcional cuando el cambio no es trivial.
 
 ### Una responsabilidad semántica, un owner
-No introducir una implementación paralela de una responsabilidad que ya tiene owner canónico. Un segundo owner de la misma responsabilidad es el hallazgo sistémico de mayor prioridad tanto en BUILD (Architecture Recon) como en REVIEW (`review-architecture`).
+No introducir una implementación paralela de una responsabilidad que ya tiene owner canónico. Un segundo owner de la misma responsabilidad es el hallazgo sistémico de mayor prioridad tanto en BUILD (Architecture Recon) como en REVIEW ([lente de arquitectura](.agents/skills/skill-code-review/references/architecture.md)).
 
 ### Arquitectura antes que localidad
 Principio universal: el archivo más cercano no define ownership por sí solo — esto siempre es verdad, no requiere activar ninguna skill para tenerlo presente.
 
 Activación técnica: resolver `Layer`, `Runtime scope`, `Owner` y contrato con `.agents/skills/skill-architecture/SKILL.md` solo cuando el cambio afecte ownership, contratos, runtime o boundaries. No aplicarlo a cambios triviales (copy, estilo aislado, ajustes que no mueven ownership) — eso solo sube el costo cognitivo sin agregar señal. `.agents/skills/architecture-recon/SKILL.md` ya usa el mismo criterio de activación en BUILD; mantener la misma filosofía aquí.
 
+`.agents/skills/skill-architecture/specialties/ownership-and-sources.md` vincula ambos skills con la taxonomía, las fuentes y las salidas operativas de Odessay. Es un índice local; este archivo y los contratos aceptados mantienen su autoridad.
+
 ### Proteger hotspots de orquestación
 Los módulos centrales de composición (ej. `components/editor/editor-shell.tsx`, `src-tauri/src/commands/index.rs`) pueden cablear comportamiento, pero no deben adquirir ownership nuevo de dominio, persistencia o runtime. El tamaño de un hotspot no es en sí mismo la violación; que absorba una responsabilidad nueva sí lo es. Ver `Construction order` y `Hotspots` en `.agents/agents/build-agent.md`.
 
 ### El cambio más pequeño coherente
-Preferir el cambio más pequeño que preserve ownership y contratos — no optimizar solo por menos archivos tocados, ni inflar un PR con decisiones no relacionadas. Ver `.agents/skills/review-change-size/SKILL.md`.
+Preferir el cambio más pequeño que preserve ownership y contratos — no optimizar solo por menos archivos tocados, ni inflar un PR con decisiones no relacionadas. Ver `.agents/skills/skill-code-review/references/change-size.md`.
 
 ### Instrucciones scoped
 Antes de modificar un subtree, verificar si existe un `AGENTS.md` más específico y aplicarlo. Hoy existen `components/editor/AGENTS.md` y `src-tauri/AGENTS.md`; si tu cambio cae fuera de ambos, solo aplican las reglas de este archivo.
