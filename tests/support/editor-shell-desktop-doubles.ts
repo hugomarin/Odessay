@@ -27,7 +27,7 @@
  *   vi.mock("@/lib/sync/sync-service-factory", async () =>
  *     (await import("./support/editor-shell-desktop-doubles")).syncServiceDouble())
  */
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, readdirSync, rmSync } from "node:fs"
 import { readdir, readFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -37,6 +37,7 @@ import { vi } from "vitest"
 import {
   configureRealDesktopDoubles,
   resetCatalogDoubles,
+  resetSettingsStoreDouble,
   resetWriteFileFailureState,
   tauriCatalogDetachLocalFileDouble,
   tauriCatalogDualWriteDouble,
@@ -48,6 +49,9 @@ import {
   tauriOpenFileDouble,
   tauriPathModuleDouble,
   tauriRelocateFileDouble,
+  tauriSettingsDeleteDouble,
+  tauriSettingsReadDouble,
+  tauriSettingsWriteDouble,
   tauriWorkspaceSyncDouble,
   tauriWorkspaceTouchFileDouble,
   tauriWriteFileDouble,
@@ -85,6 +89,11 @@ export function tauriCommandsDouble() {
     tauriOpenFile: tauriOpenFileDouble,
     tauriListRecentFiles: tauriListRecentFilesDouble,
     tauriRelocateFile: tauriRelocateFileDouble,
+    // Settings de desktop (BindingRoots, workspaces): un "Save As" a una
+    // carpeta nueva la registra como root (ODE-402, ODE-574).
+    tauriSettingsRead: tauriSettingsReadDouble,
+    tauriSettingsWrite: tauriSettingsWriteDouble,
+    tauriSettingsDelete: tauriSettingsDeleteDouble,
     tauriRenameFile: unimplemented("tauriRenameFile"),
     tauriWorkspaceSync: tauriWorkspaceSyncDouble,
     tauriWorkspaceTouchFile: tauriWorkspaceTouchFileDouble,
@@ -159,9 +168,13 @@ export function desktopWorkspaceRoot(): string {
 export function resetDesktopWorkspace() {
   resetCatalogDoubles()
   resetWriteFileFailureState()
+  resetSettingsStoreDouble()
   if (!workspaceRoot) return
-  rmSync(join(workspaceRoot, "data"), { recursive: true, force: true })
-  rmSync(join(workspaceRoot, "config"), { recursive: true, force: true })
+  // Todo lo que haya bajo el root, no solo data/ y config/: una prueba puede
+  // crear carpetas propias (p. ej. el destino de un "Save As", ODE-574).
+  for (const entry of readdirSync(workspaceRoot)) {
+    rmSync(join(workspaceRoot, entry), { recursive: true, force: true })
+  }
 }
 
 export function destroyDesktopWorkspace() {

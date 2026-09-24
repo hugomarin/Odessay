@@ -60,7 +60,7 @@ import { resetLearnedWordsCacheForTest } from "@/lib/corrections/learned-words-l
 import { getSyncWorker } from "@/lib/sync/worker"
 import { resetEditorSessionStoreForTests } from "@/lib/stores/editor-session-store"
 
-import { type EditorHandle, type HarnessWorld, defaultNetwork, world } from "./editor-shell-doubles"
+import { type EditorHandle, type HarnessWorld, defaultNetwork, tauriEventListeners, world } from "./editor-shell-doubles"
 import { readWorkspaceMarkdown } from "./editor-shell-desktop-doubles"
 
 export {
@@ -549,6 +549,23 @@ export async function waitFor<T>(
  * editor asiente: el handler limpia el editor y difiere el foco un par de
  * frames, y escribir antes hace que el shell pise el texto (ODE-557).
  */
+/**
+ * Emite un evento nativo de Tauri (p. ej. `menu:save-as`, la acción del menú
+ * nativo) a los oyentes que la app registró con `listen`. Falla si nadie
+ * escucha ese canal: un evento que se pierde en silencio sería un
+ * NON_PRODUCTION_PATH.
+ */
+export async function emitTauriEvent(channel: string, payload: unknown = null) {
+  const listeners = tauriEventListeners.get(channel)
+  if (!listeners || listeners.size === 0) {
+    throw new Error(`Nadie escucha el evento nativo "${channel}"`)
+  }
+  await act(async () => {
+    for (const listener of [...listeners]) listener({ event: channel, payload })
+  })
+  await flush()
+}
+
 export async function clickNewArtifact(container: HTMLElement) {
   const button = await waitFor(
     () =>
