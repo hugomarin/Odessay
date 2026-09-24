@@ -179,6 +179,7 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
   world.aiReviewCalls = []
   world.learnedWords = []
   world.learnedWordsCalls = 0
+  world.onShellCommit = null
 
   Object.assign(world, overrides)
 
@@ -322,6 +323,18 @@ export async function setEditorContent(content: string) {
  * selector que no existía.
  */
 export async function pointerClick(node: HTMLElement) {
+  await act(async () => {
+    dispatchPointerClick(node)
+  })
+  await flush(2)
+}
+
+/**
+ * El mismo gesto que `pointerClick`, pero síncrono y fuera de `act`: para
+ * dispararlo DENTRO de una ventana de commit (desde `world.onShellCommit`),
+ * donde esperar rompería justo el orden que se quiere reproducir.
+ */
+export function dispatchPointerClick(node: HTMLElement) {
   const element = node as HTMLElement & {
     setPointerCapture?: (id: number) => void
     releasePointerCapture?: (id: number) => void
@@ -347,11 +360,8 @@ export async function pointerClick(node: HTMLElement) {
       : new MouseEvent(type, init as MouseEventInit)
   }
 
-  await act(async () => {
-    node.dispatchEvent(makeEvent("pointerdown"))
-    node.dispatchEvent(makeEvent("pointerup"))
-  })
-  await flush(2)
+  node.dispatchEvent(makeEvent("pointerdown"))
+  node.dispatchEvent(makeEvent("pointerup"))
 }
 
 /**
