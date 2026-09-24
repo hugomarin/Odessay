@@ -57,6 +57,7 @@ import { createRoot, type Root } from "react-dom/client"
 
 import { EditorShell } from "@/components/editor/editor-shell"
 import { resetLearnedWordsCacheForTest } from "@/lib/corrections/learned-words-loader"
+import { getSyncWorker } from "@/lib/sync/worker"
 import { resetEditorSessionStoreForTests } from "@/lib/stores/editor-session-store"
 
 import { type EditorHandle, type HarnessWorld, defaultNetwork, world } from "./editor-shell-doubles"
@@ -263,7 +264,27 @@ export async function mountEditorShell(
         root.unmount()
       })
       container.remove()
+      await quiesceSyncWorker()
     },
+  }
+}
+
+/**
+ * Detiene el SyncWorker real y espera a que termine cualquier flush en vuelo.
+ *
+ * Es un singleton de la app, así que sobrevive al desmontaje del shell. Las
+ * pruebas que guardan de verdad encolan mutaciones; si un flush sigue en curso
+ * cuando Vitest desmonta happy-dom, marca la mutación contra `localDB` sin
+ * `window` y revienta como rechazo no manejado en OTRA prueba. Pasó en CI
+ * (ODE-564): `stop()` solo cancela el siguiente flush, no el que ya corre.
+ */
+async function quiesceSyncWorker(timeoutMs = 5_000) {
+  const worker = getSyncWorker()
+  worker.stop()
+  const internals = worker as unknown as { isRunning: boolean }
+  const deadline = Date.now() + timeoutMs
+  while (internals.isRunning && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 20))
   }
 }
 
