@@ -144,6 +144,41 @@ export function resetWriteFileFailureState(): void {
   writeFileCallCount = 0
   failingWriteFileCallNumber = null
   writeFileFailureFactory = null
+  heldWriteFile = null
+  failingCatalogGetById.clear()
+}
+
+/**
+ * Retiene el próximo `tauriWriteFile` cuya ruta cumpla `matches` hasta que se
+ * llame a `release()`, como un disco lento. Sirve para observar lo que la app
+ * muestra MIENTRAS un guardado está en vuelo (por ejemplo, cerrar una pestaña
+ * con su guardado pendiente, ODE-574). `started()` resuelve cuando el write
+ * retenido ya llegó.
+ */
+let heldWriteFile: { matches: (path: string) => boolean; gate: Promise<void>; arrived: () => void } | null = null
+export function holdWriteFile(matches: (path: string) => boolean): { release: () => void; started: Promise<void> } {
+  let release!: () => void
+  let arrived!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  heldWriteFile = { matches, gate, arrived }
+  return { release, started }
+}
+
+/**
+ * Hace fallar la lectura del catálogo SQLite (`catalog_get_by_id`) para un
+ * documento concreto, como un error de la base de datos nativa. Abrir ese
+ * documento devuelve entonces `DB_ERROR`, que la hidratación clasifica como
+ * `open-error` (ODE-574, antes ODE-555). Se limpia con
+ * `resetWriteFileFailureState`.
+ */
+const failingCatalogGetById = new Map<string, () => never>()
+export function failCatalogGetById(documentId: string, makeError: () => never): void {
+  failingCatalogGetById.set(documentId, makeError)
 }
 
 export async function tauriCreateFileDouble(dir: string, filename: string): Promise<string> {
@@ -168,6 +203,12 @@ export async function tauriWriteFileDouble(
   expectedContentHash?: string | null,
 ): Promise<void> {
   writeFileCallCount += 1
+  if (heldWriteFile?.matches(path)) {
+    const held = heldWriteFile
+    heldWriteFile = null
+    held.arrived()
+    await held.gate
+  }
   if (failingWriteFileCallNumber === writeFileCallCount) {
     const fail = writeFileFailureFactory!
     failingWriteFileCallNumber = null
@@ -358,6 +399,8 @@ export async function tauriCatalogBulkDualWriteDouble(dbPath: string, inputs: De
 }
 
 export async function tauriCatalogGetByIdDouble(dbPath: string, id: string): Promise<DesktopCatalogRow | null> {
+  const failure = failingCatalogGetById.get(id)
+  if (failure) failure()
   return rowsFor(dbPath).get(id) ?? null
 }
 
