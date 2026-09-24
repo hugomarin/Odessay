@@ -274,7 +274,11 @@ vi.mock("@/lib/editor/suggestion-engine", () => ({
   isSuggestionAcceptDisabled: () => false,
 }))
 
-vi.mock("@/lib/corrections/persistence", () => ({
+vi.mock("@/lib/corrections/persistence", async () => {
+  // ODE-586: la caché local pasa por este módulo; se delega en el `localDB`
+  // doblado de este archivo, con llamadas directas como antes.
+  const { localDB } = await import("@/lib/local-db")
+  return {
   CORRECTION_BLOCK_CACHE_LIMIT: 100,
   createCorrectionBlockRecordId: () => "cb-id",
   DEFAULT_CORRECTION_BLOCK_POSITION_WINDOW: 32,
@@ -283,7 +287,14 @@ vi.mock("@/lib/corrections/persistence", () => ({
   parseCorrectionBlockLogicalId: () => null,
   persistCorrectionBlockRemotely: vi.fn(async () => {}),
   reconcileHydratedCorrectionBlocks: () => ({ stale: [], fresh: [] }),
-}))
+  readLocalCorrectionBlocks: (writingId: string) => localDB.correctionBlocks.getByWriting(writingId),
+  saveLocalCorrectionBlock: async (block: Parameters<typeof localDB.correctionBlocks.save>[0]) => {
+    await localDB.correctionBlocks.save(block)
+    await localDB.correctionBlocks.evictOldestWriting(100)
+  },
+  deleteLocalCorrectionBlocks: (ids: string[]) => localDB.correctionBlocks.deleteMany(ids),
+  }
+})
 
 vi.mock("@/lib/corrections/learned-words-loader", () => ({
   loadCachedLearnedWordsPages: () => Promise.resolve({ ok: true, items: [] }),

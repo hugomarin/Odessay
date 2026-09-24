@@ -49,6 +49,8 @@ Método:  inventario de declaraciones + conteo mecánico sobre el archivo real,
 
 La red que lo protege: 4a, 4b, los humos desktop y corrections, ODE-464 y los barridos de ODE-561, más dos pruebas nuevas previas al corte (restauración de selección, STATE-07, y admisión de sugerencias hidratadas desde caché). Las tres mutaciones de referencia se repitieron sobre el hook y siguen poniéndose en rojo. La regla `ui-no-direct-persistence` escanea ahora también `hooks/`.
 
+**Actualización (2026-09-24, ODE-586 — corte 2, entrega 1):** las 8 llamadas directas a `localDB.correctionBlocks` de la shell pasan por su dueño canónico, `lib/corrections/persistence.ts` (`readLocalCorrectionBlocks`, `saveLocalCorrectionBlock`, `deleteLocalCorrectionBlocks`). El baseline de `ui-no-direct-persistence` queda vacío. Sin cambio de comportamiento; la mudanza del cluster a un hook es la entrega 2.
+
 **Actualización (2026-09-24, ODE-563 — segundo tiempo del primer corte):** los 9 metadatos del documento (título, título explícito, versión, fecha de creación, slug, estado, tipo, visibilidad, ciclo de vida) tienen ahora un solo dueño, `applyDocumentMetadata`, que escribe estado y ref en el mismo paso. Se eliminaron sus 9 efectos espejo y todas sus escrituras a mano; `writingSlugRef` desapareció, porque nadie lo leía. Contra `main`, con el mismo método:
 
 ```text

@@ -29,11 +29,9 @@ Lo que sí sigue vivo aquí: invalidar las sugerencias de un bloque cuando el
 usuario lo edita, el aplazamiento de esa invalidación mientras hay
 supresión activa, y la persistencia de bloques de corrección.
 
-## Deuda conocida — no usar como plantilla
+## Persistencia de bloques de corrección
 
-`editor-shell.tsx` hoy llama `localDB.correctionBlocks.*` directamente en varios puntos (save/delete/evictOldest/getByWriting). Es una violación de boundary ya identificada (`architecture/remediation` — disposition: planned; ver Gap Matrix del quality harness). No es un patrón a copiar.
-
-Código nuevo no debe agregar más llamadas directas a `localDB.correctionBlocks` desde `editor-shell.tsx` ni desde otro componente de `components/editor/`. El owner canónico de esa persistencia es `lib/corrections/persistence.ts` — extender ahí y cablear la llamada desde el hotspot.
+La caché local de bloques de corrección tiene un solo dueño: `lib/corrections/persistence.ts` (`readLocalCorrectionBlocks`, `saveLocalCorrectionBlock`, `deleteLocalCorrectionBlocks`, además de la hidratación y el volcado remotos). Ningún componente ni hook llama `localDB.correctionBlocks` directamente; la regla `ui-no-direct-persistence` lo hace cumplir y su baseline está vacío desde ODE-586. Si hace falta una operación nueva, se añade en ese módulo y se llama desde aquí.
 
 ## Persistencia
 

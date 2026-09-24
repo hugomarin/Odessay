@@ -1,5 +1,3 @@
 {
-  "ui-no-direct-persistence": [
-    "components/editor/editor-shell.tsx"
-  ]
+  "ui-no-direct-persistence": []
 }
