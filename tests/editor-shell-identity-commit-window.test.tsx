@@ -22,12 +22,18 @@
  * Qué commit trae el efecto rezagado es un detalle de implementación, así que
  * se barren las ventanas; una ventana que deja de existir falla por timeout.
  *
- * Camino de producción: A y B abiertos por ruta → gesto real de pestaña a B →
- * dentro de la ventana N, gesto real de vuelta a A → escritura real en el
+ * Camino de producción: A, B y C abiertos por ruta (C activo) → gesto real de
+ * pestaña a A → dentro de la ventana N, gesto real a B → escritura real en el
  * editor real → guardado real sobre fake-indexeddb.
  *
- * Mutation test (ODE-564): dejar el ref de identidad en el documento anterior
- * al volver a A la pone en rojo — lo escrito se atribuye a B.
+ * Por qué tres documentos y por qué se termina en B: B no coincide con ningún
+ * valor que un ref de identidad rancio pudiera conservar (A, con el que se
+ * montó el shell y al que se iba; C, el último abierto por ruta). Terminar en
+ * el documento de montaje dejaba pasar un ref que nunca se actualizaba, por
+ * pura coincidencia.
+ *
+ * Mutation test (ODE-564): un ref de identidad que no sigue al último cambio
+ * la pone en rojo — lo escrito se atribuye a otro documento.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -77,10 +83,12 @@ const COMMIT_WINDOWS = [1, 2, 3, 4, 5]
 
 const TEXT_A = "Texto de A."
 const TEXT_B = "Texto de B."
-const EDIT = " ODE564-ESCRITO-TRAS-VOLVER"
+const TEXT_C = "Texto de C."
+const EDIT = " ODE564-ESCRITO-TRAS-EL-CAMBIO"
 
 let writingA = ""
 let writingB = ""
+let writingC = ""
 
 function makeLocalWriting(id: string, bodyText: string, title: string): LocalWriting {
   return {
@@ -134,9 +142,11 @@ let mounted: Awaited<ReturnType<typeof mountEditorShell>> | null = null
 beforeEach(async () => {
   writingA = crypto.randomUUID()
   writingB = crypto.randomUUID()
+  writingC = crypto.randomUUID()
   resetEditorShellWorld()
   await localDB.writings.save(makeLocalWriting(writingA, TEXT_A, "Documento A"))
   await localDB.writings.save(makeLocalWriting(writingB, TEXT_B, "Documento B"))
+  await localDB.writings.save(makeLocalWriting(writingC, TEXT_C, "Documento C"))
 })
 
 afterEach(async () => {
@@ -147,50 +157,53 @@ afterEach(async () => {
 
 describe("ODE-564 — un cambio de documento dentro de una ventana de commit se mantiene", () => {
   it.each(COMMIT_WINDOWS)(
-    "volver a A en la ventana %i del cambio a B deja A activo y le atribuye lo escrito",
+    "cambiar a B en la ventana %i del cambio a A deja B activo y le atribuye lo escrito",
     async (targetCommit) => {
       mounted = await mountEditorShell({ writingId: writingA })
       await waitFor(() => mounted!.editor().getText().includes(TEXT_A), { label: "hidratación de A" })
       await mounted.render({ writingId: writingB })
       await waitFor(() => tabFor(writingB), { label: "pestaña de B" })
-      await pointerClick(tabNode(writingA).node)
-      await waitFor(() => activeWritingId() === writingA && mounted!.editor().getText().includes(TEXT_A), {
-        label: "A activo con su contenido",
+      await mounted.render({ writingId: writingC })
+      await waitFor(() => tabFor(writingC), { label: "pestaña de C" })
+      await waitFor(() => activeWritingId() === writingC && mounted!.editor().getText().includes(TEXT_C), {
+        label: "C activo con su contenido",
       })
       await flush(3)
 
-      // La sonda: en la ventana N de los commits del cambio a B, gesto real
-      // de vuelta a A, síncrono y antes de los efectos pasivos de ese commit.
+      // La sonda: en la ventana N de los commits del cambio a A, gesto real a
+      // B, síncrono y antes de los efectos pasivos de ese commit.
       const probe = { armed: true, commits: 0, fired: false, activeRightAfter: null as string | null }
       world.onShellCommit = () => {
         if (!probe.armed || probe.fired) return
         probe.commits += 1
         if (probe.commits !== targetCommit) return
         probe.fired = true
-        dispatchPointerClick(tabNode(writingA).node)
-        // Control positivo: el gesto sí activó A, dentro de la ventana.
+        dispatchPointerClick(tabNode(writingB).node)
+        // Control positivo: el gesto sí activó B, dentro de la ventana.
         probe.activeRightAfter = activeWritingId()
       }
 
-      await pointerClick(tabNode(writingB).node)
+      await pointerClick(tabNode(writingA).node)
       await waitFor(() => probe.fired, { label: `ventana de commit ${targetCommit}`, timeoutMs: 5000 })
       world.onShellCommit = null
-      expect(probe.activeRightAfter, "el gesto de vuelta activó A dentro de la ventana").toBe(writingA)
+      expect(probe.activeRightAfter, "el gesto activó B dentro de la ventana").toBe(writingB)
 
-      // Todo el trabajo pendiente se asienta. El último cambio elegido fue A.
+      // Todo el trabajo pendiente se asienta. El último cambio elegido fue B.
       await advance(500)
-      await waitFor(() => mounted!.editor().getText().includes(TEXT_A), {
-        label: "el editor termina mostrando A",
+      await waitFor(() => mounted!.editor().getText().includes(TEXT_B), {
+        label: "el editor termina mostrando B",
         timeoutMs: 5000,
       })
-      expect(activeWritingId(), "A sigue activo tras asentarse el cambio a B").toBe(writingA)
+      expect(activeWritingId(), "B sigue activo tras asentarse el cambio a A").toBe(writingB)
 
-      // Y lo que se escribe ahora se atribuye a A, no a B.
+      // Y lo que se escribe ahora se atribuye a B, no a A ni a C.
       await typeInEditor(EDIT)
-      const savedA = await waitForPersisted(writingA, EDIT.trim())
-      expect(savedA.body_text).toContain(EDIT.trim())
-      const recordB = await localDB.writings.get(writingB)
-      expect(recordB?.body_text, "B no recibe lo escrito tras volver a A").not.toContain(EDIT.trim())
+      const savedB = await waitForPersisted(writingB, EDIT.trim())
+      expect(savedB.body_text).toContain(EDIT.trim())
+      for (const other of [writingA, writingC]) {
+        const record = await localDB.writings.get(other)
+        expect(record?.body_text, "ningún otro documento recibe lo escrito").not.toContain(EDIT.trim())
+      }
     },
     SHELL_TEST_TIMEOUT_MS,
   )
