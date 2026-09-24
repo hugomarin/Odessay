@@ -145,7 +145,32 @@ export function resetWriteFileFailureState(): void {
   failingWriteFileCallNumber = null
   writeFileFailureFactory = null
   heldWriteFile = null
+  failingWriteFileMatching = null
+  writeFileLog.length = 0
   failingCatalogGetById.clear()
+}
+
+/**
+ * Registro de cada `tauriWriteFile` que llegó al doble, en orden y ANTES de
+ * cualquier retención o fallo: cuenta los intentos, no los que acabaron en
+ * disco. Sirve para comprobar cuántos guardados arrancó la app mientras otro
+ * seguía en vuelo (ODE-574, antes ODE-461). Se limpia con
+ * `resetWriteFileFailureState`.
+ */
+const writeFileLog: Array<{ path: string; content: string }> = []
+export function writeFileCalls(): ReadonlyArray<{ path: string; content: string }> {
+  return [...writeFileLog]
+}
+
+/**
+ * Hace fallar el próximo `tauriWriteFile` cuya ruta cumpla `matches`, como un
+ * error del disco o de la base nativa. A diferencia de `failWriteFileOnCall`,
+ * no depende de cuántas escrituras hubo antes. Se limpia con
+ * `resetWriteFileFailureState`.
+ */
+let failingWriteFileMatching: { matches: (path: string) => boolean; makeError: () => never } | null = null
+export function failNextWriteFile(matches: (path: string) => boolean, makeError: () => never): void {
+  failingWriteFileMatching = { matches, makeError }
 }
 
 /**
@@ -203,11 +228,17 @@ export async function tauriWriteFileDouble(
   expectedContentHash?: string | null,
 ): Promise<void> {
   writeFileCallCount += 1
+  writeFileLog.push({ path, content })
   if (heldWriteFile?.matches(path)) {
     const held = heldWriteFile
     heldWriteFile = null
     held.arrived()
     await held.gate
+  }
+  if (failingWriteFileMatching?.matches(path)) {
+    const { makeError } = failingWriteFileMatching
+    failingWriteFileMatching = null
+    makeError()
   }
   if (failingWriteFileCallNumber === writeFileCallCount) {
     const fail = writeFileFailureFactory!
