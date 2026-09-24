@@ -46,13 +46,13 @@ Ese rol resuelve la topología de ejecución (capabilities, dependencias, critic
 1. `workflow/status.json` — fase activa y plan de fases. Para saber qué está construido, consultar el ledger: `npm run ops:ledger -- built --phase "Fase N" --brief` (no leer `workflow/built.jsonl` entero).
 2. `workflow/define/roadmap.md` — alcance y dependencias de la fase.
 3. El subconjunto estricto de documentos de `workflow/context/` citados en la línea `Referencia` de cada issue del roadmap.
-4. `.agents/skills/skill-planning/SKILL.md` — cómo estructurar issues ejecutables, jerarquía en Linear y template de Issue Brief.
+4. `.agents/skills/skill-planning/SKILL.md` — método de definición; `specialties/definition-and-sources.md` aporta verificación y fuentes, `specialties/issue-brief-schema.md` define el Issue Brief y `specialties/linear-conventions.md` rige su publicación en Linear.
 
 **No cargar por defecto:** skills técnicos (frontend, backend, database), testing. Solo si un issue de la fase los requiere explícitamente.
 
 **Excepción arquitectónica:**
-- Si la fase o los issues implican desktop, shared core, runtime boundaries, save path, sync/hydration, parser/serializer o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md` antes de redactar briefs.
-- En esos casos, cada issue debe salir de DEFINE con un **Architecture Contract** mínimo en el brief:
+- Si algún issue requiere decidir ownership, contrato, fuente de verdad, runtime o boundary —por ejemplo en desktop, shared core, save path, sync/hydration, parser/serializer o extracción de servicios—, cargar `.agents/skills/skill-architecture/SKILL.md` antes de redactar ese brief.
+- Cada issue que activa Architecture debe salir de DEFINE con un **Architecture Contract** mínimo en el brief:
   - `Layer`
   - `Runtime scope`
   - `Owner`
@@ -69,14 +69,14 @@ Ese rol resuelve la topología de ejecución (capabilities, dependencias, critic
 6. **Si existe el DoD:** el Planning Agent cruza el Roadmap contra el DoD. Si hay asimetrías de alcance, dialoga con el humano para **complementar** el Roadmap y/o el DoD. Nada se borra, se enriquece el contrato.
 7. Una vez que ambos documentos están alineados y el humano da luz verde, ejecutar el Planning Agent: resuelve la topología de la fase (capabilities, dependencias, critical path, smallest coherent stages — ver `.agents/agents/planning-agent.md`) antes de escribir ningún brief. Si la fase ya estaba estratégicamente definida, este paso marca el cambio explícito a planeación táctica de issues.
 8. Para cada nodo de la topología, el Planning Agent usa `.agents/skills/skill-planning/SKILL.md` para endurecerlo en un Issue Brief — incluida la revisión por los domain skills que ese brief active.
-9. Si algún issue de la fase toca arquitectura o runtime boundaries, leer `.agents/skills/skill-architecture/SKILL.md` antes de fijar ownership y `Reference docs`.
+9. Si algún issue de la fase requiere una decisión de ownership, contrato, fuente de verdad, runtime o boundary, leer `.agents/skills/skill-architecture/SKILL.md` antes de fijar ownership y `Reference docs` de ese issue.
 10. **Para cada issue, leer ÚNICAMENTE los documentos de contexto listados en su línea `Referencia:`**. El agente DEBE inyectar como *Proof of Work/Acceptance Criteria* las pruebas rigurosas exigidas por el DoD para ese alcance.
     - Si el issue toca presentación de texto, incluir explícitamente `Presentation Contract` cross-mode (`/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}`) con criterios verificables.
-    - Si el issue toca arquitectura, runtime boundaries, desktop/shared-core, save path, sync/hydration, parser/serializer o extracción de servicios, agregar en el brief un `Architecture Contract` obligatorio con: `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants`, `Required docs`.
+    - Si el issue activa Architecture según `AGENTS.md` y `skill-architecture`, agregar en el brief un `Architecture Contract` obligatorio con: `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants`, `Required docs`.
 11. Crear o actualizar el proyecto de la fase y los issues en Linear con su brief incluido.
 12. Verificar que cada brief creado está completo antes de cerrar: `Definition check` sin contradicción abierta y `Skill reviews` sin objeciones pendientes (ver `skill-planning`).
 13. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
-14. Entregar **una** `Execution Trace` para toda esta ejecución de `wf-define` — no una por issue. El schema de campos lo define `.agents/skills/skill-planning/SKILL.md`; este paso solo exige que exista y esté completa, no repite el schema aquí.
+14. Entregar **una** `Execution Trace` para toda esta ejecución de `wf-define` — no una por issue. El schema de campos está en `.agents/skills/skill-planning/specialties/issue-brief-schema.md`; este paso solo exige que exista y esté completa, no repite el schema aquí.
 
 **Gate de salida:** todos los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo, **más** la única `Execution Trace` de la ejecución presente y completa. Sin brief por issue no hay BUILD. Si un issue es arquitectónico y no incluye `Architecture Contract`, DEFINE no está completo.
 
@@ -108,7 +108,7 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
 4. Architecture Recon no autoriza ampliar el contexto documental. Si el código revela que falta una decisión o documento necesario para resolver ownership o contracts, declarar `Context Gap — Architecture Recon` en lugar de buscar documentación adicional por cuenta propia.
 
 **Excepción obligatoria por gap de contexto arquitectónico:**
-- Si el brief toca desktop, shared core, runtime boundaries, filesystem local, `.md` como contrato documental, extracción de servicios (`DocumentService`, `SyncService`, etc.) o migración web → desktop, el agente debe validar el brief contra su `Architecture Contract`.
+- Si el brief cambia ownership, contrato, fuente de verdad, runtime o boundary —incluido el trabajo desktop, shared core, filesystem, `.md` o servicios que afecta esas decisiones—, el agente debe validarlo contra su `Architecture Contract`.
 - Si falta `Architecture Contract`, o le falta cualquiera de estos campos: `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants`, `Required docs`, BUILD debe detenerse con `Context Gap` bloqueante. No inferir ese contrato desde el diff ni desde el código existente.
 - Si `Required docs` o `Reference docs` no son suficientes para ejecutar sin inferir arquitectura desde el código, BUILD debe detenerse con `Context Gap` bloqueante y pedir corrección del brief según el criterio de `skill-planning` + `skill-architecture`.
 - Regla específica: si el trabajo depende del estado actual del codebase, del save path real, de restricciones del runtime desktop vigente o de gaps de migración ya diagnosticados, entonces `workflow/context/features/odessay-desktop-migration-diagnostic.md` debe aparecer explícitamente en `Required docs`/`Reference docs`. Si no aparece, el brief está incompleto.
@@ -118,7 +118,7 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
 **Setup**
 1. Leer brief. Si el cambio activa performance por carga, datos, hydration, sync, listeners, bootstrap, operaciones bulk, desktop o background work, consultar `.agents/skills/skill-performance/SKILL.md` y declarar el `Performance Architecture Contract`. Si no se activa, no crear una sección de performance artificial. Declarar `Presentation Contract` solo cuando la superficie realmente cambia.
    > _Presentation Contract: paridad cross-surface en `/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}` — `tables`, `pre/code` y URLs largas con wrap, contención y scroll equivalentes entre superficies._
-   > _Architecture Contract: si el brief toca desktop/shared-core/runtime boundaries/save/sync/parser/services, BUILD debe operar dentro de `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants` y `Required docs` ya definidos. Si falta uno, o los docs requeridos no bastan para ejecutar sin inferir arquitectura desde el código, detenerse._
+   > _Architecture Contract: cuando el brief activa Architecture, BUILD debe operar dentro de `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants` y `Required docs` ya definidos. Si falta uno, o los docs requeridos no bastan para ejecutar sin inferir arquitectura desde el código, detenerse._
 2. Mover issue a `In Progress` en Linear. Verificar rama con `git branch --show-current` — si es `main`, crear `codex/{issue-id}-{descripcion}` antes de cualquier edición.
 3. Pre-flight: `npm run env:check --if-present` + `npm run ops:status:drift --if-present`.
    - Si aparece un identificador histórico inválido o huérfano, registrarlo en `workflow/status.json.traceability_exceptions.ignored_issue_ids` con razón concreta. No volver a copiar ese falso positivo en notas de `status.json`, PRs o reviews posteriores.
@@ -204,7 +204,7 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
 
 **Agente responsable:** `/wf-review` lo conduce el rol definido en `.agents/agents/review-agent.md`.
 
-Ese rol usa `.agents/skills/skill-code-review/SKILL.md` para orquestar la investigación técnica y activa las lentes `review-correctness`, `review-architecture`, `review-testing`, `review-change-size` según el scope real del diff. `workflow.md` define el protocolo (gates, merge, ledgers, Linear); el documento del agente y sus skills definen cómo se investiga el diff.
+Ese rol usa `.agents/skills/skill-code-review/SKILL.md` para orquestar la investigación técnica y carga sus referencias de corrección, arquitectura, testing y tamaño del cambio según el scope real del diff. `workflow.md` define el protocolo (gates, merge, ledgers, Linear); el documento del agente y el skill definen cómo se investiga el diff.
 
 **Resolución de issue:**
 - Con argumento (`/wf-review ODE-22`): usar el issue indicado.
@@ -213,10 +213,10 @@ Ese rol usa `.agents/skills/skill-code-review/SKILL.md` para orquestar la invest
 **Contexto a cargar:**
 1. El Issue Brief desde Linear.
 2. El diff del PR.
-3. `.agents/skills/skill-code-review/SKILL.md` — orquesta cuáles de `review-correctness`, `review-architecture`, `review-testing`, `review-change-size` activar según el diff.
+3. `.agents/skills/skill-code-review/SKILL.md` — orquesta cuáles de sus referencias temáticas cargar según el diff.
 4. Si el brief tiene `Performance Architecture Contract` activo: solo los artefactos que ese contrato seleccionó (trace, report o output de gate).
 5. Si el brief tiene `Presentation Contract` requerido: evidencia cross-mode (`write`, `preview`, `shared`, `public`) con foco en tablas, `pre/code`, URLs largas y overflow.
-6. Si el brief toca desktop/shared core/runtime boundaries/save path/sync/parser/serializer/servicios: `.agents/skills/skill-architecture/SKILL.md` + el `Architecture Contract` del brief (la lente `review-architecture` aplica este checklist, incluido el bloque de bundle desktop/Tauri).
+6. Si el brief activa Architecture o el diff cambia ownership, contrato, fuente de verdad, runtime o boundary: `.agents/skills/skill-architecture/SKILL.md` + el `Architecture Contract` requerido para ese scope (la referencia de arquitectura de Code Review aplica este checklist, incluido el bloque de bundle desktop/Tauri cuando corresponda).
 
 **No cargar por defecto:** documentos core, features, roadmap.
 
@@ -244,7 +244,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 4. Revisar diff contra el brief (scope, calidad, seguridad, performance).
 5. Dejar comentario en Linear: resultado de revisión.
    - El comentario de REVIEW debe separar explícitamente:
-     - `TechnicalVerdict` (PASS/FAIL — el juicio técnico del Review Agent: findings, contratos que las lentes `review-*` evaluaron, seguridad),
+     - `TechnicalVerdict` (PASS/FAIL — el juicio técnico del Review Agent: findings, contratos que las referencias de review evaluaron, seguridad),
      - `QualityScore` (calidad técnica del diff),
      - `ProcessInsights` (fallos del primer review, correcciones posteriores, gaps de contexto y recomendaciones),
      - `GateResult` final (PASS solo si `TechnicalVerdict=PASS` **y** los checks mecánicos del paso 1 pasaron — este valor es el que se persiste como `gate_result` en el ledger, no el `TechnicalVerdict` aislado).
@@ -339,7 +339,7 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 1. El Issue Brief desde Linear.
 2. Los documentos listados en la sección `Reference docs` del brief — son los únicos que aplican.
 
-**Excepción obligatoria por gap de contexto arquitectónico:** aplica la misma excepción que wf-build (ver sección BUILD). Si el brief toca desktop, shared core, runtime boundaries o servicios y su `Architecture Contract`/`Required docs` no bastan para ejecutar sin inferir arquitectura desde el código, detener SHIP y marcar `Context Gap` bloqueante.
+**Excepción obligatoria por gap de contexto arquitectónico:** aplica la misma excepción que wf-build (ver sección BUILD). Cuando el brief activa Architecture y su `Architecture Contract`/`Required docs` no bastan para ejecutar sin inferir arquitectura desde el código, detener SHIP y marcar `Context Gap` bloqueante.
 
 **Secuencia:**
 

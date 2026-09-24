@@ -1,24 +1,12 @@
----
-name: skill-design-landing
-description: Visual system for the marketing layer of Artifact Studio (public landing, product pages, branded shared/preview surfaces). Use this skill whenever you work in app/(marketing)/**, on the public home, or on any surface seen by someone who is not yet a user. Do NOT use it for the product (Desk, Workspace, Studio, Settings, editor, modals) — that layer is governed by skill-design. If the color, type, spacing or component decision happens inside the app shell, this skill does not apply.
----
+# Sistema visual de marketing
 
-# Skill: Design System — Marketing Layer (Artifact Studio)
+Esta especialidad define la tipografía, los tokens, los componentes y la composición de `app/(marketing)`, la home pública y otras superficies de campaña envueltas en `[data-layer="marketing"]`. El punto de entrada y la selección de capa viven en [Design](../SKILL.md).
 
-Artifact Studio has **two visual systems that never mix**:
+La capa de marketing usa tokens bajo `[data-layer="marketing"]`. Comparte con producto la marca, la familia de grises cálidos y Roboto Mono. Antes de implementar la landing, leer también [marketing-page.md](marketing-page.md), cuya fuente es el prototipo aprobado en `docs/design/reference/Artifact Studio Landing.dc.html` y `docs/design/reference/Artifact Studio UI Kit.dc.html` §8.
 
-| Layer | Skill | Where | What it says |
-| --- | --- | --- | --- |
-| Product | `skill-design` | `app/(app)`, `app/(auth)`, `app/(reading)` | a tool: dense, legible at 13px, warm grey |
-| Marketing | **this skill** | `app/(marketing)` | a publication: cream, light serif at scale, gold used sparingly |
+## Criterios visuales
 
-They share exactly three things: the mark, the warm-grey family, and Roboto Mono. **Nothing else.** An app button on the landing looks cheap; landing type inside the app becomes illegible.
-
-Before implementing a marketing view, read `.agents/skills/skill-design-landing/design.md` — it holds the per-section values, the anatomy of each block, and the validation checklists.
-
----
-
-## Philosophy
+### Philosophy
 
 The app serves the text. The landing **argues a thesis**: the files AI produces need a place where they read as documents. So the landing looks like neither a tool nor a SaaS template — it looks like a publication. Large light-serif headlines, generous cream, and one warm color used three times per screen.
 
@@ -31,7 +19,7 @@ Origin rules:
 
 ---
 
-## Tokens
+### Tokens
 
 Marketing tokens are **scoped**, never in `:root`. This is mandatory: overwriting the global `--bg` breaks the app.
 
@@ -72,7 +60,7 @@ Exposed to Tailwind v4 inside `@theme` with an `mkt-` prefix:
 
 ---
 
-## Type
+### Type
 
 Three families, no overlapping roles:
 
@@ -96,7 +84,7 @@ const newsreader = Newsreader({
 })
 ```
 
-### Scale
+#### Scale
 
 | Element | Spec |
 | --- | --- |
@@ -114,7 +102,7 @@ Rules: `text-wrap: balance` on headlines, `text-wrap: pretty` on paragraphs. One
 
 ---
 
-## Gold budget
+### Gold budget
 
 Maximum **three appearances per screen**: the overline, one italic in the headline, the action arrow. Never as a large block background, never in body copy, never two gold headlines in a row.
 
@@ -122,7 +110,7 @@ On dark panels gold becomes `--mkt-gold-light` and body drops to `--mkt-on-dark-
 
 ---
 
-## Components
+### Components
 
 Five, and they cover the whole landing. They live in `components/marketing/`.
 
@@ -138,7 +126,7 @@ Five, and they cover the whole landing. They live in `components/marketing/`.
 
 ---
 
-## Layout
+### Layout
 
 ```
 max-width: 1320px · 48px side padding
@@ -151,13 +139,13 @@ Product screenshots always live inside a dark or cream panel, bleeding to one ed
 
 ---
 
-## Motion
+### Motion
 
 The landing is nearly static. Color transitions on hover (150ms ease) and, if the brief asks, a 220ms fade-in on viewport entry. No parallax, no animated counters, no `transition: all`.
 
 ---
 
-## Invariables
+## Invariantes verificables
 
 - Never app tokens (`--bg`, `--sb`, `--cursor`, `shadow-float*`, `radius-lg`) inside `app/(marketing)`.
 - Never `--mkt-*` outside `[data-layer="marketing"]`.
@@ -167,3 +155,7 @@ The landing is nearly static. Color transitions on hover (150ms ease) and, if th
 - At most one cream panel (`--mkt-panel-warm`) per view.
 - Screenshots are real captures of the build, never drawn mockups.
 - `DesktopStartupRedirect` stays on the home: the landing must never appear inside the desktop app.
+
+## Incertidumbre
+
+Cuando el brief deja abierta una decisión visual, derivarla de la filosofía y los tokens de marketing y verificar la coherencia de la superficie pública.

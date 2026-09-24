@@ -11,6 +11,9 @@ uses_skills:
   - skill-backend
   - skill-database
   - skill-ux-testing
+  - skill-performance
+  - skill-design
+  - skill-corrections
 commands:
   - /wf-define
   - wf-define
@@ -20,7 +23,7 @@ commands:
 
 Este documento define el **rol de agente** que conduce `/wf-define` en Odessay.
 
-No define el protocolo del comando ni los entregables del workflow. Eso vive en `workflow/workflow.md`. No define el schema del Issue Brief ni cómo endurecer un issue individual. Eso vive en `.agents/skills/skill-planning/SKILL.md`.
+No define el protocolo del comando ni los entregables del workflow. Eso vive en `workflow/workflow.md`. El método para endurecer un issue vive en `.agents/skills/skill-planning/SKILL.md` y el schema de Odessay en `.agents/skills/skill-planning/specialties/issue-brief-schema.md`.
 
 Este documento responde a otra pregunta:
 
@@ -97,7 +100,7 @@ La salida formal de este rol para `wf-define` es:
 - proyecto de la fase en Linear, si todavía no existe
 - issues de la fase creados en Linear, secuenciados según la topología resuelta
 - cada issue con brief completo (endurecido vía `skill-planning`) y contratos requeridos
-- una `Execution Trace` — el schema de campos lo define `skill-planning`; este rol la produce, no lo repite aquí
+- una `Execution Trace` — el schema de campos está en la especialidad de Odessay de `skill-planning`; este rol la produce, no lo repite aquí
 
 No es una salida válida de `wf-define`:
 
@@ -118,11 +121,11 @@ Define qué hace `/wf-define`: qué contexto carga, qué gates debe pasar, cuán
 
 ### `.agents/skills/skill-planning/SKILL.md`
 
-Define cómo endurecer cada issue en un Issue Brief ejecutable: schema, `Definition check`, `Requirements`, `Failure modes`, contratos (`Architecture`, `Performance`, `Visual/UX`), `Reference docs`, y la revisión por domain skills. Este rol lo usa como marco principal para materializar cada nodo de la topología — no vuelve a definir ese schema aquí.
+Define cómo endurecer cada issue en un Issue Brief ejecutable. En ese skill, `specialties/definition-and-sources.md` conserva la verificación de definición y la revisión por domain skills; `specialties/issue-brief-schema.md` conserva los campos, contratos y `Reference docs`; `specialties/linear-conventions.md` se carga al publicar la fase y sus issues en Linear. Este rol carga los recursos pertinentes para materializar cada nodo de la topología.
 
-### Domain skills (`skill-frontend`, `skill-backend`, `skill-database`, `skill-ux-testing`, `skill-architecture`, `skill-performance`, ...)
+### Domain skills (`skill-frontend`, `skill-backend`, `skill-database`, `skill-ux-testing`, `skill-architecture`, `skill-performance`, `skill-design`, `skill-corrections`)
 
-Validan decisiones concretas de la topología o de un brief puntual desde su disciplina. No diseñan la fase ni generan roadmaps independientes — son reviewers especialistas, no co-owners de la síntesis.
+Validan decisiones concretas de la topología o de un brief puntual desde su disciplina. Design se carga cuando el brief fija una superficie visual; Corrections cuando cambia ese subsistema; Performance cuando cambia la forma de carga o el costo al crecer. La matriz de activación del skill de Planning selecciona los demás por scope. No diseñan la fase ni generan roadmaps independientes — son reviewers especialistas, no co-owners de la síntesis.
 
 ### `.agents/skills/skill-audit-planning/SKILL.md`
 
@@ -206,7 +209,7 @@ El agente principal debe convocar contexto especializado si aparece cualquiera d
 - cruce entre frontend/backend/database
 - riesgo de secuencia entre fases
 - ambigüedad entre contrato de producto y contrato técnico
-- desktop, multi-runtime, adapters, filesystem, `.md`, save path, sync o servicios compartidos
+- una decisión de ownership, contrato, fuente de verdad o boundary en desktop, multi-runtime, adapters, filesystem, `.md`, save path, sync o servicios compartidos
 
 La consulta especializada debe ser acotada, concreta y orientada a destrabar una decisión de la topología — no debe convertirse en ownership paralelo del roadmap.
 

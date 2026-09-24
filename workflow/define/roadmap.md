@@ -591,7 +591,7 @@ Artifact Studio tiene una identidad visual única y verificable en todas sus sup
 
 **Temas que entran en esta fase**
 
-- bajada del paquete de diseño a `docs/design/` y creación de `skill-design-landing`;
+- bajada del paquete de diseño a `docs/design/` y definición de la especialidad de marketing en `skill-design`;
 - fusión de los deltas de tokens, tipografía y geometría en `skill-design` y `app/globals.css`;
 - primitivas compartidas: los cinco overlays y la barra de selección única;
 - refresco de marca: geometría del mark, wordmark en Geist, app icon y favicon regenerados;
@@ -625,7 +625,7 @@ Artifact Studio tiene una identidad visual única y verificable en todas sus sup
 
 Fase 10 corre en paralelo al cierre de Fase 9: `ODE-372` sigue siendo el gate DoD de esa fase y no se absorbe aquí.
 
-Referencia: `workflow/define/dod-fase-10.md`, `docs/design/migration-plan.md`, `docs/design/system-app.md`, `docs/design/layout.md`, `docs/design/overlays.md`, `docs/design/icons.md`, `docs/design/brand.md`, `docs/design/views/*.md`, `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-design/vistas.md`, `.agents/skills/skill-design/tipografia.md`, `.agents/skills/skill-design-landing/SKILL.md`, `.agents/skills/skill-frontend/SKILL.md`, `.agents/skills/skill-planning/SKILL.md`, `workflow/agents.md`.
+Referencia: `workflow/define/dod-fase-10.md`, `docs/design/migration-plan.md`, `docs/design/system-app.md`, `docs/design/layout.md`, `docs/design/overlays.md`, `docs/design/icons.md`, `docs/design/brand.md`, `docs/design/views/*.md`, `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-design/vistas.md`, `.agents/skills/skill-design/tipografia.md`, `.agents/skills/skill-design/specialties/marketing-system.md`, `.agents/skills/skill-design/specialties/marketing-page.md`, `.agents/skills/skill-frontend/SKILL.md`, `.agents/skills/skill-planning/SKILL.md`, `workflow/agents.md`.
 
 ---
 

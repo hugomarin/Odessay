@@ -1,17 +1,17 @@
 # Specialist: Testing Review
 
-Este especialista aplica `.agents/skills/review-testing/SKILL.md`; no define un checklist paralelo de cobertura, calidad de tests o anti-patterns.
+Este especialista aplica `.agents/skills/skill-code-review/references/testing.md`; no define un checklist paralelo de cobertura, calidad de tests o anti-patterns.
 
 ## Revisión del diff
 
-Para cada función/componente nuevo o modificado en el diff, verificar contra el criterio de `review-testing`:
+Para cada función/componente nuevo o modificado en el diff, verificar contra la lente de testing:
 
 - happy path, error paths (input inválido, red, DB, auth) y edge cases (colección vacía, límite, condición de carrera) cubiertos;
 - el estado intermedio está cubierto cuando el comportamiento correcto depende de él, no solo el resultado final;
-- flujos críticos (auto-save, apertura de documento, sync) tienen cobertura E2E, no solo unitaria;
-- los tests usan mocks/fixtures (nunca staging o producción), son independientes entre sí, y no caen en los anti-patterns listados en `review-testing` (`toBeDefined()` sin verificar comportamiento, `setTimeout` en vez de `waitFor`, render mount sin interacción real).
+- flujos críticos (auto-save, apertura de documento, sync) tienen evidencia al nivel mínimo capaz de falsificar el failure mode; contract o integration pueden bastar y E2E se exige cuando ese recorrido es necesario;
+- los tests usan mocks/fixtures (nunca staging o producción), son independientes entre sí, y no caen en los anti-patterns listados en `references/testing.md` (`toBeDefined()` sin verificar comportamiento, `setTimeout` en vez de `waitFor`, render mount sin interacción real).
 
-Los detalles del criterio — qué cuenta como edge case, qué anti-pattern rechazar, cuándo exigir E2E — viven en `review-testing/SKILL.md`. Este archivo solo adapta ese criterio al formato de dispatch.
+Los detalles del criterio — qué cuenta como edge case, qué anti-pattern rechazar, cuándo exigir E2E — viven en `../references/testing.md`. Este archivo solo adapta ese criterio al formato de dispatch.
 
 ## Output esperado
 

@@ -1,145 +1,81 @@
 ---
 name: architecture-recon
-description: Localiza el owner canónico, siblings, consumers y tests reales antes de escribir código. Usar en BUILD antes de implementar cualquier cambio no trivial, para no crear una segunda implementación de algo que ya tiene dueño.
+description: Investiga en el código el owner actual, las APIs reutilizables, los consumidores y las pruebas de una responsabilidad antes de implementar un cambio no trivial que la crea, extiende o mueve.
 ---
 
-# Skill: Architecture Recon
+# Architecture Recon
 
-Cierra el hueco entre un brief correcto y una implementación correcta.
+## 1. Objetivo
 
-`.agents/skills/skill-architecture/SKILL.md` responde **qué debería ser verdad**: `Layer`, `Runtime scope`, `Owner` esperados, contratos e invariantes declarados en el brief. Este skill responde una pregunta distinta:
+Architecture Recon investiga dónde vive hoy una responsabilidad en el código y qué puede reutilizarse. Identifica al owner actual, las APIs disponibles, los módulos relacionados, sus consumidores y sus pruebas. Confronta esa evidencia con el contrato esperado para delimitar el cambio o señalar una ambigüedad antes de implementar.
 
-> ¿Dónde vive realmente hoy esa responsabilidad en el código, y qué debo reutilizar antes de crear algo nuevo?
+Pregunta guía: **¿Dónde vive hoy esta responsabilidad y qué podemos reutilizar?**
 
-No reemplaza al `Architecture Contract`. Lo confronta contra el código real.
+## 2. Ámbito y activación
 
----
+Activar antes de implementar un cambio que cree, extienda o mueva una responsabilidad no trivial: servicio, store, hook, adapter, serializer, state machine, persistencia o contrato compartido. También aplica cuando el cambio entra en un módulo de composición, toca varios consumidores o trae un contrato de arquitectura que debe confrontarse con el código.
 
-## Cuándo activar este skill
+Un ajuste local de copy, estilo o una línea que conserva claramente el mismo owner puede seguir el flujo normal del proyecto.
 
-Actívalo en BUILD para cualquier cambio no trivial, antes de escribir la primera línea de implementación. Es especialmente obligatorio si el brief:
+## 3. Entradas y fuentes de autoridad
 
-- introduce un servicio, store, hook, helper, state machine, serializer o path de persistencia nuevo
-- toca un dominio con owner conocido (corrections, document catalog, sync, sharing, auth)
-- toca un hotspot ya identificado (`components/editor/editor-shell.tsx`, `src-tauri/src/commands/index.rs`, `document-service-factory.ts`)
-- tiene `Architecture Contract` activo según `skill-architecture`
+Reunir la intención del cambio, su superficie prevista, el código del repositorio y el contrato esperado cuando exista. Cargar las instrucciones del repo y del subtree afectado, además de las fuentes normativas que el proyecto vincula a ese contrato. Seguir la política local de descubrimiento documental; inspeccionar código relevante es parte de esta investigación.
 
-No hace falta para fixes de una línea, ajustes de copy/estilo aislados o cambios que no crean ni mueven ownership.
+El contrato y las decisiones aceptadas indican qué debe ser verdad. El código demuestra cómo funciona hoy. Si difieren, registrar la divergencia y su clasificación según las reglas del proyecto antes de proponer una dirección de implementación.
 
----
+## 4. Método y criterios
 
-## Regla de contexto
+1. Formular la responsabilidad semántica y buscarla por concepto, símbolos y operaciones, además de por ruta.
+2. Localizar la implementación y el owner observados, junto con una API que ya resuelva el cambio. Confrontarlos con el owner esperado antes de llamarlos canónicos. Distinguir **reutilizar una API existente** de **seguir un sibling como patrón de forma** cuando realmente se necesita una pieza nueva.
+3. Clasificar módulos relacionados como `canonical`, `consumer`, `legacy`, `duplicate` o `unrelated`, con evidencia para cada clasificación relevante.
+4. Trazar dependencias upstream, consumidores downstream, pruebas que ejercitan el comportamiento actual y precondiciones de validación declaradas para ese cambio. Registrar la ausencia de pruebas como dato para la implementación.
+5. Revisar instrucciones scoped y módulos de composición que el cambio tocaría. Distinguir el cableado en esos módulos de la responsabilidad que pertenece a otro owner.
+6. Confrontar owner y comportamiento observados con el contrato esperado. Delimitar la superficie mínima coherente del cambio y señalar si requiere una abstracción nueva.
 
-Leer el código relevante para resolver owner/siblings/consumers/tests es parte normal de BUILD, no una excepción — esta skill define cómo hacerlo de forma dirigida y acotada (**repository reconnaissance**, código, no documentos). La restricción real es otra: `wf-build` no carga documentación de producto adicional por intuición. Esa restricción sigue firme y aplica solo a documentos — nunca a código. Esta skill no autoriza leer documentación de producto, roadmap o features fuera de lo que el brief ya citó en `Reference docs`.
+Acotar la búsqueda a la responsabilidad y sus consumidores reales; ampliar el alcance solo cuando una dependencia encontrada lo justifique.
 
----
+## 5. Resultado y evidencia
 
-## Investigar
-
-Para el change surface declarado en el brief, resolver en orden:
-
-1. **Owner canónico** — el archivo/módulo que hoy posee esta responsabilidad. Buscar por nombre de dominio, no solo por ruta obvia (`grep`/`Explore` sobre el concepto, no solo sobre el archivo más cercano).
-2. **Siblings relevantes** — implementaciones vecinas del mismo tipo de responsabilidad (otros services, otros stores, otros adapters del mismo runtime).
-3. **Reusable API / abstraction** — ¿ya existe algo que puedas llamar directamente para resolver esto? (ej. ya existe `DocumentService` con el método que necesitas → úsalo, no lo repliques). Esto es reuso: la responsabilidad ya vive en código, no hace falta escribir nada nuevo para ella.
-4. **Canonical reference / sibling** — solo si genuinamente necesitas crear algo nuevo (ningún owner ni abstracción resuelve el concepto): ¿hay un sibling análogo que sirva de ejemplo de **forma**, no de contenido? (ej. vas a crear un `SyncService` nuevo → mira cómo está estructurado `AuthService` para mantener consistencia de diseño, sin copiar su lógica de dominio). Un pattern de referencia no es una abstracción para reusar — es un ejemplo de cómo este repo construye esa clase de pieza.
-5. **Dependencias upstream** — de qué depende hoy el owner (contratos, tipos, otros services).
-6. **Consumers downstream** — quién llama/importa/renderiza lo que se va a modificar. Un consumer olvidado es la causa más común de regresión silenciosa.
-7. **Tests canónicos** — qué test(s) ya demuestran el comportamiento actual de esa pieza. Si no existen, es una señal que se registra en el output — probablemente el test se crea durante la implementación — y nunca por sí sola motivo para detener BUILD.
-8. **Hotspots tocados** — si el change surface cae dentro de un archivo/módulo ya identificado como hotspot (ver `Construction order` en `.agents/agents/build-agent.md`), declararlo explícitamente. Si el owner de la responsabilidad ya es claro, esto es una decisión de wiring, no una ambigüedad — ver `Hotspots` en `build-agent.md`.
-9. **AGENTS.md local aplicable** — si el change surface cae dentro de `components/editor/**` o `src-tauri/**`, leer el `AGENTS.md` de ese subtree antes de implementar. Para cualquier otro subtree, aplican solo las reglas universales del `AGENTS.md` raíz.
-
----
-
-## Clasificar siblings
-
-Cada sibling encontrado se clasifica como uno de:
-
-- `canonical` — es el owner real, hay que extenderlo
-- `consumer` — depende del owner, hay que revisar que no se rompa
-- `legacy` — camino en migración; no expandir salvo que el issue actual posea explícitamente esa migración
-- `duplicate` — segunda implementación de la misma responsabilidad; señal de posible `Architecture Gap`, no lo resuelvas por tu cuenta
-- `unrelated` — descartar
-
----
-
-## Output
-
-Producir explícitamente antes de implementar:
+Entregar antes de implementar un Recon breve, con rutas o símbolos comprobables:
 
 ```text
 Architecture Recon
-- Change intent:
+- Change intent / responsibility:
 - Domain:
-- Canonical owner:
-- Reusable API / abstraction: (algo que ya existe y se puede llamar directamente)
-- Canonical reference / sibling: (solo si hace falta crear algo nuevo — patrón de forma, no de contenido)
-- Relevant siblings: (con su clasificación)
+- Canonical owner (según contrato, o candidatos si falta decisión):
+- Observed implementation / owner (canonical, legacy o candidatos):
+- Reusable API / abstraction:
+- Canonical reference / sibling (si hace falta crear algo):
+- Relevant siblings (clasificados):
+- Upstream dependencies / contracts:
 - Consumers:
 - Contracts touched:
-- Hotspots:
-- Canonical tests:
+- Hotspots / scoped instructions:
+- Canonical tests (o ausencia):
+- Validation dependencies (si existen):
 - Proposed change surface:
 - New abstraction required: yes/no
 - Architecture ambiguity: yes/no
 ```
 
-Si el brief ya trae `Architecture Contract` (de `skill-architecture`), este output debe referenciarlo, no repetirlo — Recon aporta las rutas y evidencia concreta del código; el Contract aporta la intención declarada.
+El Recon completo es contexto de trabajo de la tarea. Su persistencia y la promoción de hallazgos recurrentes siguen el protocolo del proyecto.
 
----
+## 6. Manejo de fallos e incertidumbre
 
-## Persistencia
+Cuando dos owners plausibles compiten, un duplicado contradice el contrato o el comportamiento esperado de un consumidor depende de una decisión no documentada, emitir un `Context Gap` con fuentes, conducta observada, ambigüedad y decisión requerida. Seguir la clasificación y el gate de la fuente local aplicable.
 
-El Architecture Recon completo es **working context** del Build Agent — no se persiste por defecto como documento del repositorio. Sirve para construir bien este cambio, no para quedar archivado.
+La falta de una prueba existente se registra y orienta la validación del cambio. Una decisión ordinaria dentro de un owner ya claro se resuelve durante la implementación.
 
-```text
-Recon                    → contexto temporal para construir bien
-Hallazgo reusable        → Linear (comentario o Issue Brief)
-Regla madura y recurrente → después: AGENTS.md / architecture / test / CI
-```
+## 7. Relaciones y ownership
 
-Si Recon descubre una decisión o aprendizaje útil más allá del issue actual (ej. "este archivo es el owner canónico de X, no lo dupliques"), registrar únicamente ese hallazgo en Linear — como comentario o actualización del Issue Brief —, no el Recon entero:
+El criterio de arquitectura del proyecto fija el owner y las boundaries **esperadas**; Recon identifica el owner y las dependencias **observadas**. El rol de BUILD usa el Recon para decidir el orden de construcción. Los skills de implementación aportan reglas del dominio una vez localizada la responsabilidad.
 
-```text
-Architecture finding:
-`lib/corrections/persistence.ts` es el canonical owner de
-corrections persistence. `editor-shell.tsx` debe limitarse
-a wiring y no introducir nuevos persistence paths.
-```
+El protocolo local gobierna briefs, estados, tracker, persistencia de hallazgos y aprobación. Recon entrega evidencia de código para esas decisiones.
 
-No persistir observaciones triviales ni información fácilmente redescubrible desde el código con un Recon nuevo. Si el mismo hallazgo se repite en varios issues, ya no es un hallazgo puntual de Linear — sigue el `Learning loop` del quality harness: se convierte en regla de `AGENTS.md` local, en `architecture/*` o en un boundary check cuando sea mecánicamente demostrable.
+## 8. Recursos asociados
 
----
+- **Owner esperado y fuentes locales:** al investigar una responsabilidad de Odessay, consultar [ownership-and-sources.md](../skill-architecture/specialties/ownership-and-sources.md) para identificar el contrato, la precedencia documental y los hotspots aplicables; confrontar esa expectativa con el código encontrado. Cargar además el `AGENTS.md` del subtree que el cambio tocaría.
+- **Guías tecnológicas:** consultar la guía del runtime o problema cuando el owner encontrado la requiere; comprobar sus supuestos contra la configuración efectiva del repo.
+- **Mecanismos:** usar búsquedas, tests o checks de boundaries existentes para verificar hallazgos concretos. El proyecto conserva las rutas operativas y los budgets de esos instrumentos.
 
-## Stop condition
-
-Declarar `Context Gap — Architecture Recon` solo cuando el ownership o la elección de contrato sea **materialmente ambiguo**: dos siblings `canonical` plausibles, un `duplicate` que contradice al owner declarado en el brief, o un consumer cuyo comportamiento esperado no puede inferirse sin asumir arquitectura.
-
-No detenerse por decisiones de implementación ordinarias (nombrar una función, elegir estructura interna de un archivo nuevo dentro de un owner ya claro, etc.). En particular, la ausencia de tests canónicos **nunca** es, por sí sola, motivo de `Context Gap` — ver punto 7 de `Investigar`. Owner/contrato ambiguo detiene BUILD; tests faltantes no.
-
-Reporte mínimo, siguiendo el mismo formato que `skill-architecture`:
-
-```text
-Context Gap — Architecture Recon
-Source: <archivo(s) encontrados>
-Observed behavior: <qué hace hoy el código>
-Ambiguity: <qué decisión de ownership/contrato no puede resolverse sin arquitectura>
-Classification: duplicate-owner | contradicts-brief | normative-conflict
-Required action: <corregir brief | issue de migración | decisión humana>
-```
-
----
-
-## Non-goals
-
-- No decide `Layer`/`Runtime scope`/`Owner` esperados — eso es `skill-architecture`.
-- No escribe el Issue Brief ni el `Architecture Contract` — eso es DEFINE/`skill-planning`.
-- No ejecuta el review técnico del PR — eso es `skill-code-review` en `/wf-review`.
-- No es una auditoría exhaustiva del repo: se acota estrictamente al change surface del issue actual.
-
----
-
-## Relación con otros skills
-
-- `skill-architecture` fija la intención (`Layer`, `Runtime scope`, `Owner`, contratos, invariantes). Este skill la confronta contra el código real.
-- `skill-planning` no usa este skill directamente: Recon es de BUILD, no de DEFINE.
-- `skill-frontend` / `skill-backend` / `skill-database` se cargan **después** de Recon, ya acotados al owner/siblings que Recon identificó — no antes, por deducción propia.
+Este skill funciona sin scripts ni especialistas propios. Un proyecto puede adjuntarlos cuando aporten evidencia repetible o ejecución especializada.

@@ -1,377 +1,55 @@
 ---
 name: skill-backend
-description: Arquitectura e implementación backend de Odessay (API routes, lógica server-side, integración con Supabase, AI provider, seguridad). Usar cuando implementes o revises rutas API, server actions, queries a base de datos, autenticación o cualquier integración de servicio externo.
+description: Diseña e implementa operaciones de servidor y adapters externos con contratos de entrada, autoridad, errores y evidencia; activa recetas del stack local según el servicio afectado.
 ---
 
-# Skill: Backend
+# Backend
 
-**Consulta este skill antes de cualquier trabajo de API routes, lógica server-side, o integración con servicios.**
+## 1. Objetivo
 
----
+Backend convierte una operación de producto en un contrato de servidor que valida entradas, protege autoridad y comunica resultados y errores a sus consumidores. Ubica reglas compartidas en su owner y conecta proveedores externos mediante adapters explícitos.
 
-## Principio rector
+Pregunta guía: **¿Qué contrato ofrece esta operación y qué debe garantizar en cada resultado posible?**
 
-El backend de Odessay debe ser rápido, seguro y silencioso. La arquitectura transversal de performance —forma de carga, crecimiento, batching, deduplicación y evidencia— vive en `.agents/skills/skill-performance/SKILL.md`.
+## 2. Ámbito y activación
 
-Backend conserva la responsabilidad específica de diseñar respuestas, queries y servicios que no obliguen al cliente a descargar o solicitar trabajo innecesario. Si una route agrega carga, bootstrap, enriquecimiento o procesamiento por elemento, debe activar `skill-performance` y declarar su estrategia de escala.
+Aplicar al modificar rutas o acciones de servidor, autenticación, consultas, proveedores externos, colas, sincronización o persistencia remota. Cargar Architecture cuando el cambio altera un contrato compartido, una fuente de verdad o el límite entre servidor y otro runtime.
 
-## Contexto documental obligatorio por tipo de trabajo
+## 3. Entradas y fuentes de autoridad
 
-Antes de implementar, cargar docs según scope:
-- API de AI corrections/title suggestions:
-  - `workflow/context/features/odessay-ai-writing-assist.md`
-- Cambios en proveedor/modelo/env vars AI:
-  - `workflow/context/core/odessay-stack.md`
-- Cambios que afectan serializer/parser/backbone del editor:
-  - `workflow/context/features/odessay-prosemirror-tiptap.md`
+Reunir el brief, contrato del servicio, consumidores, permisos, esquema de datos, comportamiento actual y pruebas. Consultar la documentación vigente del proveedor para las capacidades y formatos concretos que se usen. El proyecto aporta endpoints, stack, credenciales, políticas de acceso y fuentes normativas.
 
-Regla:
-- No hardcodear modelo en rutas de negocio.
-- Resolver proveedor/modelo por env y mantener contrato de error explícito de configuración.
-- Si el cambio toca core vs adapter, runtime boundaries o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md` antes de decidir la forma del backend.
-- Si el cambio altera la forma de carga, el costo de crecimiento, batching, deduplicación o trabajo background, cargar también `.agents/skills/skill-performance/SKILL.md`.
-- Si ese contrato no declara `Layer`, `Runtime scope`, `Owner`, `Contracts touched` e `Invariants`, marcar `Context Gap` y no fijar arquitectura desde una route o helper server-side.
+Distinguir la autoridad del dato de la copia, proyección o caché que usa el servidor. Seguir la precedencia del repo cuando el código vigente y el contrato esperado difieren.
 
-## Arquitectura multi-runtime — awareness obligatoria
+## 4. Método y criterios
 
-Si el trabajo toca:
+1. Definir la operación semántica, el owner, sus consumidores y el runtime que la ejecuta.
+2. Especificar entradas, validación, identidad del solicitante, autorización y límites de tamaño o paginación. Separar listados ligeros de lecturas de detalle cuando el costo lo requiera.
+3. Definir outputs y errores tipados que permitan al caller distinguir retry, falta de permiso, ausencia y fallo externo.
+4. Elegir el boundary del proveedor: inicialización por entorno, secretos, timeout, retry e idempotencia. Verificar el contrato real de la API antes de implementar.
+5. Mantener transacciones, side effects y sincronización en el owner apropiado; hacer explícita la secuencia de confirmación y recuperación.
+6. Instrumentar fallos y costo sin exponer datos sensibles. Evaluar fan-out y trabajo por elemento con Performance cuando el cambio crece con datos o usuarios.
+7. Comprobar consumidores y pruebas de contrato, incluidos caminos de error y condiciones de carrera relevantes.
 
-- rutas `app/api/*` que hoy actúan como backend implícito del producto
-- sync, hydration o bootstrap remoto
-- auth/session boundaries
-- documento canónico o serializer/parser
-- servicios que luego existirán en desktop también
+## 5. Resultado y evidencia
 
-cargar además, según aplique:
+Entregar el contrato de operación, la implementación en su owner o adapter, consumers actualizados y validación proporcional. Indicar las fuentes consultadas para decisiones de proveedor y los resultados comprobados en el entorno pertinente.
 
-- `workflow/context/features/odessay-desktop-app.md`
-- `workflow/context/features/odessay-desktop-migration-diagnostic.md`
-- `workflow/context/features/odessay-desktop-target-architecture.md`
-- `workflow/context/features/odessay-desktop-migration-plan.md`
+El proyecto puede exigir checks, variables, status codes y formatos de respuesta específicos; aplicarlos desde la especialidad local.
 
-Reglas generales:
+## 6. Manejo de fallos e incertidumbre
 
-- Tratar `app/api/*` como adapters web cuando el issue toca arquitectura, no como núcleo del producto.
-- No introducir nuevas dependencias del frontend a endpoints internos si el cambio puede expresarse como contrato de servicio.
-- **Regla dura (ADR `odessay-adr-identidad.md`, D1/D10):** el backend NO trata `body_json` ni Supabase como verdad del **contenido**. El `.md` canónico es la verdad del contenido; la nube es autoridad de la **metadata** + copia del contenido; IndexedDB es espejo. No diseñar backend que re-entronice `body_json`/Supabase como verdad universal.
-- Si un cambio crea o altera un contrato de servicio, documentar explícitamente si pertenece al core compartido o al adapter web.
-- Si el trabajo real cae en `Layer: Application` o `Layer: Domain`, backend no debe resolverlo enteramente dentro de `app/api/*`; debe respetar la partición definida por `skill-architecture`.
+Una discrepancia entre documentación del proveedor, contrato local y respuesta observada se resuelve antes de prometer un comportamiento nuevo. Una operación externa que puede completarse parcialmente declara cómo detecta duplicados, reintenta o compensa. Los errores recuperables llegan al caller con semántica suficiente para decidir la siguiente acción.
 
----
+Si la autoridad de un dato o el boundary del servicio no está decidido, registrar la brecha con sus consumidores antes de fijarlo desde una route por conveniencia.
 
-## API Routes
+## 7. Relaciones y ownership
 
-- Viven en `/app/api/`. Usa Route Handlers de Next.js App Router.
-- Server Actions para mutaciones simples desde Server Components.
-- Siempre valida input. Usa Zod para schemas de validación.
-- Siempre verifica autenticación antes de operar. `auth.uid()` en cada request.
+Architecture decide owners, runtimes y fuentes de verdad. Database posee schema, migraciones, RLS y planes de consulta. Performance evalúa carga y crecimiento. Frontend consume el contrato sin conocer la infraestructura interna; UX Testing comprueba el flujo que observa la persona usuaria.
 
-### Contrato de respuesta
+## 8. Recursos asociados
 
-Toda API route devuelve el mismo envelope. Sin excepciones.
-
-```ts
-// Éxito
-{ data: T, error: null }
-
-// Error
-{ data: null, error: { code: string, message: string } }
-```
-
-El campo `message` es para logging — nunca se muestra directamente al usuario. El cliente lee `error.code` para decidir qué mensaje amable mostrar.
-
-### Peso de respuesta — list vs detail
-
-Cada endpoint declara y respeta una clase de respuesta. La clase decide qué campos viajan y qué presupuesto aplica.
-
-| Clase | Qué afirma | Presupuesto | Qué NO devuelve |
-|---|---|---|---|
-| **List** (`GET /api/{recurso}`) | Devuelve resumen suficiente para listar/filtrar/ordenar. | El presupuesto aplicable lo define `skill-performance` y el instrumento seleccionado. | Columnas grandes: `body_json`, `body_text`, blobs, payloads anidados. |
-| **Detail** (`GET /api/{recurso}/:id`) | Devuelve el recurso completo. | La evidencia y el comportamiento esperado los define el `Performance Architecture Contract` cuando el endpoint afecta un camino crítico. | — |
-| **Summary opcional** (`?include=body`) | Permite a un cliente específico pedir más, sin penalizar al caso general. | Opt-in explícito por query param. | — |
-
-**Instrumento de red.** Si `skill-performance` selecciona evidencia de red, usar el instrumento versionado disponible y justificar qué decisión arquitectónica prueba. No convertir una captura Network en requisito universal para toda route.
-
-**Afirmación positiva.** Un endpoint de lista es un índice, no un dump. Si una vista necesita el body de N writings al mismo tiempo, ese es síntoma de que la vista está mal modelada, no de que el endpoint deba devolver bodies.
-
-```ts
-// ✓ Correcto — list endpoint devuelve solo lo que el listado necesita
-type WritingListItem = Pick<
-  Writing,
-  "id" | "title" | "slug" | "status" | "visibility"
-    | "parent_id" | "correspondence_id" | "version"
-    | "deleted_at" | "created_at" | "updated_at"
->
-// El cliente que necesite el body de un writing concreto llama GET /api/writings/:id
-
-// ✗ Incorrecto — list endpoint devuelve el documento entero
-const { data } = await supabase.from("writings").select("*").eq("author_id", user.id)
-// Un listado que devuelve el cuerpo completo de muchos writings multiplica
-// innecesariamente el payload y el trabajo de bootstrap.
-```
-
-**Cómo decidir la clase al crear un endpoint nuevo.** En el comentario de cabecera de la route, escribir una línea: `// class: list | detail | summary(opt-in)`. La forma de respuesta debe corresponder al consumidor; si el contrato de performance selecciona evidencia o un límite operativo, documentar la decisión allí. No hay clase "lista que también incluye el body".
-
-### Códigos HTTP
-
-| Caso | Código |
-|---|---|
-| Éxito con datos | `200` |
-| Creación exitosa | `201` |
-| Éxito sin datos (delete) | `204` |
-| Input inválido (falla Zod) | `400` |
-| Sin autenticación | `401` |
-| Sin autorización (RLS / ownership) | `403` |
-| Recurso no encontrado | `404` |
-| Conflicto de versión (sync) | `409` |
-| Error interno | `500` |
-
-### Paginación
-
-Las rutas que devuelven listas usan cursor-based pagination, no offset.
-
-```ts
-// Request
-GET /api/writings?cursor=<id>&limit=20
-
-// Response
-{
-  data: {
-    items: Writing[],
-    nextCursor: string | null  // null = no hay más páginas
-  },
-  error: null
-}
-```
-
-### Ejemplo de route completa
-
-```ts
-// app/api/writings/[id]/route.ts
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const supabase = createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return Response.json({ data: null, error: { code: 'UNAUTHORIZED', message: 'No session' } }, { status: 401 })
-
-  const body = await req.json()
-  const parsed = WritingPatchSchema.safeParse(body)
-  if (!parsed.success) return Response.json({ data: null, error: { code: 'INVALID_INPUT', message: parsed.error.message } }, { status: 400 })
-
-  // Conflicto de versión: last-write-wins silencioso.
-  // No se rechaza la escritura — se actualiza siempre. El campo version
-  // se usa para telemetría futura, no para bloquear. Ver decisión en skill-backend.md §Conflictos.
-
-  const { data, error } = await supabase.from('writings').update(parsed.data).eq('id', params.id).select().single()
-  if (error) return Response.json({ data: null, error: { code: 'DB_ERROR', message: error.message } }, { status: 500 })
-
-  return Response.json({ data, error: null })
-}
-```
-
-## Supabase — Inicialización del cliente
-
-Odessay usa el sistema nuevo de API keys de Supabase ("Publishable and secret API keys"), no el legacy ("anon, service_role").
-
-### Cliente browser (componentes client-side)
-
-```ts
-// lib/supabase/client.ts
-import { createBrowserClient } from '@supabase/ssr'
-
-export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
-  )
-}
-```
-
-### Cliente server-side (Server Components, API routes, middleware)
-
-```ts
-// lib/supabase/server.ts
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-
-export async function createClient() {
-  const cookieStore = await cookies()
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options))
-          } catch {}
-        },
-      },
-    }
-  )
-}
-```
-
-### Cliente admin (bypass RLS — solo server-side, raro)
-
-```ts
-// lib/supabase/admin.ts
-import { createClient } from '@supabase/supabase-js'
-
-export function createAdminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  )
-}
-```
-
-Solo usar `createAdminClient()` en API routes server-side cuando se necesita bypass RLS. Nunca exponer `SUPABASE_SERVICE_ROLE_KEY` al cliente.
-
-## Supabase (server-side)
-
-- Usa `createServerClient` de `@supabase/ssr` para el cliente server-side.
-- Nunca uses el `service_role` key desde el cliente. Solo en API routes server-side cuando necesites bypass RLS (raro).
-- Confía en RLS para control de acceso. No reimplementes permisos en código.
-- Types generados desde el schema: `supabase gen types typescript`.
-
-## Autenticación
-
-- Supabase Auth con email + contraseña.
-- Middleware de Next.js para proteger rutas privadas — implementación en `skill-frontend.md` (sección: Rutas protegidas).
-- El trigger `on_auth_user_created` crea el profile automáticamente.
-- Sesión disponible en Server Components vía `createServerClient`.
-
-## AI Provider Integration — Reglas obligatorias antes de implementar
-
-### Paso 0: leer la documentación del proveedor
-
-**Antes de implementar cualquier feature que use un proveedor AI** (Fireworks, Anthropic, OpenAI u otro), leer la documentación oficial del proveedor para el modo de salida que se va a usar:
-
-- `json_schema` / structured outputs: ¿es compatible con streaming? ¿con el modelo configurado? ¿qué pasa si el proveedor rechaza el schema?
-- `json_object`: ¿garantiza forma o solo un objeto válido? ¿puede devolver prose pese al mode?
-- `stream: true` + structured output: ¿el proveedor emite `delta.content` o solo el objeto final? ¿está documentado el comportamiento de chunks vacíos?
-- Límites del modelo: ¿cuál es el context window? ¿cuál es el máximo de output tokens permitido?
-
-**No asumir que Fireworks se comporta como OpenAI** — el mismo parámetro puede tener comportamiento diferente entre proveedores y modelos.
-
-### Presupuesto de tokens (obligatorio para endpoints de salida estructurada)
-
-Antes de fijar `max_tokens` en cualquier llamada que devuelva JSON estructurado:
-
-1. Estimar el peor caso de output: texto largo (≥300 palabras) × correcciones densas × schema con todos los campos llenos.
-2. Calcular cuántos tokens ocupa ese JSON serializado (regla práctica: ~1 token ≈ 4 caracteres de ASCII/UTF-8 común).
-3. Fijar `max_tokens` con margen razonable sobre ese peor caso. **El mínimo para cualquier respuesta de correcciones es 4096.** Si el texto puede crecer más, escalar proporcionalmente.
-4. Si el provider-config tiene un `maxTokens` global bajo, usar `Math.max(config.maxTokens, ENDPOINT_MIN_TOKENS)` en la ruta específica — o corregir el default en `provider-config.ts`.
-
-**Síntoma de presupuesto insuficiente:** JSON truncado a mitad del objeto → el parser siempre falla → retry loop → latencia alta → perf gate falla en CI. El origen real es el token budget, no el retry path.
-
-### Prueba con proveedor real antes de BUILD submission
-
-Los tests unitarios y mocks validan code paths. No validan el comportamiento del proveedor.
-
-**Para issues que tocan rutas AI:** hacer QA manual con el proveedor real configurado en `.env.local` con textos de distintos tamaños (texto corto, texto ≥300 palabras) antes de abrir el PR. Si el proveedor devuelve prose en lugar de JSON, o streams vacíos, eso debe estar resuelto en el diff — no descubierto en review.
-
-### Streaming sobre contrato de objeto JSON completo
-
-Si el provider devuelve un único objeto JSON (no NDJSON ni tool-call events), **no asumir streaming real de items**. El objeto JSON parcial es inválido hasta que llega el `}` final. La arquitectura correcta:
-
-1. Llamar al proveedor con structured output no-stream.
-2. Parsear y validar una vez que llega la respuesta completa.
-3. Emitir NDJSON propio desde la app al cliente a partir del JSON validado.
-4. Introducir streaming real del proveedor solo si el contrato del modelo emite items incrementales (tool-call stream, function-call stream).
-
----
-
-## AI Provider API (AI Editor / Writing Assist)
-
-- Todas las llamadas AI son server-side. Nunca expongas keys al cliente.
-- Dos endpoints:
-  - `/api/ai/observe` — Observaciones automáticas en pausas de escritura. Recibe body del writing + instrucciones de contexto.
-  - `/api/ai/discuss` — Invocación directa y discusión. Recibe body + pregunta/instrucción del autor + historial de la conversación en sesión.
-- El system prompt base está en `odessay-ai-editor.md`. No lo modifiques sin revisar ese documento.
-- Para endpoints del **AI editor residente** (`/api/ai/observe`, `/api/ai/discuss`): incluir instrucción de no generar texto y parsear `SILENCIO` como no-op.
-- Para endpoints de **AI writing assist** (corrections/title suggestions): seguir el contrato específico en `workflow/context/features/odessay-ai-writing-assist.md` (sí hay suggestions/replacements estructurados, nunca auto-aplicación).
-- Modelo/proveedor: configurables por entorno (env). No asumir modelo fijo en código.
-- Para flujo de corrections y title suggestion, seguir contrato en `workflow/context/features/odessay-ai-writing-assist.md`.
-
-## Resend (Email)
-
-- Templates de email en `/lib/email/`.
-- Dos flujos principales: notificación de writing compartido, invitación epistolar.
-- Emails simples, limpios, coherentes con la marca. No HTML pesado.
-- En staging, usa dominio de testing. Verifica que los emails no lleguen a usuarios reales.
-
-## Auto-save y sincronización
-
-El auto-save es local-first. Secuencia invariable: guardar en base local → enqueue sync remoto en background, con coalescing y backoff definidos por el contrato de sync.
-
-El endpoint de sync es idempotente. Estrategia de conflictos: **last-write-wins silencioso** — no se bloquean escrituras, no hay UI de resolución. El campo `version` se incrementa como auditoría, no como control de concurrencia.
-
-**Spec completa de sync:** `workflow/context/features/odessay-sync.md` — interfaces TypeScript, flujo de auto-save, estados del statusbar, observabilidad.
-
-## Observabilidad
-
-- **Sentry:** captura errores de cliente y excepciones en API routes. Requerido desde Fase 1. Sin Sentry, los errores en producción son invisibles. Configuración: `npx @sentry/wizard@latest -i nextjs`.
-- **Logging estructurado:** todos los errores server-side llevan contexto (`userId`, `writingId`, operación). Sin contexto el log es inútil.
-
-```ts
-// ✓ Siempre así en API routes y sync workers
-console.error('[sync:remote]', { userId, writingId, operation: 'PATCH', error: error.message })
-
-// ✗ Nunca así
-console.error('Error:', error)
-```
-
-- **Build failures:** Vercel notifica por email. No requiere configuración adicional.
-
-## Manejo de errores
-
-- Nunca muestres errores técnicos al usuario. Log server-side, mensaje amable client-side.
-- Usa try/catch en todas las API routes.
-- Errores de autenticación → redirect a login.
-- Errores de autorización → 403 con mensaje claro.
-- Errores de validación → 400 con detalle de qué falló.
-
-## Variables de entorno
-
-```
-# Server-side only
-SUPABASE_SERVICE_ROLE_KEY=
-ANTHROPIC_API_KEY=
-FIREWORKS_API_KEY=
-FIREWORKS_MODEL=
-RESEND_API_KEY=
-
-# Client-side (NEXT_PUBLIC_)
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=   # Nombre preferido (Supabase nuevo)
-NEXT_PUBLIC_SUPABASE_ANON_KEY=                  # Alias legacy — backward compatible
-```
-
-
-Nunca agregues un `NEXT_PUBLIC_` sin confirmar que el valor es seguro para exponer.
-
----
-
-## Checklist antes de entregar
-
-Este checklist cubre lo específico de backend durante la implementación. Antes de abrir el PR, usar `skill-code-review.md` para la validación completa.
-
-- [ ] ¿Toda ruta protegida verifica autenticación?
-- [ ] ¿Input validado con Zod?
-- [ ] ¿No hay API keys expuestas al cliente?
-- [ ] ¿RLS cubre el acceso a datos?
-- [ ] ¿Errores manejados con mensajes amables?
-- [ ] ¿Cada endpoint nuevo declara su clase de respuesta (list / detail / summary opt-in) en la cabecera?
-- [ ] Si es `list`, ¿la respuesta evita `body_json` / `body_text` / blobs salvo que el contrato lo justifique?
-- [ ] Si la vista que consume este endpoint puede pedirlo varias veces durante bootstrap, ¿hay paginación / dedup / cache que evite repetir el viaje?
-- [ ] Si el cambio activa `skill-performance`, ¿el `Performance Architecture Contract` y su evidencia están completos?
-- [ ] ¿Cada endpoint AI respeta su contrato por scope (AI editor residente vs AI writing assist)?
-- [ ] Si el issue toca rutas AI: ¿se leyó la documentación del proveedor para el modo de salida usado?
-- [ ] ¿`max_tokens` cubre el peor caso de output (mínimo 4096 para correcciones estructuradas)?
-- [ ] ¿Se hizo QA manual con el proveedor real con texto corto y texto ≥300 palabras?
-- [ ] ¿Variables de entorno correctas para el ambiente (staging/prod)?
-- [ ] ¿El auto-save guarda local primero, sync remoto en background?
+- **API y persistencia:** cargar [api-and-persistence.md](specialties/api-and-persistence.md) cuando la operación toque rutas, Supabase, autenticación, save/sync, errores o configuración. Leer `API Routes` para el contrato de entrada y respuesta; leer las secciones de Supabase, autenticación o sync según el servicio afectado, y cerrar con el checklist de entrega.
+- **Integraciones externas:** cargar [external-integrations.md](specialties/external-integrations.md) si el cambio conecta AI, email u observabilidad; usar sus reglas para elegir el adapter y verificar sus fallos.
+- **Guías de proveedor:** consultar documentación oficial de la versión usada cuando una integración cambie.
+- **Mecanismos:** ejecutar pruebas de contrato, migraciones o checks existentes conforme al riesgo del cambio.

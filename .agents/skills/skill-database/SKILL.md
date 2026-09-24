@@ -1,116 +1,47 @@
 ---
 name: skill-database
-description: Guía de base de datos de Odessay para migraciones, RLS, triggers, índices y validación del schema en Supabase. Usar cuando modifiques el modelo de datos, escribas migraciones SQL, revises políticas de acceso o optimices queries.
+description: Diseña y verifica cambios de schema, migraciones, políticas de acceso, triggers e índices con evidencia del estado real de la base de datos y sus consumidores.
 ---
 
-# Skill: Database
+# Database
 
-**Consulta este skill antes de cualquier trabajo con migraciones, queries, RLS, o triggers.**
-**Usa Supabase MCP para consultar el schema vivo y validar contra el estado real de la DB.**
-Si el cambio puede modificar la forma de carga, el fan-out de queries, la paginación, la hidratación, el trabajo bulk o el costo al crecer, consulta también `.agents/skills/skill-performance/SKILL.md`. Database define schema, índices, RLS y consultas; `skill-performance` define la forma sostenible de ejecutarlas.
+## 1. Objetivo
 
----
+Database transforma un contrato de datos en schema, migraciones, políticas y consultas que preservan integridad, acceso y compatibilidad con sus consumidores.
 
-## Principio rector
+Pregunta guía: **¿Qué datos y operaciones cambian, quién puede usarlos y cómo se valida la transición?**
 
-La base de datos remota es la **autoridad de la metadata** del documento y guarda una **copia** del contenido; **no** es la autoridad del contenido. La autoridad del contenido es el `.md` canónico (ver `workflow/context/core/odessay-adr-identidad.md`, D1/D10). El schema en `odessay-modelo-datos.md` es la referencia para la capa remota y colaborativa. Cualquier cambio al schema pasa por una migración versionada.
+## 2. Ámbito y activación
 
-Matiz arquitectónico (resuelto por el ADR, ya no "ahora vs dirección"):
+Aplicar al modificar tablas, columnas, constraints, índices, RLS, triggers, seed data o la forma de una consulta. Cargar Architecture cuando cambia la autoridad de un dato o el boundary entre runtimes. Cargar Performance cuando cambian fan-out, paginación o costo al crecer.
 
-- IndexedDB (`LocalWriting`) es **espejo** del registro de nube, no una verdad aparte (D10).
-- el documento canónico es el `.md`; `body_json` es copia de trabajo, no la verdad (D1).
-- el registro de nube debe sumar `content_hash` (sobre el markdown canónico) para reconciliar archivos desnudos cross-máquina (D11), y la identidad es un solo UUID cliente=nube (D5).
+## 3. Entradas y fuentes de autoridad
 
-Regla general:
+Reunir el contrato de datos, schema versionado, estado vivo del entorno pertinente, migraciones previas, consumers y pruebas. Distinguir decisiones normativas del schema observado. El proyecto determina proveedor, entidades, políticas de acceso y precedencia documental.
 
-- no diseñar cambios de schema que bloqueen o contradigan la estrategia de documento canónico compartido
-- si un issue toca `writings.body_json`, serializer/parser, sync documental o el rol futuro de la persistencia remota, cargar también:
-  - `.agents/skills/skill-architecture/SKILL.md`
-  - `workflow/context/features/odessay-desktop-app.md`
-  - `workflow/context/features/odessay-desktop-migration-diagnostic.md`
-  - `workflow/context/features/odessay-desktop-target-architecture.md`
-  - `workflow/context/features/odessay-desktop-migration-plan.md`
-- si falta `Layer`, `Runtime scope`, `Owner`, `Contracts touched` o `Invariants`, no diseñar el cambio de schema desde Supabase por inercia. Marcar `Context Gap`.
+## 4. Método y criterios
 
----
+1. Formular la invariante de datos y los consumidores que dependen de ella.
+2. Comparar schema declarado y schema real antes de diseñar la migración.
+3. Diseñar la transición compatible con lecturas y escrituras existentes, incluidos datos previos y rollback cuando el riesgo lo exija.
+4. Definir constraints, índices y políticas de acceso donde se puede hacer cumplir la regla. Comprobar roles y caminos de lectura/escritura reales.
+5. Revisar triggers y side effects por idempotencia, recursión y alcance de transacción.
+6. Evaluar planes de consulta, cardinalidad, paginación y número de viajes cuando el volumen pueda crecer.
+7. Verificar migración, políticas y consumidores en el entorno adecuado antes de entregar.
 
-## Schema de referencia
+## 5. Resultado y evidencia
 
-Antes de cualquier operación, lee `workflow/context/core/odessay-modelo-datos.md`. Las entidades principales son:
+Entregar migración versionada, contrato actualizado, consultas y consumidores compatibles, y evidencia de schema y políticas. La validación debe demostrar el comportamiento y los roles afectados, no solo que el SQL compila.
 
-- `profiles` — Extiende auth.users. Username, display_name, bio.
-- `writings` — La unidad fundamental. Body en JSON (TipTap) + texto plano. Estado (draft/finished) y visibilidad (private/shared/public) como dimensiones independientes.
-  - `body_json` es **copia de trabajo / persistencia remota** del contenido, no su autoridad: el contenido canónico es el `.md` (ADR D1). La nube guarda una **copia** del contenido más la metadata autoritativa (D10). El contrato es único entre runtimes; solo cambia el substrato (markdown en desktop, `body_json` persistido en web), no la autoridad.
-- `correspondences` — Identidad del diálogo. Se crea cuando un writing recibe su primera respuesta.
-- `collections` — Agrupaciones del autor. Un writing puede estar en múltiples collections.
-- `writing_collections` — Join table.
-- `writing_shares` — Quién puede ver un writing compartido.
-- `ai_observations` — Señalamientos del AI editor.
-- `invitations` — Invitaciones epistolares.
+## 6. Manejo de fallos e incertidumbre
 
-## Migraciones
+Cuando schema vivo, migraciones y contrato documental divergen, registrar la diferencia y resolver la autoridad antes de aplicar otro cambio. Una migración parcial o una política que depende de contexto no disponible requiere una estrategia explícita de recuperación.
 
-- Viven en `/supabase/migrations/`.
-- Nombre: `{timestamp}_{descripcion}.sql`. Ejemplo: `20260314120000_create_writings.sql`.
-- Cada migración es una transacción. Si algo falla, se revierte todo.
-- Siempre incluye el rollback como comentario al final del archivo.
-- Nunca edites una migración ya aplicada. Crea una nueva.
-- Testea la migración en staging antes de aplicar en producción.
+## 7. Relaciones y ownership
 
-## RLS (Row Level Security)
+Architecture fija autoridad y límites del dato. Backend consume el schema mediante contratos de servicio; Database posee migraciones, RLS, triggers, índices y verificación de consultas. Performance evalúa costo y forma de carga.
 
-- RLS activo en todas las tablas. Sin excepciones.
-- Las directrices de RLS están en `odessay-modelo-datos.md`.
-- Patrones principales:
-  - `auth.uid() = author_id` para acceso propio.
-  - Subquery a `writing_shares` para acceso compartido.
-  - `visibility = 'public'` para acceso abierto.
-- Testea RLS con diferentes usuarios en staging. Un fallo de RLS es un bug de seguridad crítico.
+## 8. Recursos asociados
 
-## Triggers
-
-- `on_auth_user_created` — Crea profile al registrarse.
-- Trigger para crear `correspondence` cuando un writing con `parent_id` se comparte/publica y no existe correspondencia para ese árbol.
-- Trigger para actualizar `correspondences.updated_at` cuando se agrega un writing al árbol.
-- Trigger para generar `slug` automáticamente del título en writings.
-- Trigger para extraer `body_text` de `body_json` en cada update de writings (o hacerlo application-side).
-
-## Queries
-
-- Usa el cliente tipado de Supabase. No SQL raw desde la aplicación excepto en migraciones.
-- Queries frecuentes que deben ser eficientes:
-  - Mis writings filtrados por estado/visibilidad.
-  - Writings de una collection.
-  - Writings compartidos conmigo.
-  - Árbol de una correspondencia (recursive query por `parent_id`).
-  - Lookup de writing por `author_id + slug` (URL pública).
-- Para listas, árboles o sincronizaciones que puedan crecer, el brief debe declarar el patrón de carga, el límite de fan-out, el owner de paginación/batching y cómo se evita una query por elemento. Si se activa `skill-performance`, ese contrato prevalece sobre cualquier checklist local de este skill.
-
-## Supabase MCP
-
-- Usa Supabase MCP para:
-  - Consultar el schema actual de la DB.
-  - Verificar que las migraciones se aplicaron correctamente.
-  - Inspeccionar RLS policies activas.
-  - Validar datos en staging.
-- Nunca uses Supabase MCP contra producción para modificar datos.
-
-## Seed data
-
-- Vive en `/supabase/seed/`.
-- Incluye: usuarios de prueba, writings de ejemplo en diferentes estados y visibilidades, collections, correspondencias con árbol de respuestas, invitaciones.
-- Se aplica solo en staging. Nunca en producción.
-
----
-
-## Checklist antes de entregar
-
-Este checklist cubre lo específico de base de datos durante la implementación. Antes de abrir el PR, usar `skill-code-review.md` para la validación completa.
-
-- [ ] ¿La migración tiene rollback documentado?
-- [ ] ¿RLS cubre todos los casos (private/shared/public)?
-- [ ] ¿Los triggers funcionan en staging?
-- [ ] ¿Los índices necesarios están creados?
-- [ ] Si la consulta cambia la forma de carga o puede crecer, ¿existe el `Performance Architecture Contract` y la evidencia proporcional requerida?
-- [ ] ¿El schema en `odessay-modelo-datos.md` está actualizado si hubo cambios?
-- [ ] ¿No se modificó producción directamente?
+- **Especialidad local:** en Odessay, [specialties/schema-and-access.md](specialties/schema-and-access.md) conserva el schema de referencia, la semántica documental, reglas Supabase, comandos y checklist. Cargarla antes de una operación de datos del proyecto.
+- **Mecanismos:** usar introspección, tests de políticas, schema diff y validación de migraciones disponibles en el repo.

@@ -5,7 +5,11 @@ description: "Diseña cambios para performance sostenible cuando crecen datos, f
 
 # Skill: Performance Architecture
 
-## Propósito
+## 1. Objetivo
+
+Performance Architecture diseña la forma de carga y actualización de un cambio para que su costo siga siendo sostenible al crecer datos, consumidores y actividad.
+
+### Propósito
 
 Este skill evita que una solución correcta hoy se convierta en el problema de velocidad de mañana.
 
@@ -15,7 +19,9 @@ La pregunta principal no es solo “¿cuánto tarda esta ejecución?”, sino:
 
 La medición confirma decisiones arquitectónicas; no sustituye una arquitectura de carga sana.
 
-## Cuándo activarlo
+## 2. Ámbito y activación
+
+### Cuándo activarlo
 
 Actívalo antes de planear o revisar cualquier cambio que introduzca o modifique:
 
@@ -30,7 +36,13 @@ Actívalo antes de planear o revisar cualquier cambio que introduzca o modifique
 
 No lo actives para un cambio puramente textual o visual que no cambie carga, ejecución, estado, datos ni runtime.
 
-## Regla de construcción
+## 3. Entradas y fuentes de autoridad
+
+Reunir intención, consumidores, runtime, contrato de arquitectura y presupuestos o instrumentos del proyecto. Las fuentes locales fijan capacidades, umbrales y hechos del bundle.
+
+## 4. Método y criterios
+
+### Regla de construcción
 
 Una feature no está bien diseñada si funciona con pocos datos pero su costo crece accidentalmente con el volumen.
 
@@ -45,7 +57,7 @@ Antes de implementar, la solución debe declarar:
 - runtime afectado y capabilities requeridas;
 - evidencia mínima para demostrar que no se introdujo una carga evitable.
 
-## Patrones preferidos
+### Patrones preferidos
 
 Elegir explícitamente el patrón que corresponda:
 
@@ -62,7 +74,7 @@ Elegir explícitamente el patrón que corresponda:
 
 La elección debe quedar explicada en el brief o en la nota de implementación. No se debe aplicar un patrón por moda si no resuelve el costo dominante.
 
-## Forma de costo y crecimiento
+### Forma de costo y crecimiento
 
 Declarar la forma esperada de cada operación relevante:
 
@@ -84,7 +96,7 @@ Ejemplos de señales de riesgo:
 - un evento por write de una operación bulk;
 - una feature nueva que duplica una fuente de verdad o un servicio ya existente.
 
-## Revisión de impacto global
+### Revisión de impacto global
 
 El análisis no se limita al diff del issue. Para cada cambio activado, revisar:
 
@@ -97,7 +109,9 @@ El análisis no se limita al diff del issue. Para cada cambio activado, revisar:
 
 Un issue puede ser técnicamente pequeño y sistémicamente caro. Si la carga solo aparece al combinar varios issues, el riesgo pertenece al planning y no debe dejarse para el review final.
 
-## Performance Architecture Contract
+## 5. Resultado y evidencia
+
+### Performance Architecture Contract
 
 Para issues activados, el brief o plan debe contener un bloque equivalente a:
 
@@ -118,7 +132,7 @@ Performance Architecture:
 
 No exigir este bloque para un cambio fuera del alcance del skill. No aceptar un bloque vacío o genérico para un cambio de bootstrap, datos, runtime o listeners.
 
-## Evidencia proporcional
+### Evidencia proporcional
 
 Cuando el contrato pida evidencia ejecutable, consultar
 `references/instruments.md`. Ese inventario define qué instrumento corresponde
@@ -126,19 +140,19 @@ al riesgo y evita convertir todos los budgets o traces en requisitos universales
 
 La evidencia debe seguir el riesgo:
 
-### Nivel 1 — Diseño
+#### Nivel 1 — Diseño
 
 Revisión del patrón de carga, ownership, consumidores y forma de costo. Es obligatoria antes de BUILD cuando el cambio afecta un camino crítico.
 
-### Nivel 2 — Escala
+#### Nivel 2 — Escala
 
 Fixture o test con volúmenes representativos, por ejemplo 10, 100 y 1,000 elementos, o con el volumen real esperado del producto. Verificar que no aparecen llamadas, listeners, renders o payloads innecesarios por elemento.
 
-### Nivel 3 — Runtime
+#### Nivel 3 — Runtime
 
 Trace, waterfall, memoria o interacción cuando el cambio modifica bootstrap, navegación, sync, hydration o el hot path del editor.
 
-### Nivel 4 — Bundle desktop
+#### Nivel 4 — Bundle desktop
 
 Si toca Tauri o una capability nativa, validar el bundle instalado. `tauri dev` y mocks del navegador no prueban entitlements, Hardened Runtime, App Sandbox, filesystem ni permisos del sistema.
 
@@ -152,7 +166,23 @@ Las métricas se eligen por decisión, no por exhaustividad. Las categorías hab
 
 No inventar umbrales por issue si ya existe un instrumento aplicable. Tampoco declarar “performance cubierta” solo porque pasó una métrica que no representa el riesgo del cambio.
 
-## Desktop y capabilities nativas
+### Resultado esperado por modo
+
+#### En planning
+
+Entregar el `Performance Architecture Contract`, el impacto global, los consumidores y la dependencia correcta. Si falta información para decidir la forma de carga, marcar un `Context Gap` antes de crear el issue.
+
+#### En implementación
+
+Comprobar que la implementación conserva el patrón elegido y que no introduce una segunda hydration, listener, query o fuente de verdad sin justificación.
+
+#### En review
+
+Revisar la forma de crecimiento y el sistema completo, no solo el archivo modificado. Un test unitario verde no compensa una arquitectura `O(N)` innecesaria en el arranque.
+
+## 6. Manejo de fallos e incertidumbre
+
+### Desktop y capabilities nativas
 
 Cuando el cambio toque Tauri, permisos, filesystem, media capture, IPC, firma o distribución, leer:
 
@@ -184,31 +214,7 @@ Reglas:
 
 El frontend puede mostrar estado, error y retry. La disponibilidad nativa pertenece al adapter y al contrato de distribución.
 
-## Resultado esperado por modo
-
-### En planning
-
-Entregar el `Performance Architecture Contract`, el impacto global, los consumidores y la dependencia correcta. Si falta información para decidir la forma de carga, marcar un `Context Gap` antes de crear el issue.
-
-### En implementación
-
-Comprobar que la implementación conserva el patrón elegido y que no introduce una segunda hydration, listener, query o fuente de verdad sin justificación.
-
-### En review
-
-Revisar la forma de crecimiento y el sistema completo, no solo el archivo modificado. Un test unitario verde no compensa una arquitectura `O(N)` innecesaria en el arranque.
-
-## Integración con otros skills
-
-- `skill-planning`: activa este skill antes de cerrar briefs con carga, datos, runtime o integración global.
-- `skill-audit-planning`: usa este skill para detectar acumulación, overlaps y huecos sistémicos entre issues.
-- `skill-architecture`: lo consulta para clasificar boundaries, runtime y capabilities.
-- `skill-frontend` y `skill-backend`: lo aplican a sus implementaciones sin duplicar sus reglas generales.
-- `skill-database`: lo consulta cuando queries, índices, RLS, paginación o migraciones pueden cambiar el fan-out o el costo al crecer.
-- `skill-code-review`: verifica que el contrato se cumplió y que la evidencia corresponde al riesgo real.
-- `skill-ux-testing`: valida el flujo visible y el tiempo hasta poder operar, sin convertirse en owner de la arquitectura.
-
-## Anti-patrones bloqueantes
+### Anti-patrones bloqueantes
 
 Marcar el trabajo como bloqueado o incompleto cuando:
 
@@ -220,7 +226,19 @@ Marcar el trabajo como bloqueado o incompleto cuando:
 - la feature existe en código pero no está integrada en la superficie global que prometía;
 - la evidencia se captura sobre otro build, flag, volumen o runtime distinto al que se entrega.
 
-## Límite del skill
+## 7. Relaciones y ownership
+
+### Integración con otros skills
+
+- `skill-planning`: activa este skill antes de cerrar briefs con carga, datos, runtime o integración global.
+- `skill-audit-planning`: usa este skill para detectar acumulación, overlaps y huecos sistémicos entre issues.
+- `skill-architecture`: lo consulta para clasificar boundaries, runtime y capabilities.
+- `skill-frontend` y `skill-backend`: lo aplican a sus implementaciones sin duplicar sus reglas generales.
+- `skill-database`: lo consulta cuando queries, índices, RLS, paginación o migraciones pueden cambiar el fan-out o el costo al crecer.
+- `skill-code-review`: verifica que el contrato se cumplió y que la evidencia corresponde al riesgo real.
+- `skill-ux-testing`: valida el flujo visible y el tiempo hasta poder operar, sin convertirse en owner de la arquitectura.
+
+### Límite del skill
 
 Este skill no reemplaza:
 
@@ -231,3 +249,8 @@ Este skill no reemplaza:
 - la aceptación del resultado por parte del dueño.
 
 Define cómo evitar que las decisiones de esos ámbitos introduzcan carga innecesaria y cuándo deben pedir una decisión arquitectónica antes de BUILD.
+
+## 8. Recursos asociados
+
+- **Medición:** cuando el cambio declare un costo o presupuesto que deba comprobarse, cargar [instruments.md](references/instruments.md) para elegir el check de Odessay y registrar la evidencia correspondiente.
+- **Runtime desktop:** cuando una capability nativa, el bundle o una diferencia dev/producción pueda cambiar el resultado, cargar [desktop-runtime-evidence.md](references/desktop-runtime-evidence.md) para definir qué observar en el artefacto distribuido.

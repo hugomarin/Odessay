@@ -33,6 +33,8 @@
 
 **Resumen:** las Fases 1-5 (sección 10) se ejecutaron casi al pie de la letra. La Fase 6 — Remediation Plane tal como está especificado en la sección 8 (`architecture/remediation.yml`, dispositions FIX NOW/PLANNED/OPPORTUNISTIC/RATCHET) — **nunca se construyó así**. En su lugar, el trabajo divergió hacia un mecanismo distinto y no descrito en este spec: el **Capability Integration Map** (`workflow/quality/capability-integration-map.md`), que clasifica 106 escenarios de producto por cobertura de test real (`NONE`→`INTEGRATION`) y los cierra vía "Critical Proofs" en vez de por disposition de deuda arquitectónica. Ver la nota al inicio de ese documento para el detalle de la relación entre ambos.
 
+**Actualización de productización:** los cuatro directorios `review-*` describen la implementación histórica de esta especificación. La versión actual conserva sus criterios como `references/{correctness,architecture,testing,change-size}.md` dentro de `skill-code-review`; el Review Agent carga un solo skill y selecciona las referencias según el diff.
+
 | Fase del plan (sección 10) | Qué pedía | Estado real, verificado contra el repo |
 |---|---|---|
 | 1 — Architecture Recon + Build/Review Agent + split `skill-code-review` | `architecture-recon/SKILL.md`, `build-agent.md`, `review-agent.md`, reducir `skill-code-review` a orquestación | ✅ Hecho — PR [#433](https://github.com/hugomarin/Odessay/pull/433). `skill-code-review/SKILL.md` son 135 líneas hoy (era ~565). `product-manager` se renombró a `planning-agent`, no al nombre que el spec sugería. |
@@ -44,7 +46,7 @@
 
 **Otros gaps puntuales, menores:**
 - Sección 2.6 proponía `review-runtime-boundaries` y `review-security` como skills separadas — nunca se crearon así; ese juicio quedó repartido entre `skill-code-review`, `review-architecture` y otras skills existentes (`skill-database`, `skill-backend`).
-- El catálogo de skills real (`.agents/skills/`) creció mucho más allá del alcance de este spec (`skill-planning`, `skill-backend`, `skill-database`, `skill-design`, `skill-design-landing`, `skill-ux-testing`, `skill-audit-planning`) — trabajo legítimo pero fuera del scope original de "Skills → Agents → AGENTS.md → Workflow → CI → Remediation" que este documento cubre.
+- El catálogo de skills real (`.agents/skills/`) creció mucho más allá del alcance de este spec (`skill-planning`, `skill-backend`, `skill-database`, `skill-design`, el antiguo `skill-design-landing` hoy integrado como especialidad de Design, `skill-ux-testing`, `skill-audit-planning`) — trabajo legítimo pero fuera del scope original de "Skills → Agents → AGENTS.md → Workflow → CI → Remediation" que este documento cubre.
 
 **Qué usar para trabajo activo hoy:** para status operativo del rollout (qué PR hizo qué, qué sigue), ver `workflow/quality/capability-integration-map.md` y la metodología de Critical Proofs que describe — ese documento y el proceso `/wf-build`/`/wf-review` actuales son la fuente de verdad viva. Este spec es el registro de la intención original y de dónde se ejecutó tal cual vs. dónde se pivoteó.
 
