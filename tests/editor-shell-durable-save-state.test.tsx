@@ -126,23 +126,41 @@ async function mountLoaded(props: Parameters<typeof mountEditorShell>[0] = {}) {
 }
 
 /**
- * Crea un documento real, guardado en disco y pendiente de nube. Online, ese
- * estado se muestra como "Saving…" (`saving`, con `has_pending_sync`): el
- * `.md` ya es durable pero la nube no lo confirmó (ODE-461).
+ * Deja abierto un documento real, guardado en disco y pendiente de nube.
+ * Online, ese estado se muestra como "Saving…" (`saving`, con
+ * `has_pending_sync`): el `.md` ya es durable, pero la nube no lo confirmó
+ * (ODE-461).
+ *
+ * El documento se crea y después se ABRE POR RUTA (remontaje por `key`, como
+ * una entrada desde Desk). No se usa el documento tal como queda tras
+ * materializarse, porque bajo carga la shell a veces no lo adopta (hallazgo
+ * de ODE-574: `onMaterialized` con `isSourceDraftActive: false`). Esa carrera
+ * es un bug aparte; aquí volvería intermitente una prueba que es sobre otra
+ * cosa.
  */
-async function createSavedLocally(text: string) {
+async function openSavedLocally(text: string) {
   await clickNewArtifact(mounted!.container)
   await typeInEditor(text)
   await advance(6_000)
   await waitForMarkdownContaining(text)
-  const tab = await waitFor(
+  const created = await waitFor(
+    () => {
+      const tab = getEditorSessionState().session.tabs.find((candidate) => candidate.writing_id)
+      return tab?.writing_id ?? null
+    },
+    { label: "documento materializado en el store", timeoutMs: 15_000 },
+  )
+
+  await mounted!.render({ key: created, writingId: created })
+  await waitFor(() => mounted!.editor().getText().includes(text), { label: "documento abierto por ruta" })
+  await waitFor(
     () => {
       const current = activeTab()
-      return current?.writing_id && current.save_state === "saving" && current.has_pending_sync ? current : null
+      return current?.writing_id === created && current.save_state === "saving" && current.has_pending_sync
     },
     { label: "documento en disco, nube pendiente", timeoutMs: 15_000 },
   )
-  return tab.writing_id!
+  return created
 }
 
 /** Lo que el servicio de sync aplica tras confirmar un INSERT: el snapshot de la nube. */
@@ -178,7 +196,7 @@ describe("ODE-542 — el estado de guardado converge desde el catálogo durable"
     "sin evento `synced`: el snapshot de la nube lleva la pestaña a Saved",
     async () => {
       await mountLoaded()
-      const writingId = await createSavedLocally("ODE542-SIN-EVENTO")
+      const writingId = await openSavedLocally("ODE542-SIN-EVENTO")
 
       // El servicio de sync confirma el INSERT: marca la fila synced en SQLite
       // (sin evento de catálogo) y aplica el snapshot. El evento efímero
@@ -218,7 +236,7 @@ describe("ODE-542 — el estado de guardado converge desde el catálogo durable"
     "un evento `synced` sin confirmación durable no muestra Saved",
     async () => {
       await mountLoaded()
-      const writingId = await createSavedLocally("ODE542-EVENTO-SIN-DURABLE")
+      const writingId = await openSavedLocally("ODE542-EVENTO-SIN-DURABLE")
 
       // El catálogo durable sigue en pending: el evento no basta.
       await act(async () => {
