@@ -8,7 +8,13 @@ import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
 import { TextSelection } from "@tiptap/pm/state"
 import { useRouter } from "next/navigation"
-import { useDocumentHydration, type ActivationReason, type DocumentMetadataPatch } from "@/hooks/useDocumentHydration"
+import {
+  activationHydrates,
+  useDocumentHydration,
+  type ActivationReason,
+  type DocumentMetadataPatch,
+  type HydrationPhase,
+} from "@/hooks/useDocumentHydration"
 import { useManualCorrections } from "@/hooks/useManualCorrections"
 import {
   mapLocalSyncStatusToSaveState,
@@ -526,7 +532,13 @@ export function EditorShell({
   const hydrationProgress = useHydrationProgress()
 
   const [currentWritingId, setCurrentWritingId] = useState<string | null>(initialHydrationSession.activeWritingId)
-  const [hydrationWritingId, setHydrationWritingId] = useState<string | null>(initialHydrationSession.hydrationWritingId)
+  // Fase de hidratación del documento activo (ADR documento activo, Fase 4 —
+  // ODE-570). Lo que se carga es siempre el documento activo; la fase solo dice
+  // si su contenido ya está en el editor. Solo `activateDocument` la pone en
+  // "loading"; la hidratación la devuelve a "ready" al terminar o fallar.
+  const [hydrationPhase, setHydrationPhase] = useState<HydrationPhase>(
+    initialHydrationSession.hydrationWritingId ? "loading" : "ready",
+  )
   const [title, setTitle] = useState(UNTITLED_WRITING_TITLE)
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
@@ -684,27 +696,23 @@ export function EditorShell({
    * Único punto de entrada de toda transición del documento activo (ADR
    * `odessay-adr-documento-activo.md`, Fase 1 — ODE-567).
    *
-   * Fase 1 es una MUDANZA: escribe exactamente los mismos portadores que cada
-   * handler escribía a mano, en el mismo orden (identidad → hidratación →
-   * ruta). La fuente todavía no cambia; eso es la Fase 2. `reason` no altera
-   * nada aún: documenta la transición y es la base de la Fase 4 (decidir la
-   * hidratación por motivo en vez de handler por handler).
+   * Escribe la identidad de la instancia, la fase de hidratación y la
+   * proyección de la ruta, en ese orden. El store se escribe en la misma
+   * transición, al lado de esta llamada (ADR, enmienda de ODE-568).
    *
-   * - `hydrationWritingId`: `undefined` = no se toca; `null` = sin hidratar.
+   * - Hidratación (Fase 4, ODE-570): la decide el motivo, no el handler. Ver
+   *   `activationHydrates`.
    * - `href`: proyección de la ruta con `replaceEditorHistory`; omitido = la
    *   transición no toca la URL (o la toca con otro mecanismo, declarado en
    *   su sitio).
    */
   const activateDocument = useCallback(
     (
-      target: { writingId: string | null; hydrationWritingId?: string | null; href?: string },
+      target: { writingId: string | null; href?: string },
       reason: ActivationReason,
     ) => {
-      void reason
       setActiveWritingId(target.writingId)
-      if (target.hydrationWritingId !== undefined) {
-        setHydrationWritingId(target.hydrationWritingId)
-      }
+      setHydrationPhase(activationHydrates(target.writingId, reason) ? "loading" : "ready")
       if (target.href !== undefined) {
         replaceEditorHistory(target.href)
       }
@@ -959,7 +967,7 @@ export function EditorShell({
             return
           }
 
-          activateDocument({ writingId: record.id, hydrationWritingId: record.id }, "materialize")
+          activateDocument({ writingId: record.id }, "materialize")
           ephemeralDraftWritingIdRef.current = null
           applyDocumentMetadata({
             createdAt: record.createdAt,
@@ -981,7 +989,6 @@ export function EditorShell({
           activateDocument(
             {
               writingId: nextWritingSession.activeWritingId,
-              hydrationWritingId: nextWritingSession.hydrationWritingId,
             },
             "identity",
           )
@@ -1963,7 +1970,7 @@ export function EditorShell({
   }, [currentWritingId, resetCorrectionQueueState])
 
   useEffect(() => {
-    if (!isDesktopRuntime() || hydrationWritingId !== null || !currentWritingId) {
+    if (!isDesktopRuntime() || hydrationPhase !== "ready" || !currentWritingId) {
       return
     }
 
@@ -1985,7 +1992,7 @@ export function EditorShell({
     applyCatalogTitle()
     window.addEventListener(CATALOG_TITLE_CHANGE_EVENT, applyCatalogTitle)
     return () => window.removeEventListener(CATALOG_TITLE_CHANGE_EVENT, applyCatalogTitle)
-  }, [applyDocumentMetadata, currentWritingId, hydrationWritingId])
+  }, [applyDocumentMetadata, currentWritingId, hydrationPhase])
 
   useEffect(() => {
     const nextExternalLoad = resolveExternalWritingLoad(currentWritingIdRef.current, routeWritingId)
@@ -1995,7 +2002,7 @@ export function EditorShell({
     }
 
     activateDocument(
-      { writingId: nextExternalLoad.activeWritingId, hydrationWritingId: nextExternalLoad.hydrationWritingId },
+      { writingId: nextExternalLoad.activeWritingId },
       "route",
     )
     navigatedToDraftRef.current = false
@@ -2054,7 +2061,7 @@ export function EditorShell({
           startedAt: performance.now(),
         }
         activateDocument(
-          { writingId: restoreTransition.writingId, hydrationWritingId: restoreTransition.writingId },
+          { writingId: restoreTransition.writingId },
           "restore",
         )
         console.info(`[editor:session-restore] restorable ${restoreTransition.writingId}`)
@@ -2121,7 +2128,7 @@ export function EditorShell({
           if (result.error || !result.data) {
             throw new Error(result.error?.message ?? "Failed to create desktop draft")
           }
-          activateDocument({ writingId: result.data.id, hydrationWritingId: null }, "create")
+          activateDocument({ writingId: result.data.id }, "identity")
         } else {
           await (await getDocumentService()).saveWriting({
             writing: {
@@ -2148,7 +2155,7 @@ export function EditorShell({
               metadataUpdatedAt: nowIso,
             },
           })
-          activateDocument({ writingId: nextId, hydrationWritingId: null }, "create")
+          activateDocument({ writingId: nextId }, "identity")
         }
       } catch {
         // If the save fails (e.g., scope change in progress), fall back to
@@ -2369,7 +2376,7 @@ export function EditorShell({
   useDocumentHydration({
     editor,
     currentWritingId,
-    hydrationWritingId,
+    hydrationPhase,
     routeWritingId,
     editorSession,
     modeRef,
@@ -2380,7 +2387,7 @@ export function EditorShell({
     ephemeralDraftWritingIdRef,
     draftContentSnapshotRef,
     suppressCorrectionAnalysisUntilRef,
-    setHydrationWritingId,
+    setHydrationPhase,
     setMode,
     setMarkdownValue,
     setBodyText,
@@ -4411,10 +4418,10 @@ export function EditorShell({
     // Guard: don't publish tab state with a stale title while hydration is in progress
     // or while a new workspace tab is being created. During tab switching, displayTitle
     // may still derive from the previous writing's bodyText until hydration settles.
-    // During + creation in desktop, hydrationWritingId is not set to the placeholder id,
+    // During + creation in desktop, the placeholder id never hydrates,
     // so this guard also blocks publishTabState from running with the stale displayTitle
     // and corrupting/replacing an existing tab.
-    if (hydrationWritingId !== null || isCreatingWorkspaceTabRef.current) {
+    if (hydrationPhase !== "ready" || isCreatingWorkspaceTabRef.current) {
       return
     }
 
@@ -4439,7 +4446,7 @@ export function EditorShell({
       saveState: syncStatus === "saved-local" ? "saved-local" : syncStatus,
       hasPendingSync: syncStatus !== "saved",
     })
-  }, [currentWritingId, displayTitle, hydrationWritingId, routeWritingId, sessionLoaded, syncStatus, writingSlug])
+  }, [currentWritingId, displayTitle, hydrationPhase, routeWritingId, sessionLoaded, syncStatus, writingSlug])
 
   useEffect(() => {
     if (!editor) {
@@ -4792,7 +4799,6 @@ export function EditorShell({
         activateDocument(
           {
             writingId: nextTab.writing_id,
-            hydrationWritingId: nextTab.writing_id,
             href: buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }),
           },
           "select",
@@ -4800,7 +4806,7 @@ export function EditorShell({
         return
       }
 
-      activateDocument({ writingId: null, hydrationWritingId: null, href: "/write" }, "select")
+      activateDocument({ writingId: null, href: "/write" }, "select")
     },
     [activateDocument, editorSession.tabs, prepareDocumentExit],
   )
@@ -4871,7 +4877,6 @@ export function EditorShell({
         activateDocument(
           {
             writingId: nextTab.writing_id,
-            hydrationWritingId: nextTab.writing_id,
             href: buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }),
           },
           "close",
@@ -4879,7 +4884,7 @@ export function EditorShell({
         return
       }
 
-      activateDocument({ writingId: null, hydrationWritingId: null, href: "/write" }, "close")
+      activateDocument({ writingId: null, href: "/write" }, "close")
     },
     [
       activateDocument,
@@ -5145,7 +5150,7 @@ export function EditorShell({
       // can otherwise append to (and persist over) the previous document.
       persistenceCoordinator.cancel()
       persistenceCoordinator.activateDocument(null)
-      activateDocument({ writingId: null, hydrationWritingId: null, href: "/write" }, "create")
+      activateDocument({ writingId: null, href: "/write" }, "create")
       ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
       navigatedToDraftRef.current = false
 
@@ -5186,7 +5191,7 @@ export function EditorShell({
     // Claim ownership of the blank-draft -> identified-local-writing transition
     // synchronously so persistEditorSnapshot never races against it.
     activateDocument(
-      { writingId: nextWritingId, hydrationWritingId: nextWritingId, href: `/write/${nextWritingId}` },
+      { writingId: nextWritingId, href: `/write/${nextWritingId}` },
       "create",
     )
 
@@ -5224,7 +5229,7 @@ export function EditorShell({
       } catch {
         // If save fails, revert the optimistic claim so persistEditorSnapshot
         // can fall back to identity-on-first-input.
-        activateDocument({ writingId: null, hydrationWritingId: null }, "revert")
+        activateDocument({ writingId: null }, "revert")
         return
       } finally {
         finishCreation()
@@ -5251,7 +5256,7 @@ export function EditorShell({
     try {
       await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
     } catch {
-      activateDocument({ writingId: null, hydrationWritingId: null }, "revert")
+      activateDocument({ writingId: null }, "revert")
       return
     } finally {
       finishCreation()
@@ -5299,7 +5304,7 @@ export function EditorShell({
       throw new Error(describeOpenOutcome(outcome))
     }
     const openedTitle = outcome.record.title ?? UNTITLED_WRITING_TITLE
-    activateDocument({ writingId: documentId, hydrationWritingId: documentId }, "open")
+    activateDocument({ writingId: documentId }, "open")
     openWritingTab({ writingId: documentId, slug: outcome.record.slug, title: openedTitle, saveState: "saved-local", hasPendingSync: false })
   }, [activateDocument, prepareDocumentExit])
 
@@ -5359,7 +5364,7 @@ export function EditorShell({
         }
 
         const openedId = result.documentId
-        activateDocument({ writingId: openedId, hydrationWritingId: openedId }, "open")
+        activateDocument({ writingId: openedId }, "open")
         const openedTitle = result.record.title ?? filenameToTitle(_path)
         applyDocumentMetadata({ title: openedTitle })
         openWritingTab({
@@ -5410,7 +5415,7 @@ export function EditorShell({
           if (result.error || !result.data) {
             throw new Error(result.error?.message ?? "Failed to import desktop file")
           }
-          activateDocument({ writingId: result.data.id, hydrationWritingId: result.data.id }, "open")
+          activateDocument({ writingId: result.data.id }, "open")
           applyDocumentMetadata({ title: result.data.title ?? nextTitle })
         } else {
           await (await getDocumentService()).saveWriting({ writing: record })
@@ -5420,7 +5425,7 @@ export function EditorShell({
       }
 
       const openedWritingId = currentWritingIdRef.current ?? nextWritingId
-      activateDocument({ writingId: openedWritingId, hydrationWritingId: openedWritingId }, "open")
+      activateDocument({ writingId: openedWritingId }, "open")
       openWritingTab({
         writingId: openedWritingId,
         title: isDesktopRuntime() ? titleRef.current || nextTitle : nextTitle,
@@ -5666,6 +5671,7 @@ export function EditorShell({
     <section
       id="editor"
       data-page="editor"
+      data-hydration-phase={hydrationPhase}
       data-focus-mode={isFocusMode ? "true" : "false"}
       className="h-screen overflow-hidden bg-bg"
     >

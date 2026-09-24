@@ -32,7 +32,10 @@ const CARRIERS = [
   ["shell", /\bsetActiveWritingId\(|\bsetCurrentWritingId\(|\bcurrentWritingIdRef\.current\s*=[^=]/],
   ["store", /\b(focusTab|openWritingTab|closeTab|openDraftTab|reconcileMaterializedDraftTab|reconcileUnavailableWritingTab|publishTabState)\(/],
   ["tabRef", /\bactiveEditorTabIdRef\.current\s*=[^=]/],
-  ["hydration", /\bsetHydrationWritingId\(/],
+  // Quién INICIA una hidratación (ODE-570): el dueño es `activateDocument`,
+  // que la deriva del motivo. Terminarla (`setHydrationPhase("ready")` desde
+  // la propia hidratación) no es decidir qué se carga, y no cuenta.
+  ["hydration", /\bsetHydrationWritingId\(|\bsetHydrationPhase\((?!"ready"\))/],
   ["project", /\breplaceEditorHistory\(/],
   ["navigate", /\bnavigateToWriting\(|\brouter(Ref\.current)?\.(replace|push)\(/],
 ]

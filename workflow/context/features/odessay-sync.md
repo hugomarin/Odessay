@@ -498,6 +498,8 @@ idle → switching → loading → ready
 - `loading`: se leyó `localDB`, se prepara el documento para TipTap.
 - `ready`: TipTap tiene el contenido, el foco está en el editor.
 
+> **En el editor (ODE-570):** la fase es `hydrationPhase` (`"loading"` | `"ready"`), expuesta en `data-hydration-phase` de la raíz del editor. `switching` es síncrono (`prepareDocumentExit` → `activateDocument` en el mismo handler) y nunca llega a un render; sin documento, la fase es `ready`, y un fallo al abrir también sale a `ready`. Solo `activateDocument` la pone en `loading`, derivándolo del motivo (`activationHydrates`); la hidratación la devuelve a `ready`.
+
 Sin estos estados, el sistema depende de guards implícitos (`if (editor && !isHydrating)`) que pueden evaluarse con valores stale si ocurre una interrupción.
 
 ### Caso de estudio: validación de transiciones en el editor
@@ -507,7 +509,7 @@ Aplicar el checklist de cinco puntos a la transición "cambio de pestaña":
 | Punto | Pregunta | Validación en el editor |
 |---|---|---|
 | Inicio | ¿Quién dispara? ¿Es único? | Solo `activateDocument` (ADR documento activo, D2), llamado desde cada handler; las navegaciones a documento solo vía `navigateToWriting`, nunca en paralelo a una proyección. |
-| Estado intermedio observable | ¿Hay un lapso visible entre inicio y fin? | Sí: lectura de localDB + setContent de TipTap. **Destino:** fase explícita de la transición (`idle → switching → loading → ready`), ADR documento activo D3, Fase 4. **Hoy no existe `hydrationPhase`:** el lapso lo marca `hydrationWritingId` (distinto de `null` mientras se hidrata), que además bloquea la publicación de la pestaña. |
+| Estado intermedio observable | ¿Hay un lapso visible entre inicio y fin? | Sí: lectura de localDB + setContent de TipTap. Lo marca `hydrationPhase === "loading"` (ADR documento activo, Fase 4 — ODE-570), que además bloquea la publicación de la pestaña. |
 | Estado final garantizado | ¿Cuál es el estado final? ¿Qué pasa si se interrumpe? | Final: la pestaña activa del store de sesión es `id` y `editor.getJSON()` es el contenido de `id`. Si se interrumpe, el dueño de generación (`lib/editor/hydration-generation.ts`) descarta el trabajo diferido del documento anterior. |
 | Interrupciones | ¿Qué pasa con tab switch, rehidratación, sync tardío, cambio de scope? | Cambiar de documento cancela la hidratación en curso: el dueño de generación (`lib/editor/hydration-generation.ts`) invalida el trabajo diferido del documento anterior. `localDB` scope changes se defieren con `setTimeout` para no cortar transacciones en vuelo. |
 | Tests | ¿Cubre estado intermedio o solo final? | Tests de `editor-hydration-session.test.ts` cubren `idle → loading → ready`. Tests E2E de `write-transient-race.e2e.ts` simulan interrupción. |
