@@ -484,6 +484,31 @@ const isPerfHarness = () => {
   return perfHarnessDetected
 }
 
+/**
+ * La única salida de la shell hacia el router de Next para ir a un documento
+ * (ODE-569). Una NAVEGACIÓN, no una proyección: la proyección de la URL del
+ * documento activo es `activateDocument({ href })`.
+ *
+ * Conserva las dos excepciones que tenían los sitios sueltos:
+ * - en el perf harness se proyecta en vez de navegar (ODE-389);
+ * - `skipOnDesktop`: en el bundle estático la ruta ya no cambia de página, así
+ *   que esos sitios no navegan en desktop.
+ */
+function navigateToWriting(
+  router: Pick<ReturnType<typeof useRouter>, "push" | "replace">,
+  href: string,
+  { mode, skipOnDesktop }: { mode: "push" | "replace"; skipOnDesktop: boolean },
+) {
+  if (isPerfHarness()) {
+    replaceEditorHistory(href)
+    return
+  }
+  if (skipOnDesktop && isDesktopRuntime()) {
+    return
+  }
+  router[mode](href)
+}
+
 export function EditorShell({
   writingId,
   forceNewWriting = false,
@@ -951,8 +976,8 @@ export function EditorShell({
         },
         onIdentityCreated: (writingId) => {
           const nextWritingSession = createNewWritingSessionState(writingId)
-          // La ruta de esta transición es una navegación real de Next
-          // (`router.replace`), no una proyección: se mantiene aquí abajo.
+          // La ruta de esta transición es una navegación real de Next, no una
+          // proyección: va por `navigateToWriting`, aquí abajo.
           activateDocument(
             {
               writingId: nextWritingSession.activeWritingId,
@@ -963,11 +988,7 @@ export function EditorShell({
 
           if (!routeWritingIdRef.current && !navigatedToDraftRef.current) {
             navigatedToDraftRef.current = true
-            if (isPerfHarness()) {
-              replaceEditorHistory(`/write/${writingId}`)
-            } else {
-              routerRef.current.replace(`/write/${writingId}`)
-            }
+            navigateToWriting(routerRef.current, `/write/${writingId}`, { mode: "replace", skipOnDesktop: false })
           }
         },
         onCommitted: applyCommittedTabState,
@@ -2037,10 +2058,10 @@ export function EditorShell({
           "restore",
         )
         console.info(`[editor:session-restore] restorable ${restoreTransition.writingId}`)
-      } else if (restoreTransition.target === "history") {
-        replaceEditorHistory(nextHref)
       } else {
-        router.replace(nextHref)
+        // "history" y "router" son las dos ramas de `navigateToWriting`: el
+        // resolver elige "history" exactamente cuando `isPerfHarness()`.
+        navigateToWriting(router, nextHref, { mode: "replace", skipOnDesktop: false })
       }
       return
     }
@@ -2158,11 +2179,10 @@ export function EditorShell({
       setBodyText("")
       setSyncStatus("saved-local")
       navigatedToDraftRef.current = true
-      if (isPerfHarness()) {
-        replaceEditorHistory(`/write/${currentWritingIdRef.current ?? nextId}`)
-      } else if (!isDesktopRuntime()) {
-        router.replace(`/write/${currentWritingIdRef.current ?? nextId}`)
-      }
+      navigateToWriting(router, `/write/${currentWritingIdRef.current ?? nextId}`, {
+        mode: "replace",
+        skipOnDesktop: true,
+      })
     }
 
     void ensureIdentity()
@@ -2407,14 +2427,7 @@ export function EditorShell({
         }
 
         applyDocumentMetadata({ slug: localWriting.slug })
-        if (isPerfHarness()) {
-          // ODE-389: a cold harness has no session, so a real navigation lands
-          // on /login and takes the editor down mid-test. Keep the URL in sync
-          // without leaving the harness route.
-          replaceEditorHistory(`/write/${localWriting.slug}`)
-        } else if (!isDesktopRuntime()) {
-          router.replace(`/write/${localWriting.slug}`)
-        }
+        navigateToWriting(router, `/write/${localWriting.slug}`, { mode: "replace", skipOnDesktop: true })
       })()
     })
   }, [applyDocumentMetadata, currentWritingId, routeWritingId, router])
@@ -5132,9 +5145,7 @@ export function EditorShell({
       // can otherwise append to (and persist over) the previous document.
       persistenceCoordinator.cancel()
       persistenceCoordinator.activateDocument(null)
-      // La ruta de esta transición se proyecta más abajo, después de abrir la
-      // pestaña borrador; se mantiene en su sitio para no reordenar (Fase 1).
-      activateDocument({ writingId: null, hydrationWritingId: null }, "create")
+      activateDocument({ writingId: null, hydrationWritingId: null, href: "/write" }, "create")
       ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
       navigatedToDraftRef.current = false
 
@@ -5147,7 +5158,6 @@ export function EditorShell({
 
       openDraftTab(ephemeralDraftWritingIdRef.current)
       activeEditorTabIdRef.current = getEditorSessionState().session.active_tab_id ?? EDITOR_DRAFT_TAB_ID
-      replaceEditorHistory("/write")
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
           const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
@@ -5417,12 +5427,7 @@ export function EditorShell({
         saveState: "saved-local",
         hasPendingSync: false,
       })
-      if (isPerfHarness()) {
-        // ODE-389: same cold-harness guard as the other editor navigations.
-        replaceEditorHistory(`/write/${nextWritingId}`)
-      } else if (!isDesktopRuntime()) {
-        router.push(`/write/${nextWritingId}`)
-      }
+      navigateToWriting(router, `/write/${nextWritingId}`, { mode: "push", skipOnDesktop: true })
     },
     [activateDocument, applyDocumentMetadata, prepareDocumentExit, router],
   )
