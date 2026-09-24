@@ -78,6 +78,24 @@ type MarkdownSelectionRestoreOptions = {
 }
 
 /**
+ * Motivo de una transición del documento activo (ADR documento activo). Los
+ * siete del ADR más tres que aparecieron al mudar los escritores (Fase 1):
+ * `route` (carga por ruta externa), `identity` (identidad creada en el primer
+ * guardado web) y `revert` (deshacer una creación fallida).
+ */
+export type ActivationReason =
+  | "select"
+  | "open"
+  | "create"
+  | "materialize"
+  | "close"
+  | "restore"
+  | "recover"
+  | "route"
+  | "identity"
+  | "revert"
+
+/**
  * Cambio parcial de los metadatos del documento. Lo aplica el dueño único de
  * la shell (`applyDocumentMetadata`), que escribe estado y ref a la vez
  * (ODE-563).
@@ -118,8 +136,14 @@ export type DocumentHydrationInput = {
   setBodyText: Setter<string>
   setSyncStatus: Setter<EditorSaveState>
   setIsBodyHydrating: Setter<boolean>
-  /** Único camino para cambiar la identidad del documento activo (ODE-564). */
-  setActiveWritingId: (writingId: string | null) => void
+  /**
+   * Único punto de entrada de las transiciones del documento activo (ADR
+   * documento activo, Fase 1 — ODE-567).
+   */
+  activateDocument: (
+    target: { writingId: string | null; hydrationWritingId?: string | null; href?: string },
+    reason: ActivationReason,
+  ) => void
   /** Único camino para cambiar metadatos del documento (ODE-563). */
   applyDocumentMetadata: (patch: DocumentMetadataPatch) => void
   /** Este efecto solo limpia el aviso; nunca lo fija. */
@@ -147,7 +171,6 @@ export type DocumentHydrationInput = {
   deleteLocalCorrectionBlocks: (ids: string[]) => Promise<unknown>
 
   // Helpers de módulo de la shell, inyectados para no mover su cascada.
-  replaceEditorHistory: (nextHref: string) => void
   untitledWritingTitle: string
   isExplicitWritingTitle: (title: string | null | undefined, bodyText: string, createdAt: string | null) => boolean
 }
@@ -173,7 +196,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     setBodyText,
     setSyncStatus,
     setIsBodyHydrating,
-    setActiveWritingId,
+    activateDocument,
     applyDocumentMetadata,
     setExternalFileNotice,
     setCanonicalPath,
@@ -186,7 +209,6 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     setPersistedCorrectionBlocks,
     readLocalCorrectionBlocks,
     deleteLocalCorrectionBlocks,
-    replaceEditorHistory,
     untitledWritingTitle: UNTITLED_WRITING_TITLE,
     isExplicitWritingTitle,
   } = input
@@ -311,14 +333,16 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
         setHydrationWritingId(null)
 
         if (recovery.status === "activate-writing") {
-          setActiveWritingId(recovery.writingId)
-          setHydrationWritingId(recovery.writingId)
-          replaceEditorHistory(
-            buildWritingRouteHref("/write", { id: recovery.writingId, slug: recovery.slug }),
+          activateDocument(
+            {
+              writingId: recovery.writingId,
+              hydrationWritingId: recovery.writingId,
+              href: buildWritingRouteHref("/write", { id: recovery.writingId, slug: recovery.slug }),
+            },
+            "recover",
           )
         } else if (recovery.status === "show-empty-editor") {
-          setActiveWritingId(null)
-          replaceEditorHistory("/write")
+          activateDocument({ writingId: null, href: "/write" }, "recover")
         }
       }
 

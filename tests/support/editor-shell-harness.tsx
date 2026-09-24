@@ -61,6 +61,7 @@ import { getSyncWorker } from "@/lib/sync/worker"
 import { resetEditorSessionStoreForTests } from "@/lib/stores/editor-session-store"
 
 import { type EditorHandle, type HarnessWorld, defaultNetwork, world } from "./editor-shell-doubles"
+import { readWorkspaceMarkdown } from "./editor-shell-desktop-doubles"
 
 export {
   aiServiceDouble,
@@ -529,3 +530,45 @@ export async function waitFor<T>(
   }
   throw new Error(`waitFor agotó ${timeoutMs}ms esperando: ${label}`)
 }
+
+/* ------------------------------------------------------------------ *
+ * Drivers de modo desktop
+ * ------------------------------------------------------------------ */
+
+/**
+ * Pulsa el botón real de "New Artifact": el del estado vacío (con texto) o el
+ * "+" de la barra de pestañas (`aria-label="New Artifact"`). Espera a que el
+ * editor asiente: el handler limpia el editor y difiere el foco un par de
+ * frames, y escribir antes hace que el shell pise el texto (ODE-557).
+ */
+export async function clickNewArtifact(container: HTMLElement) {
+  const button = await waitFor(
+    () =>
+      Array.from(container.querySelectorAll("button")).find(
+        (candidate) =>
+          (candidate.textContent ?? "").includes("New Artifact") ||
+          candidate.getAttribute("aria-label") === "New Artifact",
+      ),
+    { label: 'botón "New Artifact"' },
+  )
+  button.click()
+  await advance(400)
+}
+
+/** Espera a que algún `.md` del workspace contenga `needle` y lo devuelve. */
+export async function waitForMarkdownContaining(needle: string, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const files = await readWorkspaceMarkdown()
+    const match = files.find((file) => file.contents.includes(needle))
+    if (match) return match
+    await advance(250)
+  }
+  const files = await readWorkspaceMarkdown()
+  throw new Error(
+    `Ningún .md contiene ${JSON.stringify(needle)}. Archivos: ${JSON.stringify(
+      files.map((file) => ({ path: file.path, bytes: file.contents.length })),
+    )}`,
+  )
+}
+

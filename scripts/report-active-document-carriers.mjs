@@ -19,6 +19,10 @@ import { readFileSync } from "node:fs"
 const FILES = ["components/editor/editor-shell.tsx", "hooks/useDocumentHydration.ts"]
 
 const CARRIERS = [
+  // Entrada única (ADR, D2): la transición pasa por la función dueña.
+  // Sin punto delante: `persistenceCoordinator.activateDocument` es otro
+  // portador (el #6 del ADR), no la entrada única.
+  ["activate", /(?<![.\w])activateDocument\(/],
   ["shell", /\bsetActiveWritingId\(|\bsetCurrentWritingId\(|\bcurrentWritingIdRef\.current\s*=[^=]/],
   ["store", /\b(focusTab|openWritingTab|closeTab|openDraftTab|reconcileMaterializedDraftTab|reconcileUnavailableWritingTab|publishTabState)\(/],
   ["tabRef", /\bactiveEditorTabIdRef\.current\s*=[^=]/],
@@ -58,17 +62,21 @@ for (const file of FILES) {
   })
 }
 
-// El dueño de ODE-564 no es una transición: es donde terminan todas.
-const OWNERS = new Set(["setActiveWritingId"])
-const identityRows = [...rows.entries()].filter(([name, carriers]) => carriers.has("shell") && !OWNERS.has(name))
+// Los dueños no son transiciones: son donde terminan todas.
+const OWNERS = new Set(["setActiveWritingId", "activateDocument"])
+const identityRows = [...rows.entries()].filter(
+  ([name, carriers]) => (carriers.has("shell") || carriers.has("activate")) && !OWNERS.has(name),
+)
 identityRows.sort((a, b) => b[1].size - a[1].size || a[0].localeCompare(b[0]))
 
 const names = CARRIERS.map(([carrier]) => carrier)
+// "total" cuenta solo portadores escritos a mano (sin la columna activate).
 const width = Math.max(...identityRows.map(([name]) => name.length), 10)
 console.log(`${"transición".padEnd(width)}  ${names.map((n) => n.padEnd(11)).join("")}total`)
 for (const [name, carriers] of identityRows) {
   const cells = names.map((n) => (carriers.has(n) ? "✓" : "·").padEnd(11)).join("")
-  console.log(`${name.padEnd(width)}  ${cells}${carriers.size}`)
+  const direct = [...carriers].filter((carrier) => carrier !== "activate").length
+  console.log(`${name.padEnd(width)}  ${cells}${direct}`)
 }
 
 const shell = readFileSync(FILES[0], "utf8").split("\n")
@@ -79,5 +87,8 @@ const mirrors = shell.filter(
     /^\s+\}, \[/.test(shell[i + 2] ?? ""),
 ).length
 console.log(`\ntransiciones que cambian la identidad: ${identityRows.length}`)
-console.log(`portadores tocados por transición (media): ${(identityRows.reduce((s, [, c]) => s + c.size, 0) / identityRows.length).toFixed(1)}`)
+const directCount = (carriers) => [...carriers].filter((carrier) => carrier !== "activate").length
+const viaActivate = identityRows.filter(([, carriers]) => carriers.has("activate")).length
+console.log(`pasan por activateDocument: ${viaActivate}/${identityRows.length}`)
+console.log(`portadores escritos a mano por transición (media): ${(identityRows.reduce((s, [, c]) => s + directCount(c), 0) / identityRows.length).toFixed(1)}`)
 console.log(`efectos espejo en editor-shell.tsx: ${mirrors}`)
