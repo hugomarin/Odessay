@@ -10,6 +10,7 @@
  *
  * El montaje y los drivers viven en `editor-shell-harness.tsx`.
  */
+import { useLayoutEffect } from "react"
 import { vi } from "vitest"
 
 import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
@@ -52,6 +53,12 @@ export type HarnessWorld = {
   learnedWords: LearnedWordEntry[]
   /** Veces que el shell pidió la lista de palabras aprendidas. */
   learnedWordsCalls: number
+  /**
+   * Se llama en cada commit del shell, en fase de layout: después del commit
+   * y ANTES de sus efectos pasivos. Es la ventana donde un efecto pasivo
+   * rezagado puede deshacer una acción imperativa (ODE-561, ODE-564).
+   */
+  onShellCommit: (() => void) | null
   /** El editor real de TipTap, capturado (no sustituido). */
   editor: EditorHandle | null
   /**
@@ -124,6 +131,7 @@ export const world: HarnessWorld = {
   aiReviewCalls: [],
   learnedWords: [],
   learnedWordsCalls: 0,
+  onShellCommit: null,
 }
 
 /* ------------------------------------------------------------------ *
@@ -141,6 +149,12 @@ export function createTiptapCaptureModule(actual: Record<string, unknown>) {
     useEditor: (options: unknown, deps?: unknown) => {
       const editor = realUseEditor(options, deps)
       if (editor) world.editor = editor
+      // El shell llama a useEditor en cada render, así que este layout effect
+      // corre en cada commit suyo: es la sonda de `world.onShellCommit`.
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      useLayoutEffect(() => {
+        world.onShellCommit?.()
+      })
       return editor
     },
   }

@@ -105,7 +105,6 @@ export type DocumentHydrationInput = {
   // aquí: se escriben por `applyDocumentMetadata` (ODE-563).
   modeRef: RefObject<EditorMode>
   isApplyingContentRef: RefObject<boolean>
-  currentWritingIdRef: RefObject<string | null>
   hydrationGenerationOwnerRef: RefObject<ReturnType<typeof createHydrationGenerationOwner> | null>
   currentCanonicalPathRef: RefObject<string | null>
   desktopSessionRestoreTimingRef: RefObject<{ writingId: string; startedAt: number } | null>
@@ -113,13 +112,14 @@ export type DocumentHydrationInput = {
   draftContentSnapshotRef: RefObject<{ draftId: string; bodyJson: Record<string, unknown> } | null>
   suppressCorrectionAnalysisUntilRef: RefObject<number>
 
-  setCurrentWritingId: Setter<string | null>
   setHydrationWritingId: Setter<string | null>
   setMode: Setter<EditorMode>
   setMarkdownValue: Setter<string>
   setBodyText: Setter<string>
   setSyncStatus: Setter<EditorSaveState>
   setIsBodyHydrating: Setter<boolean>
+  /** Único camino para cambiar la identidad del documento activo (ODE-564). */
+  setActiveWritingId: (writingId: string | null) => void
   /** Único camino para cambiar metadatos del documento (ODE-563). */
   applyDocumentMetadata: (patch: DocumentMetadataPatch) => void
   /** Este efecto solo limpia el aviso; nunca lo fija. */
@@ -161,20 +161,19 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     editorSession,
     modeRef,
     isApplyingContentRef,
-    currentWritingIdRef,
     hydrationGenerationOwnerRef,
     currentCanonicalPathRef,
     desktopSessionRestoreTimingRef,
     ephemeralDraftWritingIdRef,
     draftContentSnapshotRef,
     suppressCorrectionAnalysisUntilRef,
-    setCurrentWritingId,
     setHydrationWritingId,
     setMode,
     setMarkdownValue,
     setBodyText,
     setSyncStatus,
     setIsBodyHydrating,
+    setActiveWritingId,
     applyDocumentMetadata,
     setExternalFileNotice,
     setCanonicalPath,
@@ -312,15 +311,13 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
         setHydrationWritingId(null)
 
         if (recovery.status === "activate-writing") {
-          currentWritingIdRef.current = recovery.writingId
-          setCurrentWritingId(recovery.writingId)
+          setActiveWritingId(recovery.writingId)
           setHydrationWritingId(recovery.writingId)
           replaceEditorHistory(
             buildWritingRouteHref("/write", { id: recovery.writingId, slug: recovery.slug }),
           )
         } else if (recovery.status === "show-empty-editor") {
-          currentWritingIdRef.current = null
-          setCurrentWritingId(null)
+          setActiveWritingId(null)
           replaceEditorHistory("/write")
         }
       }

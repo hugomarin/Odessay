@@ -57,6 +57,7 @@ import { createRoot, type Root } from "react-dom/client"
 
 import { EditorShell } from "@/components/editor/editor-shell"
 import { resetLearnedWordsCacheForTest } from "@/lib/corrections/learned-words-loader"
+import { getSyncWorker } from "@/lib/sync/worker"
 import { resetEditorSessionStoreForTests } from "@/lib/stores/editor-session-store"
 
 import { type EditorHandle, type HarnessWorld, defaultNetwork, world } from "./editor-shell-doubles"
@@ -179,6 +180,7 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
   world.aiReviewCalls = []
   world.learnedWords = []
   world.learnedWordsCalls = 0
+  world.onShellCommit = null
 
   Object.assign(world, overrides)
 
@@ -262,7 +264,27 @@ export async function mountEditorShell(
         root.unmount()
       })
       container.remove()
+      await quiesceSyncWorker()
     },
+  }
+}
+
+/**
+ * Detiene el SyncWorker real y espera a que termine cualquier flush en vuelo.
+ *
+ * Es un singleton de la app, así que sobrevive al desmontaje del shell. Las
+ * pruebas que guardan de verdad encolan mutaciones; si un flush sigue en curso
+ * cuando Vitest desmonta happy-dom, marca la mutación contra `localDB` sin
+ * `window` y revienta como rechazo no manejado en OTRA prueba. Pasó en CI
+ * (ODE-564): `stop()` solo cancela el siguiente flush, no el que ya corre.
+ */
+async function quiesceSyncWorker(timeoutMs = 5_000) {
+  const worker = getSyncWorker()
+  worker.stop()
+  const internals = worker as unknown as { isRunning: boolean }
+  const deadline = Date.now() + timeoutMs
+  while (internals.isRunning && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 20))
   }
 }
 
@@ -322,6 +344,18 @@ export async function setEditorContent(content: string) {
  * selector que no existía.
  */
 export async function pointerClick(node: HTMLElement) {
+  await act(async () => {
+    dispatchPointerClick(node)
+  })
+  await flush(2)
+}
+
+/**
+ * El mismo gesto que `pointerClick`, pero síncrono y fuera de `act`: para
+ * dispararlo DENTRO de una ventana de commit (desde `world.onShellCommit`),
+ * donde esperar rompería justo el orden que se quiere reproducir.
+ */
+export function dispatchPointerClick(node: HTMLElement) {
   const element = node as HTMLElement & {
     setPointerCapture?: (id: number) => void
     releasePointerCapture?: (id: number) => void
@@ -347,11 +381,8 @@ export async function pointerClick(node: HTMLElement) {
       : new MouseEvent(type, init as MouseEventInit)
   }
 
-  await act(async () => {
-    node.dispatchEvent(makeEvent("pointerdown"))
-    node.dispatchEvent(makeEvent("pointerup"))
-  })
-  await flush(2)
+  node.dispatchEvent(makeEvent("pointerdown"))
+  node.dispatchEvent(makeEvent("pointerup"))
 }
 
 /**
