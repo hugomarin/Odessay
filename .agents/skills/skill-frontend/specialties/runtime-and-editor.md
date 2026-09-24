@@ -315,8 +315,8 @@ setActiveWritingId(id)                // owner 2: estado local
 // El orden de resolución depende del event loop y del framework.
 
 // ✓ CORRECTO — un solo owner de la transición; la URL es espejo pasivo
-activateDocument(id, "select")        // owner único (ADR documento activo, D2)
-// La URL se reescribe como proyección del store de sesión, sin decidir nada.
+activateDocument({ writingId: id, href }, "select")  // owner único (ADR documento activo, D2)
+// La URL se reescribe como proyección (`href`), sin decidir nada.
 ```
 
 **Transiciones críticas en Odessay:**
@@ -332,7 +332,7 @@ No mezclar dimensiones de estado en un mismo store ni replicar la misma dimensi�
 
 | Dimensión | Fuente de verdad | Qué NO hacer |
 |---|---|---|
-| Identidad del writing activo | Pestaña activa del store de sesión (`lib/stores/editor-session-store.ts`), escrita solo por `activateDocument` — `workflow/context/core/odessay-adr-documento-activo.md` | Copiarla a refs o estado de la shell con efectos; decidirla desde la URL |
+| Identidad del writing activo | Entre entradas y fuera de la shell: pestaña activa del store de sesión (`lib/stores/editor-session-store.ts`). Dentro de una instancia de `EditorShell`: su identidad de instancia. Ambas escritas solo desde `activateDocument` — `workflow/context/core/odessay-adr-documento-activo.md` (D1 enmendado) | Copiarla de un portador a otro con efectos; decidirla desde la URL; mover a un store compartido algo que lean las limpiezas de la shell sin probar el remontaje |
 | Contenido del documento | TipTap internal state | Sincronizar a store global por keystroke |
 | Lista de pestañas abiertas | Store de sesión del editor (`editor-session-store`) | Derivar del historial de navegación; mantener una copia en la shell |
 | Estado de sync remoto | Zustand sync slice | Leer directamente desde componentes de UI sin selector |
@@ -342,12 +342,13 @@ No mezclar dimensiones de estado en un mismo store ni replicar la misma dimensi�
 const [writingId, setWritingId] = useState(params.id)   // fuente A
 const currentId = useEditorStore(s => s.writingId)       // fuente B
 
-// ✓ CORRECTO — una sola fuente, los demás consumen de ella
-// Render: suscripción al store de sesión (useSyncExternalStore).
-// Callbacks de larga vida: getEditorSessionState() lee el valor vigente al
-// instante, sin un ref espejo que pueda quedar atrás.
-// Estado actual: la shell aún usa currentWritingIdRef/setActiveWritingId
-// hasta la Fase 2 del ADR documento activo; no replicar ese patrón fuera de ella.
+// ✓ CORRECTO — una sola fuente por alcance, los demás consumen de ella
+// Fuera de la shell: suscripción al store de sesión (useSyncExternalStore) o
+// getEditorSessionState() en callbacks de larga vida.
+// Dentro de EditorShell: la identidad de instancia (currentWritingIdRef), que
+// solo escribe activateDocument. Existe porque la shell se remonta en cada
+// entrada por URL (ADR documento activo, enmienda de ODE-568); no replicar
+// ese patrón fuera de ella.
 ```
 
 ### Estados intermedios explícitos, no guards inferidos
@@ -408,10 +409,10 @@ useWritingStore.getState().setId(id)  // Zustand
 window.history.replaceState(...)      // history manual
 
 // ✓ CORRECTO — capa coordinadora única (ADR documento activo, D2)
-// activateDocument(id, reason) escribe la pestaña activa del store de sesión;
-// shell, URL e hidratación derivan de ella. Ningún otro componente decide
-// qué documento está activo. (Hoy, hasta la Fase 1, esa secuencia vive en los
-// handlers de la shell: no añadir un camino más.)
+// activateDocument(target, reason) escribe la identidad de la shell, la
+// hidratación y la proyección de la URL; el store se escribe en la misma
+// transición y las navegaciones a documento van por navigateToWriting.
+// Ningún otro componente decide qué documento está activo.
 ```
 
 ### Validar transiciones: el checklist de cinco puntos

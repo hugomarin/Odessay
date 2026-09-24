@@ -1,9 +1,9 @@
 # ADR — Fuente única del documento activo en el editor
 
-- **Estado:** Aceptado (2026-09-24)
+- **Estado:** Aceptado (2026-09-24), **enmendado** el mismo día en ODE-568 (ver §Enmienda: fuente por alcance)
 - **Fecha:** 2026-09-24
-- **Decide:** Hugo. Aprobó la propuesta de forma explícita en ODE-566.
-- **Estado del corpus vs. código:** este ADR va **por delante del código**. El runtime vigente es el que describe §Contexto hasta completar las fases ODE-567…ODE-571; `odessay-sync.md` y `skill-frontend` distinguen, en cada punto, el destino del estado actual.
+- **Decide:** Hugo. Aprobó la propuesta de forma explícita en ODE-566 y eligió la opción A de la enmienda en ODE-568.
+- **Estado del corpus vs. código:** Fases 1 (ODE-567) y 3 (ODE-569) implementadas; Fase 2 (ODE-568) cancelada por la enmienda; Fases 4 (ODE-570) y 5 (ODE-571) pendientes. `odessay-sync.md` y `skill-frontend` distinguen, en cada punto, el destino del estado actual.
 - **Ámbito:** **qué documento está activo en el editor** en cada momento y quién puede cambiarlo. No toca la identidad *documental* (UUID, `.md` canónico, catálogo), que gobierna `odessay-adr-identidad.md` y prevalece en su ámbito.
 - **Reconcilia:** `workflow/context/features/odessay-sync.md` §"Fuente de verdad única por dimensión" y `.agents/skills/skill-frontend/specialties/runtime-and-editor.md` §"Una fuente de verdad por dimensión". Ambos contradecían al código (ver §Contradicción) y quedaron alineados con este ADR en ODE-566.
 
@@ -115,7 +115,33 @@ Precedencia aplicada: este ADR prevalece sobre ambas secciones, que se reconcili
 
 **D4 — Invariantes.** Los de ODE-562/563/564 siguen vigentes durante la migración. Además: ninguna transición escribe más de un portador de identidad; ningún efecto copia identidad de un portador a otro; una pestaña cerrada solo vuelve por `activateDocument` (se conserva el guard de ODE-561 en el store).
 
+## Enmienda: fuente por alcance (ODE-568)
+
+**Qué se descubrió.** Al preparar la Fase 2 se midió, con una sonda en cada commit, la identidad de la shell contra la pestaña activa del store: 193 commits con desajuste en 60 pruebas, estructurales (una entrada por URL conoce el documento antes de que el store abra su pestaña) y transitorios (entre la escritura del store y la de la identidad). El bloqueo de fondo es el Hecho 1 visto desde React: en un remontaje por `key`, React renderiza la shell **nueva** antes de ejecutar las limpiezas de la **vieja**. Si la identidad viviera solo en el store compartido, la shell nueva la escribiría al montar y las limpiezas de la vieja (por ejemplo `persistCurrentWorkspaceViewState` al desmontar) leerían la identidad nueva: guardarían la vista del documento anterior en la pestaña del nuevo. Hoy no pasa porque cada instancia tiene su propio ref.
+
+**Opciones que se pusieron sobre la mesa.**
+- **A — Fuente por alcance.** El store manda entre entradas y para todo lo que está fuera de la shell; dentro de una instancia montada, la shell conserva su identidad de instancia, escrita solo por `activateDocument`. Sin tocar el ruteo.
+- **B — Una sola instancia de shell.** Las entradas por URL dejan de remontar la shell (quitar `key`, reescribir el ruteo web de `/write/[id]` y `DesktopWriteEntry`) para que la Fase 2 sea segura.
+- **C — Limpiezas con la identidad capturada.** Mantener el remontaje y hacer que cada limpieza use la identidad capturada al montar. Frágil: basta con que una limpieza nueva lea el store para reabrir el bug.
+
+**Decisión (Hugo, 2026-09-24): A.** Las causas de los tres bugs de la familia (ODE-555, ODE-561 y la ventana de ODE-564) eran varios escritores y efectos que copiaban identidad, y eso ya lo resuelve el escritor único de la Fase 1. B es una reescritura grande del ruteo web cuyo único beneficio restante sería borrar un ref.
+
+**Qué cambia de D1–D4:**
+- **D1 queda así:** la pestaña activa del store de sesión es la fuente del documento activo **entre entradas y fuera de la shell** (persistencia, restauración de sesión, Studio, Recientes, catálogo). **Dentro de una instancia montada** de `EditorShell`, la identidad de instancia (`currentWritingId` / `currentWritingIdRef`, dueño `setActiveWritingId`) es la que leen la hidratación, el guardado, las correcciones y las limpiezas de esa instancia. No es una fuente independiente: **solo `activateDocument` la escribe**, en la misma transición que escribe el store.
+- **D2 sin cambios**, con el ajuste de la Fase 1: `activateDocument` es el único escritor de la identidad de la shell, de la hidratación y de la proyección de la URL. La escritura del store (`focusTab`, `openWritingTab`, `closeTab`, `openDraftTab`…) sigue en la misma transición, junto a esa llamada; juntarla dentro de `activateDocument` es posible pero no necesario.
+- **D3 queda así:**
+  - `currentWritingIdRef` y `setActiveWritingId` **se quedan** como identidad de instancia. `activeEditorTabIdRef` también, hasta que se decida aparte.
+  - La **ruta**: toda proyección pasa por `activateDocument({ href })` y toda navegación a un documento por `navigateToWriting` (Fase 3, ODE-569). Las entradas por URL **siguen remontando** la shell: una instancia por entrada es justo lo que hace segura la opción A.
+  - El coordinador de persistencia **sigue** activándose desde la identidad de la instancia. Suscribirlo al store tendría el mismo problema de remontaje.
+  - `hydrationWritingId` → fase explícita de la transición: sigue en pie (Fase 4).
+  - `publishTabState` solo para metadatos: sigue en pie como destino. El guard de ODE-561 ya impide que resucite una pestaña cerrada.
+- **D4 queda así:** toda transición pasa por `activateDocument`. Ningún efecto copia identidad de un portador a otro, salvo el espejo store → `activeEditorTabIdRef`, declarado. Se conservan los invariantes de ODE-561/562/563/564.
+
+**Regla para lo que viene.** Antes de mover a un store compartido cualquier dato que lean las limpiezas de la shell, hay que comprobar el remontaje: una prueba que entre por URL de A a B y verifique que las limpiezas de A siguen viendo A.
+
 ## Consecuencias
+
+> Las filas de `useManualCorrections` y del coordinador de persistencia describían el destino de la Fase 2 original; con la enmienda no cambian su contrato.
 
 **Por consumidor:**
 
@@ -141,10 +167,10 @@ Cada fase es un issue propio, con la red de pruebas como precondición y la regl
 | Fase | Qué hace | Tiempo | Red previa | Medida esperada |
 |---|---|---|---|---|
 | 1 (ODE-567) | Extraer el protocolo de salida y la secuencia de cada transición a una sola función (`activateDocument`) que por dentro sigue escribiendo los mismos portadores de hoy. Uniformiza el protocolo; la diferencia de `handleOpenWorkspaceDocument` se caracteriza antes de decidir si era bug | mover | barridos de ventanas (ODE-561, ODE-564), 4a, 4b, metadatos; una prueba nueva del protocolo de salida por transición | los 12 escritores pasan por una función |
-| 2 (ODE-568) | La shell lee el documento activo del store; eliminar `currentWritingIdRef`, `setActiveWritingId` y `activeEditorTabIdRef` | ownership | la de la fase 1 más el barrido de identidad de ODE-564 contra la lectura nueva | columnas `shell` y `tabRef` vacías |
-| 3 (ODE-569) | La ruta como proyección: un efecto store → URL; las entradas llaman a `activateDocument(…, "open")`; la restauración sale del store al iniciarse | ownership | pruebas de restauración y entrada por URL (a crear), e2e de apertura | columna `route` solo en la proyección |
-| 4 (ODE-570) | La hidratación como fase explícita de la transición; `hydrationWritingId` desaparece; el coordinador de persistencia se suscribe al store | ownership | ODE-464, 4a, selección, admisión | columna `hydration` vacía |
-| 5 (ODE-571) | Borrador: `ephemeralDraftWritingIdRef` pasa a ser el `draft_writing_id` del store | ownership | pruebas ODE-405 / ODE-478 | sin identidad de borrador en la shell |
+| 2 (ODE-568) | ~~La shell lee el documento activo del store; eliminar `currentWritingIdRef`, `setActiveWritingId` y `activeEditorTabIdRef`~~ **Cancelada** por la enmienda (opción A): la identidad de instancia se queda | — | — | — |
+| 3 (ODE-569) | **Hecha, en alcance fino:** las proyecciones de URL van por `activateDocument({ href })` y las navegaciones a documento por `navigateToWriting`. Las entradas siguen remontando la shell (enmienda) | mover | `tests/editor-shell-route-projection(-desktop).test.tsx` | 0 proyecciones a mano; navegaciones solo vía `navigateToWriting` |
+| 4 (ODE-570) | La hidratación como fase explícita de la transición; `hydrationWritingId` desaparece. El coordinador de persistencia **no** se suscribe al store (enmienda) | ownership | ODE-464, 4a, selección, admisión | columna `hydration` vacía |
+| 5 (ODE-571) | Borrador: `ephemeralDraftWritingIdRef` pasa a ser el `draft_writing_id` del store. **Antes de empezar**, pasa la regla de la enmienda: si las limpiezas leen la identidad del borrador, queda como identidad de instancia | ownership | pruebas ODE-405 / ODE-478, más la prueba de remontaje de la enmienda | sin identidad de borrador duplicada |
 
 ## Qué no decide este ADR
 
@@ -154,7 +180,7 @@ Cada fase es un issue propio, con la red de pruebas como precondición y la regl
 
 ## Verificación
 
-`node scripts/report-active-document-carriers.mjs` recalcula la tabla de transiciones × portadores. Al terminar la Fase 5, cada transición debería mostrar un solo portador: el store, a través de `activateDocument`.
+`node scripts/report-active-document-carriers.mjs` recalcula la tabla de transiciones × portadores. Con la enmienda, el objetivo al terminar ya no es un solo portador: es que cada transición pase por `activateDocument` (hoy 12/12), con las columnas `shell`, `project` e `hydration` vacías y el store escrito junto a esa llamada. `navigate` no cuenta como portador: es ir a otra página.
 
 ## Referencias
 
@@ -164,3 +190,4 @@ Cada fase es un issue propio, con la red de pruebas como precondición y la regl
 - `workflow/testing/integration-harness-catalog.md` — ventana commit → efectos pasivos y barridos
 - `components/editor/AGENTS.md` — rol de la shell
 - ODE-555, ODE-561, ODE-562, ODE-563, ODE-564 — la serie que llevó hasta aquí
+- ODE-568 — la medición del remontaje y la elección de la opción A (comentario del issue)
