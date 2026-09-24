@@ -5136,7 +5136,7 @@ export function EditorShell({
   const handleRenameWritingConfirm = useCallback(
     async (nextTitle: string): Promise<boolean> => {
       if (isDesktopRuntime()) {
-        const writingId = currentWritingIdRef.current
+        let writingId = currentWritingIdRef.current
         if (!writingId) {
           // The draft has no file yet. Naming it is just as deliberate a
           // signal of real intent as the first keystroke, so it must
@@ -5147,7 +5147,18 @@ export function EditorShell({
             title: nextTitle,
             hasExplicitTitle: nextTitle !== DESKTOP_UNTITLED_WRITING_TITLE,
           })
-          return persistEditorSnapshot(editor, { title: nextTitle }, { awaitDurability: true })
+          const durable = await persistEditorSnapshot(editor, { title: nextTitle }, { awaitDurability: true })
+          if (!durable) return false
+
+          // ODE-585: if a materialization was already in flight, the file was
+          // born under the draft's old title and the queued save above cannot
+          // rename it — on desktop the title comes from the `.md` name. Name
+          // the materialized document through the regular rename below; when
+          // the draft materialized under this very name, that is a no-op. The
+          // shell adopted it by now (`onMaterialized` runs before the write
+          // settles); without an identity the name was not applied, so say so.
+          writingId = currentWritingIdRef.current
+          if (!writingId) return false
         }
 
         const result = await (await getDocumentService()).renameWriting({
