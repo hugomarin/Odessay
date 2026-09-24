@@ -61,6 +61,17 @@ La red que lo protege: 4a, 4b, los humos desktop y corrections, ODE-464 y los ba
 
 Lo que importa no es el recuento de líneas: los refs de metadatos ya no pueden llevar el valor del documento anterior entre una escritura y el commit siguiente. Efecto colateral: el menú Abrir archivo leía `titleRef` justo después de `setTitle` y le ponía a la pestaña nueva el título del documento anterior; ahora lee el nuevo.
 
+**Actualización (2026-09-24, ODE-564 — identidad del documento activo):** `currentWritingId` y `currentWritingIdRef` tienen ahora un solo dueño, `setActiveWritingId`. Antes, 21 sitios escribían el ref a mano y un efecto espejo lo reescribía tras cada commit. Contra `main`:
+
+```text
+6,251 líneas
+   50 useEffect     (-1)
+    7 efectos espejo restantes   (8 → 7)
+   19 → 1   escrituras de currentWritingIdRef en la shell (la del dueño)
+```
+
+La ventana en la que un espejo pendiente devolvía el ref al documento anterior **no resultó observable** por el camino de usuario: el barrido de ventanas de commit pasaba contra `main`, y ningún efecto posterior al espejo lee la identidad de forma síncrona. El cambio se justifica por quitar la dualidad. La calibración mostró además que el espejo era, en la práctica, la red de seguridad de cualquier escritor que olvidara el ref; con el dueño único esa red deja de hacer falta, porque no queda ninguna escritura fuera de él.
+
 El tamaño no es el hallazgo — `components/editor/AGENTS.md` ya establece que el tamaño por sí solo no es un finding de review. Los dos números que importan son los del medio.
 
 ## 2. Hallazgo 1 — cada dato tiene dos dueños

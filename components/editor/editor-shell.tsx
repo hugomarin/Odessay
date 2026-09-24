@@ -640,6 +640,21 @@ export function EditorShell({
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
   const activeEditorTabIdRef = useRef<string | null>(editorSession.active_tab_id)
+  /**
+   * Único dueño de la identidad del documento activo (ODE-564).
+   *
+   * El ref es lo que leen los callbacks de larga vida (guardado, imágenes,
+   * correcciones); el estado es lo que re-renderiza y dispara efectos. Antes,
+   * además de las escrituras imperativas, un efecto espejo copiaba el estado
+   * al ref tras cada commit, y un espejo pendiente podía devolver el ref al
+   * documento anterior después de que un handler ya había escrito el nuevo.
+   * Aquí se escriben los dos en el mismo paso, y es la única forma de
+   * cambiarlos.
+   */
+  const setActiveWritingId = useCallback((writingId: string | null) => {
+    currentWritingIdRef.current = writingId
+    setCurrentWritingId(writingId)
+  }, [])
   const hydrationGenerationOwnerRef = useRef<ReturnType<typeof createHydrationGenerationOwner> | null>(null)
   if (hydrationGenerationOwnerRef.current === null) {
     hydrationGenerationOwnerRef.current = createHydrationGenerationOwner()
@@ -888,9 +903,8 @@ export function EditorShell({
             return
           }
 
-          currentWritingIdRef.current = record.id
+          setActiveWritingId(record.id)
           ephemeralDraftWritingIdRef.current = null
-          setCurrentWritingId(record.id)
           setHydrationWritingId(record.id)
           applyDocumentMetadata({
             createdAt: record.createdAt,
@@ -907,8 +921,7 @@ export function EditorShell({
         },
         onIdentityCreated: (writingId) => {
           const nextWritingSession = createNewWritingSessionState(writingId)
-          currentWritingIdRef.current = nextWritingSession.activeWritingId
-          setCurrentWritingId(nextWritingSession.activeWritingId)
+          setActiveWritingId(nextWritingSession.activeWritingId)
           setHydrationWritingId(nextWritingSession.hydrationWritingId)
 
           if (!routeWritingIdRef.current && !navigatedToDraftRef.current) {
@@ -952,7 +965,7 @@ export function EditorShell({
         },
       )
     },
-    [applyDocumentMetadata, createDesktopDraftFn],
+    [setActiveWritingId, applyDocumentMetadata, createDesktopDraftFn],
   )
 
   useEffect(() => {
@@ -1896,15 +1909,10 @@ export function EditorShell({
       return
     }
 
-    currentWritingIdRef.current = nextExternalLoad.activeWritingId
-    setCurrentWritingId(nextExternalLoad.activeWritingId)
+    setActiveWritingId(nextExternalLoad.activeWritingId)
     setHydrationWritingId(nextExternalLoad.hydrationWritingId)
     navigatedToDraftRef.current = false
-  }, [routeWritingId])
-
-  useEffect(() => {
-    currentWritingIdRef.current = currentWritingId
-  }, [currentWritingId])
+  }, [setActiveWritingId, routeWritingId])
 
   useEffect(() => {
     activeEditorTabIdRef.current = editorSession.active_tab_id
@@ -1954,12 +1962,11 @@ export function EditorShell({
       if (restoreTransition.target === "desktop-hydration") {
         // Explicit desktop handoff: history is only a projection in the static
         // bundle, so identity must transition before hydration/fallback effects.
-        currentWritingIdRef.current = restoreTransition.writingId
+        setActiveWritingId(restoreTransition.writingId)
         desktopSessionRestoreTimingRef.current = {
           writingId: restoreTransition.writingId,
           startedAt: performance.now(),
         }
-        setCurrentWritingId(restoreTransition.writingId)
         setHydrationWritingId(restoreTransition.writingId)
         console.info(`[editor:session-restore] restorable ${restoreTransition.writingId}`)
       } else if (restoreTransition.target === "history") {
@@ -1980,7 +1987,7 @@ export function EditorShell({
 
     navigatedToDraftRef.current = true
     openDraftTab(ephemeralDraftWritingIdRef.current)
-  }, [createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
+  }, [setActiveWritingId, createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
   // Eagerly create a stable local identity for blank /write so the first
   // paste/input never races against identity creation. This is the explicit
@@ -2025,7 +2032,7 @@ export function EditorShell({
           if (result.error || !result.data) {
             throw new Error(result.error?.message ?? "Failed to create desktop draft")
           }
-          currentWritingIdRef.current = result.data.id
+          setActiveWritingId(result.data.id)
         } else {
           await (await getDocumentService()).saveWriting({
             writing: {
@@ -2052,7 +2059,7 @@ export function EditorShell({
               metadataUpdatedAt: nowIso,
             },
           })
-          currentWritingIdRef.current = nextId
+          setActiveWritingId(nextId)
         }
       } catch {
         // If the save fails (e.g., scope change in progress), fall back to
@@ -2069,7 +2076,6 @@ export function EditorShell({
         replaceDraft: true,
       })
 
-      setCurrentWritingId(currentWritingIdRef.current ?? nextId)
       setHydrationWritingId(null)
       applyDocumentMetadata({
         title: nextTitle,
@@ -2093,7 +2099,7 @@ export function EditorShell({
     }
 
     void ensureIdentity()
-  }, [applyDocumentMetadata, createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
+  }, [setActiveWritingId, applyDocumentMetadata, createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
   useEffect(() => {
     setSidebarMode("collapsed")
@@ -2281,20 +2287,19 @@ export function EditorShell({
     editorSession,
     modeRef,
     isApplyingContentRef,
-    currentWritingIdRef,
     hydrationGenerationOwnerRef,
     currentCanonicalPathRef,
     desktopSessionRestoreTimingRef,
     ephemeralDraftWritingIdRef,
     draftContentSnapshotRef,
     suppressCorrectionAnalysisUntilRef,
-    setCurrentWritingId,
     setHydrationWritingId,
     setMode,
     setMarkdownValue,
     setBodyText,
     setSyncStatus,
     setIsBodyHydrating,
+    setActiveWritingId,
     applyDocumentMetadata,
     setExternalFileNotice,
     setCanonicalPath,
@@ -4708,19 +4713,17 @@ export function EditorShell({
       navigatedToDraftRef.current = false
 
       if (nextTab.writing_id) {
-        currentWritingIdRef.current = nextTab.writing_id
-        setCurrentWritingId(nextTab.writing_id)
+        setActiveWritingId(nextTab.writing_id)
         setHydrationWritingId(nextTab.writing_id)
         replaceEditorHistory(buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }))
         return
       }
 
-      currentWritingIdRef.current = null
-      setCurrentWritingId(null)
+      setActiveWritingId(null)
       setHydrationWritingId(null)
       replaceEditorHistory("/write")
     },
-    [editorSession.tabs, flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, snapshotOutgoingDraftContent],
+    [setActiveWritingId, editorSession.tabs, flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, snapshotOutgoingDraftContent],
   )
 
   const handleCloseWorkspaceTab = useCallback(
@@ -4790,19 +4793,18 @@ export function EditorShell({
       const nextTab = getEditorSessionState().session.tabs.find((tab) => tab.id === nextActiveTabId)
       navigatedToDraftRef.current = false
       if (nextTab?.writing_id) {
-        currentWritingIdRef.current = nextTab.writing_id
-        setCurrentWritingId(nextTab.writing_id)
+        setActiveWritingId(nextTab.writing_id)
         setHydrationWritingId(nextTab.writing_id)
         replaceEditorHistory(buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }))
         return
       }
 
-      currentWritingIdRef.current = null
-      setCurrentWritingId(null)
+      setActiveWritingId(null)
       setHydrationWritingId(null)
       replaceEditorHistory("/write")
     },
     [
+      setActiveWritingId,
       flushQueuedRichModeUpdate,
       persistCurrentWorkspaceViewState,
       persistenceCoordinator,
@@ -5070,8 +5072,7 @@ export function EditorShell({
       // can otherwise append to (and persist over) the previous document.
       persistenceCoordinator.cancel()
       persistenceCoordinator.activateDocument(null)
-      currentWritingIdRef.current = null
-      setCurrentWritingId(null)
+      setActiveWritingId(null)
       setHydrationWritingId(null)
       ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
       navigatedToDraftRef.current = false
@@ -5111,8 +5112,7 @@ export function EditorShell({
 
     // Claim ownership of the blank-draft -> identified-local-writing transition
     // synchronously so persistEditorSnapshot never races against it.
-    currentWritingIdRef.current = nextWritingId
-    setCurrentWritingId(nextWritingId)
+    setActiveWritingId(nextWritingId)
     setHydrationWritingId(nextWritingId)
     replaceEditorHistory(`/write/${nextWritingId}`)
 
@@ -5150,8 +5150,7 @@ export function EditorShell({
       } catch {
         // If save fails, revert the optimistic claim so persistEditorSnapshot
         // can fall back to identity-on-first-input.
-        currentWritingIdRef.current = null
-        setCurrentWritingId(null)
+        setActiveWritingId(null)
         setHydrationWritingId(null)
         return
       } finally {
@@ -5179,8 +5178,7 @@ export function EditorShell({
     try {
       await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
     } catch {
-      currentWritingIdRef.current = null
-      setCurrentWritingId(null)
+      setActiveWritingId(null)
       setHydrationWritingId(null)
       return
     } finally {
@@ -5201,6 +5199,7 @@ export function EditorShell({
       })
     })
   }, [
+    setActiveWritingId,
     currentWritingId,
     editor,
     editorSession.tabs,
@@ -5226,11 +5225,10 @@ export function EditorShell({
       throw new Error(describeOpenOutcome(outcome))
     }
     const openedTitle = outcome.record.title ?? UNTITLED_WRITING_TITLE
-    currentWritingIdRef.current = documentId
-    setCurrentWritingId(documentId)
+    setActiveWritingId(documentId)
     setHydrationWritingId(documentId)
     openWritingTab({ writingId: documentId, slug: outcome.record.slug, title: openedTitle, saveState: "saved-local", hasPendingSync: false })
-  }, [flushQueuedRichModeUpdate, snapshotOutgoingDraftContent])
+  }, [setActiveWritingId, flushQueuedRichModeUpdate, snapshotOutgoingDraftContent])
 
   selectAdjacentTabRef.current = (direction) => {
     const tabs = editorSession.tabs
@@ -5291,8 +5289,7 @@ export function EditorShell({
         }
 
         const openedId = result.documentId
-        currentWritingIdRef.current = openedId
-        setCurrentWritingId(openedId)
+        setActiveWritingId(openedId)
         setHydrationWritingId(openedId)
         const openedTitle = result.record.title ?? filenameToTitle(_path)
         applyDocumentMetadata({ title: openedTitle })
@@ -5344,8 +5341,7 @@ export function EditorShell({
           if (result.error || !result.data) {
             throw new Error(result.error?.message ?? "Failed to import desktop file")
           }
-          currentWritingIdRef.current = result.data.id
-          setCurrentWritingId(result.data.id)
+          setActiveWritingId(result.data.id)
           setHydrationWritingId(result.data.id)
           applyDocumentMetadata({ title: result.data.title ?? nextTitle })
         } else {
@@ -5355,11 +5351,11 @@ export function EditorShell({
         return
       }
 
-      currentWritingIdRef.current = currentWritingIdRef.current ?? nextWritingId
-      setCurrentWritingId(currentWritingIdRef.current)
-      setHydrationWritingId(currentWritingIdRef.current)
+      const openedWritingId = currentWritingIdRef.current ?? nextWritingId
+      setActiveWritingId(openedWritingId)
+      setHydrationWritingId(openedWritingId)
       openWritingTab({
-        writingId: currentWritingIdRef.current,
+        writingId: openedWritingId,
         title: isDesktopRuntime() ? titleRef.current || nextTitle : nextTitle,
         saveState: "saved-local",
         hasPendingSync: false,
@@ -5371,7 +5367,7 @@ export function EditorShell({
         router.push(`/write/${nextWritingId}`)
       }
     },
-    [applyDocumentMetadata, flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, router, snapshotOutgoingDraftContent],
+    [setActiveWritingId, applyDocumentMetadata, flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, router, snapshotOutgoingDraftContent],
   )
 
   const handleMenuNewFile = useCallback(() => {
