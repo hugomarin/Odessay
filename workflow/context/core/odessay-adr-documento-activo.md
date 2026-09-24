@@ -1,10 +1,11 @@
 # ADR — Fuente única del documento activo en el editor
 
-- **Estado:** Propuesto (pendiente de aprobación del dueño, ODE-566)
+- **Estado:** Aceptado (2026-09-24)
 - **Fecha:** 2026-09-24
-- **Decide:** Hugo
+- **Decide:** Hugo. Aprobó la propuesta de forma explícita en ODE-566.
+- **Estado del corpus vs. código:** este ADR va **por delante del código**. El runtime vigente es el que describe §Contexto hasta completar las fases ODE-567…ODE-571; `odessay-sync.md` y `skill-frontend` distinguen, en cada punto, el destino del estado actual.
 - **Ámbito:** **qué documento está activo en el editor** en cada momento y quién puede cambiarlo. No toca la identidad *documental* (UUID, `.md` canónico, catálogo), que gobierna `odessay-adr-identidad.md` y prevalece en su ámbito.
-- **Reconcilia:** `workflow/context/features/odessay-sync.md` §"Fuente de verdad única por dimensión" y `.agents/skills/skill-frontend/specialties/runtime-and-editor.md` §"Una fuente de verdad por dimensión", que hoy contradicen al código (ver §Contradicción).
+- **Reconcilia:** `workflow/context/features/odessay-sync.md` §"Fuente de verdad única por dimensión" y `.agents/skills/skill-frontend/specialties/runtime-and-editor.md` §"Una fuente de verdad por dimensión". Ambos contradecían al código (ver §Contradicción) y quedaron alineados con este ADR en ODE-566.
 
 ---
 
@@ -69,7 +70,7 @@ Además hay **sincronizaciones automáticas en los dos sentidos**:
 - **El código no lo cumple.** El store de sesión guarda y persiste la pestaña activa; en la restauración de sesión y en la recuperación de un documento no disponible **manda sobre la shell**; y la shell le publica de vuelta. Por el Hecho 1, la shell tampoco *puede* ser la fuente a través de una entrada externa.
 - El mismo documento describe el estado intermedio como `hydrationPhase` (`idle → switching → loading → ready`). **`hydrationPhase` no existe en el código**; su papel lo cumple a medias `hydrationWritingId`.
 
-Precedencia aplicada: este ADR, una vez aceptado, prevalece sobre ambas secciones y se reconcilian con él (ver §Consecuencias).
+Precedencia aplicada: este ADR prevalece sobre ambas secciones, que se reconciliaron con él (ver §Consecuencias).
 
 ## Opciones
 
@@ -97,7 +98,7 @@ Precedencia aplicada: este ADR, una vez aceptado, prevalece sobre ambas seccione
 
 **Lectura.** A es la más barata, pero no cumple el criterio que ningún otro puede sortear: la shell se remonta en cada entrada externa, así que no puede ser la fuente a través de ella. B resuelve casi todo, porque el store ya persiste, ya lo leen los demás y se lee al instante, pero deja el protocolo de salida repartido. C centraliza el protocolo, pero como almacén propio añade un séptimo portador.
 
-## Decisión propuesta
+## Decisión
 
 **D1 — El store de sesión es la única fuente del documento activo.** El documento activo es la pestaña activa del store: su `writing_id`, o el `draft_writing_id` de la pestaña borrador. Ningún otro portador decide qué documento está activo.
 
@@ -137,11 +138,11 @@ Cada fase es un issue propio, con la red de pruebas como precondición y la regl
 
 | Fase | Qué hace | Tiempo | Red previa | Medida esperada |
 |---|---|---|---|---|
-| 1 | Extraer el protocolo de salida y la secuencia de cada transición a una sola función (`activateDocument`) que por dentro sigue escribiendo los mismos portadores de hoy. Uniformiza el protocolo; la diferencia de `handleOpenWorkspaceDocument` se caracteriza antes de decidir si era bug | mover | barridos de ventanas (ODE-561, ODE-564), 4a, 4b, metadatos; una prueba nueva del protocolo de salida por transición | los 12 escritores pasan por una función |
-| 2 | La shell lee el documento activo del store; eliminar `currentWritingIdRef`, `setActiveWritingId` y `activeEditorTabIdRef` | ownership | la de la fase 1 más el barrido de identidad de ODE-564 contra la lectura nueva | columnas `shell` y `tabRef` vacías |
-| 3 | La ruta como proyección: un efecto store → URL; las entradas llaman a `activateDocument(…, "open")`; la restauración sale del store al iniciarse | ownership | pruebas de restauración y entrada por URL (a crear), e2e de apertura | columna `route` solo en la proyección |
-| 4 | La hidratación como fase explícita de la transición; `hydrationWritingId` desaparece; el coordinador de persistencia se suscribe al store | ownership | ODE-464, 4a, selección, admisión | columna `hydration` vacía |
-| 5 | Borrador: `ephemeralDraftWritingIdRef` pasa a ser el `draft_writing_id` del store | ownership | pruebas ODE-405 / ODE-478 | sin identidad de borrador en la shell |
+| 1 (ODE-567) | Extraer el protocolo de salida y la secuencia de cada transición a una sola función (`activateDocument`) que por dentro sigue escribiendo los mismos portadores de hoy. Uniformiza el protocolo; la diferencia de `handleOpenWorkspaceDocument` se caracteriza antes de decidir si era bug | mover | barridos de ventanas (ODE-561, ODE-564), 4a, 4b, metadatos; una prueba nueva del protocolo de salida por transición | los 12 escritores pasan por una función |
+| 2 (ODE-568) | La shell lee el documento activo del store; eliminar `currentWritingIdRef`, `setActiveWritingId` y `activeEditorTabIdRef` | ownership | la de la fase 1 más el barrido de identidad de ODE-564 contra la lectura nueva | columnas `shell` y `tabRef` vacías |
+| 3 (ODE-569) | La ruta como proyección: un efecto store → URL; las entradas llaman a `activateDocument(…, "open")`; la restauración sale del store al iniciarse | ownership | pruebas de restauración y entrada por URL (a crear), e2e de apertura | columna `route` solo en la proyección |
+| 4 (ODE-570) | La hidratación como fase explícita de la transición; `hydrationWritingId` desaparece; el coordinador de persistencia se suscribe al store | ownership | ODE-464, 4a, selección, admisión | columna `hydration` vacía |
+| 5 (ODE-571) | Borrador: `ephemeralDraftWritingIdRef` pasa a ser el `draft_writing_id` del store | ownership | pruebas ODE-405 / ODE-478 | sin identidad de borrador en la shell |
 
 ## Qué no decide este ADR
 

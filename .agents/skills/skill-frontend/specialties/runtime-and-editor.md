@@ -314,9 +314,9 @@ router.push(`/write/${id}`)           // owner 1: navegación
 setActiveWritingId(id)                // owner 2: estado local
 // El orden de resolución depende del event loop y del framework.
 
-// ✓ CORRECTO — un solo owner (estado local), la URL es espejo pasivo
-setActiveWritingId(id)                // owner único
-window.history.replaceState(null, '', `/write/${id}`)  // espejo, sin decisión
+// ✓ CORRECTO — un solo owner de la transición; la URL es espejo pasivo
+activateDocument(id, "select")        // owner único (ADR documento activo, D2)
+// La URL se reescribe como proyección del store de sesión, sin decidir nada.
 ```
 
 **Transiciones críticas en Odessay:**
@@ -332,9 +332,9 @@ No mezclar dimensiones de estado en un mismo store ni replicar la misma dimensi�
 
 | Dimensión | Fuente de verdad | Qué NO hacer |
 |---|---|---|
-| Identidad del writing activo | `currentWritingIdRef` o estado local del editor | Replicar en URL, Zustand y localDB simultáneamente |
+| Identidad del writing activo | Pestaña activa del store de sesión (`lib/stores/editor-session-store.ts`), escrita solo por `activateDocument` — `workflow/context/core/odessay-adr-documento-activo.md` | Copiarla a refs o estado de la shell con efectos; decidirla desde la URL |
 | Contenido del documento | TipTap internal state | Sincronizar a store global por keystroke |
-| Lista de pestañas abiertas | Estado local del editor-shell | Derivar del historial de navegación |
+| Lista de pestañas abiertas | Store de sesión del editor (`editor-session-store`) | Derivar del historial de navegación; mantener una copia en la shell |
 | Estado de sync remoto | Zustand sync slice | Leer directamente desde componentes de UI sin selector |
 
 ```tsx
@@ -343,9 +343,11 @@ const [writingId, setWritingId] = useState(params.id)   // fuente A
 const currentId = useEditorStore(s => s.writingId)       // fuente B
 
 // ✓ CORRECTO — una sola fuente, los demás consumen de ella
-const currentWritingIdRef = useRef(params.id)            // fuente única
-// Los efectos y handlers leen currentWritingIdRef.current,
-// nunca un snapshot de estado que pueda estar stale.
+// Render: suscripción al store de sesión (useSyncExternalStore).
+// Callbacks de larga vida: getEditorSessionState() lee el valor vigente al
+// instante, sin un ref espejo que pueda quedar atrás.
+// Estado actual: la shell aún usa currentWritingIdRef/setActiveWritingId
+// hasta la Fase 2 del ADR documento activo; no replicar ese patrón fuera de ella.
 ```
 
 ### Estados intermedios explícitos, no guards inferidos
@@ -385,10 +387,10 @@ function handlePaste(e) {
 // El efecto de inicialización genera el UUID cuando el componente monta,
 // no cuando llega el evento de input.
 useEffect(() => {
-  if (!currentWritingIdRef.current) {
+  if (!getActiveWritingId()) {
     const id = crypto.randomUUID()
-    currentWritingIdRef.current = id
-    localDB.writings.save({ id, body_json: emptyDoc, ... })
+    void localDB.writings.save({ id, body_json: emptyDoc, ... })
+      .then(() => activateDocument(id, "create"))  // el único escritor de la identidad activa
   }
 }, [])
 // El paste solo actualiza el contenido — la identidad ya existe.
@@ -405,10 +407,11 @@ setActiveWritingId(id)                // estado local
 useWritingStore.getState().setId(id)  // Zustand
 window.history.replaceState(...)      // history manual
 
-// ✓ CORRECTO — capa coordinadora única (editor-shell state)
-// El editor-shell tiene un único handler: handleSelectWorkspaceTab(id)
-// Ese handler actualiza el estado local, y opcionalmente el history.
-// Nada más. Ningún otro componente toca la navegación.
+// ✓ CORRECTO — capa coordinadora única (ADR documento activo, D2)
+// activateDocument(id, reason) escribe la pestaña activa del store de sesión;
+// shell, URL e hidratación derivan de ella. Ningún otro componente decide
+// qué documento está activo. (Hoy, hasta la Fase 1, esa secuencia vive en los
+// handlers de la shell: no añadir un camino más.)
 ```
 
 ### Validar transiciones: el checklist de cinco puntos
