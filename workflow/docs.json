@@ -39,6 +39,13 @@
       "description": "ADR raíz de identidad y fuente de verdad del documento. Cierra la polaridad A1/A2/A3: .md canónico, body_json copia de trabajo, metadata en la nube (no en frontmatter), un solo UUID cliente=nube y binding por ruta+inode+content_hash. Incluye enmienda D10 y la semántica D9 de borrado: ausencia observada nunca archiva cloud; una acción confirmada compone borrado local y soft-delete cloud según presencia."
     },
     {
+      "path": "workflow/context/core/odessay-adr-documento-activo.md",
+      "type": "core",
+      "scope": "arquitectura-de-editor",
+      "state": "adr-propuesto",
+      "description": "ADR (propuesto, ODE-566) sobre qué documento está activo en el editor y quién puede cambiarlo. Inventario reproducible de los seis portadores de la identidad activa (scripts/report-active-document-carriers.mjs), comparación de opciones (shell / store de sesión / coordinador) y propuesta: el store de sesión como fuente única, una sola función de transición (activateDocument) como único escritor, y lo demás derivado. Incluye plan de migración por fases. Reconcilia odessay-sync.md §fuente de verdad tras su aceptación. No toca la identidad documental, que gobierna odessay-adr-identidad.md."
+    },
+    {
       "path": "workflow/context/core/odessay-paginas.md",
       "type": "core",
       "description": "Arquitectura de rutas: zona pública, espacio del autor (dual: vista propia vs visitante) y zona privada. Mecanismo universal de respuesta (reply_to / parent_id). Layout y comportamiento de cada página."
