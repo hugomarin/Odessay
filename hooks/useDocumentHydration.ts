@@ -25,7 +25,7 @@
  * La decisión de hidratación (outcomes, retry, unified-open) no vive aquí: es
  * de `lib/editor/hydration-coordinator.ts`.
  */
-import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react"
+import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react"
 import type { Editor } from "@tiptap/react"
 
 import { mapLocalSyncStatusToSaveState, type EditorSaveState } from "@/components/editor/save-state"
@@ -136,6 +136,12 @@ export type DocumentHydrationInput = {
   editor: Editor | null
   currentWritingId: string | null
   hydrationPhase: HydrationPhase
+  /**
+   * Cuenta las llamadas a `activateDocument` (ODE-572). Marca cada transición
+   * del documento activo, para distinguirla de una re-ejecución del efecto por
+   * otra dependencia (por ejemplo, un cambio de `editorSession.tabs`).
+   */
+  activationSeq: number
   routeWritingId: string | null
   editorSession: { tabs: LocalEditorSessionTab[] }
 
@@ -200,6 +206,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     editor,
     currentWritingId,
     hydrationPhase,
+    activationSeq,
     routeWritingId,
     editorSession,
     modeRef,
@@ -233,12 +240,29 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     isExplicitWritingTitle,
   } = input
 
+  // Última activación (y editor) a la que la rama "sin documento" ya aplicó su
+  // estado inicial. Ver el comentario de esa rama.
+  const noDocumentAppliedRef = useRef<{ activationSeq: number; editor: Editor } | null>(null)
+
   useEffect(() => {
     if (!editor) {
       return
     }
 
     if (!currentWritingId) {
+      // ODE-572: esta rama prepara el editor al LLEGAR a "sin documento" (el
+      // borrador en blanco o ninguna pestaña). Es una transición, no un estado:
+      // el efecto también se re-ejecuta cuando cambia otra dependencia, como
+      // `editorSession.tabs` (un título que actualiza el catálogo, un borrador
+      // de una shell anterior que se materializa), y volver a aplicarla ahí
+      // borraba lo que el usuario estaba escribiendo en el borrador. Se aplica
+      // una vez por activación (`activateDocument`) y por instancia del editor.
+      const applied = noDocumentAppliedRef.current
+      if (applied && applied.activationSeq === activationSeq && applied.editor === editor) {
+        return
+      }
+      noDocumentAppliedRef.current = { activationSeq, editor }
+
       // No tab is open — clear stale content so the editor never shows a previous
       // writing after the last tab is closed. `currentWritingId` is also null
       // while sitting on the still-blank draft, so before wiping, restore
@@ -686,6 +710,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     applyCorrectionSuggestionUpdate,
     admitCorrectionSuggestions,
     currentWritingId,
+    activationSeq,
     editor,
     editorSession.tabs,
     flattenPersistedSuggestions,

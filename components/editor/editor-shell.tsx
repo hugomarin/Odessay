@@ -536,6 +536,10 @@ export function EditorShell({
   // ODE-570). Lo que se carga es siempre el documento activo; la fase solo dice
   // si su contenido ya está en el editor. Solo `activateDocument` la pone en
   // "loading"; la hidratación la devuelve a "ready" al terminar o fallar.
+  // Una por cada llamada a `activateDocument` (ODE-572): el efecto de
+  // hidratación la usa para aplicar el estado "sin documento" una vez por
+  // transición, no en cada re-ejecución.
+  const [activationSeq, setActivationSeq] = useState(0)
   const [hydrationPhase, setHydrationPhase] = useState<HydrationPhase>(
     initialHydrationSession.hydrationWritingId ? "loading" : "ready",
   )
@@ -713,6 +717,7 @@ export function EditorShell({
     ) => {
       setActiveWritingId(target.writingId)
       setHydrationPhase(activationHydrates(target.writingId, reason) ? "loading" : "ready")
+      setActivationSeq((current) => current + 1)
       if (target.href !== undefined) {
         replaceEditorHistory(target.href)
       }
@@ -2377,6 +2382,7 @@ export function EditorShell({
     editor,
     currentWritingId,
     hydrationPhase,
+    activationSeq,
     routeWritingId,
     editorSession,
     modeRef,
