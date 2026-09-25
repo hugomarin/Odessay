@@ -180,6 +180,7 @@ export function failWriteFileOnCall(callNumber: number, makeError: () => never):
   writeFileFailureFactory = makeError
 }
 export function resetWriteFileFailureState(): void {
+  renameFileFailure = null
   writeFileCallCount = 0
   failingWriteFileCallNumber = null
   writeFileFailureFactory = null
@@ -303,6 +304,29 @@ export async function tauriWriteFileDouble(
 
   await fs.mkdir(dirname(path), { recursive: true })
   await fs.writeFile(path, content, "utf8")
+}
+
+/**
+ * Mirrors the real Rust `rename_file` command: creates the destination's
+ * parent directory and renames in place, returning the new path. It does not
+ * resolve collisions — `FilesystemDocumentService.renameWriting` already
+ * picked a free filename before calling it. `failNextRenameFile` makes the
+ * next call fail like an OS error (ODE-585); cleared by
+ * `resetWriteFileFailureState`.
+ */
+let renameFileFailure: (() => never) | null = null
+export function failNextRenameFile(makeError: () => never): void {
+  renameFileFailure = makeError
+}
+export async function tauriRenameFileDouble(oldPath: string, newPath: string): Promise<string> {
+  if (renameFileFailure) {
+    const fail = renameFileFailure
+    renameFileFailure = null
+    fail()
+  }
+  await fs.mkdir(dirname(newPath), { recursive: true })
+  await fs.rename(oldPath, newPath)
+  return newPath
 }
 
 export async function tauriOpenFileDouble(path: string): Promise<string> {
