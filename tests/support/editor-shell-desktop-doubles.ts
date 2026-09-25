@@ -41,6 +41,7 @@ import {
   resetWriteFileFailureState,
   tauriCatalogActivateBindingRootDouble,
   tauriCatalogDetachLocalFileDouble,
+  tauriCatalogApplyCloudSnapshotsDouble,
   tauriCatalogDualWriteDouble,
   tauriCatalogGetByIdDouble,
   tauriCatalogListDouble,
@@ -108,7 +109,7 @@ export function tauriCommandsDouble() {
     tauriCatalogDetachLocalFile: tauriCatalogDetachLocalFileDouble,
     tauriCatalogHydrateExcerpts: vi.fn(async () => []),
     tauriCatalogApplyReconcile: unimplemented("tauriCatalogApplyReconcile"),
-    tauriCatalogApplyCloudSnapshots: unimplemented("tauriCatalogApplyCloudSnapshots"),
+    tauriCatalogApplyCloudSnapshots: tauriCatalogApplyCloudSnapshotsDouble,
     tauriCatalogApplyWorkspaceRemoval: unimplemented("tauriCatalogApplyWorkspaceRemoval"),
     // Registrar un Workspace (abrir desde su árbol, ODE-580).
     tauriCatalogActivateBindingRoot: tauriCatalogActivateBindingRootDouble,
