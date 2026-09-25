@@ -141,24 +141,24 @@ Precedencia aplicada: este ADR prevalece sobre ambas secciones, que se reconcili
 
 ## Consecuencias
 
-> Las filas de `useManualCorrections` y del coordinador de persistencia describían el destino de la Fase 2 original; con la enmienda no cambian su contrato.
+> Estado tras la enmienda (opción A) y las Fases 1, 3, 4 y 5. La primera versión de esta tabla describía el destino de la Fase 2 original (correcciones y coordinador de persistencia leyendo el store), que la enmienda canceló; corregida en ODE-584. Antes de mover a un store compartido cualquiera de estos lectores, aplica la regla de la enmienda: probar el remontaje.
 
 **Por consumidor:**
 
-| Consumidor | ¿Cambia su contrato? |
-|---|---|
-| `lib/stores/studio-session-store.ts` | No: sigue reflejando el store |
-| `hooks/useRecentWritings.ts` | No: sigue leyendo el store |
-| `hooks/useCatalogEditorSessionSync.ts` | No: solo sincroniza títulos |
-| `hooks/useDocumentHydration.ts` | Sí: se dispara por el motivo y la fase de `activateDocument`, no por `hydrationWritingId` |
-| `hooks/useManualCorrections.ts` | Sí, mecánico: lee la identidad del store en vez de un `RefObject` |
-| `lib/editor/persistence-coordinator.ts` | Sí: su documento activo sale de una suscripción al store |
-| Entradas URL (Desk, Search, Recent, apertura desktop) | No para quien navega: la URL sigue siendo `/write?id=` y `/write/[id]`; cambia cómo la consume la shell |
+| Consumidor | ¿Cambió su contrato? | Estado |
+|---|---|---|
+| `lib/stores/studio-session-store.ts` | No | Sigue reflejando el store de sesión |
+| `hooks/useRecentWritings.ts` | No | Sigue leyendo el store de sesión |
+| `hooks/useCatalogEditorSessionSync.ts` | No | Solo sincroniza títulos |
+| `hooks/useDocumentHydration.ts` | Sí (Fase 4, ODE-570) | Se dispara por el motivo de `activateDocument` (`activationHydrates`) y expone `hydrationPhase`; `hydrationWritingId` desapareció |
+| `hooks/useManualCorrections.ts` | No (enmienda) | Sigue recibiendo la identidad de instancia (`currentWritingIdRef`, un `RefObject`). No lee el store: sus respuestas tardías se comparan contra la instancia que las pidió |
+| `lib/editor/persistence-coordinator.ts` | No (enmienda) | Sigue activándose desde la identidad de la instancia (`persistenceCoordinator.activateDocument(currentWritingId)` en un efecto de la shell). Suscribirlo al store reabriría el problema de remontaje |
+| Entradas URL (Desk, Search, Recent, apertura desktop) | No para quien navega | La URL sigue siendo `/write?id=` y `/write/[id]`; cada entrada remonta la shell, y las proyecciones y navegaciones van por `activateDocument({ href })` y `navigateToWriting` (Fase 3, ODE-569) |
 
-**Documentos a reconciliar tras la aceptación:**
-- `odessay-sync.md` §fuente de verdad: la dimensión "writing activo" pasa a tener como fuente la pestaña activa del store de sesión, con `activateDocument` como único escritor; `hydrationPhase` pasa de afirmación a destino de la Fase 4.
-- `skill-frontend/specialties/runtime-and-editor.md`: su tabla de dimensiones.
-- `components/editor/AGENTS.md` ya dice que la shell **no** debe ser owner canónico de la "identidad documental" ni del "estado de dominio de tabs". Esta decisión lo cumple, así que ese archivo no cambia.
+**Documentos reconciliados** (ya alineados con D1–D3 enmendados; se listan para que no se vuelvan a "reconciliar" hacia el destino cancelado):
+- `workflow/context/features/odessay-sync.md` §fuente de verdad: la dimensión "writing activo" tiene fuente por alcance (store entre entradas y fuera de la shell, identidad de instancia dentro), con `activateDocument` como único escritor; `hydrationPhase` es el estado vigente de la Fase 4.
+- `.agents/skills/skill-frontend/specialties/runtime-and-editor.md`: su tabla de dimensiones dice lo mismo, incluida la regla de probar el remontaje.
+- `components/editor/AGENTS.md` ya decía que la shell **no** debe ser owner canónico de la "identidad documental" ni del "estado de dominio de tabs". Esta decisión lo cumple, así que ese archivo no cambia.
 
 ## Plan de migración
 
