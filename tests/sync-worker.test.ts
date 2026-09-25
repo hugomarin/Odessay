@@ -79,6 +79,16 @@ const createLocalDbMock = () => {
       detachLocalFile: vi.fn(async () => undefined),
       delete: vi.fn(async () => undefined),
       saveWithRebind: vi.fn(async () => undefined),
+      transitionLifecycle: vi.fn(
+        async (_id: string, transition: { when: (current: LocalWriting["lifecycle"]) => boolean }) => ({
+          previous: writing.lifecycle,
+          changed: transition.when(writing.lifecycle),
+          localUpdatedAt: writing.local_updated_at ?? null,
+        }),
+      ),
+      update: vi.fn(async (_id: string, updater: (current: LocalWriting | null) => LocalWriting | null) =>
+        updater(writing),
+      ),
     },
     collections: {
       save: vi.fn(async () => undefined),
@@ -221,7 +231,10 @@ describe("SyncWorker", () => {
 
     expect(upsertWriting).toHaveBeenCalledTimes(1);
     expect(localDb.syncQueue.markSynced).toHaveBeenCalledWith(mutation.id);
-    expect(localDb.writings.save).toHaveBeenCalledWith(
+    // La fila remota se aplica con una actualización atómica contra la fila
+    // actual (ODE-583), no con un `save` a ciegas.
+    expect(localDb.writings.update).toHaveBeenCalledTimes(1);
+    await expect(localDb.writings.update.mock.results[0]?.value).resolves.toEqual(
       expect.objectContaining({
         slug: "draft-1",
       }),
