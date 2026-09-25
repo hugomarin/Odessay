@@ -430,20 +430,13 @@ export async function tauriCatalogListRetiredBindingRootsDouble(_dbPath: string)
  * (`DesktopWorkspaceService.registerWorkspace`) calls it before writing
  * Settings.
  */
-export async function tauriCatalogActivateBindingRootDouble(
-  _dbPath: string,
-  _bindingRootId: string,
-  _rootPath: string,
-): Promise<void> {}
+export async function tauriCatalogActivateBindingRootDouble(): Promise<void> {}
 
 /**
  * Same premise: with no retired BindingRoot there is nothing archived to
  * restore, so re-registering a root returns no cloud-archived candidates.
  */
-export async function tauriCatalogReactivateBindingRootDouble(
-  _dbPath: string,
-  _bindingRootId: string,
-): Promise<DesktopCatalogRow[]> {
+export async function tauriCatalogReactivateBindingRootDouble(): Promise<DesktopCatalogRow[]> {
   return []
 }
 
