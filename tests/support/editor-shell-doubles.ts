@@ -37,6 +37,8 @@ export type HarnessWorld = {
   tauriCalls: Array<{ command: string; args?: Record<string, unknown> }>
   /** Resultado del diálogo nativo de guardado (null = cancelado). */
   saveDialogResult: string | null
+  /** Veces que la app abrió el diálogo nativo de guardado, con sus opciones. */
+  saveDialogCalls: Array<Record<string, unknown> | undefined>
   openDialogResult: string | string[] | null
   /** Peticiones HTTP salientes y su router. */
   networkCalls: Array<{ url: string; method: string }>
@@ -53,6 +55,15 @@ export type HarnessWorld = {
   learnedWords: LearnedWordEntry[]
   /** Veces que el shell pidió la lista de palabras aprendidas. */
   learnedWordsCalls: number
+  /**
+   * Handler de la hidratación remota de bloques de corrección. Devolver una
+   * promesa pendiente deja la respuesta "en vuelo" (ODE-464, ODE-574).
+   */
+  hydrateCorrectionBlocks: (writingId: string) => Promise<{ error: unknown; data: unknown[] | null }>
+  /** Documentos cuya hidratación remota de correcciones se pidió, en orden. */
+  correctionHydrationCalls: string[]
+  /** Volcados remotos de bloques de corrección, en orden. */
+  correctionPersistCalls: Array<{ writingId?: string; blockId?: string }>
   /**
    * Se llama en cada commit del shell, en fase de layout: después del commit
    * y ANTES de sus efectos pasivos. Es la ventana donde un efecto pasivo
@@ -122,6 +133,7 @@ export const world: HarnessWorld = {
   tauriInvoke: () => undefined,
   tauriCalls: [],
   saveDialogResult: null,
+  saveDialogCalls: [],
   openDialogResult: null,
   networkCalls: [],
   network: defaultNetwork(),
@@ -131,6 +143,9 @@ export const world: HarnessWorld = {
   aiReviewCalls: [],
   learnedWords: [],
   learnedWordsCalls: 0,
+  hydrateCorrectionBlocks: async () => ({ error: null, data: [] }),
+  correctionHydrationCalls: [],
+  correctionPersistCalls: [],
   onShellCommit: null,
 }
 
@@ -220,7 +235,10 @@ export function tauriEventDouble() {
 
 export function tauriDialogDouble() {
   return {
-    save: async () => world.saveDialogResult,
+    save: async (options?: Record<string, unknown>) => {
+      world.saveDialogCalls.push(options)
+      return world.saveDialogResult
+    },
     open: async () => world.openDialogResult,
     message: async () => {},
     ask: async () => true,
@@ -250,7 +268,17 @@ export function aiServiceDouble() {
         return world.aiReview(input)
       },
       suggestTitle: async () => ({ error: null, data: null }),
-      hydrateCorrectionBlocks: async () => ({ error: null, data: [] }),
+      hydrateCorrectionBlocks: async (writingId: string) => {
+        world.correctionHydrationCalls.push(writingId)
+        return world.hydrateCorrectionBlocks(writingId)
+      },
+      persistCorrectionBlock: async (input: { writingId?: string; block?: { id?: string; blockId?: string } }) => {
+        world.correctionPersistCalls.push({ writingId: input.writingId, blockId: input.block?.blockId })
+        return {
+          error: null,
+          data: { persistedId: input.block?.id ?? null, deletedIds: [], syncedAt: new Date().toISOString() },
+        }
+      },
     }),
   }
 }
