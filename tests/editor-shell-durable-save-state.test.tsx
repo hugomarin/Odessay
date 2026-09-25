@@ -31,6 +31,15 @@
  * hidratación lee el estado durable. Por eso la shell no reconcilia aparte al
  * materializar.
  *
+ * ODE-579 — paridad y coste. Cada caso afirma la status bar y la pestaña
+ * contra el MISMO snapshot terminal (la fila real del catálogo proyectada con
+ * `mapCatalogRecordToSaveState`), no solo el `save_state` de la pestaña. Y el
+ * caso 4 mide el trabajo por evento que declara el contrato de rendimiento de
+ * ODE-542: un evento del documento activo hace UNA lectura puntual
+ * (`getById`) y a lo sumo un update de pestaña, nunca un `list` del catálogo;
+ * uno de fondo no lee el catálogo; y abrir documentos no suma listeners de
+ * sync (una suscripción global, no una por pestaña).
+ *
  * Fuera de esta prueba, con motivo: que una razón de catálogo que no es de
  * reconciliación (`content`, `excerpt`…) no promueva un "Saved" falso con un
  * guardado en vuelo. Reproducirlo exige que el catálogo emita esa razón
@@ -87,7 +96,9 @@ const { confirmCatalogUpsertSyncedDouble } = await import("./integration/documen
 const { createDesktopDraft: createProductionDesktopDraft } = await import("@/lib/services/document-service-factory")
 const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
-const { emitSyncStatusChange } = await import("@/lib/sync/events")
+const sessionStore = await import("@/lib/stores/editor-session-store")
+const { emitSyncStatusChange, SYNC_STATUS_EVENT_NAME } = await import("@/lib/sync/events")
+const { mapCatalogRecordToSaveState } = await import("@/components/editor/save-state")
 const { act } = await import("react")
 
 const TEST_TIMEOUT_MS = 60_000
@@ -117,6 +128,62 @@ function activeTab() {
   return session.tabs.find((tab) => tab.id === session.active_tab_id)
 }
 
+const SAVE_STATE_BY_LABEL: Record<string, string> = {
+  Saved: "saved",
+  "Saving...": "saving",
+  "Saved locally": "saved-local",
+  "Needs attention": "error",
+}
+
+/** Lo que muestra la status bar, traducido a `EditorSaveState`. */
+function barSaveState() {
+  const label = mounted?.container
+    .querySelector('[data-testid="editor-statusbar"] [aria-live="polite"]')
+    ?.textContent?.trim()
+  if (label === undefined) return null
+  return SAVE_STATE_BY_LABEL[label] ?? `desconocido: ${label}`
+}
+
+/**
+ * Barra y pestaña convergen al estado que proyecta la fila REAL del catálogo
+ * durable, y coinciden entre sí.
+ */
+async function expectBarAndTabMatchDurable(writingId: string, expected: string) {
+  const record = await (await getDocumentCatalog()).getById(writingId)
+  if (!record) throw new Error(`Sin fila de catálogo para ${writingId}`)
+  expect(mapCatalogRecordToSaveState(record, true), "el snapshot durable terminal").toBe(expected)
+  await waitFor(() => activeTab()?.save_state === expected && barSaveState() === expected, {
+    label: `barra y pestaña en ${expected}`,
+    timeoutMs: 10_000,
+  })
+  expect(barSaveState(), "la barra dice lo mismo que la pestaña").toBe(activeTab()?.save_state)
+  expect(activeTab()?.has_pending_sync).toBe(expected !== "saved")
+}
+
+/** Listeners de sync vivos en `window` (altas menos bajas). */
+function trackSyncListeners() {
+  const add = vi.spyOn(window, "addEventListener")
+  const remove = vi.spyOn(window, "removeEventListener")
+  const count = (spy: typeof add | typeof remove) =>
+    spy.mock.calls.filter(([type]) => type === SYNC_STATUS_EVENT_NAME).length
+  return {
+    live: () => count(add) - count(remove),
+    restore: () => {
+      add.mockRestore()
+      remove.mockRestore()
+    },
+  }
+}
+
+async function emitSync(writingId: string, status: "synced" | "syncing") {
+  await act(async () => {
+    emitSyncStatusChange({ writingId, status })
+  })
+  await flush(5)
+  await advance(50)
+  await flush(5)
+}
+
 /** Monta la shell y espera a que cargue la sesión (ver ODE-574, carrera de arranque). */
 async function mountLoaded(props: Parameters<typeof mountEditorShell>[0] = {}) {
   mounted = await mountEditorShell(props)
@@ -139,13 +206,16 @@ async function mountLoaded(props: Parameters<typeof mountEditorShell>[0] = {}) {
  * cosa.
  */
 async function openSavedLocally(text: string) {
+  const alreadyOpen = new Set(getEditorSessionState().session.tabs.map((tab) => tab.writing_id).filter(Boolean))
   await clickNewArtifact(mounted!.container)
   await typeInEditor(text)
   await advance(6_000)
   await waitForMarkdownContaining(text)
   const created = await waitFor(
     () => {
-      const tab = getEditorSessionState().session.tabs.find((candidate) => candidate.writing_id)
+      const tab = getEditorSessionState().session.tabs.find(
+        (candidate) => candidate.writing_id && !alreadyOpen.has(candidate.writing_id),
+      )
       return tab?.writing_id ?? null
     },
     { label: "documento materializado en el store", timeoutMs: 15_000 },
@@ -204,8 +274,7 @@ describe("ODE-542 — el estado de guardado converge desde el catálogo durable"
       confirmCatalogUpsertSyncedDouble(writingId)
       await applyCloudSnapshotFor(writingId)
 
-      await waitFor(() => activeTab()?.save_state === "saved", { label: "pestaña en Saved", timeoutMs: 10_000 })
-      expect(activeTab()?.has_pending_sync).toBe(false)
+      await expectBarAndTabMatchDurable(writingId, "saved")
     },
     TEST_TIMEOUT_MS,
   )
@@ -226,8 +295,8 @@ describe("ODE-542 — el estado de guardado converge desde el catálogo durable"
       await advance(6_000)
       await waitForMarkdownContaining("ODE542-MATERIALIZADO")
 
-      await waitFor(() => activeTab()?.save_state === "saved", { label: "pestaña en Saved", timeoutMs: 10_000 })
-      expect(activeTab()?.writing_id).toBeTruthy()
+      const writingId = await waitFor(() => activeTab()?.writing_id ?? null, { label: "borrador materializado" })
+      await expectBarAndTabMatchDurable(writingId, "saved")
     },
     TEST_TIMEOUT_MS,
   )
@@ -245,13 +314,82 @@ describe("ODE-542 — el estado de guardado converge desde el catálogo durable"
       await flush(5)
       await advance(50)
       expect(activeTab()?.save_state, "sin confirmación durable no hay Saved").toBe("saving")
+      expect(barSaveState(), "ni en la barra").toBe("saving")
 
       // Con la confirmación durable, el mismo evento sí converge.
       confirmCatalogUpsertSyncedDouble(writingId)
       await act(async () => {
         emitSyncStatusChange({ writingId, status: "synced" })
       })
-      await waitFor(() => activeTab()?.save_state === "saved", { label: "pestaña en Saved", timeoutMs: 10_000 })
+      await expectBarAndTabMatchDurable(writingId, "saved")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "coste por evento: una lectura puntual del catálogo, ningún escaneo, ningún listener por pestaña",
+    async () => {
+      const listeners = trackSyncListeners()
+      try {
+        await mountLoaded()
+        const listenersWithOneTab = listeners.live()
+        const background = await openSavedLocally("ODE579-FONDO")
+        const active = await openSavedLocally("ODE579-ACTIVO")
+        expect(
+          getEditorSessionState().session.tabs.filter((tab) => tab.writing_id).length,
+          "control positivo: dos documentos abiertos en pestañas",
+        ).toBeGreaterThanOrEqual(2)
+        expect(listenersWithOneTab, "control positivo: la shell escucha los eventos de sync").toBeGreaterThan(0)
+        expect(listeners.live(), "abrir documentos no suma listeners de sync").toBe(listenersWithOneTab)
+
+        await flush(5)
+        await advance(50)
+        const catalog = await getDocumentCatalog()
+        const getById = vi.spyOn(catalog, "getById")
+        const list = vi.spyOn(catalog, "list")
+        const updateTab = vi.spyOn(sessionStore, "updateTabSaveState")
+        const resetCounts = () => {
+          getById.mockClear()
+          list.mockClear()
+          updateTab.mockClear()
+        }
+
+        // Activo, sin confirmación durable: una lectura, nada que actualizar.
+        resetCounts()
+        await emitSync(active, "synced")
+        expect(getById.mock.calls, "una lectura puntual del documento activo").toEqual([[active]])
+        expect(list, "sin escanear el catálogo").not.toHaveBeenCalled()
+        expect(updateTab, "sin cambio durable no hay update").not.toHaveBeenCalled()
+        expect(barSaveState()).toBe("saving")
+
+        // Activo, con confirmación durable: una lectura, un update.
+        confirmCatalogUpsertSyncedDouble(active)
+        resetCounts()
+        await emitSync(active, "synced")
+        expect(getById.mock.calls, "una lectura puntual del documento activo").toEqual([[active]])
+        expect(list, "sin escanear el catálogo").not.toHaveBeenCalled()
+        expect(updateTab.mock.calls.map(([input]) => input), "un update de su pestaña").toEqual([
+          { tabId: active, saveState: "saved", hasPendingSync: false },
+        ])
+        await expectBarAndTabMatchDurable(active, "saved")
+
+        // Repetido: idempotente.
+        resetCounts()
+        await emitSync(active, "synced")
+        expect(getById.mock.calls).toEqual([[active]])
+        expect(list).not.toHaveBeenCalled()
+        expect(updateTab, "un evento repetido no vuelve a escribir").not.toHaveBeenCalled()
+
+        // De fondo: sin lectura del catálogo, a lo sumo su pestaña.
+        resetCounts()
+        await emitSync(background, "syncing")
+        expect(getById, "un evento de fondo no lee el catálogo").not.toHaveBeenCalled()
+        expect(list).not.toHaveBeenCalled()
+        expect(updateTab.mock.calls.length, "a lo sumo un update, el de su pestaña").toBeLessThanOrEqual(1)
+        expect(barSaveState(), "la barra sigue siendo la del documento activo").toBe("saved")
+      } finally {
+        listeners.restore()
+      }
     },
     TEST_TIMEOUT_MS,
   )
