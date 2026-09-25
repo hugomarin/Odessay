@@ -97,6 +97,21 @@ Con esto el cluster de correcciones queda fuera de la shell. Lo pendiente es de 
 
 Los helpers puros del módulo de la shell (`navigateToWriting`, `deriveAutoTitle`, `isPerfHarness`) llegan por `input` para no crear un ciclo de imports. El efecto que activa el documento de la ruta y el espejo `activeEditorTabIdRef` (la excepción declarada del ADR) se quedan en la shell. Abrir la pestaña de la ruta no tiene ningún efecto observable distinto de la publicación de la pestaña en los escenarios probados: sin él, esa publicación crea la pestaña igual.
 
+**Actualización (2026-09-25, ODE-587 — corte 3, entrega 1c):** abrir documentos en pestañas sale tal cual a `hooks/useWorkspaceTabOpening.ts`, en el mismo orden y llamado donde empezaba ese bloque:
+
+- crear pestaña ("New Artifact": borrador efímero en desktop, identidad local nueva en web);
+- abrir un documento desde el árbol del workspace;
+- pasar a la pestaña contigua con el teclado;
+- la creación forzada de `/write?new`.
+
+Antes se añadió la red que faltaba en `tests/editor-shell-workspace-tabs.test.tsx`: el atajo de pestaña siguiente y "New Artifact" en web. Abrir desde el árbol del workspace sigue sin prueba, porque el árbol necesita los dobles de settings de desktop que llegan con #492. Contra la entrega 1b:
+
+```text
+4,910 líneas        (-181)
+   39 useEffect     (-1)
+   58 useCallback   (-2)
+```
+
 **Actualización (2026-09-24, ODE-563 — segundo tiempo del primer corte):** los 9 metadatos del documento (título, título explícito, versión, fecha de creación, slug, estado, tipo, visibilidad, ciclo de vida) tienen ahora un solo dueño, `applyDocumentMetadata`, que escribe estado y ref en el mismo paso. Se eliminaron sus 9 efectos espejo y todas sus escrituras a mano; `writingSlugRef` desapareció, porque nadie lo leía. Contra `main`, con el mismo método:
 
 ```text
