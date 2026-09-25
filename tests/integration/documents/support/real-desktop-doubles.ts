@@ -182,6 +182,66 @@ export function resetWriteFileFailureState(): void {
   writeFileCallCount = 0
   failingWriteFileCallNumber = null
   writeFileFailureFactory = null
+  heldWriteFile = null
+  failingWriteFileMatching = null
+  writeFileLog.length = 0
+  failingCatalogGetById.clear()
+}
+
+/**
+ * Registro de cada `tauriWriteFile` que llegó al doble, en orden y ANTES de
+ * cualquier retención o fallo: cuenta los intentos, no los que acabaron en
+ * disco. Sirve para comprobar cuántos guardados arrancó la app mientras otro
+ * seguía en vuelo (ODE-574, antes ODE-461). Se limpia con
+ * `resetWriteFileFailureState`.
+ */
+const writeFileLog: Array<{ path: string; content: string }> = []
+export function writeFileCalls(): ReadonlyArray<{ path: string; content: string }> {
+  return [...writeFileLog]
+}
+
+/**
+ * Hace fallar el próximo `tauriWriteFile` cuya ruta cumpla `matches`, como un
+ * error del disco o de la base nativa. A diferencia de `failWriteFileOnCall`,
+ * no depende de cuántas escrituras hubo antes. Se limpia con
+ * `resetWriteFileFailureState`.
+ */
+let failingWriteFileMatching: { matches: (path: string) => boolean; makeError: () => never } | null = null
+export function failNextWriteFile(matches: (path: string) => boolean, makeError: () => never): void {
+  failingWriteFileMatching = { matches, makeError }
+}
+
+/**
+ * Retiene el próximo `tauriWriteFile` cuya ruta cumpla `matches` hasta que se
+ * llame a `release()`, como un disco lento. Sirve para observar lo que la app
+ * muestra MIENTRAS un guardado está en vuelo (por ejemplo, cerrar una pestaña
+ * con su guardado pendiente, ODE-574). `started()` resuelve cuando el write
+ * retenido ya llegó.
+ */
+let heldWriteFile: { matches: (path: string) => boolean; gate: Promise<void>; arrived: () => void } | null = null
+export function holdWriteFile(matches: (path: string) => boolean): { release: () => void; started: Promise<void> } {
+  let release!: () => void
+  let arrived!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  heldWriteFile = { matches, gate, arrived }
+  return { release, started }
+}
+
+/**
+ * Hace fallar la lectura del catálogo SQLite (`catalog_get_by_id`) para un
+ * documento concreto, como un error de la base de datos nativa. Abrir ese
+ * documento devuelve entonces `DB_ERROR`, que la hidratación clasifica como
+ * `open-error` (ODE-574, antes ODE-555). Se limpia con
+ * `resetWriteFileFailureState`.
+ */
+const failingCatalogGetById = new Map<string, () => never>()
+export function failCatalogGetById(documentId: string, makeError: () => never): void {
+  failingCatalogGetById.set(documentId, makeError)
 }
 
 export async function tauriCreateFileDouble(dir: string, filename: string): Promise<string> {
@@ -206,6 +266,18 @@ export async function tauriWriteFileDouble(
   expectedContentHash?: string | null,
 ): Promise<void> {
   writeFileCallCount += 1
+  writeFileLog.push({ path, content })
+  if (heldWriteFile?.matches(path)) {
+    const held = heldWriteFile
+    heldWriteFile = null
+    held.arrived()
+    await held.gate
+  }
+  if (failingWriteFileMatching?.matches(path)) {
+    const { makeError } = failingWriteFileMatching
+    failingWriteFileMatching = null
+    makeError()
+  }
   if (failingWriteFileCallNumber === writeFileCallCount) {
     const fail = writeFileFailureFactory!
     failingWriteFileCallNumber = null
@@ -310,10 +382,26 @@ export async function tauriWorkspaceTouchFileDouble(
 
 export async function tauriWorkspaceSyncDouble(
   rootPath: string,
-  _selectedPaths: string[] | undefined,
+  selectedPaths: string[] | undefined,
   documentIds?: Record<string, string>,
 ): Promise<DesktopWorkspaceSnapshot> {
   const manifest = manifestFor(rootPath)
+
+  // Adoption of an explicitly selected file: a `.md` named in `selectedPaths`
+  // that exists on disk but has no manifest entry yet gets a fresh id, as the
+  // real scan assigns one to an unbound file inside the selected scope. This
+  // is the call the unified opener makes when a file from a folder outside
+  // every BindingRoot is opened (`openDocumentByPath`, ODE-581). Only exact
+  // file paths are adopted; unselected files stay out of the manifest, so
+  // callers that never select anything see the same snapshot as before.
+  for (const relativePath of selectedPaths ?? []) {
+    if (!relativePath.endsWith(".md") || manifest.has(relativePath)) continue
+    const isFile = await fs
+      .stat(join(rootPath, relativePath))
+      .then((stat) => stat.isFile())
+      .catch(() => false)
+    if (isFile) manifest.set(relativePath, randomUUID())
+  }
 
   // Explicit-IDs form (the destination bind: relocateDesktopWriting passes
   // `{ [relativePath]: id }` for the file it just moved in) — durably record
@@ -397,6 +485,8 @@ export async function tauriCatalogBulkDualWriteDouble(dbPath: string, inputs: De
 
 export async function tauriCatalogGetByIdDouble(dbPath: string, id: string): Promise<DesktopCatalogRow | null> {
   await passCatalogReadGates(id)
+  const failure = failingCatalogGetById.get(id)
+  if (failure) failure()
   return rowsFor(dbPath).get(id) ?? null
 }
 

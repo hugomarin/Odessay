@@ -2358,10 +2358,20 @@ export function EditorShell({
           }
         }
 
-        void syncCurrentWritingState()
+        // ODE-574: una lectura del catálogo que falla (p. ej. SQLite ocupado)
+        // no puede quedar como rechazo sin manejar. El contenido sigue abierto
+        // y el siguiente cambio del catálogo o la siguiente activación
+        // reintentan.
+        const logCatalogReadFailure = (error: unknown) => {
+          console.error("[editor] catalog state read failed", {
+            writingId: currentWritingId,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+        void syncCurrentWritingState().catch(logCatalogReadFailure)
         unsubscribeCatalog = subscribeToCatalog((change) => {
           if (change.documentIds.includes(currentWritingId)) {
-            void syncCurrentWritingState(change.reason)
+            void syncCurrentWritingState(change.reason).catch(logCatalogReadFailure)
           }
         })
       })

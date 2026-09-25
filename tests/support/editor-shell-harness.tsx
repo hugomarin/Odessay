@@ -173,6 +173,7 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
   world.tauriInvoke = () => undefined
   world.tauriCalls = []
   world.saveDialogResult = null
+  world.saveDialogCalls = []
   world.openDialogResult = null
   world.networkCalls = []
   world.network = defaultNetwork()
@@ -181,6 +182,9 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
   world.aiReviewCalls = []
   world.learnedWords = []
   world.learnedWordsCalls = 0
+  world.hydrateCorrectionBlocks = async () => ({ error: null, data: [] })
+  world.correctionHydrationCalls = []
+  world.correctionPersistCalls = []
   world.onShellCommit = null
 
   Object.assign(world, overrides)
