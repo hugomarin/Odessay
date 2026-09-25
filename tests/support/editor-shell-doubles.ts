@@ -192,9 +192,27 @@ export function tauriCoreDouble(actual: Record<string, unknown>) {
   }
 }
 
+/**
+ * Oyentes registrados con `listen` de `@tauri-apps/api/event`, por canal.
+ *
+ * Vive a nivel de módulo y NO se resetea entre pruebas, a propósito: el bus de
+ * menú (`lib/services/desktop/menu-event-bus.ts`) registra cada canal una sola
+ * vez por proceso, igual que en la app. Resetearlo dejaría sordas a las
+ * pruebas siguientes del archivo. Quién recibe el evento lo decide el propio
+ * bus (su pila de suscriptores), no el doble.
+ */
+export const tauriEventListeners = new Map<string, Set<(event: { event: string; payload: unknown }) => void>>()
+
 export function tauriEventDouble() {
   return {
-    listen: async () => () => {},
+    listen: async (channel: string, handler: (event: { event: string; payload: unknown }) => void) => {
+      const listeners = tauriEventListeners.get(channel) ?? new Set()
+      listeners.add(handler)
+      tauriEventListeners.set(channel, listeners)
+      return () => {
+        listeners.delete(handler)
+      }
+    },
     emit: async () => {},
     once: async () => () => {},
   }
