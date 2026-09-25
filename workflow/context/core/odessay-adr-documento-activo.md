@@ -136,6 +136,7 @@ Precedencia aplicada: este ADR prevalece sobre ambas secciones, que se reconcili
   - `hydrationWritingId` → fase explícita de la transición: sigue en pie (Fase 4).
   - `publishTabState` solo para metadatos: sigue en pie como destino. El guard de ODE-561 ya impide que resucite una pestaña cerrada.
 - **D4 queda así:** toda transición pasa por `activateDocument`. Ningún efecto copia identidad de un portador a otro, salvo el espejo store → `activeEditorTabIdRef`, declarado. Se conservan los invariantes de ODE-561/562/563/564.
+  - **ODE-577 (2026-09-24):** el espejo se queda. El borrador que la shell no adoptaba no venía de un espejo rancio sino del store: la lectura de la sesión persistida llegaba después de que el autor abriera el borrador y **sustituía** el estado, así que la pestaña desaparecía y el espejo copiaba un `null` verdadero. Desde ODE-577, `loaded` significa "la sesión persistida ya llegó", y los cambios anteriores se reaplican sobre ella en vez de perderse (`changesBeforeLoad` en `lib/stores/editor-session-store.ts`).
 
 **Regla para lo que viene.** Antes de mover a un store compartido cualquier dato que lean las limpiezas de la shell, hay que comprobar el remontaje: una prueba que entre por URL de A a B y verifique que las limpiezas de A siguen viendo A.
 
