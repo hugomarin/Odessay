@@ -9,6 +9,9 @@
  *      caso y el hallazgo de ODE-587.)
  *   2. Una pestaña de fondo dibuja el estado editorial que da el catálogo (la
  *      activa lee el estado vivo de la shell).
+ *   3. El atajo de pestaña siguiente cambia a la pestaña contigua.
+ *   4. "New Artifact" en web activa una identidad nueva, y lo que se escribe
+ *      después va a ese documento, no al que estaba abierto.
  *
  * Camino de producción (web): A y B abiertos como pestañas, A activa; gestos
  * reales sobre la barra de pestañas; `webDocumentCatalog` real sobre
@@ -45,7 +48,8 @@ vi.mock("@/lib/services/ai-service-factory", async () =>
 )
 
 
-const { mountEditorShell, pointerClick, resetEditorShellWorld, waitFor } = await import("./support/editor-shell-harness")
+const { advance, clickNewArtifact, flush, mountEditorShell, pointerClick, resetEditorShellWorld, typeInEditor, waitFor } =
+  await import("./support/editor-shell-harness")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 const { createEditorSessionTab, createEmptyEditorSession } = await import("@/lib/local-db/editor-sessions")
@@ -168,6 +172,69 @@ describe("ODE-587 — pestañas de fondo", () => {
       )
       expect(chipColor()).toBe(expected)
       expect(activeWritingId(), "B sigue de fondo").toBe(writingA)
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+/** Emite el atajo real: el shell resuelve la tecla de comando según plataforma. */
+async function pressShortcut(key: string, code: string) {
+  for (const modifier of ["ctrl", "meta"] as const) {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key,
+        code,
+        shiftKey: true,
+        ctrlKey: modifier === "ctrl",
+        metaKey: modifier === "meta",
+        bubbles: true,
+      }),
+    )
+    await flush(2)
+    if (activeWritingId() !== writingA) return
+  }
+}
+
+describe("ODE-587 — crear pestaña y moverse entre pestañas", () => {
+  it(
+    "el atajo de pestaña siguiente cambia a la contigua",
+    async () => {
+      // Mutación: en la shell, que `selectAdjacentTabRef` no seleccione la
+      // pestaña contigua → rojo.
+      await openAWithBInBackground()
+      await pressShortcut("]", "BracketRight")
+
+      await waitFor(() => activeWritingId() === writingB, { label: "B pasa a ser la activa" })
+      await waitFor(() => mounted!.editor().getText().includes(TEXT_B), { label: "con B en el editor", timeoutMs: 10_000 })
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "New Artifact en web activa una identidad nueva y lo escrito va a ese documento",
+    async () => {
+      // Mutación: en `handleCreateWorkspaceTab` (rama web), no activar la
+      // identidad nueva → rojo.
+      await openAWithBInBackground()
+      await clickNewArtifact(mounted!.container)
+
+      const created = await waitFor(
+        () => {
+          const id = activeWritingId()
+          return id && id !== writingA && id !== writingB ? id : null
+        },
+        { label: "una identidad nueva activa", timeoutMs: 10_000 },
+      )
+      expect(mounted!.editor().getText(), "el editor queda vacío").toBe("")
+
+      await typeInEditor("ODE587-NUEVO")
+      await advance(500)
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        if ((await localDB.writings.get(created))?.body_text.includes("ODE587-NUEVO")) break
+        await advance(100)
+      }
+      expect((await localDB.writings.get(created))?.body_text, "lo escrito va al documento nuevo").toContain("ODE587-NUEVO")
+      expect((await localDB.writings.get(writingA))?.body_text, "y no a A").not.toContain("ODE587-NUEVO")
     },
     TEST_TIMEOUT_MS,
   )
