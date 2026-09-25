@@ -42,6 +42,13 @@
  *    qué, cualquier aserción sobre ese invariante sería un verde vacuo
  *    (regla 8 de `workflow/quality/capability-proof-contract.md`).
  *
+ *    **Resuelto en ODE-559:** no había nada "más arriba". El hook tenía
+ *    cuatro guardas redundantes y la comprobación de identidad aparecía
+ *    TRES veces; la mutación de ODE-556 quitó dos y la tercera (en
+ *    `runPackages`) siguió protegiendo. Ahora son una sola compuerta,
+ *    `isResponseStillCurrent`, con su proof en
+ *    `tests/editor-shell-corrections-isolation.test.tsx`.
+ *
  * El control positivo de este humo es justo lo que destapó (2): la primera
  * versión de la prueba de 4c afirmaba una ausencia en un mundo donde la
  * ausencia estaba garantizada, porque el payload del doble no cumplía el
