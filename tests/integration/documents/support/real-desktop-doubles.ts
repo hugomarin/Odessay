@@ -344,10 +344,26 @@ export async function tauriWorkspaceTouchFileDouble(
 
 export async function tauriWorkspaceSyncDouble(
   rootPath: string,
-  _selectedPaths: string[] | undefined,
+  selectedPaths: string[] | undefined,
   documentIds?: Record<string, string>,
 ): Promise<DesktopWorkspaceSnapshot> {
   const manifest = manifestFor(rootPath)
+
+  // Adoption of an explicitly selected file: a `.md` named in `selectedPaths`
+  // that exists on disk but has no manifest entry yet gets a fresh id, as the
+  // real scan assigns one to an unbound file inside the selected scope. This
+  // is the call the unified opener makes when a file from a folder outside
+  // every BindingRoot is opened (`openDocumentByPath`, ODE-581). Only exact
+  // file paths are adopted; unselected files stay out of the manifest, so
+  // callers that never select anything see the same snapshot as before.
+  for (const relativePath of selectedPaths ?? []) {
+    if (!relativePath.endsWith(".md") || manifest.has(relativePath)) continue
+    const isFile = await fs
+      .stat(join(rootPath, relativePath))
+      .then((stat) => stat.isFile())
+      .catch(() => false)
+    if (isFile) manifest.set(relativePath, randomUUID())
+  }
 
   // Explicit-IDs form (the destination bind: relocateDesktopWriting passes
   // `{ [relativePath]: id }` for the file it just moved in) — durably record
