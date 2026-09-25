@@ -197,7 +197,10 @@ describe("ODE-589 — los guardados web no escriben a partir de una lectura viej
           version: 2,
           updatedAt: "2026-09-25T00:00:05.000Z",
         }),
-      (row: LocalWriting | null) => expect(row?.status, "y el cambio de metadatos").toBe("review"),
+      (row: LocalWriting | null) => {
+        expect(row?.status, "y el cambio de metadatos").toBe("review")
+        expect(row?.version, "encima del guardado del editor (v2), no por detrás").toBe(3)
+      },
     ],
     [
       "renameWriting",
@@ -207,7 +210,10 @@ describe("ODE-589 — los guardados web no escriben a partir de una lectura viej
           title: "Carta a Marta",
           updatedAt: "2026-09-25T00:00:05.000Z",
         }),
-      (row: LocalWriting | null) => expect(row?.title, "y el título nuevo").toBe("Carta a Marta"),
+      (row: LocalWriting | null) => {
+        expect(row?.title, "y el título nuevo").toBe("Carta a Marta")
+        expect(row?.version, "renombrar conserva la versión del guardado del editor").toBe(2)
+      },
     ],
   ] as const)(
     "%s no devuelve el cuerpo anterior sobre un guardado del editor en la ventana",
@@ -226,7 +232,6 @@ describe("ODE-589 — los guardados web no escriben a partir de una lectura viej
       const row = await localDB.writings.get(WRITING_ID)
       expect(row?.body_text, "el cuerpo del guardado del editor").toBe("Versión más nueva.")
       expectChange(row)
-      expect(row?.version, "la versión no retrocede").toBeGreaterThanOrEqual(2)
     },
   )
 })
