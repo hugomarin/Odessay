@@ -232,6 +232,19 @@ export function runtimeDetectionDouble() {
   return { isDesktopRuntime: () => world.isDesktop }
 }
 
+/**
+ * `@/lib/runtime/detect`: el otro detector de desktop, el que mira
+ * `window.__TAURI_INTERNALS__`. En la app los dos coinciden; en el harness hay
+ * que doblarlo para que no contradiga a `isDesktopRuntime`. Lo usa, p. ej.,
+ * `loadContextualWorkspace` (el árbol del Workspace, ODE-580).
+ */
+export function tauriRuntimeDetectDouble() {
+  return {
+    isTauriRuntime: () => world.isDesktop,
+    isWebRuntime: () => !world.isDesktop,
+  }
+}
+
 export function aiServiceDouble() {
   return {
     getAIService: () => ({

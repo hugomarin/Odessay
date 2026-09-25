@@ -39,10 +39,13 @@ import {
   resetCatalogDoubles,
   resetSettingsStoreDouble,
   resetWriteFileFailureState,
+  tauriCatalogActivateBindingRootDouble,
   tauriCatalogDetachLocalFileDouble,
   tauriCatalogDualWriteDouble,
   tauriCatalogGetByIdDouble,
   tauriCatalogListDouble,
+  tauriCatalogListRetiredBindingRootsDouble,
+  tauriCatalogReactivateBindingRootDouble,
   tauriCatalogResolvePathDouble,
   tauriCreateFileDouble,
   tauriListRecentFilesDouble,
@@ -107,11 +110,12 @@ export function tauriCommandsDouble() {
     tauriCatalogApplyReconcile: unimplemented("tauriCatalogApplyReconcile"),
     tauriCatalogApplyCloudSnapshots: unimplemented("tauriCatalogApplyCloudSnapshots"),
     tauriCatalogApplyWorkspaceRemoval: unimplemented("tauriCatalogApplyWorkspaceRemoval"),
-    tauriCatalogActivateBindingRoot: unimplemented("tauriCatalogActivateBindingRoot"),
+    // Registrar un Workspace (abrir desde su árbol, ODE-580).
+    tauriCatalogActivateBindingRoot: tauriCatalogActivateBindingRootDouble,
     tauriCatalogCountBindingRootDocuments: unimplemented("tauriCatalogCountBindingRootDocuments"),
     tauriCatalogListBindingRootDocuments: unimplemented("tauriCatalogListBindingRootDocuments"),
-    tauriCatalogListRetiredBindingRoots: unimplemented("tauriCatalogListRetiredBindingRoots"),
-    tauriCatalogReactivateBindingRoot: unimplemented("tauriCatalogReactivateBindingRoot"),
+    tauriCatalogListRetiredBindingRoots: tauriCatalogListRetiredBindingRootsDouble,
+    tauriCatalogReactivateBindingRoot: tauriCatalogReactivateBindingRootDouble,
   }
 }
 

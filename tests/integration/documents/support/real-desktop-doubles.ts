@@ -54,6 +54,44 @@ export function resetCatalogDoubles(): void {
   catalogsByDb.clear()
   bindingRootIdsByRoot.clear()
   manifestsByRoot.clear()
+  for (const gate of [...catalogReadGates]) gate.release()
+}
+
+type CatalogReadGate = { matches: (idOrPath: string) => boolean; hits: number; opened: Promise<void>; release: () => void }
+let catalogReadGates: CatalogReadGate[] = []
+
+/**
+ * Retiene las lecturas de fila del catálogo (`getById`, `resolvePath`) cuyo id
+ * o ruta cumpla `matches`, hasta `release()`. La lectura se hace de verdad al
+ * soltarla; solo cambia cuándo.
+ *
+ * Sirve para parar un opener justo en su frontera asíncrona — la lectura de la
+ * fila del documento que va a abrir — y observar qué hizo la shell antes de
+ * esperar (ODE-580). `hits()` es el control positivo: la lectura retenida
+ * ocurrió.
+ */
+export function holdCatalogReads(matches: (idOrPath: string) => boolean): { hits: () => number; release: () => void } {
+  let open!: () => void
+  const gate: CatalogReadGate = {
+    matches,
+    hits: 0,
+    opened: new Promise<void>((resolve) => {
+      open = resolve
+    }),
+    release: () => {
+      catalogReadGates = catalogReadGates.filter((candidate) => candidate !== gate)
+      open()
+    },
+  }
+  catalogReadGates.push(gate)
+  return { hits: () => gate.hits, release: gate.release }
+}
+
+async function passCatalogReadGates(idOrPath: string): Promise<void> {
+  const gate = catalogReadGates.find((candidate) => candidate.matches(idOrPath))
+  if (!gate) return
+  gate.hits += 1
+  await gate.opened
 }
 
 function manifestFor(rootPath: string): Map<string, string> {
@@ -358,10 +396,12 @@ export async function tauriCatalogBulkDualWriteDouble(dbPath: string, inputs: De
 }
 
 export async function tauriCatalogGetByIdDouble(dbPath: string, id: string): Promise<DesktopCatalogRow | null> {
+  await passCatalogReadGates(id)
   return rowsFor(dbPath).get(id) ?? null
 }
 
 export async function tauriCatalogResolvePathDouble(dbPath: string, path: string): Promise<DesktopCatalogRow | null> {
+  await passCatalogReadGates(path)
   for (const row of rowsFor(dbPath).values()) {
     if (row.canonicalPath === path) return row
   }
@@ -380,6 +420,30 @@ export async function tauriCatalogListDouble(dbPath: string): Promise<DesktopCat
  * and short-circuits immediately when it's empty.
  */
 export async function tauriCatalogListRetiredBindingRootsDouble(_dbPath: string): Promise<DesktopRetiredBindingRoot[]> {
+  return []
+}
+
+/**
+ * Same premise as `tauriCatalogListRetiredBindingRootsDouble`: no test using
+ * this double retires a BindingRoot, so there is never a retirement fence to
+ * lift and activating one is a real no-op. Registering a Workspace
+ * (`DesktopWorkspaceService.registerWorkspace`) calls it before writing
+ * Settings.
+ */
+export async function tauriCatalogActivateBindingRootDouble(
+  _dbPath: string,
+  _bindingRootId: string,
+  _rootPath: string,
+): Promise<void> {}
+
+/**
+ * Same premise: with no retired BindingRoot there is nothing archived to
+ * restore, so re-registering a root returns no cloud-archived candidates.
+ */
+export async function tauriCatalogReactivateBindingRootDouble(
+  _dbPath: string,
+  _bindingRootId: string,
+): Promise<DesktopCatalogRow[]> {
   return []
 }
 
