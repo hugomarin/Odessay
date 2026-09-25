@@ -86,9 +86,27 @@ pub fn write_file(
     content: String,
     expected_content_hash: Option<String>,
 ) -> Result<(), String> {
-    let target = Path::new(&path);
+    write_file_with_stages(&path, &content, expected_content_hash, &mut |_| {})
+}
 
-    if let Some(expected) = expected_content_hash {
+/// Points inside a guarded write where a test can act as an external editor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WriteStage {
+    /// The `.tmp` sibling is fully written; the next step makes it the target.
+    BeforeCommit,
+    /// The commit displaced an unexpected version; the next step puts it back.
+    BeforeRestore,
+}
+
+fn write_file_with_stages(
+    path: &str,
+    content: &str,
+    expected_content_hash: Option<String>,
+    at_stage: &mut dyn FnMut(WriteStage),
+) -> Result<(), String> {
+    let target = Path::new(path);
+
+    if let Some(expected) = &expected_content_hash {
         if !target.exists() {
             return Err(format!(
                 "CONFLICT: {} no longer exists on disk (expected content hash {expected})",
@@ -96,7 +114,7 @@ pub fn write_file(
             ));
         }
         let actual = crate::commands::workspace::content_hash_for_markdown_file(target)?;
-        if actual != expected {
+        if &actual != expected {
             return Err(format!(
                 "CONFLICT: {} changed on disk since it was last read (expected {expected}, found {actual})",
                 target.display()
@@ -110,7 +128,8 @@ pub fn write_file(
         }
     }
     let tmp_path = format!("{}.tmp", path);
-    fs::write(&tmp_path, &content).map_err(|e| format!("write_file tmp: {e}"))?;
+    fs::write(&tmp_path, content).map_err(|e| format!("write_file tmp: {e}"))?;
+    at_stage(WriteStage::BeforeCommit);
     fs::rename(&tmp_path, target).map_err(|e| {
         let _ = fs::remove_file(&tmp_path);
         format!("write_file rename: {e}")
@@ -747,6 +766,150 @@ mod tests {
             "Changed by another app\n",
             "the external edit must remain completely untouched"
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    // ODE-578 — the guard above runs before the `.tmp` is written, so an
+    // external save landing between that check and the replace used to be
+    // overwritten silently. These tests act as the external editor at the
+    // last moment before the commit (and, for the double race, before the
+    // restore), through the stage hook `write_file` passes as a no-op.
+
+    fn guarded_write(
+        target: &Path,
+        content: &str,
+        on_stage: impl FnMut(WriteStage),
+    ) -> (Result<(), String>, Vec<WriteStage>) {
+        let baseline = crate::commands::workspace::content_hash_for_markdown_file(target)
+            .expect("compute baseline hash");
+        let mut on_stage = on_stage;
+        let mut seen = Vec::new();
+        let result = write_file_with_stages(
+            &target.to_string_lossy(),
+            content,
+            Some(baseline),
+            &mut |stage| {
+                seen.push(stage);
+                on_stage(stage);
+            },
+        );
+        (result, seen)
+    }
+
+    fn entries_in(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(dir)
+            .expect("read dir")
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn write_file_commit_with_nothing_in_the_window_replaces_the_target() {
+        let root = temp_dir("commit-clean");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+
+        let (result, seen) = guarded_write(&target, "Mine\n", |_| {});
+
+        result.expect("an unchanged target must be replaced");
+        assert_eq!(seen, vec![WriteStage::BeforeCommit], "positive control: the window was reached");
+        assert_eq!(fs::read_to_string(&target).expect("read target"), "Mine\n");
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_file_external_in_place_save_in_the_commit_window_is_a_conflict() {
+        let root = temp_dir("commit-in-place");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+
+        let (result, seen) = guarded_write(&target, "Mine\n", |stage| {
+            if stage == WriteStage::BeforeCommit {
+                fs::write(&target, "External\n").expect("external in-place save");
+            }
+        });
+
+        assert!(seen.contains(&WriteStage::BeforeCommit), "positive control: the window was reached");
+        let error = result.expect_err("a save that landed in the window must refuse the write");
+        assert!(error.starts_with("CONFLICT:"), "got: {error}");
+        assert_eq!(fs::read_to_string(&target).expect("read target"), "External\n");
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_file_external_atomic_save_in_the_commit_window_is_a_conflict() {
+        let root = temp_dir("commit-atomic");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+
+        let (result, seen) = guarded_write(&target, "Mine\n", |stage| {
+            if stage == WriteStage::BeforeCommit {
+                // How most editors save: write a sibling, rename it over.
+                let sibling = target.with_file_name(".Letter.md.sb-external");
+                fs::write(&sibling, "External\n").expect("external sibling");
+                fs::rename(&sibling, &target).expect("external atomic replace");
+            }
+        });
+
+        assert!(seen.contains(&WriteStage::BeforeCommit), "positive control: the window was reached");
+        let error = result.expect_err("a save that landed in the window must refuse the write");
+        assert!(error.starts_with("CONFLICT:"), "got: {error}");
+        assert_eq!(fs::read_to_string(&target).expect("read target"), "External\n");
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn write_file_external_delete_in_the_commit_window_is_a_conflict() {
+        let root = temp_dir("commit-delete");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+
+        let (result, seen) = guarded_write(&target, "Mine\n", |stage| {
+            if stage == WriteStage::BeforeCommit {
+                fs::remove_file(&target).expect("external delete");
+            }
+        });
+
+        assert!(seen.contains(&WriteStage::BeforeCommit), "positive control: the window was reached");
+        let error = result.expect_err("a delete in the window must not be undone by the write");
+        assert!(error.starts_with("CONFLICT:"), "got: {error}");
+        assert!(entries_in(&root).is_empty(), "nothing recreated, no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// The double race: a first external save lands in the commit window, and
+    /// a second one lands while the first is being put back. Neither may be
+    /// lost: the first ends at the target, the second is kept beside it.
+    #[test]
+    fn write_file_second_external_save_during_restore_is_kept_beside_the_target() {
+        let root = temp_dir("commit-double");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+
+        let (result, seen) = guarded_write(&target, "Mine\n", |stage| match stage {
+            WriteStage::BeforeCommit => fs::write(&target, "External 1\n").expect("first external save"),
+            WriteStage::BeforeRestore => fs::write(&target, "External 2\n").expect("second external save"),
+        });
+
+        assert_eq!(
+            seen,
+            vec![WriteStage::BeforeCommit, WriteStage::BeforeRestore],
+            "positive control: both windows were reached"
+        );
+        let error = result.expect_err("the write must be refused");
+        assert!(error.starts_with("CONFLICT:"), "got: {error}");
+        assert_eq!(fs::read_to_string(&target).expect("read target"), "External 1\n");
+        let entries = entries_in(&root);
+        assert_eq!(entries.len(), 2, "target plus the kept version: {entries:?}");
+        let kept = entries.iter().find(|name| name.as_str() != "Letter.md").expect("kept version");
+        assert!(error.contains(kept.as_str()), "the error names where it was kept: {error}");
+        assert_eq!(fs::read_to_string(root.join(kept)).expect("read kept"), "External 2\n");
         let _ = fs::remove_dir_all(root);
     }
 
