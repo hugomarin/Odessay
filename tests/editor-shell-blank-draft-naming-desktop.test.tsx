@@ -21,7 +21,7 @@
  * Mutation test (ODE-574): cada caso nombra en su comentario la mutación que
  * lo pone en rojo.
  */
-import { join } from "node:path"
+import { basename, dirname, join } from "node:path"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@tiptap/react", async (importOriginal) => {
@@ -72,6 +72,8 @@ const { createDesktopWorkspace, desktopWorkspaceRoot, destroyDesktopWorkspace, r
 const { DESKTOP_PERSISTENCE_DEBOUNCE_MS } = await import("@/components/editor/editor-shell")
 const { createDesktopDraft: createProductionDesktopDraft } = await import("@/lib/services/document-service-factory")
 const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
+const { STARTER_DOCUMENTS, STARTER_DOCUMENT_IDS } = await import("@/lib/services/desktop/starter-documents")
+const STARTER_FILENAMES = new Set(STARTER_DOCUMENTS.map((doc) => doc.filename))
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 const { createEmptyEditorSession } = await import("@/lib/local-db/editor-sessions")
@@ -119,8 +121,19 @@ function activeTab() {
   return session.tabs.find((tab) => tab.id === session.active_tab_id)
 }
 
+/**
+ * Los documentos de bienvenida que siembra el primer arranque (ODE-449, el
+ * reconciliador del workspace) no son de esta prueba: se excluyen del disco y
+ * del catálogo. La propiedad sigue siendo "un solo documento del usuario".
+ */
+async function userMarkdown() {
+  return (await readWorkspaceMarkdown()).filter(
+    (file) => !STARTER_FILENAMES.has(basename(file.path)) || basename(dirname(file.path)) !== "artifact-studio-managed",
+  )
+}
+
 async function catalogRows() {
-  return (await getDocumentCatalog()).list()
+  return (await (await getDocumentCatalog()).list()).filter((row) => !STARTER_DOCUMENT_IDS.has(row.id))
 }
 
 function renameInput() {
@@ -167,7 +180,7 @@ describe("ODE-478 caso 3 — nombrar un borrador todavía en blanco", () => {
       const rows = await catalogRows()
       expect(rows, "una fila en el catálogo").toHaveLength(1)
       expect(rows[0]?.title).toBe("Nombre que yo quería")
-      expect(await readWorkspaceMarkdown(), "un .md en el workspace").toHaveLength(1)
+      expect(await userMarkdown(), "un .md en el workspace").toHaveLength(1)
       await waitFor(() => activeTab()?.writing_id === rows[0]?.id, { label: "la pestaña adopta el documento" })
     },
     TEST_TIMEOUT_MS,
@@ -190,7 +203,7 @@ describe("ODE-478 caso 3 — nombrar un borrador todavía en blanco", () => {
       })
       expect(renameInput(), "y sigue abierto").toBeTruthy()
       expect(activeTab()?.writing_id ?? null, "la pestaña sigue siendo un borrador").toBeNull()
-      expect(await readWorkspaceMarkdown(), "ningún .md").toEqual([])
+      expect(await userMarkdown(), "ningún .md").toEqual([])
     },
     TEST_TIMEOUT_MS,
   )
@@ -219,7 +232,7 @@ describe("ODE-478 caso 3 — nombrar un borrador todavía en blanco", () => {
       await renameActiveTab("Título mientras se guarda")
       await advance(1_000)
       expect(renameInput(), "el modal no se cierra mientras la escritura sigue en vuelo").toBeTruthy()
-      expect(await readWorkspaceMarkdown(), "nada en disco todavía").toEqual([])
+      expect(await userMarkdown(), "nada en disco todavía").toEqual([])
 
       release()
       await waitFor(() => !renameInput(), { label: "el modal se cierra al ser durable", timeoutMs: 15_000 })
@@ -232,7 +245,7 @@ describe("ODE-478 caso 3 — nombrar un borrador todavía en blanco", () => {
       // título del guardado en cola no renombra el archivo en desktop (el
       // título sale del nombre del `.md`; renombrar pasa por `renameWriting`).
       // La prueba antigua solo miraba que `saveWriting` recibiera el título.
-      expect((await readWorkspaceMarkdown()).map((entry) => entry.path)).toEqual([file.path])
+      expect((await userMarkdown()).map((entry) => entry.path)).toEqual([file.path])
     },
     TEST_TIMEOUT_MS,
   )
@@ -251,7 +264,7 @@ describe("ODE-478 caso 3 — nombrar un borrador todavía en blanco", () => {
       await advance(SAVE_WINDOW_MS)
 
       await waitFor(() => activeTab()?.writing_id ?? null, { label: "la pestaña se materializa", timeoutMs: 15_000 })
-      const files = await readWorkspaceMarkdown()
+      const files = await userMarkdown()
       expect(files, "un .md").toHaveLength(1)
       expect(files[0]?.contents, "con la imagen").toContain("photo.png")
     },
@@ -273,7 +286,7 @@ describe("ODE-478 caso 3 — nombrar un borrador todavía en blanco", () => {
       expect(activeTab()?.writing_id, "cuando el modal se abre, el documento ya tiene identidad").toEqual(
         expect.any(String),
       )
-      expect(await readWorkspaceMarkdown(), "y está en disco").toHaveLength(1)
+      expect(await userMarkdown(), "y está en disco").toHaveLength(1)
     },
     TEST_TIMEOUT_MS,
   )
@@ -291,7 +304,7 @@ describe('ODE-478 follow-up — "Save As" sobre un borrador todavía efímero', 
 
       await waitFor(() => world.saveDialogCalls.length === 1, { label: "el selector nativo se abre" })
       await advance(SAVE_WINDOW_MS)
-      expect(await readWorkspaceMarkdown(), "cancelar no escribe nada").toEqual([])
+      expect(await userMarkdown(), "cancelar no escribe nada").toEqual([])
     },
     TEST_TIMEOUT_MS,
   )
@@ -308,7 +321,7 @@ describe('ODE-478 follow-up — "Save As" sobre un borrador todavía efímero', 
 
       await waitFor(() => activeTab()?.title === "My Named File", { label: "la pestaña toma el nombre", timeoutMs: 15_000 })
       await advance(SAVE_WINDOW_MS)
-      const files = await readWorkspaceMarkdown()
+      const files = await userMarkdown()
       expect(files.map((entry) => entry.path), "un solo archivo, en la ruta elegida").toEqual([chosen])
       const rows = await catalogRows()
       expect(rows).toHaveLength(1)
@@ -323,7 +336,7 @@ describe('ODE-478 follow-up — "Save As" sobre un borrador todavía efímero', 
       // Mutación: la misma que el caso anterior → rojo.
       await mountWithBlankDraft()
       await typeInEditor("contenido real antes de guardar")
-      expect(await readWorkspaceMarkdown(), "precondición: aún no se materializó").toEqual([])
+      expect(await userMarkdown(), "precondición: aún no se materializó").toEqual([])
 
       const chosen = join(desktopWorkspaceRoot(), "elegida", "My Note.md")
       world.saveDialogResult = chosen
@@ -332,7 +345,7 @@ describe('ODE-478 follow-up — "Save As" sobre un borrador todavía efímero', 
       await waitFor(() => activeTab()?.title === "My Note", { label: "la pestaña toma el nombre", timeoutMs: 15_000 })
       // Y el autoguardado que ya estaba en cola no crea otro documento.
       await advance(SAVE_WINDOW_MS)
-      const files = await readWorkspaceMarkdown()
+      const files = await userMarkdown()
       expect(files.map((entry) => entry.path), "un solo archivo, en la ruta elegida").toEqual([chosen])
       expect(files[0]?.contents).toContain("contenido real antes de guardar")
       expect(await catalogRows(), "una sola fila").toHaveLength(1)
