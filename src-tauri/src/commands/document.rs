@@ -72,14 +72,17 @@ pub fn create_file(dir: String, filename: String) -> Result<String, String> {
 /// watcher/reconciler path (TS side) detects an external edit early and
 /// drives the UI, but that path always has a window between "detected" and
 /// "the next save actually runs" where a caller could still overwrite an
-/// external edit it never saw. This is the final barrier: immediately before
-/// the rename that makes a write durable, the file's *current* on-disk
+/// external edit it never saw. This is the final barrier: before the write
+/// that makes a save durable, the file's *current* on-disk
 /// content hash is recomputed and compared against what the caller expected
 /// when it started this save. A mismatch (or the file having disappeared)
 /// means the file changed since the caller last knew about it, and the write
 /// is refused with a `CONFLICT: ` prefixed error instead of silently
 /// clobbering someone else's edit. `None` skips the check entirely — used
-/// for a brand-new file with no prior baseline to compare against.
+/// for a brand-new file with no prior baseline to compare against. The
+/// check is made twice: early, before the `.tmp` is written, and again at
+/// the commit itself (`commit_if_unchanged`, ODE-578), so a save that lands
+/// while the `.tmp` is being written is refused too.
 #[tauri::command]
 pub fn write_file(
     path: String,
@@ -130,10 +133,173 @@ fn write_file_with_stages(
     let tmp_path = format!("{}.tmp", path);
     fs::write(&tmp_path, content).map_err(|e| format!("write_file tmp: {e}"))?;
     at_stage(WriteStage::BeforeCommit);
-    fs::rename(&tmp_path, target).map_err(|e| {
-        let _ = fs::remove_file(&tmp_path);
+    match expected_content_hash {
+        Some(expected) => {
+            commit_if_unchanged(target, Path::new(&tmp_path), content, &expected, at_stage)
+        }
+        None => fs::rename(&tmp_path, target).map_err(|e| {
+            let _ = fs::remove_file(&tmp_path);
+            format!("write_file rename: {e}")
+        }),
+    }
+}
+
+/// The commit boundary of a guarded write (ODE-578). The check above runs
+/// before the `.tmp` is written, so an external save can still land between
+/// it and the replace. Instead of a blind `rename`, the `.tmp` and the target
+/// are exchanged atomically: afterwards the `.tmp` path holds exactly what the
+/// target held at that instant, and only if that is the expected version is
+/// it discarded. Anything else is an external version that arrived in the
+/// window: it is put back with a second exchange and the write is refused
+/// with the same `CONFLICT: ` the early check returns, so the caller handles
+/// both identically. No version other than the expected baseline and the
+/// caller's own content is ever deleted.
+fn commit_if_unchanged(
+    target: &Path,
+    tmp: &Path,
+    content: &str,
+    expected: &str,
+    at_stage: &mut dyn FnMut(WriteStage),
+) -> Result<(), String> {
+    match exchange_paths(tmp, target) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound && tmp.exists() => {
+            let _ = fs::remove_file(tmp);
+            return Err(format!(
+                "CONFLICT: {} was removed from disk while the save was being written",
+                target.display()
+            ));
+        }
+        Err(error) if exchange_unsupported(&error) => {
+            return commit_by_revalidation(target, tmp, expected);
+        }
+        Err(error) => {
+            let _ = fs::remove_file(tmp);
+            return Err(format!("write_file exchange: {error}"));
+        }
+    }
+
+    let displaced = crate::commands::workspace::content_hash_for_markdown_file(tmp);
+    if displaced.as_deref() == Ok(expected) {
+        let _ = fs::remove_file(tmp);
+        return Ok(());
+    }
+    let found = displaced.unwrap_or_else(|error| format!("an unreadable version ({error})"));
+
+    at_stage(WriteStage::BeforeRestore);
+    if exchange_paths(tmp, target).is_ok() && is_exactly(tmp, content) {
+        let _ = fs::remove_file(tmp);
+        return Err(format!(
+            "CONFLICT: {} changed on disk while the save was being written (expected {expected}, found {found})",
+            target.display()
+        ));
+    }
+    // Restoring did not bring our own content back: the `.tmp` path holds a
+    // version someone else wrote (a second save during the restore, or the
+    // first one if the target vanished). Keep it beside the target.
+    let kept = keep_beside(target, tmp)?;
+    Err(format!(
+        "CONFLICT: {} changed on disk while the save was being written; another version was kept at {}",
+        target.display(),
+        kept.display()
+    ))
+}
+
+/// Fallback for volumes without an atomic exchange (some network and FAT
+/// volumes): re-check right before the rename. This narrows the window to two
+/// syscalls instead of closing it.
+fn commit_by_revalidation(target: &Path, tmp: &Path, expected: &str) -> Result<(), String> {
+    let current = crate::commands::workspace::content_hash_for_markdown_file(target);
+    if current.as_deref() != Ok(expected) {
+        let _ = fs::remove_file(tmp);
+        return Err(format!(
+            "CONFLICT: {} changed on disk while the save was being written",
+            target.display()
+        ));
+    }
+    fs::rename(tmp, target).map_err(|e| {
+        let _ = fs::remove_file(tmp);
         format!("write_file rename: {e}")
     })
+}
+
+fn is_exactly(path: &Path, content: &str) -> bool {
+    fs::read(path).map(|bytes| bytes == content.as_bytes()).unwrap_or(false)
+}
+
+/// Moves a displaced version out of the `.tmp` path to a sibling that is not
+/// a `.md` file, so the workspace never indexes it as a document.
+fn keep_beside(target: &Path, displaced: &Path) -> Result<PathBuf, String> {
+    let name = target
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "document.md".to_string());
+    let suffix = Uuid::new_v4().simple().to_string();
+    let kept = target.with_file_name(format!("{name}.conflict-{}", &suffix[..8]));
+    fs::rename(displaced, &kept).map_err(|e| {
+        format!(
+            "CONFLICT: {} changed on disk while the save was being written, and the version found there could not be kept ({e}); it remains at {}",
+            target.display(),
+            displaced.display()
+        )
+    })?;
+    Ok(kept)
+}
+
+/// Atomically swaps two existing paths.
+#[cfg(target_os = "macos")]
+fn exchange_paths(a: &Path, b: &Path) -> std::io::Result<()> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let a = CString::new(a.as_os_str().as_bytes())?;
+    let b = CString::new(b.as_os_str().as_bytes())?;
+    // SAFETY: both pointers are valid NUL-terminated strings for the call.
+    let rc = unsafe { libc::renamex_np(a.as_ptr(), b.as_ptr(), libc::RENAME_SWAP) };
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+/// Atomically swaps two existing paths.
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn exchange_paths(a: &Path, b: &Path) -> std::io::Result<()> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let a = CString::new(a.as_os_str().as_bytes())?;
+    let b = CString::new(b.as_os_str().as_bytes())?;
+    // SAFETY: both pointers are valid NUL-terminated strings for the call.
+    let rc = unsafe {
+        libc::renameat2(libc::AT_FDCWD, a.as_ptr(), libc::AT_FDCWD, b.as_ptr(), libc::RENAME_EXCHANGE)
+    };
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(any(target_os = "macos", all(target_os = "linux", target_env = "gnu"))))]
+fn exchange_paths(_a: &Path, _b: &Path) -> std::io::Result<()> {
+    Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
+}
+
+fn exchange_unsupported(error: &std::io::Error) -> bool {
+    if error.kind() == std::io::ErrorKind::Unsupported {
+        return true;
+    }
+    #[cfg(unix)]
+    {
+        matches!(
+            error.raw_os_error(),
+            Some(code) if code == libc::ENOTSUP || code == libc::EOPNOTSUPP || code == libc::ENOSYS
+        ) || (cfg!(target_os = "linux") && error.raw_os_error() == Some(libc::EINVAL))
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
 }
 
 /// Atomically write binary content to `path` by writing a .tmp sibling then renaming.
