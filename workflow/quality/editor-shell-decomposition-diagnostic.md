@@ -61,6 +61,26 @@ La red que lo protege: 4a, 4b, los humos desktop y corrections, ODE-464 y los ba
 
 La segunda mitad del cluster (aplicar, aceptar, rechazar, aprender palabra, el toast, el cableado de `useManualCorrections` y la invalidación por edición) es la entrega 2b.
 
+**Actualización (2026-09-24, ODE-586 — corte 2, entrega 2b):** la segunda mitad sale en dos hooks, cada uno llamado donde estaba su código, porque en la shell vivía en dos bloques separados y juntarlos habría obligado a reordenarla:
+
+- `hooks/useCorrectionActions.ts`: aplicar (rich y markdown), aceptar, rechazar, aceptar o rechazar todas, aprender y olvidar palabras, y el toast. Solo callbacks.
+- `hooks/useCorrectionLifecycle.ts`: los espejos de sugerencias y palabras aprendidas, la carga de palabras aprendidas, `useManualCorrections`, la invalidación por edición, el volcado al recuperar la conexión y las acciones en línea desde las decoraciones. Sus efectos corren en el mismo orden y en la misma posición.
+
+Mudanza mecánica. El estado y los refs siguen siendo de la shell. Sale también `getBlockSuggestions`, que nadie usaba. Contra la entrega 2a:
+
+```text
+5,500 líneas        (-621)
+   45 useEffect     (-6)
+   68 useCallback   (-12)
+  122 referencias a corrections   (-106)
+```
+
+Con esto el cluster de correcciones queda fuera de la shell. Lo pendiente es de estado, no de sitio:
+
+- **Los espejos** de sugerencias y palabras aprendidas siguen existiendo; ahora viven en el hook.
+- **Aceptar y rechazar están duplicados**: la versión del panel y la versión en línea desde las decoraciones tienen cada una su lógica.
+- **Sin prueba:** el volcado de bloques pendientes al recuperar la conexión no tiene ninguna.
+
 **Actualización (2026-09-24, ODE-563 — segundo tiempo del primer corte):** los 9 metadatos del documento (título, título explícito, versión, fecha de creación, slug, estado, tipo, visibilidad, ciclo de vida) tienen ahora un solo dueño, `applyDocumentMetadata`, que escribe estado y ref en el mismo paso. Se eliminaron sus 9 efectos espejo y todas sus escrituras a mano; `writingSlugRef` desapareció, porque nadie lo leía. Contra `main`, con el mismo método:
 
 ```text

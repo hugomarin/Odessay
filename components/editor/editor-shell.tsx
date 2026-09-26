@@ -15,8 +15,9 @@ import {
   type DocumentMetadataPatch,
   type HydrationPhase,
 } from "@/hooks/useDocumentHydration"
+import { useCorrectionActions, type CorrectionToastState } from "@/hooks/useCorrectionActions"
 import { useCorrectionBlocks } from "@/hooks/useCorrectionBlocks"
-import { useManualCorrections } from "@/hooks/useManualCorrections"
+import { useCorrectionLifecycle } from "@/hooks/useCorrectionLifecycle"
 import {
   formatSaveStateDiagnostic,
   mapLocalSyncStatusToSaveState,
@@ -89,36 +90,20 @@ import {
   clearPublicationSuggestions,
   setPublicationSuggestions as setEditorPublicationSuggestions,
 } from "@/lib/editor/publication-suggestion-extension"
-import { getResolvedCorrectionText, resolveCorrectionDecorationRanges } from "@/lib/editor/ai-correction-decorations"
 import {
-  acknowledgeCorrectionDirtyBlocks,
-  getCurrentCorrectionBlock,
   type CorrectionTriggerBlock,
 } from "@/lib/editor/correction-trigger-plugin"
 import {
-  applyPublicationSuggestionGroup,
-  deriveSuggestionContexts,
   getVisibleCorrectionSuggestions,
-  hashPublicationSource,
-  invalidateBlockSuggestions,
-  isSuggestionAcceptDisabled,
   replaceBlockSuggestions,
-  updateSuggestionStatuses,
 } from "@/lib/editor/suggestion-engine"
-import { forgetCorrectionDecision, readCorrectionMemory, rememberCorrectionDecision } from "@/lib/editor/correction-memory-client"
-import { admitSuggestions } from "@/lib/corrections/engine/admission"
 import {
   CORRECTION_STALE_TIMEOUT_MS,
-  consumeDeferredCorrectionBlocks,
-  deferCorrectionBlocks,
   dropExpiredStaleSuggestions,
   dropStaleSuggestionsForBlock,
   restorePendingSuggestions,
   type DeferredCorrectionBlocksState,
 } from "@/lib/corrections/engine/lifecycle"
-import {
-  createStableFingerprint,
-} from "@/lib/corrections/engine/identity"
 import {
   getMissingCorrectionBlockIds,
   takeCorrectionBatch,
@@ -153,20 +138,10 @@ import { calculateTextMetrics } from "@/lib/editor/text-metrics"
 import { saveBinaryArtifact } from "@/lib/utils/download"
 import { cn } from "@/lib/utils"
 import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
-import { logCorrectionEvent } from "@/lib/observability/corrections-log"
 import {
   deleteLocalCorrectionBlocks,
   readLocalCorrectionBlocks,
 } from "@/lib/corrections/persistence"
-import { createLearnedWordSet, normalizeLearnedWord } from "@/lib/corrections/learned-words"
-import {
-  loadCachedLearnedWordsPages,
-  mergeLearnedWordEntries,
-  primeLearnedWordsCache,
-  removeCachedLearnedWord,
-  upsertCachedLearnedWord,
-} from "@/lib/corrections/learned-words-loader"
-import { buildLearnWordRollbackState } from "@/lib/corrections/learned-words-rollback"
 import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
   ArtifactType,
@@ -177,7 +152,6 @@ import type {
   WritingVisibility,
 } from "@/lib/local-db/schema"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
-import { getAIService } from "@/lib/services/ai-service-factory"
 import { getAssetService } from "@/lib/services/asset-service-factory"
 import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 import {
@@ -294,12 +268,6 @@ type RenameWritingSnapshot = {
   bodyText: string
 }
 
-type CorrectionToastState = {
-  phase: "running" | "complete" | "error"
-  completed: number
-  total: number
-  message?: string
-}
 
 type ExternalFileNotice =
   | { kind: "moved"; path: string | null }
@@ -2425,7 +2393,10 @@ export function EditorShell({
         window.cancelAnimationFrame(markdownSelectionRafRef.current)
       }
 
+      // El timer del toast lo arma `showCorrectionToast` (useCorrectionActions)
+      // en cualquier momento; hay que leer su valor al desmontar, no al montar.
       if (correctionToastDismissRef.current !== null) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         window.clearTimeout(correctionToastDismissRef.current)
       }
 
@@ -2480,112 +2451,35 @@ export function EditorShell({
     [editor, persistEditorSnapshot, updateDerivedEditorState],
   )
 
-  const applyCorrectionSuggestionsByRange = useCallback(
-    (targetSuggestions: PublicationSuggestion[]) => {
-      if (!editor || modeRef.current !== "rich") {
-        return {
-          appliedIds: [] as string[],
-          conflictIds: targetSuggestions.map((suggestion) => suggestion.id),
-        }
-      }
-
-      const pendingSuggestions = targetSuggestions.filter((suggestion) => suggestion.status === "pending")
-
-      if (pendingSuggestions.length === 0) {
-        return {
-          appliedIds: [] as string[],
-          conflictIds: [],
-        }
-      }
-
-      const resolvedRanges = resolveCorrectionDecorationRanges(editor.state.doc, pendingSuggestions)
-      const rangesById = new Map(resolvedRanges.map((range) => [range.suggestion.id, range]))
-      const applicableRanges = pendingSuggestions
-        .map((suggestion) => {
-          const range = rangesById.get(suggestion.id) ?? null
-
-          if (!range) {
-            return null
-          }
-
-          return getResolvedCorrectionText(editor.state.doc, range) === suggestion.original_text
-            ? range
-            : null
-        })
-        .filter((range): range is NonNullable<typeof range> => range !== null)
-        .sort((left, right) => right.from - left.from)
-
-      if (applicableRanges.length === 0) {
-        return {
-          appliedIds: [] as string[],
-          conflictIds: pendingSuggestions.map((suggestion) => suggestion.id),
-        }
-      }
-
-      const selectionBookmark = editor.state.selection.getBookmark()
-      const transaction = editor.state.tr
-
-      for (const { suggestion, from, to } of applicableRanges) {
-        transaction.insertText(suggestion.replacement_text, from, to)
-      }
-
-      try {
-        transaction.setSelection(selectionBookmark.map(transaction.mapping).resolve(transaction.doc))
-      } catch {
-        transaction.setSelection(TextSelection.near(transaction.doc.resolve(transaction.selection.from)))
-      }
-
-      if (markdownSaveTimeoutRef.current) {
-        window.clearTimeout(markdownSaveTimeoutRef.current)
-        markdownSaveTimeoutRef.current = null
-      }
-
-      suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
-      isApplyingContentRef.current = true
-      editor.view.dispatch(transaction)
-      isApplyingContentRef.current = false
-      updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
-
-      const appliedIds = applicableRanges.map((range) => range.suggestion.id)
-
-      return {
-        appliedIds,
-        conflictIds: pendingSuggestions
-          .filter((suggestion) => !appliedIds.includes(suggestion.id))
-          .map((suggestion) => suggestion.id),
-      }
-    },
-    [editor, persistEditorSnapshot, updateDerivedEditorState],
-  )
-
-  const applyCorrectionSuggestionsFromMarkdown = useCallback(
-    (targetSuggestions: PublicationSuggestion[]) => {
-      const result = applyPublicationSuggestionGroup(currentDocumentMarkdownRef.current, targetSuggestions)
-
-      if (result.appliedIds.length > 0) {
-        suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
-        applyMarkdownFromPanel(result.markdown)
-      }
-
-      return {
-        appliedIds: result.appliedIds,
-        conflictIds: result.conflictIds,
-      }
-    },
-    [applyMarkdownFromPanel],
-  )
-
-  const applyCorrectionSuggestions = useCallback(
-    (targetSuggestions: PublicationSuggestion[]) => {
-      if (modeRef.current === "rich") {
-        return applyCorrectionSuggestionsByRange(targetSuggestions)
-      }
-
-      return applyCorrectionSuggestionsFromMarkdown(targetSuggestions)
-    },
-    [applyCorrectionSuggestionsByRange, applyCorrectionSuggestionsFromMarkdown],
-  )
+  // ODE-586: acciones sobre las sugerencias de corrección (mudanza mecánica).
+  const {
+    applyCorrectionSuggestions,
+    handleAcceptCorrection,
+    showCorrectionToast,
+    handleRejectCorrection,
+    handleLearnWord,
+    handleRemoveLearnedWord,
+    handleAcceptAllCorrections,
+    handleRejectAllCorrections,
+  } = useCorrectionActions({
+    applyCorrectionSuggestionUpdate,
+    applyMarkdownFromPanel,
+    automaticCorrectionSuggestionsRef,
+    correctionToastDismissRef,
+    createCorrectionAdmissionContext,
+    currentDocumentMarkdownRef,
+    editor,
+    isApplyingContentRef,
+    learnedWordsRef,
+    markdownSaveTimeoutRef,
+    modeRef,
+    persistEditorSnapshot,
+    setCorrectionToast,
+    setLearnedWords,
+    suppressCorrectionAnalysisUntilRef,
+    updateDerivedEditorState,
+    updatePersistedBlocksFromSuggestions,
+  })
 
   const closeActivePanel = useCallback(() => {
     setActivePanel(null)
@@ -2614,251 +2508,6 @@ export function EditorShell({
     },
     [editor],
   )
-
-  const handleAcceptCorrection = useCallback(
-    (suggestion: PublicationSuggestion, suggestionIds: string[] = [suggestion.id]) => {
-      if (isSuggestionAcceptDisabled(suggestion)) {
-        return
-      }
-
-      const suggestionIdSet = new Set(suggestionIds)
-      const targetSuggestions = automaticCorrectionSuggestionsRef.current.filter((item) => suggestionIdSet.has(item.id))
-      const result = applyCorrectionSuggestions(targetSuggestions)
-
-      automaticCorrectionSuggestionsRef.current
-        .filter((item) => result.appliedIds.includes(item.id))
-        .forEach((item) => rememberCorrectionDecision(item.correction_fingerprint, "accepted"))
-
-      let nextSuggestions = automaticCorrectionSuggestionsRef.current
-
-      if (result.appliedIds.length > 0) {
-        nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.appliedIds, "accepted")
-      }
-
-      if (result.conflictIds.length > 0) {
-        nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.conflictIds, "conflict")
-      }
-
-      if (result.appliedIds.length > 0 || result.conflictIds.length > 0) {
-        applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-        void updatePersistedBlocksFromSuggestions(
-          nextSuggestions,
-          [
-            ...new Set(
-              targetSuggestions
-                .map((item) => item.source_hash ?? "")
-                .filter(Boolean),
-            ),
-          ],
-        )
-      }
-    },
-    [applyCorrectionSuggestionUpdate, applyCorrectionSuggestions, updatePersistedBlocksFromSuggestions],
-  )
-
-  const showCorrectionToast = useCallback((toast: CorrectionToastState, durationMs: number) => {
-    setCorrectionToast(toast)
-
-    if (correctionToastDismissRef.current !== null) {
-      window.clearTimeout(correctionToastDismissRef.current)
-    }
-
-    correctionToastDismissRef.current = window.setTimeout(() => {
-      setCorrectionToast(null)
-      correctionToastDismissRef.current = null
-    }, durationMs)
-  }, [])
-
-  const handleRejectCorrection = useCallback((suggestionId: string) => {
-    const suggestion = automaticCorrectionSuggestionsRef.current.find((item) => item.id === suggestionId)
-
-    if (!suggestion) {
-      return
-    }
-
-    rememberCorrectionDecision(suggestion.correction_fingerprint, "rejected")
-    const nextSuggestions = updateSuggestionStatuses(
-      automaticCorrectionSuggestionsRef.current,
-      [suggestionId],
-      "rejected",
-    )
-    applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-    void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
-  }, [applyCorrectionSuggestionUpdate, updatePersistedBlocksFromSuggestions])
-
-  const handleLearnWord = useCallback((suggestion: PublicationSuggestion, suggestionIds: string[] = [suggestion.id]) => {
-    const normalizedWord = normalizeLearnedWord(suggestion.original_text)
-
-    if (!normalizedWord) {
-      handleRejectCorrection(suggestion.id)
-      return
-    }
-
-    const targetIds = [
-      ...new Set([
-        ...suggestionIds,
-        ...automaticCorrectionSuggestionsRef.current
-          .filter((item) => normalizeLearnedWord(item.original_text) === normalizedWord)
-          .map((item) => item.id),
-      ]),
-    ]
-    const sourceHashes = [
-      ...new Set(
-        automaticCorrectionSuggestionsRef.current
-          .map((item) => item.source_hash ?? "")
-          .filter(Boolean),
-      ),
-    ]
-
-    const optimisticEntry: LearnedWordEntry = {
-      id: `pending:${normalizedWord}`,
-      word: normalizedWord,
-      language: "unknown",
-      createdAt: new Date().toISOString(),
-    }
-
-    setLearnedWords((current) => {
-      if (current.some((item) => item.word === normalizedWord)) {
-        return current
-      }
-
-      return [optimisticEntry, ...current]
-    })
-
-    automaticCorrectionSuggestionsRef.current
-      .filter((item) => targetIds.includes(item.id))
-      .forEach((item) => rememberCorrectionDecision(item.correction_fingerprint, "rejected"))
-
-    const nextSuggestions = admitSuggestions(
-      updateSuggestionStatuses(
-        automaticCorrectionSuggestionsRef.current,
-        targetIds,
-        "rejected",
-      ),
-      {
-        ...createCorrectionAdmissionContext(),
-        learnedWords: createLearnedWordSet([
-          normalizedWord,
-          ...learnedWordsRef.current.map((item) => item.word),
-        ]),
-      },
-    )
-    applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-    void updatePersistedBlocksFromSuggestions(nextSuggestions, sourceHashes)
-
-    void getAIService().learnWord({
-      word: suggestion.original_text,
-      language: "unknown",
-    }).then((result) => {
-      if (result.error || !result.data) {
-        throw new Error(result.error?.message ?? "Could not save learned word.")
-      }
-
-      upsertCachedLearnedWord(result.data)
-      setLearnedWords((current) => {
-        const withoutOptimistic = current.filter((item) => item.id !== optimisticEntry.id)
-
-        if (withoutOptimistic.some((item) => item.word === result.data.word)) {
-          return withoutOptimistic
-        }
-
-        return [result.data, ...withoutOptimistic]
-      })
-    }).catch((error) => {
-      console.error("[learned-words] persist failed", error)
-      automaticCorrectionSuggestionsRef.current
-        .filter((item) => targetIds.includes(item.id))
-        .forEach((item) => forgetCorrectionDecision(item.correction_fingerprint))
-
-      const rollbackState = buildLearnWordRollbackState({
-        learnedWords: learnedWordsRef.current,
-        optimisticEntryId: optimisticEntry.id,
-        suggestions: automaticCorrectionSuggestionsRef.current,
-        targetIds,
-        admissionContext: createCorrectionAdmissionContext(),
-      })
-      setLearnedWords(rollbackState.learnedWords)
-      applyCorrectionSuggestionUpdate(() => rollbackState.suggestions, { immediate: true })
-      void updatePersistedBlocksFromSuggestions(rollbackState.suggestions, sourceHashes)
-      showCorrectionToast({
-        phase: "complete",
-        completed: 0,
-        total: 0,
-        message: "We couldn't save that word. Try again.",
-      }, 4000)
-    })
-  }, [
-    applyCorrectionSuggestionUpdate,
-    createCorrectionAdmissionContext,
-    handleRejectCorrection,
-    showCorrectionToast,
-    updatePersistedBlocksFromSuggestions,
-  ])
-
-  const handleRemoveLearnedWord = useCallback((id: string) => {
-    const previous = learnedWordsRef.current
-    setLearnedWords(previous.filter((item) => item.id !== id))
-    removeCachedLearnedWord(id)
-
-    void getAIService().deleteLearnedWord(id).then((result) => {
-      if (result.error) {
-        throw new Error(result.error.message)
-      }
-    }).catch((error) => {
-      console.error("[learned-words] delete failed", error)
-      primeLearnedWordsCache(previous)
-      setLearnedWords(previous)
-    })
-  }, [])
-
-  const handleAcceptAllCorrections = useCallback(() => {
-    const pendingSuggestions = automaticCorrectionSuggestionsRef.current.filter((suggestion) => suggestion.status === "pending")
-    const result = applyCorrectionSuggestions(pendingSuggestions)
-
-    if (result.appliedIds.length === 0 && result.conflictIds.length === 0) {
-      return
-    }
-
-    automaticCorrectionSuggestionsRef.current
-      .filter((suggestion) => result.appliedIds.includes(suggestion.id))
-      .forEach((suggestion) => rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted"))
-
-    let nextSuggestions = automaticCorrectionSuggestionsRef.current
-    if (result.appliedIds.length > 0) {
-      nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.appliedIds, "accepted")
-    }
-    if (result.conflictIds.length > 0) {
-      nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.conflictIds, "conflict")
-    }
-    applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-    void updatePersistedBlocksFromSuggestions(
-      nextSuggestions,
-      [
-        ...new Set(
-          automaticCorrectionSuggestionsRef.current
-            .filter((suggestion) => result.appliedIds.includes(suggestion.id))
-            .map((suggestion) => suggestion.source_hash ?? "")
-            .filter(Boolean),
-        ),
-      ],
-    )
-  }, [applyCorrectionSuggestionUpdate, applyCorrectionSuggestions, updatePersistedBlocksFromSuggestions])
-
-  const handleRejectAllCorrections = useCallback(() => {
-    const pending = automaticCorrectionSuggestionsRef.current.filter((s) => s.status === "pending")
-
-    pending.forEach((suggestion) => rememberCorrectionDecision(suggestion.correction_fingerprint, "rejected"))
-    const nextSuggestions = updateSuggestionStatuses(
-      automaticCorrectionSuggestionsRef.current,
-      pending.map((s) => s.id),
-      "rejected",
-    )
-    applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-    void updatePersistedBlocksFromSuggestions(
-      nextSuggestions,
-      [...new Set(pending.map((suggestion) => suggestion.source_hash ?? "").filter(Boolean))],
-    )
-  }, [applyCorrectionSuggestionUpdate, updatePersistedBlocksFromSuggestions])
 
   const getRichSelectionOverlayPositions = useCallback((from: number, to: number) => {
     if (!editor) return null
@@ -4053,314 +3702,44 @@ export function EditorShell({
     currentDocumentMarkdownRef.current = currentDocumentMarkdown
   }, [currentDocumentMarkdown])
 
-  useEffect(() => {
-    automaticCorrectionSuggestionsRef.current = automaticCorrectionSuggestions
-  }, [automaticCorrectionSuggestions])
-
-  useEffect(() => {
-    learnedWordsRef.current = learnedWords
-  }, [learnedWords])
-
-  useEffect(() => {
-    if (!currentWritingId || learnedWordsLoadedRef.current) {
-      return
-    }
-
-    setLearnedWordsLoading(true)
-
-    void loadCachedLearnedWordsPages(getAIService()).then((result) => {
-      if (!result.ok) {
-        console.info(`[learned-words] load skipped message=${result.message}`)
-        return
-      }
-
-      learnedWordsLoadedRef.current = true
-      const nextLearnedWords = mergeLearnedWordEntries(learnedWordsRef.current, result.items)
-      primeLearnedWordsCache(nextLearnedWords)
-      setLearnedWords(nextLearnedWords)
-      const sourceHashes = [
-        ...new Set(
-          automaticCorrectionSuggestionsRef.current
-            .map((suggestion) => suggestion.source_hash ?? "")
-            .filter(Boolean),
-        ),
-      ]
-      const nextSuggestions = admitSuggestions(
-        automaticCorrectionSuggestionsRef.current,
-        {
-          ...createCorrectionAdmissionContext(),
-          learnedWords: createLearnedWordSet(nextLearnedWords.map((item) => item.word)),
-        },
-      )
-      applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-      void updatePersistedBlocksFromSuggestions(nextSuggestions, sourceHashes)
-    }).finally(() => {
-      setLearnedWordsLoading(false)
-    })
-  }, [
-    applyCorrectionSuggestionUpdate,
-    createCorrectionAdmissionContext,
-    currentWritingId,
-    updatePersistedBlocksFromSuggestions,
-  ])
-
-  const normalizeAutomaticSuggestion = useCallback(
-    (block: CorrectionTriggerBlock, suggestion: PublicationSuggestion): PublicationSuggestion => {
-      const sourceMarkdown = currentDocumentMarkdownRef.current
-      const occurrence = suggestion.occurrence ?? 0
-      const fingerprint =
-        suggestion.correction_fingerprint ??
-        createStableFingerprint({
-          type: suggestion.mechanical_type ?? suggestion.kind,
-          originalText: suggestion.original_text,
-          replacementText: suggestion.replacement_text,
-        })
-      const id = [
-        "auto-correction",
-        block.hash,
-        hashPublicationSource(`${fingerprint}:${occurrence}`),
-      ].join(":")
-
-      return {
-        ...suggestion,
-        ...deriveSuggestionContexts(sourceMarkdown, suggestion.original_text),
-        id,
-        block_id: block.id,
-        source_hash: block.hash,
-        correction_fingerprint: fingerprint,
-        occurrence,
-        status: "pending",
-      }
-    },
-    [],
-  )
-
+  // ODE-586: ciclo de vida de las correcciones (mudanza mecánica; mismos
+  // efectos, en el mismo orden y en esta posición).
   const {
-    runState: correctionAnalysisRunState,
-    progress: correctionAnalysisProgress,
-    startAnalysis: startCorrectionAnalysis,
-    retryFailedPackages: retryFailedCorrectionPackages,
-    cancelAnalysis: cancelCorrectionAnalysis,
-  } = useManualCorrections({
-    currentWritingId,
-    editorRef: editorInstanceRef,
-    currentWritingIdRef,
-    titleRef,
-    learnedWordsRef,
-    persistedCorrectionBlocksRef,
-    readCorrectionMemory,
+    correctionAnalysisRunState,
+    correctionAnalysisProgress,
+    startCorrectionAnalysis,
+    retryFailedCorrectionPackages,
+    cancelCorrectionAnalysis,
+  } = useCorrectionLifecycle({
     admitCorrectionSuggestions,
     applyCorrectionSuggestionUpdate,
-    normalizeAutomaticSuggestion,
+    applyCorrectionSuggestions,
+    automaticCorrectionSuggestions,
+    automaticCorrectionSuggestionsRef,
+    createCorrectionAdmissionContext,
+    currentDocumentMarkdownRef,
+    currentWritingId,
+    currentWritingIdRef,
+    deferredSuppressedCorrectionBlocksRef,
+    deletePersistedBlocksForPosition,
+    editor,
+    editorInstanceRef,
+    flushPendingCorrectionBlocks,
+    handleLearnWord,
+    learnedWords,
+    learnedWordsLoadedRef,
+    learnedWordsRef,
+    modeRef,
     persistCorrectionBlockWriteThrough,
-    updatePersistedBlocksFromSuggestions,
-    logCorrectionEvent,
+    persistedCorrectionBlocksRef,
+    setLearnedWords,
+    setLearnedWordsLoading,
     showCorrectionToast,
+    suppressCorrectionAnalysisUntilRef,
+    suppressedCorrectionFlushTimerRef,
+    titleRef,
+    updatePersistedBlocksFromSuggestions,
   })
-
-  const getBlockSuggestions = useCallback(
-    (blockId: string, sourceHash?: string) =>
-      automaticCorrectionSuggestionsRef.current.filter(
-        (suggestion) =>
-          suggestion.block_id === blockId && (sourceHash ? suggestion.source_hash === sourceHash : true),
-      ),
-    [],
-  )
-
-
-  useEffect(() => {
-    if (!editor) {
-      return
-    }
-
-    const scheduleDeferredSuppressedFlush = () => {
-      if (suppressedCorrectionFlushTimerRef.current !== null) {
-        return
-      }
-
-      const flushAt = deferredSuppressedCorrectionBlocksRef.current.flushAt
-
-      if (flushAt === null) {
-        return
-      }
-
-      suppressedCorrectionFlushTimerRef.current = window.setTimeout(() => {
-        suppressedCorrectionFlushTimerRef.current = null
-
-        if (modeRef.current !== "rich") {
-          deferredSuppressedCorrectionBlocksRef.current = {
-            blocksById: new Map(),
-            flushAt: null,
-          }
-          return
-        }
-
-        const consumed = consumeDeferredCorrectionBlocks(deferredSuppressedCorrectionBlocksRef.current)
-        deferredSuppressedCorrectionBlocksRef.current = consumed.state
-        processDirtyCorrectionBlocks(
-          consumed.blocks
-            .map((block) => getCurrentCorrectionBlock(editor.state.doc, block.id) ?? block)
-            .filter((block) => block.text.trim().length > 0),
-        )
-      }, Math.max(0, flushAt - Date.now()))
-    }
-
-    const processDirtyCorrectionBlocks = (blocks: CorrectionTriggerBlock[]) => {
-      for (const block of blocks) {
-        if (currentWritingIdRef.current) {
-          void deletePersistedBlocksForPosition(currentWritingIdRef.current, block)
-        }
-
-        const applyStaleInvalidation = (markResolvableStale = true) => {
-          applyCorrectionSuggestionUpdate((current) => {
-            const invalidation = invalidateBlockSuggestions(current, block, Date.now(), markResolvableStale)
-
-            for (const suggestionId of invalidation.droppedIds) {
-              logCorrectionEvent({
-                type: "stale:drop",
-                blockId: block.id,
-                suggestionId,
-              })
-            }
-
-            for (const suggestionId of invalidation.keptIds) {
-              logCorrectionEvent({
-                type: "stale:keep",
-                blockId: block.id,
-                suggestionId,
-              })
-            }
-
-            return invalidation.suggestions
-          })
-        }
-
-        // Un bloque editado invalida sus sugerencias vigentes, sin marcarlas
-        // como "resolubles como stale": eso ultimo solo tenia sentido cuando
-        // el analisis automatico iba a volver a revisar el bloque por su
-        // cuenta. El analisis manual lo dispara el usuario, asi que la
-        // sugerencia vieja se cae y punto (ODE-558).
-        applyStaleInvalidation(false)
-      }
-    }
-
-    const handleDirtyBlocks = (event: Event) => {
-      const blocks = ((event as CustomEvent<{ blocks?: CorrectionTriggerBlock[] }>).detail?.blocks ?? [])
-
-      acknowledgeCorrectionDirtyBlocks(editor, blocks.map((block) => block.id))
-
-      if (modeRef.current !== "rich") {
-        return
-      }
-
-      if (Date.now() < suppressCorrectionAnalysisUntilRef.current) {
-        deferredSuppressedCorrectionBlocksRef.current = deferCorrectionBlocks(
-          deferredSuppressedCorrectionBlocksRef.current,
-          blocks,
-          suppressCorrectionAnalysisUntilRef.current,
-        )
-        scheduleDeferredSuppressedFlush()
-        return
-      }
-
-      processDirtyCorrectionBlocks(blocks)
-    }
-
-    editor.view.dom.addEventListener("odessay:correction-dirty-blocks", handleDirtyBlocks)
-
-    return () => {
-      editor.view.dom.removeEventListener("odessay:correction-dirty-blocks", handleDirtyBlocks)
-      if (suppressedCorrectionFlushTimerRef.current !== null) {
-        window.clearTimeout(suppressedCorrectionFlushTimerRef.current)
-        suppressedCorrectionFlushTimerRef.current = null
-      }
-    }
-  }, [applyCorrectionSuggestionUpdate, deletePersistedBlocksForPosition, editor])
-
-  useEffect(() => {
-    const handleOnline = () => {
-      const writingId = currentWritingIdRef.current
-
-      if (!writingId) {
-        return
-      }
-
-      void flushPendingCorrectionBlocks(writingId)
-    }
-
-    window.addEventListener("online", handleOnline)
-
-    return () => {
-      window.removeEventListener("online", handleOnline)
-    }
-  }, [flushPendingCorrectionBlocks])
-
-  useEffect(() => {
-    const handleAutomaticInlineAction = (event: Event) => {
-      const detail = (event as CustomEvent<{ action?: string; suggestionId?: string }>).detail
-      const suggestionId = detail?.suggestionId
-
-      if (!suggestionId) {
-        return
-      }
-
-      const suggestion = automaticCorrectionSuggestionsRef.current.find((item) => item.id === suggestionId)
-
-      if (!suggestion) {
-        return
-      }
-
-      if (isSuggestionAcceptDisabled(suggestion) && detail.action === "accept") {
-        return
-      }
-
-      if (detail.action === "accept") {
-        const result = applyCorrectionSuggestions([suggestion])
-
-        if (result.appliedIds.length > 0) {
-          rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted")
-        }
-
-        let nextSuggestions = automaticCorrectionSuggestionsRef.current
-
-        if (result.appliedIds.length > 0) {
-          nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.appliedIds, "accepted")
-        }
-
-        if (result.conflictIds.length > 0) {
-          nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.conflictIds, "conflict")
-        }
-
-        if (result.appliedIds.length > 0 || result.conflictIds.length > 0) {
-          applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-          void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
-        }
-        return
-      }
-
-      if (detail.action === "reject") {
-        rememberCorrectionDecision(suggestion.correction_fingerprint, "rejected")
-        const nextSuggestions = updateSuggestionStatuses(
-          automaticCorrectionSuggestionsRef.current,
-          [suggestion.id],
-          "rejected",
-        )
-        applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-        void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
-        return
-      }
-
-      if (detail.action === "learn") {
-        handleLearnWord(suggestion)
-      }
-    }
-
-    window.addEventListener("odessay:publication-suggestion-action", handleAutomaticInlineAction)
-
-    return () => {
-      window.removeEventListener("odessay:publication-suggestion-action", handleAutomaticInlineAction)
-    }
-  }, [applyCorrectionSuggestionUpdate, applyCorrectionSuggestions, handleLearnWord, updatePersistedBlocksFromSuggestions])
   const markdownFindMatches = useMemo(
     () => (isFindReplaceOpen ? findTextMatches(markdownValue, findQuery, findCaseSensitive) : []),
     [findCaseSensitive, findQuery, isFindReplaceOpen, markdownValue],
