@@ -261,8 +261,8 @@ export function useWorkspaceTabOpening(input: WorkspaceTabOpeningInput) {
     //
     // `saveViewState: false` es el comportamiento vigente, no un olvido de la
     // mudanza: a diferencia de los otros handlers, esta transición nunca guardó
-    // la vista saliente. Cambiarlo es un cambio visible y no tiene camino de
-    // producción barato en el harness todavía (ODE-567, decisión documentada).
+    // la vista saliente (ODE-567, decisión documentada). Caracterizado en
+    // tests/editor-shell-open-exit-protocol.test.tsx (ODE-580).
     prepareDocumentExit({ flushPendingEdit: true, snapshotDraft: true, saveViewState: false })
 
     const outcome = await openDocumentById(documentId)

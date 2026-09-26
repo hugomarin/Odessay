@@ -48,7 +48,7 @@ export type SessionRestoreInput = {
   router: ReturnType<typeof useRouter>
   sessionLoaded: boolean
   setBodyText: React.Dispatch<React.SetStateAction<string>>
-  setSyncStatus: React.Dispatch<React.SetStateAction<EditorSaveState>>
+  applySyncStatus: (next: EditorSaveState) => void
 }
 
 export function useSessionRestore(input: SessionRestoreInput) {
@@ -71,7 +71,7 @@ export function useSessionRestore(input: SessionRestoreInput) {
     router,
     sessionLoaded,
     setBodyText,
-    setSyncStatus,
+    applySyncStatus,
   } = input
 
   useEffect(() => {
@@ -242,7 +242,7 @@ export function useSessionRestore(input: SessionRestoreInput) {
         lifecycle: "local-only",
       })
       setBodyText("")
-      setSyncStatus("saved-local")
+      applySyncStatus("saved-local")
       navigatedToDraftRef.current = true
       navigateToWriting(router, `/write/${currentWritingIdRef.current ?? nextId}`, {
         mode: "replace",
@@ -251,5 +251,5 @@ export function useSessionRestore(input: SessionRestoreInput) {
     }
 
     void ensureIdentity()
-  }, [activateDocument, applyDocumentMetadata, createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded, currentWritingIdRef, deriveAutoTitle, desktopUntitledWritingTitle, ephemeralDraftWritingIdRef, identityEnsuredRef, navigateToWriting, navigatedToDraftRef, setBodyText, setSyncStatus])
+  }, [activateDocument, applyDocumentMetadata, createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded, currentWritingIdRef, deriveAutoTitle, desktopUntitledWritingTitle, ephemeralDraftWritingIdRef, identityEnsuredRef, navigateToWriting, navigatedToDraftRef, setBodyText, applySyncStatus])
 }
