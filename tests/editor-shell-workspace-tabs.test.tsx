@@ -227,6 +227,48 @@ describe("ODE-587 — pestañas de fondo", () => {
   )
 
   it(
+    "un segundo lápiz sobre la pestaña que acaba de activarse espera a su hidratación",
+    async () => {
+      // Mutación: en `handleRenameWorkspaceTab`, abrir directamente cuando la
+      // pestaña ya es la activa (sin `isRenameSnapshotReady`) → rojo: el
+      // segundo lápiz abre el modal con el título de A mientras B hidrata, y
+      // confirmar renombraría B con el título de A (ODE-588, review r2).
+      await openAWithBInBackground()
+
+      let releaseRead!: () => void
+      const gate = new Promise<void>((resolve) => {
+        releaseRead = resolve
+      })
+      const realGet = localDB.writings.get.bind(localDB.writings)
+      vi.spyOn(localDB.writings, "get").mockImplementation(async (id: string) => {
+        if (id === writingB) await gate
+        return realGet(id)
+      })
+
+      const pencilOfB = () => tabNode(writingB).querySelector<HTMLElement>('button[aria-label^="Rename"]')!
+      await pointerClick(pencilOfB())
+      await waitFor(() => activeWritingId() === writingB, { label: "B pasa a ser la activa" })
+
+      // Segundo lápiz: B ya es la activa, pero sigue hidratando.
+      await pointerClick(pencilOfB())
+      await advance(50)
+      expect(
+        document.querySelector('input[aria-label="Artifact name"]'),
+        "sin modal mientras B hidrata, ni con el segundo lápiz",
+      ).toBeNull()
+
+      releaseRead()
+      const input = await waitFor(() => document.querySelector<HTMLInputElement>('input[aria-label="Artifact name"]'), {
+        label: "el modal se abre cuando B termina de hidratar",
+        timeoutMs: 10_000,
+      })
+      expect(input.value, "el modal se abre con el título de B").toBe("Documento B")
+      expect(mounted!.editor().getText(), "con el cuerpo de B cargado").toContain(TEXT_B)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
     "una pestaña de fondo dibuja el estado que da el catálogo",
     async () => {
       // Mutación: en `useWorkspaceTabs`, que `tabStatuses` ignore el estado del

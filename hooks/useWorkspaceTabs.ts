@@ -241,11 +241,32 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
   // selects it first and opens the modal once that tab is the active one.
   const pendingRenameTabIdRef = useRef<string | null>(null)
 
+  /**
+   * El snapshot del renombrado lee el editor y el título cargados, así que
+   * solo es del documento de `tabId` cuando esa pestaña es la activa, su
+   * hidratación terminó y la hidratación terminada es la de ESE documento, no
+   * la de otro que terminó mientras tanto (ODE-588).
+   */
+  const isRenameSnapshotReady = useCallback(
+    (tabId: string) => {
+      if (tabId !== editorSession.active_tab_id || hydrationPhase !== "ready") return false
+      const tab = editorSession.tabs.find((item) => item.id === tabId)
+      return currentWritingId === (tab?.writing_id ?? null)
+    },
+    [currentWritingId, editorSession.active_tab_id, editorSession.tabs, hydrationPhase],
+  )
+
   const handleRenameWorkspaceTab = useCallback(
     (tabId: string) => {
-      if (tabId !== editorSession.active_tab_id) {
+      // Cualquier entrada — el lápiz de una pestaña de fondo, un segundo lápiz
+      // sobre la pestaña que acaba de activarse, o "Rename" desde el menú o el
+      // atajo — puede llegar mientras el documento pedido todavía hidrata.
+      // Abrir entonces llevaría el título y el cuerpo del anterior, y
+      // confirmar renombraría el documento pedido con ese título (ODE-588).
+      // Se deja pendiente y el efecto de abajo lo abre cuando esté listo.
+      if (!isRenameSnapshotReady(tabId)) {
         pendingRenameTabIdRef.current = tabId
-        handleSelectWorkspaceTab(tabId)
+        if (tabId !== editorSession.active_tab_id) handleSelectWorkspaceTab(tabId)
         return
       }
 
@@ -255,7 +276,7 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
       })
       setRenameModalOpen(true)
     },
-    [editor, editorSession.active_tab_id, handleSelectWorkspaceTab, setRenameModalOpen, setRenameModalSnapshot, titleRef, untitledWritingTitle],
+    [editor, editorSession.active_tab_id, handleSelectWorkspaceTab, isRenameSnapshotReady, setRenameModalOpen, setRenameModalSnapshot, titleRef, untitledWritingTitle],
   )
 
   useEffect(() => {
@@ -272,18 +293,10 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
       pendingRenameTabIdRef.current = null
       return
     }
-    // El switch de pestaña ya aterrizó, pero el snapshot del renombrado lee el
-    // editor y el título cargados: abrir aquí, en cuanto `active_tab_id` cambia,
-    // tomaría todavía el título y el cuerpo del documento anterior (ODE-588).
-    // Se espera a que termine la hidratación del documento pedido.
-    if (hydrationPhase !== "ready") return
-    // Y a que la hidratación terminada sea la de ESA pestaña, no la de otro
-    // documento que terminó mientras tanto (failure mode de ODE-588).
-    const pendingTab = editorSession.tabs.find((tab) => tab.id === pendingTabId)
-    if (currentWritingId !== (pendingTab?.writing_id ?? null)) return
+    if (!isRenameSnapshotReady(pendingTabId)) return
     pendingRenameTabIdRef.current = null
     handleRenameWorkspaceTab(pendingTabId)
-  }, [editorSession.active_tab_id, editorSession.tabs, hydrationPhase, currentWritingId, handleRenameWorkspaceTab])
+  }, [editorSession.active_tab_id, isRenameSnapshotReady, handleRenameWorkspaceTab])
 
   const handleRenameActiveWriting = useCallback(() => {
     const activeTabId = editorSession.active_tab_id
