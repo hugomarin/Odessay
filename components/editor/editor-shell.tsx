@@ -1670,7 +1670,20 @@ export function EditorShell({
         onSettled?: () => void
       },
     ) => {
-      pendingMarkdownSelectionRef.current = { start, end, ...options }
+      // The latest selection wins, but a pending completion callback is never
+      // dropped with the request it came with: hydration finishes through
+      // this queue (`onSettled: finishHydration`), and a plain restore
+      // coalescing over it used to leave the phase on "loading" (ODE-582).
+      // Only callbacks carry over; each request keeps its own validity check.
+      const supersededOnSettled = pendingMarkdownSelectionRef.current?.onSettled
+      const onSettled =
+        supersededOnSettled && options?.onSettled
+          ? () => {
+              supersededOnSettled()
+              options.onSettled?.()
+            }
+          : supersededOnSettled ?? options?.onSettled
+      pendingMarkdownSelectionRef.current = { start, end, ...options, onSettled }
 
       if (markdownSelectionRafRef.current !== null) {
         return
