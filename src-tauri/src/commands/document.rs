@@ -1097,4 +1097,66 @@ mod tests {
         assert!(!target.exists(), "no partial write must happen on conflict");
         let _ = fs::remove_dir_all(root);
     }
+
+    // ODE-595 — the `commit_by_revalidation` fallback (volumes without an
+    // atomic exchange) and the `exchange_unsupported` errno mapping never ran
+    // in the suite: only the exchange path is proven on unix machines. These
+    // tests exercise the fallback directly and the mapping as a pure
+    // function, with no production-code change. The `#[cfg(not(...))]`
+    // `exchange_paths` stub cannot compile on macOS/Linux-gnu, so it stays
+    // uncovered by construction.
+    #[test]
+    fn commit_by_revalidation_with_unchanged_target_replaces_it_without_residue() {
+        let root = temp_dir("revalidation-clean");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+        let expected = crate::commands::workspace::content_hash_for_markdown_file(&target)
+            .expect("compute baseline hash");
+        let tmp = PathBuf::from(format!("{}.tmp", target.display()));
+        fs::write(&tmp, "Mine\n").expect("write tmp");
+
+        commit_by_revalidation(&target, &tmp, &expected).expect("an unchanged target must be replaced");
+
+        assert_eq!(fs::read_to_string(&target).expect("read target"), "Mine\n");
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn commit_by_revalidation_with_changed_target_conflicts_and_cleans_up() {
+        let root = temp_dir("revalidation-conflict");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+        let expected = crate::commands::workspace::content_hash_for_markdown_file(&target)
+            .expect("compute baseline hash");
+        let tmp = PathBuf::from(format!("{}.tmp", target.display()));
+        fs::write(&tmp, "Mine\n").expect("write tmp");
+        fs::write(&target, "External\n").expect("external save in the narrowed window");
+
+        let error = commit_by_revalidation(&target, &tmp, &expected)
+            .expect_err("a target that changed before the rename must refuse the write");
+        assert!(error.starts_with("CONFLICT:"), "got: {error}");
+        assert_eq!(fs::read_to_string(&target).expect("read target"), "External\n");
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "tmp removed, nothing else kept");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn exchange_unsupported_maps_only_exchange_failures() {
+        use std::io::{Error, ErrorKind};
+        assert!(exchange_unsupported(&Error::new(ErrorKind::Unsupported, "no exchange")));
+        #[cfg(unix)]
+        {
+            assert!(exchange_unsupported(&Error::from_raw_os_error(libc::ENOTSUP)));
+            assert!(exchange_unsupported(&Error::from_raw_os_error(libc::EOPNOTSUPP)));
+            assert!(exchange_unsupported(&Error::from_raw_os_error(libc::ENOSYS)));
+            if cfg!(target_os = "linux") {
+                assert!(exchange_unsupported(&Error::from_raw_os_error(libc::EINVAL)));
+            } else {
+                assert!(!exchange_unsupported(&Error::from_raw_os_error(libc::EINVAL)));
+            }
+        }
+        assert!(!exchange_unsupported(&Error::new(ErrorKind::NotFound, "missing")));
+        assert!(!exchange_unsupported(&Error::new(ErrorKind::PermissionDenied, "denied")));
+    }
 }
