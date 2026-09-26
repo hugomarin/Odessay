@@ -239,12 +239,17 @@ describe("ODE-478 caso 3 — nombrar un borrador todavía en blanco", () => {
       expect(document.body.textContent ?? "").not.toContain(RENAME_FAILURE)
       await advance(SAVE_WINDOW_MS)
       const file = await waitForMarkdownContaining("ODE478-CONTENIDO-REAL")
-      expect(await catalogRows(), "un solo documento").toHaveLength(1)
-      // No se afirma el nombre: hoy se PIERDE (hallazgo de ODE-574, registrado
-      // aparte). La materialización en vuelo nace "Untitled artifact" y el
-      // título del guardado en cola no renombra el archivo en desktop (el
-      // título sale del nombre del `.md`; renombrar pasa por `renameWriting`).
-      // La prueba antigua solo miraba que `saveWriting` recibiera el título.
+      const rows = await catalogRows()
+      expect(rows, "un solo documento").toHaveLength(1)
+      // ODE-585: el nombre elegido mientras la materialización estaba en vuelo
+      // es el título final del documento materializado, en el catálogo y en la
+      // pestaña (antes se perdía: la materialización nacía "Untitled artifact"
+      // y el guardado en cola no renombraba el archivo).
+      expect(rows[0]?.title, "el nombre sobrevive en el catálogo").toBe("Título mientras se guarda")
+      await waitFor(
+        () => activeTab()?.title === "Título mientras se guarda",
+        { label: "el nombre sobrevive en la pestaña", timeoutMs: 15_000 },
+      )
       expect((await userMarkdown()).map((entry) => entry.path)).toEqual([file.path])
     },
     TEST_TIMEOUT_MS,

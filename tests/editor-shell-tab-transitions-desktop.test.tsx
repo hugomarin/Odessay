@@ -76,7 +76,9 @@ const { createDesktopWorkspace, destroyDesktopWorkspace, readWorkspaceMarkdown, 
 const { failCatalogGetById, holdWriteFile } = await import("./integration/documents/support/real-desktop-doubles")
 const { createDesktopDraft: createProductionDesktopDraft } = await import("@/lib/services/document-service-factory")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
-const { EDITOR_DRAFT_TAB_ID } = await import("@/lib/local-db/editor-sessions")
+const { EDITOR_DRAFT_TAB_ID, createEmptyEditorSession } = await import("@/lib/local-db/editor-sessions")
+const { localDB } = await import("@/lib/local-db")
+const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 
 const TEST_TIMEOUT_MS = 60_000
 
@@ -90,12 +92,15 @@ afterAll(() => {
   destroyDesktopWorkspace()
 })
 
-beforeEach(() => {
+beforeEach(async () => {
   resetDesktopWorkspace()
   resetEditorShellWorld({ isDesktop: true })
+  // La sesión persistida vive en fake-indexeddb, que el harness no limpia.
+  await writeEditorSession(createEmptyEditorSession())
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await mounted?.unmount()
   mounted = null
 })
@@ -120,11 +125,43 @@ function holdDraftCreation(passThrough = 0) {
   return { create, release, calls: () => calls }
 }
 
-/** Monta la shell y espera a que cargue la sesión (ver ODE-577). */
+/**
+ * Retiene la lectura de la sesión persistida para actuar determinísticamente
+ * antes de que cargue (ODE-577). Sin esto, la lectura (rápida en
+ * fake-indexeddb) suele completar durante el montaje y el test actúa tras la
+ * carga sin ejercitar la ventana pre-carga.
+ */
+function holdSessionRead() {
+  const original = localDB.editorSessions.get.bind(localDB.editorSessions)
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let arrived!: () => void
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  vi.spyOn(localDB.editorSessions, "get").mockImplementation(async (id: string) => {
+    const value = await original(id)
+    arrived()
+    await gate
+    return value
+  })
+  return { release, started }
+}
+
+/**
+ * Monta la shell reteniendo la sesión para que las acciones iniciales del
+ * test ocurran determinísticamente pre-carga (ODE-577). La lectura se suelta
+ * sola tras la ventana de acciones; el replay asienta en segundo plano.
+ */
 async function mountLoaded(createDesktopDraftOverride?: CreateDesktopDraft) {
+  const hold = holdSessionRead()
   mounted = await mountEditorShell({ createDesktopDraftOverride })
-  await waitFor(() => getEditorSessionState().loaded, { label: "sesión cargada" })
+  await hold.started
+  expect(getEditorSessionState().loaded, "pre-carga: la sesión todavía no cargó").toBe(false)
   await flush(3)
+  setTimeout(() => hold.release(), 2_000)
   return mounted
 }
 

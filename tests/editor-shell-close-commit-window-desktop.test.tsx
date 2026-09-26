@@ -76,6 +76,7 @@ const { DESKTOP_PERSISTENCE_DEBOUNCE_MS } = await import("@/components/editor/ed
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 const { EDITOR_DRAFT_TAB_ID, createEmptyEditorSession } = await import("@/lib/local-db/editor-sessions")
+const { localDB } = await import("@/lib/local-db")
 
 const TEST_TIMEOUT_MS = 60_000
 const COMMIT_WINDOWS = [1, 2, 3, 4, 5]
@@ -103,16 +104,51 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   world.onShellCommit = null
   await mounted?.unmount()
   mounted = null
 })
 
-/** Monta la shell y espera a que cargue la sesión (ver ODE-577). */
+/**
+ * Retiene la lectura de la sesión persistida para actuar determinísticamente
+ * antes de que cargue (ODE-577). Sin esto, la lectura (rápida en
+ * fake-indexeddb) suele completar durante el montaje y el test actúa tras la
+ * carga sin ejercitar la ventana pre-carga.
+ */
+function holdSessionRead() {
+  const original = localDB.editorSessions.get.bind(localDB.editorSessions)
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let arrived!: () => void
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  vi.spyOn(localDB.editorSessions, "get").mockImplementation(async (id: string) => {
+    const value = await original(id)
+    arrived()
+    await gate
+    return value
+  })
+  return { release, started }
+}
+
+/**
+ * Monta la shell reteniendo la sesión para que las acciones iniciales del
+ * test (New Artifact, escribir) ocurran determinísticamente pre-carga
+ * (ODE-577). La lectura se suelta sola tras la ventana de acciones; el replay
+ * asienta en segundo plano durante los avances del test. No es la espera que
+ * se quitó (que gateaba las acciones); es exponerlas a la ventana real.
+ */
 async function mountLoaded() {
+  const hold = holdSessionRead()
   mounted = await mountEditorShell()
-  await waitFor(() => getEditorSessionState().loaded, { label: "sesión cargada" })
+  await hold.started
+  expect(getEditorSessionState().loaded, "pre-carga: la sesión todavía no cargó").toBe(false)
   await flush(3)
+  setTimeout(() => hold.release(), 2_000)
   return mounted
 }
 

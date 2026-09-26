@@ -74,7 +74,9 @@ const {
 const { createDesktopWorkspace, desktopWorkspaceRoot, destroyDesktopWorkspace, readWorkspaceMarkdown, resetDesktopWorkspace } =
   await import("./support/editor-shell-desktop-doubles")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
-const { EDITOR_DRAFT_TAB_ID } = await import("@/lib/local-db/editor-sessions")
+const { EDITOR_DRAFT_TAB_ID, createEmptyEditorSession } = await import("@/lib/local-db/editor-sessions")
+const { localDB } = await import("@/lib/local-db")
+const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 
 const TEST_TIMEOUT_MS = 60_000
 const BODY = "ODE574-CUERPO-DE-LA-CARTA"
@@ -90,23 +92,47 @@ afterAll(() => {
   destroyDesktopWorkspace()
 })
 
-beforeEach(() => {
+beforeEach(async () => {
   resetDesktopWorkspace()
   resetEditorShellWorld({ isDesktop: true })
+  // La sesión persistida vive en fake-indexeddb, que el harness no limpia.
+  await writeEditorSession(createEmptyEditorSession())
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await mounted?.unmount()
   mounted = null
 })
 
+/**
+ * Retiene la lectura de la sesión persistida para actuar determinísticamente
+ * antes de que cargue (ODE-577). Sin esto, la lectura (rápida en
+ * fake-indexeddb) suele completar durante el montaje y el test actúa tras la
+ * carga sin ejercitar la ventana pre-carga.
+ */
+function holdSessionRead() {
+  const original = localDB.editorSessions.get.bind(localDB.editorSessions)
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let arrived!: () => void
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  vi.spyOn(localDB.editorSessions, "get").mockImplementation(async (id: string) => {
+    const value = await original(id)
+    arrived()
+    await gate
+    return value
+  })
+  return { release, started }
+}
+
 function activeTab() {
   const { session } = getEditorSessionState()
   return session.tabs.find((tab) => tab.id === session.active_tab_id)
-}
-
-function hydrationPhase() {
-  return document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") ?? null
 }
 
 async function exists(path: string) {
@@ -114,20 +140,22 @@ async function exists(path: string) {
 }
 
 /**
- * Crea un documento real con contenido y devuelve su `.md` y su título.
- *
- * Tras materializarse, el documento se REABRE POR RUTA (remontaje por `key`,
- * como una entrada desde Desk). Bajo carga la shell a veces no adopta el
- * borrador recién materializado (ODE-577); entonces `handleSaveToDisk` no ve
- * documento y materializa otro con el nombre elegido. Esta prueba es sobre
- * Save As, no sobre esa carrera.
+ * Crea un documento real con contenido y devuelve su `.md` y su título. Actúa
+ * determinísticamente antes de que cargue la sesión (ODE-577): retiene la
+ * lectura, monta, abre el borrador y escribe, suelta y deja asentar el replay.
+ * La shell adopta el borrador recién materializado sin reapertura por ruta:
+ * "Save As" actúa sobre el documento que la propia shell ya adoptó.
  */
 async function createDocument() {
+  const hold = holdSessionRead()
   mounted = await mountEditorShell()
-  await waitFor(() => getEditorSessionState().loaded, { label: "sesión cargada" })
+  await hold.started
+  expect(getEditorSessionState().loaded, "pre-carga: la sesión todavía no cargó").toBe(false)
   await flush(3)
   await clickNewArtifact(mounted.container)
   await typeInEditor(BODY)
+  hold.release()
+  await waitFor(() => getEditorSessionState().loaded, { label: "replay asentado tras pre-carga" })
   await advance(6_000)
   const file = await waitForMarkdownContaining(BODY)
   const created = await waitFor(
@@ -137,12 +165,6 @@ async function createDocument() {
     },
     { label: "documento materializado", timeoutMs: 15_000 },
   )
-
-  await mounted.render({ key: created, writingId: created })
-  await waitFor(() => mounted!.editor().getText().includes(BODY), { label: "documento abierto por ruta" })
-  // El título se lee con la hidratación terminada: antes, la pestaña aún
-  // muestra el título previo a la reapertura.
-  await waitFor(() => hydrationPhase() === "ready", { label: "hidratación terminada" })
   const tab = await waitFor(() => (activeTab()?.writing_id === created ? activeTab() : null), {
     label: "pestaña del documento activa",
   })
