@@ -137,6 +137,54 @@ La ventana en la que un espejo pendiente devolvía el ref al documento anterior 
 
 El tamaño no es el hallazgo — `components/editor/AGENTS.md` ya establece que el tamaño por sí solo no es un finding de review. Los dos números que importan son los del medio.
 
+**Actualización (2026-09-26, ODE-598 — limpieza tras los cortes 1–3, sin cambio de producto):** los cortes 1–3 y sus follow-ups están en `main`. Estado actual medido sobre el archivo real con el mismo método:
+
+```text
+5,090 líneas
+   40 useEffect      60 useCallback      26 useState      20 useRef
+```
+
+Los 7 hooks extraídos por los cortes, en orden de llamada en la shell:
+
+```text
+L1204  useCorrectionBlocks      (ODE-586, corte 2 entrega 2a)
+L1863  useSessionRestore        (ODE-587, corte 3 entrega 1b)
+L2109  useDocumentHydration     (ODE-562, corte 1)
+L2303  useCorrectionActions     (ODE-586, corte 2 entrega 2b)
+L3552  useCorrectionLifecycle   (ODE-586, corte 2 entrega 2b)
+L3981  useWorkspaceTabs         (ODE-587, corte 3 entrega 1a)
+L4082  useWorkspaceTabOpening   (ODE-587, corte 3 entrega 1c)
+```
+
+(Siguen viviendo en la shell, previos a los cortes y fuera de su alcance: `useEditor` de TipTap, `useEditorSelection`, los de menú/cierre de Tauri y los de stores. No se cuentan como extraídos.)
+
+Los 7 efectos espejo que quedan, con su línea (el conteo mecánico de `scripts/report-active-document-carriers.mjs` dice 6 porque su patrón no ve el `?? null` de L1570; a mano son 7, los mismos 7 que dejó ODE-564):
+
+```text
+L764   reconcileActiveSaveStateRef.current = reconcileActiveSaveState
+L1569  editorInstanceRef.current = editor ?? null
+L1603  tableOfContentsItemsRef.current = tableOfContentsItems
+L1607  activeTableOfContentsItemIdRef.current = selectedTableOfContentsItemId
+L1785  modeRef.current = mode
+L1853  activeEditorTabIdRef.current = editorSession.active_tab_id   (la excepción declarada del ADR)
+L3540  currentDocumentMarkdownRef.current = currentDocumentMarkdown
+```
+
+Los cortes que faltan, con su issue:
+
+```text
+3b  ODE-599  red y extracción de la conexión con desktop (cambios externos, menú, cierre)
+4a  ODE-602  red y extracción del chrome (TOC, focus mode, find/replace, visor de imagen, paneles y modales)
+4b  ODE-603  red y extracción de los comandos (handleRunAction e inserts de link/tabla/imagen)
+5   ODE-605  extraer el cluster de guardado/persistencia
+6   ODE-607  extraer anotaciones/selección
+7   ODE-609  un solo dueño para los espejos que quedan + ratchet de arquitectura
+```
+
+(El cierre —medir, actualizar diagnóstico y mapa, dejar el estado final— es ODE-610. La enmienda del dueño de `activeEditorTabIdRef` es ODE-608.)
+
+ODE-598 no mueve líneas de producto: quita los rodeos de ODE-577 en 4 tests de la shell desktop (ahora actúan determinísticamente pre-carga, sin espera de sesión ni reapertura por ruta), re-exige la aserción de nombre in-flight de ODE-585, y deja la fila STATE-07 del capability map en `INTEGRATION` con su prueba citada. La red para los cortes 3b–7 queda así: `tests/editor-shell-selection-restore.test.tsx` (STATE-07), `tests/editor-shell-draft-adoption-desktop.test.tsx` (ODE-577) y los 4 archivos sin rodeos.
+
 ## 2. Hallazgo 1 — cada dato tiene dos dueños
 
 Diecinueve efectos existen solo para mantener una copia sombra del estado en un ref: `title → titleRef`, `version → versionRef`, `lifecycle → lifecycleRef`, y así con unos veinte campos. Y hay 602 puntos donde el código lee la sombra en vez del estado.
@@ -174,12 +222,13 @@ Tres problemas, en orden de gravedad:
 | Tabs / sesión / catálogo | ~62 refs | STATE-05, STATE-08 | unit del store, no el seam al shell |
 | Chrome (TOC, modales, focus mode) | ~106 refs | — | **ninguna** |
 
-Nueve filas del capability map nombran este archivo en su chain o su evidencia: **AI-05, EXP-05, STATE-01, STATE-03, STATE-04, STATE-05, STATE-07, STATE-08, WATCH-07**. De ellas, cinco están en `PARTIAL_INTEGRATION` o `NONE`, y en cuatro el tramo no probado **es precisamente este archivo**:
+Nueve filas del capability map nombran este archivo (o el hook que salió de él) en su chain o su evidencia: **AI-05, EXP-05, STATE-01, STATE-03, STATE-04, STATE-05, STATE-07, STATE-08, WATCH-07**. De ellas, cuatro están en `PARTIAL_INTEGRATION` o `NONE`, y en tres el tramo no probado **es precisamente este archivo**:
 
 - **STATE-05** — el seam `store → EditorShell` (aplicación al DOM) es literalmente el gap declarado de la fila.
-- **STATE-07** — el código de restore de cursor/selección vive aquí (~L2512-2520) y no lo ejercita ningún test.
 - **EXP-05** — `exportBinary`/`exportMarkdown` del shell nunca se conectan al `saveBinaryArtifact` ya probado.
 - **WATCH-07** — que el shell siembre el `content_hash` base correcto al abrir no lo prueba nadie; el proof de integración lo siembra a mano y lo documenta como tal.
+
+(STATE-07 salió de esta lista en ODE-598: el restore de cursor/selección vive desde ODE-562 en `hooks/useDocumentHydration.ts` y lo ejercita `tests/editor-shell-selection-restore.test.tsx`; ver la fila del mapa.)
 
 ## 5. Hallazgo 4 — el editor real sí corre fuera del navegador
 
