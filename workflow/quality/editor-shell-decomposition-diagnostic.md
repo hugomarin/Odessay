@@ -217,7 +217,7 @@ Tres problemas, en orden de gravedad:
 | Save / persistencia | ~317 refs | WATCH-07, DOC-02/03/06 | **ninguna** (el coordinator sí, por debajo) |
 | Hidratación / identidad | ~104 refs, 7 efectos | STATE-01/03/04/05 | 1 e2e + unit del coordinator |
 | Find / replace | ~122 refs | — | unit de `lib/editor/find-replace.ts` |
-| Desktop wiring (canonical path, conflicto externo, open-file, menús, close guard) | ~103 refs | WATCH-07, WS-* | **ninguna** |
+| Desktop wiring (canonical path, conflicto externo, open-file, menús, close guard) | ~103 refs | WATCH-07, WS-* | reacción a cambios externos (limpio, sucio con sus dos botones, borrado, movimiento, cambio de pestaña a mitad) y guardia de cierre por la shell con la cadena real watcher → reconciliador → catálogo (`editor-shell-external-changes-desktop.test.tsx`, ODE-599); open-file y Save As por ODE-581/ODE-574 |
 | Anotaciones / selección | ~90 refs | ANN-04/05 | 1 e2e |
 | Tabs / sesión / catálogo | ~62 refs | STATE-05, STATE-08 | unit del store, no el seam al shell |
 | Chrome (TOC, modales, focus mode) | ~106 refs | — | **ninguna** |
@@ -226,7 +226,7 @@ Nueve filas del capability map nombran este archivo (o el hook que salió de él
 
 - **STATE-05** — el seam `store → EditorShell` (aplicación al DOM) es literalmente el gap declarado de la fila.
 - **EXP-05** — `exportBinary`/`exportMarkdown` del shell nunca se conectan al `saveBinaryArtifact` ya probado.
-- **WATCH-07** — que el shell siembre el `content_hash` base correcto al abrir no lo prueba nadie; el proof de integración lo siembra a mano y lo documenta como tal.
+- **WATCH-07** — que el shell siembre el `content_hash` base correcto al abrir no lo prueba nadie; el proof de integración lo siembra a mano y lo documenta como tal. *(ODE-599: la red de la shell ya lo ejercita —la línea base la siembra la primera lectura del catálogo tras abrir por el opener real— y encontró un bug real de clasificación limpio/sucio tras un autosave rechazado, ODE-627; ver la fila del mapa.)*
 
 (STATE-07 salió de esta lista en ODE-598: el restore de cursor/selección vive desde ODE-562 en `hooks/useDocumentHydration.ts` y lo ejercita `tests/editor-shell-selection-restore.test.tsx`; ver la fila del mapa.)
 
