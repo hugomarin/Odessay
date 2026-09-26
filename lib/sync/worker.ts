@@ -219,7 +219,13 @@ class SyncWorker {
     this.nextTrigger = delay === 0 ? "auth" : "debounce";
     this.timeoutId = this.scheduleTimeout(() => {
       this.timeoutId = null;
-      void this.flush();
+      // Nobody awaits a timer-driven flush: a local-DB failure inside it
+      // (IndexedDB unavailable, or torn down) would become an unhandled
+      // rejection. The mutations stay queued and the next flush retries them;
+      // the failure only needs to stay visible (ODE-583 follow-up).
+      this.flush().catch((error: unknown) => {
+        this.logError("[sync:flush]", { error: error instanceof Error ? error.message : String(error) });
+      });
     }, delay);
   }
 
