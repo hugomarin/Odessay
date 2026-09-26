@@ -5,8 +5,8 @@
  * prueba por la shell antes de mudar su código a `hooks/useWorkspaceTabs.ts`:
  *
  *   1. El lápiz de una pestaña de FONDO la selecciona primero y abre el modal
- *      de renombrado cuando ya es la activa. (Con el título equivocado: ver el
- *      caso y el hallazgo de ODE-587.)
+ *      de renombrado cuando ya es la activa, con el título y el cuerpo de esa
+ *      pestaña (el fix de ODE-588 espera a que termine su hidratación).
  *   2. Una pestaña de fondo dibuja el estado editorial que da el catálogo (la
  *      activa lee el estado vivo de la shell).
  *   3. El atajo de pestaña siguiente cambia a la pestaña contigua.
@@ -18,6 +18,7 @@
  * fake-indexeddb. Doble: solo el proveedor de AI y la red (harness).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { act } from "react"
 
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
@@ -48,7 +49,7 @@ vi.mock("@/lib/services/ai-service-factory", async () =>
 )
 
 
-const { advance, clickNewArtifact, flush, mountEditorShell, pointerClick, resetEditorShellWorld, typeInEditor, waitFor } =
+const { advance, clickNewArtifact, flush, mountEditorShell, pointerClick, resetEditorShellWorld, typeInEditor, waitFor, world } =
   await import("./support/editor-shell-harness")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 const { writeEditorSession } = await import("@/lib/editor/session-persistence")
@@ -58,7 +59,11 @@ const { getVocabularyColor } = await import("@/lib/vocabulary/resolve")
 
 const TEST_TIMEOUT_MS = 30_000
 const TEXT_A = "Texto de A, ODE587."
-const TEXT_B = "Texto de B, ODE587."
+// Suficientemente largo para habilitar la sugerencia por IA (≥ 12 palabras) y
+// distinguible de A: el cuerpo que recibe el modal se observa por la entrada
+// que llega a `suggestTitle`.
+const TEXT_B =
+  "El documento B tiene un contenido lo suficientemente largo como para pedir una sugerencia de titulo automatica en la prueba de ODE588."
 
 let writingA = ""
 let writingB = ""
@@ -99,6 +104,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await mounted?.unmount()
   mounted = null
 })
@@ -124,10 +130,11 @@ async function openAWithBInBackground() {
 
 describe("ODE-587 — pestañas de fondo", () => {
   it(
-    "el lápiz de una pestaña de fondo la selecciona y abre el modal con su título",
+    "el lápiz de una pestaña de fondo la selecciona y abre el modal con su título y cuerpo",
     async () => {
-      // Mutación: en `useWorkspaceTabs`, que el efecto del renombrado pendiente
-      // no abra el modal cuando la pestaña ya es la activa → rojo.
+      // Mutación: en `useWorkspaceTabs`, abrir el modal en cuanto cambia
+      // `active_tab_id` (sin esperar la hidratación del documento pedido) →
+      // rojo: el snapshot llevaría el título y el cuerpo de A (ODE-588).
       await openAWithBInBackground()
       const pencil = tabNode(writingB).querySelector<HTMLElement>('button[aria-label^="Rename"]')
       expect(pencil, "el lápiz de la pestaña de B").toBeTruthy()
@@ -139,11 +146,82 @@ describe("ODE-587 — pestañas de fondo", () => {
         label: "el modal de renombrado se abre",
         timeoutMs: 10_000,
       })
-      expect(input, "el modal se abre tras seleccionar B").toBeTruthy()
-      // No se afirma el título: hoy el modal se abre con el de A (hallazgo de
-      // ODE-587, registrado aparte). El efecto abre el modal en cuanto B es la
-      // pestaña activa, antes de que termine su hidratación, así que el
-      // snapshot lleva el título y el cuerpo del documento anterior.
+      expect(input.value, "el modal se abre con el título de B").toBe("Documento B")
+
+      // El cuerpo que recibe el modal es el de B: se observa por la entrada que
+      // llega a la sugerencia por IA (su `bodyText`). El botón solo está
+      // habilitado cuando el cuerpo tiene contenido suficiente, que es el de B.
+      const suggest = await waitFor(
+        () =>
+          Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+            (button) => (button.textContent ?? "").trim() === "Suggest",
+          ),
+        { label: "botón Suggest habilitado con el cuerpo de B", timeoutMs: 10_000 },
+      )
+      await act(async () => {
+        suggest.click()
+      })
+      await waitFor(() => world.suggestTitleCalls.length >= 1, { label: "la sugerencia se pidió" })
+      expect(world.suggestTitleCalls[0]?.bodyText ?? "", "el cuerpo enviado a la IA es el de B").toContain(
+        "contenido lo suficientemente largo",
+      )
+      expect(world.suggestTitleCalls[0]?.bodyText ?? "", "y no el de A").not.toContain(TEXT_A)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "si el usuario se va a otra pestaña antes de que termine la hidratación, volver a la pedida no abre el modal",
+    async () => {
+      // Mutación: en `useWorkspaceTabs`, no descartar `pendingRenameTabIdRef`
+      // cuando la pestaña activa deja de ser la pedida → rojo: al volver a B
+      // con una selección ordinaria, el modal se abre solo.
+      await openAWithBInBackground()
+
+      // Retiene la lectura de B: su hidratación queda en "loading" hasta que
+      // se suelte el gate, reproduciendo la ventana real (lectura async de
+      // disco/remoto que puede durar segundos) sin depender del timing.
+      let releaseRead!: () => void
+      const gate = new Promise<void>((resolve) => {
+        releaseRead = resolve
+      })
+      const realGet = localDB.writings.get.bind(localDB.writings)
+      vi.spyOn(localDB.writings, "get").mockImplementation(async (id: string) => {
+        if (id === writingB) await gate
+        return realGet(id)
+      })
+
+      const pencil = tabNode(writingB).querySelector<HTMLElement>('button[aria-label^="Rename"]')
+      expect(pencil, "el lápiz de la pestaña de B").toBeTruthy()
+      await pointerClick(pencil!)
+      await waitFor(() => activeWritingId() === writingB, { label: "B pasa a ser la activa" })
+
+      // B está hidratando: el modal todavía no debe abrirse.
+      expect(document.querySelector('input[aria-label="Artifact name"]'), "sin modal mientras B hidrata").toBeNull()
+
+      // El usuario se va a A antes de que B termine de hidratar.
+      await pointerClick(tabNode(writingA))
+      await waitFor(() => activeWritingId() === writingA, { label: "A vuelve a ser la activa" })
+
+      // Suelta la lectura de B: su generación quedó cancelada por el switch y
+      // el renombrado pendiente ya fue descartado.
+      releaseRead()
+      await advance(50)
+
+      // Volver a B con una selección ordinaria NO abre el modal de renombrado.
+      await pointerClick(tabNode(writingB))
+      await waitFor(() => activeWritingId() === writingB, { label: "B activa de nuevo" })
+      await waitFor(() => mounted!.editor().getText().includes(TEXT_B), {
+        label: "B hidratado",
+        timeoutMs: 10_000,
+      })
+
+      // Da tiempo a que un modal espurio apareciera si el pendiente siguiera vivo.
+      await advance(250)
+      expect(
+        document.querySelector('input[aria-label="Artifact name"]'),
+        "no se abre el modal de renombrado",
+      ).toBeNull()
     },
     TEST_TIMEOUT_MS,
   )

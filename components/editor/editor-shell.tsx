@@ -3981,9 +3981,11 @@ export function EditorShell({
   } = useWorkspaceTabs({
     activateDocument,
     activeEditorTabIdRef,
+    currentWritingId,
     editor,
     editorSession,
     ephemeralDraftWritingIdRef,
+    hydrationPhase,
     materializedDraftIdsRef,
     navigatedToDraftRef,
     persistenceCoordinator,
