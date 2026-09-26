@@ -83,6 +83,27 @@ export type HarnessWorld = {
    * capability-proof-contract: un error tragado no es ejecución exitosa.
    */
   unhandledErrors: Array<{ kind: "error" | "rejection"; message: string }>
+  /**
+   * Watchers nativos (`plugin:fs|watch`) que la app registró, con el canal por
+   * el que el sistema operativo le entregaría los eventos. `emitFsWatchEvent`
+   * del harness los usa para simular un cambio hecho fuera de la app (ODE-599).
+   */
+  fsWatchers: FsWatcherRecord[]
+  /**
+   * Oyente de `onCloseRequested` de la ventana nativa y veces que la app pidió
+   * `destroy()` tras asentarse. El sistema operativo es el boundary: la
+   * guardia de cierre real corre entera (ODE-599).
+   */
+  windowCloseHandler: ((event: { preventDefault: () => void }) => unknown) | null
+  windowDestroyCalls: number
+}
+
+export type FsWatcherRecord = {
+  rid: number
+  paths: string[]
+  options: { recursive?: boolean; delayMs?: number } | undefined
+  channel: { onmessage: (event: unknown) => void }
+  closed: boolean
 }
 
 export type AiReviewInput = {
@@ -150,6 +171,9 @@ export const world: HarnessWorld = {
   correctionHydrationCalls: [],
   correctionPersistCalls: [],
   onShellCommit: null,
+  fsWatchers: [],
+  windowCloseHandler: null,
+  windowDestroyCalls: 0,
 }
 
 /* ------------------------------------------------------------------ *
@@ -200,13 +224,71 @@ export function nextNavigationDouble() {
   }
 }
 
+/**
+ * `Channel` del transporte nativo. El real registra su callback en
+ * `window.__TAURI_INTERNALS__`, que no existe fuera de la app; este solo
+ * guarda `onmessage` para que el harness entregue por él lo que entregaría el
+ * sistema operativo.
+ */
+class HarnessChannel {
+  onmessage: (message: unknown) => void
+  constructor(onmessage?: (message: unknown) => void) {
+    this.onmessage = onmessage ?? (() => {})
+  }
+}
+
+let nextFsWatcherRid = 1
+
 export function tauriCoreDouble(actual: Record<string, unknown>) {
   return {
     ...actual,
+    Channel: HarnessChannel,
     invoke: async (command: string, args?: Record<string, unknown>) => {
       world.tauriCalls.push({ command, args })
+      // El watcher de fs es transporte nativo puro: se registra y se cierra
+      // aquí, y el harness emite sus eventos (`emitFsWatchEvent`).
+      if (command === "allow_watch_path") return undefined
+      if (command === "plugin:fs|watch") {
+        const record: FsWatcherRecord = {
+          rid: nextFsWatcherRid++,
+          paths: (args?.paths as string[]) ?? [],
+          options: args?.options as FsWatcherRecord["options"],
+          channel: args?.onEvent as FsWatcherRecord["channel"],
+          closed: false,
+        }
+        world.fsWatchers.push(record)
+        return record.rid
+      }
+      if (command === "plugin:resources|close") {
+        const watcher = world.fsWatchers.find((candidate) => candidate.rid === args?.rid)
+        if (watcher) {
+          watcher.closed = true
+          return undefined
+        }
+      }
       return world.tauriInvoke(command, args)
     },
+  }
+}
+
+/**
+ * `@tauri-apps/api/window`: la ventana nativa. Guarda el oyente de
+ * `onCloseRequested` para que el harness pida el cierre como lo haría el
+ * sistema operativo (`requestWindowClose`).
+ */
+export function tauriWindowDouble() {
+  return {
+    getCurrentWindow: () => ({
+      onCloseRequested: async (handler: (event: { preventDefault: () => void }) => unknown) => {
+        world.windowCloseHandler = handler
+        return () => {
+          if (world.windowCloseHandler === handler) world.windowCloseHandler = null
+        }
+      },
+      destroy: async () => {
+        world.windowDestroyCalls += 1
+      },
+    }),
   }
 }
 

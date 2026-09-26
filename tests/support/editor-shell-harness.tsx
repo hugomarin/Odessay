@@ -187,6 +187,9 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
   world.correctionHydrationCalls = []
   world.correctionPersistCalls = []
   world.onShellCommit = null
+  world.fsWatchers = []
+  world.windowCloseHandler = null
+  world.windowDestroyCalls = 0
 
   Object.assign(world, overrides)
 
@@ -569,6 +572,49 @@ export async function emitTauriEvent(channel: string, payload: unknown = null) {
     for (const listener of [...listeners]) listener({ event: channel, payload })
   })
   await flush()
+}
+
+/**
+ * Entrega un evento del watcher nativo de fs (`plugin:fs|watch`) a cada
+ * watcher vivo cuyo alcance cubre alguna de `paths`, como haría el sistema
+ * operativo tras un cambio hecho fuera de la app. El resto de la cadena —la
+ * supresión de auto-escrituras, el reconciliador, el catálogo— corre real.
+ * Falla si ningún watcher cubre esas rutas: un evento que nadie observa
+ * sería un NON_PRODUCTION_PATH (ODE-599).
+ */
+export async function emitFsWatchEvent(
+  paths: string[],
+  type: unknown = { modify: { kind: "data", mode: "content" } },
+) {
+  const covers = (scope: string, path: string) => path === scope || path.startsWith(`${scope}/`)
+  const targets = world.fsWatchers.filter(
+    (watcher) => !watcher.closed && watcher.paths.some((scope) => paths.some((path) => covers(scope, path))),
+  )
+  if (targets.length === 0) {
+    throw new Error(
+      `Ningún watcher nativo observa ${JSON.stringify(paths)}. Vivos: ${JSON.stringify(
+        world.fsWatchers.filter((watcher) => !watcher.closed).map((watcher) => watcher.paths),
+      )}`,
+    )
+  }
+  await act(async () => {
+    for (const watcher of targets) watcher.channel.onmessage({ type, paths, attrs: {} })
+  })
+  await flush()
+}
+
+/**
+ * Pide cerrar la ventana nativa como lo haría el sistema operativo y devuelve
+ * la promesa del oyente de la app, que resuelve cuando la guardia terminó
+ * (asentó y llamó a `destroy()`, o falló). `prevented()` dice si la app
+ * retuvo el cierre (ODE-599).
+ */
+export function requestWindowClose(): { settled: Promise<unknown>; prevented: () => boolean } {
+  const handler = world.windowCloseHandler
+  if (!handler) throw new Error("La app no registró ningún oyente de cierre de ventana")
+  let prevented = false
+  const settled = Promise.resolve(handler({ preventDefault: () => (prevented = true) }))
+  return { settled, prevented: () => prevented }
 }
 
 export async function clickNewArtifact(container: HTMLElement) {
