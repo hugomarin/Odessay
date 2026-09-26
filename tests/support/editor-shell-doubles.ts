@@ -13,7 +13,7 @@
 import { useLayoutEffect } from "react"
 import { vi } from "vitest"
 
-import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
+import type { LearnWordInput, LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 
 /* ------------------------------------------------------------------ *
  * Estado compartido de los dobles
@@ -58,7 +58,7 @@ export type HarnessWorld = {
   /** Veces que el shell pidió la lista de palabras aprendidas. */
   learnedWordsCalls: number
   /** Palabras que el shell mandó a aprender al proveedor, en orden. */
-  learnWordCalls: Array<{ word: string; language?: string }>
+  learnWordCalls: LearnWordInput[]
   /**
    * Handler de la hidratación remota de bloques de corrección. Devolver una
    * promesa pendiente deja la respuesta "en vuelo" (ODE-464, ODE-574).
@@ -286,7 +286,7 @@ export function aiServiceDouble() {
       },
       // Contrato real: `{ error, data: LearnedWordEntry }`. Sin `data`, el
       // shell lo trata como fallo y revierte el aprendizaje (ODE-597).
-      learnWord: async (input: { word: string; language?: string }) => {
+      learnWord: async (input: LearnWordInput) => {
         world.learnWordCalls.push({ word: input.word, language: input.language })
         const entry: LearnedWordEntry = {
           id: `learned:${input.word}`,
