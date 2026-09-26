@@ -76,6 +76,7 @@ const { readEditorSession, writeEditorSession } = await import("@/lib/editor/ses
 const { EDITOR_DRAFT_TAB_ID, createEditorSessionTab, createEmptyEditorSession } = await import(
   "@/lib/local-db/editor-sessions"
 )
+const { localDB } = await import("@/lib/local-db")
 
 const TEST_TIMEOUT_MS = 60_000
 /** Lo que tarda un guardado de desktop en arrancar, con margen. */
@@ -107,10 +108,54 @@ afterEach(async () => {
 
 type CreateDesktopDraft = typeof createProductionDesktopDraft
 
-/** Monta la shell y espera a que cargue la sesión (ver ODE-577). */
+/**
+ * Retiene la lectura de la sesión persistida para actuar determinísticamente
+ * antes de que cargue (ODE-577). Sin esto, la lectura (rápida en
+ * fake-indexeddb) suele completar durante el montaje y el test actúa tras la
+ * carga sin ejercitar la ventana pre-carga.
+ */
+function holdSessionRead() {
+  const original = localDB.editorSessions.get.bind(localDB.editorSessions)
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let arrived!: () => void
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  vi.spyOn(localDB.editorSessions, "get").mockImplementation(async (id: string) => {
+    const value = await original(id)
+    arrived()
+    await gate
+    return value
+  })
+  return { release, started }
+}
+
+/**
+ * Monta la shell reteniendo la sesión para que las acciones iniciales del
+ * test ocurran determinísticamente pre-carga (ODE-577). La lectura se suelta
+ * sola tras la ventana de acciones; el replay asienta en segundo plano.
+ */
 async function mountLoaded(createDesktopDraftOverride?: CreateDesktopDraft) {
+  const hold = holdSessionRead()
   mounted = await mountEditorShell({ createDesktopDraftOverride })
-  await waitFor(() => getEditorSessionState().loaded, { label: "sesión cargada" })
+  await hold.started
+  expect(getEditorSessionState().loaded, "pre-carga: la sesión todavía no cargó").toBe(false)
+  await flush(3)
+  setTimeout(() => hold.release(), 2_000)
+  return mounted
+}
+
+/**
+ * Monta la shell esperando a que cargue la sesión. Espera legítima (no rodeo
+ * ODE-577): estos tests miden restauración post-carga (reabrir por UUID,
+ * restaurar borrador, remontar vacío), no acciones pre-carga.
+ */
+async function mountSettled() {
+  mounted = await mountEditorShell()
+  await waitFor(() => getEditorSessionState().loaded, { label: "sesión cargada para restaurar" })
   await flush(3)
   return mounted
 }
@@ -128,11 +173,7 @@ async function catalogRows() {
   return (await getDocumentCatalog()).list()
 }
 
-function hydrationPhase() {
-  return document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") ?? null
-}
-
-/** Crea un documento real y espera a que su pestaña tenga identidad. */
+/** Crea un documento real y espera a que su pestaña adopte su identidad (ODE-577). */
 async function createDocument(text: string) {
   await clickNewArtifact(mounted!.container)
   await typeInEditor(text)
@@ -148,22 +189,6 @@ async function createDocument(text: string) {
   return { writingId, file }
 }
 
-/**
- * Crea un documento y lo REABRE POR RUTA (remontaje por `key`, como una
- * entrada desde Desk), con la hidratación terminada. Las pruebas que siguen
- * editando un documento ya materializado lo necesitan: bajo carga la shell a
- * veces no adopta el borrador recién materializado (ODE-577), y entonces los
- * guardados siguientes salen por otro camino.
- */
-async function createDocumentOpenedByRoute(text: string) {
-  const created = await createDocument(text)
-  await mounted!.render({ key: created.writingId, writingId: created.writingId })
-  await waitFor(() => mounted!.editor().getText().includes(text), { label: "documento abierto por ruta" })
-  await waitFor(() => hydrationPhase() === "ready", { label: "hidratación terminada" })
-  await advance(300)
-  return created
-}
-
 function writesTo(path: string) {
   return writeFileCalls().filter((call) => call.path === path)
 }
@@ -174,7 +199,7 @@ describe("ODE-405 — un borrador de desktop solo se materializa con contenido r
     async () => {
       // Mutación: en `editor-shell.tsx`, no llamar a `activateDocument(…,
       // "restore")` en la rama `desktop-hydration` del restore → rojo.
-      await mountLoaded()
+      await mountSettled()
       const { writingId, file } = await createDocument("ODE405-RESTAURADO")
       for (let attempt = 0; attempt < 40; attempt += 1) {
         const persisted = await readEditorSession()
@@ -187,7 +212,7 @@ describe("ODE-405 — un borrador de desktop solo se materializa con contenido r
       mounted = null
       resetEditorSessionStoreForTests()
       const info = vi.spyOn(console, "info")
-      await mountLoaded()
+      await mountSettled()
 
       await waitFor(() => mounted!.editor().getText().includes("ODE405-RESTAURADO"), {
         label: "el documento restaurado en el editor",
@@ -216,7 +241,7 @@ describe("ODE-405 — un borrador de desktop solo se materializa con contenido r
         tabs: [createEditorSessionTab({ id: EDITOR_DRAFT_TAB_ID, writingId: null, title: "Untitled", saveState: "saved-local" })],
       })
 
-      await mountLoaded()
+      await mountSettled()
       await waitFor(() => activeTab()?.id === EDITOR_DRAFT_TAB_ID, { label: "borrador restaurado y activo" })
       await advance(SAVE_WINDOW_MS)
 
@@ -233,7 +258,7 @@ describe("ODE-405 — un borrador de desktop solo se materializa con contenido r
     async () => {
       // Mutación: en `editor-shell.tsx`, quitar el `return` de la rama
       // `remain-empty` del restore → rojo (se abre una pestaña de borrador).
-      await mountLoaded()
+      await mountSettled()
       await advance(SAVE_WINDOW_MS)
       expect(await readWorkspaceMarkdown(), "ningún .md al montar").toEqual([])
       expect(tabs(), "ninguna pestaña al montar").toHaveLength(0)
@@ -241,7 +266,7 @@ describe("ODE-405 — un borrador de desktop solo se materializa con contenido r
 
       await mounted!.unmount()
       mounted = null
-      await mountLoaded()
+      await mountSettled()
       await advance(SAVE_WINDOW_MS)
       expect(await readWorkspaceMarkdown(), "ningún .md al remontar").toEqual([])
       expect(await catalogRows(), "ninguna fila en el catálogo").toEqual([])
@@ -432,7 +457,7 @@ describe("ODE-461 — fiabilidad del guardado en desktop", () => {
       // Mutación: en `persistence-coordinator.ts`, que `pump()` no espere al
       // guardado en vuelo (`if (scheduledKey !== null)`) → rojo.
       await mountLoaded()
-      const { file } = await createDocumentOpenedByRoute("ODE461-PRIMERO")
+      const { file } = await createDocument("ODE461-PRIMERO")
       const baseline = writesTo(file.path).length
 
       const held = holdWriteFile((path) => path === file.path)
@@ -464,7 +489,7 @@ describe("ODE-461 — fiabilidad del guardado en desktop", () => {
       // `persistence-coordinator.ts`, no liberar `inFlight` en el `finally`
       // de `start()` → rojo.
       await mountLoaded()
-      const { file } = await createDocumentOpenedByRoute("ODE461-ANTES")
+      const { file } = await createDocument("ODE461-ANTES")
       const errors = vi.spyOn(console, "error").mockImplementation(() => {})
 
       failNextWriteFile(
