@@ -154,10 +154,62 @@ describe("ODE-592 — el restore web no escribe a partir de una lectura vieja", 
     expect(row?.sync_status, "restore confirmado: synced, no pending").toBe("synced")
     expect(row?.lifecycle).toBe("server-confirmed")
     expect(row?.version, "la versión del servidor").toBe(5)
-    expect(
-      await localDB.syncQueue.getCurrentForWriting(WRITING_ID),
-      "el restore limpia la cola y no encola nada propio",
-    ).toBeNull()
+    // La cola se limpió antes de la ventana: lo único encolado es la
+    // mutación del guardado del editor, no una del restore.
+    const queued = await localDB.syncQueue.getCurrentForWriting(WRITING_ID)
+    expect(queued?.operation, "la mutación del guardado sobrevive").toBe("upsert")
+    expect(queued?.entity_kind === "writing" && queued.payload.body_text).toBe("Versión más nueva.")
+  })
+
+  it("sin ventana, el restore limpia la cola y no encola nada propio", async () => {
+    await localDB.writings.save(makeArchivedWriting({ sync_status: "pending" }))
+    await webDocumentService.saveWriting({ writing: editorRecord("Pendiente.", 1) })
+    expect(await localDB.syncQueue.getCurrentForWriting(WRITING_ID)).not.toBeNull()
+    stubRestoreFetch(5)
+
+    const result = await webDocumentService.restoreWriting({
+      writingId: WRITING_ID,
+      version: 1,
+      updatedAt: "2026-09-25T00:00:05.000Z",
+    })
+
+    expect(result.error).toBeNull()
+    const row = await localDB.writings.get(WRITING_ID)
+    expect(row?.sync_status).toBe("synced")
+    expect(row?.lifecycle).toBe("server-confirmed")
+    expect(await localDB.syncQueue.getCurrentForWriting(WRITING_ID)).toBeNull()
+  })
+
+  it("un guardado que confirma después de la escritura del restore conserva su mutación en la cola", async () => {
+    await localDB.writings.save(makeArchivedWriting())
+    stubRestoreFetch(5)
+    // La ventana se abre DESPUÉS de que la transacción de `update` confirma:
+    // si el restore limpiara la cola en ese momento, borraría la mutación de
+    // este guardado y su cuerpo nunca subiría al servidor.
+    const state = { injected: false }
+    const update = localDB.writings.update
+    vi.spyOn(localDB.writings, "update").mockImplementation(async (id, updater) => {
+      const written = await update(id, updater)
+      if (!state.injected && id === WRITING_ID) {
+        state.injected = true
+        const saved = await webDocumentService.saveWriting({ writing: editorRecord("Versión posterior.", 6) })
+        expect(saved.error).toBeNull()
+      }
+      return written
+    })
+
+    const result = await webDocumentService.restoreWriting({
+      writingId: WRITING_ID,
+      version: 1,
+      updatedAt: "2026-09-25T00:00:05.000Z",
+    })
+
+    expect(result.error).toBeNull()
+    expect(state.injected, "control positivo: el guardado entró en la ventana").toBe(true)
+    const row = await localDB.writings.get(WRITING_ID)
+    expect(row?.body_text).toBe("Versión posterior.")
+    const queued = await localDB.syncQueue.getCurrentForWriting(WRITING_ID)
+    expect(queued, "la mutación del guardado sigue en la cola").not.toBeNull()
   })
 
   it("sin fila local devuelve el registro sintético sin escribir ni encolar", async () => {

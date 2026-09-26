@@ -288,6 +288,10 @@ export const webDocumentService: DocumentService = {
       // se usa `enqueueWritingUpdate` a propósito: ese helper marca
       // `sync_status: "pending"` y encola un `upsert`, semántica opuesta a un
       // restore ya confirmado por el servidor (`synced` + limpiar la cola).
+      // La cola se limpia ANTES de escribir: si se limpiara después, un
+      // guardado que confirmara entre la escritura y la limpieza perdería su
+      // mutación y su cuerpo no llegaría nunca al servidor.
+      await localDB.syncQueue.deleteForEntity("writing", input.writingId)
       const written = await localDB.writings.update(input.writingId, (current) => {
         if (!current) return null
         return {
@@ -308,7 +312,6 @@ export const webDocumentService: DocumentService = {
         parentId: data.parent_id == null ? null : String(data.parent_id), correspondenceId: data.correspondence_id == null ? null : String(data.correspondence_id),
         version: Number(data.version ?? 1), deletedAt: null, createdAt: String(data.created_at ?? input.updatedAt), updatedAt: String(data.updated_at ?? input.updatedAt), lifecycle: "server-confirmed",
       })
-      await localDB.syncQueue.deleteForEntity("writing", input.writingId)
       return ok(localWritingToRecord(written))
     } catch (error) { return err(makeServiceError(error, "UNAVAILABLE")) }
   },
