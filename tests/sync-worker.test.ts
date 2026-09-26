@@ -203,6 +203,54 @@ describe("SyncWorker", () => {
     );
   });
 
+  it("a scheduled flush that fails logs the error instead of leaving an unhandled rejection", async () => {
+    // ODE-583 follow-up: the timer-driven flush was fired with `void`, so a
+    // local-DB failure inside it (IndexedDB unavailable, or torn down under a
+    // test) surfaced as an unhandled rejection. The mutations stay queued and
+    // the next flush retries them; the failure only needs to be visible.
+    const localDb = createLocalDbMock();
+    localDb.syncQueue.getPending = vi.fn(async () => {
+      throw new Error("indexeddb unavailable");
+    });
+    const logError = vi.fn();
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    let fire: (() => void) | null = null;
+    const worker = new SyncWorker({
+      localDb,
+      isOnline: () => true,
+      logError,
+      scheduleTimeout: (callback) => {
+        fire = callback;
+        return 1;
+      },
+      clearScheduledTimeout: () => undefined,
+      transport: {
+        upsertWriting: vi.fn(async () => createRemoteWriting()),
+        deleteWriting: vi.fn(async () => undefined),
+        upsertCollection: vi.fn(async () => undefined),
+        deleteCollection: vi.fn(async () => undefined),
+        setWritingCollections: vi.fn(async () => undefined),
+      },
+    });
+
+    try {
+      worker.schedule(0);
+      expect(fire, "control positivo: el flush quedó agendado").not.toBeNull();
+      fire!();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(unhandled, "sin rechazo sin manejar").not.toHaveBeenCalled();
+      expect(logError).toHaveBeenCalledWith(
+        "[sync:flush]",
+        expect.objectContaining({ error: "indexeddb unavailable" }),
+      );
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
   it("retries pending mutations after connectivity is restored", async () => {
     const localDb = createLocalDbMock();
     const mutation = createMutation();
