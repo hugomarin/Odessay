@@ -281,27 +281,38 @@ export const webDocumentService: DocumentService = {
         message: payload?.error?.message ?? "Restore failed",
         retryable: response.status >= 500,
       })
-      const local = await localDB.writings.get(input.writingId)
-      if (!local) return ok({
-        id: input.writingId, authorId: String(payload.data.author_id ?? ""), title: payload.data.title == null ? null : String(payload.data.title),
-        content: { markdown: null, richText: null, plainText: "", canonicalSource: "pending-document-contract" },
-        slug: payload.data.slug == null ? null : String(payload.data.slug), status: (payload.data.status ?? "draft") as WritingRecord["status"],
-        artifactType: normalizeArtifactType(typeof payload.data.artifact_type === "string" ? payload.data.artifact_type : null), visibility: (payload.data.visibility ?? "private") as WritingRecord["visibility"],
-        parentId: payload.data.parent_id == null ? null : String(payload.data.parent_id), correspondenceId: payload.data.correspondence_id == null ? null : String(payload.data.correspondence_id),
-        version: Number(payload.data.version ?? 1), deletedAt: null, createdAt: String(payload.data.created_at ?? input.updatedAt), updatedAt: String(payload.data.updated_at ?? input.updatedAt), lifecycle: "server-confirmed",
-      })
-      const restored: LocalWriting = {
-        ...local,
-        deleted_at: null,
-        sync_status: "synced",
-        lifecycle: "server-confirmed",
-        version: Number(payload.data.version ?? input.version + 1),
-        updated_at: String(payload.data.updated_at ?? input.updatedAt),
-        local_updated_at: Date.now(),
-      }
+      const data = payload.data
+      // Sobre la fila ACTUAL, en una transacción (ODE-592): leer con `get`
+      // y escribir después con `save` son dos transacciones y lo que otro
+      // escritor confirmara en la ventana (p. ej. el editor) se revertía. No
+      // se usa `enqueueWritingUpdate` a propósito: ese helper marca
+      // `sync_status: "pending"` y encola un `upsert`, semántica opuesta a un
+      // restore ya confirmado por el servidor (`synced` + limpiar la cola).
+      // La cola se limpia ANTES de escribir: si se limpiara después, un
+      // guardado que confirmara entre la escritura y la limpieza perdería su
+      // mutación y su cuerpo no llegaría nunca al servidor.
       await localDB.syncQueue.deleteForEntity("writing", input.writingId)
-      await localDB.writings.save(restored)
-      return ok(localWritingToRecord(restored))
+      const written = await localDB.writings.update(input.writingId, (current) => {
+        if (!current) return null
+        return {
+          ...current,
+          deleted_at: null,
+          sync_status: "synced",
+          lifecycle: "server-confirmed",
+          version: Number(data.version ?? input.version + 1),
+          updated_at: String(data.updated_at ?? input.updatedAt),
+          local_updated_at: Date.now(),
+        }
+      })
+      if (!written) return ok({
+        id: input.writingId, authorId: String(data.author_id ?? ""), title: data.title == null ? null : String(data.title),
+        content: { markdown: null, richText: null, plainText: "", canonicalSource: "pending-document-contract" },
+        slug: data.slug == null ? null : String(data.slug), status: (data.status ?? "draft") as WritingRecord["status"],
+        artifactType: normalizeArtifactType(typeof data.artifact_type === "string" ? data.artifact_type : null), visibility: (data.visibility ?? "private") as WritingRecord["visibility"],
+        parentId: data.parent_id == null ? null : String(data.parent_id), correspondenceId: data.correspondence_id == null ? null : String(data.correspondence_id),
+        version: Number(data.version ?? 1), deletedAt: null, createdAt: String(data.created_at ?? input.updatedAt), updatedAt: String(data.updated_at ?? input.updatedAt), lifecycle: "server-confirmed",
+      })
+      return ok(localWritingToRecord(written))
     } catch (error) { return err(makeServiceError(error, "UNAVAILABLE")) }
   },
 
