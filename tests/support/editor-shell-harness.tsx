@@ -240,6 +240,13 @@ export type EditorShellTestProps = {
   key?: string
   /** Sustituto de la creación de borradores desktop, para controlar su tiempo. */
   createDesktopDraftOverride?: ComponentProps<typeof EditorShell>["createDesktopDraftOverride"]
+  /**
+   * Monta la shell dentro de un `<main>` desplazable, como hace el layout de
+   * la app (`components/navigation/sidebar.tsx`). La shell lee y restaura el
+   * scroll de ese `<main>` en el view_state de cada pestaña; sin él, ese
+   * contenedor no existe en el test. Opción de montaje, no prop de la shell.
+   */
+  withAppMain?: boolean
 }
 
 /**
@@ -252,11 +259,17 @@ export async function mountEditorShell(
   ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
   const container = document.createElement("div")
-  document.body.appendChild(container)
+  const appMain = props.withAppMain ? document.createElement("main") : null
+  if (appMain) {
+    appMain.appendChild(container)
+    document.body.appendChild(appMain)
+  } else {
+    document.body.appendChild(container)
+  }
   const root: Root = createRoot(container)
 
   const render = async (next: EditorShellTestProps = props) => {
-    const { key, ...shellProps } = next
+    const { key, withAppMain: _withAppMain, ...shellProps } = next
     await act(async () => {
       root.render(<EditorShell key={key} {...shellProps} />)
     })
@@ -278,6 +291,7 @@ export async function mountEditorShell(
         root.unmount()
       })
       container.remove()
+      appMain?.remove()
       await quiesceSyncWorker()
     },
   }
@@ -527,6 +541,36 @@ export function holdAnimationFrames(): FrameController {
       queue = []
     },
   }
+}
+
+/**
+ * Los dos contenedores de scroll que la shell lee al guardar el view_state de
+ * una pestaña y escribe al restaurarlo (`persistCurrentWorkspaceViewState`,
+ * `useDocumentHydration`). happy-dom no tiene layout: `scrollTop` guarda lo que
+ * se le asigne, sin recortar al alto del contenido.
+ */
+function viewportNodes() {
+  const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+  const shellViewport = document.querySelector<HTMLElement>("main")
+  if (!editorViewport || !shellViewport) {
+    throw new Error("La shell no tiene montados sus contenedores de scroll")
+  }
+  return { editorViewport, shellViewport }
+}
+
+export type ViewportScroll = { editorScrollTop: number; shellScrollTop: number }
+
+/** Desplaza los contenedores reales de la shell, como lo haría el usuario. */
+export function scrollViewport({ editorScrollTop, shellScrollTop }: ViewportScroll) {
+  const { editorViewport, shellViewport } = viewportNodes()
+  editorViewport.scrollTop = editorScrollTop
+  shellViewport.scrollTop = shellScrollTop
+}
+
+/** Lee el scroll actual de los contenedores reales de la shell. */
+export function readViewport(): ViewportScroll {
+  const { editorViewport, shellViewport } = viewportNodes()
+  return { editorScrollTop: editorViewport.scrollTop, shellScrollTop: shellViewport.scrollTop }
 }
 
 /** Espera a que una condición se cumpla, sin `sleep` ciego. */
