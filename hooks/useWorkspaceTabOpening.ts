@@ -51,6 +51,7 @@ export type WorkspaceTabOpeningInput = {
   navigatedToDraftRef: React.RefObject<boolean>
   persistenceCoordinator: PersistenceCoordinator
   prepareDocumentExit: (steps: { flushPendingEdit: boolean; snapshotDraft: boolean; saveViewState: boolean }) => void
+  refreshRichFootnotes: DocumentHydrationInput["refreshRichFootnotes"]
   selectAdjacentTabRef: React.RefObject<((direction: number) => void) | null>
   sessionLoaded: boolean
   untitledWritingTitle: string
@@ -77,6 +78,7 @@ export function useWorkspaceTabOpening(input: WorkspaceTabOpeningInput) {
     navigatedToDraftRef,
     persistenceCoordinator,
     prepareDocumentExit,
+    refreshRichFootnotes,
     selectAdjacentTabRef,
     sessionLoaded,
     untitledWritingTitle,
@@ -116,6 +118,7 @@ export function useWorkspaceTabOpening(input: WorkspaceTabOpeningInput) {
         isApplyingContentRef.current = true
         editor.commands.setContent(EMPTY_EDITOR_JSON)
         isApplyingContentRef.current = false
+        refreshRichFootnotes()
         updateDerivedEditorState(editor)
       }
 
@@ -240,6 +243,7 @@ export function useWorkspaceTabOpening(input: WorkspaceTabOpeningInput) {
     editorSession.tabs,
     persistenceCoordinator,
     prepareDocumentExit,
+    refreshRichFootnotes,
     updateDerivedEditorState,
     activeEditorTabIdRef,
     createWritingId,

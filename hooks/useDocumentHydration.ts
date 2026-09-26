@@ -182,6 +182,7 @@ export type DocumentHydrationInput = {
   setExternalFileNotice: (notice: null) => void
   setCanonicalPath: Setter<string | null>
 
+  refreshRichFootnotes: () => void
   updateDerivedEditorState: (editor: Editor) => void
   applyCorrectionSuggestionUpdate: (
     updater: (current: PublicationSuggestion[]) => PublicationSuggestion[],
@@ -234,6 +235,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     applyDocumentMetadata,
     setExternalFileNotice,
     setCanonicalPath,
+    refreshRichFootnotes,
     updateDerivedEditorState,
     applyCorrectionSuggestionUpdate,
     flattenPersistedSuggestions,
@@ -286,6 +288,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
       isApplyingContentRef.current = true
       editor.commands.setContent(restorable?.bodyJson ?? EMPTY_EDITOR_JSON)
       isApplyingContentRef.current = false
+      refreshRichFootnotes()
       updateDerivedEditorState(editor)
       applyDocumentMetadata({
         status: "draft",
@@ -509,6 +512,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
           )
         }
         isApplyingContentRef.current = false
+        refreshRichFootnotes()
         const currentDocBlocks = collectCorrectionBlocks(editor.state.doc)
         const hydratedReconciliation = reconcileHydratedCorrectionBlocks(
           localCorrectionBlocks,
@@ -732,6 +736,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     hydrationPhase,
     queueMarkdownSelectionRestore,
     routeWritingId,
+    refreshRichFootnotes,
     setPersistedCorrectionBlocks,
     updateDerivedEditorState,
   ])

@@ -217,6 +217,44 @@ type SelectionSnapshot = {
   text: string
 }
 
+type OwnedMarkdownSelectionSnapshot = MarkdownSelectionSnapshot & {
+  writingId: string
+}
+
+type MarkdownSelectionRead = {
+  selection: MarkdownSelectionSnapshot | null
+  belongsToOtherDocument: boolean
+}
+
+const markdownSelectionOwnerId = (writingId: string | null) => writingId ?? EDITOR_DRAFT_TAB_ID
+
+function readMarkdownSelectionForActiveDocument(
+  cached: OwnedMarkdownSelectionSnapshot | null,
+  activeWritingId: string | null,
+  source?: string,
+): MarkdownSelectionRead {
+  const ownerId = markdownSelectionOwnerId(activeWritingId)
+  if (!cached || cached.writingId === ownerId) {
+    return { selection: cached, belongsToOtherDocument: false }
+  }
+
+  // A cached selection belongs to a different document. Use the active tab's
+  // own saved selection while its deferred restore is pending; never fall back
+  // to the shared textarea's selection, which can still hold the prior tab's
+  // range.
+  const viewState = getEditorSessionState().session.tabs.find((tab) => tab.id === ownerId)?.view_state
+  const start = viewState?.markdownSelectionStart
+  const end = viewState?.markdownSelectionEnd
+  if (typeof start === "number" && typeof end === "number") {
+    return {
+      selection: { start, end, text: source?.slice(start, end) ?? "" },
+      belongsToOtherDocument: true,
+    }
+  }
+
+  return { selection: null, belongsToOtherDocument: true }
+}
+
 type PendingAnnotationSnapshot = {
   from: number
   to: number
@@ -827,7 +865,7 @@ export function EditorShell({
   const materializedDraftIdsRef = useRef<Map<string, string>>(new Map())
   const selectAdjacentTabRef = useRef<((direction: number) => void) | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
-  const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
+  const markdownSelectionRef = useRef<OwnedMarkdownSelectionSnapshot | null>(null)
   const markdownTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const findInputRef = useRef<HTMLInputElement | null>(null)
   const replaceInputRef = useRef<HTMLInputElement | null>(null)
@@ -843,6 +881,7 @@ export function EditorShell({
   const pendingMarkdownSelectionRef = useRef<{
     start: number
     end: number
+    writingId: string
     scrollTop?: number
     scrollLeft?: number
     editorScrollTop?: number
@@ -1227,6 +1266,10 @@ export function EditorShell({
     setBodyText(editorInstance.getText())
   }, [])
 
+  const refreshRichFootnotes = useCallback(() => {
+    setRichFootnoteRevision((revision) => revision + 1)
+  }, [])
+
   const persistEditorSnapshot = useCallback(
     async (
       editorInstance: Editor,
@@ -1382,6 +1425,12 @@ export function EditorShell({
         onSettled?: () => void
       },
     ) => {
+      const writingId = markdownSelectionOwnerId(currentWritingIdRef.current)
+      const requestedIsStillValid = options?.isStillValid
+      const isStillValid = () =>
+        markdownSelectionOwnerId(currentWritingIdRef.current) === writingId &&
+        (!requestedIsStillValid || requestedIsStillValid())
+
       // The latest selection wins, but a pending completion callback is never
       // dropped with the request it came with: hydration finishes through
       // this queue (`onSettled: finishHydration`), and a plain restore
@@ -1395,7 +1444,7 @@ export function EditorShell({
               options.onSettled?.()
             }
           : supersededOnSettled ?? options?.onSettled
-      pendingMarkdownSelectionRef.current = { start, end, ...options, onSettled }
+      pendingMarkdownSelectionRef.current = { start, end, ...options, writingId, isStillValid, onSettled }
 
       if (markdownSelectionRafRef.current !== null) {
         return
@@ -1516,6 +1565,7 @@ export function EditorShell({
           start: pendingSelection.start,
           end: pendingSelection.end,
           text: nextTextarea.value.slice(pendingSelection.start, pendingSelection.end),
+          writingId: pendingSelection.writingId,
         }
 
         // No scroll target was scheduled (a plain selection-only restore) —
@@ -1696,6 +1746,11 @@ export function EditorShell({
     const tabId = currentWritingIdRef.current ?? EDITOR_DRAFT_TAB_ID
     const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
     const shellViewport = document.querySelector<HTMLElement>("main")
+    const currentTab = getEditorSessionState().session.tabs.find((tab) => tab.id === tabId)
+    const markdownSelection = readMarkdownSelectionForActiveDocument(
+      markdownSelectionRef.current,
+      currentWritingIdRef.current,
+    )
 
     saveTabViewState({
       tabId,
@@ -1711,11 +1766,17 @@ export function EditorShell({
         selectionTo: modeRef.current === "rich" && editor ? editor.state.selection.to : null,
         markdownSelectionStart:
           modeRef.current === "markdown"
-            ? markdownSelectionRef.current?.start ?? markdownTextareaRef.current?.selectionStart ?? null
+            ? markdownSelection.selection?.start ??
+              (markdownSelection.belongsToOtherDocument
+                ? currentTab?.view_state?.markdownSelectionStart ?? null
+                : markdownTextareaRef.current?.selectionStart ?? null)
             : null,
         markdownSelectionEnd:
           modeRef.current === "markdown"
-            ? markdownSelectionRef.current?.end ?? markdownTextareaRef.current?.selectionEnd ?? null
+            ? markdownSelection.selection?.end ??
+              (markdownSelection.belongsToOtherDocument
+                ? currentTab?.view_state?.markdownSelectionEnd ?? null
+                : markdownTextareaRef.current?.selectionEnd ?? null)
             : null,
       },
     })
@@ -2022,6 +2083,7 @@ export function EditorShell({
             isApplyingContentRef.current = true
             liveEditor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
             isApplyingContentRef.current = false
+            refreshRichFootnotes()
             updateDerivedEditorState(liveEditor)
             persistenceCoordinator.setDurableContentHash(currentWritingId, nextContentHash)
             setExternalFileNotice({ kind: "content-changed", path: nextCanonicalPath })
@@ -2066,7 +2128,13 @@ export function EditorShell({
       externalContentConflictRef.current = null
       setExternalContentConflict(null)
     }
-  }, [applySyncStatus, currentWritingId, persistenceCoordinator, updateDerivedEditorState])
+  }, [
+    applySyncStatus,
+    currentWritingId,
+    persistenceCoordinator,
+    refreshRichFootnotes,
+    updateDerivedEditorState,
+  ])
 
   useEffect(() => {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
@@ -2134,6 +2202,7 @@ export function EditorShell({
     applyDocumentMetadata,
     setExternalFileNotice,
     setCanonicalPath,
+    refreshRichFootnotes,
     updateDerivedEditorState,
     applyCorrectionSuggestionUpdate,
     flattenPersistedSuggestions,
@@ -2400,6 +2469,7 @@ export function EditorShell({
 
   const handleRunAction = useCallback(
     (action: EditorShortcutAction, options?: { richSelection?: RichSelectionRange }) => {
+      const writingId = markdownSelectionOwnerId(currentWritingId)
       const runGlobalAction = () => {
         switch (action) {
           case "find":
@@ -2484,6 +2554,10 @@ export function EditorShell({
       }
 
       const captureMarkdownSelection = () => {
+        if (markdownSelectionOwnerId(currentWritingIdRef.current) !== writingId) {
+          return
+        }
+
         const textarea = markdownTextareaRef.current
 
         if (!textarea) {
@@ -2497,6 +2571,7 @@ export function EditorShell({
           start,
           end,
           text: textarea.value.slice(start, end),
+          writingId,
         }
       }
 
@@ -2536,8 +2611,15 @@ export function EditorShell({
         const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
         const shellViewport = document.querySelector<HTMLElement>("main")
         const fallbackCursor = markdownValue.length
-        const start = markdownSelectionRef.current?.start ?? textarea?.selectionStart ?? fallbackCursor
-        const end = markdownSelectionRef.current?.end ?? textarea?.selectionEnd ?? fallbackCursor
+        const markdownSelection = readMarkdownSelectionForActiveDocument(
+          markdownSelectionRef.current,
+          currentWritingIdRef.current,
+          markdownValue,
+        )
+        const start = markdownSelection.selection?.start ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionStart ?? fallbackCursor)
+        const end = markdownSelection.selection?.end ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionEnd ?? fallbackCursor)
         const scrollTop = textarea?.scrollTop
         const scrollLeft = textarea?.scrollLeft
         const editorScrollTop = editorViewport?.scrollTop
@@ -2572,8 +2654,15 @@ export function EditorShell({
         const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
         const shellViewport = document.querySelector<HTMLElement>("main")
         const fallbackCursor = markdownValue.length
-        const selectionStart = markdownSelectionRef.current?.start ?? textarea?.selectionStart ?? fallbackCursor
-        const selectionEnd = markdownSelectionRef.current?.end ?? textarea?.selectionEnd ?? fallbackCursor
+        const markdownSelection = readMarkdownSelectionForActiveDocument(
+          markdownSelectionRef.current,
+          currentWritingIdRef.current,
+          markdownValue,
+        )
+        const selectionStart = markdownSelection.selection?.start ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionStart ?? fallbackCursor)
+        const selectionEnd = markdownSelection.selection?.end ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionEnd ?? fallbackCursor)
         const scrollTop = textarea?.scrollTop
         const scrollLeft = textarea?.scrollLeft
         const editorScrollTop = editorViewport?.scrollTop
@@ -2895,6 +2984,7 @@ export function EditorShell({
     [
       applySyncStatus,
       captureRichSelectionSnapshot,
+      currentWritingId,
       editor,
       markdownValue,
       openFindReplacePanel,
@@ -3254,9 +3344,17 @@ export function EditorShell({
         const source = markdownValue
         const textarea = markdownTextareaRef.current
         const fallbackCursor = source.length
-        const start = markdownSelectionRef.current?.start ?? textarea?.selectionStart ?? fallbackCursor
-        const end = markdownSelectionRef.current?.end ?? textarea?.selectionEnd ?? fallbackCursor
-        const selectedText = markdownSelectionRef.current?.text?.trim() ?? source.slice(start, end).trim()
+        const markdownSelection = readMarkdownSelectionForActiveDocument(
+          markdownSelectionRef.current,
+          currentWritingIdRef.current,
+          source,
+        )
+        const start = markdownSelection.selection?.start ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionStart ?? fallbackCursor)
+        const end = markdownSelection.selection?.end ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionEnd ?? fallbackCursor)
+        const selectedText = markdownSelection.selection?.text?.trim() ??
+          (markdownSelection.belongsToOtherDocument ? "" : source.slice(start, end).trim())
         const linkText = payload.text || selectedText || payload.url
         const replacement = `[${linkText}](${payload.url})`
         const nextMarkdown = `${source.slice(0, start)}${replacement}${source.slice(end)}`
@@ -3394,8 +3492,15 @@ export function EditorShell({
         const source = markdownValue
         const textarea = markdownTextareaRef.current
         const fallbackCursor = source.length
-        const start = markdownSelectionRef.current?.start ?? textarea?.selectionStart ?? fallbackCursor
-        const end = markdownSelectionRef.current?.end ?? textarea?.selectionEnd ?? fallbackCursor
+        const markdownSelection = readMarkdownSelectionForActiveDocument(
+          markdownSelectionRef.current,
+          currentWritingIdRef.current,
+          source,
+        )
+        const start = markdownSelection.selection?.start ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionStart ?? fallbackCursor)
+        const end = markdownSelection.selection?.end ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionEnd ?? fallbackCursor)
         const imageMarkdown = `![${payload.alt}](${payload.src})`
         const nextMarkdown = `${source.slice(0, start)}${imageMarkdown}${source.slice(end)}`
         const nextSelectionStart = start + imageMarkdown.length
@@ -3820,7 +3925,11 @@ export function EditorShell({
     })
   }
 
-  function syncActiveMarkdownMatchSelection(nextActiveIndex: number) {
+  function syncActiveMarkdownMatchSelection(nextActiveIndex: number, writingId: string) {
+    if (markdownSelectionOwnerId(currentWritingIdRef.current) !== writingId) {
+      return
+    }
+
     const textarea = markdownTextareaRef.current
     const targetMatch = markdownFindMatches[clampFindReplaceIndex(markdownFindMatches.length, nextActiveIndex)]
 
@@ -3834,6 +3943,7 @@ export function EditorShell({
       start: targetMatch.start,
       end: targetMatch.end,
       text: textarea.value.slice(targetMatch.start, targetMatch.end),
+      writingId,
     }
   }
 
@@ -3847,15 +3957,16 @@ export function EditorShell({
       setFindActiveIndex(nextActiveIndex)
 
       if (modeRef.current === "markdown") {
+        const writingId = markdownSelectionOwnerId(currentWritingId)
         window.requestAnimationFrame(() => {
-          syncActiveMarkdownMatchSelection(nextActiveIndex)
+          syncActiveMarkdownMatchSelection(nextActiveIndex, writingId)
         })
         return
       }
 
       syncActiveRichMatchSelection(nextActiveIndex)
     },
-    [activeMatchIndex, matchCount, syncActiveMarkdownMatchSelection, syncActiveRichMatchSelection],
+    [activeMatchIndex, currentWritingId, matchCount, syncActiveMarkdownMatchSelection, syncActiveRichMatchSelection],
   )
 
   const handleReplaceCurrentMatch = useCallback(() => {
@@ -3877,8 +3988,9 @@ export function EditorShell({
       handleMarkdownChange(nextMarkdown)
       setFindActiveIndex(nextActive)
 
+      const writingId = markdownSelectionOwnerId(currentWritingId)
       window.requestAnimationFrame(() => {
-        syncActiveMarkdownMatchSelection(nextActive)
+        syncActiveMarkdownMatchSelection(nextActive, writingId)
       })
       return
     }
@@ -3903,6 +4015,7 @@ export function EditorShell({
     syncActiveRichMatchSelection(nextActive)
   }, [
     activeMatchIndex,
+    currentWritingId,
     editor,
     findCaseSensitive,
     findQuery,
@@ -4100,6 +4213,7 @@ export function EditorShell({
     navigatedToDraftRef,
     persistenceCoordinator,
     prepareDocumentExit,
+    refreshRichFootnotes,
     selectAdjacentTabRef,
     sessionLoaded,
     untitledWritingTitle: UNTITLED_WRITING_TITLE,
@@ -4521,6 +4635,7 @@ export function EditorShell({
                     isApplyingContentRef.current = true
                     editor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
                     isApplyingContentRef.current = false
+                    refreshRichFootnotes()
                     updateDerivedEditorState(editor)
                     persistenceCoordinator.setDurableContentHash(writingId, externalContentConflict.externalContentHash)
                     externalContentConflictRef.current = null
@@ -4655,7 +4770,13 @@ export function EditorShell({
                     markdownValue={markdownValue}
                     onMarkdownChange={handleMarkdownChange}
                     onMarkdownSelectionChange={(selection) => {
-                      markdownSelectionRef.current = selection
+                      const writingId = markdownSelectionOwnerId(currentWritingId)
+                      if (markdownSelectionOwnerId(currentWritingIdRef.current) !== writingId) return
+
+                      markdownSelectionRef.current = {
+                        ...selection,
+                        writingId,
+                      }
                       setMarkdownSelectionState(selection)
                     }}
                     markdownTextareaRef={markdownTextareaRef}
@@ -4721,6 +4842,9 @@ export function EditorShell({
                 annotations={footnotes}
                 currentMarkdown={currentDocumentMarkdown}
                 onNavigate={(annotation: AnnotationPanelEntry) => {
+                  const writingId = markdownSelectionOwnerId(currentWritingId)
+                  if (markdownSelectionOwnerId(currentWritingIdRef.current) !== writingId) return false
+
                   if (modeRef.current === "markdown") {
                     const textarea = markdownTextareaRef.current
                     if (
@@ -4737,6 +4861,7 @@ export function EditorShell({
                       start: annotation.source_start,
                       end: annotation.source_end,
                       text: markdownValue.slice(annotation.source_start, annotation.source_end),
+                      writingId,
                     }
                     queueMarkdownSelectionRestore(annotation.source_start, annotation.source_end)
                     return true
