@@ -157,12 +157,14 @@ import { cn } from "@/lib/utils"
 import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
 import { logCorrectionEvent } from "@/lib/observability/corrections-log"
 import {
-  CORRECTION_BLOCK_CACHE_LIMIT,
   createCorrectionBlockRecordId,
   DEFAULT_CORRECTION_BLOCK_POSITION_WINDOW,
+  deleteLocalCorrectionBlocks,
   findStaleCorrectionBlockRecords,
   parseCorrectionBlockLogicalId,
   persistCorrectionBlockRemotely,
+  readLocalCorrectionBlocks,
+  saveLocalCorrectionBlock,
 } from "@/lib/corrections/persistence"
 import { createLearnedWordSet, normalizeLearnedWord } from "@/lib/corrections/learned-words"
 import {
@@ -329,8 +331,6 @@ type ExternalContentConflict = {
 // (ODE-562). Viven aquí, y no en el hook, a propósito: son deuda ya declarada
 // de este archivo en architecture/boundaries.baseline.json, y moverlas a
 // hooks/ la escondería en vez de pagarla. Pagarla es el corte de correcciones.
-const readLocalCorrectionBlocks = (writingId: string) => localDB.correctionBlocks.getByWriting(writingId)
-const deleteLocalCorrectionBlocks = (ids: string[]) => localDB.correctionBlocks.deleteMany(ids)
 
 function replaceEditorHistory(nextHref: string) {
   if (typeof window === "undefined") {
@@ -1334,8 +1334,7 @@ export function EditorShell({
 
   const syncPersistedCorrectionBlock = useCallback(async (block: LocalCorrectionBlock) => {
     persistedCorrectionBlocksRef.current.set(block.blockHash, block)
-    await localDB.correctionBlocks.save(block)
-    await localDB.correctionBlocks.evictOldestWriting(CORRECTION_BLOCK_CACHE_LIMIT)
+    await saveLocalCorrectionBlock(block)
   }, [])
 
   const persistCorrectionBlockWriteThrough = useCallback(
@@ -1432,7 +1431,7 @@ export function EditorShell({
       for (const update of updates) {
         if (update.deletedBlockIds.length > 0) {
           persistedCorrectionBlocksRef.current.delete(update.previousBlock.blockHash)
-          await localDB.correctionBlocks.delete(update.previousBlock.id)
+          await deleteLocalCorrectionBlocks([update.previousBlock.id])
         }
 
         await persistCorrectionBlockWriteThrough(update.nextBlock, update.deletedBlockIds)
@@ -1466,7 +1465,7 @@ export function EditorShell({
       staleBlocks.forEach((candidate) => {
         persistedCorrectionBlocksRef.current.delete(candidate.blockHash)
       })
-      await localDB.correctionBlocks.deleteMany(staleBlocks.map((candidate) => candidate.id))
+      await deleteLocalCorrectionBlocks(staleBlocks.map((candidate) => candidate.id))
 
       void persistCorrectionBlockRemotely({
         writingId,
@@ -1485,8 +1484,8 @@ export function EditorShell({
     generation?: HydrationGeneration,
   ) => {
     const pendingResult = generation
-      ? await generation.runAsync(() => localDB.correctionBlocks.getByWriting(writingId))
-      : { status: "current" as const, value: await localDB.correctionBlocks.getByWriting(writingId) }
+      ? await generation.runAsync(() => readLocalCorrectionBlocks(writingId))
+      : { status: "current" as const, value: await readLocalCorrectionBlocks(writingId) }
     if (pendingResult.status === "stale") return
     const pendingBlocks = pendingResult.value.filter((block) => block.syncedAt === null)
 
