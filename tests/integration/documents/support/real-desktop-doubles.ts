@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs"
 import { randomUUID } from "node:crypto"
 import { dirname, join } from "node:path"
 import type {
+  DesktopCatalogCollectionSnapshot,
   DesktopCatalogDualWriteInput,
   DesktopCatalogRow,
   DesktopCloudSnapshotInput,
@@ -307,6 +308,44 @@ export async function tauriWriteFileDouble(
 }
 
 /**
+ * Mirrors the real Rust `write_binary_file` command (src-tauri/src/commands/document.rs),
+ * the export writer behind `saveDesktopBinaryExport`: create missing parent
+ * dirs, write a `.tmp` sibling, rename it over the target, and drop the
+ * `.tmp` if the rename fails. A write failure here is a genuine fs error
+ * (e.g. a parent path component that is a plain file), never a scripted
+ * throw (EXP-05, ODE-601).
+ *
+ * Failure shape: the command returns `Err(String)`, and Tauri's `invoke`
+ * rejects with that bare string — not an `Error`. The double rejects the same
+ * way, with the same message prefixes, so callers that branch on
+ * `instanceof Error` see what production sees.
+ */
+export async function tauriWriteBinaryFileDouble(path: string, bytes: Uint8Array): Promise<void> {
+  const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
+  const parent = dirname(path)
+  const parentExists = await fs.stat(parent).then(() => true, () => false)
+  if (!parentExists) {
+    try {
+      await fs.mkdir(parent, { recursive: true })
+    } catch (error) {
+      return Promise.reject(`create_dir_all: ${reason(error)}`)
+    }
+  }
+  const tmpPath = `${path}.tmp`
+  try {
+    await fs.writeFile(tmpPath, bytes)
+  } catch (error) {
+    return Promise.reject(`write_binary_file tmp: ${reason(error)}`)
+  }
+  try {
+    await fs.rename(tmpPath, path)
+  } catch (error) {
+    await fs.rm(tmpPath, { force: true })
+    return Promise.reject(`write_binary_file rename: ${reason(error)}`)
+  }
+}
+
+/**
  * Mirrors the real Rust `rename_file` command: creates the destination's
  * parent directory and renames in place, returning the new path. It does not
  * resolve collisions — `FilesystemDocumentService.renameWriting` already
@@ -609,6 +648,17 @@ export async function tauriCatalogActivateBindingRootDouble(): Promise<void> {}
  */
 export async function tauriCatalogReactivateBindingRootDouble(): Promise<DesktopCatalogRow[]> {
   return []
+}
+
+/**
+ * Same premise, for collections: no test using this double creates a
+ * collection (there is no double for `catalog_save_collection`), so the
+ * catalog's collection snapshot is really empty. The editor's Properties panel
+ * reads it on open (`WritingCollectionsSection` → `loadDesktopCollections`),
+ * which is on the path to Export (EXP-05, ODE-601).
+ */
+export async function tauriCatalogListCollectionSnapshotDouble(_dbPath: string): Promise<DesktopCatalogCollectionSnapshot> {
+  return { collections: [], writingCollections: [] }
 }
 
 export async function tauriCatalogDetachLocalFileDouble(dbPath: string, id: string): Promise<void> {

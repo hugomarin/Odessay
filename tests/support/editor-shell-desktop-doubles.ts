@@ -44,6 +44,7 @@ import {
   tauriCatalogApplyCloudSnapshotsDouble,
   tauriCatalogDualWriteDouble,
   tauriCatalogGetByIdDouble,
+  tauriCatalogListCollectionSnapshotDouble,
   tauriCatalogListDouble,
   tauriCatalogListRetiredBindingRootsDouble,
   tauriCatalogReactivateBindingRootDouble,
@@ -59,6 +60,7 @@ import {
   tauriSettingsWriteDouble,
   tauriWorkspaceSyncDouble,
   tauriWorkspaceTouchFileDouble,
+  tauriWriteBinaryFileDouble,
   tauriWriteFileDouble,
 } from "../integration/documents/support/real-desktop-doubles"
 
@@ -91,6 +93,8 @@ export function tauriCommandsDouble() {
   return {
     tauriCreateFile: tauriCreateFileDouble,
     tauriWriteFile: tauriWriteFileDouble,
+    // El escritor de exports (PDF/Word/Markdown) tras el diálogo nativo (EXP-05, ODE-601).
+    tauriWriteBinaryFile: tauriWriteBinaryFileDouble,
     tauriOpenFile: tauriOpenFileDouble,
     tauriListRecentFiles: tauriListRecentFilesDouble,
     tauriRelocateFile: tauriRelocateFileDouble,
@@ -118,6 +122,8 @@ export function tauriCommandsDouble() {
     tauriCatalogListBindingRootDocuments: unimplemented("tauriCatalogListBindingRootDocuments"),
     tauriCatalogListRetiredBindingRoots: tauriCatalogListRetiredBindingRootsDouble,
     tauriCatalogReactivateBindingRoot: tauriCatalogReactivateBindingRootDouble,
+    // El panel de propiedades lee las colecciones al abrirse (camino a Export, ODE-601).
+    tauriCatalogListCollectionSnapshot: tauriCatalogListCollectionSnapshotDouble,
   }
 }
 
