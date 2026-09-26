@@ -51,6 +51,16 @@ La red que lo protege: 4a, 4b, los humos desktop y corrections, ODE-464 y los ba
 
 **Actualización (2026-09-24, ODE-586 — corte 2, entrega 1):** las 8 llamadas directas a `localDB.correctionBlocks` de la shell pasan por su dueño canónico, `lib/corrections/persistence.ts` (`readLocalCorrectionBlocks`, `saveLocalCorrectionBlock`, `deleteLocalCorrectionBlocks`). El baseline de `ui-no-direct-persistence` queda vacío. Sin cambio de comportamiento; la mudanza del cluster a un hook es la entrega 2.
 
+**Actualización (2026-09-24, ODE-586 — corte 2, entrega 2a):** el estado de sugerencias, su admisión y la caché de bloques de corrección salen tal cual a `hooks/useCorrectionBlocks.ts` (batcher, `applyCorrectionSuggestionUpdate`, admisión, `persistCorrectionBlockWriteThrough`, `updatePersistedBlocksFromSuggestions`, `deletePersistedBlocksForPosition`, `flushPendingCorrectionBlocks`…). Mudanza mecánica, como ODE-562: sin efectos, así que el orden de efectos de la shell no cambia; el estado y los refs siguen siendo de la shell. Antes se añadió la red que faltaba, aceptar y rechazar una corrección por la shell (`tests/editor-shell-corrections-accept.test.tsx`, AI-05/AI-06). Contra la entrega 1, con el mismo método:
+
+```text
+6,121 líneas        (-249)
+   80 useCallback   (-10)
+  228 referencias a corrections   (-58)
+```
+
+La segunda mitad del cluster (aplicar, aceptar, rechazar, aprender palabra, el toast, el cableado de `useManualCorrections` y la invalidación por edición) es la entrega 2b.
+
 **Actualización (2026-09-24, ODE-563 — segundo tiempo del primer corte):** los 9 metadatos del documento (título, título explícito, versión, fecha de creación, slug, estado, tipo, visibilidad, ciclo de vida) tienen ahora un solo dueño, `applyDocumentMetadata`, que escribe estado y ref en el mismo paso. Se eliminaron sus 9 efectos espejo y todas sus escrituras a mano; `writingSlugRef` desapareció, porque nadie lo leía. Contra `main`, con el mismo método:
 
 ```text
@@ -104,7 +114,7 @@ Tres problemas, en orden de gravedad:
 
 | Cluster | Peso aprox. | Capabilities | Cobertura vía shell |
 |---|---|---|---|
-| Correcciones (persistencia y aplicación de sugerencias del análisis manual) | ~305 refs *(era ~533; ODE-558 eliminó la cola automática inalcanzable)* | AI-05 | humo del camino real (`editor-shell-corrections-path.test.tsx`) y aislamiento entre documentos (`editor-shell-corrections-isolation.test.tsx`, ODE-559) |
+| Correcciones (persistencia y aplicación de sugerencias del análisis manual) | ~305 refs *(era ~533; ODE-558 eliminó la cola automática inalcanzable)* | AI-05 | humo del camino real (`editor-shell-corrections-path.test.tsx`), aislamiento entre documentos (`editor-shell-corrections-isolation.test.tsx`, ODE-559) y aceptar/rechazar por la shell (`editor-shell-corrections-accept.test.tsx`, ODE-586) |
 | Save / persistencia | ~317 refs | WATCH-07, DOC-02/03/06 | **ninguna** (el coordinator sí, por debajo) |
 | Hidratación / identidad | ~104 refs, 7 efectos | STATE-01/03/04/05 | 1 e2e + unit del coordinator |
 | Find / replace | ~122 refs | — | unit de `lib/editor/find-replace.ts` |
