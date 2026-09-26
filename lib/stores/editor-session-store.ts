@@ -88,6 +88,19 @@ let loadPromise: Promise<void> | null = null;
  */
 const removedWritingIds = new Set<string>();
 
+/**
+ * Changes made before the persisted session arrived, in order (ODE-577).
+ *
+ * The author can act before `readEditorSession()` resolves ("New Artifact",
+ * the native "New File" menu, typing into the draft). Each change applies at
+ * once so the UI responds, but the persisted session is still the source the
+ * rest of the tabs come from: when it arrives, these changes are replayed on
+ * top of it instead of being thrown away with the pre-load state. Nothing is
+ * persisted until then — writing the pre-load session would overwrite the
+ * tabs the read has not returned yet.
+ */
+let changesBeforeLoad: Array<(current: LocalEditorSession) => LocalEditorSession> = [];
+
 const emitChange = () => {
   listeners.forEach((listener) => listener());
 };
@@ -110,6 +123,23 @@ const setSessionState = (
   updater: (current: LocalEditorSession) => LocalEditorSession,
   options?: { persist?: boolean },
 ) => {
+  if (!state.loaded) {
+    // `loaded` means "the persisted session is in"; a change before that is
+    // replayed over it when it arrives (see `changesBeforeLoad`).
+    changesBeforeLoad.push(updater);
+    state = {
+      ...state,
+      session: {
+        ...updater(state.session),
+        updated_at: Date.now(),
+      },
+    };
+    syncStudioSessionFromEditorTabs(state.session.tabs, state.session.active_tab_id);
+    emitChange();
+    void initializeEditorSessionStore();
+    return;
+  }
+
   const nextSession = updater(state.session);
   state = {
     ...state,
@@ -171,12 +201,37 @@ export function initializeEditorSessionStore() {
   emitChange();
 
   loadPromise = readEditorSession()
-    .then((session) => {
+    .then((persisted) => {
+      const replay = changesBeforeLoad;
+      changesBeforeLoad = [];
+      const session = replay.reduce((current, change) => change(current), persisted);
       state = {
         loaded: true,
         loading: false,
-        session,
+        session: replay.length > 0 ? { ...session, updated_at: Date.now() } : session,
       };
+      if (replay.length > 0) {
+        syncStudioSessionFromEditorTabs(state.session.tabs, state.session.active_tab_id);
+      }
+      emitChange();
+      if (replay.length > 0) {
+        void persistState(state.session);
+      }
+    })
+    .catch((error) => {
+      // Without the persisted session the store would stay "loading" and keep
+      // queueing changes forever. Degrade to an empty session with the
+      // author's changes on top, but do not write it: the read may have failed
+      // transiently and the stored tabs are still there.
+      console.error("[editor:session] could not read the persisted session", error);
+      const replay = changesBeforeLoad;
+      changesBeforeLoad = [];
+      state = {
+        loaded: true,
+        loading: false,
+        session: replay.reduce((current, change) => change(current), createEmptyEditorSession()),
+      };
+      syncStudioSessionFromEditorTabs(state.session.tabs, state.session.active_tab_id);
       emitChange();
     })
     .finally(() => {
@@ -681,6 +736,7 @@ export function syncWritingTitlesFromCatalog(titlesByWritingId: ReadonlyMap<stri
 export function resetEditorSessionStoreForTests() {
   state = DEFAULT_STATE;
   loadPromise = null;
+  changesBeforeLoad = [];
   removedWritingIds.clear();
   emitChange();
 }

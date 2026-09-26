@@ -92,6 +92,32 @@ export const enqueueWritingUpsert = async (writing: LocalWriting) => {
   await enqueueMutation(writing, "upsert");
 };
 
+/**
+ * Web: escribe el documento aplicando `updater` sobre la fila ACTUAL, dentro
+ * de una única transacción, y encola la mutación con la fila resultante
+ * (ODE-589). Leer con `writings.get` y escribir después con
+ * `enqueueWritingUpsert` son dos transacciones: lo que otro escritor (el
+ * editor, el worker de sync) confirmara entre medias se perdía. Si `updater`
+ * devuelve `null` no se escribe ni se encola nada y se devuelve `null`.
+ *
+ * Solo para el adaptador web: en desktop el `.md` es el documento canónico y
+ * el guardado va por el servicio de documentos (ver `enqueueWritingUpsert`).
+ */
+export const enqueueWritingUpdate = async (
+  writingId: string,
+  updater: (current: LocalWriting | null) => LocalWriting | null,
+): Promise<LocalWriting | null> => {
+  const written = await localDB.writings.update(writingId, (current) => {
+    const next = updater(current);
+    return next ? { ...next, local_updated_at: Date.now(), sync_status: "pending" } : null;
+  });
+  if (!written) {
+    return null;
+  }
+  await enqueueMutation(written, "upsert");
+  return written;
+};
+
 export const enqueueWritingDelete = async (writingId: string) => {
   if (isDesktopRuntime()) {
     const { getDocumentService } = await import("@/lib/services/document-service-factory");

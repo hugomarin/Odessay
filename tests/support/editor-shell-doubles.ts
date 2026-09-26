@@ -37,6 +37,8 @@ export type HarnessWorld = {
   tauriCalls: Array<{ command: string; args?: Record<string, unknown> }>
   /** Resultado del diálogo nativo de guardado (null = cancelado). */
   saveDialogResult: string | null
+  /** Veces que la app abrió el diálogo nativo de guardado, con sus opciones. */
+  saveDialogCalls: Array<Record<string, unknown> | undefined>
   openDialogResult: string | string[] | null
   /** Peticiones HTTP salientes y su router. */
   networkCalls: Array<{ url: string; method: string }>
@@ -53,6 +55,15 @@ export type HarnessWorld = {
   learnedWords: LearnedWordEntry[]
   /** Veces que el shell pidió la lista de palabras aprendidas. */
   learnedWordsCalls: number
+  /**
+   * Handler de la hidratación remota de bloques de corrección. Devolver una
+   * promesa pendiente deja la respuesta "en vuelo" (ODE-464, ODE-574).
+   */
+  hydrateCorrectionBlocks: (writingId: string) => Promise<{ error: unknown; data: unknown[] | null }>
+  /** Documentos cuya hidratación remota de correcciones se pidió, en orden. */
+  correctionHydrationCalls: string[]
+  /** Volcados remotos de bloques de corrección, en orden. */
+  correctionPersistCalls: Array<{ writingId?: string; blockId?: string }>
   /**
    * Se llama en cada commit del shell, en fase de layout: después del commit
    * y ANTES de sus efectos pasivos. Es la ventana donde un efecto pasivo
@@ -122,6 +133,7 @@ export const world: HarnessWorld = {
   tauriInvoke: () => undefined,
   tauriCalls: [],
   saveDialogResult: null,
+  saveDialogCalls: [],
   openDialogResult: null,
   networkCalls: [],
   network: defaultNetwork(),
@@ -131,6 +143,9 @@ export const world: HarnessWorld = {
   aiReviewCalls: [],
   learnedWords: [],
   learnedWordsCalls: 0,
+  hydrateCorrectionBlocks: async () => ({ error: null, data: [] }),
+  correctionHydrationCalls: [],
+  correctionPersistCalls: [],
   onShellCommit: null,
 }
 
@@ -192,9 +207,27 @@ export function tauriCoreDouble(actual: Record<string, unknown>) {
   }
 }
 
+/**
+ * Oyentes registrados con `listen` de `@tauri-apps/api/event`, por canal.
+ *
+ * Vive a nivel de módulo y NO se resetea entre pruebas, a propósito: el bus de
+ * menú (`lib/services/desktop/menu-event-bus.ts`) registra cada canal una sola
+ * vez por proceso, igual que en la app. Resetearlo dejaría sordas a las
+ * pruebas siguientes del archivo. Quién recibe el evento lo decide el propio
+ * bus (su pila de suscriptores), no el doble.
+ */
+export const tauriEventListeners = new Map<string, Set<(event: { event: string; payload: unknown }) => void>>()
+
 export function tauriEventDouble() {
   return {
-    listen: async () => () => {},
+    listen: async (channel: string, handler: (event: { event: string; payload: unknown }) => void) => {
+      const listeners = tauriEventListeners.get(channel) ?? new Set()
+      listeners.add(handler)
+      tauriEventListeners.set(channel, listeners)
+      return () => {
+        listeners.delete(handler)
+      }
+    },
     emit: async () => {},
     once: async () => () => {},
   }
@@ -202,7 +235,10 @@ export function tauriEventDouble() {
 
 export function tauriDialogDouble() {
   return {
-    save: async () => world.saveDialogResult,
+    save: async (options?: Record<string, unknown>) => {
+      world.saveDialogCalls.push(options)
+      return world.saveDialogResult
+    },
     open: async () => world.openDialogResult,
     message: async () => {},
     ask: async () => true,
@@ -212,6 +248,19 @@ export function tauriDialogDouble() {
 
 export function runtimeDetectionDouble() {
   return { isDesktopRuntime: () => world.isDesktop }
+}
+
+/**
+ * `@/lib/runtime/detect`: el otro detector de desktop, el que mira
+ * `window.__TAURI_INTERNALS__`. En la app los dos coinciden; en el harness hay
+ * que doblarlo para que no contradiga a `isDesktopRuntime`. Lo usa, p. ej.,
+ * `loadContextualWorkspace` (el árbol del Workspace, ODE-580).
+ */
+export function tauriRuntimeDetectDouble() {
+  return {
+    isTauriRuntime: () => world.isDesktop,
+    isWebRuntime: () => !world.isDesktop,
+  }
 }
 
 export function aiServiceDouble() {
@@ -232,7 +281,17 @@ export function aiServiceDouble() {
         return world.aiReview(input)
       },
       suggestTitle: async () => ({ error: null, data: null }),
-      hydrateCorrectionBlocks: async () => ({ error: null, data: [] }),
+      hydrateCorrectionBlocks: async (writingId: string) => {
+        world.correctionHydrationCalls.push(writingId)
+        return world.hydrateCorrectionBlocks(writingId)
+      },
+      persistCorrectionBlock: async (input: { writingId?: string; block?: { id?: string; blockId?: string } }) => {
+        world.correctionPersistCalls.push({ writingId: input.writingId, blockId: input.block?.blockId })
+        return {
+          error: null,
+          data: { persistedId: input.block?.id ?? null, deletedIds: [], syncedAt: new Date().toISOString() },
+        }
+      },
     }),
   }
 }

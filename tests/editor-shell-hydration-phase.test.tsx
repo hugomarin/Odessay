@@ -19,7 +19,7 @@
  *
  * Camino de producción: montaje por ruta, gesto real de pestaña y escritura
  * real sobre fake-indexeddb. La red previa (ODE-464, open-error en
- * editor-shell-tab-switch-persistence, selección, admisión, barridos de
+ * editor-shell-tab-transitions-desktop, selección, admisión, barridos de
  * ventanas) cubre el comportamiento de la hidratación en sí.
  *
  * Mutation test (ODE-570): hidratar también en "identity", o no volver a

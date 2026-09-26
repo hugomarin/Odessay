@@ -24,11 +24,11 @@
  * Completion event: el `.md` en disco y la pestaña del store, tras dejar
  * vencer los debounces, no la llamada a guardar.
  *
- * Fuera de esta prueba, con motivo: abrir desde el árbol del workspace
- * (`handleOpenWorkspaceDocument`) y desde el menú nativo (`handleMenuOpenFile`)
- * no tienen camino de producción barato en el harness. El primero, además,
- * hoy NO guarda el view_state saliente (los otros cuatro sí): ODE-567 lo
- * conserva tal cual, declarado, en vez de cambiarlo sin red.
+ * Las dos transiciones que ABREN un documento (árbol del Workspace,
+ * `handleOpenWorkspaceDocument`, y menú nativo, `handleMenuOpenFile`) están en
+ * `tests/editor-shell-open-exit-protocol.test.tsx` (ODE-580): necesitan dobles
+ * que este archivo no monta. Allí queda caracterizado también que abrir desde
+ * el Workspace NO guarda el view_state saliente (los otros cuatro sí).
  *
  * Mutation test (ODE-567): quitar el volcado de la edición en cola, o el
  * guardado del view_state, del protocolo de salida pone en rojo los casos
