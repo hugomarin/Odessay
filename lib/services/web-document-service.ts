@@ -20,7 +20,7 @@ import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { normalizeArtifactType } from "@/lib/writings/artifact-type"
 import { getExportFileBaseName } from "@/lib/export/writing-export"
-import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
+import { enqueueWritingDelete, enqueueWritingUpdate } from "@/lib/sync/queue"
 import { needsBodyHydration } from "@/lib/sync/remote-bootstrap"
 import { getSyncService } from "@/lib/sync/sync-service-factory"
 
@@ -168,13 +168,17 @@ export const webDocumentService: DocumentService = {
 
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
-      const existing = await localDB.writings.get(input.writing.id)
-      const local = recordToLocalWriting(input.writing, existing)
-      if (existing) {
-        local.lifecycle = existing.lifecycle
-      }
-      await enqueueWritingUpsert(local)
-      return ok(localWritingToRecord(local))
+      // El editor manda el documento; el `lifecycle` es del worker de sync y
+      // se toma de la fila actual, en la misma transacción (ODE-589).
+      const written = await enqueueWritingUpdate(input.writing.id, (current) => {
+        const local = recordToLocalWriting(input.writing, current)
+        if (current) {
+          local.lifecycle = current.lifecycle
+        }
+        return local
+      })
+      if (!written) throw new Error(`Writing ${input.writing.id} could not be saved`)
+      return ok(localWritingToRecord(written))
     } catch (error) {
       return err(makeServiceError(error, "DB_ERROR"))
     }
@@ -182,23 +186,27 @@ export const webDocumentService: DocumentService = {
 
   async updateWritingMetadata(input: UpdateWritingMetadataInput): Promise<ServiceResponse<WritingRecord>> {
     try {
-      const existing = await localDB.writings.get(input.writingId)
-      if (!existing || existing.sync_status === "deleted") return err({
+      // Los metadatos se aplican sobre la fila actual, no sobre una lectura
+      // anterior: un guardado del editor entre medias conserva su cuerpo
+      // (ODE-589). Si ese guardado ya subió la versión, esta escritura va
+      // encima, nunca por detrás.
+      const written = await enqueueWritingUpdate(input.writingId, (current) => {
+        if (!current || current.sync_status === "deleted") return null
+        return {
+          ...current,
+          ...(input.status ? { status: input.status } : {}),
+          ...(input.artifactType ? { artifact_type: input.artifactType } : {}),
+          version: Math.max(input.version, current.version + 1),
+          updated_at: input.updatedAt,
+          metadata_updated_at: input.updatedAt,
+        }
+      })
+      if (!written) return err({
         code: "NOT_FOUND",
         message: `Writing ${input.writingId} not found`,
         retryable: false,
       })
-      const next = {
-        ...existing,
-        ...(input.status ? { status: input.status } : {}),
-        ...(input.artifactType ? { artifact_type: input.artifactType } : {}),
-        version: input.version,
-        updated_at: input.updatedAt,
-        metadata_updated_at: input.updatedAt,
-        local_updated_at: Date.now(),
-      }
-      await enqueueWritingUpsert(next)
-      return ok(localWritingToRecord(next))
+      return ok(localWritingToRecord(written))
     } catch (error) {
       return err(makeServiceError(error, "DB_ERROR"))
     }
@@ -216,9 +224,19 @@ export const webDocumentService: DocumentService = {
 
   async renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
-      const local = await localDB.writings.get(input.writingId)
+      // Sobre la fila actual, en una transacción (ODE-589).
+      const written = await enqueueWritingUpdate(input.writingId, (current) =>
+        current
+          ? {
+              ...current,
+              title: input.title,
+              updated_at: input.updatedAt,
+              content_updated_at: input.updatedAt,
+            }
+          : null,
+      )
 
-      if (!local) {
+      if (!written) {
         return err({
           code: "NOT_FOUND",
           message: `Writing ${input.writingId} not found`,
@@ -226,17 +244,7 @@ export const webDocumentService: DocumentService = {
         })
       }
 
-      const nextLocal: LocalWriting = {
-        ...local,
-        title: input.title,
-        updated_at: input.updatedAt,
-        content_updated_at: input.updatedAt,
-        local_updated_at: Date.now(),
-        sync_status: "pending",
-      }
-
-      await enqueueWritingUpsert(nextLocal)
-      return ok(localWritingToRecord(nextLocal))
+      return ok(localWritingToRecord(written))
     } catch (error) {
       return err(makeServiceError(error, "DB_ERROR"))
     }

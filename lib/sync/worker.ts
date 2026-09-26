@@ -1,5 +1,5 @@
 import { localDB, type LocalDB } from "@/lib/local-db";
-import type { LocalWriting, SyncMutation } from "@/lib/local-db/schema";
+import type { SyncMutation, WritingLifecycle } from "@/lib/local-db/schema";
 import { emitSyncStatusChange } from "@/lib/sync/events";
 import { canRetryMutation, getNextRetryAt } from "@/lib/sync/retry";
 import { mapRemoteWritingToLocal, type RemoteWritingRecord } from "@/lib/sync/remote-bootstrap";
@@ -219,7 +219,13 @@ class SyncWorker {
     this.nextTrigger = delay === 0 ? "auth" : "debounce";
     this.timeoutId = this.scheduleTimeout(() => {
       this.timeoutId = null;
-      void this.flush();
+      // Nobody awaits a timer-driven flush: a local-DB failure inside it
+      // (IndexedDB unavailable, or torn down) would become an unhandled
+      // rejection. The mutations stay queued and the next flush retries them;
+      // the failure only needs to stay visible (ODE-583 follow-up).
+      this.flush().catch((error: unknown) => {
+        this.logError("[sync:flush]", { error: error instanceof Error ? error.message : String(error) });
+      });
     }, delay);
   }
 
@@ -284,10 +290,14 @@ class SyncWorker {
       return "superseded";
     }
 
-    // Hoisted out of the try block: the terminal-failure branch below needs
-    // the pre-attempt lifecycle (captured once here, never mutated) to
-    // revert the optimistic "syncing" flip when no further retry is coming.
-    let localWriting: LocalWriting | null = null;
+    // Hoisted out of the try block: the failure branch below needs the
+    // pre-attempt lifecycle (captured once here, never mutated) to revert the
+    // optimistic "syncing" flip.
+    let priorLifecycle: WritingLifecycle | null = null;
+    // The row's `local_updated_at` when this attempt started: every local save
+    // rewrites it, so a different value after the request means the author
+    // saved while it was in flight (ODE-583).
+    let attemptLocalUpdatedAt: number | null = null;
 
     try {
       emitSyncStatusChange({
@@ -295,16 +305,16 @@ class SyncWorker {
         status: mutation.entity_kind === "writing" ? "syncing" : "pending",
       });
 
-      localWriting =
-        mutation.entity_kind === "writing"
-          ? await this.localDb.writings.get(mutation.entity_id)
-          : null;
-
-      if (localWriting && localWriting.lifecycle !== "syncing") {
-        await this.localDb.writings.save({
-          ...localWriting,
-          lifecycle: "syncing",
+      // Lifecycle-only and atomic against the current row (ODE-583): a
+      // read-then-full-save here could put back an older body/version if the
+      // author saved in between.
+      if (mutation.entity_kind === "writing") {
+        const flip = await this.localDb.writings.transitionLifecycle(mutation.entity_id, {
+          when: (current) => current !== "syncing",
+          to: "syncing",
         });
+        priorLifecycle = flip.previous;
+        attemptLocalUpdatedAt = flip.localUpdatedAt;
       }
 
       if (mutation.entity_kind === "writing") {
@@ -317,8 +327,21 @@ class SyncWorker {
           );
 
           if (remoteWriting) {
-            const localWriting = await this.localDb.writings.get(remoteWriting.id);
-            await this.localDb.writings.save(mapRemoteWritingToLocal(remoteWriting, localWriting));
+            // Atomic against the current row (ODE-583). If the author saved
+            // while the request was in flight, the server's echo of what was
+            // sent must not replace that newer body: its own mutation is
+            // already queued and will sync it. The document does exist on the
+            // server now, so only the lifecycle moves.
+            await this.localDb.writings.update(remoteWriting.id, (current) => {
+              const savedDuringRequest =
+                current !== null &&
+                attemptLocalUpdatedAt !== null &&
+                current.local_updated_at !== attemptLocalUpdatedAt;
+              if (savedDuringRequest) {
+                return current.lifecycle === "server-confirmed" ? null : { ...current, lifecycle: "server-confirmed" };
+              }
+              return mapRemoteWritingToLocal(remoteWriting, current);
+            });
           }
         }
       } else if (mutation.entity_kind === "collection") {
@@ -375,14 +398,15 @@ class SyncWorker {
       // on every failure, keeps the next attempt's captured lifecycle a
       // trustworthy pre-attempt baseline (local-only or server-confirmed)
       // instead of "syncing" carried over from this failure.
-      if (localWriting && localWriting.lifecycle !== "syncing") {
-        const currentWriting = await this.localDb.writings.get(mutation.entity_id);
-        if (currentWriting && currentWriting.lifecycle === "syncing") {
-          await this.localDb.writings.save({
-            ...currentWriting,
-            lifecycle: localWriting.lifecycle,
-          });
-        }
+      // Same atomic, lifecycle-only update (ODE-583): only reverts while the
+      // row is still "syncing", and never touches the body, version or local
+      // timestamp of a save that landed while the request was in flight.
+      if (priorLifecycle && priorLifecycle !== "syncing") {
+        const stableLifecycle = priorLifecycle;
+        await this.localDb.writings.transitionLifecycle(mutation.entity_id, {
+          when: (current) => current === "syncing",
+          to: stableLifecycle,
+        });
       }
 
       if (!canRetryMutation(mutation.attempts + 1)) {

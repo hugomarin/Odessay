@@ -33,6 +33,14 @@ type LocalDB = {
       remoteWriting: LocalWriting;
       candidate: LocalWriting;
     }) => Promise<void>;
+    transitionLifecycle: (
+      id: string,
+      transition: { when: (current: WritingLifecycle) => boolean; to: WritingLifecycle },
+    ) => Promise<{ previous: WritingLifecycle | null; changed: boolean; localUpdatedAt: number | null }>;
+    update: (
+      id: string,
+      updater: (current: LocalWriting | null) => LocalWriting | null,
+    ) => Promise<LocalWriting | null>;
   };
   collections: {
     save: (collection: LocalCollection) => Promise<void>;
@@ -633,6 +641,75 @@ const saveWriting = async (writing: LocalWriting) => {
     }));
   });
   emitLocalDBChange();
+};
+
+/**
+ * Cambia SOLO el `lifecycle` de un documento, leyendo y escribiendo la fila
+ * actual dentro de una única transacción `readwrite` (ODE-583).
+ *
+ * Leer la fila con `get` y escribirla entera con `save` son dos transacciones:
+ * un guardado del autor confirmado entre las dos se perdía, porque la segunda
+ * devolvía el cuerpo, la versión y la marca local de la lectura anterior. Aquí
+ * la condición (`when`) se evalúa contra la fila que se va a escribir, y el
+ * resto de la fila queda como está.
+ *
+ * Devuelve el `lifecycle` que había (`null` si la fila no existe), si cambió y
+ * el `local_updated_at` de la fila leída: quien llama puede comparar después si
+ * el autor guardó entre medias.
+ */
+const transitionWritingLifecycle = async (
+  id: string,
+  { when, to }: { when: (current: WritingLifecycle) => boolean; to: WritingLifecycle },
+) => {
+  const result: { previous: WritingLifecycle | null; changed: boolean; localUpdatedAt: number | null } = {
+    previous: null,
+    changed: false,
+    localUpdatedAt: null,
+  };
+  await withStore(LOCAL_DB_STORES.writings, "readwrite", async (store) => {
+    const row = (await runRequest(store.get(id))) as LocalWriting | undefined;
+    if (!row) {
+      return;
+    }
+    result.previous = row.lifecycle;
+    result.localUpdatedAt = row.local_updated_at ?? null;
+    if (!when(row.lifecycle)) {
+      return;
+    }
+    await runRequest(store.put({ ...row, lifecycle: to }));
+    result.changed = true;
+  });
+  if (result.changed) {
+    emitLocalDBChange();
+  }
+  return result;
+};
+
+/**
+ * Lee la fila actual y escribe la que devuelva `updater` dentro de una única
+ * transacción `readwrite` (ODE-583). `updater` recibe `null` si la fila no
+ * existe y puede devolver `null` para no escribir nada. Para quien necesita
+ * decidir contra la fila que de verdad va a sustituir, no contra una lectura
+ * anterior que un guardado del autor pudo dejar atrás.
+ */
+const updateWriting = async (
+  id: string,
+  updater: (current: LocalWriting | null) => LocalWriting | null,
+) => {
+  let written: LocalWriting | null = null;
+  await withStore(LOCAL_DB_STORES.writings, "readwrite", async (store) => {
+    const row = ((await runRequest(store.get(id))) as LocalWriting | undefined) ?? null;
+    const next = updater(row);
+    if (!next) {
+      return;
+    }
+    written = { ...next, artifact_type: normalizeArtifactType(next.artifact_type) };
+    await runRequest(store.put(written));
+  });
+  if (written) {
+    emitLocalDBChange();
+  }
+  return written;
 };
 
 const saveWritingWithRebind = async ({
@@ -1307,6 +1384,8 @@ const localDBInstance: LocalDB = {
     delete: softDeleteWriting,
     purge: purgeWriting,
     saveWithRebind: saveWritingWithRebind,
+    transitionLifecycle: transitionWritingLifecycle,
+    update: updateWriting,
   },
   collections: {
     save: saveCollection,
