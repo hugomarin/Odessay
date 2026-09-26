@@ -137,6 +137,9 @@ export function syncServiceDouble() {
     getSyncService: () => ({
       scheduleFlush: async () => ({ data: undefined, error: null }),
       hydrateWriting: async () => ({ data: undefined, error: null }),
+      // El panel de propiedades la llama al abrirse (camino a Export, ODE-601):
+      // lee colecciones de Supabase, así que es red, igual que las demás.
+      hydrateCollections: async () => ({ data: undefined, error: null }),
       enqueueMutation: async () => ({ data: undefined, error: null }),
     }),
   }
