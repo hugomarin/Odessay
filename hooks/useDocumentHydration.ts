@@ -160,7 +160,13 @@ export type DocumentHydrationInput = {
   setMode: Setter<EditorMode>
   setMarkdownValue: Setter<string>
   setBodyText: Setter<string>
-  setSyncStatus: Setter<EditorSaveState>
+  setSyncStatus: (next: EditorSaveState) => void
+  /**
+   * ODE-542: relee el estado durable de sync del documento activo. La
+   * hidratación lo llama tras aplicar su snapshot puntual, que puede ser
+   * anterior a un sync que terminó durante la carga.
+   */
+  reconcileActiveSaveState: (reason: string) => void
   setIsBodyHydrating: Setter<boolean>
   /**
    * Único punto de entrada de las transiciones del documento activo (ADR
@@ -222,6 +228,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     setMarkdownValue,
     setBodyText,
     setSyncStatus,
+    reconcileActiveSaveState,
     setIsBodyHydrating,
     activateDocument,
     applyDocumentMetadata,
@@ -563,6 +570,13 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
             typeof navigator === "undefined" ? true : navigator.onLine,
           ),
         )
+        // ODE-542: el snapshot de arriba puede ser anterior a un sync que
+        // terminó durante (o justo antes de) esta hidratación. Una relectura
+        // durable por hidratación hace converger el indicador sin cambiar de
+        // pestaña.
+        if (generation.isCurrent()) {
+          reconcileActiveSaveState("post-hydration")
+        }
         updateDerivedEditorState(editor)
 
         const activeTab =
