@@ -104,7 +104,7 @@ Tres problemas, en orden de gravedad:
 
 | Cluster | Peso aprox. | Capabilities | Cobertura vía shell |
 |---|---|---|---|
-| Correcciones (persistencia y aplicación de sugerencias del análisis manual) | ~305 refs *(era ~533; ODE-558 eliminó la cola automática inalcanzable)* | AI-05 | humo del camino real (`editor-shell-corrections-path.test.tsx`) |
+| Correcciones (persistencia y aplicación de sugerencias del análisis manual) | ~305 refs *(era ~533; ODE-558 eliminó la cola automática inalcanzable)* | AI-05 | humo del camino real (`editor-shell-corrections-path.test.tsx`) y aislamiento entre documentos (`editor-shell-corrections-isolation.test.tsx`, ODE-559) |
 | Save / persistencia | ~317 refs | WATCH-07, DOC-02/03/06 | **ninguna** (el coordinator sí, por debajo) |
 | Hidratación / identidad | ~104 refs, 7 efectos | STATE-01/03/04/05 | 1 e2e + unit del coordinator |
 | Find / replace | ~122 refs | — | unit de `lib/editor/find-replace.ts` |
@@ -159,7 +159,7 @@ Los cuatro del §4, en este orden: STATE-07 (cero cobertura hoy), STATE-05 (seam
 Orden propuesto:
 
 1. **Hidratación / identidad** — el que más fallos reales ha producido y el que falla en silencio.
-2. **Correcciones** — ya no es el cluster más grande: ODE-558 eliminó la mitad automática por inalcanzable (~228 referencias menos). Lo que queda es la aplicación y persistencia de sugerencias del análisis manual, con owner canónico ya existente (`lib/corrections/persistence.ts`); cierra además las 8 llamadas directas que hoy son deuda declarada. Antes de extraer aquí, ver ODE-559: el invariante de identidad de ese camino todavía no es falsificable.
+2. **Correcciones** — ya no es el cluster más grande: ODE-558 eliminó la mitad automática por inalcanzable (~228 referencias menos). Lo que queda es la aplicación y persistencia de sugerencias del análisis manual, con owner canónico ya existente (`lib/corrections/persistence.ts`); cierra además las 8 llamadas directas que hoy son deuda declarada. El invariante de identidad ya es falsificable (ODE-559): vive en una sola compuerta, `isResponseStillCurrent` en `hooks/useManualCorrections.ts`, y lo prueba `tests/editor-shell-corrections-isolation.test.tsx`.
 3. **Tabs / sesión y wiring desktop.**
 4. **Chrome** (TOC, find/replace, modales, focus mode) — mayormente puro; riesgo tipográfico, no semántico.
 

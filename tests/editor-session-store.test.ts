@@ -508,3 +508,104 @@ function focusTabBackTo(writingId: string) {
   openWritingTab({ writingId, title: "A" });
   expect(getEditorSessionState().session.active_tab_id).toBe(writingId);
 }
+
+describe("editorSessionStore — changes before the persisted session arrives (ODE-577)", () => {
+  function persistedWithWriting(writingId: string) {
+    return {
+      ...createEmptyEditorSession(),
+      active_tab_id: writingId,
+      tabs: [
+        {
+          id: writingId,
+          writing_id: writingId,
+          slug: null,
+          title: "Persisted",
+          save_state: "saved" as const,
+          has_pending_sync: false,
+          last_touched_at: 1,
+          view_state: null,
+        },
+      ],
+    };
+  }
+
+  /** Delivers the read's value only on `release()`, as a read started at mount. */
+  function holdRead() {
+    const original = localDB.editorSessions.get.bind(localDB.editorSessions);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const spy = vi.spyOn(localDB.editorSessions, "get").mockImplementation(async (id: string) => {
+      const value = await original(id);
+      await gate;
+      return value;
+    });
+    return { release, restore: () => spy.mockRestore() };
+  }
+
+  it("replays a draft opened before the read over the persisted tabs, and is not loaded until then", async () => {
+    await localDB.editorSessions.save(persistedWithWriting("writing-1"));
+    const hold = holdRead();
+    const loading = initializeEditorSessionStore();
+
+    openDraftTab("draft-identity");
+    expect(getEditorSessionState().loaded).toBe(false);
+    expect(getEditorSessionState().session.active_tab_id).toBe(EDITOR_DRAFT_TAB_ID);
+
+    hold.release();
+    await loading;
+    hold.restore();
+
+    const { loaded, session } = getEditorSessionState();
+    expect(loaded).toBe(true);
+    expect(session.tabs.map((tab) => tab.id)).toEqual(["writing-1", EDITOR_DRAFT_TAB_ID]);
+    expect(session.active_tab_id).toBe(EDITOR_DRAFT_TAB_ID);
+    await vi.waitFor(async () => {
+      const stored = await localDB.editorSessions.get("workspace");
+      expect(stored?.tabs.map((tab) => tab.id)).toEqual(["writing-1", EDITOR_DRAFT_TAB_ID]);
+    });
+  });
+
+  it("does not persist the pre-load session over the stored one", async () => {
+    await localDB.editorSessions.save(persistedWithWriting("writing-1"));
+    const hold = holdRead();
+    const save = vi.spyOn(localDB.editorSessions, "save");
+    const loading = initializeEditorSessionStore();
+
+    openDraftTab("draft-identity");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(save).not.toHaveBeenCalled();
+
+    hold.release();
+    await loading;
+    hold.restore();
+    save.mockRestore();
+  });
+
+  it("starts the read itself when a change arrives before anyone asked for the session", async () => {
+    await localDB.editorSessions.save(persistedWithWriting("writing-1"));
+
+    openDraftTab("draft-identity");
+    await vi.waitFor(() => expect(getEditorSessionState().loaded).toBe(true));
+
+    expect(getEditorSessionState().session.tabs.map((tab) => tab.id)).toEqual(["writing-1", EDITOR_DRAFT_TAB_ID]);
+  });
+
+  it("degrades to the author's changes over an empty session if the read fails, without writing", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const read = vi.spyOn(localDB.editorSessions, "get").mockRejectedValue(new Error("idb unavailable"));
+    const save = vi.spyOn(localDB.editorSessions, "save");
+    const loading = initializeEditorSessionStore();
+    openDraftTab("draft-identity");
+    await loading;
+
+    expect(getEditorSessionState().loaded).toBe(true);
+    expect(getEditorSessionState().session.tabs.map((tab) => tab.id)).toEqual([EDITOR_DRAFT_TAB_ID]);
+    expect(save).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith("[editor:session] could not read the persisted session", expect.any(Error));
+    read.mockRestore();
+    save.mockRestore();
+    error.mockRestore();
+  });
+});
