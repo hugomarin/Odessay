@@ -26,16 +26,25 @@ import { closeTab, focusTab, getEditorSessionState, reorderTab, updateTabSaveSta
 import { revealWorkspacePath } from "@/lib/workspace/reveal-path"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { type Editor } from "@tiptap/react"
-import type { DocumentHydrationInput } from "@/hooks/useDocumentHydration"
+import type { DocumentHydrationInput, HydrationPhase } from "@/hooks/useDocumentHydration"
 import type { PersistenceCoordinator } from "@/lib/editor/persistence-coordinator"
 import type { LocalEditorSession } from "@/lib/local-db/schema"
 
 export type WorkspaceTabsInput = {
   activateDocument: DocumentHydrationInput["activateDocument"]
   activeEditorTabIdRef: React.RefObject<string | null>
+  /** Identidad del documento activo; la que fija `activateDocument` (shell). */
+  currentWritingId: string | null
   editor: Editor | null
   editorSession: LocalEditorSession
   ephemeralDraftWritingIdRef: React.RefObject<string | null>
+  /**
+   * Fase de hidratación del documento activo (ODE-570, ADR documento activo).
+   * El renombrado de una pestaña de fondo espera a que esté "ready" para que
+   * el snapshot lleve el título y el cuerpo del documento pedido, no del
+   * anterior (ODE-588).
+   */
+  hydrationPhase: HydrationPhase
   materializedDraftIdsRef: React.RefObject<Map<string, string>>
   navigatedToDraftRef: React.RefObject<boolean>
   persistenceCoordinator: PersistenceCoordinator
@@ -51,9 +60,11 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
   const {
     activateDocument,
     activeEditorTabIdRef,
+    currentWritingId,
     editor,
     editorSession,
     ephemeralDraftWritingIdRef,
+    hydrationPhase,
     materializedDraftIdsRef,
     navigatedToDraftRef,
     persistenceCoordinator,
@@ -230,11 +241,32 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
   // selects it first and opens the modal once that tab is the active one.
   const pendingRenameTabIdRef = useRef<string | null>(null)
 
+  /**
+   * El snapshot del renombrado lee el editor y el título cargados, así que
+   * solo es del documento de `tabId` cuando esa pestaña es la activa, su
+   * hidratación terminó y la hidratación terminada es la de ESE documento, no
+   * la de otro que terminó mientras tanto (ODE-588).
+   */
+  const isRenameSnapshotReady = useCallback(
+    (tabId: string) => {
+      if (tabId !== editorSession.active_tab_id || hydrationPhase !== "ready") return false
+      const tab = editorSession.tabs.find((item) => item.id === tabId)
+      return currentWritingId === (tab?.writing_id ?? null)
+    },
+    [currentWritingId, editorSession.active_tab_id, editorSession.tabs, hydrationPhase],
+  )
+
   const handleRenameWorkspaceTab = useCallback(
     (tabId: string) => {
-      if (tabId !== editorSession.active_tab_id) {
+      // Cualquier entrada — el lápiz de una pestaña de fondo, un segundo lápiz
+      // sobre la pestaña que acaba de activarse, o "Rename" desde el menú o el
+      // atajo — puede llegar mientras el documento pedido todavía hidrata.
+      // Abrir entonces llevaría el título y el cuerpo del anterior, y
+      // confirmar renombraría el documento pedido con ese título (ODE-588).
+      // Se deja pendiente y el efecto de abajo lo abre cuando esté listo.
+      if (!isRenameSnapshotReady(tabId)) {
         pendingRenameTabIdRef.current = tabId
-        handleSelectWorkspaceTab(tabId)
+        if (tabId !== editorSession.active_tab_id) handleSelectWorkspaceTab(tabId)
         return
       }
 
@@ -244,16 +276,27 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
       })
       setRenameModalOpen(true)
     },
-    [editor, editorSession.active_tab_id, handleSelectWorkspaceTab, setRenameModalOpen, setRenameModalSnapshot, titleRef, untitledWritingTitle],
+    [editor, editorSession.active_tab_id, handleSelectWorkspaceTab, isRenameSnapshotReady, setRenameModalOpen, setRenameModalSnapshot, titleRef, untitledWritingTitle],
   )
 
   useEffect(() => {
     const pendingTabId = pendingRenameTabIdRef.current
-    if (!pendingTabId || pendingTabId !== editorSession.active_tab_id) return
-    // The tab switch landed and the editor holds its content: open the modal.
+    if (!pendingTabId) return
+    // El usuario se fue a otra pestaña antes de que terminara la hidratación
+    // de la pedida: descarta el renombrado pendiente. De lo contrario, una
+    // selección ordinaria posterior de la pestaña pedida abriría el modal sin
+    // que nadie lo pidiera (ODE-588). Es seguro descartarlo aquí: el lápiz
+    // fija el ref, `focusTab` y `activateDocument` en el mismo handler
+    // batcheado, así que un pendiente solo existe mientras la pestaña activa
+    // es la pedida.
+    if (pendingTabId !== editorSession.active_tab_id) {
+      pendingRenameTabIdRef.current = null
+      return
+    }
+    if (!isRenameSnapshotReady(pendingTabId)) return
     pendingRenameTabIdRef.current = null
     handleRenameWorkspaceTab(pendingTabId)
-  }, [editorSession.active_tab_id, handleRenameWorkspaceTab])
+  }, [editorSession.active_tab_id, isRenameSnapshotReady, handleRenameWorkspaceTab])
 
   const handleRenameActiveWriting = useCallback(() => {
     const activeTabId = editorSession.active_tab_id

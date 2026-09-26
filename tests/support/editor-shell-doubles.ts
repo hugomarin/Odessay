@@ -51,6 +51,8 @@ export type HarnessWorld = {
   aiReview: (input: AiReviewInput) => Promise<AiReviewResult>
   /** Peticiones de review realmente emitidas, en orden. */
   aiReviewCalls: AiReviewInput[]
+  /** Peticiones de sugerencia de título realmente emitidas, en orden. */
+  suggestTitleCalls: Array<{ currentTitle?: string; bodyText?: string; writingId?: string }>
   /** Palabras que el proveedor devuelve como aprendidas por el usuario. */
   learnedWords: LearnedWordEntry[]
   /** Veces que el shell pidió la lista de palabras aprendidas. */
@@ -141,6 +143,7 @@ export const world: HarnessWorld = {
   unhandledErrors: [],
   aiReview: async () => ({ error: null, data: { corrections: [] } }),
   aiReviewCalls: [],
+  suggestTitleCalls: [],
   learnedWords: [],
   learnedWordsCalls: 0,
   hydrateCorrectionBlocks: async () => ({ error: null, data: [] }),
@@ -280,7 +283,10 @@ export function aiServiceDouble() {
         world.aiReviewCalls.push(input)
         return world.aiReview(input)
       },
-      suggestTitle: async () => ({ error: null, data: null }),
+      suggestTitle: async (input: { currentTitle?: string; bodyText?: string; writingId?: string }) => {
+        world.suggestTitleCalls.push(input)
+        return { error: null, data: null }
+      },
       hydrateCorrectionBlocks: async (writingId: string) => {
         world.correctionHydrationCalls.push(writingId)
         return world.hydrateCorrectionBlocks(writingId)

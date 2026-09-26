@@ -180,6 +180,7 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
   world.editor = null
   world.aiReview = async () => ({ error: null, data: { corrections: [] } })
   world.aiReviewCalls = []
+  world.suggestTitleCalls = []
   world.learnedWords = []
   world.learnedWordsCalls = 0
   world.hydrateCorrectionBlocks = async () => ({ error: null, data: [] })
