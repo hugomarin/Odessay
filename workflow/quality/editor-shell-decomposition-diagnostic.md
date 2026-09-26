@@ -89,6 +89,14 @@ Con esto el cluster de correcciones queda fuera de la shell. Lo pendiente es de 
    60 useCallback   (-8)
 ```
 
+**Actualización (2026-09-25, ODE-587 — corte 3, entrega 1b):** la entrada a la sesión sale tal cual a `hooks/useSessionRestore.ts`, con sus tres efectos consecutivos, en el mismo orden y en la misma posición:
+
+- abrir la pestaña del documento de la ruta;
+- restaurar la sesión persistida;
+- la identidad ansiosa de un `/write` en blanco en web.
+
+Los helpers puros del módulo de la shell (`navigateToWriting`, `deriveAutoTitle`, `isPerfHarness`) llegan por `input` para no crear un ciclo de imports. El efecto que activa el documento de la ruta y el espejo `activeEditorTabIdRef` (la excepción declarada del ADR) se quedan en la shell. Abrir la pestaña de la ruta no tiene ningún efecto observable distinto de la publicación de la pestaña en los escenarios probados: sin él, esa publicación crea la pestaña igual.
+
 **Actualización (2026-09-24, ODE-563 — segundo tiempo del primer corte):** los 9 metadatos del documento (título, título explícito, versión, fecha de creación, slug, estado, tipo, visibilidad, ciclo de vida) tienen ahora un solo dueño, `applyDocumentMetadata`, que escribe estado y ref en el mismo paso. Se eliminaron sus 9 efectos espejo y todas sus escrituras a mano; `writingSlugRef` desapareció, porque nadie lo leía. Contra `main`, con el mismo método:
 
 ```text

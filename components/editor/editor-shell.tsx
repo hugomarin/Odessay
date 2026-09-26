@@ -18,6 +18,7 @@ import {
 import { useCorrectionActions, type CorrectionToastState } from "@/hooks/useCorrectionActions"
 import { useCorrectionBlocks } from "@/hooks/useCorrectionBlocks"
 import { useCorrectionLifecycle } from "@/hooks/useCorrectionLifecycle"
+import { useSessionRestore } from "@/hooks/useSessionRestore"
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs"
 import {
   formatSaveStateDiagnostic,
@@ -119,7 +120,6 @@ import {
   createBlankDraftIdentity,
   createNewWritingSessionState,
   createRouteHydrationSessionState,
-  resolvePersistedSessionRestoreTransition,
   resolveExternalWritingLoad,
 } from "@/lib/editor/hydration-session"
 import { EDITOR_DRAFT_TAB_ID } from "@/lib/local-db/editor-sessions"
@@ -187,7 +187,6 @@ import {
   type PersistenceSnapshotOverrides,
   type PersistenceStateEvent,
 } from "@/lib/editor/persistence-coordinator"
-import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import {
   getEditorSessionState,
   initializeEditorSessionStore,
@@ -1860,184 +1859,29 @@ export function EditorShell({
     setImageViewerSource(null)
   }, [currentWritingId])
 
-  useEffect(() => {
-    if (!sessionLoaded || !routeWritingId) {
-      return
-    }
-
-    openWritingTab({ writingId: routeWritingId, replaceDraft: false })
-  }, [routeWritingId, sessionLoaded])
-
-  useEffect(() => {
-    if (
-      forceNewWriting ||
-      !sessionLoaded ||
-      routeWritingId ||
-      currentWritingIdRef.current ||
-      navigatedToDraftRef.current
-    ) {
-      return
-    }
-
-    const restoreTransition = resolvePersistedSessionRestoreTransition({
-      activeTabId: editorSession.active_tab_id,
-      tabs: editorSession.tabs.map((tab) => ({
-        id: tab.id,
-        writingId: tab.writing_id,
-        slug: tab.slug,
-      })),
-    }, {
-      isDesktopRuntime: isDesktopRuntime(),
-      useHistoryProjection: isPerfHarness(),
-    })
-
-    if (restoreTransition.status === "restore-writing") {
-      const nextHref = buildWritingRouteHref("/write", {
-        id: restoreTransition.writingId,
-        slug: restoreTransition.slug,
-      })
-
-      if (restoreTransition.target === "desktop-hydration") {
-        // Explicit desktop handoff: history is only a projection in the static
-        // bundle, so identity must transition before hydration/fallback effects.
-        desktopSessionRestoreTimingRef.current = {
-          writingId: restoreTransition.writingId,
-          startedAt: performance.now(),
-        }
-        activateDocument(
-          { writingId: restoreTransition.writingId },
-          "restore",
-        )
-        console.info(`[editor:session-restore] restorable ${restoreTransition.writingId}`)
-      } else {
-        // "history" y "router" son las dos ramas de `navigateToWriting`: el
-        // resolver elige "history" exactamente cuando `isPerfHarness()`.
-        navigateToWriting(router, nextHref, { mode: "replace", skipOnDesktop: false })
-      }
-      return
-    }
-
-    if (isDesktopRuntime()) {
-      console.info("[editor:session-restore] no-restorable-tab")
-    }
-
-    if (restoreTransition.status === "remain-empty") {
-      return
-    }
-
-    navigatedToDraftRef.current = true
-    openDraftTab(ephemeralDraftWritingIdRef.current)
-  }, [activateDocument, createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
-
-  // Eagerly create a stable local identity for blank /write so the first
-  // paste/input never races against identity creation. This is the explicit
-  // owner of the blank-draft -> identified-local-writing transition.
-  // Desktop drafts stay ephemeral until real content is entered, so this eager
-  // materialization is skipped there; identity is created on the first input/paste.
-  useEffect(() => {
-    if (isDesktopRuntime()) {
-      if (
-        sessionLoaded &&
-        !routeWritingId &&
-        !currentWritingIdRef.current &&
-        !ephemeralDraftWritingIdRef.current
-      ) {
-        ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
-      }
-      return
-    }
-
-    if (forceNewWriting || !sessionLoaded || routeWritingId || identityEnsuredRef.current || currentWritingIdRef.current) {
-      return
-    }
-
-    // If the session store already has an active non-draft tab, let the
-    // openDraftTab effect above handle redirection.
-    if (editorSession.active_tab_id && editorSession.active_tab_id !== EDITOR_DRAFT_TAB_ID) {
-      return
-    }
-
-    identityEnsuredRef.current = true
-
-    const ensureIdentity = async () => {
-      const { writingId: nextId } = createBlankDraftIdentity()
-      const nowIso = new Date().toISOString()
-      const nextTitle = isDesktopRuntime()
-        ? DESKTOP_UNTITLED_WRITING_TITLE
-        : deriveAutoTitle("", nowIso)
-
-      try {
-        if (isDesktopRuntime()) {
-          const result = await createDesktopDraftFn({ title: nextTitle })
-          if (result.error || !result.data) {
-            throw new Error(result.error?.message ?? "Failed to create desktop draft")
-          }
-          activateDocument({ writingId: result.data.id }, "identity")
-        } else {
-          await (await getDocumentService()).saveWriting({
-            writing: {
-              id: nextId,
-              authorId: null,
-              title: nextTitle,
-              content: {
-                richText: EMPTY_EDITOR_JSON as Record<string, unknown>,
-                markdown: null,
-                plainText: "",
-                canonicalSource: "rich-text",
-              },
-              slug: null,
-              status: "draft",
-              artifactType: "general",
-              visibility: "private",
-              parentId: null,
-              correspondenceId: null,
-              version: 1,
-              deletedAt: null,
-              createdAt: nowIso,
-              updatedAt: nowIso,
-              contentUpdatedAt: nowIso,
-              metadataUpdatedAt: nowIso,
-            },
-          })
-          activateDocument({ writingId: nextId }, "identity")
-        }
-      } catch {
-        // If the save fails (e.g., scope change in progress), fall back to
-        // the identity-on-first-input path in persistEditorSnapshot.
-        identityEnsuredRef.current = false
-        return
-      }
-
-      openWritingTab({
-        writingId: currentWritingIdRef.current ?? nextId,
-        title: nextTitle,
-        saveState: "saved-local",
-        hasPendingSync: false,
-        replaceDraft: true,
-      })
-
-      applyDocumentMetadata({
-        title: nextTitle,
-        hasExplicitTitle: false,
-        version: 1,
-        createdAt: nowIso,
-        slug: null,
-        status: "draft",
-        artifactType: "general",
-        visibility: "private",
-        lifecycle: "local-only",
-      })
-      setBodyText("")
-      applySyncStatus("saved-local")
-      navigatedToDraftRef.current = true
-      navigateToWriting(router, `/write/${currentWritingIdRef.current ?? nextId}`, {
-        mode: "replace",
-        skipOnDesktop: true,
-      })
-    }
-
-    void ensureIdentity()
-  }, [applySyncStatus, activateDocument, applyDocumentMetadata, createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
+  // ODE-587: entrada a la sesión (mudanza mecánica; mismos efectos, en el
+  // mismo orden y en esta posición).
+  useSessionRestore({
+    activateDocument,
+    applyDocumentMetadata,
+    createDesktopDraftFn,
+    currentWritingIdRef,
+    deriveAutoTitle,
+    desktopSessionRestoreTimingRef,
+    desktopUntitledWritingTitle: DESKTOP_UNTITLED_WRITING_TITLE,
+    editorSession,
+    ephemeralDraftWritingIdRef,
+    forceNewWriting,
+    identityEnsuredRef,
+    isPerfHarness,
+    navigatedToDraftRef,
+    navigateToWriting,
+    routeWritingId,
+    router,
+    sessionLoaded,
+    setBodyText,
+    applySyncStatus,
+  })
 
   useEffect(() => {
     setSidebarMode("collapsed")
