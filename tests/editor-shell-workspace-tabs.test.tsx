@@ -104,6 +104,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await mounted?.unmount()
   mounted = null
 })
@@ -165,6 +166,62 @@ describe("ODE-587 — pestañas de fondo", () => {
         "contenido lo suficientemente largo",
       )
       expect(world.suggestTitleCalls[0]?.bodyText ?? "", "y no el de A").not.toContain(TEXT_A)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "si el usuario se va a otra pestaña antes de que termine la hidratación, volver a la pedida no abre el modal",
+    async () => {
+      // Mutación: en `useWorkspaceTabs`, no descartar `pendingRenameTabIdRef`
+      // cuando la pestaña activa deja de ser la pedida → rojo: al volver a B
+      // con una selección ordinaria, el modal se abre solo.
+      await openAWithBInBackground()
+
+      // Retiene la lectura de B: su hidratación queda en "loading" hasta que
+      // se suelte el gate, reproduciendo la ventana real (lectura async de
+      // disco/remoto que puede durar segundos) sin depender del timing.
+      let releaseRead!: () => void
+      const gate = new Promise<void>((resolve) => {
+        releaseRead = resolve
+      })
+      const realGet = localDB.writings.get.bind(localDB.writings)
+      vi.spyOn(localDB.writings, "get").mockImplementation(async (id: string) => {
+        if (id === writingB) await gate
+        return realGet(id)
+      })
+
+      const pencil = tabNode(writingB).querySelector<HTMLElement>('button[aria-label^="Rename"]')
+      expect(pencil, "el lápiz de la pestaña de B").toBeTruthy()
+      await pointerClick(pencil!)
+      await waitFor(() => activeWritingId() === writingB, { label: "B pasa a ser la activa" })
+
+      // B está hidratando: el modal todavía no debe abrirse.
+      expect(document.querySelector('input[aria-label="Artifact name"]'), "sin modal mientras B hidrata").toBeNull()
+
+      // El usuario se va a A antes de que B termine de hidratar.
+      await pointerClick(tabNode(writingA))
+      await waitFor(() => activeWritingId() === writingA, { label: "A vuelve a ser la activa" })
+
+      // Suelta la lectura de B: su generación quedó cancelada por el switch y
+      // el renombrado pendiente ya fue descartado.
+      releaseRead()
+      await advance(50)
+
+      // Volver a B con una selección ordinaria NO abre el modal de renombrado.
+      await pointerClick(tabNode(writingB))
+      await waitFor(() => activeWritingId() === writingB, { label: "B activa de nuevo" })
+      await waitFor(() => mounted!.editor().getText().includes(TEXT_B), {
+        label: "B hidratado",
+        timeoutMs: 10_000,
+      })
+
+      // Da tiempo a que un modal espurio apareciera si el pendiente siguiera vivo.
+      await advance(250)
+      expect(
+        document.querySelector('input[aria-label="Artifact name"]'),
+        "no se abre el modal de renombrado",
+      ).toBeNull()
     },
     TEST_TIMEOUT_MS,
   )

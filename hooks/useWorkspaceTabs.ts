@@ -260,7 +260,18 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
 
   useEffect(() => {
     const pendingTabId = pendingRenameTabIdRef.current
-    if (!pendingTabId || pendingTabId !== editorSession.active_tab_id) return
+    if (!pendingTabId) return
+    // El usuario se fue a otra pestaña antes de que terminara la hidratación
+    // de la pedida: descarta el renombrado pendiente. De lo contrario, una
+    // selección ordinaria posterior de la pestaña pedida abriría el modal sin
+    // que nadie lo pidiera (ODE-588). Es seguro descartarlo aquí: el lápiz
+    // fija el ref, `focusTab` y `activateDocument` en el mismo handler
+    // batcheado, así que un pendiente solo existe mientras la pestaña activa
+    // es la pedida.
+    if (pendingTabId !== editorSession.active_tab_id) {
+      pendingRenameTabIdRef.current = null
+      return
+    }
     // El switch de pestaña ya aterrizó, pero el snapshot del renombrado lee el
     // editor y el título cargados: abrir aquí, en cuanto `active_tab_id` cambia,
     // tomaría todavía el título y el cuerpo del documento anterior (ODE-588).
