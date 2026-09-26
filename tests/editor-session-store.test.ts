@@ -608,4 +608,31 @@ describe("editorSessionStore — changes before the persisted session arrives (O
     save.mockRestore();
     error.mockRestore();
   });
+
+  it("clears the tombstone of a close→reopen pair made before the read, so a later publish is not dropped (ODE-594)", async () => {
+    await localDB.editorSessions.save(persistedWithWriting("writing-x"));
+    const hold = holdRead();
+    const loading = initializeEditorSessionStore();
+
+    openWritingTab({ writingId: "writing-x", title: "X" });
+    closeTab("writing-x");
+    openWritingTab({ writingId: "writing-x", title: "X" });
+
+    hold.release();
+    await loading;
+    hold.restore();
+
+    expect(getEditorSessionState().loaded).toBe(true);
+
+    publishTabState({
+      routeWritingId: null,
+      writingId: "writing-x",
+      title: "X updated",
+      saveState: "saved",
+      hasPendingSync: false,
+    });
+
+    const tab = getEditorSessionState().session.tabs.find((item) => item.writing_id === "writing-x");
+    expect(tab?.title).toBe("X updated");
+  });
 });

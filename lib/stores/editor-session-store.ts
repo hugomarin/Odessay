@@ -302,9 +302,13 @@ export function openWritingTab({
   replaceDraft = false,
 }: OpenWritingInput) {
   let opened = true;
-  removedWritingIds.delete(writingId);
 
   setSessionState((current) => {
+    // Inside the updater so a pre-load open replays its tombstone clear
+    // together with the tab change (ODE-594). `closeTab` adds its mark
+    // inside its updater for the same reason; a delete outside would not
+    // replay and a close→reopen pair would leave a stale mark.
+    removedWritingIds.delete(writingId);
     const existingIndex = findTabIndexByWritingId(current.tabs, writingId);
     if (existingIndex >= 0) {
       const existingTab = current.tabs[existingIndex]!;
@@ -397,8 +401,9 @@ export function reconcileMaterializedDraftTab({
   saveState?: EditorTabSaveState;
   hasPendingSync?: boolean;
 }) {
-  removedWritingIds.delete(writingId);
   setSessionState((current) => {
+    // Same as `openWritingTab`: the clear must replay (ODE-594).
+    removedWritingIds.delete(writingId);
     if (findTabIndexByWritingId(current.tabs, writingId) >= 0) {
       return current;
     }
