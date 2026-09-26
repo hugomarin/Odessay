@@ -295,7 +295,7 @@ describe("ODE-600 — STATE-05 (desktop): el borrador nuevo empieza limpio", () 
       await frames.settle()
 
       // Sin vuelta a A: salir de A antes de su restauración guarda en su
-      // pestaña el view_state previo a restaurar (hallazgo de ODE-600, ver la
+      // pestaña el view_state previo a restaurar (ODE-624, fuera de alcance; ver la
       // nota de la fila STATE-05); el control positivo es el caso 1.
       expectCleanB("borrador con frames de A retenidos")
       assertNoUnhandledErrors()

@@ -246,7 +246,7 @@ describe("ODE-600 — STATE-05 (web): la pestaña nueva de \"New Artifact\" empi
 
       // Sin vuelta a A aquí: salir de A antes de que corra su restauración
       // guarda en su pestaña el view_state previo a restaurar (hallazgo de
-      // ODE-600, fuera del alcance de STATE-05; ver la nota de la fila). El
+      // ODE-600, abierto como ODE-624; ver la nota de la fila). El
       // control positivo de esta costura es el caso anterior, y la mutación
       // de la guarda demuestra que los frames retenidos SÍ son la
       // restauración de A y alcanzan a B cuando nada los descarta.
