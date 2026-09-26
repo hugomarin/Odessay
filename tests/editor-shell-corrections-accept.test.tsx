@@ -14,6 +14,11 @@
  * correcciones → "Analyze" real → el proveedor responde con el contrato
  * canónico → botón real "Accept" o "Reject" del panel → transacción real de
  * TipTap → guardado real sobre fake-indexeddb. Doble: solo el proveedor de AI.
+ *
+ * ODE-597: el volcado remoto del bloque corre en segundo plano y producción
+ * traga su error (`.catch(console.info)` en `useCorrectionBlocks`). Por la
+ * regla 7 del capability-proof-contract se afirma su efecto por separado: el
+ * proveedor recibe el bloque con la sugerencia ya resuelta.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -158,6 +163,20 @@ async function cachedSuggestionStatuses() {
   return blocks.flatMap((block) => block.suggestions.map((suggestion) => suggestion.status))
 }
 
+/** Estados de las sugerencias de cada bloque de este documento que llegó al proveedor. */
+function remotelyPersistedStatuses() {
+  return world.correctionPersistCalls
+    .filter((call) => call.writingId === writingId && call.blockId !== undefined)
+    .map((call) => call.suggestionStatuses ?? [])
+}
+
+async function waitForRemotePersist(status: "accepted" | "rejected") {
+  await waitFor(() => remotelyPersistedStatuses().some((statuses) => statuses.includes(status)), {
+    label: `el proveedor recibe el bloque con la sugerencia ${status}`,
+    timeoutMs: 5000,
+  })
+}
+
 async function waitForSavedBody(predicate: (body: string) => boolean, label: string) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const body = (await localDB.writings.get(writingId))?.body_text ?? ""
@@ -184,6 +203,7 @@ describe("AI-05 / AI-06 — aceptar y rechazar una corrección desde el panel", 
         await advance(100)
       }
       expect(await cachedSuggestionStatuses(), "la caché de bloques la marca aceptada").toEqual(["accepted"])
+      await waitForRemotePersist("accepted")
     },
     TEST_TIMEOUT_MS,
   )
@@ -204,6 +224,7 @@ describe("AI-05 / AI-06 — aceptar y rechazar una corrección desde el panel", 
       }
       expect(await cachedSuggestionStatuses(), "la caché de bloques la marca rechazada").toEqual(["rejected"])
       expect((await localDB.writings.get(writingId))?.body_text, "el documento guardado sigue igual").toBe(PARAGRAPH)
+      await waitForRemotePersist("rejected")
     },
     TEST_TIMEOUT_MS,
   )

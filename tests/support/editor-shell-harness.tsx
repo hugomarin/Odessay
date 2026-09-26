@@ -183,6 +183,7 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
   world.suggestTitleCalls = []
   world.learnedWords = []
   world.learnedWordsCalls = 0
+  world.learnWordCalls = []
   world.hydrateCorrectionBlocks = async () => ({ error: null, data: [] })
   world.correctionHydrationCalls = []
   world.correctionPersistCalls = []
