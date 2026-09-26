@@ -81,6 +81,14 @@ Con esto el cluster de correcciones queda fuera de la shell. Lo pendiente es de 
 - **Aceptar y rechazar están duplicados**: la versión del panel y la versión en línea desde las decoraciones tienen cada una su lógica.
 - **Sin prueba:** el volcado de bloques pendientes al recuperar la conexión no tiene ninguna.
 
+**Actualización (2026-09-25, ODE-587 — corte 3, entrega 1a):** los handlers de pestaña salen tal cual a `hooks/useWorkspaceTabs.ts`: seleccionar, cerrar, cerrar otras o todas, mostrar el archivo, renombrar (también desde una pestaña de fondo) y reordenar, más el estado editorial que dibuja cada pestaña. La shell los llama donde empezaba ese bloque; entre su primer handler y su último efecto no había otro efecto, así que el orden no cambia. Antes se añadió la red que faltaba para las dos piezas sin prueba (`tests/editor-shell-workspace-tabs.test.tsx`). Cerrar con un guardado pendiente y activar la siguiente pestaña al cerrar solo los prueba #494 (ODE-574), verificado sobre el código combinado. El resto del cluster (restaurar la sesión, publicar el estado de la pestaña, crear pestaña, abrir un documento del workspace) vive en otros bloques de la shell y va en entregas siguientes. Contra la entrega 2b de ODE-586:
+
+```text
+5,247 líneas        (-253)
+   43 useEffect     (-2)
+   60 useCallback   (-8)
+```
+
 **Actualización (2026-09-24, ODE-563 — segundo tiempo del primer corte):** los 9 metadatos del documento (título, título explícito, versión, fecha de creación, slug, estado, tipo, visibilidad, ciclo de vida) tienen ahora un solo dueño, `applyDocumentMetadata`, que escribe estado y ref en el mismo paso. Se eliminaron sus 9 efectos espejo y todas sus escrituras a mano; `writingSlugRef` desapareció, porque nadie lo leía. Contra `main`, con el mismo método:
 
 ```text

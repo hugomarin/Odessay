@@ -167,11 +167,14 @@ describe("studio shell contract", () => {
   })
 
   it("refreshes editor tab metadata by affected UUID instead of reloading the catalog", () => {
+    // Desde ODE-587 las pestañas viven en su hook; la shell tampoco recarga el catálogo.
     const shell = read("components/editor/editor-shell.tsx")
+    const tabs = read("hooks/useWorkspaceTabs.ts")
 
     expect(shell).not.toContain("loadCatalogRecords")
-    expect(shell).toContain("Promise.all(documentIds.map((id) => getCatalogRecord(id)))")
-    expect(shell).toContain("change.documentIds.filter((id) => wanted.has(id))")
+    expect(tabs).not.toContain("loadCatalogRecords")
+    expect(tabs).toContain("Promise.all(documentIds.map((id) => getCatalogRecord(id)))")
+    expect(tabs).toContain("change.documentIds.filter((id) => wanted.has(id))")
   })
 
   it("routes rename and shortcuts through the overlay inventory", () => {
