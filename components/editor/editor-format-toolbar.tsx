@@ -14,6 +14,9 @@ import {
   Strikethrough,
   Table,
   Image,
+  Info,
+  Lightbulb,
+  PanelsTopLeft,
 } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import {
@@ -92,6 +95,9 @@ const LIST_MENU_ACTIONS: MenuActionItem[] = [
 ]
 
 const INSERT_MENU_ACTIONS: MenuActionItem[] = [
+  { id: "editor-action-tip", label: "Tip", action: "tipBlock", icon: Lightbulb },
+  { id: "editor-action-info", label: "Info", action: "infoBlock", icon: Info },
+  { id: "editor-action-card", label: "Card", action: "cardBlock", icon: PanelsTopLeft },
   { id: "editor-action-image", label: "Image", action: "image", icon: Image },
   { id: "editor-action-table", label: "Table", action: "table", icon: Table },
   { id: "editor-action-link", label: "Link", action: "link", icon: Link },

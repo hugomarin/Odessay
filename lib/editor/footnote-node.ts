@@ -385,7 +385,14 @@ export const AnnotationReferenceNode = Node.create({
           setup: setupMarkdownItRule,
         },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        serialize(state: any, node: any) {
+        serialize(state: any, node: any, parent: any, index: number) {
+          const previous = index > 0 ? parent?.child?.(index - 1) : null
+          const isOwnedBySemanticMark = previous?.marks?.some(
+            (mark: { attrs?: Record<string, unknown>; type?: { name?: string } }) =>
+              mark.type?.name === "highlight" &&
+              String(mark.attrs?.annotationId ?? "") === String(node.attrs.id ?? ""),
+          )
+          if (isOwnedBySemanticMark) return
           state.write(
             annotationToMarkdown(
               coerceAnnotationType(node.attrs.type as string),
@@ -443,6 +450,13 @@ export function getMarkdownWithFootnoteDefinitions(
   footnotes: FootnoteEntry[],
 ) {
   if (!footnotes.length) return baseMarkdown.trimEnd()
+  if (
+    findInlineAnnotationMarkers(baseMarkdown).some(
+      (marker) => marker.type === "footnote" && !marker.legacyFootnote,
+    )
+  ) {
+    return baseMarkdown.trimEnd()
+  }
 
   const lines = footnotes.map(({ index, text }) => `[^${index}]: ${text}`.trimEnd())
   return `${baseMarkdown.trimEnd()}\n\n${lines.join("\n")}`

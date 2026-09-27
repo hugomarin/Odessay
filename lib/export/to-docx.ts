@@ -172,8 +172,26 @@ export const blockToElements = (block: WritingExportBlock): (Paragraph | Table)[
             indent: { left: S.LIST_INDENT_DOCX },
           }),
       )
-    case "codeBlock":
+    case "codeBlock": {
+      // ODE-533: content-preserving Mermaid fallback for export. The diagram
+      // source is always included with a caption — content is never omitted.
+      const isMermaid = (block.language ?? "").trim().toLowerCase() === "mermaid"
+      const caption = isMermaid
+        ? [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Diagram source (mermaid):",
+                  font: S.FONT_FAMILY_BODY,
+                  size: S.FONT_SIZE_BODY_DOCX,
+                }),
+              ],
+              spacing: { after: S.PARAGRAPH_MARGIN_BOTTOM_DOCX },
+            }),
+          ]
+        : []
       return [
+        ...caption,
         new Paragraph({
           children: codeBlockRunsToDocx(block.code.trimEnd()),
           spacing: {
@@ -197,6 +215,7 @@ export const blockToElements = (block: WritingExportBlock): (Paragraph | Table)[
           },
         }),
       ]
+    }
     case "separator":
       return [
         new Paragraph({

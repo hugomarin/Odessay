@@ -7,8 +7,8 @@
  * Por qué existe además del caso web: en web lo durable es el `body_json` de
  * `localDB`, que guarda marcas y nodos tal cual. En desktop la autoridad es el
  * `.md` materializado (ADR de identidad), así que la anotación tiene que
- * atravesar el serializador de Markdown (`==texto==` + marcador inline
- * `[@n|id: cuerpo]`) y volver por el parser. Es otro seam, y es el que usa el
+ * atravesar el serializador canónico de Markdown
+ * (`<Annotation ...>texto</Annotation>`) y volver por el parser. Es otro seam, y es el que usa el
  * usuario de desktop.
  *
  * Camino de producción: "New Artifact" real y escritura real en el editor
@@ -19,16 +19,16 @@
  * shell nueva con la sesión vacía, abierta por ruta con el UUID del documento.
  *
  * Completion events: el `.md` en disco contiene el marcador (leído con el
- * parser real `findInlineAnnotationMarkers`), no "se llamó a guardar"; y la
+ * parser real `scanControlledAnnotations`), no "se llamó a guardar"; y la
  * comparación tras reabrir se hace cuando el editor ya muestra el texto.
  *
- * Mutation test (ODE-606, verificado en vivo): que `persistEditorSnapshot`
- * persista el cuerpo sin la marca `highlight` pone esta prueba en rojo: el
- * `.md` pierde el `==texto==` y la reapertura no tiene marca.
+ * Mutation test (ODE-606): si `persistEditorSnapshot` omite la marca o pierde
+ * la anotación estructurada, el `.md` deja de contener el `<Annotation>` y la
+ * reapertura ya no restaura su ancla ni su comentario.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { findInlineAnnotationMarkers } from "@/lib/editor/annotation-markdown"
+import { scanControlledAnnotations } from "@/lib/editor/annotation-markdown"
 
 vi.mock("@tiptap/react", async (importOriginal) => {
   const { createTiptapCaptureModule } = await import("./support/editor-shell-doubles")
@@ -77,7 +77,8 @@ const { createDesktopWorkspace, destroyDesktopWorkspace, resetDesktopWorkspace }
   "./support/editor-shell-desktop-doubles"
 )
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
-const { EDITOR_DRAFT_TAB_ID } = await import("@/lib/local-db/editor-sessions")
+const { createEmptyEditorSession, EDITOR_DRAFT_TAB_ID } = await import("@/lib/local-db/editor-sessions")
+const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 
 const TEST_TIMEOUT_MS = 60_000
 
@@ -116,6 +117,25 @@ async function waitForMaterializedWritingId() {
   )
 }
 
+function reopenedEditorState(writingId: string) {
+  const sessionState = getEditorSessionState()
+  const activeTab = sessionState.session.tabs.find(
+    (tab) => tab.id === sessionState.session.active_tab_id,
+  )
+  const editorText = mounted?.editor().getText() ?? ""
+
+  return {
+    writingId,
+    sessionLoaded: sessionState.loaded,
+    activeTabId: sessionState.session.active_tab_id,
+    activeWritingId: activeTab?.writing_id ?? null,
+    hydrationPhase:
+      document.querySelector<HTMLElement>('[data-page="editor"]')?.getAttribute("data-hydration-phase") ?? null,
+    editorTextLength: editorText.length,
+    editorTextPreview: editorText.slice(0, 160),
+  }
+}
+
 describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", () => {
   it("la anotación del popup llega al .md y vuelve intacta al reabrir desde disco", async () => {
     mounted = await mountEditorShell()
@@ -144,24 +164,33 @@ describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", 
 
     // Completion event: el .md en disco tiene el texto anclado y el marcador.
     const file = await waitForMarkdownContaining(NOTE)
-    expect(file.contents, "el .md lleva el texto anclado como highlight").toContain(`==${TARGET}==`)
-    const markers = findInlineAnnotationMarkers(file.contents)
-    expect(markers, "el .md lleva un solo marcador, con su tipo y su cuerpo").toEqual([
-      expect.objectContaining({ type: "ai", index: 1, text: NOTE }),
+    const annotations = scanControlledAnnotations(file.contents)
+    expect(annotations.diagnostics, "el .md no tiene diagnósticos de anotación").toEqual([])
+    expect(annotations.annotations, "el .md lleva una anotación canónica con tipo, nota y ancla").toEqual([
+      expect.objectContaining({ type: "ai", index: 1, comment: NOTE, anchorText: TARGET }),
     ])
-    expect(
-      file.contents.slice(0, markers[0].start).endsWith(`==${TARGET}==`),
-      "el marcador va pegado al texto anclado",
-    ).toBe(true)
+    const [annotation] = annotations.annotations
+    expect(file.contents.slice(annotation.anchorStart, annotation.anchorEnd), "el rango anclado se conserva").toBe(
+      TARGET,
+    )
 
     // Reabrir: shell nueva con la sesión vacía; solo queda lo que hay en disco.
     await mounted.unmount()
+    await writeEditorSession(createEmptyEditorSession())
     resetEditorShellWorld({ isDesktop: true })
     mounted = await mountEditorShell({ writingId })
-    await waitFor(() => mounted!.editor().getText().includes("ODE606"), {
-      label: "reapertura desde el .md",
-      timeoutMs: 15_000,
-    })
+    await waitFor(() => getEditorSessionState().loaded, { label: "sesión vacía cargada" })
+    try {
+      await waitFor(() => mounted!.editor().getText().includes("ODE606"), {
+        label: "reapertura desde el .md",
+        timeoutMs: 15_000,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(
+        `${message}; estado de reapertura: ${JSON.stringify(reopenedEditorState(writingId))}`,
+      )
+    }
     await flush(4)
 
     const reopened = readEditorAnnotations()

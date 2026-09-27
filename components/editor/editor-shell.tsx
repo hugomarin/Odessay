@@ -52,8 +52,12 @@ import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { EditorRightPanel } from "@/components/editor/editor-right-panel"
 import { EditorRightPanelTabs } from "@/components/editor/panels/editor-right-panel-tabs"
 import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
-import { AnnotationBubble, nextAnnotationSessionId } from "@/components/reading/margins/annotation-bubble"
-import { SelectionPopup } from "@/components/reading/margins/selection-popup"
+import {
+  AnnotationBubble,
+  nextAnnotationSessionId,
+} from "@/components/reading/margins/annotation-bubble"
+import { SelectionPopup, type SemanticMarkApplyResult } from "@/components/reading/margins/selection-popup"
+import { applyEntityMark, applySemanticHighlight, type EntityTypeName, type HighlightColorName } from "@/lib/editor/semantic-marks"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { BackupImageModal } from "@/components/editor/modals/backup-image-modal"
 import { InsertImageModal } from "@/components/editor/modals/insert-image-modal"
@@ -93,25 +97,8 @@ import {
 } from "@/lib/editor/correction-trigger-plugin"
 import {
   getVisibleCorrectionSuggestions,
-  replaceBlockSuggestions,
 } from "@/lib/editor/suggestion-engine"
-import {
-  CORRECTION_STALE_TIMEOUT_MS,
-  dropExpiredStaleSuggestions,
-  dropStaleSuggestionsForBlock,
-  restorePendingSuggestions,
-  type DeferredCorrectionBlocksState,
-} from "@/lib/corrections/engine/lifecycle"
-import {
-  getMissingCorrectionBlockIds,
-  takeCorrectionBatch,
-} from "@/lib/corrections/engine/batching"
-import {
-  CORRECTION_REVIEW_FAILURE_COOLDOWN_MS,
-  buildCorrectionReviewRetryKey,
-  CORRECTION_REVIEW_MAX_RETRIES,
-  decideCorrectionReviewRetry,
-} from "@/lib/corrections/engine/retry"
+import type { DeferredCorrectionBlocksState } from "@/lib/corrections/engine/lifecycle"
 import {
   createBlankDraftIdentity,
   createNewWritingSessionState,
@@ -477,6 +464,7 @@ export function EditorShell({
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
+  const [acceptedMarkdownForAnnotations, setAcceptedMarkdownForAnnotations] = useState("")
 
   const [bodyText, setBodyText] = useState("")
   const [markdownSelectionState, setMarkdownSelectionState] = useState<MarkdownSelectionSnapshot | null>(null)
@@ -1220,7 +1208,7 @@ export function EditorShell({
       // post-handoff lifecycle in the same tick. `persist()` records its
       // unconfirmed-content marker synchronously before returning.
       hasUnconfirmedLocalEditRef.current = false
-      const result = await persistenceCoordinator.persist(
+      const persistence = persistenceCoordinator.persist(
         {
           writingId: activeId,
           createdAt: baseCreatedAt,
@@ -1246,18 +1234,29 @@ export function EditorShell({
         overrides,
       )
 
-      if (!options?.awaitDurability || !result) {
-        return result
+      if (!options?.awaitDurability) {
+        return persistence
       }
 
-      // persist() can resolve `true` optimistically when merged into an
-      // already-in-flight write, without waiting for that write to actually
-      // land — fine for fire-and-forget autosave, but a caller reporting
-      // success back to the user (e.g. a rename confirmation) needs the real
-      // outcome (ODE-478 follow-up).
-      return persistenceCoordinator.settle({ writingId: activeId, draftWritingId, sourceTabId })
+      // Enqueue first, then settle immediately. Waiting for persist() before
+      // calling settle() leaves a fresh request parked behind desktop's quiet
+      // window, which is exactly what explicit structural mutations (marks,
+      // annotations, rename) must not do: their plain text can remain
+      // unchanged while their serialized Markdown is already different.
+      // settle() also covers the optimistic in-flight branch, while awaiting
+      // `persistence` preserves the caller's generation-scoped result.
+      const settled = await persistenceCoordinator.settle({ writingId: activeId, draftWritingId, sourceTabId })
+      const persisted = await persistence
+      return settled && persisted
     },
     [persistenceCoordinator],
+  )
+
+  const persistExplicitStructuralMutation = useCallback(
+    (editorInstance: Editor) => {
+      void persistEditorSnapshot(editorInstance, undefined, { awaitDurability: true })
+    },
+    [persistEditorSnapshot],
   )
 
   const runRichModeUpdateSideEffects = useCallback(
@@ -1619,6 +1618,7 @@ export function EditorShell({
       // volcarla antes de que cambie la identidad (ODE-478 caso 2).
       if (steps.flushPendingEdit) {
         flushQueuedRichModeUpdate()
+        flushPendingMarkdownSave()
       }
       if (steps.snapshotDraft) {
         snapshotOutgoingDraftContent()
@@ -1627,7 +1627,12 @@ export function EditorShell({
         persistCurrentWorkspaceViewState()
       }
     },
-    [flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, snapshotOutgoingDraftContent],
+    [
+      flushPendingMarkdownSave,
+      flushQueuedRichModeUpdate,
+      persistCurrentWorkspaceViewState,
+      snapshotOutgoingDraftContent,
+    ],
   )
 
   useEffect(() => {
@@ -1936,9 +1941,9 @@ export function EditorShell({
 
   useEffect(() => {
     return () => {
-      if (markdownSaveTimeoutRef.current) {
-        window.clearTimeout(markdownSaveTimeoutRef.current)
-      }
+      // Flush rather than drop: a Source-mode edit typed <800ms before an
+      // unmount (web route change) still belongs to the current document.
+      flushPendingMarkdownSave()
 
       if (richUpdateRafRef.current !== null) {
         window.cancelAnimationFrame(richUpdateRafRef.current)
@@ -1966,7 +1971,7 @@ export function EditorShell({
       pendingMarkdownSelectionRef.current = null
       persistCurrentWorkspaceViewState()
     }
-  }, [persistCurrentWorkspaceViewState])
+  }, [flushPendingMarkdownSave, persistCurrentWorkspaceViewState])
 
   const applyMarkdownFromPanel = useCallback(
     (nextMarkdown: string) => {
@@ -1975,6 +1980,7 @@ export function EditorShell({
       if (!editor) return false
 
       setMarkdownValue(normalizedMarkdown)
+      setAcceptedMarkdownForAnnotations(normalizedMarkdown)
       // WATCH-07 — a real content mutation (from the AI panel), not a
       // programmatic re-sync; isApplyingContentRef only exists here to
       // suppress a duplicate onUpdate-triggered persist, not to mark this as
@@ -1988,6 +1994,9 @@ export function EditorShell({
             window.clearTimeout(markdownSaveTimeoutRef.current)
             markdownSaveTimeoutRef.current = null
           }
+          // The panel applies this markdown synchronously, so any queued
+          // textarea snapshot has been superseded rather than abandoned.
+          pendingMarkdownSaveRef.current = null
         },
         updateDerivedState: () => {
           if (!editor) {
@@ -2121,6 +2130,7 @@ export function EditorShell({
     scheduleMarkdownSave,
     selectAdjacentTabRef,
     selectionRef,
+    showCorrectionToast,
     setActivePanel,
     setBodyText,
     setFootnoteModalOpen,
@@ -2157,8 +2167,8 @@ export function EditorShell({
 
     setPendingRichSelection(null)
     updateDerivedEditorState(editor)
-    void persistEditorSnapshot(editor)
-  }, [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState])
+    persistExplicitStructuralMutation(editor)
+  }, [editor, pendingRichSelection, persistExplicitStructuralMutation, updateDerivedEditorState])
 
   const convertStandaloneHighlight = useCallback(
     (anchorText: string, type: AnnotationType, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => {
@@ -2247,6 +2257,54 @@ export function EditorShell({
     [handleAnnotateSelection, handleFootnoteSelection, handleMarkSelection],
   )
 
+  const applySemanticEntityAtSelection = useCallback(
+    (type: EntityTypeName): SemanticMarkApplyResult => {
+      if (!editor || !pendingRichSelection) {
+        return "Select some text first."
+      }
+      suppressNextSelectionPopupRef.current = true
+      editor.commands.focus()
+      const decision = applyEntityMark(editor, {
+        from: pendingRichSelection.from,
+        to: pendingRichSelection.to,
+        type,
+      })
+      if (!decision.ok) {
+        suppressNextSelectionPopupRef.current = false
+        return decision.message
+      }
+      setPendingRichSelection(null)
+      updateDerivedEditorState(editor)
+      persistExplicitStructuralMutation(editor)
+      return null
+    },
+    [editor, pendingRichSelection, persistExplicitStructuralMutation, updateDerivedEditorState],
+  )
+
+  const applySemanticHighlightAtSelection = useCallback(
+    (color: HighlightColorName): SemanticMarkApplyResult => {
+      if (!editor || !pendingRichSelection) {
+        return "Select some text first."
+      }
+      suppressNextSelectionPopupRef.current = true
+      editor.commands.focus()
+      const decision = applySemanticHighlight(editor, {
+        from: pendingRichSelection.from,
+        to: pendingRichSelection.to,
+        color,
+      })
+      if (!decision.ok) {
+        suppressNextSelectionPopupRef.current = false
+        return decision.message
+      }
+      setPendingRichSelection(null)
+      updateDerivedEditorState(editor)
+      persistExplicitStructuralMutation(editor)
+      return null
+    },
+    [editor, pendingRichSelection, persistExplicitStructuralMutation, updateDerivedEditorState],
+  )
+
   const handleConfirmAnnotation = useCallback(
     (note: string) => {
       if (!editor || !pendingAnnotation) return
@@ -2279,9 +2337,9 @@ export function EditorShell({
 
       setPendingAnnotation(null)
       updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
+      persistExplicitStructuralMutation(editor)
     },
-    [editor, pendingAnnotation, persistEditorSnapshot, updateDerivedEditorState],
+    [editor, pendingAnnotation, persistExplicitStructuralMutation, updateDerivedEditorState],
   )
 
   useEffect(() => {
@@ -2402,18 +2460,44 @@ export function EditorShell({
           bodyMarkdown = getEditorMarkdown(editor)
         }
         const footnoteNodes = getEditorFootnotes(editor)
-        setMarkdownValue(
-          isDesktopRuntime()
-            ? bodyMarkdown
-            : normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes)),
-        )
+        const sourceMarkdown = isDesktopRuntime()
+          ? bodyMarkdown
+          : normalizeMarkdownForRoundTrip(
+              getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes),
+            )
+        setMarkdownValue(sourceMarkdown)
+        setAcceptedMarkdownForAnnotations(sourceMarkdown)
         return
       }
 
       const normalizedMarkdown = isDesktopRuntime()
         ? markdownValue
         : normalizeMarkdownForRoundTrip(markdownValue)
+
+      let currentRichMarkdown: string
+      if (isDesktopRuntime()) {
+        const result = desktopDocumentEngine.richToSource(editor)
+        currentRichMarkdown = result.success ? result.markdown : getEditorMarkdown(editor)
+      } else {
+        currentRichMarkdown = normalizeMarkdownForRoundTrip(
+          getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
+        )
+      }
+
       modeRef.current = "rich"
+      setMode("rich")
+      setMarkdownValue(normalizedMarkdown)
+
+      // Source is another presentation of the same EditorState. A clean
+      // Rich -> Source -> Rich transition must not replace that state: doing
+      // so destroys/recreates every custom NodeView, resets editor-owned
+      // history/selection, and schedules a durable write for unchanged
+      // content. Markdown edits that already passed the Source autosave have
+      // also been applied to TipTap, so they take this same no-op path.
+      if (currentRichMarkdown === normalizedMarkdown) {
+        return
+      }
+
       isApplyingContentRef.current = true
       if (isDesktopRuntime()) {
         const result = desktopDocumentEngine.sourceToRich(normalizedMarkdown)
@@ -2427,8 +2511,6 @@ export function EditorShell({
         editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
       }
       isApplyingContentRef.current = false
-      setMarkdownValue(normalizedMarkdown)
-      setMode("rich")
       updateDerivedEditorState(editor)
       void persistEditorSnapshot(editor)
     },
@@ -2716,7 +2798,14 @@ export function EditorShell({
   const handleInsertFootnote = useCallback(
     (note: string) => {
       if (modeRef.current === "markdown") {
-        const nextMarkdown = appendMarkdownFootnote(markdownValue, note)
+        const selection = markdownSelectionRef.current
+        const nextMarkdown = appendMarkdownFootnote(
+          markdownValue,
+          note,
+          selection?.start,
+          selection?.end,
+        )
+        if (nextMarkdown === markdownValue) return
         applyMarkdownFromPanel(nextMarkdown)
         setActivePanel("notes")
         return
@@ -2745,8 +2834,8 @@ export function EditorShell({
       return extractRichEditorAnnotations(editor)
     }
 
-    return getMarkdownFootnotes(markdownValue)
-  }, [editor, markdownValue, mode, richFootnoteRevision, version])
+    return getMarkdownFootnotes(acceptedMarkdownForAnnotations)
+  }, [acceptedMarkdownForAnnotations, editor, mode, richFootnoteRevision, version])
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const selectionMetrics = useEditorSelection(editor, mode, markdownSelectionState)
   const displayTitle = useMemo(
@@ -2922,6 +3011,7 @@ export function EditorShell({
     activateDocument,
     activeEditorTabIdRef,
     currentWritingId,
+    currentWritingIdRef,
     editor,
     editorSession,
     ephemeralDraftWritingIdRef,
@@ -3251,8 +3341,9 @@ export function EditorShell({
   // save abandoned it the same way (ODE-478 follow-up).
   const settleBeforeClose = useCallback(async () => {
     flushQueuedRichModeUpdate()
+    flushPendingMarkdownSave()
     await persistenceCoordinator.settle()
-  }, [flushQueuedRichModeUpdate, persistenceCoordinator])
+  }, [flushPendingMarkdownSave, flushQueuedRichModeUpdate, persistenceCoordinator])
   useTauriCloseGuard(settleBeforeClose)
 
   // Picks up a file opened via Cmd+O from outside Write (see useGlobalOpenFileMenu).
@@ -3997,6 +4088,8 @@ export function EditorShell({
         position={pendingRichSelection?.popupPosition ?? null}
         onSelectType={handleEditorSelectType}
         onDismiss={dismissSelectionPopup}
+        onApplyEntity={applySemanticEntityAtSelection}
+        onApplyHighlight={applySemanticHighlightAtSelection}
       />
 
       <AnnotationBubble

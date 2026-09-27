@@ -9,26 +9,22 @@ import { describe, expect, it } from "vitest"
  * kind of contract guard as `editor-frame-height-contract`.
  *
  * Anatomy: titlebar 46 · left panel 236 · sheet max 720 with `48 24 140` ·
- * right panel 276 · status bar 46, on the three-column grid.
+ * right panel 276 · status bar 46, floating across the sheet footer.
  */
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8")
 
 describe("studio shell contract", () => {
-  // KNOWN FAILURE (surfaced by PR4 adding `npm test` to CI, not caused by it):
-  // status-bar.tsx no longer uses `grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]`
-  // at all — it was refactored to a flex layout and this contract test was
-  // never updated to match. Needs a real fix to the assertion (or the
-  // component), not a CI change. Tracked as follow-up in ODE-543, not fixed here.
-  it.skip("keeps the titlebar and the status bar as siblings of the middle band", () => {
+  it("keeps the titlebar height and the accepted floating status bar", () => {
     const titlebar = read("components/editor/editor-topbar.tsx")
     const statusBar = read("components/editor/status-bar.tsx")
 
     expect(titlebar).toContain("h-[46px]")
     expect(statusBar).toContain("h-[46px]")
-    expect(statusBar).toContain("grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]")
+    expect(statusBar).toContain("absolute inset-x-0 bottom-0")
+    expect(statusBar).toContain("justify-between")
     // Neither owns the format toolbar: that lives inside the sheet column.
     expect(titlebar).not.toContain("EditorFormatToolbar")
-    // The status bar is in flow under the band, not pinned over the content.
+    // The bar is anchored to the sheet, never to the viewport.
     expect(statusBar).not.toContain("fixed")
   })
 

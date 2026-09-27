@@ -1,5 +1,6 @@
 import type { JSONContent } from "@tiptap/core"
 import { parseMarkdownToSnapshot } from "@/lib/editor/document-serialization"
+export { parseMarkdownToDocumentIr } from "@/lib/editor/document-serialization"
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024 // 5 MB
 

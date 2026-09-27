@@ -4,7 +4,6 @@ import Bold from "@tiptap/extension-bold"
 import BulletList from "@tiptap/extension-bullet-list"
 import CharacterCount from "@tiptap/extension-character-count"
 import Code from "@tiptap/extension-code"
-import CodeBlock from "@tiptap/extension-code-block"
 import Document from "@tiptap/extension-document"
 import Heading from "@tiptap/extension-heading"
 import History from "@tiptap/extension-history"
@@ -35,6 +34,18 @@ import { FrontmatterNode } from "@/lib/editor/frontmatter-node"
 import { PublicationSuggestionExtension } from "@/lib/editor/publication-suggestion-extension"
 import { AnnotationHighlight } from "@/lib/editor/annotation-highlight"
 import {
+  EntityMark,
+  SemanticHighlightMark,
+  SemanticMarkCommands,
+} from "@/lib/editor/semantic-mark-extensions"
+import {
+  CardBlock,
+  DocumentCodeBlock,
+  DocumentComponentCommands,
+  InfoBlock,
+  TipBlock,
+} from "@/lib/editor/document-component-extensions"
+import {
   LocalImageExtension,
   type LocalImageBackupRequest,
   type ResolvedLocalImage,
@@ -45,6 +56,10 @@ export const EMPTY_EDITOR_JSON: JSONContent = {
   type: "doc",
   content: [{ type: "paragraph" }],
 }
+
+const ControlledDocument = Document.extend({
+  content: "(block | controlledBlock)+",
+})
 
 type CreateEditorExtensionsOptions = {
   onTableOfContentsUpdate?: (items: TableOfContentData) => void
@@ -75,14 +90,20 @@ export const createEditorExtensions = (options: CreateEditorExtensionsOptions = 
     : []
 
   return [
-    Document,
+    ControlledDocument,
     Paragraph,
     Text,
     Heading.extend({ addKeyboardShortcuts: () => ({}) }).configure({ levels: [1, 2, 3] }),
+    // Semantic marks precede native inline marks so the serializer opens the
+    // canonical chain (Annotation → Entity → Highlight) before native marks,
+    // keeping their nesting byte-stable across round-trips.
+    AnnotationHighlight.extend({ addKeyboardShortcuts: () => ({}) }),
+    EntityMark,
+    SemanticHighlightMark,
+    SemanticMarkCommands,
     Bold.extend({ addKeyboardShortcuts: () => ({}) }),
     Italic.extend({ addKeyboardShortcuts: () => ({}) }),
     Strike.extend({ addKeyboardShortcuts: () => ({}) }),
-    AnnotationHighlight.extend({ addKeyboardShortcuts: () => ({}) }),
     LocalImageExtension.extend({ addKeyboardShortcuts: () => ({}) }).configure({
       allowBase64: false,
       inline: false,
@@ -100,7 +121,11 @@ export const createEditorExtensions = (options: CreateEditorExtensionsOptions = 
     OrderedList.extend({ addKeyboardShortcuts: () => ({}) }),
     ListItem,
     Code.extend({ addKeyboardShortcuts: () => ({}) }),
-    CodeBlock.extend({ addKeyboardShortcuts: () => ({}) }),
+    DocumentCodeBlock,
+    TipBlock,
+    InfoBlock,
+    CardBlock,
+    DocumentComponentCommands,
     Markdown.configure({
       transformPastedText: true,
       transformCopiedText: true,

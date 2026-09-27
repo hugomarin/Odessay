@@ -89,8 +89,10 @@ describe("document serialization", () => {
     });
 
     expect(markdown).toContain("# Title");
-    expect(markdown).toContain("Alpha ==Beta==");
-    expect(markdown).toContain("[^1|ann-1: Footnote body]");
+    expect(markdown).toContain(
+      'Alpha <Annotation id="ann-1" type="footnote" comment="Footnote body">Beta</Annotation>',
+    );
+    expect(markdown).not.toContain("[^1|");
   });
 
   it("preserves every annotation highlight type across structural markdown round-trips", () => {
@@ -119,8 +121,14 @@ the next line]`;
       "highlight",
       "footnote",
     ]);
-    expect(markdown).toContain("[@1|ann-ai: Note with \\] bracket]");
-    expect(markdown).toContain("[^1|ann-footnote: Reference on\nthe next line]");
+    expect(markdown).toContain(
+      '<Annotation id="ann-ai" type="ai" comment="Note with ] bracket">Heading AI</Annotation>',
+    );
+    expect(markdown).toContain(
+      '<Annotation id="ann-footnote" type="footnote" comment="Reference on\nthe next line">Paragraph footnote</Annotation>',
+    );
+    expect(markdown.match(/the next line/g)).toHaveLength(1);
+    expect(markdown).not.toMatch(/\[(?:@|\^)/);
   });
 
   it("normalizes legacy collaborative markers to personal annotations", () => {
@@ -128,7 +136,40 @@ the next line]`;
     const markdown = serializeDocumentToMarkdown(parsed.bodyJson);
 
     expect(collectHighlightTypes(parsed.bodyJson)).toEqual(["personal"]);
-    expect(markdown).toBe("==Legacy span==[@p1|ann-c: Legacy note]");
+    expect(markdown).toBe(
+      '<Annotation id="ann-c" type="personal" comment="Legacy note">Legacy span</Annotation>',
+    );
+  });
+
+  it("preserves canonical annotation identity, type, comment, and anchor", () => {
+    const source =
+      'Before <Annotation id="ann-stable" type="ai" comment="Revise &amp; keep">selected **text**</Annotation> after';
+    const parsed = parseMarkdownToSnapshot(source);
+    const paragraph = parsed.bodyJson.content?.[0];
+    const annotatedText = paragraph?.content?.find((node) => node.type === "text" && node.text === "selected ");
+
+    expect(annotatedText?.marks).toContainEqual({
+      type: "highlight",
+      attrs: {
+        annotationId: "ann-stable",
+        annotationType: "ai",
+        annotationComment: "Revise & keep",
+      },
+    });
+    expect(serializeDocumentToMarkdown(parsed.bodyJson)).toBe(source);
+  });
+
+  it("remaps duplicate annotation ids atomically while preserving both occurrences", () => {
+    const source =
+      '<Annotation id="duplicate" type="ai" comment="one">First</Annotation> <Annotation id="duplicate" type="personal" comment="two">Second</Annotation>';
+    const parsed = parseMarkdownToSnapshot(source);
+    const serialized = serializeDocumentToMarkdown(parsed.bodyJson);
+    const ids = [...serialized.matchAll(/<Annotation id="([^"]+)"/g)].map((match) => match[1]);
+
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    expect(serialized).toContain('comment="one">First</Annotation>');
+    expect(serialized).toContain('comment="two">Second</Annotation>');
   });
 
   it("separates consecutive block images when serializing canonical markdown", () => {
@@ -235,9 +276,7 @@ Tail paragraph`);
       ],
     };
 
-    expect(buildWritingMarkdown(bodyJson)).toBe(
-      "# Title\n\nAlpha **Beta** [^1]\n\n[^1]: Footnote body",
-    );
+    expect(buildWritingMarkdown(bodyJson)).toBe("# Title\n\nAlpha **Beta**");
     expect(serializeDocumentToMarkdown(bodyJson)).toBe(
       "# Title\n\nAlpha **Beta** [^1|ann-1: Footnote body]",
     );
