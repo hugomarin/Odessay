@@ -33,9 +33,9 @@
  *
  * Límite honesto de ANN-03: el sidebar se comprueba tras reabrir, pero esa
  * comprobación pasa en parte porque guardar sube `version` y eso fuerza el
- * recálculo del memo `footnotes`. Con la misma `version` el sidebar se queda
- * con la lista del documento anterior: bug 1 de ODE-625, fijado como
- * `it.fails` al final de este archivo.
+ * recálculo del memo `footnotes`. Con la misma `version` el sidebar se quedaba
+ * con la lista del documento anterior: bug 1 de ODE-625, arreglado; los dos
+ * casos que lo aíslan están al final de este archivo.
  *
  * Mutation tests (ODE-606, verificados en vivo):
  *   - el popup conserva el snapshot de la PRIMERA selección en vez de
@@ -294,14 +294,14 @@ describe("ODE-606 — ANN-03: una anotación existente vuelve intacta", () => {
   }, SHELL_TEST_TIMEOUT_MS)
 })
 
-// BUG CONOCIDO — ODE-625 (bug 1). El memo `footnotes` del shell, que es lo que
-// renderiza el sidebar, solo se recalcula cuando cambia `version` (o una
-// revisión local): hidratar otro documento con la misma `version` deja la
-// lista del contenido anterior. Los casos de ANN-03 de arriba pasan porque
-// guardar sube `version` (1 → 3) y eso fuerza el recálculo; estos dos lo
-// aíslan. `it.fails` pasa mientras el bug exista y se pone en rojo cuando se
-// arregle: entonces hay que pasarlos a `it`.
-describe("BUG ODE-625 — el sidebar de notas refleja el documento activo", () => {
+// ODE-625 (bug 1, arreglado). El memo `footnotes` del shell, que es lo que
+// renderiza el sidebar, solo se recalculaba cuando cambiaba `version` (o una
+// revisión local): hidratar otro documento con la misma `version` dejaba la
+// lista del contenido anterior. Los casos de ANN-03 de arriba pasan también
+// porque guardar sube `version` (1 → 3); estos dos aíslan el bug. Eran
+// `it.fails`; pasaron a `it` sin tocar el cuerpo. Mutation check: revertir el
+// fix de ODE-625 en `editor-shell.tsx` los pone en rojo.
+describe("ODE-625 — el sidebar de notas refleja el documento activo", () => {
   function writingWithAiAnnotation(id: string, version: number): LocalWriting {
     const start = TEXT_A.indexOf(TARGET)
     return {
@@ -324,7 +324,7 @@ describe("BUG ODE-625 — el sidebar de notas refleja el documento activo", () =
     }
   }
 
-  it.fails("abrir un documento que ya tiene una anotación la lista en el sidebar", async () => {
+  it("abrir un documento que ya tiene una anotación la lista en el sidebar", async () => {
     const writingA = "64111111-1111-4111-8111-111111111111"
     await localDB.writings.save(writingWithAiAnnotation(writingA, 1))
     mounted = await mountEditorShell({ writingId: writingA })
@@ -335,7 +335,7 @@ describe("BUG ODE-625 — el sidebar de notas refleja el documento activo", () =
     expect(await openNotesSidebar()).toEqual([{ anchor: `“${TARGET}”`, body: NOTE, badge: "AI · 1" }])
   }, SHELL_TEST_TIMEOUT_MS)
 
-  it.fails("el sidebar de B no lista las anotaciones de A", async () => {
+  it("el sidebar de B no lista las anotaciones de A", async () => {
     const writingA = "65111111-1111-4111-8111-111111111111"
     const writingB = "65222222-2222-4222-8222-222222222222"
     await localDB.writings.save(writingWithAiAnnotation(writingA, 3))

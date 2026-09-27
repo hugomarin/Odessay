@@ -182,6 +182,7 @@ export type DocumentHydrationInput = {
   setExternalFileNotice: (notice: null) => void
   setCanonicalPath: Setter<string | null>
 
+  refreshRichFootnotes: () => void
   updateDerivedEditorState: (editor: Editor) => void
   applyCorrectionSuggestionUpdate: (
     updater: (current: PublicationSuggestion[]) => PublicationSuggestion[],
@@ -234,6 +235,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     applyDocumentMetadata,
     setExternalFileNotice,
     setCanonicalPath,
+    refreshRichFootnotes,
     updateDerivedEditorState,
     applyCorrectionSuggestionUpdate,
     flattenPersistedSuggestions,
@@ -286,6 +288,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
       isApplyingContentRef.current = true
       editor.commands.setContent(restorable?.bodyJson ?? EMPTY_EDITOR_JSON)
       isApplyingContentRef.current = false
+      refreshRichFootnotes()
       updateDerivedEditorState(editor)
       applyDocumentMetadata({
         status: "draft",
@@ -304,6 +307,19 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
       applyCorrectionSuggestionUpdate(() => [], { immediate: true })
       currentCanonicalPathRef.current = null
       setCanonicalPath(null)
+      // STATE-05: el borrador no tiene view_state que restaurar, así que
+      // empieza arriba; sin esto hereda el scroll del documento que se dejó.
+      // Desde ODE-626 "New Artifact" en web también llega aquí (antes creaba
+      // una fila y pasaba por la restauración de abajo).
+      for (const viewport of [
+        document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]'),
+        document.querySelector<HTMLElement>("main"),
+      ]) {
+        if (viewport) {
+          viewport.scrollTop = 0
+          viewport.scrollLeft = 0
+        }
+      }
       window.requestAnimationFrame(() => {
         editor.commands.focus("start")
       })
@@ -509,6 +525,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
           )
         }
         isApplyingContentRef.current = false
+        refreshRichFootnotes()
         const currentDocBlocks = collectCorrectionBlocks(editor.state.doc)
         const hydratedReconciliation = reconcileHydratedCorrectionBlocks(
           localCorrectionBlocks,
@@ -732,6 +749,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     hydrationPhase,
     queueMarkdownSelectionRestore,
     routeWritingId,
+    refreshRichFootnotes,
     setPersistedCorrectionBlocks,
     updateDerivedEditorState,
   ])

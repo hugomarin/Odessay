@@ -10,8 +10,8 @@
  *   2. Una pestaña de fondo dibuja el estado editorial que da el catálogo (la
  *      activa lee el estado vivo de la shell).
  *   3. El atajo de pestaña siguiente cambia a la pestaña contigua.
- *   4. "New Artifact" en web activa una identidad nueva, y lo que se escribe
- *      después va a ese documento, no al que estaba abierto.
+ *   4. "New Artifact" en web activa un borrador efímero; al primer contenido
+ *      se materializa una identidad nueva y lo escrito va a ese documento.
  *
  * Camino de producción (web): A y B abiertos como pestañas, A activa; gestos
  * reales sobre la barra de pestañas; `webDocumentCatalog` real sobre
@@ -331,28 +331,32 @@ describe("ODE-587 — crear pestaña y moverse entre pestañas", () => {
   )
 
   it(
-    "New Artifact en web activa una identidad nueva y lo escrito va a ese documento",
+    "New Artifact en web conserva el borrador efímero hasta escribir",
     async () => {
-      // Mutación: en `handleCreateWorkspaceTab` (rama web), no activar la
-      // identidad nueva → rojo.
       await openAWithBInBackground()
       await clickNewArtifact(mounted!.container)
 
+      const draftId = await waitFor(
+        () => {
+          const { session } = getEditorSessionState()
+          const activeTab = session.tabs.find((tab) => tab.id === session.active_tab_id)
+          return activeTab?.writing_id === null ? activeTab.draft_writing_id ?? null : null
+        },
+        { label: "un borrador efímero activo", timeoutMs: 10_000 },
+      )
+      expect(mounted!.editor().getText(), "el editor queda vacío").toBe("")
+      expect(activeWritingId(), "el borrador sigue sin UUID durable").toBeNull()
+      expect(await localDB.writings.get(draftId), "New Artifact aún no crea una fila durable").toBeNull()
+
+      await typeInEditor("ODE587-NUEVO")
       const created = await waitFor(
         () => {
           const id = activeWritingId()
           return id && id !== writingA && id !== writingB ? id : null
         },
-        { label: "una identidad nueva activa", timeoutMs: 10_000 },
+        { label: "la identidad se materializa al escribir", timeoutMs: 10_000 },
       )
-      expect(mounted!.editor().getText(), "el editor queda vacío").toBe("")
-
-      await typeInEditor("ODE587-NUEVO")
       await advance(500)
-      for (let attempt = 0; attempt < 40; attempt += 1) {
-        if ((await localDB.writings.get(created))?.body_text.includes("ODE587-NUEVO")) break
-        await advance(100)
-      }
       expect((await localDB.writings.get(created))?.body_text, "lo escrito va al documento nuevo").toContain("ODE587-NUEVO")
       expect((await localDB.writings.get(writingA))?.body_text, "y no a A").not.toContain("ODE587-NUEVO")
     },

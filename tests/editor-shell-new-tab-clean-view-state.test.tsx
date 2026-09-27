@@ -160,6 +160,15 @@ function expectSavedA() {
   expect(savedA?.shellScrollTop, "la shell guarda el scroll de la shell de A").toBe(SCROLL_A.shellScrollTop)
 }
 
+/**
+ * La pestaña de "New Artifact": en web es un borrador efímero sin UUID durable
+ * hasta el primer contenido (ODE-626), así que se reconoce por su identidad de
+ * borrador, no por `writing_id`.
+ */
+function isNewTab(tab: NonNullable<ReturnType<typeof activeTab>>) {
+  return tab.writing_id !== WRITING_A && Boolean(tab.writing_id ?? tab.draft_writing_id)
+}
+
 /** B limpio en el DOM y en el editor: scroll 0, cursor al inicio, sin selección. */
 function expectCleanB(label: string) {
   expect(readViewport(), `${label}: B empieza sin scroll`).toEqual({ editorScrollTop: 0, shellScrollTop: 0 })
@@ -190,7 +199,7 @@ describe("ODE-600 — STATE-05 (web): la pestaña nueva de \"New Artifact\" empi
       const tabB = await waitFor(
         () => {
           const tab = activeTab()
-          return tab && tab.writing_id && tab.writing_id !== WRITING_A ? tab : null
+          return tab && isNewTab(tab) ? tab : null
         },
         { label: "pestaña de B activa" },
       )
@@ -231,7 +240,7 @@ describe("ODE-600 — STATE-05 (web): la pestaña nueva de \"New Artifact\" empi
       await waitFor(
         () => {
           const tab = activeTab()
-          return tab?.writing_id && tab.writing_id !== WRITING_A ? tab : null
+          return tab && isNewTab(tab) ? tab : null
         },
         { label: "pestaña de B activa" },
       )

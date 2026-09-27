@@ -377,6 +377,15 @@ async function buildDesktopOpenDocumentUseCase() {
     readFileEvidence,
     locateBindingRoot,
     registerExternalRoot,
+    // The global reconciler starts on app mount (DesktopAppShell), before any
+    // Open File, so a root registered here needs the same refresh as Workspace
+    // adoption and relocate; otherwise no watcher covers it until restart.
+    onExternalRootRegistered: async () => {
+      const { refreshWorkspaceReconcilerRoots } = await import(
+        "@/lib/services/desktop/desktop-workspace-reconciler"
+      )
+      await refreshWorkspaceReconcilerRoots()
+    },
     listKnownBindings,
     materializeCloudOnly,
     cloudHashLookup: async (contentHash) => {

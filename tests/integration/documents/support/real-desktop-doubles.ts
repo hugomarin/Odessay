@@ -50,6 +50,10 @@ const manifestsByRoot = new Map<string, Map<string, string>>()
 // the evidence the real `workspace_sync` keeps per entry to follow a file that
 // was renamed or moved inside the root outside the app (ODE-599, WATCH-04).
 const manifestInodesByRoot = new Map<string, Map<string, number>>()
+// The manifest's persisted scope per root, as `.odessay/index.json` keeps it:
+// a call with `selectedPaths` replaces it, a call without one reuses it
+// (`workspace.rs` `uses_persisted_selection`). Empty means the whole root.
+const selectedPathsByRoot = new Map<string, string[]>()
 
 /** Point the `@tauri-apps/api/path` double at a real temp directory. Call once per test file, before the first production call that resolves desktop runtime services. */
 export function configureRealDesktopDoubles(baseDir: string): void {
@@ -63,6 +67,7 @@ export function resetCatalogDoubles(): void {
   bindingRootIdsByRoot.clear()
   manifestsByRoot.clear()
   manifestInodesByRoot.clear()
+  selectedPathsByRoot.clear()
   for (const gate of [...catalogReadGates]) gate.release()
 }
 
@@ -457,6 +462,8 @@ export async function tauriWorkspaceSyncDouble(
   documentIds?: Record<string, string>,
 ): Promise<DesktopWorkspaceSnapshot> {
   const manifest = manifestFor(rootPath)
+  if (selectedPaths) selectedPathsByRoot.set(rootPath, [...new Set(selectedPaths)])
+  const effectiveSelectedPaths = selectedPathsByRoot.get(rootPath) ?? []
 
   // Adoption of an explicitly selected file: a `.md` named in `selectedPaths`
   // that exists on disk but has no manifest entry yet gets a fresh id, as the
@@ -538,7 +545,7 @@ export async function tauriWorkspaceSyncDouble(
     fileCount: files.length,
     folderCount: 0,
     updatedAt: Date.now(),
-    selectedPaths: [],
+    selectedPaths: effectiveSelectedPaths,
     files,
     unboundPaths: [],
   }

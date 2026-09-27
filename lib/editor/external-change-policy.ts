@@ -57,27 +57,18 @@ export type ExternalContentChangeInput = {
 
 /**
  * "Is there local content not yet confirmed durable?" is NOT the same
- * question as "does PersistenceCoordinator.hasPending() say a write is in
- * flight/queued?" — the desktop debounce (150ms rich mode,
- * MARKDOWN_SAVE_DEBOUNCE_MS in markdown mode) means there is a real window
- * after a keystroke where the editor already holds an unconfirmed edit but
- * no persist request has reached the coordinator yet at all, so
- * `hasPending()` alone would (correctly, from its own narrower perspective)
- * still say "nothing pending" — silently letting an external CLEAN
- * auto-reload discard that edit. `editor-shell.tsx` tracks the "has the
- * editor changed since the durable baseline" half itself (set the instant
- * a real edit happens, in TipTap's own `onUpdate` and the markdown-mode
- * equivalents; cleared the instant that content is actually handed to
- * `persist()`, at which point `hasPending()` becomes authoritative) and
- * combines it here rather than inline, so the combination itself — not just
- * `resolveExternalContentChange`'s later branching on it — is a named,
- * tested contract.
+ * The shell owns the short pre-handoff window: it sets a ref as soon as the
+ * editor changes and clears it when calling `persist()`. The coordinator
+ * owns the post-handoff window: `hasUnconfirmedContent()` stays true until a
+ * durable commit or explicit discard, including after a failed write has
+ * left `hasPending()` false. Combine the two lifecycles here so the shell
+ * never owns persistence durability and the rule stays directly testable.
  */
 export function computeHasPendingLocalEdit(input: {
   hasUnconfirmedLocalEdit: boolean
-  hasPendingPersistence: boolean
+  hasUnconfirmedPersistedContent: boolean
 }): boolean {
-  return input.hasUnconfirmedLocalEdit || input.hasPendingPersistence
+  return input.hasUnconfirmedLocalEdit || input.hasUnconfirmedPersistedContent
 }
 
 export function resolveExternalContentChange(

@@ -40,6 +40,22 @@
  * uno de fondo no lee el catálogo; y abrir documentos no suma listeners de
  * sync (una suscripción global, no una por pestaña).
  *
+ * ODE-604 — paridad en ERROR. ODE-579 probó la paridad barra/pestaña en
+ * éxito; el caso 5 la prueba cuando la escritura local falla (el comando
+ * nativo `write_file` rechaza, como un disco lleno o una base bloqueada): las
+ * dos muestran "Needs attention", el contenido sigue en el editor, y el
+ * reintento (el siguiente guardado, que es cómo la shell reintenta: no hay
+ * botón) las devuelve juntas al estado durable, y a "Saved" cuando la nube
+ * confirma. La proyección pura vive en
+ * `tests/editor-save-state-reconciliation.test.ts`.
+ *
+ * Mutation test (ODE-604): que el efecto que publica el estado de la pestaña
+ * activa (`publishTabState` en `editor-shell.tsx`) no propague `"error"` pone
+ * en rojo el caso 5 (la barra dice "Needs attention" y la pestaña no). Quitar
+ * solo el `updateTabSaveState(... "error")` del `onError` del coordinador NO
+ * lo pone en rojo, y es correcto: para la pestaña ACTIVA el error llega por
+ * los dos caminos; el del `onError` es el que cubre una pestaña de fondo.
+ *
  * Fuera de esta prueba, con motivo: que una razón de catálogo que no es de
  * reconciliación (`content`, `excerpt`…) no promueva un "Saved" falso con un
  * guardado en vuelo. Reproducirlo exige que el catálogo emita esa razón
@@ -92,7 +108,10 @@ const {
 const { createDesktopWorkspace, destroyDesktopWorkspace, resetDesktopWorkspace } = await import(
   "./support/editor-shell-desktop-doubles"
 )
-const { confirmCatalogUpsertSyncedDouble } = await import("./integration/documents/support/real-desktop-doubles")
+const { confirmCatalogUpsertSyncedDouble, failNextWriteFile } = await import(
+  "./integration/documents/support/real-desktop-doubles"
+)
+const { readWorkspaceMarkdown } = await import("./support/editor-shell-desktop-doubles")
 const { createDesktopDraft: createProductionDesktopDraft } = await import("@/lib/services/document-service-factory")
 const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
@@ -389,6 +408,56 @@ describe("ODE-542 — el estado de guardado converge desde el catálogo durable"
         expect(barSaveState(), "la barra sigue siendo la del documento activo").toBe("saved")
       } finally {
         listeners.restore()
+      }
+    },
+    TEST_TIMEOUT_MS,
+  )
+  it(
+    "error de escritura: barra y pestaña en Needs attention a la vez; el reintento las devuelve juntas a Saved",
+    async () => {
+      await mountLoaded()
+      const writingId = await openSavedLocally("ODE604-ERROR-BASE")
+      const file = (await readWorkspaceMarkdown()).find((entry) => entry.contents.includes("ODE604-ERROR-BASE"))
+      if (!file) throw new Error("Sin .md del documento")
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+      try {
+        failNextWriteFile(
+          (path) => path === file.path,
+          () => {
+            throw new Error("database is locked")
+          },
+        )
+        await typeInEditor(" ODE604-FALLA")
+        await advance(6_000)
+        await waitFor(() => barSaveState() === "error" && activeTab()?.save_state === "error", {
+          label: "barra y pestaña en Needs attention",
+          timeoutMs: 10_000,
+        })
+        expect(
+          errors.mock.calls.some(([message]) => message === "[editor:save] local save failed"),
+          "control positivo: la escritura falló de verdad",
+        ).toBe(true)
+        const onDisk = (await readWorkspaceMarkdown()).find((entry) => entry.path === file.path)?.contents ?? ""
+        expect(onDisk, "el disco conserva lo anterior").toContain("ODE604-ERROR-BASE")
+        expect(onDisk, "sin la edición fallida").not.toContain("ODE604-FALLA")
+        expect(mounted!.editor().getText(), "el contenido sigue en el editor").toContain("ODE604-FALLA")
+
+        // Reintento: el siguiente guardado, con éxito.
+        await typeInEditor(" ODE604-REINTENTO")
+        await advance(6_000)
+        const saved = await waitForMarkdownContaining("ODE604-REINTENTO")
+        expect(saved.path, "al mismo archivo").toBe(file.path)
+        expect(saved.contents, "el contenido nunca se pierde: lleva también la edición que falló").toContain(
+          "ODE604-FALLA",
+        )
+        await expectBarAndTabMatchDurable(writingId, "saving")
+
+        // La nube confirma: las dos a Saved.
+        confirmCatalogUpsertSyncedDouble(writingId)
+        await applyCloudSnapshotFor(writingId)
+        await expectBarAndTabMatchDurable(writingId, "saved")
+      } finally {
+        errors.mockRestore()
       }
     },
     TEST_TIMEOUT_MS,

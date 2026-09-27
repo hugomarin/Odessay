@@ -59,7 +59,14 @@ export type EditorCursorSnapshot =
 
 type MarkdownCursorScroll = Omit<Extract<EditorCursorSnapshot, { mode: "markdown" }>, "mode" | "start" | "end">
 
+// ODE-625: la selección Markdown cacheada lleva el documento al que pertenece.
+type OwnedMarkdownSelectionSnapshot = MarkdownSelectionSnapshot & {
+  writingId: string
+}
+
 export type FindReplaceInput = {
+  currentWritingId: string | null
+  currentWritingIdRef: React.RefObject<string | null>
   editor: Editor | null
   editorCursorSnapshotRef: React.RefObject<EditorCursorSnapshot | null>
   findActiveIndex: number
@@ -68,7 +75,8 @@ export type FindReplaceInput = {
   findQuery: string
   handleMarkdownChange: (value: string) => void
   isFindReplaceOpen: boolean
-  markdownSelectionRef: React.RefObject<MarkdownSelectionSnapshot | null>
+  markdownSelectionOwnerId: (writingId: string | null) => string
+  markdownSelectionRef: React.RefObject<OwnedMarkdownSelectionSnapshot | null>
   markdownTextareaRef: React.RefObject<HTMLTextAreaElement | null>
   markdownValue: string
   mode: "rich" | "markdown"
@@ -86,6 +94,8 @@ export type FindReplaceInput = {
 
 export function useFindReplace(input: FindReplaceInput) {
   const {
+    currentWritingId,
+    currentWritingIdRef,
     editor,
     editorCursorSnapshotRef,
     findActiveIndex,
@@ -94,6 +104,7 @@ export function useFindReplace(input: FindReplaceInput) {
     findQuery,
     handleMarkdownChange,
     isFindReplaceOpen,
+    markdownSelectionOwnerId,
     markdownSelectionRef,
     markdownTextareaRef,
     markdownValue,
@@ -313,7 +324,11 @@ export function useFindReplace(input: FindReplaceInput) {
     })
   }
 
-  function syncActiveMarkdownMatchSelection(nextActiveIndex: number) {
+  function syncActiveMarkdownMatchSelection(nextActiveIndex: number, writingId: string) {
+    if (markdownSelectionOwnerId(currentWritingIdRef.current) !== writingId) {
+      return
+    }
+
     const textarea = markdownTextareaRef.current
     const targetMatch = markdownFindMatches[clampFindReplaceIndex(markdownFindMatches.length, nextActiveIndex)]
 
@@ -327,6 +342,7 @@ export function useFindReplace(input: FindReplaceInput) {
       start: targetMatch.start,
       end: targetMatch.end,
       text: textarea.value.slice(targetMatch.start, targetMatch.end),
+      writingId,
     }
   }
 
@@ -340,15 +356,16 @@ export function useFindReplace(input: FindReplaceInput) {
       setFindActiveIndex(nextActiveIndex)
 
       if (modeRef.current === "markdown") {
+        const writingId = markdownSelectionOwnerId(currentWritingId)
         window.requestAnimationFrame(() => {
-          syncActiveMarkdownMatchSelection(nextActiveIndex)
+          syncActiveMarkdownMatchSelection(nextActiveIndex, writingId)
         })
         return
       }
 
       syncActiveRichMatchSelection(nextActiveIndex)
     },
-    [activeMatchIndex, matchCount, modeRef, setFindActiveIndex, syncActiveMarkdownMatchSelection, syncActiveRichMatchSelection],
+    [activeMatchIndex, currentWritingId, markdownSelectionOwnerId, matchCount, modeRef, setFindActiveIndex, syncActiveMarkdownMatchSelection, syncActiveRichMatchSelection],
   )
 
   const handleReplaceCurrentMatch = useCallback(() => {
@@ -370,8 +387,9 @@ export function useFindReplace(input: FindReplaceInput) {
       handleMarkdownChange(nextMarkdown)
       setFindActiveIndex(nextActive)
 
+      const writingId = markdownSelectionOwnerId(currentWritingId)
       window.requestAnimationFrame(() => {
-        syncActiveMarkdownMatchSelection(nextActive)
+        syncActiveMarkdownMatchSelection(nextActive, writingId)
       })
       return
     }
@@ -396,11 +414,13 @@ export function useFindReplace(input: FindReplaceInput) {
     syncActiveRichMatchSelection(nextActive)
   }, [
     activeMatchIndex,
+    currentWritingId,
     editor,
     findCaseSensitive,
     findQuery,
     handleMarkdownChange,
     markdownFindMatches,
+    markdownSelectionOwnerId,
     markdownValue,
     modeRef,
     persistEditorSnapshot,

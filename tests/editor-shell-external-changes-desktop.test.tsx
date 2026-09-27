@@ -33,9 +33,9 @@
  * siembra por dentro.
  *
  * Orden de producción: el reconciliador arranca ANTES del Open File, como en
- * `DesktopAppShell` al abrir la app. En ese orden hoy la cadena no llega a la
- * shell (ODE-628: `registerExternalRoot` no refresca el watcher), así que los
- * casos de cambio externo quedan como `it.fails`; ver la nota de su `describe`.
+ * `DesktopAppShell` al abrir la app. El opener refresca el watcher tras
+ * registrar la carpeta (ODE-628), así que la cadena llega a la shell sin
+ * reiniciar el reconciliador.
  *
  * Completion events: el texto del `.md` en el disco real y el DOM (editor,
  * banner, aviso). Nunca "se llamó a X".
@@ -257,18 +257,6 @@ async function waitForWatcherOnDocuments() {
   await advance(100)
 }
 
-/**
- * Secuencia de REINICIO, no la de producción: el reconciliador arranca con el
- * BindingRoot externo ya registrado, así que lo lee al arrancar y su watcher
- * cubre la carpeta. Solo la usa la caracterización de ODE-627, para que siga
- * fallando por su propio bug (la aserción de `ODE627-LOCAL`) y no por ODE-628.
- * Cuando ODE-628 se arregle, pasa al orden de producción como las demás.
- */
-async function startReconcilerAfterOpen() {
-  await startReconciler()
-  await waitForWatcherOnDocuments()
-}
-
 /** Espera a que el reconciliador (coalesce de 250ms) proyecte y la shell reaccione. */
 async function waitForShell<T>(predicate: () => T | null | undefined | false, label: string) {
   return waitFor(predicate, { label, timeoutMs: 10_000 })
@@ -338,16 +326,10 @@ async function trackCatalogSubscriptions() {
  * ------------------------------------------------------------------ */
 
 describe("ODE-599 — la shell reacciona a cambios externos del documento abierto", () => {
-  // BUG CONOCIDO, encontrado por esta red al seguir el orden de producción:
-  // ODE-628. `DesktopAppShell` arranca el reconciliador al abrir la app, ANTES
-  // del Open File; `registerExternalRoot` registra el BindingRoot externo pero
-  // no llama a `refreshWorkspaceReconcilerRoots()`, así que ningún watcher
-  // cubre la carpeta hasta reiniciar la app. Las seis pruebas fallan en
-  // `waitForWatcherOnDocuments` (el watcher nunca aparece), no en su aserción.
-  // Control: con una llamada a `refreshWorkspaceReconcilerRoots()` tras el
-  // open, las seis pasan con el cuerpo intacto. Al arreglar ODE-628 pasan a
-  // `it` sin tocar el cuerpo.
-  it.fails(
+  // Estas seis encontraron ODE-628 al seguir el orden de producción: el
+  // BindingRoot externo de un Open File no tenía watcher hasta reiniciar. Eran
+  // `it.fails`; con el fix pasaron a `it` sin tocar el cuerpo.
+  it(
     "WATCH-07 limpio: recarga sola el contenido externo y no escribe al disco",
     async () => {
       const subscriptions = await trackCatalogSubscriptions()
@@ -387,7 +369,7 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "WATCH-07 sucio: banner de conflicto, ninguna escritura pisa la externa, y «Keep my version» escribe la del usuario",
     async () => {
       const path = writeMarkdownFile("Carta sucia", "ODE599 base sucia.")
@@ -440,7 +422,7 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "WATCH-07 sucio: «Reload external» descarta la edición local y no escribe",
     async () => {
       const path = writeMarkdownFile("Carta recarga", "ODE599 base recarga.")
@@ -478,7 +460,7 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "borrado externo: aviso una vez, el contenido sigue abierto y la pestaña conserva la identidad",
     async () => {
       const path = writeMarkdownFile("Carta borrada", "ODE599 cuerpo borrado.")
@@ -513,7 +495,7 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "movimiento externo: aviso con la ruta nueva, una vez, y la misma identidad",
     async () => {
       const path = writeMarkdownFile("Carta movida", "ODE599 cuerpo movido.")
@@ -545,7 +527,7 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "un cambio de pestaña entre el evento y su resolución no aplica el cambio de A sobre B",
     async () => {
       const pathA = writeMarkdownFile("Carta A", "ODE599 cuerpo A.")
@@ -596,23 +578,25 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
   )
 })
 
-describe("ODE-627 — caracterización: un autosave rechazado por CONFLICT antes del evento", () => {
-  // BUG CONOCIDO, encontrado por esta red: ODE-627. Se deja como `it.fails`
-  // para que el comportamiento correcto quede escrito y la red avise en cuanto
-  // cambie. Al arreglar ODE-627 pasa a `it` sin tocar el cuerpo.
+describe("ODE-627 — regresión: un autosave rechazado por CONFLICT antes del evento", () => {
+  // Regresión de ODE-627 (encontrado por esta red, arreglado en el
+  // PersistenceCoordinator: un guardado fallido conserva la marca de contenido
+  // sin confirmar). Era `it.fails`; pasó a `it` sin tocar el cuerpo. Con
+  // ODE-628 arreglado usa el orden de producción, como las demás.
   //
   // Secuencia: el usuario teclea; el archivo cambia fuera justo antes del
   // autosave desktop (DESKTOP_PERSISTENCE_DEBOUNCE_MS = 4s); la guardia de hash
   // rechaza bien ese guardado (CONFLICT); el evento del watcher llega después
-  // (300ms de delay + 250ms de coalesce). Hoy la shell ve el documento limpio
-  // y recarga la externa: el texto tecleado se pierde sin banner.
-  it.fails(
+  // (300ms de delay + 250ms de coalesce). Antes del fix la shell veía el
+  // documento limpio y recargaba la externa: el texto tecleado se perdía sin banner.
+  it(
     "la edición local rechazada sigue contando como sucia: banner de conflicto, sin recarga",
     async () => {
       const path = writeMarkdownFile("Carta rechazada", "ODE599 base rechazada.")
+      await startReconciler()
       await mountLoaded()
       await openFromNativeMenu(path, "ODE599 base rechazada.")
-      await startReconcilerAfterOpen()
+      await waitForWatcherOnDocuments()
 
       await typeInEditor(" ODE627-LOCAL")
       await advance(3_700)
