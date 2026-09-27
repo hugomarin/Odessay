@@ -2,7 +2,10 @@ import { promises as fs } from "node:fs"
 import { randomUUID } from "node:crypto"
 import { dirname, join } from "node:path"
 import type {
+  DesktopCatalogCollectionSnapshot,
   DesktopCatalogDualWriteInput,
+  DesktopCatalogReconcileInput,
+  DesktopCatalogReconcileResult,
   DesktopCatalogRow,
   DesktopCloudSnapshotInput,
   DesktopFileMetadata,
@@ -43,6 +46,10 @@ const bindingRootIdsByRoot = new Map<string, string>()
 // of scope, per the note below) — just enough state to answer "does this
 // root still claim this document" truthfully.
 const manifestsByRoot = new Map<string, Map<string, string>>()
+// Last inode seen for each manifest entry (rootPath -> relativePath -> inode),
+// the evidence the real `workspace_sync` keeps per entry to follow a file that
+// was renamed or moved inside the root outside the app (ODE-599, WATCH-04).
+const manifestInodesByRoot = new Map<string, Map<string, number>>()
 
 /** Point the `@tauri-apps/api/path` double at a real temp directory. Call once per test file, before the first production call that resolves desktop runtime services. */
 export function configureRealDesktopDoubles(baseDir: string): void {
@@ -55,6 +62,7 @@ export function resetCatalogDoubles(): void {
   catalogsByDb.clear()
   bindingRootIdsByRoot.clear()
   manifestsByRoot.clear()
+  manifestInodesByRoot.clear()
   for (const gate of [...catalogReadGates]) gate.release()
 }
 
@@ -307,6 +315,44 @@ export async function tauriWriteFileDouble(
 }
 
 /**
+ * Mirrors the real Rust `write_binary_file` command (src-tauri/src/commands/document.rs),
+ * the export writer behind `saveDesktopBinaryExport`: create missing parent
+ * dirs, write a `.tmp` sibling, rename it over the target, and drop the
+ * `.tmp` if the rename fails. A write failure here is a genuine fs error
+ * (e.g. a parent path component that is a plain file), never a scripted
+ * throw (EXP-05, ODE-601).
+ *
+ * Failure shape: the command returns `Err(String)`, and Tauri's `invoke`
+ * rejects with that bare string — not an `Error`. The double rejects the same
+ * way, with the same message prefixes, so callers that branch on
+ * `instanceof Error` see what production sees.
+ */
+export async function tauriWriteBinaryFileDouble(path: string, bytes: Uint8Array): Promise<void> {
+  const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
+  const parent = dirname(path)
+  const parentExists = await fs.stat(parent).then(() => true, () => false)
+  if (!parentExists) {
+    try {
+      await fs.mkdir(parent, { recursive: true })
+    } catch (error) {
+      return Promise.reject(`create_dir_all: ${reason(error)}`)
+    }
+  }
+  const tmpPath = `${path}.tmp`
+  try {
+    await fs.writeFile(tmpPath, bytes)
+  } catch (error) {
+    return Promise.reject(`write_binary_file tmp: ${reason(error)}`)
+  }
+  try {
+    await fs.rename(tmpPath, path)
+  } catch (error) {
+    await fs.rm(tmpPath, { force: true })
+    return Promise.reject(`write_binary_file rename: ${reason(error)}`)
+  }
+}
+
+/**
  * Mirrors the real Rust `rename_file` command: creates the destination's
  * parent directory and renames in place, returning the new path. It does not
  * resolve collisions — `FilesystemDocumentService.renameWriting` already
@@ -437,6 +483,33 @@ export async function tauriWorkspaceSyncDouble(
     }
   }
 
+  // Inode-correlated move recovery, mirroring the real scan: a manifest entry
+  // whose file is gone keeps its id if a `.md` inside the same root that the
+  // manifest does not know yet carries the inode last seen for it — a Finder
+  // rename or move, never delete + create. Only unmanifested candidates are
+  // considered, so an app-side rename that already bound its new path through
+  // `documentIds` above just drops the stale entry below (ODE-599).
+  const knownInodes = manifestInodesByRoot.get(rootPath)
+  if (knownInodes) {
+    let candidates: Array<{ relativePath: string; inode: number }> | null = null
+    for (const [relativePath, id] of [...manifest.entries()]) {
+      const inode = knownInodes.get(relativePath)
+      if (!inode) continue
+      const stillExists = await fs
+        .stat(join(rootPath, relativePath))
+        .then(() => true)
+        .catch(() => false)
+      if (stillExists) continue
+      candidates ??= await listUnmanifestedMarkdown(rootPath, manifest)
+      const moved: { relativePath: string; inode: number } | undefined = candidates.find((candidate) => candidate.inode === inode)
+      if (!moved) continue
+      manifest.delete(relativePath)
+      knownInodes.delete(relativePath)
+      manifest.set(moved.relativePath, id)
+      candidates = candidates.filter((candidate) => candidate !== moved)
+    }
+  }
+
   // Reconcile-delete: runs on EVERY call, not just the no-IDs (origin-root
   // resync) form above — production's real rescan drops entries for files
   // it can no longer find on disk regardless of whether this same call also
@@ -454,6 +527,9 @@ export async function tauriWorkspaceSyncDouble(
   const files = await Promise.all(
     [...manifest.entries()].map(([relativePath, id]) => statAsWorkspaceFile(rootPath, relativePath, id)),
   )
+  const inodes = new Map<string, number>()
+  for (const file of files) inodes.set(file.relativePath, file.inode)
+  manifestInodesByRoot.set(rootPath, inodes)
   const bindingRootId = bindingRootFor(rootPath)
   return {
     rootPath,
@@ -466,6 +542,34 @@ export async function tauriWorkspaceSyncDouble(
     files,
     unboundPaths: [],
   }
+}
+
+/** Every `.md` under `rootPath` (outside `.odessay`) that `manifest` does not bind yet, with its real inode. */
+async function listUnmanifestedMarkdown(
+  rootPath: string,
+  manifest: Map<string, string>,
+): Promise<Array<{ relativePath: string; inode: number }>> {
+  const found: Array<{ relativePath: string; inode: number }> = []
+  async function walk(dir: string, prefix: string) {
+    let entries
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (entry.name === ".odessay") continue
+      const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        await walk(full, relativePath)
+      } else if (entry.name.endsWith(".md") && !manifest.has(relativePath)) {
+        found.push({ relativePath, inode: (await fs.stat(full)).ino })
+      }
+    }
+  }
+  await walk(rootPath, "")
+  return found
 }
 
 // ─── catalog tauri-commands doubles (real in-memory row store) ────────────
@@ -571,6 +675,93 @@ export async function tauriCatalogGetByIdDouble(dbPath: string, id: string): Pro
   return rowsFor(dbPath).get(id) ?? null
 }
 
+/**
+ * Espejo de `catalog_apply_reconcile` (src-tauri/src/commands/index.rs): una
+ * ráfaga del WorkspaceReconciler en una sola transacción. Un upsert proyecta
+ * la presencia local y el binding sin tocar los metadatos de la nube; un
+ * detach quita el binding y marca `local_present=0`. `changed` solo lista los
+ * ids cuyo binding guardado difería de verdad (ruta, inode o hash) o que
+ * perdieron presencia: un rescan que reconfirma lo mismo no emite nada.
+ *
+ * Sin raíces retiradas en ningún test que use este doble, la valla de
+ * retirada nunca aplica (mismo premisa que `tauriCatalogListRetiredBindingRootsDouble`).
+ */
+export async function tauriCatalogApplyReconcileDouble(
+  dbPath: string,
+  input: DesktopCatalogReconcileInput,
+): Promise<DesktopCatalogReconcileResult> {
+  const rows = rowsFor(dbPath)
+  const changed: string[] = []
+  for (const binding of input.upserts) {
+    const prior = rows.get(binding.documentId)
+    const unchanged =
+      prior !== undefined &&
+      prior.relativePath === binding.relativePath &&
+      prior.canonicalPath === binding.canonicalPath &&
+      prior.inode === binding.inode &&
+      prior.contentHash === binding.contentHash
+    if (!unchanged) changed.push(binding.documentId)
+    // A physical directory has one binding-root identity: resolve by path first.
+    const bindingRootId = bindingRootIdsByRoot.get(binding.rootPath) ?? binding.bindingRootId
+    rows.set(binding.documentId, {
+      ...(prior ?? {
+        id: binding.documentId,
+        cloudPresent: false,
+        cloudAccountId: null,
+        syncStatus: "local-only",
+        slug: null,
+        status: null,
+        artifactType: null,
+        visibility: null,
+        version: null,
+        deletedAt: null,
+        createdAt: binding.createdAt,
+        excerpt: null,
+        excerptContentHash: null,
+      }),
+      localPresent: true,
+      modifiedAt: binding.modifiedAt,
+      title: prior && prior.cloudPresent ? (prior.title ?? binding.title) : binding.title,
+      bindingRootId,
+      relativePath: binding.relativePath,
+      canonicalPath: binding.canonicalPath,
+      inode: binding.inode,
+      contentHash: binding.contentHash,
+      size: binding.size,
+      lastSeenAt: binding.lastSeenAt,
+    } as DesktopCatalogRow)
+  }
+  for (const id of input.detached) {
+    const prior = rows.get(id)
+    if (!prior) continue
+    if (prior.localPresent) changed.push(id)
+    rows.set(id, {
+      ...prior,
+      localPresent: false,
+      bindingRootId: null,
+      relativePath: null,
+      canonicalPath: null,
+      inode: null,
+      contentHash: null,
+      size: null,
+      lastSeenAt: null,
+      excerpt: null,
+      excerptContentHash: null,
+    })
+  }
+  return { applied: true, changed }
+}
+
+/** Espejo de `catalog_list_binding_root_documents`: las filas ligadas a una raíz, por ruta relativa. */
+export async function tauriCatalogListBindingRootDocumentsDouble(
+  dbPath: string,
+  bindingRootId: string,
+): Promise<DesktopCatalogRow[]> {
+  return [...rowsFor(dbPath).values()]
+    .filter((row) => row.bindingRootId === bindingRootId)
+    .sort((a, b) => (a.relativePath ?? "").localeCompare(b.relativePath ?? ""))
+}
+
 export async function tauriCatalogResolvePathDouble(dbPath: string, path: string): Promise<DesktopCatalogRow | null> {
   await passCatalogReadGates(path)
   for (const row of rowsFor(dbPath).values()) {
@@ -609,6 +800,17 @@ export async function tauriCatalogActivateBindingRootDouble(): Promise<void> {}
  */
 export async function tauriCatalogReactivateBindingRootDouble(): Promise<DesktopCatalogRow[]> {
   return []
+}
+
+/**
+ * Same premise, for collections: no test using this double creates a
+ * collection (there is no double for `catalog_save_collection`), so the
+ * catalog's collection snapshot is really empty. The editor's Properties panel
+ * reads it on open (`WritingCollectionsSection` → `loadDesktopCollections`),
+ * which is on the path to Export (EXP-05, ODE-601).
+ */
+export async function tauriCatalogListCollectionSnapshotDouble(_dbPath: string): Promise<DesktopCatalogCollectionSnapshot> {
+  return { collections: [], writingCollections: [] }
 }
 
 export async function tauriCatalogDetachLocalFileDouble(dbPath: string, id: string): Promise<void> {
