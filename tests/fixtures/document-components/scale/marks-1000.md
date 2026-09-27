@@ -997,4 +997,3 @@
 <Entity id="ent-499" type="company" ref="https://example.com/499">Aplyca 499</Entity> and <Highlight color="amber">passage 499</Highlight>
 
 <Entity id="ent-500" type="person"><Highlight color="green">**bold** mention 500</Highlight></Entity>
-

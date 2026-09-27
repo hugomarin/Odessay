@@ -62,7 +62,7 @@ Known trap: `body` carries `@apply bg-bg text-ink`. The marketing wrapper sets i
 
 | Phase | Deliverable | Gate |
 | --- | --- | --- |
-| A1 | `[data-layer="marketing"]` tokens + `@theme` entries + group layout + both skill files | no app route changes by a pixel (before/after captures of `/desk` and `/write/[id]`) |
+| A1 | `[data-layer="marketing"]` tokens + `@theme` entries + group layout + `skill-design` with its marketing specialties | no app route changes by a pixel (before/after captures of `/desk` and `/write/[id]`) |
 | A2 | `ArrowLink`, `SectionHeader`, `Panel`, `ShotFrame`, `MarketingNav` | grep of the diff: zero `shadow-float`, `bg-card`, `bg-sb`, `text-ink-`, `rounded-[8px|10px|12px]` under `components/marketing/` |
 | A3 | Static sections: hero, what it does, panels, notes, method, CTA, footer; captures into `public/marketing` via `next/image` | `ArrowLink` on one line at 1320/1100/900; no CLS from captures |
 | A4 | Graphics: problem map, "Up close" cards, Voices panel | zero chip overlap at 1320/1100/960; % crops; aspect-ratio held |

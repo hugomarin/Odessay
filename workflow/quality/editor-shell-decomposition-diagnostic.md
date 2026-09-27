@@ -1,0 +1,394 @@
+# Editor Shell — Diagnóstico de descomposición
+
+`components/editor/editor-shell.tsx` es el mayor riesgo estructural del código y su deuda más grande. La intención es romperlo en piezas con responsabilidad específica, pero **no antes de tener cobertura que sirva como red de seguridad** — refactorizar a ciegas un archivo de este tamaño es cómo se rompen invariantes en silencio.
+
+Este documento es el diagnóstico previo: qué hay realmente ahí dentro, qué cobertura existe hoy, por qué la que existe no sirve como red, y qué hace falta construir antes de mover la primera pieza.
+
+**No** es el plan de extracción detallado. Ese se escribe cuando la red exista, y su contenido depende de lo que la red revele.
+
+**Snapshot de la medición**
+```text
+Fecha:   2026-09-22
+Commit:  e8889942 (main)
+Método:  inventario de declaraciones + conteo mecánico sobre el archivo real,
+         no estimación sobre el mapa de capabilities
+```
+
+---
+
+## 1. Qué hay dentro
+
+```text
+7,324 líneas
+   63 useEffect        92 useCallback        30 useRef        ~60 useState
+  602 lecturas de `<algo>Ref.current`
+   19 efectos cuya única función es copiar estado a un ref
+    8 llamadas directas a localDB.correctionBlocks (deuda ya declarada en components/editor/AGENTS.md)
+```
+
+**Actualización (2026-09-23, ODE-558):** la cola automática de correcciones resultó ser **código inalcanzable** y se eliminó. El archivo y el cluster quedan así:
+
+```text
+6,664 líneas        (-660)
+   61 useEffect     (-2)    84 useCallback (-8)    19 useRef (-11)
+  481 lecturas de refs      (-121)
+  305 referencias a corrections   (-228, era el cluster más grande)
+    8 llamadas directas a localDB.correctionBlocks   (sin cambio: todas viven en el camino manual)
+```
+
+**Actualización (2026-09-23, ODE-562 — primer corte, hidratación):** el efecto de hidratación (~456 líneas) salió tal cual a `hooks/useDocumentHydration.ts`. Mudanza mecánica: mismas 12 dependencias y mismas guardas de generación; la shell llama al hook en la posición que ocupaba el efecto y los refs espejo siguen siendo suyos. Diferencias medidas contra `main` con el mismo método antes y después:
+
+```text
+6,265 líneas        (-399)
+   60 useEffect     (-1)
+  -25 lecturas de refs (el efecto las lleva consigo; siguen leyendo los mismos refs)
+    8 llamadas directas a localDB.correctionBlocks   (sin cambio, a propósito: las dos de la
+                                                      hidratación se inyectan desde la shell, donde
+                                                      la deuda está declarada; pagarla es el corte 2)
+```
+
+La red que lo protege: 4a, 4b, los humos desktop y corrections, ODE-464 y los barridos de ODE-561, más dos pruebas nuevas previas al corte (restauración de selección, STATE-07, y admisión de sugerencias hidratadas desde caché). Las tres mutaciones de referencia se repitieron sobre el hook y siguen poniéndose en rojo. La regla `ui-no-direct-persistence` escanea ahora también `hooks/`.
+
+**Actualización (2026-09-24, ODE-586 — corte 2, entrega 1):** las 8 llamadas directas a `localDB.correctionBlocks` de la shell pasan por su dueño canónico, `lib/corrections/persistence.ts` (`readLocalCorrectionBlocks`, `saveLocalCorrectionBlock`, `deleteLocalCorrectionBlocks`). El baseline de `ui-no-direct-persistence` queda vacío. Sin cambio de comportamiento; la mudanza del cluster a un hook es la entrega 2.
+
+**Actualización (2026-09-24, ODE-586 — corte 2, entrega 2a):** el estado de sugerencias, su admisión y la caché de bloques de corrección salen tal cual a `hooks/useCorrectionBlocks.ts` (batcher, `applyCorrectionSuggestionUpdate`, admisión, `persistCorrectionBlockWriteThrough`, `updatePersistedBlocksFromSuggestions`, `deletePersistedBlocksForPosition`, `flushPendingCorrectionBlocks`…). Mudanza mecánica, como ODE-562: sin efectos, así que el orden de efectos de la shell no cambia; el estado y los refs siguen siendo de la shell. Antes se añadió la red que faltaba, aceptar y rechazar una corrección por la shell (`tests/editor-shell-corrections-accept.test.tsx`, AI-05/AI-06). Contra la entrega 1, con el mismo método:
+
+```text
+6,121 líneas        (-249)
+   80 useCallback   (-10)
+  228 referencias a corrections   (-58)
+```
+
+La segunda mitad del cluster (aplicar, aceptar, rechazar, aprender palabra, el toast, el cableado de `useManualCorrections` y la invalidación por edición) es la entrega 2b.
+
+**Actualización (2026-09-24, ODE-586 — corte 2, entrega 2b):** la segunda mitad sale en dos hooks, cada uno llamado donde estaba su código, porque en la shell vivía en dos bloques separados y juntarlos habría obligado a reordenarla:
+
+- `hooks/useCorrectionActions.ts`: aplicar (rich y markdown), aceptar, rechazar, aceptar o rechazar todas, aprender y olvidar palabras, y el toast. Solo callbacks.
+- `hooks/useCorrectionLifecycle.ts`: los espejos de sugerencias y palabras aprendidas, la carga de palabras aprendidas, `useManualCorrections`, la invalidación por edición, el volcado al recuperar la conexión y las acciones en línea desde las decoraciones. Sus efectos corren en el mismo orden y en la misma posición.
+
+Mudanza mecánica. El estado y los refs siguen siendo de la shell. Sale también `getBlockSuggestions`, que nadie usaba. Contra la entrega 2a:
+
+```text
+5,500 líneas        (-621)
+   45 useEffect     (-6)
+   68 useCallback   (-12)
+  122 referencias a corrections   (-106)
+```
+
+Con esto el cluster de correcciones queda fuera de la shell. Lo pendiente es de estado, no de sitio:
+
+- **Los espejos** de sugerencias y palabras aprendidas siguen existiendo; ahora viven en el hook.
+- **Aceptar y rechazar están duplicados**: la versión del panel y la versión en línea desde las decoraciones tienen cada una su lógica.
+- **Sin prueba:** el volcado de bloques pendientes al recuperar la conexión no tiene ninguna.
+
+**Actualización (2026-09-25, ODE-587 — corte 3, entrega 1a):** los handlers de pestaña salen tal cual a `hooks/useWorkspaceTabs.ts`: seleccionar, cerrar, cerrar otras o todas, mostrar el archivo, renombrar (también desde una pestaña de fondo) y reordenar, más el estado editorial que dibuja cada pestaña. La shell los llama donde empezaba ese bloque; entre su primer handler y su último efecto no había otro efecto, así que el orden no cambia. Antes se añadió la red que faltaba para las dos piezas sin prueba (`tests/editor-shell-workspace-tabs.test.tsx`). Cerrar con un guardado pendiente y activar la siguiente pestaña al cerrar solo los prueba #494 (ODE-574), verificado sobre el código combinado. El resto del cluster (restaurar la sesión, publicar el estado de la pestaña, crear pestaña, abrir un documento del workspace) vive en otros bloques de la shell y va en entregas siguientes. Contra la entrega 2b de ODE-586:
+
+```text
+5,247 líneas        (-253)
+   43 useEffect     (-2)
+   60 useCallback   (-8)
+```
+
+**Actualización (2026-09-25, ODE-587 — corte 3, entrega 1b):** la entrada a la sesión sale tal cual a `hooks/useSessionRestore.ts`, con sus tres efectos consecutivos, en el mismo orden y en la misma posición:
+
+- abrir la pestaña del documento de la ruta;
+- restaurar la sesión persistida;
+- la identidad ansiosa de un `/write` en blanco en web.
+
+Los helpers puros del módulo de la shell (`navigateToWriting`, `deriveAutoTitle`, `isPerfHarness`) llegan por `input` para no crear un ciclo de imports. El efecto que activa el documento de la ruta y el espejo `activeEditorTabIdRef` (la excepción declarada del ADR) se quedan en la shell. Abrir la pestaña de la ruta no tiene ningún efecto observable distinto de la publicación de la pestaña en los escenarios probados: sin él, esa publicación crea la pestaña igual.
+
+**Actualización (2026-09-25, ODE-587 — corte 3, entrega 1c):** abrir documentos en pestañas sale tal cual a `hooks/useWorkspaceTabOpening.ts`, en el mismo orden y llamado donde empezaba ese bloque:
+
+- crear pestaña ("New Artifact": borrador efímero en desktop, identidad local nueva en web);
+- abrir un documento desde el árbol del workspace;
+- pasar a la pestaña contigua con el teclado;
+- la creación forzada de `/write?new`.
+
+Antes se añadió la red que faltaba en `tests/editor-shell-workspace-tabs.test.tsx`: el atajo de pestaña siguiente y "New Artifact" en web. Abrir desde el árbol del workspace sigue sin prueba, porque el árbol necesita los dobles de settings de desktop que llegan con #492. Contra la entrega 1b:
+
+```text
+4,910 líneas        (-181)
+   39 useEffect     (-1)
+   58 useCallback   (-2)
+```
+
+**Actualización (2026-09-24, ODE-563 — segundo tiempo del primer corte):** los 9 metadatos del documento (título, título explícito, versión, fecha de creación, slug, estado, tipo, visibilidad, ciclo de vida) tienen ahora un solo dueño, `applyDocumentMetadata`, que escribe estado y ref en el mismo paso. Se eliminaron sus 9 efectos espejo y todas sus escrituras a mano; `writingSlugRef` desapareció, porque nadie lo leía. Contra `main`, con el mismo método:
+
+```text
+6,255 líneas        (-10; el dueño único compensa casi todo lo que se borró)
+   51 useEffect     (-9)
+    8 efectos espejo restantes   (17 → 8; quedan identidad, modo, pestaña activa,
+                                  TOC y los de correcciones/learned words)
+  -22 lecturas de refs
+```
+
+Lo que importa no es el recuento de líneas: los refs de metadatos ya no pueden llevar el valor del documento anterior entre una escritura y el commit siguiente. Efecto colateral: el menú Abrir archivo leía `titleRef` justo después de `setTitle` y le ponía a la pestaña nueva el título del documento anterior; ahora lee el nuevo.
+
+**Actualización (2026-09-24, ODE-564 — identidad del documento activo):** `currentWritingId` y `currentWritingIdRef` tienen ahora un solo dueño, `setActiveWritingId`. Antes, 21 sitios escribían el ref a mano y un efecto espejo lo reescribía tras cada commit. Contra `main`:
+
+```text
+6,251 líneas
+   50 useEffect     (-1)
+    7 efectos espejo restantes   (8 → 7)
+   19 → 1   escrituras de currentWritingIdRef en la shell (la del dueño)
+```
+
+La ventana en la que un espejo pendiente devolvía el ref al documento anterior **no resultó observable** por el camino de usuario: el barrido de ventanas de commit pasaba contra `main`, y ningún efecto posterior al espejo lee la identidad de forma síncrona. El cambio se justifica por quitar la dualidad. La calibración mostró además que el espejo era, en la práctica, la red de seguridad de cualquier escritor que olvidara el ref; con el dueño único esa red deja de hacer falta, porque no queda ninguna escritura fuera de él.
+
+El tamaño no es el hallazgo — `components/editor/AGENTS.md` ya establece que el tamaño por sí solo no es un finding de review. Los dos números que importan son los del medio.
+
+**Actualización (2026-09-26, ODE-598 — limpieza tras los cortes 1–3, sin cambio de producto):** los cortes 1–3 y sus follow-ups están en `main`. Estado actual medido sobre el archivo real con el mismo método:
+
+```text
+5,090 líneas
+   40 useEffect      60 useCallback      26 useState      20 useRef
+```
+
+Los 7 hooks extraídos por los cortes, en orden de llamada en la shell:
+
+```text
+L1204  useCorrectionBlocks      (ODE-586, corte 2 entrega 2a)
+L1863  useSessionRestore        (ODE-587, corte 3 entrega 1b)
+L2109  useDocumentHydration     (ODE-562, corte 1)
+L2303  useCorrectionActions     (ODE-586, corte 2 entrega 2b)
+L3552  useCorrectionLifecycle   (ODE-586, corte 2 entrega 2b)
+L3981  useWorkspaceTabs         (ODE-587, corte 3 entrega 1a)
+L4082  useWorkspaceTabOpening   (ODE-587, corte 3 entrega 1c)
+```
+
+(Siguen viviendo en la shell, previos a los cortes y fuera de su alcance: `useEditor` de TipTap, `useEditorSelection`, los de menú/cierre de Tauri y los de stores. No se cuentan como extraídos.)
+
+Los 7 efectos espejo que quedan, con su línea (el conteo mecánico de `scripts/report-active-document-carriers.mjs` dice 6 porque su patrón no ve el `?? null` de L1570; a mano son 7, los mismos 7 que dejó ODE-564):
+
+```text
+L764   reconcileActiveSaveStateRef.current = reconcileActiveSaveState
+L1569  editorInstanceRef.current = editor ?? null
+L1603  tableOfContentsItemsRef.current = tableOfContentsItems
+L1607  activeTableOfContentsItemIdRef.current = selectedTableOfContentsItemId
+L1785  modeRef.current = mode
+L1853  activeEditorTabIdRef.current = editorSession.active_tab_id   (la excepción declarada del ADR)
+L3540  currentDocumentMarkdownRef.current = currentDocumentMarkdown
+```
+
+Los cortes que faltan, con su issue:
+
+```text
+3b  ODE-599  hecha (entrega 2): cambios externos a hook; menú y cierre se quedan en la shell (sus callbacks van con su dueño natural: apertura/guardado)
+4a  ODE-602  red y extracción del chrome (TOC, focus mode, find/replace, visor de imagen, paneles y modales)
+4b  ODE-603  red y extracción de los comandos (handleRunAction e inserts de link/tabla/imagen)
+5   ODE-605  extraer el cluster de guardado/persistencia
+6   ODE-607  extraer anotaciones/selección
+7   ODE-609  un solo dueño para los espejos que quedan + ratchet de arquitectura
+```
+
+(El cierre —medir, actualizar diagnóstico y mapa, dejar el estado final— es ODE-610. La enmienda del dueño de `activeEditorTabIdRef` es ODE-608.)
+
+ODE-598 no mueve líneas de producto: quita los rodeos de ODE-577 en 4 tests de la shell desktop (ahora actúan determinísticamente pre-carga, sin espera de sesión ni reapertura por ruta), re-exige la aserción de nombre in-flight de ODE-585, y deja la fila STATE-07 del capability map en `INTEGRATION` con su prueba citada. La red para los cortes 3b–7 queda así: `tests/editor-shell-selection-restore.test.tsx` (STATE-07), `tests/editor-shell-draft-adoption-desktop.test.tsx` (ODE-577) y los 4 archivos sin rodeos.
+
+**Actualización (2026-09-27, ODE-602 — corte 4a, entrega 1: la red del chrome):** sin cambio de producto. Cuatro archivos nuevos montan la shell (web) y conducen el chrome por sus entradas reales —atajos sobre `window`, botones del status bar, de la cabecera de la hoja y del panel, el node view de la imagen—, leyendo lo guardado en `localDB` cuando la propiedad es de persistencia:
+
+```text
+tests/editor-shell-chrome-toc.test.tsx            TOC: encabezados del activo, cambio de documento,
+                                                   click → cursor, activo por scroll, caso de coste
+tests/editor-shell-chrome-find-replace.test.tsx   resaltado, Replace/Replace all → sucio y guardado,
+                                                   cambio de documento con la búsqueda abierta
+tests/editor-shell-chrome-focus-panels.test.tsx   focus mode (selección, contenido, restauración),
+                                                   closeActivePanel y precedencia de Escape
+tests/editor-shell-chrome-modals.test.tsx         visor de imagen; renombrar e insertar imagen
+                                                   sobre el documento activo
+```
+
+Cada caso se validó con una mutación que lo pone en rojo por la razón esperada. Dos observaciones de esa calibración:
+
+- **La TOC tiene dos defensas al cambiar de documento**, no una: el vaciado de `tableOfContentsItems` al cambiar `currentWritingId` y la propia extensión TableOfContents, que vuelve a emitir con el `setContent` del documento nuevo. Quitar solo una deja la prueba verde.
+- **El caso de coste de la TOC** es una ráfaga de cinco teclas dentro de un encabezado: hoy produce un solo recálculo visible (el debounce de 180ms). Sin el debounce, cinco.
+
+**Bug encontrado — ODE-630.** En rich mode, `richFindMatches` se memoriza con `editor` (la misma instancia durante toda la vida de la shell) y no con el documento. Replace y Replace all insertan en las posiciones de ese memo rancio: dos Replace seguidos corrompen el texto, y tras cambiar de pestaña con la búsqueda abierta "Replace all" escribe en el documento nuevo con las posiciones del anterior, y se guarda. Sus dos casos quedan como `it.fails` y la mudanza no los arregla.
+
+**Actualización (2026-09-27, ODE-602 — corte 4a, entrega 2: la mudanza del chrome):** mudanza mecánica a tres hooks, cada uno llamado donde estaba su código, con el estado y los refs en la shell:
+
+- `hooks/useFocusMode.ts`: entrar, salir y alternar (solo callbacks).
+- `hooks/useTableOfContents.ts`: los dos espejos de la TOC, tal cual (su dueño lo decide ODE-609), descartar el item activo que desaparece, seguir el scroll y llevar el cursor al encabezado pulsado. Sus cuatro efectos en el mismo orden y posición.
+- `hooks/useFindReplace.ts`: coincidencias, decoraciones, abrir/cerrar, navegar y reemplazar. Se llama justo detrás del efecto que publica el estado de la pestaña: sus memos vivían delante de ese efecto, que no los lee, y sus efectos detrás. El bug de ODE-630 viaja tal cual. `handleRunAction`, más arriba, abre la búsqueda por una declaración de función elevada que delega en el hook, como hacía la declaración original.
+
+Se quedan en la shell, por triviales (menos de 20 líneas y un estado) o porque moverlos cambiaría el orden de efectos: los dos callbacks que la extensión TableOfContents necesita al crearse y su debounce, los dos efectos de limpieza de ese debounce, la clase de focus mode en `<body>`, el visor de imagen (abrir, cerrar y limpiarlo al cambiar de documento), `closeActivePanel` y `openInsertImageModal`. El manejador de teclado (Escape y atajos) es de los comandos, corte 4b (ODE-603). La red de la entrega 1 pasa idéntica antes y después, y sus mutaciones se repitieron sobre los hooks. Contra `main` (`be1ebf4b`), con el mismo método:
+
+```text
+4,628 líneas        (-464)
+   33 useEffect     (-7)
+   52 useCallback   (-8)
+   11 useMemo       (-3)
+    5 efectos espejo en la shell   (7 → 5; los dos de la TOC viven ahora en su hook)
+```
+
+**Actualización (2026-09-27, ODE-599 — corte 3b, entrega 2: la conexión con desktop):** la reacción a cambios externos sale tal cual a `hooks/useExternalDocumentChanges.ts`, llamado donde estaba el efecto (entre `useSessionRestore` y `useDocumentHydration`), así que el orden de efectos no cambia. Se mueven:
+
+- la suscripción al catálogo del documento activo (borrado, movimiento y cambio de contenido), con la proyección del estado durable de sync de ODE-542;
+- los dos manejadores del banner de conflicto ("Reload external" y "Keep my version").
+
+El estado (`externalFileNotice`, `externalContentConflict`), los refs y `persistEditorSnapshot` siguen siendo de la shell y llegan por `input`; los tipos `ExternalFileNotice` y `ExternalContentConflict` viven ahora en el hook. No se crean envoltorios sobre `useTauriCloseGuard`/`useTauriEditorMenuEvents`/`useTauriMenuEvents`: sus callbacks (`handleMenuOpenFile`, `handleMenuNewFile`, `handleSaveToDisk`, `settleBeforeClose`) se quedan en la shell, como estaban; moverlos es de su dueño natural (apertura/guardado, cortes 5 y 7). `publishTabState` también se queda: publica metadatos de la pestaña activa y su dueño se decide en el corte 7 (espejos, ODE-609); el ADR del documento activo fija su contrato (solo metadatos, nunca crea/activa/reemplaza pestañas). La red (`tests/editor-shell-external-changes-desktop.test.tsx`) pasa idéntica (8 passed) sin tocar sus tests, el conteo de suscripciones vivas y de lecturas por evento no cambia, y dos mutaciones en vivo sobre el hook (quitar el banner, no persistir en "Keep my version") ponen en rojo sus casos. Contra `main` (`9efb5fa0`), con el mismo método:
+
+```text
+4,521 líneas        (-216)
+   32 useEffect     (-1)
+   53 useCallback   (sin cambio; los manejadores inline pasan a useCallback en el hook)
+   19 useRef        (sin cambio)
+   26 useState      (sin cambio)
+   11 useMemo       (sin cambio)
+```
+
+Los 11 hooks extraídos por los cortes, en orden de llamada en la shell:
+
+```text
+L762   useFocusMode               (ODE-602, corte 4a entrega 2)
+L1165  useCorrectionBlocks        (ODE-586, corte 2 entrega 2a)
+L1576  useTableOfContents         (ODE-602, corte 4a entrega 2)
+L1765  useSessionRestore          (ODE-587, corte 3 entrega 1b)
+L1788  useExternalDocumentChanges (ODE-599, corte 3b entrega 2)
+L1848  useDocumentHydration       (ODE-562, corte 1)
+L2043  useCorrectionActions       (ODE-586, corte 2 entrega 2b)
+L3305  useCorrectionLifecycle     (ODE-586, corte 2 entrega 2b)
+L3376  useFindReplace             (ODE-602, corte 4a entrega 2)
+L3431  useWorkspaceTabs           (ODE-587, corte 3 entrega 1a)
+L3534  useWorkspaceTabOpening     (ODE-587, corte 3 entrega 1c)
+```
+
+Los 5 efectos espejo que quedan son los mismos que dejó ODE-602; este movimiento no los toca:
+
+```text
+L752   reconcileActiveSaveStateRef.current = reconcileActiveSaveState
+L1541  editorInstanceRef.current = editor ?? null
+L1688  modeRef.current = mode
+L1756  activeEditorTabIdRef.current = editorSession.active_tab_id   (la excepción declarada del ADR)
+L3294  currentDocumentMarkdownRef.current = currentDocumentMarkdown
+```
+
+**Actualización (2026-09-27, ODE-603 — corte 4b, entrega 1: la red de los comandos):** sin cambio de producto. `tests/editor-shell-commands.test.tsx` recorre **cada acción de `EditorShortcutAction`** (41) con una tabla tipada `satisfies Record<EditorShortcutAction, …>` — una acción nueva sin fila rompe `tsc` — y `it.each` sobre la propia tabla, sin copia de la lista. Cada fila entra por su **entrada real**: el `keydown` de `window` que traduce `getEditorShortcutAction` para los comandos con atajo, el canal `menu:<acción>` del menú nativo (desktop) para los que solo existen ahí, y el formulario real de cada modal para link, tabla, imagen y footnote. Los modos se cambian con los botones reales "Rich"/"Markdown" de la status bar.
+
+Qué fija, por modo. La tabla **no declara modos**: el runner recorre cada fila en ambos (Rich primero, Markdown después) y una fila sin aserción de Markdown rompe `tsc`:
+
+```text
+24 acciones con rama en ambos modos   rich y markdown, cada una con su aserción del efecto
+ 6 acciones sin rama Markdown         rich con efecto; markdown fija el no-op actual (control
+   (codeBlock, horizontalRule,        positivo en el mismo test), más un it.fails por comando
+   clearStyles, copyAsMarkdown,       que documenta el bug vigente ODE-632
+   copyAsHtml, date)
+17 acciones globales / de menú        rich y markdown, cada una con su transición observable
+                                       en Markdown (navegación contada por pasada, panel,
+                                       pestaña, cookie, modal o borrador), no con el mismo
+                                       chequeo repetido
+```
+
+`focusMode` es la única fila con `freshMountPerMode`: activar el foco oculta la status bar, que es la entrada real del cambio de modo, así que cada modo arranca de un montaje limpio. El driver de modo (`setMode`) verifica su propio efecto y reintenta el click del botón real hasta 10 s: tras cambiar de pestaña, el click puede caer mientras el shell hidrata (el `editor` todavía es null y `handleToggleMode` retorna sin cambiar de modo) — la flake de `nextTab`/`prevTab` bajo carga que la ronda de corrección encontró y fijó.
+
+Persistencia real en una muestra por familia — formato (`bold`), inserción (`table`) y nota (`footnote`) — afirmada sobre `localDB` en web y sobre el `.md` en desktop. `handleBackupLocalImage` corre entero en desktop por su entrada real (botón del node view de la imagen local → modal → `backUpLocalImage` → sustitución del src y persistencia en el `.md`). Mutaciones: renombrar el `case "<acción>"` de producción pone en rojo el caso de esa acción (barrido 41/41 en la ronda inicial, barrido de las 17 globales en la ronda de corrección); invertir `if (modeRef.current === "markdown")` en `handleRunAction` pone en rojo `bold` en ambos modos; y un `return` temprano para `markdown` antes del despacho global puso rojas las 17 aserciones nuevas de Markdown, cada una por su propia etiqueta (no por timeout de montaje).
+
+**Bug encontrado — ODE-632 (Medium).** En modo Markdown, `codeBlock` y `horizontalRule` (cuyo atajo la ayuda publica como disponible en ambos runtimes) y los de menú `clearStyles`/`copyAsMarkdown`/`copyAsHtml`/`date` no tienen rama y caen en `default: return`: el comando queda mudo. La toolbar sigue visible en Markdown y su "Text → Code" es clickeable y no hace nada. La red fija el no-op actual (para que la mudanza no lo cambie) y seis `it.fails` documentan el efecto esperado; no se arregla en este corte.
+
+## 2. Hallazgo 1 — cada dato tiene dos dueños
+
+Diecinueve efectos existen solo para mantener una copia sombra del estado en un ref: `title → titleRef`, `version → versionRef`, `lifecycle → lifecycleRef`, y así con unos veinte campos. Y hay 602 puntos donde el código lee la sombra en vez del estado.
+
+La razón es legítima: los handlers de larga vida (guardado diferido, cola de correcciones, eventos de Tauri, callbacks de `requestAnimationFrame`) capturan valores viejos en su closure, y el ref es la forma de leer el valor actual. Pero la consecuencia es que **toda extracción tiene que decidir cuál de las dos copias es canónica**, y equivocarse no rompe la compilación ni los tests: produce una carrera.
+
+Es exactamente la `Transición co-owned` que el `AGENTS.md` local prohíbe, ya materializada ~20 veces. ODE-555 es el caso vivo: `finishHydration()` se llamaba en el mismo tick en que se *agendaba* el rAF del restore, la cancelación de generación ganaba la carrera y el scroll se perdía sin error, sin excepción y sin remount.
+
+## 3. Hallazgo 2 — la red actual lleva los ojos vendados
+
+Tres tests montan el shell:
+
+```text
+tests/editor-shell-tab-switch-persistence.test.tsx     924 líneas   40 vi.mock
+tests/editor-empty-draft-persistence.test.tsx        1,425 líneas   42 vi.mock
+tests/editor-save-to-disk-relocate.test.tsx            430 líneas   40 vi.mock
+```
+
+Tres problemas, en orden de gravedad:
+
+1. **Los tres doblan `@tiptap/react`.** El editor es un stub que solo captura `onUpdate`. Ninguna de las tres puede detectar una regresión en selección, cursor, scroll o transacciones — justo la clase de bug de ODE-555. Lo único que cubre eso son 8 specs de Playwright.
+2. **Doblan piezas propias**, no solo boundaries externos: `@/lib/corrections/persistence`, `@/lib/editor/suggestion-engine`, `@/lib/local-db`, `@/lib/editor/extensions`. Un test que sustituye nuestras propias piezas no prueba que encajen entre sí; prueba que encajan con dobles que escribimos nosotros. Viola la regla 3 de `capability-proof-contract.md`.
+3. **No hay andamiaje compartido.** En el primero, la primera prueba real empieza en la **línea 461**: 460 líneas de montaje antes de la primera assertion, repetidas a mano en los otros dos con variaciones. Una prueba nueva cuesta hoy cientos de líneas de decorado, y los tres decorados no son idénticos — una prueba puede estar verde porque su decorado es más blando que el de al lado.
+
+## 4. Hallazgo 3 — cuatro de ocho clusters no se ejercitan por el shell
+
+| Cluster | Peso aprox. | Capabilities | Cobertura vía shell |
+|---|---|---|---|
+| Correcciones (persistencia y aplicación de sugerencias del análisis manual) | ~305 refs *(era ~533; ODE-558 eliminó la cola automática inalcanzable)* | AI-05 | humo del camino real (`editor-shell-corrections-path.test.tsx`), aislamiento entre documentos (`editor-shell-corrections-isolation.test.tsx`, ODE-559) y aceptar/rechazar por la shell (`editor-shell-corrections-accept.test.tsx`, ODE-586) |
+| Save / persistencia | ~317 refs | WATCH-07, DOC-02/03/06 | **ninguna** (el coordinator sí, por debajo) |
+| Hidratación / identidad | ~104 refs, 7 efectos | STATE-01/03/04/05 | 1 e2e + unit del coordinator |
+| Find / replace | ~122 refs | — | unit de `lib/editor/find-replace.ts`; por la shell desde ODE-602: resaltado, Replace/Replace all hasta lo guardado y cambio de documento con la búsqueda abierta (`editor-shell-chrome-find-replace.test.tsx`), con un bug real fijado como `it.fails` (ODE-630) |
+| Desktop wiring (canonical path, conflicto externo, open-file, menús, close guard) | ~103 refs | WATCH-07, WS-* | reacción a cambios externos (limpio, sucio con sus dos botones, borrado, movimiento, cambio de pestaña a mitad) y guardia de cierre por la shell con la cadena real watcher → reconciliador → catálogo (`editor-shell-external-changes-desktop.test.tsx`, ODE-599); open-file y Save As por ODE-581/ODE-574 |
+| Anotaciones / selección | ~90 refs | ANN-04/05 | 1 e2e |
+| Tabs / sesión / catálogo | ~62 refs | STATE-05, STATE-08 | unit del store, no el seam al shell |
+| Chrome (TOC, modales, focus mode) | ~106 refs | — | por la shell desde ODE-602: TOC (`editor-shell-chrome-toc`), focus mode y paneles (`editor-shell-chrome-focus-panels`), visor de imagen y modales de renombrar e insertar imagen (`editor-shell-chrome-modals`) |
+
+Nueve filas del capability map nombran este archivo (o el hook que salió de él) en su chain o su evidencia: **AI-05, EXP-05, STATE-01, STATE-03, STATE-04, STATE-05, STATE-07, STATE-08, WATCH-07**. De ellas, cuatro están en `PARTIAL_INTEGRATION` o `NONE`, y en tres el tramo no probado **es precisamente este archivo**:
+
+- **STATE-05** — el seam `store → EditorShell` (aplicación al DOM) es literalmente el gap declarado de la fila.
+- **EXP-05** — `exportBinary`/`exportMarkdown` del shell nunca se conectan al `saveBinaryArtifact` ya probado.
+- **WATCH-07** — que el shell siembre el `content_hash` base correcto al abrir no lo prueba nadie; el proof de integración lo siembra a mano y lo documenta como tal. *(ODE-599: la red de la shell ya lo ejercita —la línea base la siembra la primera lectura del catálogo tras abrir por el opener real— y encontró dos bugs reales: la clasificación limpio/sucio tras un autosave rechazado, ODE-627, y, en el orden de producción, que el Open File fuera de todo Workspace no refresca el watcher, ODE-628. Ambos están arreglados y sus casos son `it` de nuevo, sin tocar el cuerpo; la reacción de la shell vive desde la entrega 2 en `hooks/useExternalDocumentChanges.ts`. Ver la fila del mapa.)*
+
+(STATE-07 salió de esta lista en ODE-598: el restore de cursor/selección vive desde ODE-562 en `hooks/useDocumentHydration.ts` y lo ejercita `tests/editor-shell-selection-restore.test.tsx`; ver la fila del mapa.)
+
+## 5. Hallazgo 4 — el editor real sí corre fuera del navegador
+
+No hay obstáculo técnico para una red fiel: **12 tests usan TipTap real** (no doblan `@tiptap/react`), y **6 de ellos instancian un `Editor` completo** con las extensiones reales — `tests/highlight-annotation.test.ts`, `tests/footnotes-perf.test.ts`, `tests/lib/editor/desktop-document-engine.test.ts`, `tests/lib/editor/local-image-extension.test.ts`, `tests/lib/editor/image-markdown-roundtrip.test.ts`, `tests/lib/editor/image-presentation-viewer.test.ts` — bajo `@vitest-environment happy-dom`, el mismo entorno que ya declaran los tests del shell.
+
+Que el shell use un stub fue una decisión de comodidad, no una limitación de la plataforma.
+
+---
+
+## Plan
+
+### Fase 0 — Banco de pruebas (harness)
+
+Un módulo compartido (`tests/support/editor-shell-harness.ts` o equivalente) que monte `EditorShell` en una llamada.
+
+**Real:** el editor de TipTap con las extensiones reales, el store de sesión, `PersistenceCoordinator`, `lib/corrections/persistence`, la base local (`fake-indexeddb`), el `document-service` sobre un directorio temporal real cuando el escenario sea desktop.
+
+**Doblado — solo lo que no cabe en la terminal:** la nube (Supabase/red), el transporte nativo de Tauri, los diálogos nativos del sistema operativo, el proveedor de AI. El objetivo explícito es pasar de ~40 dobles a unos pocos.
+
+**Criterio de aceptación:** las tres pruebas existentes reescritas sobre el harness, verdes, sin su decorado propio. Si alguna se cae al quitarle el stub del editor, **eso es un hallazgo, no un contratiempo** — significaba que estaba verde por el decorado.
+
+Esta fase no produce cobertura nueva. Es la inversión que hace que las ~8 pruebas siguientes cuesten decenas de líneas en vez de cientos, y que mejorar la fidelidad se haga en un sitio y no en once.
+
+### Fase 1 — Tres pruebas de caracterización
+
+Las tres van sobre el harness, con el editor real, y las tres se validan rompiéndolas a propósito antes de darlas por buenas (mutation test — obligatorio por `capability-proof-contract.md`).
+
+1. **Identidad y trabajo diferido.** Cambiar de documento mientras otro está hidratando no puede aplicar el viewState del anterior; ningún callback diferido (rAF, timeout, promesa en vuelo) puede escribir sobre el documento nuevo. *Falsifica:* la familia de ODE-555. *Toca:* STATE-03/04/05.
+2. **Guardado contra identidad viva.** Un save encolado antes de cambiar de pestaña no puede escribir en el documento ahora abierto ni perder el contenido del anterior; el estado "sucio" debe ser visible desde el input real, no desde el debounce. *Falsifica:* pérdida silenciosa de contenido en cambio de tab/cierre. *Toca:* STATE-01, WATCH-07, DOC-*.
+3. **Aislamiento de correcciones por documento.** Al cambiar de documento, la cola, los timers, los reintentos y el circuit breaker no arrastran estado del anterior, y ningún bloque se persiste contra el `writingId` equivocado. *Falsifica:* fuga entre documentos. *Toca:* AI-05.
+
+### Fase 2 — Cerrar los gaps ya nombrados
+
+Los cuatro del §4, en este orden: STATE-07 (cero cobertura hoy), STATE-05 (seam store→shell), WATCH-07 (siembra del baseline al abrir), EXP-05 (caller real de export). Al cerrarlos, cuatro filas del capability map suben de estado **y** quedan cubiertos los bordes por donde va a pasar el corte.
+
+### Fase 3 — Extracción, siempre en dos tiempos
+
+Orden propuesto:
+
+1. **Hidratación / identidad** — el que más fallos reales ha producido y el que falla en silencio.
+2. **Correcciones** — ya no es el cluster más grande: ODE-558 eliminó la mitad automática por inalcanzable (~228 referencias menos). Lo que queda es la aplicación y persistencia de sugerencias del análisis manual, con owner canónico ya existente (`lib/corrections/persistence.ts`); cierra además las 8 llamadas directas que hoy son deuda declarada. El invariante de identidad ya es falsificable (ODE-559): vive en una sola compuerta, `isResponseStillCurrent` en `hooks/useManualCorrections.ts`, y lo prueba `tests/editor-shell-corrections-isolation.test.tsx`.
+3. **Tabs / sesión y wiring desktop.**
+4. **Chrome** (TOC, find/replace, modales, focus mode) — mayormente puro; riesgo tipográfico, no semántico.
+
+**Regla no negociable en cada paso:** primero la mudanza mecánica sin cambio de comportamiento, se verifica que todo sigue igual, y solo en un segundo commit se cambia la decisión de estado. Nunca mover estado y comportamiento a la vez — ahí es donde muerden los 19 espejos del §2.
+
+---
+
+## Trampa operativa conocida
+
+`architecture/boundaries.baseline.json` lista `components/editor/editor-shell.tsx` bajo `ui-no-direct-persistence`, y el ratchet de `tests/architecture/persistence-boundary.test.ts` es **monotónico en ambas direcciones**: si la extracción *arregla* la deuda (mover las 8 llamadas a `localDB.correctionBlocks` a su owner canónico), el test falla igual hasta que se borre esa entrada del baseline. Hay que borrarla en el mismo PR que la arregla.
+
+## Qué no decide este documento
+
+- El diseño concreto de cada pieza extraída (dónde vive, qué interfaz expone). Eso sale del `architecture-recon` de cada issue, con la red ya puesta.
+- Si alguna de las Fases 1-2 debe correr en CI universal o en `scoped-ci.yml`. Se decide por coste real cuando existan.
+
+## Documentos relacionados
+
+- `workflow/quality/capability-proof-contract.md` — reglas MUST de construcción de cada prueba de este plan.
+- `workflow/quality/capability-integration-map.md` — estado por capability y el `coverage_status` que estas fases mueven.
+- `workflow/testing/critical-capabilities-testing.md` — taxonomía de niveles y principio de menor coste.
+- `components/editor/AGENTS.md` — rol declarado del archivo y deuda conocida.

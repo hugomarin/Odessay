@@ -17,4 +17,3 @@ export const escapeControlledAttribute = (value: string): string =>
     .replaceAll('"', "&quot;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
-

@@ -26,4 +26,4 @@ Inspeccionar qué command/módulo ya resuelve una responsabilidad análoga antes
 
 ## Verificación de bundle
 
-El checklist de bugs específicos del bundle desktop (CSP, keyring backend, `supabase-js` vs `ssr`, `isTauriBuild`, DevTools) vive en `.agents/skills/review-architecture/SKILL.md` — no se repite aquí. Aplica en REVIEW, no como regla de construcción.
+El checklist de bugs específicos del bundle desktop (CSP, keyring backend, `supabase-js` vs `ssr`, `isTauriBuild`, DevTools) vive en la [especialidad de contratos de Code Review](../.agents/skills/skill-code-review/specialties/review-contracts.md) y se aplica con su [referencia de arquitectura](../.agents/skills/skill-code-review/references/architecture.md). Aplica en REVIEW.

@@ -6,12 +6,34 @@ import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents
 import { generateHTML } from "@tiptap/html"
 import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
-import { TextSelection } from "@tiptap/pm/state"
 import { useRouter } from "next/navigation"
-import { useManualCorrections } from "@/hooks/useManualCorrections"
 import {
+  activationHydrates,
+  useDocumentHydration,
+  type ActivationReason,
+  type DocumentMetadataPatch,
+  type HydrationPhase,
+} from "@/hooks/useDocumentHydration"
+import { useCorrectionActions, type CorrectionToastState } from "@/hooks/useCorrectionActions"
+import { useCorrectionBlocks } from "@/hooks/useCorrectionBlocks"
+import { useCorrectionLifecycle } from "@/hooks/useCorrectionLifecycle"
+import {
+  useExternalDocumentChanges,
+  type ExternalContentConflict,
+  type ExternalFileNotice,
+} from "@/hooks/useExternalDocumentChanges"
+import { type EditorCursorSnapshot, useFindReplace } from "@/hooks/useFindReplace"
+import { type FocusModeRestoration, useFocusMode } from "@/hooks/useFocusMode"
+import { useSessionRestore } from "@/hooks/useSessionRestore"
+import { useTableOfContents } from "@/hooks/useTableOfContents"
+import { useWorkspaceTabOpening } from "@/hooks/useWorkspaceTabOpening"
+import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs"
+import {
+  formatSaveStateDiagnostic,
   mapLocalSyncStatusToSaveState,
   mapSyncLifecycleToSaveState,
+  reconcileSaveStateFromDurable,
+  saveStateToHasPendingSync,
   type EditorSaveState,
 } from "@/components/editor/save-state"
 import { Button } from "@/components/ui/button"
@@ -65,56 +87,23 @@ import { areFloatingOverlayAnchorsEqual } from "@/lib/reading/floating-overlay-p
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
 import {
-  clearFindReplaceQueryState,
-  clampFindReplaceIndex,
-  findDocumentMatches,
-  findTextMatches,
-  renderFindReplaceOverlayHtml,
-  replaceAllMatchesInText,
-  replaceMatchInText,
-  resolveNextFindReplaceIndex,
-  setFindReplaceQueryState,
-} from "@/lib/editor/find-replace"
-import {
   clearPublicationSuggestions,
   setPublicationSuggestions as setEditorPublicationSuggestions,
 } from "@/lib/editor/publication-suggestion-extension"
-import { getResolvedCorrectionText, resolveCorrectionDecorationRanges } from "@/lib/editor/ai-correction-decorations"
-import { getHydrateMissCorrectionBlocks, isCorrectionBlockEligible } from "@/lib/editor/correction-analysis"
-import { createCorrectionSuggestionBatcher } from "@/lib/editor/correction-suggestion-batcher"
 import {
-  collectCorrectionBlocks,
-  acknowledgeCorrectionDirtyBlocks,
-  getCurrentCorrectionBlock,
   type CorrectionTriggerBlock,
 } from "@/lib/editor/correction-trigger-plugin"
 import {
-  applyPublicationSuggestionGroup,
-  deriveSuggestionContexts,
   getVisibleCorrectionSuggestions,
-  hashPublicationSource,
-  invalidateBlockSuggestions,
-  isSuggestionAcceptDisabled,
   replaceBlockSuggestions,
-  updateSuggestionStatuses,
 } from "@/lib/editor/suggestion-engine"
-import { forgetCorrectionDecision, readCorrectionMemory, rememberCorrectionDecision } from "@/lib/editor/correction-memory-client"
-import { admitSuggestions, type AdmissionContext } from "@/lib/corrections/engine/admission"
 import {
   CORRECTION_STALE_TIMEOUT_MS,
-  consumeDeferredCorrectionBlocks,
-  deferCorrectionBlocks,
   dropExpiredStaleSuggestions,
   dropStaleSuggestionsForBlock,
   restorePendingSuggestions,
   type DeferredCorrectionBlocksState,
 } from "@/lib/corrections/engine/lifecycle"
-import {
-  createStableFingerprint,
-  stableFingerprintFromStoredFingerprint,
-} from "@/lib/corrections/engine/identity"
-import { adaptCorrectionsContract } from "@/lib/ai/corrections-contract-adapter"
-import { CORRECTION_BLOCK_BATCH_SIZE, CORRECTION_ENGINE_REVISION } from "@/lib/ai/corrections-config"
 import {
   getMissingCorrectionBlockIds,
   takeCorrectionBatch,
@@ -129,8 +118,6 @@ import {
   createBlankDraftIdentity,
   createNewWritingSessionState,
   createRouteHydrationSessionState,
-  resolvePersistedSessionRestoreTransition,
-  resolveUnavailableWritingRecovery,
   resolveExternalWritingLoad,
 } from "@/lib/editor/hydration-session"
 import { EDITOR_DRAFT_TAB_ID } from "@/lib/local-db/editor-sessions"
@@ -150,27 +137,11 @@ import { calculateTextMetrics } from "@/lib/editor/text-metrics"
 import { saveBinaryArtifact } from "@/lib/utils/download"
 import { cn } from "@/lib/utils"
 import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
-import { logCorrectionEvent } from "@/lib/observability/corrections-log"
 import {
-  CORRECTION_BLOCK_CACHE_LIMIT,
-  createCorrectionBlockRecordId,
-  DEFAULT_CORRECTION_BLOCK_POSITION_WINDOW,
-  findStaleCorrectionBlockRecords,
-  hydrateCorrectionBlocksFromRemote,
-  parseCorrectionBlockLogicalId,
-  persistCorrectionBlockRemotely,
-  reconcileHydratedCorrectionBlocks,
+  deleteLocalCorrectionBlocks,
+  readLocalCorrectionBlocks,
 } from "@/lib/corrections/persistence"
-import { createLearnedWordSet, normalizeLearnedWord } from "@/lib/corrections/learned-words"
-import {
-  loadCachedLearnedWordsPages,
-  mergeLearnedWordEntries,
-  primeLearnedWordsCache,
-  removeCachedLearnedWord,
-  upsertCachedLearnedWord,
-} from "@/lib/corrections/learned-words-loader"
-import { buildLearnWordRollbackState } from "@/lib/corrections/learned-words-rollback"
-import { getLocalDBScope, localDB, subscribeToLocalDBChanges, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
+import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
   ArtifactType,
   LocalCorrectionBlock,
@@ -180,16 +151,13 @@ import type {
   WritingVisibility,
 } from "@/lib/local-db/schema"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
-import { getAIService } from "@/lib/services/ai-service-factory"
 import { getAssetService } from "@/lib/services/asset-service-factory"
 import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 import {
   createDesktopDraft as createProductionDesktopDraft,
-  getDesktopWritingCanonicalPath,
   getDocumentService,
   importDesktopWritingFile,
 } from "@/lib/services/document-service-factory"
-import { revealWorkspacePath } from "@/lib/workspace/reveal-path"
 import {
   filenameToTitle,
   titleToFilename,
@@ -197,13 +165,9 @@ import {
 } from "@/lib/desktop/document-naming"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { consumePendingOpenFile } from "@/lib/editor/pending-open-file"
-import { computeHasPendingLocalEdit, resolveExternalContentChange } from "@/lib/editor/external-change-policy"
-import type { CatalogChange } from "@/lib/services/contracts/document-catalog"
 import {
   describeOpenOutcome,
   isUnifiedOpenEnabled,
-  openDocumentById,
-  openDocumentByIdWithRetry,
   openDocumentByPath,
 } from "@/lib/services/open-document-factory"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
@@ -211,27 +175,19 @@ import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
 import { useTauriCloseGuard } from "@/hooks/useTauriCloseGuard"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
-import type { EditorHydrationRecord } from "@/lib/editor/document-hydration"
-import { resolveHydrationOutcome } from "@/lib/editor/hydration-coordinator"
-import { createHydrationGenerationOwner, type HydrationGeneration } from "@/lib/editor/hydration-generation"
+import { createHydrationGenerationOwner } from "@/lib/editor/hydration-generation"
 import {
   createPersistenceCoordinator,
   type PersistenceCommitEvent,
   type PersistenceSnapshotOverrides,
   type PersistenceStateEvent,
 } from "@/lib/editor/persistence-coordinator"
-import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import {
-  closeTab,
-  focusTab,
   getEditorSessionState,
   initializeEditorSessionStore,
-  openDraftTab,
   openWritingTab,
   publishTabState,
   reconcileMaterializedDraftTab,
-  reconcileUnavailableWritingTab,
-  reorderTab,
   saveTabViewState,
   updateTabSaveState,
   useEditorSessionStore,
@@ -256,6 +212,44 @@ type SelectionSnapshot = {
   text: string
 }
 
+type OwnedMarkdownSelectionSnapshot = MarkdownSelectionSnapshot & {
+  writingId: string
+}
+
+type MarkdownSelectionRead = {
+  selection: MarkdownSelectionSnapshot | null
+  belongsToOtherDocument: boolean
+}
+
+const markdownSelectionOwnerId = (writingId: string | null) => writingId ?? EDITOR_DRAFT_TAB_ID
+
+function readMarkdownSelectionForActiveDocument(
+  cached: OwnedMarkdownSelectionSnapshot | null,
+  activeWritingId: string | null,
+  source?: string,
+): MarkdownSelectionRead {
+  const ownerId = markdownSelectionOwnerId(activeWritingId)
+  if (!cached || cached.writingId === ownerId) {
+    return { selection: cached, belongsToOtherDocument: false }
+  }
+
+  // A cached selection belongs to a different document. Use the active tab's
+  // own saved selection while its deferred restore is pending; never fall back
+  // to the shared textarea's selection, which can still hold the prior tab's
+  // range.
+  const viewState = getEditorSessionState().session.tabs.find((tab) => tab.id === ownerId)?.view_state
+  const start = viewState?.markdownSelectionStart
+  const end = viewState?.markdownSelectionEnd
+  if (typeof start === "number" && typeof end === "number") {
+    return {
+      selection: { start, end, text: source?.slice(start, end) ?? "" },
+      belongsToOtherDocument: true,
+    }
+  }
+
+  return { selection: null, belongsToOtherDocument: true }
+}
+
 type PendingAnnotationSnapshot = {
   from: number
   to: number
@@ -274,26 +268,6 @@ type PendingRichSelectionSnapshot = {
   bubblePosition: AnnotationBubblePosition
 }
 
-type EditorCursorSnapshot =
-  | {
-      mode: "rich"
-      from: number
-      to: number
-    }
-  | {
-      mode: "markdown"
-      start: number
-      end: number
-      scrollTop?: number
-      scrollLeft?: number
-      editorScrollTop?: number
-      editorScrollLeft?: number
-      shellScrollTop?: number
-      shellScrollLeft?: number
-      windowScrollX?: number
-      windowScrollY?: number
-    }
-
 type EditorPanel = "notes" | "properties" | "grammar" | "share" | null
 
 type RenameWritingSnapshot = {
@@ -301,30 +275,10 @@ type RenameWritingSnapshot = {
   bodyText: string
 }
 
-type CorrectionToastState = {
-  phase: "running" | "complete" | "error"
-  completed: number
-  total: number
-  message?: string
-}
-
-type ExternalFileNotice =
-  | { kind: "moved"; path: string | null }
-  | { kind: "deleted"; path: string | null }
-  | { kind: "relocate-failed"; path: string | null }
-  | { kind: "content-changed"; path: string | null }
-
-/**
- * WATCH-07 — set only while there is BOTH a pending local edit AND a known
- * external content change to the same document. Blocks persistEditorSnapshot
- * from auto-saving (which would otherwise silently overwrite the external
- * edit the moment the debounce fires) until the user explicitly resolves it
- * via "Reload external" or "Keep my version".
- */
-type ExternalContentConflict = {
-  externalContentHash: string
-  path: string | null
-}
+// Lectura/borrado de la caché de bloques de corrección para la hidratación
+// (ODE-562). Viven aquí, y no en el hook, a propósito: son deuda ya declarada
+// de este archivo en architecture/boundaries.baseline.json, y moverlas a
+// hooks/ la escondería en vez de pagarla. Pagarla es el corte de correcciones.
 
 function replaceEditorHistory(nextHref: string) {
   if (typeof window === "undefined") {
@@ -379,7 +333,7 @@ const DESKTOP_EDITOR_OUTPUT_DEBOUNCE_MS = 150
 // need to track keystrokes in near-real-time — content lives in TipTap's
 // in-memory state regardless. Coalescing it to once per 4s of typing pause
 // keeps that pipeline from running once per pause during sustained typing.
-const DESKTOP_PERSISTENCE_DEBOUNCE_MS = 4_000
+export const DESKTOP_PERSISTENCE_DEBOUNCE_MS = 4_000
 
 const AUTO_TITLE_MAX_CHARS = 48
 const UNTITLED_WRITING_TITLE = "Untitled artifact"
@@ -487,6 +441,31 @@ const isPerfHarness = () => {
   return perfHarnessDetected
 }
 
+/**
+ * La única salida de la shell hacia el router de Next para ir a un documento
+ * (ODE-569). Una NAVEGACIÓN, no una proyección: la proyección de la URL del
+ * documento activo es `activateDocument({ href })`.
+ *
+ * Conserva las dos excepciones que tenían los sitios sueltos:
+ * - en el perf harness se proyecta en vez de navegar (ODE-389);
+ * - `skipOnDesktop`: en el bundle estático la ruta ya no cambia de página, así
+ *   que esos sitios no navegan en desktop.
+ */
+function navigateToWriting(
+  router: Pick<ReturnType<typeof useRouter>, "push" | "replace">,
+  href: string,
+  { mode, skipOnDesktop }: { mode: "push" | "replace"; skipOnDesktop: boolean },
+) {
+  if (isPerfHarness()) {
+    replaceEditorHistory(href)
+    return
+  }
+  if (skipOnDesktop && isDesktopRuntime()) {
+    return
+  }
+  router[mode](href)
+}
+
 export function EditorShell({
   writingId,
   forceNewWriting = false,
@@ -504,7 +483,17 @@ export function EditorShell({
   const hydrationProgress = useHydrationProgress()
 
   const [currentWritingId, setCurrentWritingId] = useState<string | null>(initialHydrationSession.activeWritingId)
-  const [hydrationWritingId, setHydrationWritingId] = useState<string | null>(initialHydrationSession.hydrationWritingId)
+  // Fase de hidratación del documento activo (ADR documento activo, Fase 4 —
+  // ODE-570). Lo que se carga es siempre el documento activo; la fase solo dice
+  // si su contenido ya está en el editor. Solo `activateDocument` la pone en
+  // "loading"; la hidratación la devuelve a "ready" al terminar o fallar.
+  // Una por cada llamada a `activateDocument` (ODE-572): el efecto de
+  // hidratación la usa para aplicar el estado "sin documento" una vez por
+  // transición, no en cada re-ejecución.
+  const [activationSeq, setActivationSeq] = useState(0)
+  const [hydrationPhase, setHydrationPhase] = useState<HydrationPhase>(
+    initialHydrationSession.hydrationWritingId ? "loading" : "ready",
+  )
   const [title, setTitle] = useState(UNTITLED_WRITING_TITLE)
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
@@ -514,6 +503,15 @@ export function EditorShell({
   const [bodyText, setBodyText] = useState("")
   const [markdownSelectionState, setMarkdownSelectionState] = useState<MarkdownSelectionSnapshot | null>(null)
   const [syncStatus, setSyncStatus] = useState<EditorSaveState>("saved")
+  // ODE-542: único escritor del estado de guardado. El ref lo lee la
+  // reconciliación contra el catálogo durable, que puede correr en el mismo
+  // bloque síncrono que una escritura: estado y ref se escriben a la vez para
+  // que nunca lea un `current` rancio.
+  const syncStatusRef = useRef<EditorSaveState>("saved")
+  const applySyncStatus = useCallback((next: EditorSaveState) => {
+    syncStatusRef.current = next
+    setSyncStatus(next)
+  }, [])
   const [version, setVersion] = useState(1)
   const [richFootnoteRevision, setRichFootnoteRevision] = useState(0)
   const [createdAt, setCreatedAt] = useState<string | null>(null)
@@ -540,19 +538,13 @@ export function EditorShell({
   /** WATCH-07 — has this document's durable-content-hash baseline been seeded into the coordinator yet, for the currently watched writingId? */
   const hasSeededBaselineRef = useRef(false)
   /**
-   * WATCH-07 — true from the moment the editor's content genuinely diverges
-   * from the last known durable baseline (set in TipTap's own `onUpdate`,
-   * and the markdown-mode equivalents, on every real edit — never on a
-   * programmatic setContent, which is already guarded by
-   * isApplyingContentRef) until `persistEditorSnapshot` actually hands that
-   * content to `persistenceCoordinator.persist()`. `hasPending()` alone is
-   * NOT sufficient here: the desktop debounce (150ms rich /
-   * MARKDOWN_SAVE_DEBOUNCE_MS markdown) means there is a real window after a
-   * keystroke where the editor holds an unconfirmed edit but no persist
-   * request exists yet for the coordinator to report as pending. Cleared as
-   * soon as persist() is actually called — hasPending() is authoritative
-   * for durability from that point on, so this ref only needs to cover the
-   * gap before that call, not duplicate the coordinator's own tracking.
+   * WATCH-07 — true only between a real editor change and handing that
+   * content to `persistenceCoordinator.persist()`. The desktop debounce
+   * means this pre-handoff window exists before the coordinator knows about
+   * the edit. The coordinator owns the distinct post-handoff lifecycle via
+   * `hasUnconfirmedContent()`; `computeHasPendingLocalEdit` combines both.
+   * Programmatic `setContent` calls are already guarded by
+   * `isApplyingContentRef`.
    */
   const hasUnconfirmedLocalEditRef = useRef(false)
   const [showCorrections, setShowCorrections] = useState(true)
@@ -588,61 +580,197 @@ export function EditorShell({
   const hasExplicitTitleRef = useRef(hasExplicitTitle)
   const versionRef = useRef(version)
   const createdAtRef = useRef<string | null>(createdAt)
-  const writingSlugRef = useRef<string | null>(null)
   const statusRef = useRef<WritingStatus>(writingStatus)
   const artifactTypeRef = useRef<ArtifactType>(artifactType)
   const visibilityRef = useRef<WritingVisibility>(writingVisibility)
+  /**
+   * Único dueño de los metadatos del documento (ODE-563).
+   *
+   * Cada metadato vive dos veces: en estado (para renderizar) y en un ref
+   * (lo que lee `persistEditorSnapshot` desde callbacks de larga vida).
+   * Antes, un efecto espejo copiaba el estado al ref DESPUÉS del commit y
+   * además varios caminos escribían el ref a mano; entre medias, el ref
+   * podía llevar el valor del documento anterior. Aquí se escriben los dos
+   * en el mismo paso, y es la única forma permitida de cambiarlos.
+   *
+   * `slug` no tiene ref: nadie lo leía (solo se escribía).
+   */
+  const applyDocumentMetadata = useCallback((patch: DocumentMetadataPatch) => {
+    if (patch.title !== undefined) {
+      titleRef.current = patch.title
+      setTitle(patch.title)
+    }
+    if (patch.hasExplicitTitle !== undefined) {
+      hasExplicitTitleRef.current = patch.hasExplicitTitle
+      setHasExplicitTitle(patch.hasExplicitTitle)
+    }
+    if (patch.version !== undefined) {
+      versionRef.current = patch.version
+      setVersion(patch.version)
+    }
+    if (patch.createdAt !== undefined) {
+      createdAtRef.current = patch.createdAt
+      setCreatedAt(patch.createdAt)
+    }
+    if (patch.slug !== undefined) {
+      setWritingSlug(patch.slug)
+    }
+    if (patch.status !== undefined) {
+      statusRef.current = patch.status
+      setWritingStatus(patch.status)
+    }
+    if (patch.artifactType !== undefined) {
+      artifactTypeRef.current = patch.artifactType
+      setArtifactType(patch.artifactType)
+    }
+    if (patch.visibility !== undefined) {
+      visibilityRef.current = patch.visibility
+      setWritingVisibility(patch.visibility)
+    }
+    if (patch.lifecycle !== undefined) {
+      lifecycleRef.current = patch.lifecycle
+      setLifecycle(patch.lifecycle)
+    }
+  }, [])
   const markdownSaveTimeoutRef = useRef<number | null>(null)
-  const pendingMarkdownSaveRef = useRef<string | null>(null)
-  const tabSelectionRequestRef = useRef(0)
+  // El guardado de markdown pendiente (ODE-573): se guarda junto al timer para
+  // poder ejecutarlo al desmontar en vez de perderlo.
+  const pendingMarkdownSaveRef = useRef<(() => void) | null>(null)
+  const scheduleMarkdownSave = useCallback((run: () => void) => {
+    pendingMarkdownSaveRef.current = run
+    return window.setTimeout(() => {
+      pendingMarkdownSaveRef.current = null
+      run()
+    }, MARKDOWN_SAVE_DEBOUNCE_MS)
+  }, [])
+  /** Ejecuta ya el guardado de markdown pendiente, si su timer sigue vivo. */
+  const flushPendingMarkdownSave = useCallback(() => {
+    const run = pendingMarkdownSaveRef.current
+    pendingMarkdownSaveRef.current = null
+    if (markdownSaveTimeoutRef.current === null || !run) {
+      return
+    }
+    window.clearTimeout(markdownSaveTimeoutRef.current)
+    markdownSaveTimeoutRef.current = null
+    run()
+  }, [])
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
   const activeEditorTabIdRef = useRef<string | null>(editorSession.active_tab_id)
+  /**
+   * Único dueño de la identidad del documento activo (ODE-564).
+   *
+   * El ref es lo que leen los callbacks de larga vida (guardado, imágenes,
+   * correcciones); el estado es lo que re-renderiza y dispara efectos. Antes,
+   * además de las escrituras imperativas, un efecto espejo copiaba el estado
+   * al ref tras cada commit, y un espejo pendiente podía devolver el ref al
+   * documento anterior después de que un handler ya había escrito el nuevo.
+   * Aquí se escriben los dos en el mismo paso, y es la única forma de
+   * cambiarlos.
+   */
+  const setActiveWritingId = useCallback((writingId: string | null) => {
+    currentWritingIdRef.current = writingId
+    setCurrentWritingId(writingId)
+  }, [])
+  /**
+   * Único punto de entrada de toda transición del documento activo (ADR
+   * `odessay-adr-documento-activo.md`, Fase 1 — ODE-567).
+   *
+   * Escribe la identidad de la instancia, la fase de hidratación y la
+   * proyección de la ruta, en ese orden. El store se escribe en la misma
+   * transición, al lado de esta llamada (ADR, enmienda de ODE-568).
+   *
+   * - Hidratación (Fase 4, ODE-570): la decide el motivo, no el handler. Ver
+   *   `activationHydrates`.
+   * - `href`: proyección de la ruta con `replaceEditorHistory`; omitido = la
+   *   transición no toca la URL (o la toca con otro mecanismo, declarado en
+   *   su sitio).
+   */
+  const activateDocument = useCallback(
+    (
+      target: { writingId: string | null; href?: string },
+      reason: ActivationReason,
+    ) => {
+      setActiveWritingId(target.writingId)
+      setHydrationPhase(activationHydrates(target.writingId, reason) ? "loading" : "ready")
+      setActivationSeq((current) => current + 1)
+      if (target.href !== undefined) {
+        replaceEditorHistory(target.href)
+      }
+    },
+    [setActiveWritingId],
+  )
+  /**
+   * ODE-542: reconcilia el estado de guardado del documento activo (status bar
+   * y su pestaña) desde el catálogo durable. Los eventos de sync son solo
+   * invalidaciones: disparan esta lectura O(1), nunca fijan un estado terminal
+   * por sí mismos. Un evento perdido no deja la UI atascada en "Saving…",
+   * porque terminar de hidratar (también tras materializar un borrador) y el
+   * `cloud-snapshot` del catálogo convergen por la misma lectura. Solo cura hacia un terminal durable, y
+   * nunca borra un `error` local (ODE-461).
+   */
+  const reconcileActiveSaveState = useCallback(
+    async (reason: string) => {
+      const writingId = currentWritingIdRef.current
+      if (!writingId) {
+        return
+      }
+
+      try {
+        const { getCatalogRecord } = await import("@/lib/queries/document-catalog")
+        const record = await getCatalogRecord(writingId)
+        if (!record || currentWritingIdRef.current !== writingId) {
+          return
+        }
+
+        const current = syncStatusRef.current
+        const next = reconcileSaveStateFromDurable({
+          current,
+          durable: { syncStatus: record.syncStatus, cloudPresent: record.cloudPresent },
+          isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
+        })
+        if (!next) {
+          return
+        }
+
+        console.info(formatSaveStateDiagnostic({ writingId, durableSyncStatus: record.syncStatus, current, next, reason }))
+        applySyncStatus(next)
+        updateTabSaveState({ tabId: writingId, saveState: next, hasPendingSync: saveStateToHasPendingSync(next) })
+      } catch (error) {
+        // El contenido sigue abierto; el siguiente evento de sync, cambio del
+        // catálogo o activación reintenta.
+        console.error("[editor:save-state] reconcile read failed", {
+          writingId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    },
+    [applySyncStatus],
+  )
+  // Los callbacks del coordinador de persistencia se crean una vez; leen la
+  // versión vigente por ref.
+  const reconcileActiveSaveStateRef = useRef(reconcileActiveSaveState)
+  useEffect(() => {
+    reconcileActiveSaveStateRef.current = reconcileActiveSaveState
+  }, [reconcileActiveSaveState])
   const hydrationGenerationOwnerRef = useRef<ReturnType<typeof createHydrationGenerationOwner> | null>(null)
   if (hydrationGenerationOwnerRef.current === null) {
     hydrationGenerationOwnerRef.current = createHydrationGenerationOwner()
   }
   const currentCanonicalPathRef = useRef<string | null>(null)
-  const focusModeRestorationRef = useRef<{
-    activePanel: EditorPanel
-    isFindReplaceOpen: boolean
-  } | null>(null)
+  const focusModeRestorationRef = useRef<FocusModeRestoration | null>(null)
 
-  const enterFocusMode = useCallback(() => {
-    if (isFocusMode) {
-      return
-    }
-
-    focusModeRestorationRef.current = { activePanel, isFindReplaceOpen }
-
-    setActivePanel(null)
-    setIsFindReplaceOpen(false)
-    setIsFocusMode(true)
-  }, [activePanel, isFindReplaceOpen, isFocusMode])
-
-  const exitFocusMode = useCallback(() => {
-    if (!isFocusMode) {
-      return
-    }
-
-    const stateToRestore = focusModeRestorationRef.current
-    focusModeRestorationRef.current = null
-    if (stateToRestore) {
-      setActivePanel(stateToRestore.activePanel)
-      setIsFindReplaceOpen(stateToRestore.isFindReplaceOpen)
-    }
-    setIsFocusMode(false)
-  }, [isFocusMode])
-
-  const toggleFocusMode = useCallback(() => {
-    if (isFocusMode) {
-      exitFocusMode()
-    } else {
-      enterFocusMode()
-    }
-  }, [enterFocusMode, exitFocusMode, isFocusMode])
+  // ODE-602: focus mode (mudanza mecánica; mismos callbacks, en esta posición).
+  const { exitFocusMode, toggleFocusMode } = useFocusMode({
+    activePanel,
+    focusModeRestorationRef,
+    isFindReplaceOpen,
+    isFocusMode,
+    setActivePanel,
+    setIsFindReplaceOpen,
+    setIsFocusMode,
+  })
   const navigatedToDraftRef = useRef(false)
-  const identityEnsuredRef = useRef(false)
   const desktopWebHandoffAppliedRef = useRef(false)
   const desktopSessionRestoreTimingRef = useRef<{ writingId: string; startedAt: number } | null>(null)
   const forceNewWritingRequestedRef = useRef(false)
@@ -661,7 +789,7 @@ export function EditorShell({
   const materializedDraftIdsRef = useRef<Map<string, string>>(new Map())
   const selectAdjacentTabRef = useRef<((direction: number) => void) | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
-  const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
+  const markdownSelectionRef = useRef<OwnedMarkdownSelectionSnapshot | null>(null)
   const markdownTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const findInputRef = useRef<HTMLInputElement | null>(null)
   const replaceInputRef = useRef<HTMLInputElement | null>(null)
@@ -677,6 +805,7 @@ export function EditorShell({
   const pendingMarkdownSelectionRef = useRef<{
     start: number
     end: number
+    writingId: string
     scrollTop?: number
     scrollLeft?: number
     editorScrollTop?: number
@@ -685,27 +814,24 @@ export function EditorShell({
     shellScrollLeft?: number
     windowScrollX?: number
     windowScrollY?: number
+    // Cross-document-leak guard (ODE-555 follow-up): this queue is shared by
+    // every caller (typing, hydration, ...), and its deferred rAF has no
+    // built-in notion of "which document this was for" — without a guard, a
+    // hydration restore queued for A that hasn't fired yet would apply to
+    // whatever document/DOM is current by the time the frame runs, even a
+    // different one the user already switched to. Callers that care (only
+    // hydration does today) pass `isStillValid`; callers that don't (plain
+    // typing, always operating on the currently-active document) omit it and
+    // get the prior, unguarded behavior.
+    isStillValid?: () => boolean
+    onSettled?: () => void
   } | null>(null)
   const suppressNextSelectionPopupRef = useRef(false)
   const currentDocumentMarkdownRef = useRef("")
-  const correctionsEnabledRef = useRef(false)
   const automaticCorrectionSuggestionsRef = useRef<PublicationSuggestion[]>([])
   const learnedWordsRef = useRef<LearnedWordEntry[]>([])
   const learnedWordsLoadedRef = useRef(false)
   const persistedCorrectionBlocksRef = useRef(new Map<string, LocalCorrectionBlock>())
-  const enqueueCorrectionBlockRef = useRef<((block: CorrectionTriggerBlock, reason?: "edit" | "hydrate-miss") => void) | null>(null)
-  const correctionQueueRef = useRef<CorrectionTriggerBlock[]>([])
-  const correctionProcessingRef = useRef(false)
-  const processCorrectionQueueRef = useRef<(() => void) | null>(null)
-  const correctionQueueTotalRef = useRef(0)
-  const correctionQueueCompletedRef = useRef(0)
-  const correctionBatchRetryRef = useRef(new Set<string>())
-  const correctionQueueFailureVisibleRef = useRef(false)
-  const correctionReviewCircuitOpenUntilRef = useRef(0)
-  const correctionFailureRetryRef = useRef(new Map<string, number>())
-  const correctionFailureRetryTimersRef = useRef(new Map<string, number>())
-  const correctionTimersRef = useRef(new Map<string, { timer: number; pos: number }>())
-  const correctionStaleTimersRef = useRef(new Map<string, number>())
   const correctionToastDismissRef = useRef<number | null>(null)
   const suppressCorrectionAnalysisUntilRef = useRef(0)
   const deferredSuppressedCorrectionBlocksRef = useRef<DeferredCorrectionBlocksState<CorrectionTriggerBlock>>({
@@ -745,10 +871,7 @@ export function EditorShell({
         // returned to. Only update the active editor when its identity
         // matches; never let another document overwrite these refs.
         if (isSourceTabActive && currentWritingIdRef.current === record.id) {
-          versionRef.current = record.version
-          setVersion(record.version)
-          createdAtRef.current = record.createdAt
-          setCreatedAt(record.createdAt)
+          applyDocumentMetadata({ version: record.version, createdAt: record.createdAt })
         }
       }
 
@@ -793,17 +916,17 @@ export function EditorShell({
           }
 
           if (event.state === "persisting_local" || event.state === "dirty") {
-            setSyncStatus("saving")
+            applySyncStatus("saving")
             return
           }
 
           if (event.state === "failed") {
-            setSyncStatus("error")
+            applySyncStatus("error")
             return
           }
 
           if (event.state === "queued_remote") {
-            setSyncStatus(
+            applySyncStatus(
               event.created
                 ? "saved-local"
                 : mapLocalSyncStatusToSaveState(
@@ -852,43 +975,37 @@ export function EditorShell({
             return
           }
 
-          currentWritingIdRef.current = record.id
+          activateDocument({ writingId: record.id }, "materialize")
           ephemeralDraftWritingIdRef.current = null
-          setCurrentWritingId(record.id)
-          setHydrationWritingId(record.id)
-          createdAtRef.current = record.createdAt
-          setCreatedAt(record.createdAt)
-          setTitle(materializedTitle)
-          titleRef.current = materializedTitle
-          setHasExplicitTitle(false)
-          hasExplicitTitleRef.current = false
-          versionRef.current = record.version
-          setVersion(record.version)
-          setWritingSlug(null)
-          writingSlugRef.current = null
-          setWritingStatus("draft")
-          statusRef.current = "draft"
-          setArtifactType("general")
-          artifactTypeRef.current = "general"
-          setWritingVisibility("private")
-          visibilityRef.current = "private"
-          setLifecycle("local-only")
-          lifecycleRef.current = "local-only"
+          applyDocumentMetadata({
+            createdAt: record.createdAt,
+            title: materializedTitle,
+            hasExplicitTitle: false,
+            version: record.version,
+            slug: null,
+            status: "draft",
+            artifactType: "general",
+            visibility: "private",
+            lifecycle: "local-only",
+          })
           navigatedToDraftRef.current = true
+          // ODE-542: no hace falta reconciliar aquí. Materializar hidrata el
+          // documento (ODE-570) y la hidratación relee el estado durable.
         },
         onIdentityCreated: (writingId) => {
           const nextWritingSession = createNewWritingSessionState(writingId)
-          currentWritingIdRef.current = nextWritingSession.activeWritingId
-          setCurrentWritingId(nextWritingSession.activeWritingId)
-          setHydrationWritingId(nextWritingSession.hydrationWritingId)
+          // La ruta de esta transición es una navegación real de Next, no una
+          // proyección: va por `navigateToWriting`, aquí abajo.
+          activateDocument(
+            {
+              writingId: nextWritingSession.activeWritingId,
+            },
+            "identity",
+          )
 
-          if (!routeWritingIdRef.current && !navigatedToDraftRef.current) {
+          if (!routeWritingIdRef.current) {
             navigatedToDraftRef.current = true
-            if (isPerfHarness()) {
-              replaceEditorHistory(`/write/${writingId}`)
-            } else {
-              routerRef.current.replace(`/write/${writingId}`)
-            }
+            navigateToWriting(routerRef.current, `/write/${writingId}`, { mode: "replace", skipOnDesktop: false })
           }
         },
         onCommitted: applyCommittedTabState,
@@ -904,7 +1021,7 @@ export function EditorShell({
               ? activeEditorTabIdRef.current === sourceTabId
               : event.writingId === currentWritingIdRef.current
             if (isSourceTabActive) {
-              setSyncStatus("error")
+              applySyncStatus("error")
             }
           }
 
@@ -923,48 +1040,48 @@ export function EditorShell({
         },
       )
     },
-    [createDesktopDraftFn],
+    [applySyncStatus, activateDocument, applyDocumentMetadata, createDesktopDraftFn],
   )
 
   useEffect(() => {
     persistenceCoordinator.activateDocument(currentWritingId)
   }, [currentWritingId, persistenceCoordinator])
 
-  useEffect(() => () => persistenceCoordinator.dispose(), [persistenceCoordinator])
+  // Lo que la shell tenga en cola hacia el coordinador al desmontarse: la
+  // edición rich en su debounce de desktop (150 ms) y el guardado de markdown
+  // (800 ms). Lo asigna un efecto más abajo,
+  // donde vive la función; se lee aquí, al cerrar el coordinador.
+  const flushPendingEditOnUnmountRef = useRef<(() => void) | null>(null)
 
+  useEffect(
+    () => () => {
+      // ODE-573: volcar ANTES de cerrar el coordinador. Este efecto está
+      // declarado antes que la limpieza que cancela las colas de la shell, y
+      // React ejecuta las limpiezas en ese orden: si el volcado fuera después,
+      // el coordinador ya cerrado rechazaría el guardado y se perdería lo
+      // escrito en los últimos 150 ms (rich) u 800 ms (markdown).
+      flushPendingEditOnUnmountRef.current?.()
+      persistenceCoordinator.dispose()
+    },
+    [persistenceCoordinator],
+  )
+
+  /**
+   * Al cambiar de documento se descarta el trabajo de correcciones pendiente
+   * del anterior. Tras ODE-558 solo queda el flush diferido de bloques
+   * suprimidos y el toast: la cola automatica, sus timers, reintentos y
+   * circuit breaker eran inalcanzables y se eliminaron.
+   */
   const resetCorrectionQueueState = useCallback(() => {
-    for (const { timer } of correctionTimersRef.current.values()) {
-      window.clearTimeout(timer)
-    }
-
-    for (const timer of correctionStaleTimersRef.current.values()) {
-      window.clearTimeout(timer)
-    }
-
-    for (const timer of correctionFailureRetryTimersRef.current.values()) {
-      window.clearTimeout(timer)
-    }
-
     if (suppressedCorrectionFlushTimerRef.current !== null) {
       window.clearTimeout(suppressedCorrectionFlushTimerRef.current)
       suppressedCorrectionFlushTimerRef.current = null
     }
 
-    correctionTimersRef.current.clear()
-    correctionStaleTimersRef.current.clear()
-    correctionBatchRetryRef.current.clear()
-    correctionQueueFailureVisibleRef.current = false
-    correctionReviewCircuitOpenUntilRef.current = 0
-    correctionFailureRetryRef.current.clear()
-    correctionFailureRetryTimersRef.current.clear()
     deferredSuppressedCorrectionBlocksRef.current = {
       blocksById: new Map(),
       flushAt: null,
     }
-    correctionQueueRef.current = []
-    correctionQueueTotalRef.current = 0
-    correctionQueueCompletedRef.current = 0
-    correctionProcessingRef.current = false
     setCorrectionToast(null)
   }, [])
 
@@ -1034,10 +1151,25 @@ export function EditorShell({
     () => buildEditorSpellcheckConfig(spellcheckPreference),
     [spellcheckPreference],
   )
-  const correctionSuggestionBatcher = useMemo(
-    () => createCorrectionSuggestionBatcher(setAutomaticCorrectionSuggestions),
-    [],
-  )
+  // ODE-586: estado de sugerencias, admisión y caché de bloques de corrección.
+  // Mudanza mecánica; el estado y los refs siguen siendo de la shell.
+  const {
+    correctionSuggestionBatcher,
+    applyCorrectionSuggestionUpdate,
+    setPersistedCorrectionBlocks,
+    flattenPersistedSuggestions,
+    createCorrectionAdmissionContext,
+    admitCorrectionSuggestions,
+    persistCorrectionBlockWriteThrough,
+    updatePersistedBlocksFromSuggestions,
+    deletePersistedBlocksForPosition,
+    flushPendingCorrectionBlocks,
+  } = useCorrectionBlocks({
+    setAutomaticCorrectionSuggestions,
+    editorInstanceRef,
+    learnedWordsRef,
+    persistedCorrectionBlocksRef,
+  })
 
   useEffect(() => {
     if (desktopWebHandoffAppliedRef.current || typeof window === "undefined") {
@@ -1058,261 +1190,8 @@ export function EditorShell({
     setBodyText(editorInstance.getText())
   }, [])
 
-  const applyCorrectionSuggestionUpdate = useCallback(
-    (
-      updater: (current: PublicationSuggestion[]) => PublicationSuggestion[],
-      options?: { immediate?: boolean },
-    ) => {
-      if (options?.immediate) {
-        correctionSuggestionBatcher.flush()
-        setAutomaticCorrectionSuggestions(updater)
-        return
-      }
-
-      correctionSuggestionBatcher.enqueue(updater)
-    },
-    [correctionSuggestionBatcher],
-  )
-
-  const setPersistedCorrectionBlocks = useCallback((blocks: LocalCorrectionBlock[]) => {
-    persistedCorrectionBlocksRef.current = new Map(
-      blocks.map((block) => [block.blockHash, block] satisfies [string, LocalCorrectionBlock]),
-    )
-  }, [])
-
-  const flattenPersistedSuggestions = useCallback((blocks: LocalCorrectionBlock[]) => {
-    const suggestionsById = new Map<string, PublicationSuggestion>()
-
-    for (const block of blocks) {
-      for (const suggestion of block.suggestions) {
-        suggestionsById.set(suggestion.id, suggestion)
-      }
-    }
-
-    return [...suggestionsById.values()]
-  }, [])
-
-  const createCorrectionAdmissionContext = useCallback(
-    (blocks?: CorrectionTriggerBlock[]): AdmissionContext => {
-      const editorBlocks = blocks ?? (editorInstanceRef.current ? collectCorrectionBlocks(editorInstanceRef.current.state.doc) : [])
-      const blocksById = new Map(editorBlocks.map((block) => [block.id, block]))
-      const blocksByLogicalId = new Map(
-        editorBlocks
-          .map((block) => [parseCorrectionBlockLogicalId(block.id), block] as const)
-          .filter((entry): entry is [string, CorrectionTriggerBlock] => entry[0] !== null),
-      )
-      const rejectedFingerprints = new Set(
-        readCorrectionMemory()
-          .filter((entry) => entry.decision === "rejected")
-          .map((entry) => stableFingerprintFromStoredFingerprint(entry.fingerprint))
-          .filter((fingerprint): fingerprint is string => Boolean(fingerprint)),
-      )
-
-      return {
-        learnedWords: createLearnedWordSet(learnedWordsRef.current.map((item) => item.word)),
-        rejectedFingerprints,
-        blockText: (blockId) => {
-          const block = blocksById.get(blockId)
-
-          if (block) {
-            return block.text
-          }
-
-          const logicalId = parseCorrectionBlockLogicalId(blockId)
-          return logicalId ? blocksByLogicalId.get(logicalId)?.text ?? null : null
-        },
-      }
-    },
-    [],
-  )
-
-  const admitCorrectionSuggestions = useCallback(
-    (candidates: PublicationSuggestion[], blocks?: CorrectionTriggerBlock[]) =>
-      admitSuggestions(candidates, createCorrectionAdmissionContext(blocks)),
-    [createCorrectionAdmissionContext],
-  )
-
-  const syncPersistedCorrectionBlock = useCallback(async (block: LocalCorrectionBlock) => {
-    persistedCorrectionBlocksRef.current.set(block.blockHash, block)
-    await localDB.correctionBlocks.save(block)
-    await localDB.correctionBlocks.evictOldestWriting(CORRECTION_BLOCK_CACHE_LIMIT)
-  }, [])
-
-  const persistCorrectionBlockWriteThrough = useCallback(
-    async (block: LocalCorrectionBlock, deletedBlockIds: string[] = []) => {
-      await syncPersistedCorrectionBlock(block)
-
-      void persistCorrectionBlockRemotely({
-        writingId: block.writingId,
-        block,
-        deletedBlockIds,
-      })
-        .then(() => {
-          persistedCorrectionBlocksRef.current.set(block.blockHash, {
-            ...block,
-            syncedAt: new Date().toISOString(),
-          })
-        })
-        .catch((error) => {
-          console.info(
-            `[corrections] persist skipped message=${error instanceof Error ? error.message : String(error)}`,
-          )
-        })
-    },
-    [syncPersistedCorrectionBlock],
-  )
-
-  const updatePersistedBlocksFromSuggestions = useCallback(
-    async (nextSuggestions: PublicationSuggestion[], blockHashes: string[]) => {
-      const currentEditor = editorInstanceRef.current
-
-      if (!currentEditor) {
-        return
-      }
-
-      const currentBlocksByLogicalId = new Map(
-        collectCorrectionBlocks(currentEditor.state.doc)
-          .map((block) => [parseCorrectionBlockLogicalId(block.id), block] as const)
-          .filter((entry): entry is [string, CorrectionTriggerBlock] => entry[0] !== null),
-      )
-
-      const updates = blockHashes
-        .map((blockHash) => {
-          const persistedBlock = persistedCorrectionBlocksRef.current.get(blockHash)
-
-          if (!persistedBlock) {
-            return null
-          }
-
-          const logicalId = parseCorrectionBlockLogicalId(persistedBlock.blockId)
-          const currentBlock = logicalId ? currentBlocksByLogicalId.get(logicalId) ?? null : null
-          const nextBlockHash = currentBlock?.hash ?? persistedBlock.blockHash
-          const nextBlockId = currentBlock?.id ?? persistedBlock.blockId
-          const didBlockHashChange = nextBlockHash !== persistedBlock.blockHash
-          const suggestions = nextSuggestions
-            .filter((suggestion) => suggestion.source_hash === blockHash)
-            .map((suggestion) =>
-              didBlockHashChange
-                ? {
-                    ...suggestion,
-                    block_id: nextBlockId,
-                    source_hash: nextBlockHash,
-                  }
-                : suggestion,
-            )
-
-          return {
-            previousBlock: persistedBlock,
-            nextBlock: {
-              ...persistedBlock,
-              id: didBlockHashChange
-                ? createCorrectionBlockRecordId(persistedBlock.writingId, nextBlockHash)
-                : persistedBlock.id,
-              blockId: nextBlockId,
-              blockHash: nextBlockHash,
-              suggestions,
-            } satisfies LocalCorrectionBlock,
-            deletedBlockIds: didBlockHashChange ? [persistedBlock.id] : [],
-          }
-        })
-        .filter(
-          (
-            update,
-          ): update is {
-            previousBlock: LocalCorrectionBlock
-            nextBlock: LocalCorrectionBlock
-            deletedBlockIds: string[]
-          } => update !== null,
-        )
-
-      if (updates.length === 0) {
-        return
-      }
-
-      for (const update of updates) {
-        if (update.deletedBlockIds.length > 0) {
-          persistedCorrectionBlocksRef.current.delete(update.previousBlock.blockHash)
-          await localDB.correctionBlocks.delete(update.previousBlock.id)
-        }
-
-        await persistCorrectionBlockWriteThrough(update.nextBlock, update.deletedBlockIds)
-      }
-    },
-    [persistCorrectionBlockWriteThrough],
-  )
-
-  const deletePersistedBlocksForPosition = useCallback(
-    async (writingId: string, block: CorrectionTriggerBlock) => {
-      const staleBlocks = findStaleCorrectionBlockRecords(
-        [...persistedCorrectionBlocksRef.current.values()].map((candidate) => ({
-          id: candidate.id,
-          blockId: candidate.blockId,
-          blockHash: candidate.blockHash,
-        })),
-        {
-          id: block.id,
-          hash: block.hash,
-          pos: block.pos,
-        },
-        DEFAULT_CORRECTION_BLOCK_POSITION_WINDOW,
-      ).map((candidate) => persistedCorrectionBlocksRef.current.get(candidate.blockHash)).filter(
-        (candidate): candidate is LocalCorrectionBlock => candidate !== undefined,
-      )
-
-      if (staleBlocks.length === 0) {
-        return
-      }
-
-      staleBlocks.forEach((candidate) => {
-        persistedCorrectionBlocksRef.current.delete(candidate.blockHash)
-      })
-      await localDB.correctionBlocks.deleteMany(staleBlocks.map((candidate) => candidate.id))
-
-      void persistCorrectionBlockRemotely({
-        writingId,
-        deletedBlockIds: staleBlocks.map((candidate) => candidate.id),
-      }).catch((error) => {
-        console.info(
-          `[corrections] stale delete skipped message=${error instanceof Error ? error.message : String(error)}`,
-        )
-      })
-    },
-    [],
-  )
-
-  const flushPendingCorrectionBlocks = useCallback(async (
-    writingId: string,
-    generation?: HydrationGeneration,
-  ) => {
-    const pendingResult = generation
-      ? await generation.runAsync(() => localDB.correctionBlocks.getByWriting(writingId))
-      : { status: "current" as const, value: await localDB.correctionBlocks.getByWriting(writingId) }
-    if (pendingResult.status === "stale") return
-    const pendingBlocks = pendingResult.value.filter((block) => block.syncedAt === null)
-
-    for (const block of pendingBlocks) {
-      if (generation && !generation.isCurrent()) return
-      void persistCorrectionBlockRemotely({
-        writingId,
-        block,
-      })
-        .then(() => {
-          const markPersisted = () =>
-            persistedCorrectionBlocksRef.current.set(block.blockHash, {
-              ...block,
-              syncedAt: new Date().toISOString(),
-            })
-          if (generation) generation.run(markPersisted)
-          else markPersisted()
-        })
-        .catch((error) => {
-          const logFailure = () => console.info(
-            `[corrections] retry skipped message=${error instanceof Error ? error.message : String(error)}`,
-          )
-          if (generation) generation.run(logFailure)
-          else logFailure()
-        })
-    }
+  const refreshRichFootnotes = useCallback(() => {
+    setRichFootnoteRevision((revision) => revision + 1)
   }, [])
 
   const persistEditorSnapshot = useCallback(
@@ -1359,10 +1238,9 @@ export function EditorShell({
       // races a second save queued behind a first one). Nothing to pass
       // through here any more.
       //
-      // Clear the "unconfirmed edit" flag now, synchronously, in the same
-      // tick as the call below — persist() registers this request with the
-      // coordinator's own pending/in-flight tracking synchronously too, so
-      // there is no window where neither signal reports the edit as unsaved.
+      // End the shell's pre-handoff lifecycle and begin the coordinator's
+      // post-handoff lifecycle in the same tick. `persist()` records its
+      // unconfirmed-content marker synchronously before returning.
       hasUnconfirmedLocalEditRef.current = false
       const persistence = persistenceCoordinator.persist(
         {
@@ -1442,6 +1320,13 @@ export function EditorShell({
     runRichModeUpdateSideEffects(queuedEditor)
   }, [runRichModeUpdateSideEffects])
 
+  useEffect(() => {
+    flushPendingEditOnUnmountRef.current = () => {
+      flushQueuedRichModeUpdate()
+      flushPendingMarkdownSave()
+    }
+  }, [flushPendingMarkdownSave, flushQueuedRichModeUpdate])
+
   const scheduleQueuedRichModeUpdate = useCallback(() => {
     richUpdateRafRef.current = null
     if (!isDesktopRuntime()) {
@@ -1470,9 +1355,30 @@ export function EditorShell({
         shellScrollLeft?: number
         windowScrollX?: number
         windowScrollY?: number
+        isStillValid?: () => boolean
+        onSettled?: () => void
       },
     ) => {
-      pendingMarkdownSelectionRef.current = { start, end, ...options }
+      const writingId = markdownSelectionOwnerId(currentWritingIdRef.current)
+      const requestedIsStillValid = options?.isStillValid
+      const isStillValid = () =>
+        markdownSelectionOwnerId(currentWritingIdRef.current) === writingId &&
+        (!requestedIsStillValid || requestedIsStillValid())
+
+      // The latest selection wins, but a pending completion callback is never
+      // dropped with the request it came with: hydration finishes through
+      // this queue (`onSettled: finishHydration`), and a plain restore
+      // coalescing over it used to leave the phase on "loading" (ODE-582).
+      // Only callbacks carry over; each request keeps its own validity check.
+      const supersededOnSettled = pendingMarkdownSelectionRef.current?.onSettled
+      const onSettled =
+        supersededOnSettled && options?.onSettled
+          ? () => {
+              supersededOnSettled()
+              options.onSettled?.()
+            }
+          : supersededOnSettled ?? options?.onSettled
+      pendingMarkdownSelectionRef.current = { start, end, ...options, writingId, isStillValid, onSettled }
 
       if (markdownSelectionRafRef.current !== null) {
         return
@@ -1488,9 +1394,18 @@ export function EditorShell({
           return
         }
 
+        // Checked at fire time, not schedule time: the document this
+        // restore was queued for may no longer be current by the time this
+        // frame actually runs (see the ref's own comment above).
+        if (pendingSelection.isStillValid && !pendingSelection.isStillValid()) {
+          pendingSelection.onSettled?.()
+          return
+        }
+
         const nextTextarea = markdownTextareaRef.current
 
         if (!nextTextarea) {
+          pendingSelection.onSettled?.()
           return
         }
 
@@ -1510,6 +1425,25 @@ export function EditorShell({
           nextTextarea.scrollLeft = pendingSelection.scrollLeft
         }
 
+        // Each scroll target re-applies itself a second frame later (layout
+        // can still settle after the first write) — that second write is
+        // the true "last write wins" moment, so it needs the same validity
+        // re-check (time has passed since the outer frame ran) and is what
+        // onSettled must actually wait for, not the outer frame itself.
+        let pendingNestedFrames = 0
+        const scheduleNestedApply = (apply: () => void) => {
+          pendingNestedFrames += 1
+          window.requestAnimationFrame(() => {
+            if (!pendingSelection.isStillValid || pendingSelection.isStillValid()) {
+              apply()
+            }
+            pendingNestedFrames -= 1
+            if (pendingNestedFrames === 0) {
+              pendingSelection.onSettled?.()
+            }
+          })
+        }
+
         const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
 
         if (
@@ -1527,7 +1461,7 @@ export function EditorShell({
           }
 
           applyViewportScroll()
-          window.requestAnimationFrame(applyViewportScroll)
+          scheduleNestedApply(applyViewportScroll)
         }
 
         const shellViewport = document.querySelector<HTMLElement>("main")
@@ -1546,7 +1480,7 @@ export function EditorShell({
           }
 
           applyShellScroll()
-          window.requestAnimationFrame(applyShellScroll)
+          scheduleNestedApply(applyShellScroll)
         }
 
         if (typeof pendingSelection.windowScrollX === "number" || typeof pendingSelection.windowScrollY === "number") {
@@ -1558,13 +1492,20 @@ export function EditorShell({
           }
 
           applyWindowScroll()
-          window.requestAnimationFrame(applyWindowScroll)
+          scheduleNestedApply(applyWindowScroll)
         }
 
         markdownSelectionRef.current = {
           start: pendingSelection.start,
           end: pendingSelection.end,
           text: nextTextarea.value.slice(pendingSelection.start, pendingSelection.end),
+          writingId: pendingSelection.writingId,
+        }
+
+        // No scroll target was scheduled (a plain selection-only restore) —
+        // this frame's write was the last one, so settle now.
+        if (pendingNestedFrames === 0) {
+          pendingSelection.onSettled?.()
         }
       })
     },
@@ -1626,37 +1567,6 @@ export function EditorShell({
     }
   }, [editor])
 
-  // Source-mode symmetry for ODE-478 case 2: the 800ms markdown save debounce
-  // only guards on modeRef, never on document identity. If a tab switch, close
-  // or New Tab flips the writing identity while the timer is pending, the
-  // callback would either persist the outgoing document's markdown under the
-  // incoming tab's writing id, or get silently dropped when the new tab's
-  // hydration restores a non-markdown mode first — the user loses the edit
-  // either way. Flush it against the outgoing document BEFORE the identity
-  // flip, exactly like flushQueuedRichModeUpdate does for rich-mode updates.
-  const flushPendingMarkdownSave = useCallback(() => {
-    const pendingMarkdown = pendingMarkdownSaveRef.current
-    if (markdownSaveTimeoutRef.current !== null) {
-      window.clearTimeout(markdownSaveTimeoutRef.current)
-      markdownSaveTimeoutRef.current = null
-    }
-    pendingMarkdownSaveRef.current = null
-    if (pendingMarkdown === null) return
-
-    const editorInstance = editorInstanceRef.current
-    if (!editorInstance || modeRef.current !== "markdown") return
-
-    isApplyingContentRef.current = true
-    const parsed = isDesktopRuntime() ? desktopDocumentEngine.sourceToRich(pendingMarkdown) : null
-    editorInstance.commands.setContent(
-      parsed?.success ? parsed.snapshot.bodyJson : materializeMarkdownForRichParser(pendingMarkdown),
-    )
-    isApplyingContentRef.current = false
-    setAcceptedMarkdownForAnnotations(pendingMarkdown)
-    setBodyText(editorInstance.getText())
-    void persistEditorSnapshot(editorInstance)
-  }, [persistEditorSnapshot])
-
   // Uploading an image needs a real writingId to attach the asset to
   // (server-side storage path + RLS), so a still-blank draft must
   // materialize first — the same principle as naming it (case 3) or Save As.
@@ -1674,102 +1584,27 @@ export function EditorShell({
     setImageModalOpen(true)
   }, [editor, persistEditorSnapshot])
 
-  useEffect(() => {
-    tableOfContentsItemsRef.current = tableOfContentsItems
-  }, [tableOfContentsItems])
-
-  useEffect(() => {
-    activeTableOfContentsItemIdRef.current = selectedTableOfContentsItemId
-  }, [selectedTableOfContentsItemId])
-
-  useEffect(() => {
-    if (
-      selectedTableOfContentsItemId &&
-      !tableOfContentsItems.some((item) => item.id === selectedTableOfContentsItemId)
-    ) {
-      setSelectedTableOfContentsItemId(null)
-    }
-  }, [selectedTableOfContentsItemId, tableOfContentsItems])
-
-  const syncActiveTableOfContentsItemFromScroll = useCallback(() => {
-    const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-    const items = tableOfContentsItemsRef.current
-
-    if (items.length === 0) {
-      return
-    }
-
-    const editorViewportRect = editorViewport?.getBoundingClientRect()
-    const usesEditorScroll = editorViewport
-      ? editorViewport.scrollHeight > editorViewport.clientHeight + 1
-      : false
-    const viewportTop = usesEditorScroll && editorViewportRect ? editorViewportRect.top : 0
-    const viewportBottom = usesEditorScroll && editorViewportRect ? editorViewportRect.bottom : window.innerHeight
-    const activationLine = viewportTop + 96
-    const visibleItems = items
-      .map((item) => ({ item, rect: item.dom.getBoundingClientRect() }))
-      .filter(({ rect }) => rect.bottom >= viewportTop && rect.top <= viewportBottom)
-
-    const nextActiveItem = visibleItems.reduce<TableOfContentDataItem | null>((closest, current) => {
-      if (!closest) {
-        return current.item
-      }
-
-      const closestRect = closest.dom.getBoundingClientRect()
-      const closestDistance = Math.abs(closestRect.top - activationLine)
-      const currentDistance = Math.abs(current.rect.top - activationLine)
-      return currentDistance < closestDistance ? current.item : closest
-    }, null)
-
-    if (nextActiveItem && nextActiveItem.id !== activeTableOfContentsItemIdRef.current) {
-      activeTableOfContentsItemIdRef.current = nextActiveItem.id
-      setSelectedTableOfContentsItemId(nextActiveItem.id)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!editor || typeof window === "undefined") {
-      return
-    }
-
-    const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-    const scrollHandler = editor.storage.tableOfContents?.scrollHandler
-
-    const handleScroll = () => {
-      if (typeof scrollHandler === "function") {
-        scrollHandler()
-      }
-
-      if (tableOfContentsScrollRafRef.current !== null) {
-        return
-      }
-
-      tableOfContentsScrollRafRef.current = window.requestAnimationFrame(() => {
-        tableOfContentsScrollRafRef.current = null
-        syncActiveTableOfContentsItemFromScroll()
-      })
-    }
-
-    editor.commands.updateTableOfContents()
-    handleScroll()
-    editorViewport?.addEventListener("scroll", handleScroll, { passive: true })
-    window.addEventListener("scroll", handleScroll, { passive: true })
-
-    return () => {
-      editorViewport?.removeEventListener("scroll", handleScroll)
-      window.removeEventListener("scroll", handleScroll)
-
-      if (tableOfContentsScrollRafRef.current !== null) {
-        window.cancelAnimationFrame(tableOfContentsScrollRafRef.current)
-        tableOfContentsScrollRafRef.current = null
-      }
-    }
-  }, [editor, syncActiveTableOfContentsItemFromScroll, tableOfContentsItems.length])
+  // ODE-602: tabla de contenidos (mudanza mecánica; mismos efectos, en el
+  // mismo orden y en esta posición).
+  const { navigateToTableOfContentsItem } = useTableOfContents({
+    activeTableOfContentsItemIdRef,
+    editor,
+    selectedTableOfContentsItemId,
+    setSelectedTableOfContentsItemId,
+    tableOfContentsItems,
+    tableOfContentsItemsRef,
+    tableOfContentsScrollRafRef,
+  })
 
   const persistCurrentWorkspaceViewState = useCallback(() => {
     const tabId = currentWritingIdRef.current ?? EDITOR_DRAFT_TAB_ID
     const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
     const shellViewport = document.querySelector<HTMLElement>("main")
+    const currentTab = getEditorSessionState().session.tabs.find((tab) => tab.id === tabId)
+    const markdownSelection = readMarkdownSelectionForActiveDocument(
+      markdownSelectionRef.current,
+      currentWritingIdRef.current,
+    )
 
     saveTabViewState({
       tabId,
@@ -1785,15 +1620,54 @@ export function EditorShell({
         selectionTo: modeRef.current === "rich" && editor ? editor.state.selection.to : null,
         markdownSelectionStart:
           modeRef.current === "markdown"
-            ? markdownSelectionRef.current?.start ?? markdownTextareaRef.current?.selectionStart ?? null
+            ? markdownSelection.selection?.start ??
+              (markdownSelection.belongsToOtherDocument
+                ? currentTab?.view_state?.markdownSelectionStart ?? null
+                : markdownTextareaRef.current?.selectionStart ?? null)
             : null,
         markdownSelectionEnd:
           modeRef.current === "markdown"
-            ? markdownSelectionRef.current?.end ?? markdownTextareaRef.current?.selectionEnd ?? null
+            ? markdownSelection.selection?.end ??
+              (markdownSelection.belongsToOtherDocument
+                ? currentTab?.view_state?.markdownSelectionEnd ?? null
+                : markdownTextareaRef.current?.selectionEnd ?? null)
             : null,
       },
     })
   }, [editor])
+
+  /**
+   * Protocolo de salida del documento activo (ADR documento activo, Hecho 4;
+   * Fase 1 — ODE-567). Antes estaba copiado en cada handler de transición.
+   *
+   * Los tres pasos son explícitos porque hoy NO todas las transiciones hacen
+   * los mismos, y la Fase 1 es una mudanza, no un cambio de comportamiento:
+   * cada sitio declara lo que ya hacía. Uniformizarlos es una decisión aparte.
+   * Va separado de `activateDocument` porque algunas transiciones (cerrar,
+   * abrir) salen ANTES de un `await` y activan DESPUÉS.
+   */
+  const prepareDocumentExit = useCallback(
+    (steps: { flushPendingEdit: boolean; snapshotDraft: boolean; saveViewState: boolean }) => {
+      // La edición en cola todavía apunta al editor del documento saliente:
+      // volcarla antes de que cambie la identidad (ODE-478 caso 2).
+      if (steps.flushPendingEdit) {
+        flushQueuedRichModeUpdate()
+        flushPendingMarkdownSave()
+      }
+      if (steps.snapshotDraft) {
+        snapshotOutgoingDraftContent()
+      }
+      if (steps.saveViewState) {
+        persistCurrentWorkspaceViewState()
+      }
+    },
+    [
+      flushPendingMarkdownSave,
+      flushQueuedRichModeUpdate,
+      persistCurrentWorkspaceViewState,
+      snapshotOutgoingDraftContent,
+    ],
+  )
 
   useEffect(() => {
     void initializeEditorSessionStore()
@@ -1859,11 +1733,7 @@ export function EditorShell({
   }, [currentWritingId, resetCorrectionQueueState])
 
   useEffect(() => {
-    titleRef.current = title
-  }, [title])
-
-  useEffect(() => {
-    if (!isDesktopRuntime() || hydrationWritingId !== null || !currentWritingId) {
+    if (!isDesktopRuntime() || hydrationPhase !== "ready" || !currentWritingId) {
       return
     }
 
@@ -1876,47 +1746,16 @@ export function EditorShell({
       // On desktop the filename is the canonical human title. Mirror the
       // catalog projection into the active editor without feeding session
       // writes back into this effect (which would create an update loop).
-      titleRef.current = catalogTitle
-      setTitle(catalogTitle)
-      setHasExplicitTitle(catalogTitle !== UNTITLED_WRITING_TITLE)
+      applyDocumentMetadata({
+        title: catalogTitle,
+        hasExplicitTitle: catalogTitle !== UNTITLED_WRITING_TITLE,
+      })
     }
 
     applyCatalogTitle()
     window.addEventListener(CATALOG_TITLE_CHANGE_EVENT, applyCatalogTitle)
     return () => window.removeEventListener(CATALOG_TITLE_CHANGE_EVENT, applyCatalogTitle)
-  }, [currentWritingId, hydrationWritingId])
-
-  useEffect(() => {
-    hasExplicitTitleRef.current = hasExplicitTitle
-  }, [hasExplicitTitle])
-
-  useEffect(() => {
-    versionRef.current = version
-  }, [version])
-
-  useEffect(() => {
-    createdAtRef.current = createdAt
-  }, [createdAt])
-
-  useEffect(() => {
-    writingSlugRef.current = writingSlug
-  }, [writingSlug])
-
-  useEffect(() => {
-    statusRef.current = writingStatus
-  }, [writingStatus])
-
-  useEffect(() => {
-    artifactTypeRef.current = artifactType
-  }, [artifactType])
-
-  useEffect(() => {
-    visibilityRef.current = writingVisibility
-  }, [writingVisibility])
-
-  useEffect(() => {
-    lifecycleRef.current = lifecycle
-  }, [lifecycle])
+  }, [applyDocumentMetadata, currentWritingId, hydrationPhase])
 
   useEffect(() => {
     const nextExternalLoad = resolveExternalWritingLoad(currentWritingIdRef.current, routeWritingId)
@@ -1925,19 +1764,12 @@ export function EditorShell({
       return
     }
 
-    // An external navigation (Desk/Search opening another artifact) flips the
-    // writing identity too; a pending Source-mode save must land on the
-    // outgoing document before that happens.
-    flushPendingMarkdownSave()
-    currentWritingIdRef.current = nextExternalLoad.activeWritingId
-    setCurrentWritingId(nextExternalLoad.activeWritingId)
-    setHydrationWritingId(nextExternalLoad.hydrationWritingId)
+    activateDocument(
+      { writingId: nextExternalLoad.activeWritingId },
+      "route",
+    )
     navigatedToDraftRef.current = false
-  }, [flushPendingMarkdownSave, routeWritingId])
-
-  useEffect(() => {
-    currentWritingIdRef.current = currentWritingId
-  }, [currentWritingId])
+  }, [activateDocument, routeWritingId])
 
   useEffect(() => {
     activeEditorTabIdRef.current = editorSession.active_tab_id
@@ -1947,333 +1779,52 @@ export function EditorShell({
     setImageViewerSource(null)
   }, [currentWritingId])
 
-  useEffect(() => {
-    if (!sessionLoaded || !routeWritingId) {
-      return
-    }
-
-    openWritingTab({ writingId: routeWritingId, replaceDraft: false })
-  }, [routeWritingId, sessionLoaded])
-
-  useEffect(() => {
-    if (
-      forceNewWriting ||
-      !sessionLoaded ||
-      routeWritingId ||
-      currentWritingIdRef.current ||
-      navigatedToDraftRef.current
-    ) {
-      return
-    }
-
-    const restoreTransition = resolvePersistedSessionRestoreTransition({
-      activeTabId: editorSession.active_tab_id,
-      tabs: editorSession.tabs.map((tab) => ({
-        id: tab.id,
-        writingId: tab.writing_id,
-        slug: tab.slug,
-      })),
-    }, {
-      isDesktopRuntime: isDesktopRuntime(),
-      useHistoryProjection: isPerfHarness(),
-    })
-
-    if (restoreTransition.status === "restore-writing") {
-      const nextHref = buildWritingRouteHref("/write", {
-        id: restoreTransition.writingId,
-        slug: restoreTransition.slug,
-      })
-
-      if (restoreTransition.target === "desktop-hydration") {
-        // Explicit desktop handoff: history is only a projection in the static
-        // bundle, so identity must transition before hydration/fallback effects.
-        currentWritingIdRef.current = restoreTransition.writingId
-        desktopSessionRestoreTimingRef.current = {
-          writingId: restoreTransition.writingId,
-          startedAt: performance.now(),
-        }
-        setCurrentWritingId(restoreTransition.writingId)
-        setHydrationWritingId(restoreTransition.writingId)
-        console.info(`[editor:session-restore] restorable ${restoreTransition.writingId}`)
-      } else if (restoreTransition.target === "history") {
-        replaceEditorHistory(nextHref)
-      } else {
-        router.replace(nextHref)
-      }
-      return
-    }
-
-    if (isDesktopRuntime()) {
-      console.info("[editor:session-restore] no-restorable-tab")
-    }
-
-    if (restoreTransition.status === "remain-empty") {
-      return
-    }
-
-    navigatedToDraftRef.current = true
-    openDraftTab(ephemeralDraftWritingIdRef.current)
-  }, [createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
-
-  // Eagerly create a stable local identity for blank /write so the first
-  // paste/input never races against identity creation. This is the explicit
-  // owner of the blank-draft -> identified-local-writing transition.
-  // Desktop drafts stay ephemeral until real content is entered, so this eager
-  // materialization is skipped there; identity is created on the first input/paste.
-  useEffect(() => {
-    if (isDesktopRuntime()) {
-      if (
-        sessionLoaded &&
-        !routeWritingId &&
-        !currentWritingIdRef.current &&
-        !ephemeralDraftWritingIdRef.current
-      ) {
-        ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
-      }
-      return
-    }
-
-    if (forceNewWriting || !sessionLoaded || routeWritingId || identityEnsuredRef.current || currentWritingIdRef.current) {
-      return
-    }
-
-    // If the session store already has an active non-draft tab, let the
-    // openDraftTab effect above handle redirection.
-    if (editorSession.active_tab_id && editorSession.active_tab_id !== EDITOR_DRAFT_TAB_ID) {
-      return
-    }
-
-    identityEnsuredRef.current = true
-
-    const ensureIdentity = async () => {
-      const { writingId: nextId } = createBlankDraftIdentity()
-      const nowIso = new Date().toISOString()
-      const nextTitle = isDesktopRuntime()
-        ? DESKTOP_UNTITLED_WRITING_TITLE
-        : deriveAutoTitle("", nowIso)
-
-      try {
-        if (isDesktopRuntime()) {
-          const result = await createDesktopDraftFn({ title: nextTitle })
-          if (result.error || !result.data) {
-            throw new Error(result.error?.message ?? "Failed to create desktop draft")
-          }
-          currentWritingIdRef.current = result.data.id
-        } else {
-          await (await getDocumentService()).saveWriting({
-            writing: {
-              id: nextId,
-              authorId: null,
-              title: nextTitle,
-              content: {
-                richText: EMPTY_EDITOR_JSON as Record<string, unknown>,
-                markdown: null,
-                plainText: "",
-                canonicalSource: "rich-text",
-              },
-              slug: null,
-              status: "draft",
-              artifactType: "general",
-              visibility: "private",
-              parentId: null,
-              correspondenceId: null,
-              version: 1,
-              deletedAt: null,
-              createdAt: nowIso,
-              updatedAt: nowIso,
-              contentUpdatedAt: nowIso,
-              metadataUpdatedAt: nowIso,
-            },
-          })
-          currentWritingIdRef.current = nextId
-        }
-      } catch {
-        // If the save fails (e.g., scope change in progress), fall back to
-        // the identity-on-first-input path in persistEditorSnapshot.
-        identityEnsuredRef.current = false
-        return
-      }
-
-      openWritingTab({
-        writingId: currentWritingIdRef.current ?? nextId,
-        title: nextTitle,
-        saveState: "saved-local",
-        hasPendingSync: false,
-        replaceDraft: true,
-      })
-
-      setCurrentWritingId(currentWritingIdRef.current ?? nextId)
-      setHydrationWritingId(null)
-      setTitle(nextTitle)
-      setHasExplicitTitle(false)
-      setBodyText("")
-      setVersion(1)
-      createdAtRef.current = nowIso
-      setCreatedAt(nowIso)
-      setWritingSlug(null)
-      setWritingStatus("draft")
-      setArtifactType("general")
-      setWritingVisibility("private")
-      setLifecycle("local-only")
-      setSyncStatus("saved-local")
-      titleRef.current = nextTitle
-      hasExplicitTitleRef.current = false
-      versionRef.current = 1
-      writingSlugRef.current = null
-      statusRef.current = "draft"
-      artifactTypeRef.current = "general"
-      visibilityRef.current = "private"
-      lifecycleRef.current = "local-only"
-      navigatedToDraftRef.current = true
-      if (isPerfHarness()) {
-        replaceEditorHistory(`/write/${currentWritingIdRef.current ?? nextId}`)
-      } else if (!isDesktopRuntime()) {
-        router.replace(`/write/${currentWritingIdRef.current ?? nextId}`)
-      }
-    }
-
-    void ensureIdentity()
-  }, [createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
+  // ODE-587: entrada a la sesión (mudanza mecánica; mismos efectos, en el
+  // mismo orden y en esta posición).
+  useSessionRestore({
+    activateDocument,
+    currentWritingIdRef,
+    desktopSessionRestoreTimingRef,
+    editorSession,
+    ephemeralDraftWritingIdRef,
+    forceNewWriting,
+    isPerfHarness,
+    navigatedToDraftRef,
+    navigateToWriting,
+    routeWritingId,
+    router,
+    sessionLoaded,
+  })
 
   useEffect(() => {
     setSidebarMode("collapsed")
   }, [])
 
-  useEffect(() => {
-    if (!isDesktopRuntime() || !currentWritingId) {
-      currentCanonicalPathRef.current = null
-      setCanonicalPath(null)
-      setExternalFileNotice(null)
-      return
-    }
-
-    let cancelled = false
-
-    let unsubscribeCatalog: (() => void) | null = null
-
-    // Desktop presence and bindings live in SQLite's DocumentCatalog. The
-    // legacy IndexedDB change bus does not receive watcher detach events, so
-    // listening only to it leaves an externally removed file looking "Saved".
-    void import("@/lib/queries/document-catalog")
-      .then(({ getCatalogRecord, subscribeToCatalog }) => {
-        if (cancelled) return
-
-        const syncCurrentWritingState = async (reason?: CatalogChange["reason"]) => {
-          const catalogRecord = await getCatalogRecord(currentWritingId)
-          if (cancelled || !catalogRecord) return
-
-          const nextCanonicalPath = catalogRecord.binding?.canonicalPath ?? null
-          const previousCanonicalPath = currentCanonicalPathRef.current
-
-          if (!catalogRecord.localPresent && previousCanonicalPath) {
-            currentCanonicalPathRef.current = null
-            setCanonicalPath(null)
-            setExternalFileNotice({ kind: "deleted", path: previousCanonicalPath })
-            return
-          }
-
-          if (
-            previousCanonicalPath &&
-            nextCanonicalPath &&
-            previousCanonicalPath !== nextCanonicalPath
-          ) {
-            currentCanonicalPathRef.current = nextCanonicalPath
-            setCanonicalPath(nextCanonicalPath)
-            setExternalFileNotice({ kind: "moved", path: nextCanonicalPath })
-            return
-          }
-
-          currentCanonicalPathRef.current = nextCanonicalPath
-          setCanonicalPath(nextCanonicalPath)
-
-          // WATCH-07 — the file's content itself (not just its path/presence)
-          // may have changed externally. The very first run for a freshly
-          // opened document has no baseline yet: only seed the coordinator's
-          // own tracked baseline here, never reload — the separate hydration
-          // effect already owns setting the editor's initial content for
-          // that case, and racing it here would double-apply the same
-          // content. The coordinator (not a local ref) owns this baseline
-          // from here on — see its own getDurableContentHash doc comment
-          // for why a caller-local copy would race a queued second save.
-          const nextContentHash = catalogRecord.binding?.contentHash ?? null
-          if (!hasSeededBaselineRef.current) {
-            hasSeededBaselineRef.current = true
-            persistenceCoordinator.setDurableContentHash(currentWritingId, nextContentHash)
-            setExternalFileNotice(null)
-            return
-          }
-
-          const decision = resolveExternalContentChange({
-            baselineContentHash: persistenceCoordinator.getDurableContentHash(currentWritingId),
-            currentContentHash: nextContentHash,
-            hasPendingLocalEdit: computeHasPendingLocalEdit({
-              hasUnconfirmedLocalEdit: hasUnconfirmedLocalEditRef.current,
-              hasPendingPersistence: persistenceCoordinator.hasPending({ writingId: currentWritingId }),
-            }),
-            reason,
-          })
-
-          if (decision.action === "none") {
-            setExternalFileNotice(null)
-            return
-          }
-
-          if (decision.action === "conflict") {
-            // Never auto-reload over an unsaved edit, and never let it
-            // silently save over the external one either — persistEditorSnapshot
-            // checks externalContentConflictRef before scheduling any write.
-            const conflict: ExternalContentConflict = { externalContentHash: nextContentHash!, path: nextCanonicalPath }
-            externalContentConflictRef.current = conflict
-            setExternalContentConflict(conflict)
-            return
-          }
-
-          // CLEAN auto-reload: nothing local is at risk, so silently keeping
-          // stale content would be strictly worse than adopting the external
-          // version. Re-read from the real service rather than trusting the
-          // catalog's own cached body (it has none — only the hash).
-          try {
-            const opened = await (await getDocumentService()).openWriting(currentWritingId)
-            const liveEditor = editorInstanceRef.current
-            if (cancelled || !opened.data || !liveEditor) return
-            isApplyingContentRef.current = true
-            liveEditor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
-            isApplyingContentRef.current = false
-            updateDerivedEditorState(liveEditor)
-            persistenceCoordinator.setDurableContentHash(currentWritingId, nextContentHash)
-            setExternalFileNotice({ kind: "content-changed", path: nextCanonicalPath })
-          } catch {
-            // Leave the stale content open and the previous notice in place;
-            // the next catalog event or focus retries the reload.
-          }
-        }
-
-        void syncCurrentWritingState()
-        unsubscribeCatalog = subscribeToCatalog((change) => {
-          if (change.documentIds.includes(currentWritingId)) {
-            void syncCurrentWritingState(change.reason)
-          }
-        })
-      })
-      .catch(() => {
-        // A catalog read failure leaves the editor content open; the next
-        // catalog event or document activation retries the state projection.
-      })
-
-    return () => {
-      cancelled = true
-      unsubscribeCatalog?.()
-      // Reset the canonical-path tracker when the watched writing changes.
-      // Otherwise the next writing's first sync sees the previous writing's path
-      // as the "previous" value and flashes a false "file moved" notice.
-      currentCanonicalPathRef.current = null
-      setCanonicalPath(null)
-      hasSeededBaselineRef.current = false
-      hasUnconfirmedLocalEditRef.current = false
-      externalContentConflictRef.current = null
-      setExternalContentConflict(null)
-    }
-  }, [currentWritingId, persistenceCoordinator, updateDerivedEditorState])
+  // ODE-599: la conexión con desktop (suscripción al catálogo, avisos de
+  // borrado/movimiento, recarga limpia y conflicto externo) vive en su hook.
+  // Se llama aquí, donde estaba el efecto, así que el orden de efectos no
+  // cambia; el estado y los refs siguen siendo de la shell.
+  const { keepMyVersion, reloadExternalVersion } = useExternalDocumentChanges({
+    applySyncStatus,
+    currentCanonicalPathRef,
+    currentWritingId,
+    currentWritingIdRef,
+    editor,
+    editorInstanceRef,
+    externalContentConflict,
+    externalContentConflictRef,
+    hasSeededBaselineRef,
+    hasUnconfirmedLocalEditRef,
+    isApplyingContentRef,
+    persistenceCoordinator,
+    persistEditorSnapshot,
+    refreshRichFootnotes,
+    setCanonicalPath,
+    setExternalContentConflict,
+    setExternalFileNotice,
+    syncStatusRef,
+    updateDerivedEditorState,
+  })
 
   useEffect(() => {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
@@ -2309,498 +1860,120 @@ export function EditorShell({
     setSidebarMode("collapsed")
   }, [])
 
-  useEffect(() => {
-    if (!editor) {
-      return
-    }
-
-    if (!currentWritingId) {
-      // No tab is open — clear stale content so the editor never shows a previous
-      // writing after the last tab is closed. `currentWritingId` is also null
-      // while sitting on the still-blank draft, so before wiping, restore
-      // whatever that draft held the last time it was left (captured by
-      // handleSelectWorkspaceTab/handleCloseWorkspaceTab) instead of
-      // discarding it — otherwise switching away and back erases in-progress
-      // text that was never given a chance to save (ODE-478 case 4).
-      const restorable =
-        ephemeralDraftWritingIdRef.current &&
-        draftContentSnapshotRef.current?.draftId === ephemeralDraftWritingIdRef.current
-          ? draftContentSnapshotRef.current
-          : null
-
-      isApplyingContentRef.current = true
-      editor.commands.setContent(restorable?.bodyJson ?? EMPTY_EDITOR_JSON)
-      isApplyingContentRef.current = false
-      updateDerivedEditorState(editor)
-      setWritingStatus("draft")
-      setArtifactType("general")
-      setWritingVisibility("private")
-      setTitle(UNTITLED_WRITING_TITLE)
-      setHasExplicitTitle(false)
-      setVersion(1)
-      setCreatedAt(null)
-      setWritingSlug(null)
-      setLifecycle("local-only")
-      setSyncStatus("saved")
-      setExternalFileNotice(null)
-      setPersistedCorrectionBlocks([])
-      applyCorrectionSuggestionUpdate(() => [], { immediate: true })
-      titleRef.current = UNTITLED_WRITING_TITLE
-      hasExplicitTitleRef.current = false
-      versionRef.current = 1
-      createdAtRef.current = null
-      writingSlugRef.current = null
-      lifecycleRef.current = "local-only"
-      currentCanonicalPathRef.current = null
-      setCanonicalPath(null)
-      window.requestAnimationFrame(() => {
-        editor.commands.focus("start")
-      })
-      return
-    }
-
-    updateDerivedEditorState(editor)
-
-    if (!hydrationWritingId) {
-      return
-    }
-
-    const targetWritingId = hydrationWritingId
-    const generationOwner = hydrationGenerationOwnerRef.current!
-    const generation = generationOwner.start(targetWritingId)
-
-    const hydrateEditor = async () => {
-      let hydratedWriting: EditorHydrationRecord | null = null
-      const localCorrectionBlocksResult = await generation.runAsync(
-        () => localDB.correctionBlocks.getByWriting(targetWritingId),
-      )
-      if (localCorrectionBlocksResult.status === "stale") return
-      let localCorrectionBlocks = localCorrectionBlocksResult.value
-
-      // openWriting handles local read + optional remote hydration in one call.
-      // Skeleton surfaces only when the call takes longer than 200 ms.
-      const skeletonTimer = setTimeout(() => {
-        generation.run(() => {
-          setIsBodyHydrating(true)
-        })
-      }, 200)
-
-      // Recovers the tab for an unavailable/unopenable writing WITHOUT persisting
-      // a new draft (invariant #10 / requirement 7): drop the invalid tab and
-      // fall back to a sibling tab or an in-memory blank draft tab.
-      const recoverUnavailableTab = () => {
-        console.info(`[editor] unavailable writing ${targetWritingId}; reconciling session`)
-        const reconciliation = reconcileUnavailableWritingTab(targetWritingId)
-        const sessionTabs = getEditorSessionState().session.tabs
-        const recovery = resolveUnavailableWritingRecovery(reconciliation, sessionTabs.map((tab) => ({
-          id: tab.id,
-          writingId: tab.writing_id,
-          slug: tab.slug,
-        })))
-        setHydrationWritingId(null)
-
-        if (recovery.status === "activate-writing") {
-          currentWritingIdRef.current = recovery.writingId
-          setCurrentWritingId(recovery.writingId)
-          setHydrationWritingId(recovery.writingId)
-          replaceEditorHistory(
-            buildWritingRouteHref("/write", { id: recovery.writingId, slug: recovery.slug }),
-          )
-        } else if (recovery.status === "show-empty-editor") {
-          currentWritingIdRef.current = null
-          setCurrentWritingId(null)
-          replaceEditorHistory("/write")
-        }
-      }
-
-      // Unified opener (ODE-375 M3): every id entry point — Desk, Search,
-      // Recent and the sidebar all navigate to /write?id= and funnel through
-      // this hydration — resolves identity through the DocumentCatalog first
-      // and consumes the opener's explicit outcomes. A `failed` outcome the
-      // opener classified as retryable (ODE-454) rearms itself with a bounded
-      // backoff + jitter — no click, navigation or web event involved — before
-      // falling back. `orphaned`, an exhausted retry loop, or a terminal
-      // `failed` recover the tab without a draft; `conflict` opens the local
-      // copy (visible conflict UX is owned by ODE-373); `opened` continues to
-      // content hydration below. The decision logic itself is the pure,
-      // dependency-injected coordinator extracted in ODE-455 — this effect
-      // only supplies the runtime adapters and reacts to its outcome.
-      const outcomeResult = await generation.runAsync(() =>
-        resolveHydrationOutcome(targetWritingId, {
-          isDesktopRuntime,
-          isUnifiedOpenEnabled,
-          isCancelled: () => !generation.isCurrent(),
-          openDocumentByIdWithRetry,
-          openWriting: async (id) => (await getDocumentService()).openWriting(id),
-          getLocalWriting: async (id) => {
-            // Explicit translation, not structural reuse: the coordinator's
-            // boundary is domain-shaped (HydrationLocalMetadata), not
-            // storage-shaped — this adapter is where the IndexedDB/SQLite
-            // column names (`canonical_path`, `sync_status`) stop.
-            const localWriting = await localDB.writings.get(id)
-            if (!localWriting) return null
-            return {
-              canonicalPath: localWriting.canonical_path,
-              lifecycle: localWriting.lifecycle,
-              syncStatus: localWriting.sync_status,
-            }
-          },
-        }),
-      )
-
-      clearTimeout(skeletonTimer)
-      generation.run(() => {
-        setIsBodyHydrating(false)
-      })
-
-      // The generation owner checks the result again after every awaited
-      // boundary. A document switch (A -> B) can land during unified open,
-      // openWriting or local metadata; a late A result must never act on B's
-      // session, editor, correction cache or route.
-      if (outcomeResult.status === "stale") return
-      const outcome = outcomeResult.value
-
-      if (outcome.status === "unavailable") {
-        if (outcome.source === "unified-open") {
-          console.info(
-            `[editor] unified-open unavailable documentId=${targetWritingId} status=${outcome.openStatus} reasonCode=${outcome.reasonCode} attempt=${outcome.attempt} next=unavailable`,
-          )
-        }
-        recoverUnavailableTab()
-        return
-      }
-
-      if (outcome.status === "open-error") {
-        console.error(`[editor] openWriting failed for ${targetWritingId}`, outcome.error)
-        return
-      }
-
-      hydratedWriting = outcome.record
-
-      if (localCorrectionBlocks.length === 0) {
-        try {
-          const correctionBlocksResult = await generation.runAsync(
-            () => hydrateCorrectionBlocksFromRemote(targetWritingId),
-          )
-          if (correctionBlocksResult.status === "stale") return
-          localCorrectionBlocks = correctionBlocksResult.value
-        } catch (error) {
-          if (!generation.isCurrent()) return
-          console.error(`[editor] correction hydration failed for ${targetWritingId}`, error)
-          localCorrectionBlocks = []
-        }
-      } else {
-        void flushPendingCorrectionBlocks(targetWritingId, generation)
-      }
-
-      if (!generation.isCurrent()) return
-
-      if (hydratedWriting) {
-        const { writing, canonicalPath, lifecycle: hydratedLifecycle, syncStatus: hydratedSyncStatus } =
-          hydratedWriting
-        // Local image node views resolve relative sources during setContent, so
-        // the document path must be available before ProseMirror creates them.
-        currentCanonicalPathRef.current = canonicalPath
-        setCanonicalPath(canonicalPath)
-        isApplyingContentRef.current = true
-        // Load JSON first to get the markdown serialization, then re-parse as markdown
-        // so that footnote references are converted to footnoteReference nodes.
-        editor.commands.setContent(writing.content.richText ?? EMPTY_EDITOR_JSON)
-        const serialized = isDesktopRuntime()
-          ? desktopDocumentEngine.richToSource(editor)
-          : null
-        const loadedMarkdown = serialized?.success
-          ? serialized.markdown
-          : normalizeMarkdownForRoundTrip(
-              getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
-            )
-        if (loadedMarkdown) {
-          const parsed = isDesktopRuntime() ? desktopDocumentEngine.sourceToRich(loadedMarkdown) : null
-          editor.commands.setContent(
-            parsed?.success ? parsed.snapshot.bodyJson : materializeMarkdownForRichParser(loadedMarkdown),
-          )
-        }
-        isApplyingContentRef.current = false
-        const currentDocBlocks = collectCorrectionBlocks(editor.state.doc)
-        const hydratedReconciliation = reconcileHydratedCorrectionBlocks(
-          localCorrectionBlocks,
-          currentDocBlocks.map((block) => block.hash),
-        )
-
-        if (hydratedReconciliation.stale.length > 0) {
-          const staleIds = hydratedReconciliation.stale.map((block) => block.id)
-
-          const deleteResult = await generation.runAsync(() => localDB.correctionBlocks.deleteMany(staleIds))
-          if (deleteResult.status === "stale") return
-          void persistCorrectionBlockRemotely({
-            writingId: targetWritingId,
-            deletedBlockIds: staleIds,
-          }).catch((error) => {
-            generation.run(() => {
-              console.info(
-                `[corrections] hydrate cleanup skipped message=${error instanceof Error ? error.message : String(error)}`,
-              )
-            })
-          })
-        }
-
-        localCorrectionBlocks = hydratedReconciliation.fresh
-        setPersistedCorrectionBlocks(localCorrectionBlocks)
-        applyCorrectionSuggestionUpdate(() => admitCorrectionSuggestions(
-          flattenPersistedSuggestions(localCorrectionBlocks),
-          currentDocBlocks,
-        ), {
-          immediate: true,
-        })
-
-        if (localCorrectionBlocks.length > 0) {
-          suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
-        }
-
-        const cachedBlockHashes = new Set(localCorrectionBlocks.map((block) => block.blockHash))
-        const uncachedBlocks = getHydrateMissCorrectionBlocks(
-          currentDocBlocks,
-          cachedBlockHashes,
-        )
-
-        for (const block of uncachedBlocks) {
-          const existingTimer = correctionTimersRef.current.get(block.id)
-
-          if (existingTimer) {
-            window.clearTimeout(existingTimer.timer)
-            correctionTimersRef.current.delete(block.id)
-          }
-
-          const timer = window.setTimeout(() => {
-            generation.run(() => {
-              correctionTimersRef.current.delete(block.id)
-
-              if (!correctionsEnabledRef.current) return
-
-              const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
-
-              if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) return
-
-              enqueueCorrectionBlockRef.current?.(currentBlock, "hydrate-miss")
-            })
-          }, 2000)
-
-          correctionTimersRef.current.set(block.id, { timer, pos: block.pos })
-        }
-
-        const loadedTitle = writing.title?.trim() || UNTITLED_WRITING_TITLE
-        const loadedHasExplicitTitle = isExplicitWritingTitle(
-          loadedTitle,
-          writing.content.plainText,
-          writing.createdAt,
-        )
-        setTitle(loadedTitle)
-        setHasExplicitTitle(loadedHasExplicitTitle)
-        setVersion(writing.version)
-        setCreatedAt(writing.createdAt)
-        setWritingSlug(writing.slug ?? null)
-        setWritingStatus(writing.status ?? "draft")
-        setArtifactType(writing.artifactType ?? "general")
-        setWritingVisibility(writing.visibility ?? "private")
-        setLifecycle(hydratedLifecycle)
-        setExternalFileNotice(null)
-        setSyncStatus(
-          mapLocalSyncStatusToSaveState(
-            hydratedSyncStatus,
-            hydratedLifecycle,
-            typeof navigator === "undefined" ? true : navigator.onLine,
-          ),
-        )
-        updateDerivedEditorState(editor)
-
-        const activeTab =
-          editorSession.tabs.find((tab) => tab.writing_id === writing.id) ??
-          editorSession.tabs.find((tab) => tab.id === routeWritingId) ??
-          editorSession.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID)
-        const viewState = activeTab?.view_state
-
-        if (viewState?.mode === "markdown") {
-          let nextMarkdown: string
-          if (isDesktopRuntime()) {
-            const result = desktopDocumentEngine.richToSource(editor)
-            if (!result.success) {
-              console.error("[ODE-209] DesktopDocumentEngine.richToSource failed:", result.error)
-              nextMarkdown = normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)))
-            } else {
-              nextMarkdown = result.markdown
-            }
-          } else {
-            nextMarkdown = normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)))
-          }
-          modeRef.current = "markdown"
-          setMode("markdown")
-          setMarkdownValue(nextMarkdown)
-          setAcceptedMarkdownForAnnotations(nextMarkdown)
-
-          window.requestAnimationFrame(() => {
-            generation.run(() => {
-              queueMarkdownSelectionRestore(
-                viewState.markdownSelectionStart ?? 0,
-                viewState.markdownSelectionEnd ?? viewState.markdownSelectionStart ?? 0,
-                {
-                  scrollTop: viewState.scrollTop,
-                  scrollLeft: viewState.scrollLeft,
-                  editorScrollTop: viewState.scrollTop,
-                  editorScrollLeft: viewState.scrollLeft,
-                  shellScrollTop: viewState.shellScrollTop,
-                  shellScrollLeft: viewState.shellScrollLeft,
-                  windowScrollX: viewState.windowScrollX,
-                  windowScrollY: viewState.windowScrollY,
-                },
-              )
-            })
-          })
-        } else if (viewState) {
-          modeRef.current = "rich"
-          setMode("rich")
-          window.requestAnimationFrame(() =>
-            generation.run(() => {
-              const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-              const shellViewport = document.querySelector<HTMLElement>("main")
-
-              const applyEditorScroll = () => {
-                if (editorViewport) {
-                  editorViewport.scrollTop = viewState.scrollTop
-                  editorViewport.scrollLeft = viewState.scrollLeft
-                }
-              }
-
-              const applyShellScroll = () => {
-                if (shellViewport) {
-                  shellViewport.scrollTop = viewState.shellScrollTop ?? 0
-                  shellViewport.scrollLeft = viewState.shellScrollLeft ?? 0
-                }
-              }
-
-              const applyWindowScroll = () => {
-                window.scrollTo(
-                  typeof viewState.windowScrollX === "number" ? viewState.windowScrollX : window.scrollX,
-                  typeof viewState.windowScrollY === "number" ? viewState.windowScrollY : window.scrollY,
-                )
-              }
-
-              if (
-                typeof viewState.selectionFrom === "number" &&
-                typeof viewState.selectionTo === "number" &&
-                viewState.selectionFrom >= 1 &&
-                viewState.selectionTo >= viewState.selectionFrom
-              ) {
-                editor
-                  .chain()
-                  .focus(undefined, { scrollIntoView: false })
-                  .setTextSelection({ from: viewState.selectionFrom, to: viewState.selectionTo })
-                  .run()
-              } else {
-                editor.commands.focus("start")
-              }
-
-              applyWindowScroll()
-              applyShellScroll()
-              applyEditorScroll()
-
-              window.requestAnimationFrame(() => {
-                generation.run(() => {
-                  applyWindowScroll()
-                  applyShellScroll()
-                  applyEditorScroll()
-                })
-              })
-            }),
-          )
-        }
-      } else {
-        setTitle(UNTITLED_WRITING_TITLE)
-        setHasExplicitTitle(false)
-        setVersion(0)
-        setCreatedAt(null)
-        setWritingSlug(null)
-        setWritingStatus("draft")
-        setArtifactType("general")
-        setWritingVisibility("private")
-        setSyncStatus("saved")
-        setExternalFileNotice(null)
-        setBodyText("")
-        currentCanonicalPathRef.current = null
-        setCanonicalPath(null)
-      }
-
-      generation.run(() => {
-        const restoreTiming = desktopSessionRestoreTimingRef.current
-        if (restoreTiming?.writingId === targetWritingId) {
-          console.info(
-            `[editor:session-restore] hydrated ${targetWritingId} duration_ms=${Math.round(performance.now() - restoreTiming.startedAt)}`,
-          )
-          desktopSessionRestoreTimingRef.current = null
-        }
-        setHydrationWritingId(null)
-      })
-    }
-
-    void hydrateEditor()
-
-    return () => {
-      generationOwner.cancel(generation)
-    }
-  }, [
-    applyCorrectionSuggestionUpdate,
-    admitCorrectionSuggestions,
-    currentWritingId,
+  // Hidratación del documento activo (ODE-562: movida tal cual a un hook).
+  // Se llama AQUÍ, en la posición que ocupaba el efecto: React ejecuta los
+  // efectos en orden de declaración y moverla alteraría su orden respecto a
+  // los espejos de refs y a la publicación de pestaña.
+  useDocumentHydration({
     editor,
-    editorSession.tabs,
-    flattenPersistedSuggestions,
-    flushPendingCorrectionBlocks,
-    hydrationWritingId,
-    queueMarkdownSelectionRestore,
+    currentWritingId,
+    hydrationPhase,
+    activationSeq,
     routeWritingId,
-    setPersistedCorrectionBlocks,
+    editorSession,
+    modeRef,
+    isApplyingContentRef,
+    hydrationGenerationOwnerRef,
+    currentCanonicalPathRef,
+    desktopSessionRestoreTimingRef,
+    ephemeralDraftWritingIdRef,
+    draftContentSnapshotRef,
+    suppressCorrectionAnalysisUntilRef,
+    setHydrationPhase,
+    setMode,
+    setMarkdownValue,
+    setBodyText,
+    setSyncStatus: applySyncStatus,
+    reconcileActiveSaveState: (reason: string) => {
+      void reconcileActiveSaveStateRef.current(reason)
+    },
+    setIsBodyHydrating,
+    activateDocument,
+    applyDocumentMetadata,
+    setExternalFileNotice,
+    setCanonicalPath,
+    refreshRichFootnotes,
     updateDerivedEditorState,
-  ])
+    applyCorrectionSuggestionUpdate,
+    flattenPersistedSuggestions,
+    admitCorrectionSuggestions,
+    flushPendingCorrectionBlocks,
+    queueMarkdownSelectionRestore,
+    setPersistedCorrectionBlocks,
+    readLocalCorrectionBlocks,
+    deleteLocalCorrectionBlocks,
+    untitledWritingTitle: UNTITLED_WRITING_TITLE,
+    isExplicitWritingTitle,
+  })
 
+  // ODE-542: una sola suscripción global a los eventos de sync. La identidad
+  // se resuelve por ref en el momento del evento, nunca con un
+  // `currentWritingId` capturado: un `synced` que llega durante la
+  // materialización o la hidratación no se pierde en la ventana de
+  // re-suscripción. Los eventos son invalidaciones: el documento activo
+  // relee su estado durable (O(1)); los de fondo solo actualizan su pestaña.
   useEffect(() => {
-    if (!currentWritingId) {
-      return
-    }
-
     return subscribeToSyncStatusChanges((event) => {
-      if (event.writingId !== currentWritingId) {
-        return
-      }
+      const activeWritingId = currentWritingIdRef.current
 
-      setSyncStatus(mapSyncLifecycleToSaveState(event.status))
-
-      if (event.status !== "synced") {
-        return
-      }
-
-      void (async () => {
-        const localWriting = await localDB.writings.get(currentWritingId)
-
-        if (!localWriting?.slug || routeWritingId === localWriting.slug) {
+      if (activeWritingId && event.writingId === activeWritingId) {
+        // Sin conexión no hay transición durable que releer: el commit local
+        // ya es durable y la nube no está disponible. Se proyecta "Saved
+        // locally" directamente, salvo que un fallo local sea dueño del
+        // indicador.
+        if (event.status === "offline") {
+          if (syncStatusRef.current !== "error") {
+            applySyncStatus("saved-local")
+            updateTabSaveState({
+              tabId: activeWritingId,
+              saveState: "saved-local",
+              hasPendingSync: saveStateToHasPendingSync("saved-local"),
+            })
+          }
           return
         }
 
-        setWritingSlug(localWriting.slug)
-        if (isPerfHarness()) {
-          // ODE-389: a cold harness has no session, so a real navigation lands
-          // on /login and takes the editor down mid-test. Keep the URL in sync
-          // without leaving the harness route.
-          replaceEditorHistory(`/write/${localWriting.slug}`)
-        } else if (!isDesktopRuntime()) {
-          router.replace(`/write/${localWriting.slug}`)
+        void reconcileActiveSaveStateRef.current(`sync-${event.status}`)
+
+        if (event.status !== "synced") {
+          return
         }
-      })()
+
+        void (async () => {
+          const localWriting = await localDB.writings.get(activeWritingId)
+
+          if (!localWriting?.slug || routeWritingId === localWriting.slug) {
+            return
+          }
+
+          applyDocumentMetadata({ slug: localWriting.slug })
+          navigateToWriting(router, `/write/${localWriting.slug}`, { mode: "replace", skipOnDesktop: true })
+        })()
+        return
+      }
+
+      // Documento de fondo: converge su pestaña sin tocar la status bar
+      // activa. Un evento perdido se cura al activarlo (relectura durable tras
+      // hidratar); un `error` local nunca lo borra un evento de la nube.
+      const tab = getEditorSessionState().session.tabs.find(
+        (candidate) => candidate.writing_id === event.writingId || candidate.id === event.writingId,
+      )
+      if (!tab || tab.save_state === "error") {
+        return
+      }
+      const nextTabState = mapSyncLifecycleToSaveState(event.status)
+      if (tab.save_state === nextTabState) {
+        return
+      }
+      updateTabSaveState({
+        tabId: tab.id,
+        saveState: nextTabState,
+        hasPendingSync: saveStateToHasPendingSync(nextTabState),
+      })
     })
-  }, [currentWritingId, routeWritingId, router])
+  }, [applyDocumentMetadata, applySyncStatus, routeWritingId, router])
 
   useEffect(() => {
-    const correctionTimers = correctionTimersRef.current
-    const correctionFailureRetryTimers = correctionFailureRetryTimersRef.current
-
     return () => {
       // Flush rather than drop: a Source-mode edit typed <800ms before an
       // unmount (web route change) still belongs to the current document.
@@ -2818,15 +1991,10 @@ export function EditorShell({
         window.cancelAnimationFrame(markdownSelectionRafRef.current)
       }
 
-      for (const { timer } of correctionTimers.values()) {
-        window.clearTimeout(timer)
-      }
-
-      for (const timer of correctionFailureRetryTimers.values()) {
-        window.clearTimeout(timer)
-      }
-
+      // El timer del toast lo arma `showCorrectionToast` (useCorrectionActions)
+      // en cualquier momento; hay que leer su valor al desmontar, no al montar.
       if (correctionToastDismissRef.current !== null) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         window.clearTimeout(correctionToastDismissRef.current)
       }
 
@@ -2835,9 +2003,6 @@ export function EditorShell({
       richUpdateEditorRef.current = null
       markdownSelectionRafRef.current = null
       pendingMarkdownSelectionRef.current = null
-      correctionTimers.clear()
-      correctionFailureRetryTimers.clear()
-      correctionQueueRef.current = []
       persistCurrentWorkspaceViewState()
     }
   }, [flushPendingMarkdownSave, persistCurrentWorkspaceViewState])
@@ -2888,385 +2053,40 @@ export function EditorShell({
     [editor, persistEditorSnapshot, updateDerivedEditorState],
   )
 
-  const applyCorrectionSuggestionsByRange = useCallback(
-    (targetSuggestions: PublicationSuggestion[]) => {
-      if (!editor || modeRef.current !== "rich") {
-        return {
-          appliedIds: [] as string[],
-          conflictIds: targetSuggestions.map((suggestion) => suggestion.id),
-        }
-      }
-
-      const pendingSuggestions = targetSuggestions.filter((suggestion) => suggestion.status === "pending")
-
-      if (pendingSuggestions.length === 0) {
-        return {
-          appliedIds: [] as string[],
-          conflictIds: [],
-        }
-      }
-
-      const resolvedRanges = resolveCorrectionDecorationRanges(editor.state.doc, pendingSuggestions)
-      const rangesById = new Map(resolvedRanges.map((range) => [range.suggestion.id, range]))
-      const applicableRanges = pendingSuggestions
-        .map((suggestion) => {
-          const range = rangesById.get(suggestion.id) ?? null
-
-          if (!range) {
-            return null
-          }
-
-          return getResolvedCorrectionText(editor.state.doc, range) === suggestion.original_text
-            ? range
-            : null
-        })
-        .filter((range): range is NonNullable<typeof range> => range !== null)
-        .sort((left, right) => right.from - left.from)
-
-      if (applicableRanges.length === 0) {
-        return {
-          appliedIds: [] as string[],
-          conflictIds: pendingSuggestions.map((suggestion) => suggestion.id),
-        }
-      }
-
-      const selectionBookmark = editor.state.selection.getBookmark()
-      const transaction = editor.state.tr
-
-      for (const { suggestion, from, to } of applicableRanges) {
-        transaction.insertText(suggestion.replacement_text, from, to)
-      }
-
-      try {
-        transaction.setSelection(selectionBookmark.map(transaction.mapping).resolve(transaction.doc))
-      } catch {
-        transaction.setSelection(TextSelection.near(transaction.doc.resolve(transaction.selection.from)))
-      }
-
-      if (markdownSaveTimeoutRef.current) {
-        window.clearTimeout(markdownSaveTimeoutRef.current)
-        markdownSaveTimeoutRef.current = null
-      }
-
-      suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
-      isApplyingContentRef.current = true
-      editor.view.dispatch(transaction)
-      isApplyingContentRef.current = false
-      updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
-
-      const appliedIds = applicableRanges.map((range) => range.suggestion.id)
-
-      return {
-        appliedIds,
-        conflictIds: pendingSuggestions
-          .filter((suggestion) => !appliedIds.includes(suggestion.id))
-          .map((suggestion) => suggestion.id),
-      }
-    },
-    [editor, persistEditorSnapshot, updateDerivedEditorState],
-  )
-
-  const applyCorrectionSuggestionsFromMarkdown = useCallback(
-    (targetSuggestions: PublicationSuggestion[]) => {
-      const result = applyPublicationSuggestionGroup(currentDocumentMarkdownRef.current, targetSuggestions)
-
-      if (result.appliedIds.length > 0) {
-        suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
-        applyMarkdownFromPanel(result.markdown)
-      }
-
-      return {
-        appliedIds: result.appliedIds,
-        conflictIds: result.conflictIds,
-      }
-    },
-    [applyMarkdownFromPanel],
-  )
-
-  const applyCorrectionSuggestions = useCallback(
-    (targetSuggestions: PublicationSuggestion[]) => {
-      if (modeRef.current === "rich") {
-        return applyCorrectionSuggestionsByRange(targetSuggestions)
-      }
-
-      return applyCorrectionSuggestionsFromMarkdown(targetSuggestions)
-    },
-    [applyCorrectionSuggestionsByRange, applyCorrectionSuggestionsFromMarkdown],
-  )
+  // ODE-586: acciones sobre las sugerencias de corrección (mudanza mecánica).
+  const {
+    applyCorrectionSuggestions,
+    handleAcceptCorrection,
+    showCorrectionToast,
+    handleRejectCorrection,
+    handleLearnWord,
+    handleRemoveLearnedWord,
+    handleAcceptAllCorrections,
+    handleRejectAllCorrections,
+  } = useCorrectionActions({
+    applyCorrectionSuggestionUpdate,
+    applyMarkdownFromPanel,
+    automaticCorrectionSuggestionsRef,
+    correctionToastDismissRef,
+    createCorrectionAdmissionContext,
+    currentDocumentMarkdownRef,
+    editor,
+    isApplyingContentRef,
+    learnedWordsRef,
+    markdownSaveTimeoutRef,
+    modeRef,
+    persistEditorSnapshot,
+    setCorrectionToast,
+    setLearnedWords,
+    suppressCorrectionAnalysisUntilRef,
+    updateDerivedEditorState,
+    updatePersistedBlocksFromSuggestions,
+  })
 
   const closeActivePanel = useCallback(() => {
     setActivePanel(null)
   }, [])
 
-  const navigateToTableOfContentsItem = useCallback(
-    (item: TableOfContentDataItem) => {
-      if (!editor) {
-        return
-      }
-
-      const cursorPosition = Math.min(item.pos + 1, editor.state.doc.content.size)
-      setSelectedTableOfContentsItemId(item.id)
-      editor.chain().focus().setTextSelection({ from: cursorPosition, to: cursorPosition }).run()
-
-      // Scroll the heading to the center of the visible area so the caret
-      // isn't hidden by the fixed topbar or bottom status bar.
-      requestAnimationFrame(() => {
-        const domPosition = editor.view.domAtPos(cursorPosition)
-        const element =
-          domPosition.node instanceof Element
-            ? domPosition.node
-            : domPosition.node.parentElement
-        element?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
-      })
-    },
-    [editor],
-  )
-
-  const handleAcceptCorrection = useCallback(
-    (suggestion: PublicationSuggestion, suggestionIds: string[] = [suggestion.id]) => {
-      if (isSuggestionAcceptDisabled(suggestion)) {
-        return
-      }
-
-      const suggestionIdSet = new Set(suggestionIds)
-      const targetSuggestions = automaticCorrectionSuggestionsRef.current.filter((item) => suggestionIdSet.has(item.id))
-      const result = applyCorrectionSuggestions(targetSuggestions)
-
-      automaticCorrectionSuggestionsRef.current
-        .filter((item) => result.appliedIds.includes(item.id))
-        .forEach((item) => rememberCorrectionDecision(item.correction_fingerprint, "accepted"))
-
-      let nextSuggestions = automaticCorrectionSuggestionsRef.current
-
-      if (result.appliedIds.length > 0) {
-        nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.appliedIds, "accepted")
-      }
-
-      if (result.conflictIds.length > 0) {
-        nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.conflictIds, "conflict")
-      }
-
-      if (result.appliedIds.length > 0 || result.conflictIds.length > 0) {
-        applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-        void updatePersistedBlocksFromSuggestions(
-          nextSuggestions,
-          [
-            ...new Set(
-              targetSuggestions
-                .map((item) => item.source_hash ?? "")
-                .filter(Boolean),
-            ),
-          ],
-        )
-      }
-    },
-    [applyCorrectionSuggestionUpdate, applyCorrectionSuggestions, updatePersistedBlocksFromSuggestions],
-  )
-
-  const showCorrectionToast = useCallback((toast: CorrectionToastState, durationMs: number) => {
-    setCorrectionToast(toast)
-
-    if (correctionToastDismissRef.current !== null) {
-      window.clearTimeout(correctionToastDismissRef.current)
-    }
-
-    correctionToastDismissRef.current = window.setTimeout(() => {
-      setCorrectionToast(null)
-      correctionToastDismissRef.current = null
-    }, durationMs)
-  }, [])
-
-  const handleRejectCorrection = useCallback((suggestionId: string) => {
-    const suggestion = automaticCorrectionSuggestionsRef.current.find((item) => item.id === suggestionId)
-
-    if (!suggestion) {
-      return
-    }
-
-    rememberCorrectionDecision(suggestion.correction_fingerprint, "rejected")
-    const nextSuggestions = updateSuggestionStatuses(
-      automaticCorrectionSuggestionsRef.current,
-      [suggestionId],
-      "rejected",
-    )
-    applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-    void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
-  }, [applyCorrectionSuggestionUpdate, updatePersistedBlocksFromSuggestions])
-
-  const handleLearnWord = useCallback((suggestion: PublicationSuggestion, suggestionIds: string[] = [suggestion.id]) => {
-    const normalizedWord = normalizeLearnedWord(suggestion.original_text)
-
-    if (!normalizedWord) {
-      handleRejectCorrection(suggestion.id)
-      return
-    }
-
-    const targetIds = [
-      ...new Set([
-        ...suggestionIds,
-        ...automaticCorrectionSuggestionsRef.current
-          .filter((item) => normalizeLearnedWord(item.original_text) === normalizedWord)
-          .map((item) => item.id),
-      ]),
-    ]
-    const sourceHashes = [
-      ...new Set(
-        automaticCorrectionSuggestionsRef.current
-          .map((item) => item.source_hash ?? "")
-          .filter(Boolean),
-      ),
-    ]
-
-    const optimisticEntry: LearnedWordEntry = {
-      id: `pending:${normalizedWord}`,
-      word: normalizedWord,
-      language: "unknown",
-      createdAt: new Date().toISOString(),
-    }
-
-    setLearnedWords((current) => {
-      if (current.some((item) => item.word === normalizedWord)) {
-        return current
-      }
-
-      return [optimisticEntry, ...current]
-    })
-
-    automaticCorrectionSuggestionsRef.current
-      .filter((item) => targetIds.includes(item.id))
-      .forEach((item) => rememberCorrectionDecision(item.correction_fingerprint, "rejected"))
-
-    const nextSuggestions = admitSuggestions(
-      updateSuggestionStatuses(
-        automaticCorrectionSuggestionsRef.current,
-        targetIds,
-        "rejected",
-      ),
-      {
-        ...createCorrectionAdmissionContext(),
-        learnedWords: createLearnedWordSet([
-          normalizedWord,
-          ...learnedWordsRef.current.map((item) => item.word),
-        ]),
-      },
-    )
-    applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-    void updatePersistedBlocksFromSuggestions(nextSuggestions, sourceHashes)
-
-    void getAIService().learnWord({
-      word: suggestion.original_text,
-      language: "unknown",
-    }).then((result) => {
-      if (result.error || !result.data) {
-        throw new Error(result.error?.message ?? "Could not save learned word.")
-      }
-
-      upsertCachedLearnedWord(result.data)
-      setLearnedWords((current) => {
-        const withoutOptimistic = current.filter((item) => item.id !== optimisticEntry.id)
-
-        if (withoutOptimistic.some((item) => item.word === result.data.word)) {
-          return withoutOptimistic
-        }
-
-        return [result.data, ...withoutOptimistic]
-      })
-    }).catch((error) => {
-      console.error("[learned-words] persist failed", error)
-      automaticCorrectionSuggestionsRef.current
-        .filter((item) => targetIds.includes(item.id))
-        .forEach((item) => forgetCorrectionDecision(item.correction_fingerprint))
-
-      const rollbackState = buildLearnWordRollbackState({
-        learnedWords: learnedWordsRef.current,
-        optimisticEntryId: optimisticEntry.id,
-        suggestions: automaticCorrectionSuggestionsRef.current,
-        targetIds,
-        admissionContext: createCorrectionAdmissionContext(),
-      })
-      setLearnedWords(rollbackState.learnedWords)
-      applyCorrectionSuggestionUpdate(() => rollbackState.suggestions, { immediate: true })
-      void updatePersistedBlocksFromSuggestions(rollbackState.suggestions, sourceHashes)
-      showCorrectionToast({
-        phase: "complete",
-        completed: 0,
-        total: 0,
-        message: "We couldn't save that word. Try again.",
-      }, 4000)
-    })
-  }, [
-    applyCorrectionSuggestionUpdate,
-    createCorrectionAdmissionContext,
-    handleRejectCorrection,
-    showCorrectionToast,
-    updatePersistedBlocksFromSuggestions,
-  ])
-
-  const handleRemoveLearnedWord = useCallback((id: string) => {
-    const previous = learnedWordsRef.current
-    setLearnedWords(previous.filter((item) => item.id !== id))
-    removeCachedLearnedWord(id)
-
-    void getAIService().deleteLearnedWord(id).then((result) => {
-      if (result.error) {
-        throw new Error(result.error.message)
-      }
-    }).catch((error) => {
-      console.error("[learned-words] delete failed", error)
-      primeLearnedWordsCache(previous)
-      setLearnedWords(previous)
-    })
-  }, [])
-
-  const handleAcceptAllCorrections = useCallback(() => {
-    const pendingSuggestions = automaticCorrectionSuggestionsRef.current.filter((suggestion) => suggestion.status === "pending")
-    const result = applyCorrectionSuggestions(pendingSuggestions)
-
-    if (result.appliedIds.length === 0 && result.conflictIds.length === 0) {
-      return
-    }
-
-    automaticCorrectionSuggestionsRef.current
-      .filter((suggestion) => result.appliedIds.includes(suggestion.id))
-      .forEach((suggestion) => rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted"))
-
-    let nextSuggestions = automaticCorrectionSuggestionsRef.current
-    if (result.appliedIds.length > 0) {
-      nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.appliedIds, "accepted")
-    }
-    if (result.conflictIds.length > 0) {
-      nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.conflictIds, "conflict")
-    }
-    applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-    void updatePersistedBlocksFromSuggestions(
-      nextSuggestions,
-      [
-        ...new Set(
-          automaticCorrectionSuggestionsRef.current
-            .filter((suggestion) => result.appliedIds.includes(suggestion.id))
-            .map((suggestion) => suggestion.source_hash ?? "")
-            .filter(Boolean),
-        ),
-      ],
-    )
-  }, [applyCorrectionSuggestionUpdate, applyCorrectionSuggestions, updatePersistedBlocksFromSuggestions])
-
-  const handleRejectAllCorrections = useCallback(() => {
-    const pending = automaticCorrectionSuggestionsRef.current.filter((s) => s.status === "pending")
-
-    pending.forEach((suggestion) => rememberCorrectionDecision(suggestion.correction_fingerprint, "rejected"))
-    const nextSuggestions = updateSuggestionStatuses(
-      automaticCorrectionSuggestionsRef.current,
-      pending.map((s) => s.id),
-      "rejected",
-    )
-    applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-    void updatePersistedBlocksFromSuggestions(
-      nextSuggestions,
-      [...new Set(pending.map((suggestion) => suggestion.source_hash ?? "").filter(Boolean))],
-    )
-  }, [applyCorrectionSuggestionUpdate, updatePersistedBlocksFromSuggestions])
 
   const getRichSelectionOverlayPositions = useCallback((from: number, to: number) => {
     if (!editor) return null
@@ -3320,6 +2140,7 @@ export function EditorShell({
 
   const handleRunAction = useCallback(
     (action: EditorShortcutAction, options?: { richSelection?: RichSelectionRange }) => {
+      const writingId = markdownSelectionOwnerId(currentWritingId)
       const runGlobalAction = () => {
         switch (action) {
           case "find":
@@ -3404,6 +2225,10 @@ export function EditorShell({
       }
 
       const captureMarkdownSelection = () => {
+        if (markdownSelectionOwnerId(currentWritingIdRef.current) !== writingId) {
+          return
+        }
+
         const textarea = markdownTextareaRef.current
 
         if (!textarea) {
@@ -3417,12 +2242,12 @@ export function EditorShell({
           start,
           end,
           text: textarea.value.slice(start, end),
+          writingId,
         }
       }
 
       const persistMarkdownDraft = (nextMarkdown: string) => {
         setMarkdownValue(nextMarkdown)
-        pendingMarkdownSaveRef.current = nextMarkdown
         // WATCH-07 — see hasUnconfirmedLocalEditRef's own doc comment: real
         // edit, marked dirty immediately, before the debounce below.
         hasUnconfirmedLocalEditRef.current = true
@@ -3431,16 +2256,25 @@ export function EditorShell({
           window.clearTimeout(markdownSaveTimeoutRef.current)
         }
 
-        setSyncStatus("saving")
+        applySyncStatus("saving")
 
         if (!editor) {
           return
         }
 
-        markdownSaveTimeoutRef.current = window.setTimeout(() => {
+        markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
+          if (modeRef.current !== "markdown") {
+            markdownSaveTimeoutRef.current = null
+            return
+          }
+
+          isApplyingContentRef.current = true
+          editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
+          isApplyingContentRef.current = false
+          setBodyText(editor.getText())
+          void persistEditorSnapshot(editor)
           markdownSaveTimeoutRef.current = null
-          flushPendingMarkdownSave()
-        }, MARKDOWN_SAVE_DEBOUNCE_MS)
+        })
       }
 
       const toggleMarkdownWrap = (marker: string) => {
@@ -3448,8 +2282,15 @@ export function EditorShell({
         const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
         const shellViewport = document.querySelector<HTMLElement>("main")
         const fallbackCursor = markdownValue.length
-        const start = markdownSelectionRef.current?.start ?? textarea?.selectionStart ?? fallbackCursor
-        const end = markdownSelectionRef.current?.end ?? textarea?.selectionEnd ?? fallbackCursor
+        const markdownSelection = readMarkdownSelectionForActiveDocument(
+          markdownSelectionRef.current,
+          currentWritingIdRef.current,
+          markdownValue,
+        )
+        const start = markdownSelection.selection?.start ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionStart ?? fallbackCursor)
+        const end = markdownSelection.selection?.end ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionEnd ?? fallbackCursor)
         const scrollTop = textarea?.scrollTop
         const scrollLeft = textarea?.scrollLeft
         const editorScrollTop = editorViewport?.scrollTop
@@ -3484,8 +2325,15 @@ export function EditorShell({
         const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
         const shellViewport = document.querySelector<HTMLElement>("main")
         const fallbackCursor = markdownValue.length
-        const selectionStart = markdownSelectionRef.current?.start ?? textarea?.selectionStart ?? fallbackCursor
-        const selectionEnd = markdownSelectionRef.current?.end ?? textarea?.selectionEnd ?? fallbackCursor
+        const markdownSelection = readMarkdownSelectionForActiveDocument(
+          markdownSelectionRef.current,
+          currentWritingIdRef.current,
+          markdownValue,
+        )
+        const selectionStart = markdownSelection.selection?.start ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionStart ?? fallbackCursor)
+        const selectionEnd = markdownSelection.selection?.end ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionEnd ?? fallbackCursor)
         const scrollTop = textarea?.scrollTop
         const scrollLeft = textarea?.scrollLeft
         const editorScrollTop = editorViewport?.scrollTop
@@ -3829,7 +2677,9 @@ export function EditorShell({
       }
     },
     [
+      applySyncStatus,
       captureRichSelectionSnapshot,
+      currentWritingId,
       editor,
       flushPendingMarkdownSave,
       markdownValue,
@@ -3837,7 +2687,7 @@ export function EditorShell({
       openInsertImageModal,
       queueMarkdownSelectionRestore,
       router,
-      showCorrectionToast,
+      scheduleMarkdownSave,
       toggleFocusMode,
     ],
   )
@@ -4230,15 +3080,29 @@ export function EditorShell({
         window.clearTimeout(markdownSaveTimeoutRef.current)
       }
 
-      setSyncStatus("saving")
+      applySyncStatus("saving")
 
-      pendingMarkdownSaveRef.current = normalizedMarkdown
-      markdownSaveTimeoutRef.current = window.setTimeout(() => {
+      markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
+        if (modeRef.current !== "markdown") {
+          markdownSaveTimeoutRef.current = null
+          return
+        }
+
+        isApplyingContentRef.current = true
+        const parsed = isDesktopRuntime() ? desktopDocumentEngine.sourceToRich(normalizedMarkdown) : null
+        editor.commands.setContent(
+          parsed?.success ? parsed.snapshot.bodyJson : materializeMarkdownForRichParser(normalizedMarkdown),
+        )
+        isApplyingContentRef.current = false
+        // Update metrics from TipTap but do NOT derive markdownValue from it —
+        // TipTap serializes table nodes as HTML, which would overwrite GFM textarea content.
+        // In Markdown mode the textarea is the source of truth; markdownValue is already correct.
+        setBodyText(editor.getText())
+        void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
-        flushPendingMarkdownSave()
-      }, MARKDOWN_SAVE_DEBOUNCE_MS)
+      })
     },
-    [editor, flushPendingMarkdownSave],
+    [applySyncStatus, editor, persistEditorSnapshot, scheduleMarkdownSave],
   )
 
   const handleInsertLink = useCallback(
@@ -4247,9 +3111,17 @@ export function EditorShell({
         const source = markdownValue
         const textarea = markdownTextareaRef.current
         const fallbackCursor = source.length
-        const start = markdownSelectionRef.current?.start ?? textarea?.selectionStart ?? fallbackCursor
-        const end = markdownSelectionRef.current?.end ?? textarea?.selectionEnd ?? fallbackCursor
-        const selectedText = markdownSelectionRef.current?.text?.trim() ?? source.slice(start, end).trim()
+        const markdownSelection = readMarkdownSelectionForActiveDocument(
+          markdownSelectionRef.current,
+          currentWritingIdRef.current,
+          source,
+        )
+        const start = markdownSelection.selection?.start ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionStart ?? fallbackCursor)
+        const end = markdownSelection.selection?.end ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionEnd ?? fallbackCursor)
+        const selectedText = markdownSelection.selection?.text?.trim() ??
+          (markdownSelection.belongsToOtherDocument ? "" : source.slice(start, end).trim())
         const linkText = payload.text || selectedText || payload.url
         const replacement = `[${linkText}](${payload.url})`
         const nextMarkdown = `${source.slice(0, start)}${replacement}${source.slice(end)}`
@@ -4263,14 +3135,22 @@ export function EditorShell({
           window.clearTimeout(markdownSaveTimeoutRef.current)
         }
 
-        setSyncStatus("saving")
+        applySyncStatus("saving")
 
         if (editor) {
-          pendingMarkdownSaveRef.current = nextMarkdown
-          markdownSaveTimeoutRef.current = window.setTimeout(() => {
+          markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
+            if (modeRef.current !== "markdown") {
+              markdownSaveTimeoutRef.current = null
+              return
+            }
+
+            isApplyingContentRef.current = true
+            editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
+            isApplyingContentRef.current = false
+            setBodyText(editor.getText())
+            void persistEditorSnapshot(editor)
             markdownSaveTimeoutRef.current = null
-            flushPendingMarkdownSave()
-          }, MARKDOWN_SAVE_DEBOUNCE_MS)
+          })
         }
 
         queueMarkdownSelectionRestore(nextSelectionStart, nextSelectionEnd)
@@ -4307,7 +3187,7 @@ export function EditorShell({
           .run()
       }
     },
-    [editor, flushPendingMarkdownSave, markdownValue, queueMarkdownSelectionRestore],
+    [applySyncStatus, editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, scheduleMarkdownSave],
   )
 
   useEffect(() => {
@@ -4344,7 +3224,7 @@ export function EditorShell({
       const nextMarkdown = markdownValue ? `${markdownValue}\n\n${tableMarkdown}\n` : `${tableMarkdown}\n`
       setMarkdownValue(nextMarkdown)
       hasUnconfirmedLocalEditRef.current = true
-      setSyncStatus("saving")
+      applySyncStatus("saving")
 
       if (!editor) {
         return
@@ -4357,13 +3237,20 @@ export function EditorShell({
       // Debounce parse + persist exactly like handleMarkdownChange, but do NOT call
       // updateDerivedEditorState — that would overwrite markdownValue with TipTap's
       // serialization of the table nodes, which can include HTML instead of GFM syntax.
-      pendingMarkdownSaveRef.current = nextMarkdown
-      markdownSaveTimeoutRef.current = window.setTimeout(() => {
+      markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
+        if (modeRef.current !== "markdown") {
+          markdownSaveTimeoutRef.current = null
+          return
+        }
+
+        isApplyingContentRef.current = true
+        editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
+        isApplyingContentRef.current = false
+        void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
-        flushPendingMarkdownSave()
-      }, MARKDOWN_SAVE_DEBOUNCE_MS)
+      })
     },
-    [mode, editor, flushPendingMarkdownSave, markdownValue, persistEditorSnapshot],
+    [applySyncStatus, mode, editor, markdownValue, persistEditorSnapshot, scheduleMarkdownSave],
   )
 
   const handleInsertImage = useCallback(
@@ -4372,25 +3259,39 @@ export function EditorShell({
         const source = markdownValue
         const textarea = markdownTextareaRef.current
         const fallbackCursor = source.length
-        const start = markdownSelectionRef.current?.start ?? textarea?.selectionStart ?? fallbackCursor
-        const end = markdownSelectionRef.current?.end ?? textarea?.selectionEnd ?? fallbackCursor
+        const markdownSelection = readMarkdownSelectionForActiveDocument(
+          markdownSelectionRef.current,
+          currentWritingIdRef.current,
+          source,
+        )
+        const start = markdownSelection.selection?.start ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionStart ?? fallbackCursor)
+        const end = markdownSelection.selection?.end ??
+          (markdownSelection.belongsToOtherDocument ? fallbackCursor : textarea?.selectionEnd ?? fallbackCursor)
         const imageMarkdown = `![${payload.alt}](${payload.src})`
         const nextMarkdown = `${source.slice(0, start)}${imageMarkdown}${source.slice(end)}`
         const nextSelectionStart = start + imageMarkdown.length
 
         setMarkdownValue(nextMarkdown)
         hasUnconfirmedLocalEditRef.current = true
-        setSyncStatus("saving")
+        applySyncStatus("saving")
 
         if (editor) {
           if (markdownSaveTimeoutRef.current) {
             window.clearTimeout(markdownSaveTimeoutRef.current)
           }
-          pendingMarkdownSaveRef.current = nextMarkdown
-          markdownSaveTimeoutRef.current = window.setTimeout(() => {
+          markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
+            if (modeRef.current !== "markdown") {
+              markdownSaveTimeoutRef.current = null
+              return
+            }
+            isApplyingContentRef.current = true
+            editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
+            isApplyingContentRef.current = false
+            setBodyText(editor.getText())
+            void persistEditorSnapshot(editor)
             markdownSaveTimeoutRef.current = null
-            flushPendingMarkdownSave()
-          }, MARKDOWN_SAVE_DEBOUNCE_MS)
+          })
         }
 
         queueMarkdownSelectionRestore(nextSelectionStart, nextSelectionStart)
@@ -4408,7 +3309,7 @@ export function EditorShell({
         .run()
       void persistEditorSnapshot(editor)
     },
-    [editor, flushPendingMarkdownSave, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore],
+    [applySyncStatus, editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, scheduleMarkdownSave],
   )
 
   const handleBackupLocalImage = useCallback(async () => {
@@ -4519,913 +3420,44 @@ export function EditorShell({
     currentDocumentMarkdownRef.current = currentDocumentMarkdown
   }, [currentDocumentMarkdown])
 
-  useEffect(() => {
-    automaticCorrectionSuggestionsRef.current = automaticCorrectionSuggestions
-  }, [automaticCorrectionSuggestions])
-
-  useEffect(() => {
-    learnedWordsRef.current = learnedWords
-  }, [learnedWords])
-
-  useEffect(() => {
-    if (!currentWritingId || learnedWordsLoadedRef.current) {
-      return
-    }
-
-    setLearnedWordsLoading(true)
-
-    void loadCachedLearnedWordsPages(getAIService()).then((result) => {
-      if (!result.ok) {
-        console.info(`[learned-words] load skipped message=${result.message}`)
-        return
-      }
-
-      learnedWordsLoadedRef.current = true
-      const nextLearnedWords = mergeLearnedWordEntries(learnedWordsRef.current, result.items)
-      primeLearnedWordsCache(nextLearnedWords)
-      setLearnedWords(nextLearnedWords)
-      const sourceHashes = [
-        ...new Set(
-          automaticCorrectionSuggestionsRef.current
-            .map((suggestion) => suggestion.source_hash ?? "")
-            .filter(Boolean),
-        ),
-      ]
-      const nextSuggestions = admitSuggestions(
-        automaticCorrectionSuggestionsRef.current,
-        {
-          ...createCorrectionAdmissionContext(),
-          learnedWords: createLearnedWordSet(nextLearnedWords.map((item) => item.word)),
-        },
-      )
-      applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-      void updatePersistedBlocksFromSuggestions(nextSuggestions, sourceHashes)
-    }).finally(() => {
-      setLearnedWordsLoading(false)
-    })
-  }, [
-    applyCorrectionSuggestionUpdate,
-    createCorrectionAdmissionContext,
-    currentWritingId,
-    updatePersistedBlocksFromSuggestions,
-  ])
-
-  const normalizeAutomaticSuggestion = useCallback(
-    (block: CorrectionTriggerBlock, suggestion: PublicationSuggestion): PublicationSuggestion => {
-      const sourceMarkdown = currentDocumentMarkdownRef.current
-      const occurrence = suggestion.occurrence ?? 0
-      const fingerprint =
-        suggestion.correction_fingerprint ??
-        createStableFingerprint({
-          type: suggestion.mechanical_type ?? suggestion.kind,
-          originalText: suggestion.original_text,
-          replacementText: suggestion.replacement_text,
-        })
-      const id = [
-        "auto-correction",
-        block.hash,
-        hashPublicationSource(`${fingerprint}:${occurrence}`),
-      ].join(":")
-
-      return {
-        ...suggestion,
-        ...deriveSuggestionContexts(sourceMarkdown, suggestion.original_text),
-        id,
-        block_id: block.id,
-        source_hash: block.hash,
-        correction_fingerprint: fingerprint,
-        occurrence,
-        status: "pending",
-      }
-    },
-    [],
-  )
-
+  // ODE-586: ciclo de vida de las correcciones (mudanza mecánica; mismos
+  // efectos, en el mismo orden y en esta posición).
   const {
-    runState: correctionAnalysisRunState,
-    progress: correctionAnalysisProgress,
-    startAnalysis: startCorrectionAnalysis,
-    retryFailedPackages: retryFailedCorrectionPackages,
-    cancelAnalysis: cancelCorrectionAnalysis,
-  } = useManualCorrections({
+    correctionAnalysisRunState,
+    correctionAnalysisProgress,
+    startCorrectionAnalysis,
+    retryFailedCorrectionPackages,
+    cancelCorrectionAnalysis,
+  } = useCorrectionLifecycle({
+    admitCorrectionSuggestions,
+    applyCorrectionSuggestionUpdate,
+    applyCorrectionSuggestions,
+    automaticCorrectionSuggestions,
+    automaticCorrectionSuggestionsRef,
+    createCorrectionAdmissionContext,
+    currentDocumentMarkdownRef,
     currentWritingId,
-    editorRef: editorInstanceRef,
     currentWritingIdRef,
-    titleRef,
-    learnedWordsRef,
-    persistedCorrectionBlocksRef,
-    readCorrectionMemory,
-    admitCorrectionSuggestions,
-    applyCorrectionSuggestionUpdate,
-    normalizeAutomaticSuggestion,
-    persistCorrectionBlockWriteThrough,
-    updatePersistedBlocksFromSuggestions,
-    logCorrectionEvent,
-    showCorrectionToast,
-  })
-
-  const getBlockSuggestions = useCallback(
-    (blockId: string, sourceHash?: string) =>
-      automaticCorrectionSuggestionsRef.current.filter(
-        (suggestion) =>
-          suggestion.block_id === blockId && (sourceHash ? suggestion.source_hash === sourceHash : true),
-      ),
-    [],
-  )
-
-  const finishCorrectionQueueIfIdle = useCallback(() => {
-    if (
-      correctionQueueRef.current.length > 0 ||
-      correctionProcessingRef.current ||
-      correctionFailureRetryTimersRef.current.size > 0 ||
-      correctionQueueFailureVisibleRef.current
-    ) {
-      return
-    }
-
-    showCorrectionToast({
-      phase: "complete",
-      completed: correctionQueueCompletedRef.current,
-      total: correctionQueueTotalRef.current,
-    }, 2000)
-    window.setTimeout(() => {
-      correctionQueueTotalRef.current = 0
-      correctionQueueCompletedRef.current = 0
-    }, 2000)
-  }, [showCorrectionToast])
-
-  const dropStaleSuggestionsForQueuedBlock = useCallback(
-    (blockId: string) => {
-      applyCorrectionSuggestionUpdate((current) => {
-        const transition = dropStaleSuggestionsForBlock(current, blockId)
-
-        for (const suggestionId of transition.droppedIds) {
-          logCorrectionEvent({
-            type: "stale:drop",
-            blockId,
-            suggestionId,
-          })
-        }
-
-        return transition.suggestions
-      }, { immediate: true })
-    },
-    [applyCorrectionSuggestionUpdate],
-  )
-
-  const showCorrectionFailureToast = useCallback((message: string) => {
-    showCorrectionToast({
-      phase: "error",
-      completed: correctionQueueCompletedRef.current,
-      total: correctionQueueTotalRef.current,
-      message,
-    }, 5000)
-  }, [showCorrectionToast])
-
-  const clearPendingCorrectionReviewWork = useCallback(() => {
-    correctionQueueRef.current = []
-
-    for (const timer of correctionFailureRetryTimersRef.current.values()) {
-      window.clearTimeout(timer)
-    }
-    correctionFailureRetryTimersRef.current.clear()
-  }, [])
-
-  const openCorrectionFailureCircuit = useCallback((message: string) => {
-    correctionReviewCircuitOpenUntilRef.current = Date.now() + CORRECTION_REVIEW_FAILURE_COOLDOWN_MS
-    correctionQueueFailureVisibleRef.current = true
-    clearPendingCorrectionReviewWork()
-    showCorrectionFailureToast(message)
-  }, [clearPendingCorrectionReviewWork, showCorrectionFailureToast])
-
-  const scheduleCorrectionFailureRetry = useCallback(
-    ({
-      batchKey,
-      blocks,
-      delayMs,
-    }: {
-      batchKey: string
-      blocks: CorrectionTriggerBlock[]
-      delayMs: number
-    }) => {
-      const existingTimer = correctionFailureRetryTimersRef.current.get(batchKey)
-
-      if (existingTimer) {
-        window.clearTimeout(existingTimer)
-      }
-
-      const retryTimer = window.setTimeout(() => {
-        correctionFailureRetryTimersRef.current.delete(batchKey)
-
-        if (
-          !correctionsEnabledRef.current ||
-          currentWritingIdRef.current === null ||
-          !editor ||
-          Date.now() < correctionReviewCircuitOpenUntilRef.current
-        ) {
-          correctionFailureRetryRef.current.delete(batchKey)
-          return
-        }
-
-        const queuedIds = new Set(correctionQueueRef.current.map((block) => block.id))
-        const retryBlocks = blocks
-          .map((block) => getCurrentCorrectionBlock(editor.state.doc, block.id) ?? block)
-          .filter((block) => block.text.trim().length > 0 && !queuedIds.has(block.id))
-
-        if (retryBlocks.length === 0) {
-          return
-        }
-
-        correctionQueueRef.current.push(...retryBlocks)
-        correctionQueueTotalRef.current += retryBlocks.length
-        setCorrectionToast({
-          phase: "running",
-          completed: correctionQueueCompletedRef.current,
-          total: correctionQueueTotalRef.current,
-          message: "Retrying corrections...",
-        })
-        processCorrectionQueueRef.current?.()
-      }, delayMs)
-
-      correctionFailureRetryTimersRef.current.set(batchKey, retryTimer)
-    },
-    [editor],
-  )
-
-  const processCorrectionQueue = useCallback(async () => {
-    if (correctionProcessingRef.current || !editor) {
-      return
-    }
-
-    if (!correctionsEnabledRef.current) {
-      correctionQueueRef.current = []
-      correctionQueueTotalRef.current = 0
-      correctionQueueCompletedRef.current = 0
-      setCorrectionToast(null)
-      return
-    }
-
-    if (isPerfHarness()) {
-      correctionQueueRef.current = []
-      correctionQueueTotalRef.current = 0
-      correctionQueueCompletedRef.current = 0
-      setCorrectionToast(null)
-      return
-    }
-
-    if (Date.now() < correctionReviewCircuitOpenUntilRef.current) {
-      clearPendingCorrectionReviewWork()
-      showCorrectionFailureToast("Corrections are temporarily unavailable. Try again in a moment.")
-      return
-    }
-
-    correctionQueueFailureVisibleRef.current = false
-    correctionReviewCircuitOpenUntilRef.current = 0
-    correctionProcessingRef.current = true
-    logCorrectionEvent({
-      type: "queue:flush",
-      batchSize: correctionQueueRef.current.length,
-      blockIds: correctionQueueRef.current.map((queuedBlock) => queuedBlock.id),
-    })
-
-    while (correctionQueueRef.current.length > 0) {
-      const queuedBatch = takeCorrectionBatch(correctionQueueRef.current, CORRECTION_BLOCK_BATCH_SIZE)
-      const currentBatch: CorrectionTriggerBlock[] = []
-
-      for (const block of queuedBatch) {
-        const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
-
-        if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
-          correctionQueueCompletedRef.current += 1
-          continue
-        }
-
-        currentBatch.push(currentBlock)
-      }
-
-      if (currentBatch.length === 0) {
-        continue
-      }
-
-      setCorrectionToast({
-        phase: "running",
-        completed: correctionQueueCompletedRef.current,
-        total: correctionQueueTotalRef.current,
-      })
-
-      const batchId = buildCorrectionReviewRetryKey(currentBatch)
-      const requestStartedAt = Date.now()
-      const requestWritingId = currentWritingIdRef.current
-
-      try {
-        logCorrectionEvent({
-          type: "request:start",
-          batchId,
-          blockIds: currentBatch.map((block) => block.id),
-        })
-
-        const result = await getAIService().reviewPublication({
-          writingId: requestWritingId ?? undefined,
-          title: titleRef.current,
-          markdown: currentBatch.map((block) => block.text).join("\n\n"),
-          bodyText: currentBatch.map((block) => block.text).join("\n\n"),
-          sourceHash: hashPublicationSource(currentBatch.map((block) => block.hash).join("|")),
-          stream: false,
-          correctionBlocks: currentBatch.map((block) => ({
-            id: block.id,
-            text: block.text,
-            hash: block.hash,
-          })),
-          correctionMemory: {
-            entries: readCorrectionMemory(),
-          },
-          learnedWords: {
-            entries: learnedWordsRef.current.map((item) => ({
-              word: item.word,
-              language: item.language,
-            })),
-          },
-        })
-
-        if (result.error || !result.data) {
-          const attempts = correctionFailureRetryRef.current.get(batchId) ?? 0
-          const retryDecision = decideCorrectionReviewRetry({
-            error: result.error,
-            previousAttempts: attempts,
-            maxRetries: CORRECTION_REVIEW_MAX_RETRIES,
-          })
-          console.info(
-            `[corrections] block analysis failed code=${result.error?.code ?? "unknown"} retryable=${result.error?.retryable ?? false} decision=${retryDecision.action} attempt=${retryDecision.attempt}`,
-          )
-          for (const block of currentBatch) {
-            dropStaleSuggestionsForQueuedBlock(block.id)
-          }
-
-          if (retryDecision.action === "retry") {
-            correctionFailureRetryRef.current.set(batchId, retryDecision.attempt)
-            correctionQueueRef.current = []
-            scheduleCorrectionFailureRetry({
-              batchKey: batchId,
-              blocks: currentBatch,
-              delayMs: retryDecision.delayMs,
-            })
-          } else {
-            correctionFailureRetryRef.current.delete(batchId)
-            openCorrectionFailureCircuit("Corrections are temporarily unavailable. Try again in a moment.")
-          }
-          continue
-        }
-
-        if (!correctionsEnabledRef.current) {
-          for (const block of currentBatch) {
-            dropStaleSuggestionsForQueuedBlock(block.id)
-          }
-          continue
-        }
-
-        if (currentWritingIdRef.current !== requestWritingId) {
-          for (const block of currentBatch) {
-            dropStaleSuggestionsForQueuedBlock(block.id)
-          }
-          logCorrectionEvent({
-            type: "request:end",
-            batchId,
-            latencyMs: Date.now() - requestStartedAt,
-            suggestions: 0,
-            missing: currentBatch.map((block) => block.id),
-          })
-          continue
-        }
-
-        const adapted = adaptCorrectionsContract({
-          summary: result.data.summary,
-          language:
-            result.data.language === "es" ||
-            result.data.language === "en" ||
-            result.data.language === "mixed" ||
-            result.data.language === "unknown"
-              ? result.data.language
-              : "unknown",
-          corrections: result.data.corrections,
-          uncertain: result.data.uncertain,
-        })
-        correctionFailureRetryRef.current.delete(batchId)
-        correctionQueueFailureVisibleRef.current = false
-        const retryTimer = correctionFailureRetryTimersRef.current.get(batchId)
-        if (retryTimer) {
-          window.clearTimeout(retryTimer)
-          correctionFailureRetryTimersRef.current.delete(batchId)
-        }
-        const suggestionsByBlockId = new Map<string, PublicationSuggestion[]>()
-        for (const suggestion of adapted.legacy.suggestions) {
-          if (!suggestion.block_id) continue
-          const blockSuggestions = suggestionsByBlockId.get(suggestion.block_id) ?? []
-          blockSuggestions.push(suggestion)
-          suggestionsByBlockId.set(suggestion.block_id, blockSuggestions)
-        }
-        const missingBlockIds = getMissingCorrectionBlockIds(currentBatch, result.data.corrections)
-        const missingBlockIdSet = new Set(missingBlockIds)
-        let persistedSuggestionsCount = 0
-
-        for (const block of currentBatch) {
-          const stillCurrentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
-
-          if (!stillCurrentBlock || stillCurrentBlock.hash !== block.hash || stillCurrentBlock.text !== block.text) {
-            dropStaleSuggestionsForQueuedBlock(block.id)
-            continue
-          }
-
-          if (missingBlockIdSet.has(block.id)) {
-            const retryKey = `${block.id}:${block.hash}`
-
-            if (!correctionBatchRetryRef.current.has(retryKey)) {
-              correctionBatchRetryRef.current.add(retryKey)
-              correctionQueueRef.current.push(block)
-              correctionQueueTotalRef.current += 1
-              logCorrectionEvent({
-                type: "queue:enqueue",
-                blockId: block.id,
-                reason: "edit",
-              })
-              continue
-            }
-          }
-
-          correctionBatchRetryRef.current.delete(`${block.id}:${block.hash}`)
-
-          const normalizedSuggestions = admitCorrectionSuggestions(
-            (suggestionsByBlockId.get(block.id) ?? []).map((suggestion) =>
-              normalizeAutomaticSuggestion(block, suggestion),
-            ),
-            [stillCurrentBlock],
-          )
-          const nextCorrectionBlock: LocalCorrectionBlock | null = requestWritingId
-            ? {
-                id: createCorrectionBlockRecordId(requestWritingId, block.hash),
-                writingId: requestWritingId,
-                blockId: block.id,
-                blockHash: block.hash,
-                suggestions: normalizedSuggestions,
-                model: result.data.usage?.model ?? "web-route",
-                engineRevision: result.data.engineRevision ?? CORRECTION_ENGINE_REVISION,
-                createdAt: new Date().toISOString(),
-                latencyMs: Date.now() - requestStartedAt,
-                promptTokens: result.data.usage?.promptTokens ?? null,
-                completionTokens: result.data.usage?.completionTokens ?? null,
-                syncedAt: null,
-              }
-            : null
-
-          const replacement = replaceBlockSuggestions(
-            automaticCorrectionSuggestionsRef.current,
-            block.id,
-            normalizedSuggestions,
-          )
-
-          const existingStaleTimer = correctionStaleTimersRef.current.get(block.id)
-
-          if (existingStaleTimer) {
-            window.clearTimeout(existingStaleTimer)
-            correctionStaleTimersRef.current.delete(block.id)
-          }
-
-          for (const suggestionId of replacement.replacedIds) {
-            logCorrectionEvent({
-              type: "stale:drop",
-              blockId: block.id,
-              suggestionId,
-            })
-          }
-
-          for (const suggestion of normalizedSuggestions) {
-            logCorrectionEvent({
-              type: "stale:keep",
-              blockId: block.id,
-              suggestionId: suggestion.id,
-            })
-          }
-
-          applyCorrectionSuggestionUpdate((current) =>
-            replaceBlockSuggestions(current, block.id, normalizedSuggestions).suggestions,
-          )
-
-          if (nextCorrectionBlock) {
-            await persistCorrectionBlockWriteThrough(nextCorrectionBlock)
-          }
-
-          persistedSuggestionsCount += normalizedSuggestions.length
-        }
-
-        logCorrectionEvent({
-          type: "request:end",
-          batchId,
-          latencyMs: Date.now() - requestStartedAt,
-          suggestions: persistedSuggestionsCount,
-          missing: missingBlockIds,
-        })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "block correction failed"
-        console.info(`[corrections] block analysis skipped message=${message}`)
-        for (const block of currentBatch) {
-          dropStaleSuggestionsForQueuedBlock(block.id)
-        }
-        correctionFailureRetryRef.current.delete(batchId)
-        openCorrectionFailureCircuit("Corrections are temporarily unavailable. Try again in a moment.")
-      } finally {
-        correctionQueueCompletedRef.current += currentBatch.length
-
-        if (correctionsEnabledRef.current && !correctionQueueFailureVisibleRef.current) {
-          setCorrectionToast({
-            phase: "running",
-            completed: correctionQueueCompletedRef.current,
-            total: correctionQueueTotalRef.current,
-          })
-        }
-      }
-    }
-
-    correctionProcessingRef.current = false
-    if (correctionsEnabledRef.current) {
-      finishCorrectionQueueIfIdle()
-    }
-  }, [
-    applyCorrectionSuggestionUpdate,
-    admitCorrectionSuggestions,
+    deferredSuppressedCorrectionBlocksRef,
+    deletePersistedBlocksForPosition,
     editor,
-    finishCorrectionQueueIfIdle,
-    normalizeAutomaticSuggestion,
+    editorInstanceRef,
+    flushPendingCorrectionBlocks,
+    handleLearnWord,
+    learnedWords,
+    learnedWordsLoadedRef,
+    learnedWordsRef,
+    modeRef,
     persistCorrectionBlockWriteThrough,
-    dropStaleSuggestionsForQueuedBlock,
-    clearPendingCorrectionReviewWork,
-    openCorrectionFailureCircuit,
-    scheduleCorrectionFailureRetry,
-    showCorrectionFailureToast,
-  ])
-
-  useEffect(() => {
-    processCorrectionQueueRef.current = () => {
-      void processCorrectionQueue()
-    }
-
-    return () => {
-      if (processCorrectionQueueRef.current) {
-        processCorrectionQueueRef.current = null
-      }
-    }
-  }, [processCorrectionQueue])
-
-  const enqueueCorrectionBlock = useCallback(
-    (block: CorrectionTriggerBlock, reason: "edit" | "hydrate-miss" = "edit") => {
-      if (!correctionsEnabledRef.current) {
-        return
-      }
-
-      if (Date.now() < correctionReviewCircuitOpenUntilRef.current) {
-        dropStaleSuggestionsForQueuedBlock(block.id)
-        showCorrectionFailureToast("Corrections are temporarily unavailable. Try again in a moment.")
-        return
-      }
-
-      const cachedBlock = persistedCorrectionBlocksRef.current.get(block.hash)
-      const hasMemorySuggestion = getBlockSuggestions(block.id, block.hash).length > 0
-
-      if (cachedBlock) {
-        logCorrectionEvent({
-          type: "cache:hit",
-          blockId: block.id,
-          source: cachedBlock.syncedAt ? "supabase" : "idb",
-        })
-
-        const cachedSuggestions = admitCorrectionSuggestions(
-          restorePendingSuggestions(cachedBlock.suggestions),
-          [block],
-        )
-
-        applyCorrectionSuggestionUpdate((current) =>
-          replaceBlockSuggestions(current, block.id, cachedSuggestions).suggestions,
-        )
-
-        const existingStaleTimer = correctionStaleTimersRef.current.get(block.id)
-
-        if (existingStaleTimer) {
-          window.clearTimeout(existingStaleTimer)
-          correctionStaleTimersRef.current.delete(block.id)
-        }
-
-        return
-      }
-
-      logCorrectionEvent(
-        hasMemorySuggestion
-          ? {
-              type: "cache:hit",
-              blockId: block.id,
-              source: "memory",
-            }
-          : {
-              type: "cache:miss",
-              blockId: block.id,
-            },
-      )
-
-      const currentIds = new Set(correctionQueueRef.current.map((item) => item.id))
-
-      if (!currentIds.has(block.id)) {
-        correctionQueueRef.current.push(block)
-        correctionQueueTotalRef.current += 1
-        logCorrectionEvent({
-          type: "queue:enqueue",
-          blockId: block.id,
-          reason,
-        })
-      }
-
-      setCorrectionToast({
-        phase: "running",
-        completed: correctionQueueCompletedRef.current,
-        total: correctionQueueTotalRef.current,
-      })
-
-      void processCorrectionQueue()
-    },
-    [
-      admitCorrectionSuggestions,
-      applyCorrectionSuggestionUpdate,
-      dropStaleSuggestionsForQueuedBlock,
-      getBlockSuggestions,
-      processCorrectionQueue,
-      showCorrectionFailureToast,
-    ],
-  )
-
-  useEffect(() => {
-    enqueueCorrectionBlockRef.current = enqueueCorrectionBlock
-  }, [enqueueCorrectionBlock])
-
-  useEffect(() => {
-    if (!editor) {
-      return
-    }
-
-    const scheduleDeferredSuppressedFlush = () => {
-      if (suppressedCorrectionFlushTimerRef.current !== null) {
-        return
-      }
-
-      const flushAt = deferredSuppressedCorrectionBlocksRef.current.flushAt
-
-      if (flushAt === null) {
-        return
-      }
-
-      suppressedCorrectionFlushTimerRef.current = window.setTimeout(() => {
-        suppressedCorrectionFlushTimerRef.current = null
-
-        if (modeRef.current !== "rich") {
-          deferredSuppressedCorrectionBlocksRef.current = {
-            blocksById: new Map(),
-            flushAt: null,
-          }
-          return
-        }
-
-        const consumed = consumeDeferredCorrectionBlocks(deferredSuppressedCorrectionBlocksRef.current)
-        deferredSuppressedCorrectionBlocksRef.current = consumed.state
-        processDirtyCorrectionBlocks(
-          consumed.blocks
-            .map((block) => getCurrentCorrectionBlock(editor.state.doc, block.id) ?? block)
-            .filter((block) => block.text.trim().length > 0),
-        )
-      }, Math.max(0, flushAt - Date.now()))
-    }
-
-    const scheduleStaleTimeout = (block: CorrectionTriggerBlock) => {
-      const existingStaleTimer = correctionStaleTimersRef.current.get(block.id)
-
-      if (existingStaleTimer) {
-        window.clearTimeout(existingStaleTimer)
-      }
-
-      const staleTimer = window.setTimeout(() => {
-        correctionStaleTimersRef.current.delete(block.id)
-        applyCorrectionSuggestionUpdate((current) => {
-          const transition = dropExpiredStaleSuggestions(current, Date.now())
-
-          for (const suggestionId of transition.droppedIds) {
-            logCorrectionEvent({
-              type: "stale:drop",
-              blockId: block.id,
-              suggestionId,
-            })
-          }
-
-          return transition.suggestions
-        }, { immediate: true })
-      }, CORRECTION_STALE_TIMEOUT_MS)
-
-      correctionStaleTimersRef.current.set(block.id, staleTimer)
-    }
-
-    const processDirtyCorrectionBlocks = (blocks: CorrectionTriggerBlock[]) => {
-      for (const block of blocks) {
-        if (currentWritingIdRef.current) {
-          void deletePersistedBlocksForPosition(currentWritingIdRef.current, block)
-        }
-
-        const applyStaleInvalidation = (markResolvableStale = true) => {
-          applyCorrectionSuggestionUpdate((current) => {
-            const invalidation = invalidateBlockSuggestions(current, block, Date.now(), markResolvableStale)
-
-            for (const suggestionId of invalidation.droppedIds) {
-              logCorrectionEvent({
-                type: "stale:drop",
-                blockId: block.id,
-                suggestionId,
-              })
-            }
-
-            for (const suggestionId of invalidation.keptIds) {
-              logCorrectionEvent({
-                type: "stale:keep",
-                blockId: block.id,
-                suggestionId,
-              })
-            }
-
-            return invalidation.suggestions
-          })
-        }
-
-        if (!isCorrectionBlockEligible(block)) {
-          applyStaleInvalidation(correctionsEnabledRef.current)
-          continue
-        }
-
-        if (!correctionsEnabledRef.current) {
-          applyStaleInvalidation(false)
-          continue
-        }
-
-        const existingTimer = correctionTimersRef.current.get(block.id)
-
-        if (existingTimer) {
-          window.clearTimeout(existingTimer.timer)
-          correctionTimersRef.current.delete(block.id)
-        }
-
-        applyStaleInvalidation()
-        scheduleStaleTimeout(block)
-
-        const timer = window.setTimeout(() => {
-          correctionTimersRef.current.delete(block.id)
-          const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
-
-          if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
-            return
-          }
-
-          enqueueCorrectionBlock(currentBlock)
-        }, 2000)
-
-        correctionTimersRef.current.set(block.id, { timer, pos: block.pos })
-      }
-    }
-
-    const handleDirtyBlocks = (event: Event) => {
-      const blocks = ((event as CustomEvent<{ blocks?: CorrectionTriggerBlock[] }>).detail?.blocks ?? [])
-
-      acknowledgeCorrectionDirtyBlocks(editor, blocks.map((block) => block.id))
-
-      if (modeRef.current !== "rich") {
-        return
-      }
-
-      if (Date.now() < suppressCorrectionAnalysisUntilRef.current) {
-        deferredSuppressedCorrectionBlocksRef.current = deferCorrectionBlocks(
-          deferredSuppressedCorrectionBlocksRef.current,
-          blocks,
-          suppressCorrectionAnalysisUntilRef.current,
-        )
-        scheduleDeferredSuppressedFlush()
-        return
-      }
-
-      processDirtyCorrectionBlocks(blocks)
-    }
-
-    editor.view.dom.addEventListener("odessay:correction-dirty-blocks", handleDirtyBlocks)
-
-    return () => {
-      editor.view.dom.removeEventListener("odessay:correction-dirty-blocks", handleDirtyBlocks)
-      if (suppressedCorrectionFlushTimerRef.current !== null) {
-        window.clearTimeout(suppressedCorrectionFlushTimerRef.current)
-        suppressedCorrectionFlushTimerRef.current = null
-      }
-    }
-  }, [applyCorrectionSuggestionUpdate, deletePersistedBlocksForPosition, editor, enqueueCorrectionBlock, getBlockSuggestions])
-
-  useEffect(() => {
-    const handleOnline = () => {
-      const writingId = currentWritingIdRef.current
-
-      if (!writingId) {
-        return
-      }
-
-      void flushPendingCorrectionBlocks(writingId)
-    }
-
-    window.addEventListener("online", handleOnline)
-
-    return () => {
-      window.removeEventListener("online", handleOnline)
-    }
-  }, [flushPendingCorrectionBlocks])
-
-  useEffect(() => {
-    const handleAutomaticInlineAction = (event: Event) => {
-      const detail = (event as CustomEvent<{ action?: string; suggestionId?: string }>).detail
-      const suggestionId = detail?.suggestionId
-
-      if (!suggestionId) {
-        return
-      }
-
-      const suggestion = automaticCorrectionSuggestionsRef.current.find((item) => item.id === suggestionId)
-
-      if (!suggestion) {
-        return
-      }
-
-      if (isSuggestionAcceptDisabled(suggestion) && detail.action === "accept") {
-        return
-      }
-
-      if (detail.action === "accept") {
-        const result = applyCorrectionSuggestions([suggestion])
-
-        if (result.appliedIds.length > 0) {
-          rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted")
-        }
-
-        let nextSuggestions = automaticCorrectionSuggestionsRef.current
-
-        if (result.appliedIds.length > 0) {
-          nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.appliedIds, "accepted")
-        }
-
-        if (result.conflictIds.length > 0) {
-          nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.conflictIds, "conflict")
-        }
-
-        if (result.appliedIds.length > 0 || result.conflictIds.length > 0) {
-          applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-          void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
-        }
-        return
-      }
-
-      if (detail.action === "reject") {
-        rememberCorrectionDecision(suggestion.correction_fingerprint, "rejected")
-        const nextSuggestions = updateSuggestionStatuses(
-          automaticCorrectionSuggestionsRef.current,
-          [suggestion.id],
-          "rejected",
-        )
-        applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-        void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
-        return
-      }
-
-      if (detail.action === "learn") {
-        handleLearnWord(suggestion)
-      }
-    }
-
-    window.addEventListener("odessay:publication-suggestion-action", handleAutomaticInlineAction)
-
-    return () => {
-      window.removeEventListener("odessay:publication-suggestion-action", handleAutomaticInlineAction)
-    }
-  }, [applyCorrectionSuggestionUpdate, applyCorrectionSuggestions, handleLearnWord, updatePersistedBlocksFromSuggestions])
-  const markdownFindMatches = useMemo(
-    () => (isFindReplaceOpen ? findTextMatches(markdownValue, findQuery, findCaseSensitive) : []),
-    [findCaseSensitive, findQuery, isFindReplaceOpen, markdownValue],
-  )
-  const richFindMatches = useMemo(
-    () => (editor && isFindReplaceOpen ? findDocumentMatches(editor.state.doc, findQuery, findCaseSensitive) : []),
-    [editor, findCaseSensitive, findQuery, isFindReplaceOpen],
-  )
-  const matchCount =
-    mode === "markdown" ? markdownFindMatches.length : richFindMatches.length
-  const activeMatchIndex = clampFindReplaceIndex(matchCount, findActiveIndex)
-  const markdownOverlayHtml = useMemo(
-    () =>
-      mode === "markdown" && isFindReplaceOpen && findQuery.trim()
-        ? renderFindReplaceOverlayHtml(markdownValue, findQuery, findCaseSensitive, activeMatchIndex)
-        : undefined,
-    [activeMatchIndex, findCaseSensitive, findQuery, isFindReplaceOpen, markdownValue, mode],
-  )
+    persistedCorrectionBlocksRef,
+    setLearnedWords,
+    setLearnedWordsLoading,
+    showCorrectionToast,
+    suppressCorrectionAnalysisUntilRef,
+    suppressedCorrectionFlushTimerRef,
+    titleRef,
+    updatePersistedBlocksFromSuggestions,
+  })
 
   useEffect(() => {
     if (!sessionLoaded) {
@@ -5435,10 +3467,10 @@ export function EditorShell({
     // Guard: don't publish tab state with a stale title while hydration is in progress
     // or while a new workspace tab is being created. During tab switching, displayTitle
     // may still derive from the previous writing's bodyText until hydration settles.
-    // During + creation in desktop, hydrationWritingId is not set to the placeholder id,
+    // During + creation in desktop, the placeholder id never hydrates,
     // so this guard also blocks publishTabState from running with the stale displayTitle
     // and corrupting/replacing an existing tab.
-    if (hydrationWritingId !== null || isCreatingWorkspaceTabRef.current) {
+    if (hydrationPhase !== "ready" || isCreatingWorkspaceTabRef.current) {
       return
     }
 
@@ -5463,597 +3495,85 @@ export function EditorShell({
       saveState: syncStatus === "saved-local" ? "saved-local" : syncStatus,
       hasPendingSync: syncStatus !== "saved",
     })
-  }, [currentWritingId, displayTitle, hydrationWritingId, routeWritingId, sessionLoaded, syncStatus, writingSlug])
+  }, [currentWritingId, displayTitle, hydrationPhase, routeWritingId, sessionLoaded, syncStatus, writingSlug])
 
-  useEffect(() => {
-    if (!editor) {
-      return
-    }
-
-    if (!isFindReplaceOpen || !findQuery.trim()) {
-      clearFindReplaceQueryState(editor)
-      return
-    }
-
-    setFindReplaceQueryState(editor, {
-      query: findQuery,
-      caseSensitive: findCaseSensitive,
-      activeIndex: activeMatchIndex,
-    })
-  }, [activeMatchIndex, editor, findCaseSensitive, findQuery, isFindReplaceOpen])
-
-  useEffect(() => {
-    if (findActiveIndex !== activeMatchIndex) {
-      setFindActiveIndex(activeMatchIndex)
-    }
-  }, [activeMatchIndex, findActiveIndex])
-
-  useEffect(() => {
-    if (!isFindReplaceOpen || !findQuery.trim()) {
-      setFindActiveIndex(0)
-      return
-    }
-
-    setFindActiveIndex(0)
-  }, [findCaseSensitive, findQuery, isFindReplaceOpen])
-
-  function captureEditorCursorSnapshot(): EditorCursorSnapshot | null {
-    if (modeRef.current === "markdown") {
-      const textarea = markdownTextareaRef.current
-      const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-      const shellViewport = document.querySelector<HTMLElement>("main")
-
-      if (!textarea) {
-        return null
-      }
-
-      return {
-        mode: "markdown",
-        start: textarea.selectionStart,
-        end: textarea.selectionEnd,
-        scrollTop: textarea.scrollTop,
-        scrollLeft: textarea.scrollLeft,
-        editorScrollTop: editorViewport?.scrollTop,
-        editorScrollLeft: editorViewport?.scrollLeft,
-        shellScrollTop: shellViewport?.scrollTop,
-        shellScrollLeft: shellViewport?.scrollLeft,
-        windowScrollX: window.scrollX,
-        windowScrollY: window.scrollY,
-      }
-    }
-
-    if (!editor) {
-      return null
-    }
-
-    return {
-      mode: "rich",
-      from: editor.state.selection.from,
-      to: editor.state.selection.to,
-    }
-  }
-
-  function restoreEditorCursorSnapshot(snapshot: EditorCursorSnapshot | null) {
-    if (!snapshot) {
-      return
-    }
-
-    if (snapshot.mode === "markdown") {
-      queueMarkdownSelectionRestore(snapshot.start, snapshot.end, snapshot)
-      return
-    }
-
-    if (!editor) {
-      return
-    }
-
-    editor.chain().focus().setTextSelection({ from: snapshot.from, to: snapshot.to }).run()
-  }
-
-  function closeFindReplacePanel(options?: { restoreSelection?: boolean }) {
-    const snapshot = editorCursorSnapshotRef.current
-
-    setIsFindReplaceOpen(false)
-    setFindQuery("")
-    setReplaceValue("")
-    setFindActiveIndex(0)
-
-    if (editor) {
-      clearFindReplaceQueryState(editor)
-    }
-
-    if (options?.restoreSelection !== false) {
-      window.requestAnimationFrame(() => {
-        restoreEditorCursorSnapshot(snapshot)
-      })
-    }
-  }
-
-  function openFindReplacePanel(options?: { focusReplace?: boolean }) {
-    editorCursorSnapshotRef.current = captureEditorCursorSnapshot()
-
-    if (!isFindReplaceOpen) {
-      setFindActiveIndex(0)
-    }
-
-    setIsFindReplaceOpen(true)
-
-    window.requestAnimationFrame(() => {
-      if (options?.focusReplace) {
-        replaceInputRef.current?.focus()
-        return
-      }
-
-      findInputRef.current?.focus()
-      findInputRef.current?.select()
-    })
-  }
-
-  function syncActiveRichMatchSelection(nextActiveIndex: number) {
-    if (!editor || !isFindReplaceOpen || !findQuery.trim()) {
-      return
-    }
-
-    const targetMatch = richFindMatches[clampFindReplaceIndex(richFindMatches.length, nextActiveIndex)]
-
-    if (!targetMatch) {
-      return
-    }
-
-    const transaction = editor.state.tr
-    transaction.setSelection(TextSelection.create(transaction.doc, targetMatch.from, targetMatch.to))
-    transaction.scrollIntoView()
-    transaction.setMeta("addToHistory", false)
-    editor.view.dispatch(transaction)
-
-    window.requestAnimationFrame(() => {
-      const activeMatchElement = editor.view.dom.querySelector<HTMLElement>(".od-find-match-active")
-
-      if (activeMatchElement) {
-        activeMatchElement.scrollIntoView({
-          block: "center",
-          inline: "nearest",
-          behavior: "auto",
-        })
-        return
-      }
-
-      const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-      const startCoords = editor.view.coordsAtPos(targetMatch.from)
-      const endCoords = editor.view.coordsAtPos(targetMatch.to)
-
-      if (!editorViewport) {
-        return
-      }
-
-      const viewportRect = editorViewport.getBoundingClientRect()
-      const matchTop = startCoords.top
-      const matchBottom = Math.max(startCoords.bottom, endCoords.bottom)
-      const topInset = 96
-      const bottomInset = 56
-
-      if (matchTop < viewportRect.top + topInset) {
-        editorViewport.scrollBy({
-          top: matchTop - viewportRect.top - topInset,
-          behavior: "auto",
-        })
-        return
-      }
-
-      if (matchBottom > viewportRect.bottom - bottomInset) {
-        editorViewport.scrollBy({
-          top: matchBottom - viewportRect.bottom + bottomInset,
-          behavior: "auto",
-        })
-      }
-    })
-  }
-
-  function syncActiveMarkdownMatchSelection(nextActiveIndex: number) {
-    const textarea = markdownTextareaRef.current
-    const targetMatch = markdownFindMatches[clampFindReplaceIndex(markdownFindMatches.length, nextActiveIndex)]
-
-    if (!textarea || !targetMatch) {
-      return
-    }
-
-    textarea.focus()
-    textarea.setSelectionRange(targetMatch.start, targetMatch.end)
-    markdownSelectionRef.current = {
-      start: targetMatch.start,
-      end: targetMatch.end,
-      text: textarea.value.slice(targetMatch.start, targetMatch.end),
-    }
-  }
-
-  const navigateFindMatches = useCallback(
-    (direction: 1 | -1) => {
-      if (matchCount === 0) {
-        return
-      }
-
-      const nextActiveIndex = resolveNextFindReplaceIndex(matchCount, activeMatchIndex, direction)
-      setFindActiveIndex(nextActiveIndex)
-
-      if (modeRef.current === "markdown") {
-        window.requestAnimationFrame(() => {
-          syncActiveMarkdownMatchSelection(nextActiveIndex)
-        })
-        return
-      }
-
-      syncActiveRichMatchSelection(nextActiveIndex)
-    },
-    [activeMatchIndex, matchCount, syncActiveMarkdownMatchSelection, syncActiveRichMatchSelection],
-  )
-
-  const handleReplaceCurrentMatch = useCallback(() => {
-    if (!findQuery.trim()) {
-      return
-    }
-
-    if (modeRef.current === "markdown") {
-      const currentMatch = markdownFindMatches[activeMatchIndex]
-
-      if (!currentMatch) {
-        return
-      }
-
-      const nextMarkdown = replaceMatchInText(markdownValue, currentMatch, replaceValue)
-      const nextMatches = findTextMatches(nextMarkdown, findQuery, findCaseSensitive)
-      const nextActive = clampFindReplaceIndex(nextMatches.length, activeMatchIndex)
-
-      handleMarkdownChange(nextMarkdown)
-      setFindActiveIndex(nextActive)
-
-      window.requestAnimationFrame(() => {
-        syncActiveMarkdownMatchSelection(nextActive)
-      })
-      return
-    }
-
-    if (!editor) {
-      return
-    }
-
-    const currentMatch = richFindMatches[activeMatchIndex]
-
-    if (!currentMatch) {
-      return
-    }
-
-    const transaction = editor.state.tr.insertText(replaceValue, currentMatch.from, currentMatch.to)
-    editor.view.dispatch(transaction)
-    updateDerivedEditorState(editor)
-    void persistEditorSnapshot(editor)
-
-    const nextActive = clampFindReplaceIndex(findDocumentMatches(editor.state.doc, findQuery, findCaseSensitive).length, activeMatchIndex)
-    setFindActiveIndex(nextActive)
-    syncActiveRichMatchSelection(nextActive)
-  }, [
+  // ODE-602: buscar y reemplazar (mudanza mecánica; mismos efectos, en el
+  // mismo orden y en esta posición).
+  const findReplace = useFindReplace({
+    currentWritingId,
+    currentWritingIdRef,
+    editor,
+    editorCursorSnapshotRef,
+    findActiveIndex,
+    findCaseSensitive,
+    findInputRef,
+    findQuery,
+    handleMarkdownChange,
+    isFindReplaceOpen,
+    markdownSelectionOwnerId,
+    markdownSelectionRef,
+    markdownTextareaRef,
+    markdownValue,
+    mode,
+    modeRef,
+    persistEditorSnapshot,
+    queueMarkdownSelectionRestore,
+    replaceInputRef,
+    replaceValue,
+    setFindActiveIndex,
+    setFindQuery,
+    setIsFindReplaceOpen,
+    setReplaceValue,
+    updateDerivedEditorState,
+  })
+  const {
     activeMatchIndex,
-    editor,
-    findCaseSensitive,
-    findQuery,
-    handleMarkdownChange,
-    markdownFindMatches,
-    markdownValue,
-    persistEditorSnapshot,
-    replaceValue,
-    richFindMatches,
-    syncActiveMarkdownMatchSelection,
-    syncActiveRichMatchSelection,
-    updateDerivedEditorState,
-  ])
-
-  const handleReplaceAllMatches = useCallback(() => {
-    if (!findQuery.trim() || matchCount === 0) {
-      return
-    }
-
-    const confirmation = window.confirm(`Replace ${matchCount} matches with "${replaceValue}"?`)
-
-    if (!confirmation) {
-      return
-    }
-
-    if (modeRef.current === "markdown") {
-      const result = replaceAllMatchesInText(markdownValue, findQuery, replaceValue, findCaseSensitive)
-      handleMarkdownChange(result.value)
-      setFindActiveIndex(0)
-      return
-    }
-
-    if (!editor) {
-      return
-    }
-
-    if (richFindMatches.length === 0) {
-      return
-    }
-
-    const transaction = editor.state.tr
-
-    for (let index = richFindMatches.length - 1; index >= 0; index -= 1) {
-      const match = richFindMatches[index]
-      transaction.insertText(replaceValue, match.from, match.to)
-    }
-
-    editor.view.dispatch(transaction)
-    updateDerivedEditorState(editor)
-    void persistEditorSnapshot(editor)
-    setFindActiveIndex(0)
-  }, [
-    editor,
-    findCaseSensitive,
-    findQuery,
-    handleMarkdownChange,
-    markdownValue,
+    closeFindReplacePanel,
+    handleReplaceAllMatches,
+    handleReplaceCurrentMatch,
+    markdownOverlayHtml,
     matchCount,
-    persistEditorSnapshot,
-    replaceValue,
-    richFindMatches,
-    updateDerivedEditorState,
-  ])
+    navigateFindMatches,
+  } = findReplace
+  // `handleRunAction`, más arriba, abre la búsqueda. Antes de ODE-602 esto era
+  // una declaración de función aquí mismo, y se elevaba; sigue siéndolo, así
+  // que el atajo la encuentra, y solo lee el resultado del hook al ejecutarse,
+  // cuando el render ya lo creó. Se recrea en cada render, como antes.
+  function openFindReplacePanel(options?: { focusReplace?: boolean }) {
+    findReplace.openFindReplacePanel(options)
+  }
 
-  const handleSelectWorkspaceTab = useCallback(
-    async (tabId: string) => {
-      const nextTab = getEditorSessionState().session.tabs.find((tab) => tab.id === tabId)
-      if (!nextTab) {
-        return
-      }
+  // ODE-587: pestañas del editor (mudanza mecánica; mismos efectos y orden).
+  const {
+    handleSelectWorkspaceTab,
+    handleCloseWorkspaceTab,
+    handleCloseOtherWorkspaceTabs,
+    handleCloseAllWorkspaceTabs,
+    handleRevealWorkspaceTab,
+    handleRenameWorkspaceTab,
+    handleRenameActiveWriting,
+    handleReorderWorkspaceTab,
+    tabStatuses,
+  } = useWorkspaceTabs({
+    activateDocument,
+    activeEditorTabIdRef,
+    currentWritingId,
+    currentWritingIdRef,
+    editor,
+    editorSession,
+    ephemeralDraftWritingIdRef,
+    hydrationPhase,
+    materializedDraftIdsRef,
+    navigatedToDraftRef,
+    persistenceCoordinator,
+    prepareDocumentExit,
+    setRenameModalOpen,
+    setRenameModalSnapshot,
+    titleRef,
+    untitledWritingTitle: UNTITLED_WRITING_TITLE,
+    writingStatus,
+  })
 
-      if (activeEditorTabIdRef.current === tabId) {
-        // If another selection is waiting on durability, clicking the tab
-        // that is still visible means "stay here". Make that latest intent
-        // win instead of allowing the older request to switch afterward.
-        tabSelectionRequestRef.current += 1
-        return
-      }
-
-      const requestId = tabSelectionRequestRef.current + 1
-      tabSelectionRequestRef.current = requestId
-      const outgoingTarget = {
-        writingId: currentWritingIdRef.current,
-        draftWritingId: currentWritingIdRef.current === null ? ephemeralDraftWritingIdRef.current : null,
-        sourceTabId: activeEditorTabIdRef.current,
-      }
-
-      // A queued rich-mode update still holds the OLD tab's editor instance.
-      // Flushing it here — before currentWritingIdRef changes below — makes
-      // sure that content lands on the document it was actually typed into,
-      // not on whatever tab we're about to switch to (ODE-478 case 2). A
-      // pending Source-mode save gets the same treatment: without the flush,
-      // its identity-blind timer attributes the edit to the incoming tab or
-      // drops it when hydration restores a different mode.
-      flushQueuedRichModeUpdate()
-      flushPendingMarkdownSave()
-      snapshotOutgoingDraftContent()
-
-      persistCurrentWorkspaceViewState()
-
-      // Desktop coalesces filesystem saves behind a quiet window. Switching
-      // identity before the outgoing snapshot reaches disk lets a quick
-      // return hydrate the old `.md`, which visibly removes annotations,
-      // highlights and recent text/title edits. Force the queued write now
-      // and keep this transition owned by the current request until the
-      // document is durable.
-      // A still-ephemeral draft has no durable file to rehydrate yet; its
-      // existing in-memory snapshot/reconciliation path intentionally allows
-      // background materialization. Named documents do have a `.md`, so they
-      // must not expose that older durable version to a returning tab.
-      if (outgoingTarget.writingId && persistenceCoordinator.hasPending(outgoingTarget)) {
-        if (outgoingTarget.sourceTabId) {
-          updateTabSaveState({
-            tabId: outgoingTarget.sourceTabId,
-            saveState: "saving",
-            hasPendingSync: true,
-          })
-        }
-        const settled = await persistenceCoordinator.settle(outgoingTarget)
-        if (!settled || tabSelectionRequestRef.current !== requestId) {
-          return
-        }
-      } else if (tabSelectionRequestRef.current !== requestId) {
-        return
-      }
-
-      const resolvedNextTab = getEditorSessionState().session.tabs.find((tab) =>
-        tab.id === tabId || Boolean(nextTab.writing_id && tab.writing_id === nextTab.writing_id),
-      )
-      if (!resolvedNextTab) {
-        return
-      }
-
-      activeEditorTabIdRef.current = resolvedNextTab.id
-      focusTab(resolvedNextTab.id)
-      navigatedToDraftRef.current = false
-
-      if (resolvedNextTab.writing_id) {
-        currentWritingIdRef.current = resolvedNextTab.writing_id
-        setCurrentWritingId(resolvedNextTab.writing_id)
-        setHydrationWritingId(resolvedNextTab.writing_id)
-        replaceEditorHistory(buildWritingRouteHref("/write", {
-          id: resolvedNextTab.writing_id,
-          slug: resolvedNextTab.slug,
-        }))
-        return
-      }
-
-      currentWritingIdRef.current = null
-      setCurrentWritingId(null)
-      setHydrationWritingId(null)
-      replaceEditorHistory("/write")
-    },
-    [
-      flushPendingMarkdownSave,
-      flushQueuedRichModeUpdate,
-      persistenceCoordinator,
-      persistCurrentWorkspaceViewState,
-      snapshotOutgoingDraftContent,
-    ],
-  )
-
-  const handleCloseWorkspaceTab = useCallback(
-    async (tabId: string) => {
-      // Read fresh rather than the closed-over `editorSession.tabs` (same
-      // reasoning as the re-resolve after the persistence await below): a
-      // tab can materialize in the store between this component's last
-      // render and the call, which the batch closers (Close others/all)
-      // make more likely by resolving their id list from live state too.
-      const targetTab = getEditorSessionState().session.tabs.find((tab) => tab.id === tabId)
-      if (!targetTab) {
-        return
-      }
-
-      // Same reasoning as handleSelectWorkspaceTab: flush before this tab's
-      // identity can change under a still-queued update (ODE-478 case 2).
-      flushQueuedRichModeUpdate()
-      flushPendingMarkdownSave()
-      snapshotOutgoingDraftContent()
-
-      const isClosingActiveTab = activeEditorTabIdRef.current === tabId
-      const persistenceTarget = {
-        writingId: targetTab.writing_id,
-        draftWritingId: targetTab.writing_id === null ? ephemeralDraftWritingIdRef.current : null,
-        sourceTabId: tabId,
-      }
-
-      if (isClosingActiveTab) {
-        persistCurrentWorkspaceViewState()
-      }
-
-      // A close waits for this tab's local write, including a still-debounced
-      // request. It must not wait for unrelated background tabs, and the
-      // existing tab save-state affordance makes the wait visible (ODE-478
-      // case 5). There is intentionally no confirm/cancel race here: once the
-      // user asks to close, the tab closes after its write is durable.
-      if (persistenceCoordinator.hasPending(persistenceTarget)) {
-        updateTabSaveState({ tabId, saveState: "saving", hasPendingSync: true })
-        const settled = await persistenceCoordinator.settle(persistenceTarget)
-        if (!settled) {
-          return
-        }
-      }
-
-      // The await above can let this very tab's own materialization complete
-      // and rename it (draft id -> real writing id) via
-      // reconcileMaterializedDraftTab, so the `tabId` captured before the
-      // await can now point at nothing. Re-resolve it against live state
-      // before closing: materializedDraftIdsRef records what the draft id
-      // became, since the tab's own draft_writing_id is cleared once it's no
-      // longer a draft (ODE-478 follow-up).
-      const tabsAfterSettle = getEditorSessionState().session.tabs
-      const resolvedTabId = tabsAfterSettle.some((tab) => tab.id === tabId)
-        ? tabId
-        : (persistenceTarget.draftWritingId
-            ? materializedDraftIdsRef.current.get(persistenceTarget.draftWritingId)
-            : undefined) ?? tabId
-
-      const nextActiveTabId = closeTab(resolvedTabId)
-
-      if (!isClosingActiveTab) {
-        return
-      }
-
-      activeEditorTabIdRef.current = nextActiveTabId
-      // Read fresh rather than the closed-over `editorSession.tabs`, which can
-      // be stale after the same await (ODE-478 follow-up).
-      const nextTab = getEditorSessionState().session.tabs.find((tab) => tab.id === nextActiveTabId)
-      navigatedToDraftRef.current = false
-      if (nextTab?.writing_id) {
-        currentWritingIdRef.current = nextTab.writing_id
-        setCurrentWritingId(nextTab.writing_id)
-        setHydrationWritingId(nextTab.writing_id)
-        replaceEditorHistory(buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }))
-        return
-      }
-
-      currentWritingIdRef.current = null
-      setCurrentWritingId(null)
-      setHydrationWritingId(null)
-      replaceEditorHistory("/write")
-    },
-    [
-      flushPendingMarkdownSave,
-      flushQueuedRichModeUpdate,
-      persistCurrentWorkspaceViewState,
-      persistenceCoordinator,
-      snapshotOutgoingDraftContent,
-    ],
-  )
-
-  // Closing more than one tab reuses handleCloseWorkspaceTab per id rather
-  // than a batch primitive in the session store — it already re-reads fresh
-  // state each call (ODE-478 follow-up), so sequencing them one at a time
-  // keeps every close's persistence/active-tab bookkeeping correct.
-  const handleCloseOtherWorkspaceTabs = useCallback(
-    async (tabId: string) => {
-      const idsToClose = getEditorSessionState()
-        .session.tabs.map((tab) => tab.id)
-        .filter((id) => id !== tabId)
-      for (const id of idsToClose) {
-        await handleCloseWorkspaceTab(id)
-      }
-    },
-    [handleCloseWorkspaceTab],
-  )
-
-  const handleCloseAllWorkspaceTabs = useCallback(async () => {
-    const ids = getEditorSessionState().session.tabs.map((tab) => tab.id)
-    for (const id of ids) {
-      await handleCloseWorkspaceTab(id)
-    }
-  }, [handleCloseWorkspaceTab])
-
-  // Reveals the tab's file, not the tab itself: draft tabs (no writing_id
-  // yet, or no local binding on this machine — cloud-only) have nothing on
-  // disk to reveal, so the caller hides this action rather than no-op it.
-  const handleRevealWorkspaceTab = useCallback(async (tabId: string) => {
-    const tab = getEditorSessionState().session.tabs.find((candidate) => candidate.id === tabId)
-    if (!tab?.writing_id) {
-      return
-    }
-    const canonicalPath = await getDesktopWritingCanonicalPath(tab.writing_id)
-    if (!canonicalPath) {
-      return
-    }
-    const dir = canonicalPath.slice(0, canonicalPath.lastIndexOf("/"))
-    try {
-      await revealWorkspacePath(dir)
-    } catch (reason) {
-      console.error("[editor-tabs] reveal failed", reason)
-    }
-  }, [])
-
-  // Renaming reads the loaded editor, so a pencil pressed on a background tab
-  // selects it first and opens the modal once that tab is the active one.
-  const pendingRenameTabIdRef = useRef<string | null>(null)
-
-  const handleRenameWorkspaceTab = useCallback(
-    (tabId: string) => {
-      if (tabId !== editorSession.active_tab_id) {
-        pendingRenameTabIdRef.current = tabId
-        handleSelectWorkspaceTab(tabId)
-        return
-      }
-
-      setRenameModalSnapshot({
-        title: titleRef.current.trim() || UNTITLED_WRITING_TITLE,
-        bodyText: editor ? getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)) : "",
-      })
-      setRenameModalOpen(true)
-    },
-    [editor, editorSession.active_tab_id, handleSelectWorkspaceTab],
-  )
-
-  useEffect(() => {
-    const pendingTabId = pendingRenameTabIdRef.current
-    if (!pendingTabId || pendingTabId !== editorSession.active_tab_id) return
-    // The tab switch landed and the editor holds its content: open the modal.
-    pendingRenameTabIdRef.current = null
-    handleRenameWorkspaceTab(pendingTabId)
-  }, [editorSession.active_tab_id, handleRenameWorkspaceTab])
 
   // The breadcrumb reads the document's canonical path: on desktop the parent
   // folder and its parent are the workspace lead the header shows. On web there
@@ -6071,98 +3591,6 @@ export function EditorShell({
     }
   }, [canonicalPath])
 
-  const handleRenameActiveWriting = useCallback(() => {
-    const activeTabId = editorSession.active_tab_id
-    if (!activeTabId) {
-      return
-    }
-
-    handleRenameWorkspaceTab(activeTabId)
-  }, [editorSession.active_tab_id, handleRenameWorkspaceTab])
-
-  const handleReorderWorkspaceTab = useCallback((tabId: string, targetTabId: string) => {
-    reorderTab(tabId, targetTabId)
-  }, [])
-
-  /**
-   * Editorial state per tab, so each tab draws the same glyph the properties
-   * panel shows (`WritingStatusIcon`). The active tab reads live local state so
-   * a change in Properties is reflected without a round trip; the rest come
-   * from the catalog, refreshed when the open set changes.
-   */
-  const [catalogTabStatuses, setCatalogTabStatuses] = useState<Record<string, WritingStatus | null>>({})
-
-  const openWritingIds = useMemo(
-    () => editorSession.tabs.map((tab) => tab.writing_id).filter((id): id is string => Boolean(id)),
-    [editorSession.tabs],
-  )
-  const openWritingIdsKey = openWritingIds.join(",")
-
-  useEffect(() => {
-    if (openWritingIds.length === 0) {
-      setCatalogTabStatuses({})
-      return
-    }
-
-    let cancelled = false
-    let unsubscribe: (() => void) | null = null
-
-    // Imported lazily: pulling the catalog into the shell's module graph drags
-    // the Tauri filesystem watcher with it, which breaks any suite that mounts
-    // the editor without the desktop mocks.
-    void import("@/lib/queries/document-catalog")
-      .then(({ getCatalogRecord, subscribeToCatalog }) => {
-        if (cancelled) return
-
-        const wanted = new Set(openWritingIds)
-        const refresh = (documentIds: string[], replace: boolean) => {
-          void Promise.all(documentIds.map((id) => getCatalogRecord(id)))
-            .then((records) => {
-              if (cancelled) return
-              setCatalogTabStatuses((current) => {
-                const next: Record<string, WritingStatus | null> = replace ? {} : { ...current }
-                documentIds.forEach((id, index) => {
-                  const record = records[index]
-                  if (record) next[id] = record.status ?? null
-                  else delete next[id]
-                })
-                return next
-              })
-            })
-            .catch(() => {
-              // A catalog miss just leaves the glyph on its fallback.
-            })
-        }
-
-        refresh(openWritingIds, true)
-        unsubscribe = subscribeToCatalog((change) => {
-          const affected = change.documentIds.filter((id) => wanted.has(id))
-          if (affected.length > 0) refresh(affected, false)
-        })
-      })
-      .catch(() => {
-        // No catalog in this runtime: the glyphs stay on their fallback.
-      })
-
-    return () => {
-      cancelled = true
-      unsubscribe?.()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openWritingIdsKey])
-
-  const tabStatuses = useMemo(() => {
-    const next: Record<string, WritingStatus | null> = {}
-    for (const tab of editorSession.tabs) {
-      next[tab.id] =
-        tab.id === editorSession.active_tab_id
-          ? writingStatus
-          : tab.writing_id
-            ? catalogTabStatuses[tab.writing_id] ?? null
-            : null
-    }
-    return next
-  }, [catalogTabStatuses, editorSession.active_tab_id, editorSession.tabs, writingStatus])
 
   const handleRenameModalOpenChange = useCallback((open: boolean) => {
     setRenameModalOpen(open)
@@ -6174,16 +3602,29 @@ export function EditorShell({
   const handleRenameWritingConfirm = useCallback(
     async (nextTitle: string): Promise<boolean> => {
       if (isDesktopRuntime()) {
-        const writingId = currentWritingIdRef.current
+        let writingId = currentWritingIdRef.current
         if (!writingId) {
           // The draft has no file yet. Naming it is just as deliberate a
           // signal of real intent as the first keystroke, so it must
           // materialize through the same path typing already uses — not
           // silently no-op (ODE-478 case 3).
           if (!editor) return false
-          setTitle(nextTitle)
-          setHasExplicitTitle(nextTitle !== DESKTOP_UNTITLED_WRITING_TITLE)
-          return persistEditorSnapshot(editor, { title: nextTitle }, { awaitDurability: true })
+          applyDocumentMetadata({
+            title: nextTitle,
+            hasExplicitTitle: nextTitle !== DESKTOP_UNTITLED_WRITING_TITLE,
+          })
+          const durable = await persistEditorSnapshot(editor, { title: nextTitle }, { awaitDurability: true })
+          if (!durable) return false
+
+          // ODE-585: if a materialization was already in flight, the file was
+          // born under the draft's old title and the queued save above cannot
+          // rename it — on desktop the title comes from the `.md` name. Name
+          // the materialized document through the regular rename below; when
+          // the draft materialized under this very name, that is a no-op. The
+          // shell adopted it by now (`onMaterialized` runs before the write
+          // settles); without an identity the name was not applied, so say so.
+          writingId = currentWritingIdRef.current
+          if (!writingId) return false
         }
 
         const result = await (await getDocumentService()).renameWriting({
@@ -6193,250 +3634,59 @@ export function EditorShell({
         })
         if (result.error || !result.data) return false
 
-        setTitle(result.data.title ?? nextTitle)
-        setHasExplicitTitle((result.data.title ?? nextTitle) !== UNTITLED_WRITING_TITLE)
+        applyDocumentMetadata({
+          title: result.data.title ?? nextTitle,
+          hasExplicitTitle: (result.data.title ?? nextTitle) !== UNTITLED_WRITING_TITLE,
+        })
         return true
       }
 
-      setTitle(nextTitle)
-      setHasExplicitTitle(nextTitle !== UNTITLED_WRITING_TITLE)
+      applyDocumentMetadata({
+        title: nextTitle,
+        hasExplicitTitle: nextTitle !== UNTITLED_WRITING_TITLE,
+      })
 
       if (editor) {
         return persistEditorSnapshot(editor, { title: nextTitle }, { awaitDurability: true })
       }
       return true
     },
-    [editor, persistEditorSnapshot],
+    [applyDocumentMetadata, editor, persistEditorSnapshot],
   )
 
-  const handleCreateWorkspaceTab = useCallback(async (options?: { skipConfirm?: boolean }) => {
-    if (!options?.skipConfirm && editorSession.tabs.length >= 10) {
-      const confirmed = window.confirm("You already have many tabs open. Open another artifact anyway?")
-      if (!confirmed) {
-        return
-      }
-    }
-
-    // Desktop: drafts remain ephemeral until the user enters real content.
-    // Just open/focus a draft tab; never persist a contentless writing here.
-    if (isDesktopRuntime()) {
-      // Flush/snapshot before detaching (same reasoning as
-      // handleSelectWorkspaceTab/handleCloseWorkspaceTab): a still-queued rAF
-      // rich-mode update or unmaterialized draft content must not be
-      // discarded just because the user hit New Tab before the next
-      // frame/save landed (ODE-478 follow-up — this handler never got the
-      // original case 2/4 fix).
-      flushQueuedRichModeUpdate()
-      flushPendingMarkdownSave()
-      snapshotOutgoingDraftContent()
-
-      persistCurrentWorkspaceViewState()
-
-      // Detach the previous document before the draft tab can receive focus.
-      // Merely changing the active session tab leaves TipTap and the save path
-      // bound to the previous UUID until React effects run, so the first input
-      // can otherwise append to (and persist over) the previous document.
-      persistenceCoordinator.cancel()
-      persistenceCoordinator.activateDocument(null)
-      currentWritingIdRef.current = null
-      setCurrentWritingId(null)
-      setHydrationWritingId(null)
-      ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
-      navigatedToDraftRef.current = false
-
-      if (editor) {
-        isApplyingContentRef.current = true
-        editor.commands.setContent(EMPTY_EDITOR_JSON)
-        isApplyingContentRef.current = false
-        updateDerivedEditorState(editor)
-      }
-
-      openDraftTab(ephemeralDraftWritingIdRef.current)
-      activeEditorTabIdRef.current = getEditorSessionState().session.active_tab_id ?? EDITOR_DRAFT_TAB_ID
-      replaceEditorHistory("/write")
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
-          editorEl?.focus()
-        })
-      })
-      return
-    }
-
-    // Block publishTabState while we are mid-creation. Web claims the final id
-    // synchronously so persistEditorSnapshot never races against it.
-    isCreatingWorkspaceTabRef.current = true
-
-    persistCurrentWorkspaceViewState()
-    const activeDraftTabId = currentWritingId ?? EDITOR_DRAFT_TAB_ID
-    const isActiveDraft =
-      !currentWritingId ||
-      editorSession.tabs.some((tab) => tab.id === activeDraftTabId && tab.writing_id === null)
-
-    const nowIso = new Date().toISOString()
-    const nextWritingId = createWritingId()
-    const nextTitle = deriveAutoTitle("", nowIso)
-
-    // Claim ownership of the blank-draft -> identified-local-writing transition
-    // synchronously so persistEditorSnapshot never races against it.
-    currentWritingIdRef.current = nextWritingId
-    setCurrentWritingId(nextWritingId)
-    setHydrationWritingId(nextWritingId)
-    replaceEditorHistory(`/write/${nextWritingId}`)
-
-    const finishCreation = () => {
-      isCreatingWorkspaceTabRef.current = false
-    }
-
-    const blankDraftRecord: WritingRecord = {
-      id: nextWritingId,
-      authorId: null,
-      title: nextTitle,
-      content: {
-        richText: EMPTY_EDITOR_JSON as Record<string, unknown>,
-        markdown: null,
-        plainText: "",
-        canonicalSource: "rich-text",
-      },
-      slug: null,
-      status: "draft",
-      artifactType: "general",
-      visibility: "private",
-      parentId: null,
-      correspondenceId: null,
-      version: 1,
-      deletedAt: null,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      contentUpdatedAt: nowIso,
-      metadataUpdatedAt: nowIso,
-    }
-
-    if (isActiveDraft) {
-      try {
-        await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
-      } catch {
-        // If save fails, revert the optimistic claim so persistEditorSnapshot
-        // can fall back to identity-on-first-input.
-        currentWritingIdRef.current = null
-        setCurrentWritingId(null)
-        setHydrationWritingId(null)
-        return
-      } finally {
-        finishCreation()
-      }
-
-      openWritingTab({
-        writingId: currentWritingIdRef.current ?? nextWritingId,
-        title: nextTitle,
-        saveState: "saved",
-        hasPendingSync: false,
-      })
-      activeEditorTabIdRef.current = currentWritingIdRef.current ?? nextWritingId
-      // Double rAF: first waits for React to commit the new tab to the DOM,
-      // second ensures the editor contenteditable is focusable.
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
-          editorEl?.focus()
-        })
-      })
-      return
-    }
-
-    try {
-      await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
-    } catch {
-      currentWritingIdRef.current = null
-      setCurrentWritingId(null)
-      setHydrationWritingId(null)
-      return
-    } finally {
-      finishCreation()
-    }
-
-    openWritingTab({
-      writingId: currentWritingIdRef.current ?? nextWritingId,
-      title: nextTitle,
-      saveState: "saved",
-      hasPendingSync: false,
-    })
-    activeEditorTabIdRef.current = currentWritingIdRef.current ?? nextWritingId
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
-        editorEl?.focus()
-      })
-    })
-  }, [
-    currentWritingId,
+  // ODE-587: abrir documentos en pestañas (mudanza mecánica; mismo orden).
+  const {
+    handleCreateWorkspaceTab,
+    handleOpenWorkspaceDocument,
+  } = useWorkspaceTabOpening({
+    activateDocument,
+    activeEditorTabIdRef,
+    createWorkspaceTabRef,
+    currentWritingIdRef,
     editor,
-    editorSession.tabs,
-    flushPendingMarkdownSave,
-    flushQueuedRichModeUpdate,
+    editorSession,
+    ephemeralDraftWritingIdRef,
+    forceNewWriting,
+    forceNewWritingRequestedRef,
+    handleSelectWorkspaceTab,
+    isApplyingContentRef,
+    isCreatingWorkspaceTabRef,
+    navigatedToDraftRef,
     persistenceCoordinator,
-    persistCurrentWorkspaceViewState,
-    snapshotOutgoingDraftContent,
+    prepareDocumentExit,
+    refreshRichFootnotes,
+    selectAdjacentTabRef,
+    sessionLoaded,
+    untitledWritingTitle: UNTITLED_WRITING_TITLE,
     updateDerivedEditorState,
-  ])
-  createWorkspaceTabRef.current = handleCreateWorkspaceTab
-
-  const handleOpenWorkspaceDocument = useCallback(async (documentId: string) => {
-    // Same reasoning as handleSelectWorkspaceTab/handleCloseWorkspaceTab/
-    // handleCreateWorkspaceTab: this also detaches from whatever document is
-    // currently active, so a still-queued edit or unmaterialized draft must
-    // not be discarded just because the user opened a different document via
-    // search/recents instead of the tab bar (ODE-478 follow-up).
-    flushQueuedRichModeUpdate()
-    flushPendingMarkdownSave()
-    snapshotOutgoingDraftContent()
-
-    const outcome = await openDocumentById(documentId)
-    if (outcome.status !== "opened" && outcome.status !== "conflict") {
-      throw new Error(describeOpenOutcome(outcome))
-    }
-    const openedTitle = outcome.record.title ?? UNTITLED_WRITING_TITLE
-    currentWritingIdRef.current = documentId
-    setCurrentWritingId(documentId)
-    setHydrationWritingId(documentId)
-    openWritingTab({ writingId: documentId, slug: outcome.record.slug, title: openedTitle, saveState: "saved-local", hasPendingSync: false })
-  }, [flushPendingMarkdownSave, flushQueuedRichModeUpdate, snapshotOutgoingDraftContent])
-
-  selectAdjacentTabRef.current = (direction) => {
-    const tabs = editorSession.tabs
-    if (tabs.length <= 1) {
-      return
-    }
-
-    const activeId = editorSession.active_tab_id ?? currentWritingIdRef.current ?? EDITOR_DRAFT_TAB_ID
-    const currentIndex = tabs.findIndex((tab) => tab.id === activeId)
-    const baseIndex = currentIndex < 0 ? 0 : currentIndex
-    const nextTab = tabs[(baseIndex + direction + tabs.length) % tabs.length]
-
-    if (nextTab && nextTab.id !== activeId) {
-      handleSelectWorkspaceTab(nextTab.id)
-    }
-  }
-
-  useEffect(() => {
-    if (!forceNewWriting || !sessionLoaded || forceNewWritingRequestedRef.current) {
-      return
-    }
-
-    forceNewWritingRequestedRef.current = true
-    void handleCreateWorkspaceTab({ skipConfirm: true })
-  }, [forceNewWriting, handleCreateWorkspaceTab, sessionLoaded])
+  })
 
   const handleMenuOpenFile = useCallback(
     async (_path: string, content: string) => {
       // Same reasoning as the other document-switching handlers: the OS
       // "Open File" menu also detaches from whatever is currently active
       // (ODE-478 follow-up).
-      flushQueuedRichModeUpdate()
-      flushPendingMarkdownSave()
-      snapshotOutgoingDraftContent()
-
-      persistCurrentWorkspaceViewState()
+      prepareDocumentExit({ flushPendingEdit: true, snapshotDraft: true, saveViewState: true })
 
       // Unified opener (ODE-375 M3): desktop Open Document converges path → UUID
       // through the catalog before hydration and never mints a fresh id per open,
@@ -6462,11 +3712,9 @@ export function EditorShell({
         }
 
         const openedId = result.documentId
-        currentWritingIdRef.current = openedId
-        setCurrentWritingId(openedId)
-        setHydrationWritingId(openedId)
+        activateDocument({ writingId: openedId }, "open")
         const openedTitle = result.record.title ?? filenameToTitle(_path)
-        setTitle(openedTitle)
+        applyDocumentMetadata({ title: openedTitle })
         openWritingTab({
           writingId: openedId,
           title: titleRef.current || openedTitle,
@@ -6515,10 +3763,8 @@ export function EditorShell({
           if (result.error || !result.data) {
             throw new Error(result.error?.message ?? "Failed to import desktop file")
           }
-          currentWritingIdRef.current = result.data.id
-          setCurrentWritingId(result.data.id)
-          setHydrationWritingId(result.data.id)
-          setTitle(result.data.title ?? nextTitle)
+          activateDocument({ writingId: result.data.id }, "open")
+          applyDocumentMetadata({ title: result.data.title ?? nextTitle })
         } else {
           await (await getDocumentService()).saveWriting({ writing: record })
         }
@@ -6526,23 +3772,17 @@ export function EditorShell({
         return
       }
 
-      currentWritingIdRef.current = currentWritingIdRef.current ?? nextWritingId
-      setCurrentWritingId(currentWritingIdRef.current)
-      setHydrationWritingId(currentWritingIdRef.current)
+      const openedWritingId = currentWritingIdRef.current ?? nextWritingId
+      activateDocument({ writingId: openedWritingId }, "open")
       openWritingTab({
-        writingId: currentWritingIdRef.current,
+        writingId: openedWritingId,
         title: isDesktopRuntime() ? titleRef.current || nextTitle : nextTitle,
         saveState: "saved-local",
         hasPendingSync: false,
       })
-      if (isPerfHarness()) {
-        // ODE-389: same cold-harness guard as the other editor navigations.
-        replaceEditorHistory(`/write/${nextWritingId}`)
-      } else if (!isDesktopRuntime()) {
-        router.push(`/write/${nextWritingId}`)
-      }
+      navigateToWriting(router, `/write/${nextWritingId}`, { mode: "push", skipOnDesktop: true })
     },
-    [flushPendingMarkdownSave, flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, router, snapshotOutgoingDraftContent],
+    [activateDocument, applyDocumentMetadata, prepareDocumentExit, router],
   )
 
   const handleMenuNewFile = useCallback(() => {
@@ -6578,13 +3818,15 @@ export function EditorShell({
       return false
     }
     const filenameTitle = filenameToTitle(result.path)
-    setTitle(filenameTitle)
-    setHasExplicitTitle(filenameTitle !== DESKTOP_UNTITLED_WRITING_TITLE)
+    applyDocumentMetadata({
+      title: filenameTitle,
+      hasExplicitTitle: filenameTitle !== DESKTOP_UNTITLED_WRITING_TITLE,
+    })
     currentCanonicalPathRef.current = result.path
     setCanonicalPath(result.path)
     setExternalFileNotice(null)
     return result.path
-  }, [editor, persistEditorSnapshot])
+  }, [applyDocumentMetadata, editor, persistEditorSnapshot])
 
   useTauriEditorMenuEvents(handleRunAction)
 
@@ -6778,6 +4020,7 @@ export function EditorShell({
     <section
       id="editor"
       data-page="editor"
+      data-hydration-phase={hydrationPhase}
       data-focus-mode={isFocusMode ? "true" : "false"}
       className="h-screen overflow-hidden bg-bg"
     >
@@ -6845,43 +4088,14 @@ export function EditorShell({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  void (async () => {
-                    const writingId = currentWritingIdRef.current
-                    if (!writingId || !editor) return
-                    const opened = await (await getDocumentService()).openWriting(writingId)
-                    if (!opened.data) return
-                    isApplyingContentRef.current = true
-                    editor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
-                    isApplyingContentRef.current = false
-                    updateDerivedEditorState(editor)
-                    persistenceCoordinator.setDurableContentHash(writingId, externalContentConflict.externalContentHash)
-                    externalContentConflictRef.current = null
-                    setExternalContentConflict(null)
-                    setExternalFileNotice({ kind: "content-changed", path: externalContentConflict.path })
-                  })()
-                }}
+                onClick={reloadExternalVersion}
               >
                 Reload external
               </Button>
               <Button
                 type="button"
                 size="sm"
-                onClick={() => {
-                  const writingId = currentWritingIdRef.current
-                  if (!editor || !writingId) return
-                  // Pre-seed the coordinator's tracked baseline to exactly
-                  // the external hash this conflict was raised against —
-                  // disk really is at that version right now, so the write
-                  // this triggers targets it precisely (one deliberate
-                  // overwrite, never a bypass of the guard itself). Clear
-                  // the conflict *before* persisting so persistEditorSnapshot's
-                  // own guard doesn't refuse this call too.
-                  persistenceCoordinator.setDurableContentHash(writingId, externalContentConflict.externalContentHash)
-                  externalContentConflictRef.current = null
-                  setExternalContentConflict(null)
-                  void persistEditorSnapshot(editor, undefined, { awaitDurability: true })
-                }}
+                onClick={keepMyVersion}
               >
                 Keep my version
               </Button>
@@ -6988,7 +4202,13 @@ export function EditorShell({
                     markdownValue={markdownValue}
                     onMarkdownChange={handleMarkdownChange}
                     onMarkdownSelectionChange={(selection) => {
-                      markdownSelectionRef.current = selection
+                      const writingId = markdownSelectionOwnerId(currentWritingId)
+                      if (markdownSelectionOwnerId(currentWritingIdRef.current) !== writingId) return
+
+                      markdownSelectionRef.current = {
+                        ...selection,
+                        writingId,
+                      }
                       setMarkdownSelectionState(selection)
                     }}
                     markdownTextareaRef={markdownTextareaRef}
@@ -7054,6 +4274,9 @@ export function EditorShell({
                 annotations={footnotes}
                 currentMarkdown={currentDocumentMarkdown}
                 onNavigate={(annotation: AnnotationPanelEntry) => {
+                  const writingId = markdownSelectionOwnerId(currentWritingId)
+                  if (markdownSelectionOwnerId(currentWritingIdRef.current) !== writingId) return false
+
                   if (modeRef.current === "markdown") {
                     const textarea = markdownTextareaRef.current
                     if (
@@ -7070,6 +4293,7 @@ export function EditorShell({
                       start: annotation.source_start,
                       end: annotation.source_end,
                       text: markdownValue.slice(annotation.source_start, annotation.source_end),
+                      writingId,
                     }
                     queueMarkdownSelectionRestore(annotation.source_start, annotation.source_end)
                     return true
@@ -7246,7 +4470,7 @@ export function EditorShell({
                     return
                   }
 
-                  setWritingStatus(nextStatus)
+                  applyDocumentMetadata({ status: nextStatus })
                   void applyPanelMetaChange(editor, { status: nextStatus }, {
                     persistSnapshot: (overrides) => {
                       if (!editor) {
@@ -7262,7 +4486,7 @@ export function EditorShell({
                     return
                   }
 
-                  setArtifactType(nextArtifactType)
+                  applyDocumentMetadata({ artifactType: nextArtifactType })
                   void applyPanelMetaChange(editor, { artifactType: nextArtifactType }, {
                     persistSnapshot: (overrides) => {
                       if (!editor) {
@@ -7278,7 +4502,7 @@ export function EditorShell({
                     return
                   }
 
-                  setWritingVisibility(nextVisibility)
+                  applyDocumentMetadata({ visibility: nextVisibility })
                   void applyPanelMetaChange(editor, { visibility: nextVisibility }, {
                     persistSnapshot: (overrides) => {
                       if (!editor) {

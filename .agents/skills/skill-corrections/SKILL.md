@@ -5,6 +5,10 @@ description: "Reglas del subsistema de correcciones AI de Odessay: identidad de 
 
 # Skill: Corrections (AI Writing Assist)
 
+## 1. Objetivo
+
+Corrections define las reglas de identidad, admisión, ciclo de vida y matching que mantienen coherentes las sugerencias de escritura asistida en Odessay.
+
 Cuando un cambio de correcciones altera persistencia, hidratación, cache,
 batching, listeners o trabajo background, consultar también
 `.agents/skills/skill-performance/SKILL.md`. Este skill conserva las reglas de
@@ -15,9 +19,9 @@ El subsistema de correcciones es el módulo hecho en casa más complejo del prod
 
 Origen: revisión 2026-07 (`docs/revision-correcciones-anotaciones-2026-07.md`) — 19 hallazgos, casi todos de cuatro familias que estas reglas cierran.
 
----
+## 2. Ámbito y activación
 
-## Cuándo activar este skill
+### Cuándo activar este skill
 
 Actívalo si el prompt, brief o diff toca cualquiera de estas señales:
 
@@ -30,7 +34,9 @@ Actívalo si el prompt, brief o diff toca cualquiera de estas señales:
 - `publication-review` (route), `corrections.ts`, `suggestion-engine.ts`
 - trigger de bloques dirty, invalidación stale
 
-## Contexto documental obligatorio
+## 3. Entradas y fuentes de autoridad
+
+### Contexto documental obligatorio
 
 1. `workflow/context/features/odessay-ai-writing-assist.md` — contrato funcional (siempre)
 2. `workflow/context/features/odessay-prosemirror-tiptap.md` — si toca decoraciones o extensiones
@@ -38,7 +44,9 @@ Actívalo si el prompt, brief o diff toca cualquiera de estas señales:
 
 ---
 
-## Regla 1 — Identidad ≠ ubicación
+## 4. Método y criterios
+
+### Regla 1 — Identidad ≠ ubicación
 
 **Qué es** una corrección (su identidad) y **dónde está** ahora (su ubicación) son datos distintos con ciclos de vida distintos:
 
@@ -49,7 +57,7 @@ Anti-patrón que esta regla prohíbe: fingerprint que incluye `blockId` (que inc
 
 `enforced by: no enforcement — el test llega con Fix 2 del plan (tests de fingerprint estable tras cambio de hash/pos)`
 
-## Regla 2 — Admisión única
+### Regla 2 — Admisión única
 
 Toda sugerencia pasa por **un solo punto de admisión** antes de ser visible, sin importar su origen: análisis nuevo, hidratación de cache, streaming, o re-evaluación tras aprender una palabra. La admisión aplica, en orden: filtro de learned words → filtro de memoria de rechazos → validación de límites de token → dedupe.
 
@@ -59,7 +67,7 @@ Corolario: cuando el estado de los filtros cambia (llega la lista de learned wor
 
 `enforced by: tests/corrections-admission.test.ts`
 
-## Regla 3 — Todo estado tiene salida
+### Regla 3 — Todo estado tiene salida
 
 El ciclo de vida de una sugerencia es una máquina de estados donde **cada estado tiene transición de salida garantizada para éxito, fallo y timeout**. Un estado transitorio (`pending-stale`, "Recalculando…") sin salida en el camino de error es un bug de diseño, aunque el happy path funcione.
 
@@ -70,7 +78,7 @@ Reglas concretas:
 
 `enforced by: no enforcement — el test llega con Fix 4 del plan (ninguna sugerencia permanece stale >10 s por ningún camino)`
 
-## Regla 4 — Matching con límites de token, una sola implementación
+### Regla 4 — Matching con límites de token, una sola implementación
 
 La respuesta a "¿dónde está esta corrección en este texto?" vive en **un solo módulo** que respeta límites de token, compartido por servidor (validación), decoraciones (render) y apply (mutación). Prohibido:
 
@@ -81,7 +89,7 @@ Este es el mismo guardrail de `skill-frontend §ProseMirror/Decorations` ("evita
 
 `enforced by: tests/corrections-matching.test.ts`
 
-## Regla 5 — Output de LLM degrada por item, nunca colapsa
+### Regla 5 — Output de LLM degrada por item, nunca colapsa
 
 El modelo va a devolver items malformados ocasionalmente. El parseo valida **item por item** (`safeParse`), descarta solo lo inválido y loguea lo descartado. Prohibido `.catch([])` (o equivalente) a nivel de colección: convierte un item malo en pérdida total silenciosa (hallazgo C5).
 
@@ -91,19 +99,9 @@ Igual para mutaciones optimistas: toda escritura optimista (learn word, accept) 
 
 ---
 
-## Failure modes que todo brief de corrections debe responder
+## 5. Resultado y evidencia
 
-Complemento de `skill-planning §Failure modes`, instanciado para este subsistema:
-
-1. ¿Qué pasa si el análisis del bloque falla o llega tarde? (¿las stale expiran?)
-2. ¿Qué pasa si la lista de learned words no ha cargado cuando corre el primer análisis?
-3. ¿Qué pasa si el usuario cambia de documento con la cola a medio procesar?
-4. ¿Qué pasa si el modelo devuelve un item malformado dentro de un lote válido?
-5. ¿Qué pasa si el guardado remoto (learn word, cache) falla después del update optimista?
-
-Un brief de corrections que no responde estas cinco preguntas no está listo para BUILD.
-
-## Checklist de review para diffs de corrections
+### Checklist de review para diffs de corrections
 
 - [ ] ¿Toda sugerencia nueva entra por el punto de admisión común (no por un camino paralelo)?
 - [ ] ¿Los fingerprints/claves de memoria excluyen hash y posición?
@@ -116,9 +114,29 @@ Un brief de corrections que no responde estas cinco preguntas no está listo par
 
 ---
 
-## Relación con otros skills
+## 6. Manejo de fallos e incertidumbre
+
+### Failure modes que todo brief de corrections debe responder
+
+Complemento de `skill-planning §Failure modes`, instanciado para este subsistema:
+
+1. ¿Qué pasa si el análisis del bloque falla o llega tarde? (¿las stale expiran?)
+2. ¿Qué pasa si la lista de learned words no ha cargado cuando corre el primer análisis?
+3. ¿Qué pasa si el usuario cambia de documento con la cola a medio procesar?
+4. ¿Qué pasa si el modelo devuelve un item malformado dentro de un lote válido?
+5. ¿Qué pasa si el guardado remoto (learn word, cache) falla después del update optimista?
+
+Un brief de corrections que no responde estas cinco preguntas no está listo para BUILD.
+
+## 7. Relaciones y ownership
+
+### Relación con otros skills
 
 - `skill-planning` invoca este skill en la revisión de briefs que tocan corrections (§Revisión por skills de dominio).
 - `skill-frontend` es dueño de los guardrails de decoraciones/ProseMirror; este skill los especializa para correcciones y les añade enforcement.
 - `skill-backend` es dueño de las reglas de la route `publication-review` (proveedor/modelo por env, contrato de error); este skill fija qué debe validar esa route (admisión, límites de token, degradación por item).
 - `skill-code-review` usa el checklist de arriba como criterio de rechazo en PRs de este scope.
+
+## 8. Recursos asociados
+
+El contrato funcional y la revisión histórica se consultan mediante las fuentes indicadas en Entradas; los tests citados junto a cada regla son los mecanismos de verificación existentes.

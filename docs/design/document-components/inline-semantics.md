@@ -41,4 +41,3 @@ AI/context consumers receive plain visible text by default. An explicit authoriz
 ## Legacy annotations
 
 Legacy `==text==[@n: comment]` is accepted only by the compatibility reader. Its deterministic compatibility ID must remain stable for the same source occurrence during migration. Any successful canonical write emits `<Annotation id="…" type="…" comment="…">text</Annotation>` and never recreates legacy syntax. Invalid mixed legacy/new source is recoverable and cannot be interpreted as deletion of durable margins.
-

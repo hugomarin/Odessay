@@ -96,7 +96,7 @@ While the selection bar is visible the sheet gets 96px bottom padding so the las
 | 700–900 | rail forced collapsed; Desk drops the date column |
 | < 700 | repo already hides the app shell (`#app-sidebar-shell`); Studio shows the mobile notice |
 
-Marketing breakpoints are in `.agents/skills/skill-design-landing/design.md` §6.
+Marketing breakpoints are in `.agents/skills/skill-design/specialties/marketing-page.md` §6.
 
 ## 6. Marketing layout
 

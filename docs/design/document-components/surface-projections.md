@@ -51,4 +51,3 @@ Every enabled registry kind must declare all projections below before its writer
 A document is non-empty when its IR contains meaningful text, a literal code payload, a resolvable asset with alt text, or a registered structural component whose content model represents author intent. Plain-text emptiness alone does not erase a valid empty authoring structure.
 
 The rollout gate enumerates the static registry and requires a handler for Rich adapter, Source serialization, shared reading, plain text, clean Markdown, PDF, and DOCX. Readers may use a documented safe fallback; writers remain disabled until full required coverage exists.
-

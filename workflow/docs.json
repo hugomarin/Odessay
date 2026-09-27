@@ -39,6 +39,13 @@
       "description": "ADR raíz de identidad y fuente de verdad del documento. Cierra la polaridad A1/A2/A3: .md canónico, body_json copia de trabajo, metadata en la nube (no en frontmatter), un solo UUID cliente=nube y binding por ruta+inode+content_hash. Incluye enmienda D10 y la semántica D9 de borrado: ausencia observada nunca archiva cloud; una acción confirmada compone borrado local y soft-delete cloud según presencia."
     },
     {
+      "path": "workflow/context/core/odessay-adr-documento-activo.md",
+      "type": "core",
+      "scope": "arquitectura-de-editor",
+      "state": "adr-aceptado-fuente-de-verdad",
+      "description": "ADR (aceptado, ODE-566) sobre qué documento está activo en el editor y quién puede cambiarlo. Inventario reproducible de los seis portadores de la identidad activa (scripts/report-active-document-carriers.mjs), comparación de opciones (shell / store de sesión / coordinador) y decisión: una sola función de transición (activateDocument) como único escritor. Enmendado en ODE-568 (opción A, fuente por alcance): el store de sesión manda entre entradas y fuera de la shell; dentro de una instancia montada de EditorShell se conserva su identidad de instancia, porque la shell se remonta en cada entrada por URL. Plan de migración completo: Fases 1, 3 y 4 hechas (ODE-567, ODE-569, ODE-570); Fase 2 cancelada (ODE-568); Fase 5 resuelta como identidad de instancia (ODE-571). Prevalece sobre odessay-sync.md §fuente de verdad, ya reconciliado con él. No toca la identidad documental, que gobierna odessay-adr-identidad.md."
+    },
+    {
       "path": "workflow/context/core/odessay-paginas.md",
       "type": "core",
       "description": "Arquitectura de rutas: zona pública, espacio del autor (dual: vista propia vs visitante) y zona privada. Mecanismo universal de respuesta (reply_to / parent_id). Layout y comportamiento de cada página."
@@ -398,6 +405,31 @@
       "description": "Propuesta histórica de mejoras para el modal de Preview. No es contrato vigente; requiere revisión de PM para promoción, archivo o descarte."
     },
     {
+      "path": "workflow/quality/capability-integration-map.md",
+      "type": "ops",
+      "description": "Inventario canónico de capabilities de nivel integración: critical chain real y coverage_status auditado por scenario (A–N), escala NONE→RELEASE, modelo de prioridad, metodología de Critical Proofs y tracker de Fase 3. Es el registro que se actualiza cuando un proof cierra o degrada un scenario."
+    },
+    {
+      "path": "workflow/quality/editor-shell-decomposition-diagnostic.md",
+      "type": "ops",
+      "description": "Diagnóstico previo a la descomposición de components/editor/editor-shell.tsx: medición del archivo (7.3k líneas, 63 efectos, 19 espejos estado↔ref, 602 lecturas de refs), por qué la cobertura actual no sirve como red (los 3 tests que lo montan doblan @tiptap/react y piezas propias), qué clusters no se ejercitan por el shell, y el plan por fases: harness compartido → 3 pruebas de caracterización → cerrar gaps del capability map → extracción en dos tiempos. Leer antes de planear cualquier extracción de ese archivo."
+    },
+    {
+      "path": "workflow/quality/capability-proof-contract.md",
+      "type": "guardrail",
+      "description": "Contrato normativo de construcción de capability proofs (reglas MUST): entry point alcanzable en producción, reproducir la secuencia de transiciones, seams internos reales, scheduling ≠ completion, ownership de trabajo diferido, doubles con el contrato completo del boundary, errores tragados no cuentan como ejecución, mutation test, y coverage status como output y no como meta. Incluye taxonomía de escapes (MOCKED_SEAM, WRONG_ASSERTION, NON_PRODUCTION_PATH, STALE_PROOF, ARCHITECTURE_GAP) y checklist de pre-upgrade. Leer en BUILD y REVIEW de cualquier proof."
+    },
+    {
+      "path": "workflow/quality/quality-harness-spec-v2.1.md",
+      "type": "spec",
+      "description": "Spec original del Quality Harness (skills, agents, AGENTS.md, CI, remediation plane, learning loop) con su Estado de implementación reconciliado: qué shippeó como se planeó y qué divergió al Capability Integration Map. Documento de dirección, no contrato de BUILD."
+    },
+    {
+      "path": "workflow/testing/integration-harness-catalog.md",
+      "type": "ops",
+      "description": "Catálogo operativo de andamiajes de pruebas de integración y componente bajo Vitest (hermano de playwright-catalog.md): ficha de cada módulo de soporte (qué resuelve, qué deja real, qué dobla, cuándo NO usarlo), criterio para elegir entre nivel servicio y nivel componente, las trampas ya pagadas (ciclo de vi.mock, capturar en vez de sustituir, drivers que verifican su propio efecto, orden del trabajo diferido, estado persistente entre tests), el protocolo antes de montar un escenario nuevo y la auditoría clasificada de la suite. Regla principal: el criterio no es cuántos dobles declara un test, sino cuáles y qué dice ser."
+    },
+    {
       "path": "workflow/testing/playwright-catalog.md",
       "type": "ops",
       "description": "Catálogo operativo de assets Playwright del repo: organiza tests, helpers y scripts por familia, clasifica qué reutilizar, qué evitar, cómo prevenir proliferación de suites solapadas, y reglas de mapeo servicio-contrato. Incluye §Regla de mapeo servicio-contrato para vincular tests a contratos operativos explícitos."
@@ -433,6 +465,71 @@
       "description": "Convención mínima para roles de agente en Odessay: ubicación, frontmatter requerido, naming, responsabilidades y relación entre workflow, agent roles y skills."
     },
     {
+      "path": ".agents/harness-productization-proposal.md",
+      "type": "proposal",
+      "description": "Propuesta conceptual para productizar los 12 skills operativos de .agents: método reusable, conocimiento técnico condicionado, especialidades locales, estructura editorial común y criterios de portabilidad."
+    },
+    {
+      "path": ".agents/skills/skill-architecture/specialties/ownership-and-sources.md",
+      "type": "architecture",
+      "description": "Binding local de los skills Architecture y Architecture Recon: taxonomía, routing de fuentes aceptadas, protocolo BUILD, hotspots y formato operativo en Odessay."
+    },
+    {
+      "path": ".agents/skills/skill-code-review/specialties/review-contracts.md",
+      "type": "review",
+      "description": "Binding local de las cuatro lentes review: contratos de arquitectura, bundle desktop, invariantes de corrección, evidencia de testing y umbral de tamaño en Odessay."
+    },
+    {
+      "path": ".agents/skills/skill-planning/specialties/definition-and-sources.md",
+      "type": "skill-reference",
+      "description": "Fuentes, verificación de definición, revisión por skills de dominio, secuenciación y criterios de calidad de issues en Odessay."
+    },
+    {
+      "path": ".agents/skills/skill-planning/specialties/linear-conventions.md",
+      "type": "skill-reference",
+      "description": "Convenciones de publicación en Linear para Planning: proyectos por fase, milestones, labels, jerarquía y asignación de issues."
+    },
+    {
+      "path": ".agents/skills/skill-planning/specialties/issue-brief-schema.md",
+      "type": "skill-reference",
+      "description": "Schema del Issue Brief y Execution Trace de Odessay: campos, contratos, referencias, validación y entrega."
+    },
+    {
+      "path": ".agents/skills/skill-audit-planning/specialties/phase-audit-contract.md",
+      "type": "skill-reference",
+      "description": "Especialidad local de Audit Planning: fuentes de fase, preguntas, criterios de rechazo, severidad y formato de auditoría de Odessay."
+    },
+    {
+      "path": ".agents/skills/skill-frontend/specialties/runtime-and-editor.md",
+      "type": "skill-reference",
+      "description": "Stack, runtimes, contratos documentales, estado, performance y editor TipTap de Odessay."
+    },
+    {
+      "path": ".agents/skills/skill-frontend/specialties/components-and-interaction.md",
+      "type": "skill-reference",
+      "description": "Componentes, CSS, IDs semánticos, estados visuales, accesibilidad y checklist de interfaz de Odessay."
+    },
+    {
+      "path": ".agents/skills/skill-backend/specialties/api-and-persistence.md",
+      "type": "skill-reference",
+      "description": "Contratos API, Supabase, autenticación, save/sync, errores y configuración backend de Odessay."
+    },
+    {
+      "path": ".agents/skills/skill-backend/specialties/external-integrations.md",
+      "type": "skill-reference",
+      "description": "Integraciones AI, email y observabilidad backend de Odessay, con criterios de proveedor y evidencia."
+    },
+    {
+      "path": ".agents/skills/skill-database/specialties/schema-and-access.md",
+      "type": "skill-reference",
+      "description": "Especialidad local de Database: schema, semántica documental, Supabase, migraciones, RLS, triggers y validación de Odessay."
+    },
+    {
+      "path": ".agents/skills/skill-ux-testing/specialties/critical-user-flows.md",
+      "type": "skill-reference",
+      "description": "Especialidad local de UX Testing: flujos críticos, paridad entre superficies, Playwright, AI Editor y mobile de Odessay."
+    },
+    {
       "path": ".agents/agents/planning-agent.md",
       "type": "agent",
       "description": "Rol de agente para `/wf-define`: resuelve la topología de ejecución (capabilities, dependencias, critical path, smallest coherent stages) antes de escribir briefs, usa skill-planning como marco principal para endurecer cada issue, convoca especialistas cuando hace falta y consolida roadmap, DoD y briefs en una sola voz. Simétrico a build-agent.md/review-agent.md."
@@ -445,7 +542,7 @@
     {
       "path": ".agents/agents/review-agent.md",
       "type": "agent",
-      "description": "Rol de agente para `/wf-review`: reconstruye el comportamiento cambiado antes de buscar findings, activa solo las lentes review-* relevantes al scope del diff, consolida findings y produce TechnicalVerdict/QualityScore/ProcessInsights. No calcula el GateResult final (eso combina TechnicalVerdict con CI/Vercel/delivery en workflow.md) ni repite merge, ledgers o Linear."
+      "description": "Rol de agente para `/wf-review`: reconstruye el comportamiento cambiado, carga las referencias relevantes de Code Review, consolida findings y produce TechnicalVerdict/QualityScore/ProcessInsights. El workflow calcula GateResult y posee merge, ledgers y Linear."
     },
     {
       "path": "components/editor/AGENTS.md",
@@ -460,42 +557,42 @@
     {
       "path": ".agents/skills/architecture-recon/SKILL.md",
       "type": "skill",
-      "description": "Localiza owner canónico, siblings, consumers, contratos y tests reales en el código antes de implementar. Complementa a skill-architecture (qué debería ser verdad) confrontándolo contra dónde vive hoy la responsabilidad. Leer código relevante es parte normal de BUILD — la restricción de 'no cargar contexto adicional por intuición' sigue aplicando solo a documentación, nunca a código."
+      "description": "Investiga implementación y owner observados, APIs reutilizables, siblings, consumers, contratos y tests antes de implementar; confronta ese estado con el owner esperado por Architecture. El binding local y la política de lectura documental de BUILD están en .agents/skills/skill-architecture/specialties/ownership-and-sources.md y workflow/workflow.md."
     },
     {
       "path": ".agents/skills/skill-design/SKILL.md",
       "type": "skill",
-      "description": "Sistema de diseño visual completo: paleta de colores (tokens ink/paper/accent), tipografía (Lora para contenido, Geist para UI), componentes ShadCN adaptados, iconos, transiciones y reglas visuales invariables."
+      "description": "Punto de entrada del sistema visual de Odessay: selecciona la especialidad de producto o marketing y aplica sus tokens, tipografía, componentes, composición y fuentes de autoridad."
     },
     {
       "path": ".agents/skills/skill-design/vistas.md",
-      "type": "skill",
-      "description": "Companion de skill-design: valores exactos de padding, tamaños, colores y comportamiento por vista (Desk, Collections, Correspondences, Reading, Editor, Sidebar) + checklists de validación. No usar sin skill-design/SKILL.md."
+      "type": "design-reference",
+      "description": "Especialidad de producto de Design: valores exactos de padding, tamaños, colores y comportamiento por vista (Desk, Collections, Correspondences, Reading, Editor, Sidebar) y checklists de validación."
     },
     {
       "path": ".agents/skills/skill-design/tipografia.md",
-      "type": "skill",
+      "type": "design-reference",
       "description": "Contrato tipográfico canónico de Odessay para editor y lectura: escala, line-height, ritmo vertical, headings, tablas, blockquote, listas y CSS compartido por odessay-editor-content/prose-odessay."
     },
     {
       "path": ".agents/skills/skill-frontend/SKILL.md",
       "type": "skill",
-      "description": "Estándares de implementación frontend: estructura de archivos Next.js 15, naming BEM, cuándo usar Server vs Client components, integración con TipTap, estado con Zustand y TanStack Query, performance y accesibilidad."
+      "description": "Método frontend para owners de estado, transiciones, datos de vista, componentes y validación; el stack Next/React/TipTap y las reglas de Odessay viven en su especialidad local."
     },
     {
       "path": ".agents/skills/skill-backend/SKILL.md",
       "type": "skill",
-      "description": "Estándares de implementación backend: API routes, Supabase (auth, DB, realtime), capa local-first, integración con provider AI server-side configurable y Resend, manejo de errores y observabilidad con Sentry."
+      "description": "Método backend para contratos de servidor, autoridad, proveedores externos, errores y evidencia; las recetas Next, Supabase, AI y email de Odessay viven en su especialidad local."
     },
     {
       "path": ".agents/skills/skill-database/SKILL.md",
       "type": "skill",
-      "description": "Guía de base de datos: convenciones de migración SQL, RLS policies, triggers, índices, naming de tablas y cómo actualizar odessay-modelo-datos.md después de un cambio de schema."
+      "description": "Método para schema, migraciones, RLS, triggers, índices y validación; el schema y las reglas Supabase de Odessay viven en su especialidad local."
     },
     {
       "path": ".agents/skills/skill-planning/SKILL.md",
       "type": "skill",
-      "description": "Método para endurecer cada issue en un Issue Brief ejecutable: schema, jerarquía de proyectos/milestones, template con areas_affected y proof of work requerido. Incluye §Verificación de definición (reconciliar el spec citado contra el código antes del brief; contradicción = bloqueante, consistencia ≠ corrección), §Visual / UX Contract, contratos de Architecture/Performance, revisión por domain skills, y el schema canónico de Execution Trace. La orquestación de la fase (topología, síntesis) vive en planning-agent.md, no aquí."
+      "description": "Método para convertir una intención en un Issue Brief ejecutable: definición contrastada, consumidores, contratos, failure modes y evidencia. El schema de Issue Brief y Execution Trace, Linear y routing documental de Odessay viven en su especialidad local; la topología pertenece a planning-agent.md."
     },
     {
       "path": ".agents/skills/skill-performance/SKILL.md",
@@ -522,39 +619,44 @@
     {
       "path": ".agents/skills/skill-audit-planning/SKILL.md",
       "type": "skill",
-      "description": "Checklist de audit de planeación para roadmap, DoD e Issue Briefs: verifica cobertura del DoD, overlaps, huecos, dependencias, secuencia y contratos faltantes antes de BUILD."
+      "description": "Método de auditoría para cobertura, solapamientos, dependencias, owners, contratos y evidencia de una fase; fuentes, severidad y formato de Odessay viven en su especialidad local."
     },
     {
       "path": ".agents/skills/skill-architecture/SKILL.md",
       "type": "skill",
       "scope": "architecture-governance",
       "state": "operational-gate-for-architecture-work",
-      "description": "Capa de clasificación arquitectónica de Odessay: separa `Layer`, `Runtime scope` y `Owner`, carga explícitamente ADR + spec del catálogo desktop y exige reportar como Context Gap cualquier contradicción de docs, briefs o código antes de implementar arquitectura nueva."
+      "description": "Método de clasificación arquitectónica: separa `Layer`, `Runtime scope` y `Owner`, fija contratos, invariantes y boundaries esperados. El binding local de Odessay selecciona ADR y spec del catálogo según el alcance definido por AGENTS.md."
+    },
+    {
+      "path": ".agents/skills/skill-architecture/references/layers-and-boundaries.md",
+      "type": "reference",
+      "description": "Criterios portables de clasificación por capa y runtime para Architecture: funciones, entradas, salidas, dependencias e invariantes de UI, Application, Domain y Adapter."
     },
     {
       "path": ".agents/skills/skill-code-review/SKILL.md",
       "type": "skill",
-      "description": "Orquestación técnica del review: qué evidencia leer, tabla de dispatch de las lentes review-*, formato de finding válido, prioridad de búsqueda (defectos sistémicos primero) y mapa de qué vive en cada otra capa. No repite protocolo de Linear/merge/ledgers (workflow.md) ni la fórmula de score (scoring.md)."
+      "description": "Skill único de review técnico: investiga el diff, selecciona referencias de corrección, arquitectura, testing y tamaño del cambio, y produce findings y TechnicalVerdict. Workflow posee merge/estados y scoring.md la puntuación."
     },
     {
-      "path": ".agents/skills/review-correctness/SKILL.md",
-      "type": "skill",
-      "description": "Lente de review para regresiones lógicas y failure modes: transición co-owned, estado intermedio no modelado, identidad creada en hot path, update optimista sin rollback, colapso de colección sobre output de LLM, contrato AI violado por scope, velocidad percibida como invariante de producto."
+      "path": ".agents/skills/skill-code-review/references/correctness.md",
+      "type": "skill-reference",
+      "description": "Referencia de Code Review para corrección lógica, transiciones, estado asíncrono, datos externos y failure modes concretos."
     },
     {
-      "path": ".agents/skills/review-architecture/SKILL.md",
-      "type": "skill",
-      "description": "Lente de review para ownership/boundaries y validación de Architecture Contract, incluido el checklist de bundle desktop/Tauri (CSP ipc, keyring backend, supabase-js vs ssr, DevTools, isTauriBuild) y coherencia de documentación por scope."
+      "path": ".agents/skills/skill-code-review/references/architecture.md",
+      "type": "skill-reference",
+      "description": "Referencia de Code Review para ownership, boundaries, fuentes de verdad y Architecture Contract; los requisitos locales de bundle viven en la especialidad de review."
     },
     {
-      "path": ".agents/skills/review-testing/SKILL.md",
-      "type": "skill",
-      "description": "Lente de review para cobertura de testing: happy path, error paths, edge cases, calidad de tests y anti-patterns. Canonical owner del criterio — specialists/testing.md es solo su adapter de ejecución JSON, no una copia paralela."
+      "path": ".agents/skills/skill-code-review/references/testing.md",
+      "type": "skill-reference",
+      "description": "Referencia de Code Review para evidencia de testing, failure modes y calidad de tests; specialists/testing.md adapta su criterio al dispatch JSON."
     },
     {
-      "path": ".agents/skills/review-change-size/SKILL.md",
-      "type": "skill",
-      "description": "Lente de review para si el diff sigue siendo una unidad coherente y revisable o debió dividirse en stages más pequeños. Distinto de los umbrales de dispatch de claude-enhancements.md (costo de despachar especialistas, no revisabilidad)."
+      "path": ".agents/skills/skill-code-review/references/change-size.md",
+      "type": "skill-reference",
+      "description": "Referencia de Code Review para tamaño y coherencia del diff, con criterio para proponer el smallest coherent stage."
     },
     {
       "path": ".agents/skills/skill-code-review/claude-enhancements.md",
@@ -584,12 +686,12 @@
     {
       "path": ".agents/skills/skill-code-review/specialists/testing.md",
       "type": "skill",
-      "description": "Adapter de ejecución JSON para review-testing/SKILL.md (canonical owner del criterio) — no repite el checklist, lo aplica contra el diff con output estricto para dispatch a subagente."
+      "description": "Adapter de ejecución JSON para la referencia de testing de Code Review; aplica su criterio al diff sin crear otro checklist."
     },
     {
       "path": ".agents/skills/skill-ux-testing/SKILL.md",
       "type": "skill",
-      "description": "Testing de UX con Playwright: cómo estructurar tests E2E para flujos críticos, pruebas de aceptación y regresiones. Incluye uso de Playwright MCP para testear interacciones en browser."
+      "description": "Método de validación UX para recorridos observables, estados y pruebas proporcionales; flujos críticos, rutas y Playwright de Odessay viven en su especialidad local."
     },
     {
       "path": "workflow/context/features/odessay-versions.md",
@@ -724,12 +826,12 @@
       "description": "Los tres estados vacíos y de primera ejecución. Subordinado al prototipo Empty States."
     },
     {
-      "path": ".agents/skills/skill-design-landing/SKILL.md",
+      "path": ".agents/skills/skill-design/specialties/marketing-system.md",
       "type": "design-reference",
-      "description": "Skill de la capa de marketing: tokens scoped, separación respecto a la capa de producto y reglas que no puede violar la landing."
+      "description": "Especialidad visual de marketing dentro de Design: tokens scoped, tipografía, composición e invariantes de esta capa."
     },
     {
-      "path": ".agents/skills/skill-design-landing/design.md",
+      "path": ".agents/skills/skill-design/specialties/marketing-page.md",
       "type": "design-reference",
       "description": "Spec de la landing sección por sección: tesis, once secciones, mapa del problema, encuadre de capturas, reglas de copy y responsive."
     },
@@ -745,6 +847,7 @@
     "workflow/context/core/": "Verdades estables del producto. Descripción del qué, para quién, cómo se ve y cómo funciona.",
     "workflow/context/features/": "Spec de cada feature con complejidad propia. Un documento por feature.",
     "workflow/define/": "Artefactos de planificación y definición (roadmap, DoD, debrief e issue briefs).",
+    "workflow/quality/": "Capa de calidad estructural: inventario de capabilities y su cobertura real, contrato normativo de construcción de proofs, y la spec del Quality Harness. Es donde se decide qué evidencia cuenta, no cómo se escribe un test.",
     "workflow/testing/": "Documentación operativa de testing y catálogos de assets reutilizables, especialmente Playwright/harnesses y políticas para evitar suites duplicadas.",
     "workflow/perf/": "Instrumentos históricos o especializados de performance; su routing y ownership conceptual viven en skill-performance.",
     "workflow/context/framework/": "Framework MECE genérico. No es específico de Odessay.",

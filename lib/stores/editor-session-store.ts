@@ -6,6 +6,7 @@ import {
   createEditorSessionTab,
   createEmptyEditorSession,
   createRecentWritingEntry,
+  DEFAULT_VIEW_STATE,
   EDITOR_DRAFT_TAB_ID,
   EDITOR_SOFT_TAB_LIMIT,
   findTabIndexByWritingId,
@@ -70,6 +71,36 @@ let state: EditorSessionState = DEFAULT_STATE;
 const listeners = new Set<EditorSessionListener>();
 let loadPromise: Promise<void> | null = null;
 
+/**
+ * Writings whose tab was removed (closed by the author, or dropped because
+ * the file became unavailable) and not explicitly opened again since.
+ *
+ * `publishTabState` runs from a React passive effect, so it can fire with a
+ * `writingId` captured by a render that committed *before* the tab was closed
+ * — the close mutates this store directly and React does not flush pending
+ * passive effects first. Without this record, that late publish either
+ * recreates the tab or promotes an open draft into it: the closed document
+ * comes back and, in the draft case, the draft is lost (ODE-561).
+ *
+ * A removed writing can only return through an explicit open
+ * (`openWritingTab`, `reconcileMaterializedDraftTab`), which clears the mark.
+ * Publishing reflects state onto a tab; it never reopens one.
+ */
+const removedWritingIds = new Set<string>();
+
+/**
+ * Changes made before the persisted session arrived, in order (ODE-577).
+ *
+ * The author can act before `readEditorSession()` resolves ("New Artifact",
+ * the native "New File" menu, typing into the draft). Each change applies at
+ * once so the UI responds, but the persisted session is still the source the
+ * rest of the tabs come from: when it arrives, these changes are replayed on
+ * top of it instead of being thrown away with the pre-load state. Nothing is
+ * persisted until then — writing the pre-load session would overwrite the
+ * tabs the read has not returned yet.
+ */
+let changesBeforeLoad: Array<(current: LocalEditorSession) => LocalEditorSession> = [];
+
 const emitChange = () => {
   listeners.forEach((listener) => listener());
 };
@@ -92,6 +123,23 @@ const setSessionState = (
   updater: (current: LocalEditorSession) => LocalEditorSession,
   options?: { persist?: boolean },
 ) => {
+  if (!state.loaded) {
+    // `loaded` means "the persisted session is in"; a change before that is
+    // replayed over it when it arrives (see `changesBeforeLoad`).
+    changesBeforeLoad.push(updater);
+    state = {
+      ...state,
+      session: {
+        ...updater(state.session),
+        updated_at: Date.now(),
+      },
+    };
+    syncStudioSessionFromEditorTabs(state.session.tabs, state.session.active_tab_id);
+    emitChange();
+    void initializeEditorSessionStore();
+    return;
+  }
+
   const nextSession = updater(state.session);
   state = {
     ...state,
@@ -153,12 +201,37 @@ export function initializeEditorSessionStore() {
   emitChange();
 
   loadPromise = readEditorSession()
-    .then((session) => {
+    .then((persisted) => {
+      const replay = changesBeforeLoad;
+      changesBeforeLoad = [];
+      const session = replay.reduce((current, change) => change(current), persisted);
       state = {
         loaded: true,
         loading: false,
-        session,
+        session: replay.length > 0 ? { ...session, updated_at: Date.now() } : session,
       };
+      if (replay.length > 0) {
+        syncStudioSessionFromEditorTabs(state.session.tabs, state.session.active_tab_id);
+      }
+      emitChange();
+      if (replay.length > 0) {
+        void persistState(state.session);
+      }
+    })
+    .catch((error) => {
+      // Without the persisted session the store would stay "loading" and keep
+      // queueing changes forever. Degrade to an empty session with the
+      // author's changes on top, but do not write it: the read may have failed
+      // transiently and the stored tabs are still there.
+      console.error("[editor:session] could not read the persisted session", error);
+      const replay = changesBeforeLoad;
+      changesBeforeLoad = [];
+      state = {
+        loaded: true,
+        loading: false,
+        session: replay.reduce((current, change) => change(current), createEmptyEditorSession()),
+      };
+      syncStudioSessionFromEditorTabs(state.session.tabs, state.session.active_tab_id);
       emitChange();
     })
     .finally(() => {
@@ -183,6 +256,13 @@ export function openDraftTab(draftWritingId?: string | null) {
     ) {
       return current;
     }
+    // A reused draft slot taking on a new ephemeral identity (STATE-05,
+    // ODE-551) must not carry the previous identity's scroll/cursor/selection
+    // forward — that view_state belongs to a document that, from the user's
+    // perspective, no longer exists in this tab.
+    const draftIdentityChanged =
+      draftWritingId !== undefined && draftWritingId !== existingDraft?.draft_writing_id;
+
     const nextTabs = existingDraft
       ? current.tabs.map((tab) =>
           tab.id === existingDraft.id
@@ -190,6 +270,7 @@ export function openDraftTab(draftWritingId?: string | null) {
                 ...tab,
                 draft_writing_id: draftWritingId === undefined ? tab.draft_writing_id : draftWritingId,
                 last_touched_at: Date.now(),
+                view_state: draftIdentityChanged ? DEFAULT_VIEW_STATE : tab.view_state,
               }
             : tab,
         )
@@ -223,6 +304,11 @@ export function openWritingTab({
   let opened = true;
 
   setSessionState((current) => {
+    // Inside the updater so a pre-load open replays its tombstone clear
+    // together with the tab change (ODE-594). `closeTab` adds its mark
+    // inside its updater for the same reason; a delete outside would not
+    // replay and a close→reopen pair would leave a stale mark.
+    removedWritingIds.delete(writingId);
     const existingIndex = findTabIndexByWritingId(current.tabs, writingId);
     if (existingIndex >= 0) {
       const existingTab = current.tabs[existingIndex]!;
@@ -316,6 +402,8 @@ export function reconcileMaterializedDraftTab({
   hasPendingSync?: boolean;
 }) {
   setSessionState((current) => {
+    // Same as `openWritingTab`: the clear must replay (ODE-594).
+    removedWritingIds.delete(writingId);
     if (findTabIndexByWritingId(current.tabs, writingId) >= 0) {
       return current;
     }
@@ -401,6 +489,10 @@ export function publishTabState({
   saveState,
   hasPendingSync,
 }: PublishTabInput) {
+  if (writingId && removedWritingIds.has(writingId)) {
+    return;
+  }
+
   const now = Date.now();
 
   setSessionState((current) => {
@@ -506,6 +598,11 @@ export function closeTab(tabId: string) {
       return current;
     }
 
+    const closedWritingId = current.tabs[index]!.writing_id;
+    if (closedWritingId) {
+      removedWritingIds.add(closedWritingId);
+    }
+
     const remainingTabs = current.tabs.filter((tab) => tab.id !== tabId);
     nextActiveTabId =
       current.active_tab_id === tabId
@@ -542,6 +639,7 @@ export function reconcileUnavailableWritingTab(writingId: string): ReconcileUnav
     }
 
     const staleTab = current.tabs[staleIndex]!;
+    removedWritingIds.add(writingId);
     const remainingTabs = current.tabs.filter((_, index) => index !== staleIndex);
     const removedActive = current.active_tab_id === staleTab.id;
 
@@ -643,5 +741,7 @@ export function syncWritingTitlesFromCatalog(titlesByWritingId: ReadonlyMap<stri
 export function resetEditorSessionStoreForTests() {
   state = DEFAULT_STATE;
   loadPromise = null;
+  changesBeforeLoad = [];
+  removedWritingIds.clear();
   emitChange();
 }

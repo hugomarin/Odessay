@@ -1,26 +1,44 @@
 ---
 name: skill-design
-description: Sistema de diseño visual de Odessay. Usa este skill siempre que vayas a construir cualquier componente de UI, configurar Tailwind, instalar o adaptar componentes de ShadCN, definir estilos tipográficos, o tomar cualquier decisión visual. También úsalo cuando implementes el editor, el espacio de lectura, el sidebar, las páginas públicas, o cualquier layout del proyecto. Si hay una decisión de color, fuente, espaciado, sombra, layout, componente o interacción involucrada, este skill aplica.
+description: Selecciona y aplica el sistema visual de Odessay para superficies de producto o marketing. Usar al diseñar o implementar componentes, tipografía, tokens, layouts e interacciones visuales; carga la especialidad de marketing solo para superficies de esa capa.
 ---
 
 # Skill: Design System (Odessay)
 
-Este skill define la lógica visual completa de Odessay. Todo lo que se construya visualmente parte de aquí. No se toman decisiones de diseño fuera de este documento — si algo no está definido, se pregunta antes de inventar.
+## 1. Objetivo
 
-**Límite con la capa de marketing.** Desde Fase 10 el producto tiene dos sistemas visuales que no se mezclan. Este skill gobierna la **capa de producto**: `app/(app)`, `app/(auth)`, `app/(reading)` y las superficies públicas de lectura de un documento. La **capa de marketing** —`app/(marketing)`, la home pública y cualquier superficie dirigida a alguien que todavía no es usuario— la gobierna `.agents/skills/skill-design-landing/SKILL.md`, con sus propios tokens bajo `[data-layer="marketing"]`. Comparten la marca, la familia de grises cálidos y Roboto Mono; nada más. Mezclarlas es el modo de fallo número uno del rediseño.
+Design identifica la capa visual de una superficie y aplica su sistema de tokens, tipografía, componentes y composición para construir una experiencia coherente y verificable.
 
-**Autoridad visual del rediseño.** Para cualquier vista de Fase 10, el prototipo `.dc.html` correspondiente en `docs/design/reference/` es la autoridad visual y este skill es la autoridad de implementación: el prototipo dice cuánto mide, el skill dice cómo se expresa (token en vez de hex, 0.5px en vez de 1px). Protocolo completo en `docs/design/migration-plan.md` §4.
+Odessay tiene dos especialidades dentro de este skill. **Producto** abarca `app/(app)`, `app/(auth)`, `app/(reading)` y las superficies públicas que presentan un documento para leer, incluso cuando el lector aún no tiene cuenta; sus reglas están en el resto de este `SKILL.md`, [vistas.md](vistas.md) y [tipografia.md](tipografia.md). **Marketing** abarca `app/(marketing)`, la home pública y las superficies de campaña envueltas en `[data-layer="marketing"]`; sus reglas están en [marketing-system.md](specialties/marketing-system.md) y [marketing-page.md](specialties/marketing-page.md). Seleccionar la especialidad por la función y el wrapper de la superficie y leer sus recursos antes de decidir valores visuales.
 
-Los archivos HTML en `/workflow/reference/` son prototipos interactivos que documentan el comportamiento validado. Sus screenshots están listados con descripción completa en `CLAUDE.md`. Los prototipos pueden tener diferencias menores respecto al diseño final — este documento, `vistas.md` y `tipografia.md` (en esta misma carpeta) son la especificación oficial.
+Las dos capas comparten la marca, la familia de grises cálidos y Roboto Mono. Los tokens de marketing viven bajo `[data-layer="marketing"]`; las demás reglas se aplican según la especialidad seleccionada.
 
-**Antes de implementar cualquier vista, leer `.agents/skills/skill-design/vistas.md`** — contiene valores exactos de padding, tamaños, colores y comportamiento por vista, más checklists de validación.
+**Autoridad visual del rediseño.** Para cualquier vista de Fase 10, el prototipo `.dc.html` correspondiente en `docs/design/reference/` es la autoridad visual y este skill aporta el sistema de implementación de la capa correspondiente: el prototipo dice cuánto mide, la especialidad dice cómo se expresa. Protocolo completo en `docs/design/migration-plan.md` §4.
+
+Los archivos HTML en `/workflow/reference/` son prototipos interactivos que documentan el comportamiento validado. Sus screenshots están listados con descripción completa en `CLAUDE.md`. Los prototipos pueden tener diferencias menores respecto al diseño final — para producto, este documento, `vistas.md` y `tipografia.md` (en esta misma carpeta) son la especificación oficial.
+
+**Antes de implementar una vista de producto, leer `.agents/skills/skill-design/vistas.md`** — contiene valores exactos de padding, tamaños, colores y comportamiento por vista, más checklists de validación.
 **Si el issue toca presentación textual (write/preview/shared/public), leer también `.agents/skills/skill-design/tipografia.md`** — es el contrato tipográfico canónico cross-mode.
+
+### Filosofía visual de producto
+
+Odessay es una plataforma de escritura epistolar. La interfaz no compite con el texto — la sirve. Cada decisión visual parte de esta premisa: el texto es el protagonista, la UI es el escenario.
+
+Las superficies son cálidas, no clínicas. El fondo es casi blanco con temperatura cálida, como papel de calidad. La tipografía es el protagonista; la UI es el escenario.
+
+El sistema tiene un focus mode donde la interfaz desaparece completamente — sidebar, toolbar, status bar — dejando solo el texto en pantalla.
 
 ---
 
-## Deltas resueltos (ODE-425) — respuesta única
+## 2. Ámbito y activación
 
-Los cinco deltas entre el paquete de diseño y este skill están **cerrados**. Ninguna vista los vuelve a decidir. Si una fuente contradice esta tabla, esta tabla gana.
+Activar al construir o modificar componentes, estilos, layouts, interacciones visuales o superficies de producto y marketing. Para marketing, cargar [marketing-system.md](specialties/marketing-system.md); para la landing, cargar además [marketing-page.md](specialties/marketing-page.md). Las secciones detalladas que siguen describen la especialidad de producto.
+
+## 3. Entradas y fuentes de autoridad
+
+### Deltas de producto resueltos (ODE-425) — respuesta única
+
+Los cinco deltas entre el paquete de diseño de producto y este skill están **cerrados**. Ninguna vista de producto los vuelve a decidir. Si una fuente de producto contradice esta tabla, esta tabla gana.
 
 | # | Pregunta | Respuesta cerrada |
 |---|---|---|
@@ -38,17 +56,7 @@ Los cinco deltas entre el paquete de diseño y este skill están **cerrados**. N
 
 ---
 
-## Filosofía visual
-
-Odessay es una plataforma de escritura epistolar. La interfaz no compite con el texto — la sirve. Cada decisión visual parte de esta premisa: el texto es el protagonista, la UI es el escenario.
-
-Las superficies son cálidas, no clínicas. El fondo es casi blanco con temperatura cálida, como papel de calidad. La tipografía es el protagonista; la UI es el escenario.
-
-El sistema tiene un focus mode donde la interfaz desaparece completamente — sidebar, toolbar, status bar — dejando solo el texto en pantalla.
-
----
-
-## Invariante de presentación textual (cross-mode)
+### Invariante de presentación textual (cross-mode)
 
 El contenido de escritura/lectura puede vivir en shells distintos, pero su **presentación tipográfica y de overflow** debe ser equivalente en:
 
@@ -66,7 +74,9 @@ Reglas:
 
 ---
 
-## Tokens de color
+## 4. Método y criterios
+
+### Tokens de color
 
 Valores finales validados. Estos son los valores exactos — no aproximaciones.
 
@@ -110,7 +120,7 @@ En `globals.css` definir como CSS custom properties y como variables ShadCN simu
 }
 ```
 
-### Tokens del paquete Artifact Studio (delta 1 — cerrados)
+#### Tokens del paquete Artifact Studio (delta 1 — cerrados)
 
 Los prototipos usan cinco pasos neutros por debajo de `--ink-4`, dos hairlines dentro de la hoja y un verde de éxito. Todos tienen token; **ningún componente vuelve a escribir estos hex**. Los valores HSL están calculados para renderizar el hex del prototipo de forma exacta.
 
@@ -173,9 +183,9 @@ theme: {
 
 ---
 
-## Tipografía
+### Tipografía
 
-### Fuentes
+#### Fuentes
 
 **Lora** — todo lo epistolar: contenido del artifact, lectura, títulos de cards, blockquotes, títulos display de modales. Serif con calidez literaria.
 
@@ -187,7 +197,7 @@ theme: {
 
 Nunca mezclar Lora y DM Sans en el mismo elemento.
 
-### Instalación
+#### Instalación
 
 Las tres familias ya están cargadas en `app/layout.tsx`. DM Sans expone `--font-dm-sans` (consumida vía `--od-font-ui`), Lora expone `--font-lora`, Geist expone `--font-geist-sans` y **solo** alimenta el wordmark. Roboto Mono entra por `@font-face` en `globals.css`.
 
@@ -204,7 +214,7 @@ import { DM_Sans, Lora } from 'next/font/google' // UI + contenido epistolar
 --od-font-prose: var(--font-lora), Georgia, serif;            /* contenido  */
 ```
 
-### Escala tipográfica validada
+#### Escala tipográfica validada
 
 Valores del paquete Artifact Studio, verificados contra los prototipos `.dc.html`.
 
@@ -231,7 +241,7 @@ Valores del paquete Artifact Studio, verificados contra los prototipos `.dc.html
 
 **Regla:** Lora para lo epistolar (contenido que el usuario escribe y lee). DM Sans para todo lo funcional (UI, labels, metadatos). Roboto Mono solo para rutas y counts. Geist solo para el wordmark.
 
-### Preferencia global de estilo del artifact
+#### Preferencia global de estilo del artifact
 
 La combinación tipográfica del contenido puede cambiar mediante una preferencia local global, sin alterar el artifact ni su Markdown:
 
@@ -245,7 +255,7 @@ La combinación tipográfica del contenido puede cambiar mediante una preferenci
 
 ---
 
-## Sombras
+### Sombras
 
 Difusas, cálidas, nunca duras.
 
@@ -266,7 +276,7 @@ boxShadow: {
 
 ---
 
-## Border radius
+### Border radius
 
 Escala cerrada: **6 · 7–8 · 9 · 10 · 13–14 · 18 · 50%**. No se inventan pasos intermedios.
 
@@ -286,13 +296,13 @@ Escala cerrada: **6 · 7–8 · 9 · 10 · 13–14 · 18 · 50%**. No se inventa
 
 ---
 
-## Espaciado
+### Espaciado
 
 Escala cerrada de **4px**: `4 · 8 · 12 · 14 · 16 · 20 · 24 · 32 · 40 · 48`. Todo padding, gap y margin de UI cae en un múltiplo de 4. Los valores fuera de la escala son un error de transcripción del prototipo, no una excepción.
 
 ---
 
-## Scrollbars
+### Scrollbars
 
 Toda región con scroll usa la clase `.od-scroll` — definida una sola vez en `globals.css`. Ningún componente redefine su propia scrollbar.
 
@@ -305,7 +315,7 @@ firefox: scrollbar-width: thin
 
 ---
 
-## Vocabulario (delta 5)
+### Vocabulario (delta 5)
 
 El término de producto es **artifact**. En toda UI nueva: "New artifact", "Search artifacts…", "3 artifacts". No "writing", no "document", no "post".
 
@@ -313,7 +323,7 @@ El repo todavía nombra `writing` en archivos y símbolos (`writing-preview-moda
 
 ---
 
-## Layout global
+### Layout global
 
 ```
 app (flex, 100vh, overflow hidden)
@@ -324,7 +334,7 @@ app (flex, 100vh, overflow hidden)
     └── [Statusbar opcional — solo en editor]
 ```
 
-### Sidebar
+#### Sidebar
 
 **Expandido (244px):** Logo Lora 17px + toggle. Acciones (New writing, Search). Nav scroll. User bar bottom.
 
@@ -332,11 +342,11 @@ app (flex, 100vh, overflow hidden)
 
 La caja se contrae hacia la derecha — los iconos no cambian de posición X.
 
-### Topbar
+#### Topbar
 
 Altura invariable: **46px** en todas las vistas. `border-bottom: 0.5px solid hsl(var(--border))`.
 
-### Sidebar — dimensiones exactas
+#### Sidebar — dimensiones exactas
 
 ```ts
 const SIDEBAR = {
@@ -349,7 +359,7 @@ const SIDEBAR = {
 
 ---
 
-## Iconografía
+### Iconografía
 
 **Librería:** Lucide React. Incluida con ShadCN.
 
@@ -371,7 +381,7 @@ const SIDEBAR = {
 | Sub-items sidebar | 12×12px |
 | Topbar tools | 14×14px |
 
-### Mapa de iconos de Odessay
+#### Mapa de iconos de Odessay
 
 | Sección | Icono Lucide |
 |---|---|
@@ -390,11 +400,11 @@ const SIDEBAR = {
 
 ---
 
-## Componentes ShadCN
+### Componentes ShadCN
 
 Inicializar: `npx shadcn@latest init` — Style: Default, Base color: Neutral, CSS variables: Yes.
 
-### Estrategia de adaptación — tres capas, en orden
+#### Estrategia de adaptación — tres capas, en orden
 
 La personalización de ShadCN ocurre en tres capas. Cada una tiene un propósito distinto. Nunca saltarse una capa para hacer algo en la siguiente — eso produce estilos huérfanos.
 
@@ -424,7 +434,7 @@ La personalización de ShadCN ocurre en tres capas. Cada una tiene un propósito
 
 ---
 
-### Configuración base por componente (Capa 2)
+#### Configuración base por componente (Capa 2)
 
 Estos son los cambios a hacer en cada archivo de componente al instalarlo. Se hacen una vez.
 
@@ -442,7 +452,7 @@ Estos son los cambios a hacer en cada archivo de componente al instalarlo. Se ha
 | `sheet.tsx` | `shadow-float-lg border-[0.5px]` |
 | `avatar.tsx` | `rounded-full` (ya es default) |
 
-### Variantes permitidas en el punto de uso (Capa 3)
+#### Variantes permitidas en el punto de uso (Capa 3)
 
 Solo estas variaciones se agregan en `className` en el punto de uso. No inventar nuevas sin actualizar este documento.
 
@@ -490,7 +500,7 @@ Solo estas variaciones se agregan en `className` en el punto de uso. No inventar
 
 ---
 
-## Transiciones
+### Transiciones
 
 ```css
 /* En globals.css */
@@ -537,7 +547,7 @@ Curvas del paquete Artifact Studio, cerradas (delta 1 · `docs/design/system-app
 
 ---
 
-## Convención de botones
+### Convención de botones
 
 Dos colores primarios con semántica distinta:
 
@@ -549,7 +559,9 @@ Nunca dos botones del mismo color en el mismo modal.
 
 ---
 
-## Reglas invariables
+## 5. Resultado y evidencia
+
+### Reglas invariables
 
 - Nunca `#ffffff` o `white` como fondo de página — siempre `bg-bg`
 - Nunca sombras de Tailwind por defecto — siempre `shadow-float*`
@@ -565,3 +577,16 @@ Nunca dos botones del mismo color en el mismo modal.
 - `max-w-[860px] mx-auto` en el **editor** (área de escritura)
 - Siempre `font-sans` o `font-lora` explícito en componentes ShadCN
 - Bordes siempre `0.5px` — nunca `1px` o `border` de Tailwind por defecto
+
+## 6. Manejo de fallos e incertidumbre
+
+Cuando una vista o un brief no resuelva una decisión visual, aplicar la filosofía, los tokens y los invariantes de este sistema; registrar las ambigüedades que exijan una decisión de producto.
+
+## 7. Relaciones y ownership
+
+Design gobierna las decisiones visuales de producto y marketing mediante dos especialidades con fuentes y tokens propios. Frontend implementa componentes y comportamiento.
+
+## 8. Recursos asociados
+
+- **Producto:** consultar en [vistas.md](vistas.md) la sección de la vista afectada, la sección compartida de Sidebar si aplica y su checklist; el archivo agrupa especificaciones por vista para evitar cargarlas todas. Cargar [tipografia.md](tipografia.md) si el cambio presenta contenido en editor, preview, shared o lectura; sus reglas y CSS forman un solo contrato tipográfico.
+- **Marketing:** cargar [marketing-system.md](specialties/marketing-system.md) al diseñar una superficie de campaña para aplicar sus tokens y composición scoped; cargar además [marketing-page.md](specialties/marketing-page.md) cuando se modifica la landing para seguir la secuencia y especificación de sus secciones.

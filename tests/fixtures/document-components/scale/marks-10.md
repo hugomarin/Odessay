@@ -7,4 +7,3 @@
 <Entity id="ent-4" type="company" ref="https://example.com/4">Aplyca 4</Entity> and <Highlight color="amber">passage 4</Highlight>
 
 <Entity id="ent-5" type="company" ref="https://example.com/5">Aplyca 5</Entity> and <Highlight color="amber">passage 5</Highlight>
-

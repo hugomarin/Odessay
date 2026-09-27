@@ -24,7 +24,7 @@ export type EditorSessionTabInput = {
   draftWritingId?: string | null;
 };
 
-const DEFAULT_VIEW_STATE: LocalEditorTabViewState = {
+export const DEFAULT_VIEW_STATE: LocalEditorTabViewState = {
   mode: "rich",
   scrollTop: 0,
   scrollLeft: 0,

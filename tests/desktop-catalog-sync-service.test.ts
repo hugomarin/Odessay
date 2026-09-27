@@ -1,4 +1,7 @@
 /** @vitest-environment happy-dom */
+import { mkdtempSync, promises as fs, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -702,6 +705,44 @@ describe("desktopCatalogSyncService", () => {
       expect(received).toContainEqual({ writingId: "doc-1", status: "retrying" })
     } finally {
       window.removeEventListener(SYNC_STATUS_EVENT_NAME, handler)
+    }
+  })
+
+  // SYNC-03: for a filesystem-bound document, the real .md file (not the
+  // SQLite catalog) is the durable content substrate — a failed sync must
+  // never touch it. `tauriOpenFile` is swapped for a genuine fs read against
+  // a real temp file below instead of the module's default canned string, so
+  // this is the first test in this file to actually exercise the
+  // record.binding.canonicalPath file-sourcing branch, and to prove survival
+  // by re-reading real bytes off disk rather than asserting a mock wasn't called.
+  it("SYNC-03: a failed sync attempt leaves the real .md file on disk byte-identical", async () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "sync03-desktop-"))
+    const filePath = join(tmpDir, "doc.md")
+    const originalContent = "# Original Title\n\nOriginal body content that must survive a failed sync."
+
+    try {
+      await fs.writeFile(filePath, originalContent, "utf8")
+      mocks.openFile.mockImplementation(async (path: string) => fs.readFile(path, "utf8"))
+      mocks.catalogGet.mockResolvedValue(
+        catalogRecord({
+          cloudPresent: true,
+          binding: { canonicalPath: filePath, relativePath: "doc.md" },
+        }),
+      )
+      mocks.listPending.mockResolvedValue([mutationRow()])
+      mocks.update.mockResolvedValue({ error: { message: "network down" }, count: null })
+      mocks.insert.mockResolvedValue({ error: { message: "network down" }, count: null })
+
+      const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+      const result = await desktopCatalogSyncService.flushPending()
+
+      expect(result.data?.failedMutations).toEqual(["m1"])
+      expect(mocks.applyCloudSnapshots).not.toHaveBeenCalled()
+
+      const reloaded = await fs.readFile(filePath, "utf8")
+      expect(reloaded).toBe(originalContent)
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true })
     }
   })
 })

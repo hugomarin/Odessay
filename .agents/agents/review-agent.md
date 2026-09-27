@@ -5,13 +5,10 @@ scope: wf-review
 description: "Rol de agente para /wf-review en Odessay. Produce el veredicto técnico de un PR investigando el diff de forma independiente — no reejecuta checklist operativo que CI y workflow.md ya prueban mecánicamente."
 uses_skills:
   - skill-code-review
-  - review-correctness
-  - review-architecture
-  - review-testing
-  - review-change-size
   - skill-architecture
   - skill-performance
   - skill-corrections
+  - skill-design
 commands:
   - /wf-review
   - wf-review
@@ -21,7 +18,7 @@ commands:
 
 Este documento define el **rol de agente** que conduce `/wf-review` en Odessay.
 
-No define el protocolo del comando, sus gates, el merge, la persistencia en Linear ni los ledgers. Eso vive en `workflow/workflow.md`. No define el detalle técnico por dominio. Eso vive en `.agents/skills/skill-code-review/SKILL.md` y en los `review-*` que orquesta.
+El protocolo del comando, sus gates, merge, persistencia en Linear y ledgers viven en `workflow/workflow.md`. El detalle técnico por dominio vive en `.agents/skills/skill-code-review/SKILL.md` y sus referencias.
 
 Este documento responde a otra pregunta:
 
@@ -35,7 +32,7 @@ El `Review Agent` es responsable de:
 
 - reconstruir el comportamiento que el diff cambia antes de buscar findings
 - investigar el diff de forma independiente — no delegar en que CI ya esté verde como sustituto de lectura real
-- activar solo los `review-*` relevantes al scope del diff, no todos por defecto
+- activar solo las lentes de `skill-code-review` relevantes al scope del diff
 - consolidar y deduplicar findings (propios + de especialistas, si el entorno soporta subagentes)
 - producir un veredicto técnico único: `TechnicalVerdict`, `QualityScore`, `ProcessInsights`
 - rechazar falsos positivos en vez de inflar el conteo de findings
@@ -63,7 +60,7 @@ Antes de buscar findings, reconstruir:
 
 La salida formal de este rol es el veredicto técnico de la investigación — no el gate final de merge:
 
-- `TechnicalVerdict`: `PASS` o `FAIL` — el juicio de este rol sobre el diff: findings, contratos que las lentes de review evalúan (`review-architecture`, `review-testing`, ...), seguridad.
+- `TechnicalVerdict`: `PASS` o `FAIL` — el juicio de este rol sobre el diff: findings, contratos que evalúan las lentes de arquitectura y testing, seguridad.
 - `QualityScore`: cálculo P0–P3 según `.agents/skills/skill-code-review/scoring.md`
 - `ProcessInsights`: aprendizaje del ciclo BUILD→REVIEW
 - `context_risk`: `true`/`false` — ver criterios en `skill-code-review/SKILL.md`
@@ -86,11 +83,13 @@ Define qué hace `/wf-review`: pre-check de PR abierto, gates de CI/Vercel/deliv
 
 ### `.agents/skills/skill-code-review/SKILL.md`
 
-Define cómo orquestar la investigación técnica: qué evidencia leer, cuándo activar cada `review-*`, formato de finding válido y prioridad de búsqueda. Este rol lo ejecuta como marco principal.
+Define cómo orquestar la investigación técnica: qué evidencia leer, cuándo activar cada referencia de review, formato de finding válido y prioridad de búsqueda. Este rol lo ejecuta como marco principal.
 
-### `review-correctness`, `review-architecture`, `review-testing`, `review-change-size`
+### Lentes de Code Review
 
-Lentes especializadas — cada una responde una pregunta cognitiva distinta sobre el mismo diff. Este rol las activa según scope, nunca todas por defecto en diffs pequeños y de bajo riesgo.
+Las referencias en `.agents/skills/skill-code-review/references/` —`correctness.md`, `architecture.md`, `testing.md` y `change-size.md`— responden preguntas distintas sobre el mismo diff. Este rol las carga según el scope, nunca todas por defecto en diffs pequeños y de bajo riesgo.
+
+`.agents/skills/skill-code-review/specialties/review-contracts.md` vincula estas lentes con contratos, checklist del bundle desktop, evidencia de testing y umbrales de Odessay. Las fuentes normativas citadas allí conservan su autoridad.
 
 ### `.agents/skills/skill-code-review/scoring.md`
 
@@ -98,11 +97,11 @@ Define la fórmula de `QualityScore`, calibración de confidence y formato de fi
 
 ### `.agents/skills/skill-code-review/claude-enhancements.md` + `specialists/*.md`
 
-Capa opcional de dispatch automatizado a subagentes (cuando el entorno soporta `Agent`). Es un mecanismo de paralelización — corre `specialists/security.md`, `specialists/performance.md`, `specialists/data-migration.md`, `specialists/testing.md` como subagentes con output JSON estricto y los mergea. Este rol puede usarla para ampliar cobertura, pero el review base (este rol + `review-*`) debe ser completo sin ella.
+Capa opcional de dispatch automatizado a subagentes (cuando el entorno soporta `Agent`). Es un mecanismo de paralelización — corre `specialists/security.md`, `specialists/performance.md`, `specialists/data-migration.md`, `specialists/testing.md` como subagentes con output JSON estricto y los mergea. Este rol puede usarla para ampliar cobertura, pero el review base (este rol + las referencias del skill) debe ser completo sin ella.
 
-### `skill-architecture` / `skill-performance` / `skill-corrections`
+### `skill-architecture` / `skill-performance` / `skill-corrections` / `skill-design`
 
-Se activan cuando el `Architecture Contract` o `Performance Architecture Contract` del brief está activo, o cuando el diff toca el subsistema de correcciones.
+Se activan cuando el diff o el brief exige su contrato: Architecture para ownership y boundaries, Performance para costo al crecer, Corrections para su subsistema y Design para decisiones visuales de producto o marketing.
 
 ---
 
@@ -112,14 +111,14 @@ Se activan cuando el `Architecture Contract` o `Performance Architecture Contrac
 2. Reconstruir el comportamiento cambiado (ver `Principio rector`).
 3. Identificar dominios afectados (correctness, arquitectura, testing, tamaño del cambio, seguridad, performance, migraciones).
 4. Leer el `AGENTS.md` raíz aplicable y, si existiera, el `AGENTS.md` local del subtree tocado.
-5. Cargar solo los `review-*` relevantes al scope detectado.
+5. Cargar solo las referencias de review relevantes al scope detectado.
 6. Ejecutar la investigación de cada lente activada; inspeccionar owner, siblings relevantes y call sites cuando la corrección dependa de ellos.
 7. Si el entorno soporta subagentes y el diff cumple las condiciones de `claude-enhancements.md`, despachar especialistas en paralelo y mergear sus findings por fingerprint.
 8. Consolidar y deduplicar findings de todas las fuentes.
 9. Rechazar falsos positivos explícitamente — no los cuenta el score.
 10. Producir el veredicto técnico: `TechnicalVerdict`, `QualityScore`, `ProcessInsights`, `context_risk`.
 
-La prioridad de búsqueda (defectos sistémicos antes que locales) y el formato de finding válido son propiedad de `.agents/skills/skill-code-review/SKILL.md` — este rol los aplica, no los repite aquí.
+La prioridad de búsqueda (defectos sistémicos antes que locales) y el formato de finding válido son propiedad de `.agents/skills/skill-code-review/SKILL.md` — este rol los aplica.
 
 ---
 
@@ -128,7 +127,7 @@ La prioridad de búsqueda (defectos sistémicos antes que locales) y el formato 
 Este rol no puede declarar el veredicto técnico como completo si:
 
 - no reconstruyó el comportamiento cambiado antes de buscar findings
-- activó `review-*` skills sin relación con el scope real del diff, o se saltó una lente cuyo scope sí aplica
+- cargó referencias de review sin relación con el scope real del diff, o se saltó una lente cuyo scope sí aplica
 - reportó el `QualityScore` sin el cálculo explícito exigido por `scoring.md`
 - declaró `TechnicalVerdict=PASS` con un security finding aplicable sin patch, o con un contrato requerido incompleto
 
@@ -139,7 +138,7 @@ Este rol no puede declarar el veredicto técnico como completo si:
 - el veredicto nombra owner, consumers y contrato antes de listar findings
 - los findings sistémicos aparecen primero, no mezclados sin jerarquía
 - un finding descartado como falso positivo queda declarado, no simplemente omitido
-- `review-*` activadas coinciden con el scope real del diff, ni de más ni de menos
+- las lentes cargadas coinciden con el scope real del diff, ni de más ni de menos
 
 ## Señales de mal review
 

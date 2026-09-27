@@ -135,6 +135,20 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
     return !cancelledRef.current && runIdRef.current === runId
   }, [])
 
+  /**
+   * ODE-559 — la única compuerta que decide si una respuesta todavía puede
+   * tocar el documento: la corrida sigue viva y el documento activo es el
+   * que la pidió. Las dos mitades se cubren entre sí (cambiar de documento
+   * cancela la corrida en el efecto de arriba, y además cambia la identidad),
+   * así que quitar una sola no se nota; quitar la compuerta, sí
+   * (`tests/editor-shell-corrections-isolation.test.tsx`).
+   */
+  const isResponseStillCurrent = useCallback(
+    (runId: unknown, requestWritingId: string) =>
+      isCurrentRun(runId) && inputRef.current.currentWritingIdRef.current === requestWritingId,
+    [isCurrentRun],
+  )
+
   const applyCachedBlockSuggestions = useCallback(
     (block: CorrectionTriggerBlock, cached: LocalCorrectionBlock) => {
       const admitted = inputRef.current.admitCorrectionSuggestions(
@@ -168,11 +182,7 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
       const { current: input } = inputRef
       const editor = input.editorRef.current
 
-      if (
-        !editor ||
-        !isCurrentRun(runId) ||
-        input.currentWritingIdRef.current !== requestWritingId
-      ) {
+      if (!editor || !isResponseStillCurrent(runId, requestWritingId)) {
         return { success: false, suggestionCount: 0 }
       }
 
@@ -203,10 +213,7 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
       let suggestionCount = 0
 
       for (const block of pkg.blocks) {
-        if (
-          !isCurrentRun(runId) ||
-          input.currentWritingIdRef.current !== requestWritingId
-        ) {
+        if (!isResponseStillCurrent(runId, requestWritingId)) {
           return { success: false, suggestionCount }
         }
 
@@ -257,7 +264,7 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
 
       return { success: true, suggestionCount }
     },
-    [isCurrentRun],
+    [isResponseStillCurrent],
   )
 
   const runPackages = useCallback(
@@ -332,13 +339,12 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
             stream: false,
           })
 
-          if (!isCurrentRun(runId)) {
-            return
-          }
-
-          if (input.currentWritingIdRef.current !== requestWritingId) {
-            cancelledRef.current = true
-            setRunState("cancelled")
+          if (!isResponseStillCurrent(runId, requestWritingId)) {
+            // Corrida viva pero otro documento activo: se cancela, como antes.
+            if (isCurrentRun(runId)) {
+              cancelledRef.current = true
+              setRunState("cancelled")
+            }
             return
           }
 
@@ -371,7 +377,7 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
 
       return failed
     },
-    [isCurrentRun, processPackageResponse],
+    [isCurrentRun, isResponseStillCurrent, processPackageResponse],
   )
 
   const startAnalysis = useCallback(async () => {

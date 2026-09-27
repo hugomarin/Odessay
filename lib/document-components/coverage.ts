@@ -26,4 +26,3 @@ export const validateDocumentComponentCoverage = (
     );
     return missing.length > 0 ? [{ kind: spec.kind, missing }] : [];
   });
-

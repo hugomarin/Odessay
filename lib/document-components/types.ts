@@ -123,4 +123,3 @@ export type DocumentParseResult = {
   diagnostics: DocumentDiagnostic[];
   recoverable: true;
 };
-

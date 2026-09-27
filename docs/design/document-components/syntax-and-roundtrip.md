@@ -65,4 +65,3 @@ Two properties are distinct:
 Known valid components canonicalize tag spacing, attribute order/escaping, line endings (`LF`), and block separation. Opaque nodes bypass canonicalization and serialize their raw bytes exactly. Consequently a document containing opaque source can still preserve bytes even though surrounding known nodes canonicalize.
 
 Full-document parse/serialize is allowed at open/import, coalesced save snapshots, explicit Rich/Source transitions, reading snapshots, and export. It is forbidden in the synchronous per-keystroke transaction path. The engine target is O(N) in source length and O(1) registry lookup by canonical kind.
-

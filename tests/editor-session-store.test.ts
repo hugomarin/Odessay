@@ -91,6 +91,89 @@ describe("editorSessionStore", () => {
     expect(tab?.view_state?.selectionTo).toBe(8);
   });
 
+  describe("STATE-05 — new tabs never inherit a sibling's view state", () => {
+    it("openWritingTab (web New Artifact path) starts the new tab clean and leaves the sibling untouched", async () => {
+      await initializeEditorSessionStore();
+      openWritingTab({ writingId: "writing-a", title: "Tab A" });
+      saveTabViewState({
+        tabId: "writing-a",
+        viewState: { mode: "rich", scrollTop: 3000, selectionFrom: 500, selectionTo: 500 },
+      });
+
+      openWritingTab({ writingId: "writing-b", title: "Tab B" });
+
+      const session = getEditorSessionState().session;
+      const tabB = session.tabs.find((tab) => tab.id === "writing-b");
+      expect(tabB?.view_state?.scrollTop).toBe(0);
+      expect(tabB?.view_state?.selectionFrom).toBeNull();
+      expect(tabB?.view_state?.selectionTo).toBeNull();
+
+      const tabA = session.tabs.find((tab) => tab.id === "writing-a");
+      expect(tabA?.view_state?.scrollTop).toBe(3000);
+      expect(tabA?.view_state?.selectionFrom).toBe(500);
+      expect(tabA?.view_state?.selectionTo).toBe(500);
+    });
+
+    it("openDraftTab (desktop New Artifact path) starts the draft tab clean and leaves the sibling untouched", async () => {
+      await initializeEditorSessionStore();
+      openWritingTab({ writingId: "writing-a", title: "Tab A" });
+      saveTabViewState({
+        tabId: "writing-a",
+        viewState: { mode: "rich", scrollTop: 3000, selectionFrom: 500, selectionTo: 500 },
+      });
+
+      openDraftTab("draft-writing-b");
+
+      const session = getEditorSessionState().session;
+      const draftTab = session.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID);
+      expect(draftTab?.view_state?.scrollTop).toBe(0);
+      expect(draftTab?.view_state?.selectionFrom).toBeNull();
+      expect(draftTab?.view_state?.selectionTo).toBeNull();
+
+      const tabA = session.tabs.find((tab) => tab.id === "writing-a");
+      expect(tabA?.view_state?.scrollTop).toBe(3000);
+      expect(tabA?.view_state?.selectionFrom).toBe(500);
+    });
+
+    it("openDraftTab reusing the draft slot for a new ephemeral identity resets its view_state (real bug, fixed)", async () => {
+      // handleCreateWorkspaceTab's desktop path hits exactly this: hitting
+      // "New Artifact" while already on a still-blank draft reuses the same
+      // EDITOR_DRAFT_TAB_ID slot under a fresh ephemeralDraftWritingIdRef,
+      // rather than creating a brand-new tab. That reused slot must be just
+      // as clean as a brand-new one — the old draft's scroll/cursor no
+      // longer belongs to what the user now sees as a different document.
+      await initializeEditorSessionStore();
+      openDraftTab("draft-a");
+      saveTabViewState({
+        tabId: EDITOR_DRAFT_TAB_ID,
+        viewState: { mode: "rich", scrollTop: 3000, selectionFrom: 500, selectionTo: 500 },
+      });
+
+      openDraftTab("draft-b");
+
+      const draftTab = getEditorSessionState().session.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID);
+      expect(draftTab?.draft_writing_id).toBe("draft-b");
+      expect(draftTab?.view_state?.scrollTop).toBe(0);
+      expect(draftTab?.view_state?.selectionFrom).toBeNull();
+      expect(draftTab?.view_state?.selectionTo).toBeNull();
+    });
+
+    it("openDraftTab without a new identity does not reset the current draft's view_state", async () => {
+      await initializeEditorSessionStore();
+      openDraftTab("draft-a");
+      saveTabViewState({
+        tabId: EDITOR_DRAFT_TAB_ID,
+        viewState: { mode: "rich", scrollTop: 3000, selectionFrom: 500, selectionTo: 500 },
+      });
+
+      openDraftTab("draft-a");
+
+      const draftTab = getEditorSessionState().session.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID);
+      expect(draftTab?.view_state?.scrollTop).toBe(3000);
+      expect(draftTab?.view_state?.selectionFrom).toBe(500);
+    });
+  });
+
   it("returns the next active tab when closing the current one", async () => {
     await initializeEditorSessionStore();
     openWritingTab({ writingId: "writing-4", title: "Fourth draft" });
@@ -346,5 +429,210 @@ describe("editorSessionStore", () => {
       });
       expect(getEditorSessionState().session).toMatchObject({ tabs: [], active_tab_id: null });
     });
+  });
+});
+
+describe("editorSessionStore — a removed writing only returns through an explicit open (ODE-561)", () => {
+  const publishFor = (writingId: string) =>
+    publishTabState({
+      routeWritingId: null,
+      writingId,
+      title: "Late publish",
+      saveState: "saved-local",
+      hasPendingSync: false,
+    });
+
+  it("a late publish for a closed writing does not recreate its tab", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-a", title: "A" });
+
+    closeTab("writing-a");
+    publishFor("writing-a");
+
+    const session = getEditorSessionState().session;
+    expect(session.tabs).toHaveLength(0);
+    expect(session.active_tab_id).toBeNull();
+  });
+
+  it("a late publish for a closed writing does not take over the open draft", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-a", title: "A" });
+    openDraftTab();
+    focusTabBackTo("writing-a");
+
+    closeTab("writing-a");
+    publishFor("writing-a");
+
+    const session = getEditorSessionState().session;
+    expect(session.tabs.map((tab) => tab.id)).toEqual([EDITOR_DRAFT_TAB_ID]);
+    expect(session.active_tab_id).toBe(EDITOR_DRAFT_TAB_ID);
+  });
+
+  it("a late publish for a writing dropped as unavailable does not bring it back", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-a", title: "A" });
+
+    reconcileUnavailableWritingTab("writing-a");
+    publishFor("writing-a");
+
+    expect(getEditorSessionState().session.tabs).toHaveLength(0);
+  });
+
+  it("an explicit open lifts the mark, so publishing reflects onto the reopened tab again", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-a", title: "A" });
+    closeTab("writing-a");
+
+    openWritingTab({ writingId: "writing-a", title: "A" });
+    publishFor("writing-a");
+
+    const tab = getEditorSessionState().session.tabs.find((item) => item.writing_id === "writing-a");
+    expect(tab?.title).toBe("Late publish");
+  });
+
+  it("still promotes the draft for a writing that never had a tab (web first save)", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-a", title: "A" });
+    closeTab("writing-a");
+    openDraftTab();
+
+    publishFor("writing-new");
+
+    const session = getEditorSessionState().session;
+    expect(session.tabs.map((tab) => tab.writing_id)).toEqual(["writing-new"]);
+    expect(session.active_tab_id).toBe("writing-new");
+  });
+});
+
+function focusTabBackTo(writingId: string) {
+  openWritingTab({ writingId, title: "A" });
+  expect(getEditorSessionState().session.active_tab_id).toBe(writingId);
+}
+
+describe("editorSessionStore — changes before the persisted session arrives (ODE-577)", () => {
+  function persistedWithWriting(writingId: string) {
+    return {
+      ...createEmptyEditorSession(),
+      active_tab_id: writingId,
+      tabs: [
+        {
+          id: writingId,
+          writing_id: writingId,
+          slug: null,
+          title: "Persisted",
+          save_state: "saved" as const,
+          has_pending_sync: false,
+          last_touched_at: 1,
+          view_state: null,
+        },
+      ],
+    };
+  }
+
+  /** Delivers the read's value only on `release()`, as a read started at mount. */
+  function holdRead() {
+    const original = localDB.editorSessions.get.bind(localDB.editorSessions);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const spy = vi.spyOn(localDB.editorSessions, "get").mockImplementation(async (id: string) => {
+      const value = await original(id);
+      await gate;
+      return value;
+    });
+    return { release, restore: () => spy.mockRestore() };
+  }
+
+  it("replays a draft opened before the read over the persisted tabs, and is not loaded until then", async () => {
+    await localDB.editorSessions.save(persistedWithWriting("writing-1"));
+    const hold = holdRead();
+    const loading = initializeEditorSessionStore();
+
+    openDraftTab("draft-identity");
+    expect(getEditorSessionState().loaded).toBe(false);
+    expect(getEditorSessionState().session.active_tab_id).toBe(EDITOR_DRAFT_TAB_ID);
+
+    hold.release();
+    await loading;
+    hold.restore();
+
+    const { loaded, session } = getEditorSessionState();
+    expect(loaded).toBe(true);
+    expect(session.tabs.map((tab) => tab.id)).toEqual(["writing-1", EDITOR_DRAFT_TAB_ID]);
+    expect(session.active_tab_id).toBe(EDITOR_DRAFT_TAB_ID);
+    await vi.waitFor(async () => {
+      const stored = await localDB.editorSessions.get("workspace");
+      expect(stored?.tabs.map((tab) => tab.id)).toEqual(["writing-1", EDITOR_DRAFT_TAB_ID]);
+    });
+  });
+
+  it("does not persist the pre-load session over the stored one", async () => {
+    await localDB.editorSessions.save(persistedWithWriting("writing-1"));
+    const hold = holdRead();
+    const save = vi.spyOn(localDB.editorSessions, "save");
+    const loading = initializeEditorSessionStore();
+
+    openDraftTab("draft-identity");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(save).not.toHaveBeenCalled();
+
+    hold.release();
+    await loading;
+    hold.restore();
+    save.mockRestore();
+  });
+
+  it("starts the read itself when a change arrives before anyone asked for the session", async () => {
+    await localDB.editorSessions.save(persistedWithWriting("writing-1"));
+
+    openDraftTab("draft-identity");
+    await vi.waitFor(() => expect(getEditorSessionState().loaded).toBe(true));
+
+    expect(getEditorSessionState().session.tabs.map((tab) => tab.id)).toEqual(["writing-1", EDITOR_DRAFT_TAB_ID]);
+  });
+
+  it("degrades to the author's changes over an empty session if the read fails, without writing", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const read = vi.spyOn(localDB.editorSessions, "get").mockRejectedValue(new Error("idb unavailable"));
+    const save = vi.spyOn(localDB.editorSessions, "save");
+    const loading = initializeEditorSessionStore();
+    openDraftTab("draft-identity");
+    await loading;
+
+    expect(getEditorSessionState().loaded).toBe(true);
+    expect(getEditorSessionState().session.tabs.map((tab) => tab.id)).toEqual([EDITOR_DRAFT_TAB_ID]);
+    expect(save).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith("[editor:session] could not read the persisted session", expect.any(Error));
+    read.mockRestore();
+    save.mockRestore();
+    error.mockRestore();
+  });
+
+  it("clears the tombstone of a close→reopen pair made before the read, so a later publish is not dropped (ODE-594)", async () => {
+    await localDB.editorSessions.save(persistedWithWriting("writing-x"));
+    const hold = holdRead();
+    const loading = initializeEditorSessionStore();
+
+    openWritingTab({ writingId: "writing-x", title: "X" });
+    closeTab("writing-x");
+    openWritingTab({ writingId: "writing-x", title: "X" });
+
+    hold.release();
+    await loading;
+    hold.restore();
+
+    expect(getEditorSessionState().loaded).toBe(true);
+
+    publishTabState({
+      routeWritingId: null,
+      writingId: "writing-x",
+      title: "X updated",
+      saveState: "saved",
+      hasPendingSync: false,
+    });
+
+    const tab = getEditorSessionState().session.tabs.find((item) => item.writing_id === "writing-x");
+    expect(tab?.title).toBe("X updated");
   });
 });

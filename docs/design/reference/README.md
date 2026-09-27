@@ -33,7 +33,7 @@ npx serve docs/design/reference
 
 | File | Specs it backs |
 | --- | --- |
-| `Artifact Studio Landing.dc.html` | `.agents/skills/skill-design-landing/design.md`, `.agents/skills/skill-design-landing/SKILL.md` |
+| `Artifact Studio Landing.dc.html` | `.agents/skills/skill-design/specialties/marketing-page.md`, `.agents/skills/skill-design/specialties/marketing-system.md` |
 | `Artifact Studio Desk.dc.html` | `docs/design/views/desk.md`, the preview overlay, the selection bar, part of `docs/design/overlays.md` |
 | `Artifact Studio Studio.dc.html` | `docs/design/views/studio.md`, including the AI bar and suggestion bubbles |
 | `Artifact Studio Workspace.dc.html` | `docs/design/views/workspace.md` (index) |

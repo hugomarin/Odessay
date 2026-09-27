@@ -34,6 +34,23 @@ export type PersistedCorrectionBlockRecord = {
 export const CORRECTION_BLOCK_CACHE_LIMIT = 20;
 export { DEFAULT_CORRECTION_BLOCK_POSITION_WINDOW, parseCorrectionBlockLogicalId, parseCorrectionBlockPosition }
 
+/*
+ * Caché local de bloques de corrección (IndexedDB). Este módulo es su único
+ * dueño: la UI y los hooks la leen y escriben por aquí, nunca con
+ * `localDB.correctionBlocks` directamente (regla `ui-no-direct-persistence`,
+ * ODE-586).
+ */
+export const readLocalCorrectionBlocks = (writingId: string): Promise<LocalCorrectionBlock[]> =>
+  localDB.correctionBlocks.getByWriting(writingId);
+
+/** Guarda un bloque y desaloja los documentos más antiguos por encima del límite de caché. */
+export const saveLocalCorrectionBlock = async (block: LocalCorrectionBlock): Promise<void> => {
+  await localDB.correctionBlocks.save(block);
+  await localDB.correctionBlocks.evictOldestWriting(CORRECTION_BLOCK_CACHE_LIMIT);
+};
+
+export const deleteLocalCorrectionBlocks = (ids: string[]): Promise<void> => localDB.correctionBlocks.deleteMany(ids);
+
 export const createCorrectionBlockRecordId = (writingId: string, blockHash: string) =>
   `auto-correction:${writingId}:${blockHash}`;
 

@@ -79,6 +79,16 @@ const createLocalDbMock = () => {
       detachLocalFile: vi.fn(async () => undefined),
       delete: vi.fn(async () => undefined),
       saveWithRebind: vi.fn(async () => undefined),
+      transitionLifecycle: vi.fn(
+        async (_id: string, transition: { when: (current: LocalWriting["lifecycle"]) => boolean }) => ({
+          previous: writing.lifecycle,
+          changed: transition.when(writing.lifecycle),
+          localUpdatedAt: writing.local_updated_at ?? null,
+        }),
+      ),
+      update: vi.fn(async (_id: string, updater: (current: LocalWriting | null) => LocalWriting | null) =>
+        updater(writing),
+      ),
     },
     collections: {
       save: vi.fn(async () => undefined),
@@ -193,6 +203,54 @@ describe("SyncWorker", () => {
     );
   });
 
+  it("a scheduled flush that fails logs the error instead of leaving an unhandled rejection", async () => {
+    // ODE-583 follow-up: the timer-driven flush was fired with `void`, so a
+    // local-DB failure inside it (IndexedDB unavailable, or torn down under a
+    // test) surfaced as an unhandled rejection. The mutations stay queued and
+    // the next flush retries them; the failure only needs to be visible.
+    const localDb = createLocalDbMock();
+    localDb.syncQueue.getPending = vi.fn(async () => {
+      throw new Error("indexeddb unavailable");
+    });
+    const logError = vi.fn();
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    let fire: (() => void) | null = null;
+    const worker = new SyncWorker({
+      localDb,
+      isOnline: () => true,
+      logError,
+      scheduleTimeout: (callback) => {
+        fire = callback;
+        return 1;
+      },
+      clearScheduledTimeout: () => undefined,
+      transport: {
+        upsertWriting: vi.fn(async () => createRemoteWriting()),
+        deleteWriting: vi.fn(async () => undefined),
+        upsertCollection: vi.fn(async () => undefined),
+        deleteCollection: vi.fn(async () => undefined),
+        setWritingCollections: vi.fn(async () => undefined),
+      },
+    });
+
+    try {
+      worker.schedule(0);
+      expect(fire, "control positivo: el flush quedó agendado").not.toBeNull();
+      fire!();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(unhandled, "sin rechazo sin manejar").not.toHaveBeenCalled();
+      expect(logError).toHaveBeenCalledWith(
+        "[sync:flush]",
+        expect.objectContaining({ error: "indexeddb unavailable" }),
+      );
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
   it("retries pending mutations after connectivity is restored", async () => {
     const localDb = createLocalDbMock();
     const mutation = createMutation();
@@ -221,7 +279,10 @@ describe("SyncWorker", () => {
 
     expect(upsertWriting).toHaveBeenCalledTimes(1);
     expect(localDb.syncQueue.markSynced).toHaveBeenCalledWith(mutation.id);
-    expect(localDb.writings.save).toHaveBeenCalledWith(
+    // La fila remota se aplica con una actualización atómica contra la fila
+    // actual (ODE-583), no con un `save` a ciegas.
+    expect(localDb.writings.update).toHaveBeenCalledTimes(1);
+    await expect(localDb.writings.update.mock.results[0]?.value).resolves.toEqual(
       expect.objectContaining({
         slug: "draft-1",
       }),

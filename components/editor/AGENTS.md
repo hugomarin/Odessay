@@ -13,13 +13,25 @@ No debe ser el owner canónico de:
 - acceso a filesystem,
 - semántica de sync.
 
-El tamaño del archivo no es, por sí solo, un finding de review — ver `Hotspots` en `.agents/agents/build-agent.md` y `review-architecture/SKILL.md`. Que absorba una responsabilidad nueva de las listadas arriba sí lo es.
+El tamaño del archivo no es, por sí solo, un finding de review — ver `Hotspots` en `.agents/agents/build-agent.md` y la [referencia de arquitectura de Code Review](../../.agents/skills/skill-code-review/references/architecture.md). Que absorba una responsabilidad nueva de las listadas arriba sí lo es.
 
-## Deuda conocida — no usar como plantilla
+## Correcciones: solo existe el camino manual
 
-`editor-shell.tsx` hoy llama `localDB.correctionBlocks.*` directamente en varios puntos (save/delete/evictOldest/getByWriting). Es una violación de boundary ya identificada (`architecture/remediation` — disposition: planned; ver Gap Matrix del quality harness). No es un patrón a copiar.
+El análisis de correcciones lo dispara el usuario desde el panel
+(`hooks/useManualCorrections.ts`). La cola **automática** que vivía en
+`editor-shell.tsx` —timers por bloque, reintentos, circuit breaker, toast de
+progreso— era inalcanzable (`correctionsEnabledRef` nunca se ponía a `true`) y
+se eliminó en ODE-558. No reintroducir análisis automático dentro del shell:
+si vuelve a hacer falta, va detrás de una bandera real y con su propio owner,
+no colgando de un ref del hotspot.
 
-Código nuevo no debe agregar más llamadas directas a `localDB.correctionBlocks` desde `editor-shell.tsx` ni desde otro componente de `components/editor/`. El owner canónico de esa persistencia es `lib/corrections/persistence.ts` — extender ahí y cablear la llamada desde el hotspot.
+Lo que sí sigue vivo aquí: invalidar las sugerencias de un bloque cuando el
+usuario lo edita, el aplazamiento de esa invalidación mientras hay
+supresión activa, y la persistencia de bloques de corrección.
+
+## Persistencia de bloques de corrección
+
+La caché local de bloques de corrección tiene un solo dueño: `lib/corrections/persistence.ts` (`readLocalCorrectionBlocks`, `saveLocalCorrectionBlock`, `deleteLocalCorrectionBlocks`, además de la hidratación y el volcado remotos). Ningún componente ni hook llama `localDB.correctionBlocks` directamente; la regla `ui-no-direct-persistence` lo hace cumplir y su baseline está vacío desde ODE-586. Si hace falta una operación nueva, se añade en ese módulo y se llama desde aquí.
 
 ## Persistencia
 
@@ -29,7 +41,7 @@ Usar el owner de persistencia canónico para el dominio que se está tocando. Co
 
 Antes de introducir estado nuevo, determinar su owner y su lifecycle.
 
-No representar el mismo estado semántico en params + estado de componente + store + refs sin lifecycles distintos y explícitos para cada uno. Si dos mecanismos pueden decidir el resultado de la misma transición, es una `Transición co-owned` — ver `review-correctness/SKILL.md`.
+No representar el mismo estado semántico en params + estado de componente + store + refs sin lifecycles distintos y explícitos para cada uno. Si dos mecanismos pueden decidir el resultado de la misma transición, es una `Transición co-owned` — ver la [referencia de corrección de Code Review](../../.agents/skills/skill-code-review/references/correctness.md).
 
 ## Antes de agregar comportamiento
 

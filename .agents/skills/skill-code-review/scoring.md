@@ -155,7 +155,7 @@ Usar estas categorías para mantener consistencia:
 - `race-condition` — estado compartido sin sincronización
 - `performance-critical-path` — degradación en editor/auto-save/sync
 - `typescript-strict` — `any`, `@ts-ignore`, tipos incorrectos
-- `design-inconsistency` — desviación de `skill-design.md`
+- `design-inconsistency` — desviación de `.agents/skills/skill-design/SKILL.md` y de la especialidad visual aplicable
 - `test-gap` — funcionalidad nueva sin test
 - `missing-edge-case` — happy path testeado, error path no
 - `scope-creep` — archivos modificados fuera del scope del issue

@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process"
 
 const commands = [
-  ["npx", ["vitest", "run", "tests/editor-empty-draft-persistence.test.tsx", "tests/editor-session-store.test.ts", "tests/editor-hydration-session.test.ts", "tests/services/document-service-factory.test.ts"]],
+  ["npx", ["vitest", "run", "tests/editor-shell-draft-materialization-desktop.test.tsx", "tests/editor-shell-close-commit-window-desktop.test.tsx", "tests/editor-shell-blank-draft-naming-desktop.test.tsx", "tests/editor-session-store.test.ts", "tests/editor-hydration-session.test.ts", "tests/services/document-service-factory.test.ts"]],
   ["npx", ["playwright", "test", "tests/playwright/write-blank-lifecycle.e2e.ts", "tests/playwright/write-new-first-paste.e2e.ts"]],
 ]
 

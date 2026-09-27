@@ -20,7 +20,7 @@ import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { normalizeArtifactType } from "@/lib/writings/artifact-type"
 import { getExportFileBaseName } from "@/lib/export/writing-export"
-import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
+import { enqueueWritingDelete, enqueueWritingUpdate } from "@/lib/sync/queue"
 import { needsBodyHydration } from "@/lib/sync/remote-bootstrap"
 import { getSyncService } from "@/lib/sync/sync-service-factory"
 
@@ -168,13 +168,17 @@ export const webDocumentService: DocumentService = {
 
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
-      const existing = await localDB.writings.get(input.writing.id)
-      const local = recordToLocalWriting(input.writing, existing)
-      if (existing) {
-        local.lifecycle = existing.lifecycle
-      }
-      await enqueueWritingUpsert(local)
-      return ok(localWritingToRecord(local))
+      // El editor manda el documento; el `lifecycle` es del worker de sync y
+      // se toma de la fila actual, en la misma transacción (ODE-589).
+      const written = await enqueueWritingUpdate(input.writing.id, (current) => {
+        const local = recordToLocalWriting(input.writing, current)
+        if (current) {
+          local.lifecycle = current.lifecycle
+        }
+        return local
+      })
+      if (!written) throw new Error(`Writing ${input.writing.id} could not be saved`)
+      return ok(localWritingToRecord(written))
     } catch (error) {
       return err(makeServiceError(error, "DB_ERROR"))
     }
@@ -182,23 +186,27 @@ export const webDocumentService: DocumentService = {
 
   async updateWritingMetadata(input: UpdateWritingMetadataInput): Promise<ServiceResponse<WritingRecord>> {
     try {
-      const existing = await localDB.writings.get(input.writingId)
-      if (!existing || existing.sync_status === "deleted") return err({
+      // Los metadatos se aplican sobre la fila actual, no sobre una lectura
+      // anterior: un guardado del editor entre medias conserva su cuerpo
+      // (ODE-589). Si ese guardado ya subió la versión, esta escritura va
+      // encima, nunca por detrás.
+      const written = await enqueueWritingUpdate(input.writingId, (current) => {
+        if (!current || current.sync_status === "deleted") return null
+        return {
+          ...current,
+          ...(input.status ? { status: input.status } : {}),
+          ...(input.artifactType ? { artifact_type: input.artifactType } : {}),
+          version: Math.max(input.version, current.version + 1),
+          updated_at: input.updatedAt,
+          metadata_updated_at: input.updatedAt,
+        }
+      })
+      if (!written) return err({
         code: "NOT_FOUND",
         message: `Writing ${input.writingId} not found`,
         retryable: false,
       })
-      const next = {
-        ...existing,
-        ...(input.status ? { status: input.status } : {}),
-        ...(input.artifactType ? { artifact_type: input.artifactType } : {}),
-        version: input.version,
-        updated_at: input.updatedAt,
-        metadata_updated_at: input.updatedAt,
-        local_updated_at: Date.now(),
-      }
-      await enqueueWritingUpsert(next)
-      return ok(localWritingToRecord(next))
+      return ok(localWritingToRecord(written))
     } catch (error) {
       return err(makeServiceError(error, "DB_ERROR"))
     }
@@ -216,9 +224,19 @@ export const webDocumentService: DocumentService = {
 
   async renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
-      const local = await localDB.writings.get(input.writingId)
+      // Sobre la fila actual, en una transacción (ODE-589).
+      const written = await enqueueWritingUpdate(input.writingId, (current) =>
+        current
+          ? {
+              ...current,
+              title: input.title,
+              updated_at: input.updatedAt,
+              content_updated_at: input.updatedAt,
+            }
+          : null,
+      )
 
-      if (!local) {
+      if (!written) {
         return err({
           code: "NOT_FOUND",
           message: `Writing ${input.writingId} not found`,
@@ -226,17 +244,7 @@ export const webDocumentService: DocumentService = {
         })
       }
 
-      const nextLocal: LocalWriting = {
-        ...local,
-        title: input.title,
-        updated_at: input.updatedAt,
-        content_updated_at: input.updatedAt,
-        local_updated_at: Date.now(),
-        sync_status: "pending",
-      }
-
-      await enqueueWritingUpsert(nextLocal)
-      return ok(localWritingToRecord(nextLocal))
+      return ok(localWritingToRecord(written))
     } catch (error) {
       return err(makeServiceError(error, "DB_ERROR"))
     }
@@ -273,27 +281,38 @@ export const webDocumentService: DocumentService = {
         message: payload?.error?.message ?? "Restore failed",
         retryable: response.status >= 500,
       })
-      const local = await localDB.writings.get(input.writingId)
-      if (!local) return ok({
-        id: input.writingId, authorId: String(payload.data.author_id ?? ""), title: payload.data.title == null ? null : String(payload.data.title),
-        content: { markdown: null, richText: null, plainText: "", canonicalSource: "pending-document-contract" },
-        slug: payload.data.slug == null ? null : String(payload.data.slug), status: (payload.data.status ?? "draft") as WritingRecord["status"],
-        artifactType: normalizeArtifactType(typeof payload.data.artifact_type === "string" ? payload.data.artifact_type : null), visibility: (payload.data.visibility ?? "private") as WritingRecord["visibility"],
-        parentId: payload.data.parent_id == null ? null : String(payload.data.parent_id), correspondenceId: payload.data.correspondence_id == null ? null : String(payload.data.correspondence_id),
-        version: Number(payload.data.version ?? 1), deletedAt: null, createdAt: String(payload.data.created_at ?? input.updatedAt), updatedAt: String(payload.data.updated_at ?? input.updatedAt), lifecycle: "server-confirmed",
-      })
-      const restored: LocalWriting = {
-        ...local,
-        deleted_at: null,
-        sync_status: "synced",
-        lifecycle: "server-confirmed",
-        version: Number(payload.data.version ?? input.version + 1),
-        updated_at: String(payload.data.updated_at ?? input.updatedAt),
-        local_updated_at: Date.now(),
-      }
+      const data = payload.data
+      // Sobre la fila ACTUAL, en una transacción (ODE-592): leer con `get`
+      // y escribir después con `save` son dos transacciones y lo que otro
+      // escritor confirmara en la ventana (p. ej. el editor) se revertía. No
+      // se usa `enqueueWritingUpdate` a propósito: ese helper marca
+      // `sync_status: "pending"` y encola un `upsert`, semántica opuesta a un
+      // restore ya confirmado por el servidor (`synced` + limpiar la cola).
+      // La cola se limpia ANTES de escribir: si se limpiara después, un
+      // guardado que confirmara entre la escritura y la limpieza perdería su
+      // mutación y su cuerpo no llegaría nunca al servidor.
       await localDB.syncQueue.deleteForEntity("writing", input.writingId)
-      await localDB.writings.save(restored)
-      return ok(localWritingToRecord(restored))
+      const written = await localDB.writings.update(input.writingId, (current) => {
+        if (!current) return null
+        return {
+          ...current,
+          deleted_at: null,
+          sync_status: "synced",
+          lifecycle: "server-confirmed",
+          version: Number(data.version ?? input.version + 1),
+          updated_at: String(data.updated_at ?? input.updatedAt),
+          local_updated_at: Date.now(),
+        }
+      })
+      if (!written) return ok({
+        id: input.writingId, authorId: String(data.author_id ?? ""), title: data.title == null ? null : String(data.title),
+        content: { markdown: null, richText: null, plainText: "", canonicalSource: "pending-document-contract" },
+        slug: data.slug == null ? null : String(data.slug), status: (data.status ?? "draft") as WritingRecord["status"],
+        artifactType: normalizeArtifactType(typeof data.artifact_type === "string" ? data.artifact_type : null), visibility: (data.visibility ?? "private") as WritingRecord["visibility"],
+        parentId: data.parent_id == null ? null : String(data.parent_id), correspondenceId: data.correspondence_id == null ? null : String(data.correspondence_id),
+        version: Number(data.version ?? 1), deletedAt: null, createdAt: String(data.created_at ?? input.updatedAt), updatedAt: String(data.updated_at ?? input.updatedAt), lifecycle: "server-confirmed",
+      })
+      return ok(localWritingToRecord(written))
     } catch (error) { return err(makeServiceError(error, "UNAVAILABLE")) }
   },
 

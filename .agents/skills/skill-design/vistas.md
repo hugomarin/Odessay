@@ -1,13 +1,8 @@
----
-name: skill-design/vistas
-description: Companion file de skill-design. Valores exactos de padding, tamaños, colores y comportamiento por vista (Desk, Collections, Correspondences, Reading, Editor, Sidebar) + checklists de validación. Leer siempre junto a .agents/skills/skill-design/SKILL.md antes de implementar cualquier vista. No usar de forma standalone.
----
+# Design — Vistas de producto (Odessay)
 
-# Skill: Design — Vistas (Odessay)
+Lee [Design](SKILL.md) primero. Este documento aporta los valores específicos de las vistas de producto y presupone sus tokens de color, tipografía, sombras y reglas globales.
 
-Lee `skill-design.md` primero. Este documento asume que ya tienes los tokens de color, tipografía, sombras y reglas globales. Aquí solo viven los valores específicos de cada vista.
-
-Los prototipos HTML en `/workflow/reference/` son la referencia visual canónica. Cuando hay conflicto entre un prototipo y este documento, este documento gana. Los prototipos pueden tener diferencias menores respecto al diseño final — este documento es la especificación oficial. Excepción conocida: ink-3/ink-4 en el editor (`workflow/reference/editor.html`) son más claros que el resto — usar los valores de `skill-design.md`.
+Para las vistas de Fase 10, los prototipos `.dc.html` en `docs/design/reference/` son la autoridad visual; aplicar el protocolo de `docs/design/migration-plan.md` §4 y expresar sus valores con los tokens de [Design](SKILL.md). Este documento conserva los valores de las vistas anteriores y las reglas de producto que siguen vigentes. Los prototipos HTML de `/workflow/reference/` documentan esos diseños anteriores; ante diferencias menores con este documento, usar sus valores escritos. Excepción conocida: ink-3/ink-4 en `workflow/reference/editor.html` son más claros que el resto; usar los valores de [Design](SKILL.md).
 
 El mapa completo de archivos de referencia y sus screenshots está en `CLAUDE.md` (sección: Prototipos visuales de referencia).
 
@@ -812,7 +807,7 @@ Nav lateral:
 
 ## Checklist de validación por vista
 
-Usar antes de mover un issue a In Review. Complementa el checklist de `skill-code-review.md`.
+Usar antes de mover un issue a In Review. Complementa el checklist de `.agents/skills/skill-code-review/SKILL.md`.
 
 ### Sidebar (todas las vistas)
 

@@ -1,201 +1,47 @@
 ---
 name: skill-audit-planning
-description: "Audit de planeación para Odessay: revisa roadmap, DoD, issue briefs, dependencias, overlaps, huecos y contratos faltantes antes de BUILD. Usar cuando se audite la calidad de una fase o de issues definidos."
+description: Audita una fase o un conjunto de Issue Briefs para comprobar cobertura, secuencia, owners, contratos y evidencia antes de BUILD.
 ---
 
-# Skill: Audit Planning
+# Audit Planning
 
-Usa este skill cuando la tarea no sea producir el plan, sino **revisar la calidad del plan**.
+## 1. Objetivo
 
-Este skill aplica a:
+Audit Planning comprueba si un conjunto de issues puede producir el resultado prometido por una fase. Relaciona criterios de salida con entregables, detecta dependencias y responsabilidades ambiguas, y propone correcciones concretas al plan.
 
-- `wf-audit`
-- auto-audit posterior a `wf-define`
-- revisión de una fase antes de crear issues en Linear
-- revisión de briefs ya creados para detectar overlaps, huecos o secuencia deficiente
+Pregunta guía: **¿Qué falta, se solapa o está mal secuenciado para que este plan sea ejecutable?**
 
-No reemplaza:
+## 2. Ámbito y activación
 
-- `skill-planning` — producir roadmap/briefs/issues
-- `skill-architecture` — clasificar layer/runtime/owner y boundaries
+Aplicar antes de BUILD, después de definir una fase o cuando cambian varios briefs conectados. Auditar el conjunto permite encontrar huecos que un issue individual no revela.
 
-Este skill responde otra pregunta:
+## 3. Entradas y fuentes de autoridad
 
-> ¿El plan quedó realmente ejecutable, completo y bien secuenciado?
+Reunir roadmap, criterios de salida, briefs completos, contratos citados, estado de las dependencias y decisiones aceptadas. Consultar los skills de dominio que cada issue activa. El proyecto define sus artefactos, tracker y formato de auditoría.
 
----
+## 4. Método y criterios
 
-## Qué audita
+1. Trazar cada resultado de la fase hasta uno o varios issues y su evidencia de cierre.
+2. Verificar que cada issue tenga owner, precondiciones, consumidores, criterios de aceptación y validación suficientes.
+3. Buscar dos issues que cambian la misma responsabilidad o dependen de decisiones incompatibles.
+4. Ordenar dependencias por contratos, datos y capabilities necesarias; identificar ciclos y trabajo que comienza antes de su fundamento.
+5. Revisar tamaño y unidad de entrega: cada issue debe producir un resultado coherente y revisable.
+6. Confrontar los briefs con arquitectura, costo al crecer y dominios activados. Distinguir falta de definición de implementación aún pendiente.
+7. Proponer la corrección mínima del plan y volver a comprobar cobertura y secuencia.
 
-El audit de planning debe revisar, como mínimo:
+## 5. Resultado y evidencia
 
-- cobertura del DoD
-- consistencia con el roadmap
-- claridad de hitos de fase
-- gaps de alcance
-- solapamientos entre issues
-- dependencias mal secuenciadas
-- contratos faltantes
-- ownership ambiguo
-- riesgo de scope inflado o issue demasiado grande
+Entregar un veredicto por fase o conjunto, una matriz de cobertura de resultados, hallazgos con fuentes y propuestas de cambio en issues o dependencias. Cada hallazgo nombra el efecto sobre BUILD y la decisión necesaria. Aplicar el formato local si el workflow lo exige.
 
----
+## 6. Manejo de fallos e incertidumbre
 
-## Contexto mínimo a cargar
+Si una fuente normativa o la intención del producto falta, registrar la pregunta y su efecto sobre el plan. Una contradicción que cambia owner, scope o contrato impide declarar listo el conjunto. Una observación sin impacto claro se deja como seguimiento, no como bloqueo.
 
-1. `workflow/define/roadmap.md`
-2. `workflow/define/dod-[fase].md`
-3. `workflow/status.json` (fase activa; para entregas usar `npm run ops:ledger -- built --phase "Fase N" --brief`)
-4. `.agents/skills/skill-planning/SKILL.md`
-5. Si la fase toca desktop, multi-runtime, shared core, save path, sync, parser/serializer o services:
-   - `.agents/skills/skill-architecture/SKILL.md`
-   - la secuencia `odessay-desktop-*`
-6. Si los issues introducen datos, fetches, hydration, listeners, procesos bulk, trabajo background o cambios de carga:
-   - `.agents/skills/skill-performance/SKILL.md`
+## 7. Relaciones y ownership
 
-Si ya existen issues o briefs en Linear, cargar también:
+Planning produce briefs ejecutables; Audit Planning comprueba la coherencia del conjunto. Architecture y los skills de dominio aportan sus contratos. El workflow posee estados, aprobación y persistencia del veredicto.
 
-7. los issues de la fase
-8. sus Issue Briefs completos
+## 8. Recursos asociados
 
----
-
-## Preguntas obligatorias del audit
-
-### 1. Cobertura del DoD
-
-- ¿Cada bloque del DoD tiene al menos un issue o un conjunto de issues que lo cierre?
-- ¿Existe algún criterio de salida sin owner claro?
-- ¿Hay issues que no contribuyen realmente al cierre del DoD?
-
-### 2. Calidad del roadmap
-
-- ¿La fase está definida como cambio de estado del sistema y no solo como lista de actividades?
-- ¿El hito de fase es reconocible y verificable?
-- ¿Los “temas que no entran” están respetados por los issues?
-
-### 3. Solapamientos
-
-- ¿Dos o más issues tocan el mismo problema sin una frontera clara?
-- ¿Hay duplicación de ownership entre frontend/backend/architecture?
-- ¿El plan podría producir trabajo paralelo conflictivo?
-
-### 4. Huecos
-
-- ¿Falta algún issue estructural para que BUILD pueda ejecutar sin improvisar?
-- ¿Falta alguna validación, harness, contract o migration step?
-- ¿Hay promesas de fase que nadie está implementando?
-
-### 5. Secuencia y dependencias
-
-- ¿El orden de ejecución es defendible?
-- ¿Hay issues bloqueados por otros que todavía no existen?
-- ¿Se intenta implementar una superficie antes de fijar el contrato que la sostiene?
-
-### 6. Calidad de briefs
-
-Por cada issue:
-
-- ¿El problema está bien explicado?
-- ¿Las dependencias están claras?
-- ¿Los `Files affected` son honestos?
-- ¿Los `Requirements` son verificables?
-- ¿El `Proof of Work`/acceptance está alineado con el DoD?
-- ¿Incluye `Architecture Contract` cuando aplica?
-- ¿Incluye `Presentation Contract` cuando aplica?
-- ¿Incluye `Performance Architecture Contract` cuando el issue puede alterar carga o costo de crecimiento?
-
-### 7. Acumulación sistémica
-
-- ¿El issue agrega una operación que ya existe en otro consumidor?
-- ¿El costo crece por documento, fila, componente o evento sin una razón explícita?
-- ¿La fase está agregando funcionalidades que individualmente parecen pequeñas pero juntas cargan el mismo camino crítico?
-- ¿El issue llega a una superficie global o queda aislado en helpers, servicios o tests?
-- ¿Existe un owner único para hydration, discovery, sync o suscripciones?
-- ¿La estrategia de batch, snapshot, delta, cache o coalescing está definida antes de BUILD?
-
----
-
-## Criterios de rechazo del plan
-
-Un audit debe marcar `FAIL` si ocurre cualquiera de estas condiciones:
-
-- el DoD no está cubierto de forma suficiente
-- existe overlap grave entre issues sin ownership claro
-- la fase promete un hito que los issues no pueden cerrar
-- un issue arquitectónico no tiene `Architecture Contract`
-- la secuencia obliga a BUILD a improvisar contracts o boundaries
-- hay huecos críticos que moverían decisiones estructurales a mitad de BUILD
-- un issue activado por performance no tiene `Performance Architecture Contract` o deja sin resolver su impacto global
-
----
-
-## Formato de salida recomendado
-
-El resultado del audit debe separarse en cuatro capas:
-
-Y debe incluir además una `Execution Trace` breve para que quede claro:
-
-- qué rol condujo el audit
-- qué skills fueron cargados
-- si hubo consulta a especialistas
-- qué artefactos se auditaron
-- qué evidencias quedaron fuera
-
-### `GateResult`
-
-- `PASS`
-- `PASS WITH GAPS`
-- `FAIL`
-
-### `Coverage`
-
-- qué partes del DoD están bien cubiertas
-- qué partes están cubiertas débilmente
-- qué partes no están cubiertas
-
-### `Findings`
-
-Lista priorizada de hallazgos:
-
-- overlap
-- hueco
-- dependencia faltante
-- contract faltante
-- brief ambiguo
-- secuencia defectuosa
-
-### `Recommended Fixes`
-
-Acciones concretas y mínimas:
-
-- dividir issue
-- fusionar issues
-- agregar issue faltante
-- mover issue de fase
-- endurecer brief
-- agregar contrato o referencia documental
-
----
-
-## Regla de severidad
-
-- `P0`: el plan no puede pasar a BUILD
-- `P1`: el plan podría arrancar, pero con alto riesgo de rework o improvisación
-- `P2`: la calidad del brief o de la secuencia debe mejorar, aunque no bloquea por sí solo
-
----
-
-## Señales de buen audit
-
-- reduce incertidumbre
-- hace visible el critical path real
-- detecta huecos antes de crear trabajo
-- evita que BUILD se convierta en discovery tardío
-
-## Señales de mal audit
-
-- reescribe todo el roadmap sin necesidad
-- critica en abstracto sin proponer fixes mínimos
-- confunde review de planificación con review de código
-- abre alcance nuevo en lugar de verificar el alcance ya definido
+- **Especialidad local:** en Odessay, [specialties/phase-audit-contract.md](specialties/phase-audit-contract.md) contiene fuentes de roadmap y DoD, preguntas de auditoría, criterios de rechazo, severidad y formato de salida. Cargarla al auditar una fase del proyecto.
+- **Mecanismos:** reutilizar la información del tracker y checks existentes; este skill no requiere scripts propios.

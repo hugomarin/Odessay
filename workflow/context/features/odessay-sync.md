@@ -469,11 +469,22 @@ Aplicar estas tres reglas a cualquier transición que cruce más de un subsistem
 
 Solo un componente o capa puede iniciar la transición. Los demás reaccionan, no deciden.
 
-En el editor, el owner es el `editor-shell`: su `handleSelectWorkspaceTab(id)` es el único lugar donde puede iniciarse un cambio de pestaña. Ni el sidebar, ni la URL, ni un sync remoto pueden forzar un cambio de pestaña directamente.
+En el editor, el owner de la transición "cambiar de documento activo" es una sola función, `activateDocument(target, reason)` (`workflow/context/core/odessay-adr-documento-activo.md`, D2). Es la única que escribe la identidad de la shell, la hidratación y la proyección de la URL; el store se escribe en la misma transición y el protocolo de salida del documento anterior va antes, en `prepareDocumentExit`. Ni el sidebar, ni la URL, ni un sync remoto pueden cambiar el documento activo directamente. Una entrada por URL remonta la shell, y la instancia nueva arranca desde la ruta y el store (enmienda de ODE-568).
+
+> **Estado actual:** las 12 transiciones pasan por `activateDocument` (Fase 1, ODE-567), con el protocolo de salida en `prepareDocumentExit`. La escritura del store (`focusTab`, `openWritingTab`…) sigue al lado de esa llamada, en cada handler. Código nuevo que cambie el documento activo pasa por `activateDocument`; no hay otro camino.
 
 **2. Fuente de verdad única por dimensión**
 
-La dimensión "writing activo" tiene una sola fuente de verdad: `currentWritingIdRef.current` en el editor-shell. La URL refleja ese valor, pero no lo controla. Zustand no almacena `writingId`. Los paneles no derivan el writing activo de sus props.
+La dimensión "writing activo" tiene una fuente por alcance (ADR `odessay-adr-documento-activo.md`, D1 enmendado en ODE-568):
+
+- **Entre entradas y fuera de la shell:** la pestaña activa del store de sesión (`lib/stores/editor-session-store.ts`), es decir, su `writing_id` o el `draft_writing_id` de la pestaña borrador. Es lo que persiste, lo que restaura la sesión y lo que leen Studio y Recientes.
+- **Dentro de una instancia montada de `EditorShell`:** su identidad de instancia (`currentWritingId` / `currentWritingIdRef`), que leen la hidratación, el guardado, las correcciones y las limpiezas de esa instancia. Solo la escribe `activateDocument`, en la misma transición que escribe el store. Lo mismo vale para la identidad del borrador sin materializar (`ephemeralDraftWritingIdRef`, ODE-571): el `onMaterialized` tardío de una instancia ya desmontada la lee y la borra, así que no puede vivir en un sitio compartido.
+
+La URL refleja el documento activo pero no lo controla: las proyecciones van por `activateDocument({ href })` y las navegaciones a un documento por `navigateToWriting`. Los paneles no derivan el writing activo de sus props.
+
+Por qué dos alcances y no uno: cada entrada externa (Desk, Search, Recent) remonta `EditorShell` (`key={writingId}` en `/write/[id]` y en `DesktopWriteEntry`). En ese remontaje React renderiza la shell nueva **antes** de ejecutar las limpiezas de la vieja, así que una identidad compartida haría que las limpiezas de la vieja guardaran en el documento nuevo. Cada instancia conserva la suya; el store es lo que sobrevive a la entrada.
+
+> **Regla:** ningún código nuevo crea un portador más ni copia la identidad de uno a otro con un efecto (el espejo store → `activeEditorTabIdRef` es la excepción declarada). Antes de mover a un store compartido un dato que lean las limpiezas de la shell, hay que probar el remontaje de A a B. `node scripts/report-active-document-carriers.mjs` mide el estado.
 
 **3. Estados intermedios explícitos**
 
@@ -487,6 +498,8 @@ idle → switching → loading → ready
 - `loading`: se leyó `localDB`, se prepara el documento para TipTap.
 - `ready`: TipTap tiene el contenido, el foco está en el editor.
 
+> **En el editor (ODE-570):** la fase es `hydrationPhase` (`"loading"` | `"ready"`), expuesta en `data-hydration-phase` de la raíz del editor. `switching` es síncrono (`prepareDocumentExit` → `activateDocument` en el mismo handler) y nunca llega a un render; sin documento, la fase es `ready`, y un fallo al abrir también sale a `ready`. Solo `activateDocument` la pone en `loading`, derivándolo del motivo (`activationHydrates`); la hidratación la devuelve a `ready`.
+
 Sin estos estados, el sistema depende de guards implícitos (`if (editor && !isHydrating)`) que pueden evaluarse con valores stale si ocurre una interrupción.
 
 ### Caso de estudio: validación de transiciones en el editor
@@ -495,10 +508,10 @@ Aplicar el checklist de cinco puntos a la transición "cambio de pestaña":
 
 | Punto | Pregunta | Validación en el editor |
 |---|---|---|
-| Inicio | ¿Quién dispara? ¿Es único? | Solo `handleSelectWorkspaceTab`. No hay `router.push()` paralelo. |
-| Estado intermedio observable | ¿Hay un lapso visible entre inicio y fin? | Sí: lectura de localDB + setContent de TipTap. Modelado como `hydrationPhase`. |
-| Estado final garantizado | ¿Cuál es el estado final? ¿Qué pasa si se interrumpe? | Final: `currentWritingIdRef === id` y `editor.getJSON() === contenido de id`. Si se interrumpe, cleanup pone `hydrationPhase = 'idle'`. |
-| Interrupciones | ¿Qué pasa con tab switch, rehidratación, sync tardío, cambio de scope? | `handleSelectWorkspaceTab` cancela cualquier hidratación en curso antes de iniciar la nueva. `localDB` scope changes se defieren con `setTimeout` para no cortar transacciones en vuelo. |
+| Inicio | ¿Quién dispara? ¿Es único? | Solo `activateDocument` (ADR documento activo, D2), llamado desde cada handler; las navegaciones a documento solo vía `navigateToWriting`, nunca en paralelo a una proyección. |
+| Estado intermedio observable | ¿Hay un lapso visible entre inicio y fin? | Sí: lectura de localDB + setContent de TipTap. Lo marca `hydrationPhase === "loading"` (ADR documento activo, Fase 4 — ODE-570), que además bloquea la publicación de la pestaña. |
+| Estado final garantizado | ¿Cuál es el estado final? ¿Qué pasa si se interrumpe? | Final: la pestaña activa del store de sesión es `id` y `editor.getJSON()` es el contenido de `id`. Si se interrumpe, el dueño de generación (`lib/editor/hydration-generation.ts`) descarta el trabajo diferido del documento anterior. |
+| Interrupciones | ¿Qué pasa con tab switch, rehidratación, sync tardío, cambio de scope? | Cambiar de documento cancela la hidratación en curso: el dueño de generación (`lib/editor/hydration-generation.ts`) invalida el trabajo diferido del documento anterior. `localDB` scope changes se defieren con `setTimeout` para no cortar transacciones en vuelo. |
 | Tests | ¿Cubre estado intermedio o solo final? | Tests de `editor-hydration-session.test.ts` cubren `idle → loading → ready`. Tests E2E de `write-transient-race.e2e.ts` simulan interrupción. |
 
 ### Reglas para agentes

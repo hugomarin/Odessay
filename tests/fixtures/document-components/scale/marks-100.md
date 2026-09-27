@@ -97,4 +97,3 @@
 <Entity id="ent-49" type="company" ref="https://example.com/49">Aplyca 49</Entity> and <Highlight color="amber">passage 49</Highlight>
 
 <Entity id="ent-50" type="person"><Highlight color="green">**bold** mention 50</Highlight></Entity>
-

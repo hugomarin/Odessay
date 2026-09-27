@@ -111,18 +111,26 @@ describe("resolveExternalContentChange (WATCH-07 policy)", () => {
    * MARKDOWN_SAVE_DEBOUNCE_MS markdown mode) means there is a real window
    * after a keystroke where the editor already holds an unconfirmed edit but
    * persistenceCoordinator.hasPending() still correctly reports "nothing
-   * pending", because persist() hasn't been called yet at all. Using
-   * hasPending() alone here would let a CLEAN auto-reload silently discard
-   * that edit. computeHasPendingLocalEdit is exactly the combination that
-   * closes this — proven directly here, and then through
-   * resolveExternalContentChange's own branching on it below.
+   * pending", because persist() hasn't been called yet at all. The
+   * coordinator-owned signal covers the separate post-handoff window.
+   * computeHasPendingLocalEdit combines those two lifecycles — proven here,
+   * and then through resolveExternalContentChange's own branching below.
    */
   describe("document clean at H1, user types, debounce has NOT fired yet, external H2 arrives (WATCH-07 regression)", () => {
-    it("computeHasPendingLocalEdit is true from the unconfirmed-edit signal alone, even though the persistence-pending signal is still false", () => {
+    it("computeHasPendingLocalEdit is true from the pre-handoff edit signal alone", () => {
       expect(
         computeHasPendingLocalEdit({
           hasUnconfirmedLocalEdit: true,
-          hasPendingPersistence: false,
+          hasUnconfirmedPersistedContent: false,
+        }),
+      ).toBe(true)
+    })
+
+    it("computeHasPendingLocalEdit is true from the coordinator signal after persist() hands off the edit", () => {
+      expect(
+        computeHasPendingLocalEdit({
+          hasUnconfirmedLocalEdit: false,
+          hasUnconfirmedPersistedContent: true,
         }),
       ).toBe(true)
     })
@@ -130,7 +138,7 @@ describe("resolveExternalContentChange (WATCH-07 policy)", () => {
     it("resolveExternalContentChange raises a conflict (never auto-reload) for exactly that combined signal", () => {
       const hasPendingLocalEdit = computeHasPendingLocalEdit({
         hasUnconfirmedLocalEdit: true,
-        hasPendingPersistence: false,
+        hasUnconfirmedPersistedContent: false,
       })
 
       expect(
@@ -144,15 +152,15 @@ describe("resolveExternalContentChange (WATCH-07 policy)", () => {
     })
   })
 
-  it("computeHasPendingLocalEdit is false only when neither signal reports an unsaved edit", () => {
+  it("computeHasPendingLocalEdit is false only when neither lifecycle reports an unsaved edit", () => {
     expect(
-      computeHasPendingLocalEdit({ hasUnconfirmedLocalEdit: false, hasPendingPersistence: false }),
+      computeHasPendingLocalEdit({ hasUnconfirmedLocalEdit: false, hasUnconfirmedPersistedContent: false }),
     ).toBe(false)
     expect(
-      computeHasPendingLocalEdit({ hasUnconfirmedLocalEdit: false, hasPendingPersistence: true }),
+      computeHasPendingLocalEdit({ hasUnconfirmedLocalEdit: false, hasUnconfirmedPersistedContent: true }),
     ).toBe(true)
     expect(
-      computeHasPendingLocalEdit({ hasUnconfirmedLocalEdit: true, hasPendingPersistence: true }),
+      computeHasPendingLocalEdit({ hasUnconfirmedLocalEdit: true, hasUnconfirmedPersistedContent: true }),
     ).toBe(true)
   })
 })

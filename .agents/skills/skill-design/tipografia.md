@@ -1,13 +1,3 @@
----
-name: odessay-typography
-description: >
-  Contrato tipográfico canónico de Odessay. Usar cuando el usuario pida ajustar, revisar,
-  extender o escribir CSS tipográfico para Odessay. También triggear cuando mencione
-  .odessay-editor-content, .prose-odessay, escala tipográfica, ritmo vertical, headings,
-  blockquote, listas, tablas, caption, o cualquier elemento tipográfico del editor o la
-  vista de lectura.
----
-
 # Odessay — Contrato Tipográfico
 
 Sistema tipográfico canónico compartido por editor y lectura. Un solo contrato para `.odessay-editor-content` + `.prose-odessay`.
@@ -17,7 +7,7 @@ Sistema tipográfico canónico compartido por editor y lectura. Un solo contrato
 Resuelto en ODE-425. El paquete Artifact Studio y `globals.css` daban dos respuestas: 17/1.9 (prototipo) y 18/1.85 (repo). **Gana 17/1.9.** Razones, en orden de peso:
 
 1. **Es el valor del prototipo, que es la autoridad visual de la fase.** `docs/design/reference/Artifact Studio Studio.dc.html` declara el cuerpo de la hoja como `font: 400 17px/1.9 'DM Sans'`, afinado contra una hoja de 720px.
-2. **Unifica editor y lectura.** La tabla de este skill ya pedía 17px en el cuerpo de lectura. Mantener 18px en el editor obligaba a sostener dos tamaños de cuerpo para el mismo contenido según la superficie que lo renderiza.
+2. **Unifica editor y lectura.** La tabla de este documento ya pedía 17px en el cuerpo de lectura. Mantener 18px en el editor obligaba a sostener dos tamaños de cuerpo para el mismo contenido según la superficie que lo renderiza.
 3. **La medida no depende del ancho de la hoja.** La columna está expresada en `ch` (68ch para prosa, 54ch para blockquote), así que sigue siendo de 68 caracteres tanto en la hoja de 860px vigente como en la de 720px que llega con el rediseño del shell. El cambio no queda a la espera de ese rediseño.
 4. **El ritmo vertical apenas se mueve.** La caja de línea pasa de 33.3px (18 × 1.85) a 32.3px (17 × 1.9): −3%. El interlineado relativo sube, así que la mancha de texto queda algo más aireada, no más apretada.
 
