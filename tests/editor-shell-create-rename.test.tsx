@@ -21,10 +21,12 @@
  * reabrir el documento por su UUID (desktop), y DOC-01 en web.
  *
  * Hallazgo (ODE-626): en web, un borrador en blanco SÍ deja fila durable en
- * `localDB` y encola un `upsert` de sync. El caso queda como caracterización
- * (`it.fails`) hasta que ODE-626 lo arregle; por eso el caso web de "crear y
- * escribir" afirma que lo escrito vive en un solo documento, no que solo
- * exista uno.
+ * `localDB` y encola un `upsert` de sync. Queda como caracterización
+ * (`it.fails`) hasta que ODE-626 lo arregle, en dos casos: el borrador en
+ * blanco, y "crear y escribir" con la cardinalidad exacta (una sola fila nueva,
+ * la de la pestaña). El caso verde de "crear y escribir" afirma sobre TODAS
+ * las filas nuevas, sin filtrar por texto: la de la pestaña tiene lo escrito y
+ * lo único extra admitido es un borrador en blanco "Untitled".
  *
  * DOC-07. Property: renombrar un documento durable desde la shell (lápiz de
  * la pestaña y modal reales) conserva su UUID y cambia de forma coherente la
@@ -41,6 +43,12 @@
  * temporal (`write_file`/`rename_file` doblados por su dueño canónico, fieles
  * al comando Rust) y el catálogo es el `SqliteDocumentCatalog` real sobre el
  * doble de sus comandos nativos. En web, `localDB` real sobre fake-indexeddb.
+ *
+ * Hallazgo (ODE-629, review de ODE-604): renombrar con un guardado más nuevo
+ * en vuelo pierde ese guardado — el archivo renombrado queda con el snapshot
+ * que el rename leyó antes de mover. Caracterización `it.fails` en el bloque
+ * DOC-07; el guardado se retiene en `write_file` (`holdWriteFile`) para que el
+ * rename ocurra de verdad mientras está en vuelo.
  *
  * Mutation test (ODE-604): en `DesktopDocumentService.renameWriting`
  * (`lib/services/document-service-factory.ts`), devolver el registro
@@ -92,6 +100,7 @@ const {
 } = await import("./support/editor-shell-harness")
 const { createDesktopWorkspace, destroyDesktopWorkspace, readWorkspaceMarkdown, resetDesktopWorkspace } =
   await import("./support/editor-shell-desktop-doubles")
+const { holdWriteFile, writeFileCalls } = await import("./integration/documents/support/real-desktop-doubles")
 const { DESKTOP_PERSISTENCE_DEBOUNCE_MS } = await import("@/components/editor/editor-shell")
 const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
@@ -248,24 +257,51 @@ describe("ODE-604 — DOC-01: crear documento (web)", () => {
     return new Set((await localDB.writings.getAll()).map((writing) => writing.id))
   }
 
+  /** Crear por el gesto real y escribir; devuelve la identidad de la pestaña y las filas nuevas. */
+  async function createAndType(before: Set<string>) {
+    await mountWeb()
+    await clickNewArtifact(mounted!.container)
+    await typeInEditor("ODE604-WEB-CREAR")
+    const writingId = await waitFor(() => activeTab()?.writing_id ?? null, { label: "pestaña con identidad" })
+    // Completion event: la fila local del documento con lo escrito.
+    await eventually(
+      async () => (await localDB.writings.get(writingId))?.body_text?.includes("ODE604-WEB-CREAR"),
+      "fila local con lo escrito",
+    )
+    return { writingId, created: await newLocalWritings(before) }
+  }
+
+  /**
+   * Parte TODAS las filas durables nuevas (sin filtrar por texto) en la de la
+   * pestaña y el resto, y describe el resto para que cualquier fila extra sea
+   * visible en la aserción.
+   */
+  function partitionNewRows(created: Awaited<ReturnType<typeof newLocalWritings>>, writingId: string) {
+    return {
+      own: created.filter((writing) => writing.id === writingId),
+      others: created
+        .filter((writing) => writing.id !== writingId)
+        .map((writing) => ({ blank: !(writing.body_text ?? "").trim(), title: writing.title })),
+    }
+  }
+
   it(
-    "crear y escribir: lo escrito vive en un solo documento, el de la pestaña, y su identidad no cambia",
+    "crear y escribir: lo escrito vive en el documento de la pestaña, cuya identidad no cambia, y ninguna otra fila nueva tiene contenido",
     async () => {
       const before = await localWritingIds()
-      await mountWeb()
-      await clickNewArtifact(mounted!.container)
-      await typeInEditor("ODE604-WEB-CREAR")
+      const { writingId, created } = await createAndType(before)
 
-      const writingId = await waitFor(() => activeTab()?.writing_id ?? null, { label: "pestaña con identidad" })
-      // Completion event: la fila local del documento con lo escrito.
-      await eventually(
-        async () => (await localDB.writings.get(writingId))?.body_text?.includes("ODE604-WEB-CREAR"),
-        "fila local con lo escrito",
-      )
-      const withText = (await newLocalWritings(before)).filter((writing) => writing.body_text?.includes("ODE604-WEB"))
-      expect(withText.map((writing) => writing.id), "un solo documento con lo escrito: el de la pestaña").toEqual([
-        writingId,
+      const { own, others } = partitionNewRows(created, writingId)
+      expect(own.map((writing) => writing.body_text), "la fila de la pestaña, con lo escrito").toEqual([
+        expect.stringContaining("ODE604-WEB-CREAR"),
       ])
+      // Cardinalidad sobre TODAS las filas nuevas: la única fila extra
+      // admitida es el borrador en blanco de ODE-626 (ver el `it.fails` de
+      // abajo). Una fila extra con contenido, o una segunda en blanco, rompe
+      // esta aserción.
+      expect(others, "fuera de la pestaña, como mucho el borrador en blanco de ODE-626").toEqual(
+        others.length === 0 ? [] : [{ blank: true, title: expect.stringMatching(/^Untitled/) }],
+      )
 
       await typeInEditor(" ODE604-WEB-SIGUE")
       await eventually(
@@ -273,10 +309,24 @@ describe("ODE-604 — DOC-01: crear documento (web)", () => {
         "fila local con lo nuevo",
       )
       expect(activeTab()?.writing_id, "la identidad no cambia al seguir escribiendo").toBe(writingId)
-      const withTextAfter = (await newLocalWritings(before)).filter((writing) =>
-        writing.body_text?.includes("ODE604-WEB"),
-      )
-      expect(withTextAfter.map((writing) => writing.id), "y no nace otra identidad con ese contenido").toEqual([
+      const after = partitionNewRows(await newLocalWritings(before), writingId)
+      expect(after.own, "sigue habiendo una sola fila de la pestaña").toHaveLength(1)
+      expect(after.others, "y seguir escribiendo no añade ninguna fila").toEqual(others)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  // Caracterización de ODE-626 sobre el caso "crear y escribir": el invariante
+  // completo de DOC-01 es que quede exactamente UNA fila durable nueva, la de
+  // la pestaña. Hoy queda además la fila en blanco de ODE-626. `it.fails`
+  // pasa mientras el bug exista; cuando ODE-626 lo arregle se pondrá en rojo:
+  // quitar el `.fails` (y la holgura del caso de arriba).
+  it.fails(
+    "crear y escribir deja exactamente una fila durable nueva, la de la pestaña (ODE-626)",
+    async () => {
+      const before = await localWritingIds()
+      const { writingId, created } = await createAndType(before)
+      expect(created.map((writing) => writing.id), "todas las filas nuevas: solo la de la pestaña").toEqual([
         writingId,
       ])
     },
@@ -349,6 +399,68 @@ describe("ODE-604 — DOC-07: renombrar un documento durable (desktop)", () => {
       expect(after.path, "lo escrito después va al archivo renombrado").toBe(renamedPath)
       expect(await readWorkspaceMarkdown()).toHaveLength(1)
       expect((await catalogRows()).map((row) => row.id)).toEqual([writingId])
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  // Caracterización de ODE-629 (hallazgo del review de ODE-604, P1). El
+  // guardado más nuevo ya decidió escribir en la ruta vieja cuando el
+  // renombrado mueve el archivo: al soltarse, `write_file` lo rechaza con
+  // CONFLICT ("no longer exists on disk") y no se reintenta, mientras
+  // `DesktopDocumentService.renameWriting` persiste en la ruta nueva el
+  // snapshot que leyó ANTES de mover (`openWriting`). Resultado: el archivo
+  // renombrado queda con el contenido viejo y lo nuevo solo vive en el editor
+  // (la pestaña queda en `error`); cerrar la app lo pierde. `it.fails` pasa
+  // mientras el bug exista; cuando ODE-629 lo arregle se pondrá en rojo: quitar
+  // el `.fails` y actualizar DOC-07 en el mapa.
+  it.fails(
+    "renombrar con un guardado más nuevo en vuelo no pierde ese guardado (ODE-629)",
+    async () => {
+      await mountLoaded()
+      await clickNewArtifact(mounted!.container)
+      await typeInEditor("ODE604-CARRERA-BASE")
+      await advance(SAVE_WINDOW_MS)
+      const original = await waitForMarkdownContaining("ODE604-CARRERA-BASE")
+      const writingId = await waitForMaterializedWritingId()
+
+      // El guardado más nuevo sale y queda retenido en `write_file` sobre la
+      // ruta vieja: ya decidió su ruta y su contenido, y el disco aún no lo tiene.
+      const baseline = writeFileCalls().length
+      const held = holdWriteFile((path) => path === original.path)
+      await typeInEditor(" ODE604-CARRERA-NUEVO")
+      await advance(SAVE_WINDOW_MS)
+      await held.started
+      expect(
+        writeFileCalls().slice(baseline).map((call) => call.content.includes("ODE604-CARRERA-NUEVO")),
+        "control positivo: el guardado con lo nuevo está en vuelo",
+      ).toEqual([true])
+
+      // Renombrar mientras ese guardado sigue en vuelo, y soltarlo después.
+      await renameActiveTab("ODE604 Carrera")
+      await waitFor(() => !renameInput(), { label: "el modal se cierra", timeoutMs: 15_000 })
+      held.release()
+      // Completion event: el guardado retenido resolvió de una de las dos
+      // formas posibles — lo nuevo llegó al archivo renombrado, o la pestaña
+      // reporta el fallo del guardado. Luego se deja vencer otra ventana de
+      // guardado por si hubiera un reintento.
+      await eventually(
+        async () =>
+          activeTab()?.save_state === "error" ||
+          (await readWorkspaceMarkdown()).some((file) => file.contents.includes("ODE604-CARRERA-NUEVO")),
+        "el guardado retenido resolvió",
+      )
+      await advance(SAVE_WINDOW_MS)
+      await flush(3)
+      expect(mounted!.editor().getText(), "control: el editor tiene lo nuevo").toContain("ODE604-CARRERA-NUEVO")
+
+      const files = await readWorkspaceMarkdown()
+      expect(files.map((file) => file.path.split("/").pop()), "un solo archivo, con el nombre nuevo").toEqual([
+        "ODE604 Carrera.md",
+      ])
+      expect(files[0]?.contents, "el guardado más nuevo sobrevive al renombrado").toContain("ODE604-CARRERA-NUEVO")
+      const rows = await catalogRows()
+      expect(rows.map((row) => row.id), "un solo documento, el mismo UUID").toEqual([writingId])
+      expect(rows[0]?.binding?.canonicalPath, "apuntando al archivo renombrado").toBe(files[0]?.path)
     },
     TEST_TIMEOUT_MS,
   )
