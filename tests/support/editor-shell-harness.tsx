@@ -52,13 +52,14 @@
  */
 import "fake-indexeddb/auto"
 
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { act, type ComponentProps } from "react"
 import { createRoot, type Root } from "react-dom/client"
 
 import { EditorShell } from "@/components/editor/editor-shell"
 import { resetLearnedWordsCacheForTest } from "@/lib/corrections/learned-words-loader"
 import { getSyncWorker } from "@/lib/sync/worker"
-import { resetEditorSessionStoreForTests } from "@/lib/stores/editor-session-store"
+import { getEditorSessionState, resetEditorSessionStoreForTests } from "@/lib/stores/editor-session-store"
 
 import { type EditorHandle, type HarnessWorld, defaultNetwork, tauriEventListeners, world } from "./editor-shell-doubles"
 import { readWorkspaceMarkdown } from "./editor-shell-desktop-doubles"
@@ -603,3 +604,201 @@ export async function waitForMarkdownContaining(needle: string, timeoutMs = 20_0
   )
 }
 
+
+/* ------------------------------------------------------------------ *
+ * Drivers de selección y formularios (ODE-606)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Selecciona `needle` en el editor REAL por el camino del navegador: foco en
+ * el `.ProseMirror`, un `Range` del DOM sobre el nodo de texto y el evento
+ * `selectionchange`, que es lo que escucha el `DOMObserver` de ProseMirror
+ * cuando el usuario arrastra. No usa `setTextSelection`: el shell tiene que
+ * leer la selección desde el DOM, como en producción, y su `selectionUpdate`
+ * (el que abre el popup) se dispara igual que con el ratón.
+ *
+ * Verifica su propio efecto: si ProseMirror no adoptó la selección, lanza.
+ * Devuelve el rango en posiciones del documento.
+ */
+export async function selectEditorText(needle: string, occurrence = 0) {
+  const editor = world.editor
+  if (!editor) throw new Error("El editor real todavía no montó")
+  const root = editor.view.dom as HTMLElement
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let seen = 0
+  let target: { node: Text; offset: number } | null = null
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text
+    let index = node.data.indexOf(needle)
+    while (index !== -1) {
+      if (seen === occurrence) {
+        target = { node, offset: index }
+        break
+      }
+      seen += 1
+      index = node.data.indexOf(needle, index + 1)
+    }
+    if (target) break
+  }
+  if (!target) throw new Error(`El texto ${JSON.stringify(needle)} no está en el editor`)
+
+  await act(async () => {
+    root.focus()
+    const range = document.createRange()
+    range.setStart(target.node, target.offset)
+    range.setEnd(target.node, target.offset + needle.length)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    document.dispatchEvent(new Event("selectionchange"))
+  })
+  await flush(2)
+
+  const { from, to } = editor.state.selection
+  // `EditorHandle` solo declara lo que usan los tests viejos; el doc es el de
+  // ProseMirror real.
+  const selected = (editor.state.doc as unknown as ProseMirrorNode).textBetween(from, to)
+  if (selected !== needle) {
+    throw new Error(
+      `ProseMirror no adoptó la selección del DOM: esperaba ${JSON.stringify(needle)}, tiene ${JSON.stringify(selected)}`,
+    )
+  }
+  return { from, to }
+}
+
+/**
+ * Escribe en un `<textarea>`/`<input>` controlado por React: el setter nativo
+ * más el evento `input`, que es lo que React escucha para su `onChange`.
+ * Asignar `.value` a secas no lo dispara.
+ */
+export async function fillTextField(field: HTMLTextAreaElement | HTMLInputElement, value: string) {
+  const prototype = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set
+  await act(async () => {
+    setter?.call(field, value)
+    field.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  await flush(1)
+  if (field.value !== value) throw new Error("El campo no aceptó el valor escrito")
+}
+
+/** Espera a que una condición ASÍNCRONA (p. ej. una lectura de `localDB`) se cumpla. */
+export async function waitForAsync<T>(
+  probe: () => Promise<T | null | undefined | false>,
+  { timeoutMs = 5000, label = "condición" }: { timeoutMs?: number; label?: string } = {},
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const value = await probe()
+    if (value) return value as T
+    await advance(50)
+  }
+  throw new Error(`waitForAsync agotó ${timeoutMs}ms esperando: ${label}`)
+}
+
+/**
+ * Activa la pestaña del documento con el gesto real y verifica que la
+ * activación ocurrió (ver "Un driver debe verificar su propio efecto" en
+ * `workflow/testing/integration-harness-catalog.md`).
+ */
+export async function clickEditorTab(writingId: string) {
+  const tab = getEditorSessionState().session.tabs.find((candidate) => candidate.writing_id === writingId)
+  if (!tab) throw new Error(`No hay pestaña abierta para ${writingId}`)
+  const node = document.querySelector<HTMLElement>(`[data-editor-tab-id="${tab.id}"]`)
+  if (!node) throw new Error(`La pestaña de ${writingId} no está en el DOM`)
+  await pointerClick(node)
+  const active = getEditorSessionState().session.active_tab_id
+  if (active !== tab.id) {
+    throw new Error(`El gesto sobre la pestaña de ${writingId} no la activó (activa: ${active})`)
+  }
+}
+
+/** Cierra la pestaña del documento con su botón real de cerrar. */
+export async function closeEditorTab(writingId: string) {
+  const tab = getEditorSessionState().session.tabs.find((candidate) => candidate.writing_id === writingId)
+  if (!tab) throw new Error(`No hay pestaña abierta para ${writingId}`)
+  const node = document.querySelector<HTMLElement>(`[data-editor-tab-id="${tab.id}"]`)
+  const close = node?.querySelector<HTMLElement>('[aria-label^="Close "]')
+  if (!close) throw new Error(`La pestaña de ${writingId} no tiene botón de cerrar en el DOM`)
+  await pointerClick(close)
+  const stillOpen = getEditorSessionState().session.tabs.some((candidate) => candidate.writing_id === writingId)
+  if (stillOpen) throw new Error(`El gesto de cerrar no cerró la pestaña de ${writingId}`)
+}
+
+/* ------------------------------------------------------------------ *
+ * Lecturas de anotaciones: documento real y sidebar renderizado (ODE-606)
+ * ------------------------------------------------------------------ */
+
+export type EditorHighlightSpan = { from: number; to: number; text: string; type: string | null }
+export type EditorAnnotationReference = { pos: number; type: string; text: string }
+
+/**
+ * Lee el documento del editor real: los tramos contiguos con marca
+ * `highlight` (con su `annotationType`, `null` si es un highlight suelto) y
+ * los nodos de referencia. Es lo que hay en el documento, no lo que el shell
+ * cree que hay.
+ */
+export function readEditorAnnotations() {
+  const editor = world.editor
+  if (!editor) throw new Error("El editor real todavía no montó")
+  const marks: EditorHighlightSpan[] = []
+  const references: EditorAnnotationReference[] = []
+  ;(editor.state.doc as unknown as ProseMirrorNode).descendants((node, pos) => {
+    if (node.isText) {
+      const highlight = node.marks.find((mark) => mark.type.name === "highlight")
+      if (!highlight) return
+      const type = (highlight.attrs.annotationType as string | null) ?? null
+      const last = marks[marks.length - 1]
+      if (last && last.to === pos && last.type === type) {
+        last.to = pos + node.nodeSize
+        last.text += node.text ?? ""
+      } else {
+        marks.push({ from: pos, to: pos + node.nodeSize, text: node.text ?? "", type })
+      }
+      return
+    }
+    if (node.type.name === "annotationReference" || node.type.name === "footnoteReference") {
+      references.push({ pos, type: String(node.attrs.type), text: String(node.attrs.text ?? "") })
+    }
+  })
+  return { marks, references }
+}
+
+/** Las entradas que el sidebar de notas renderiza; `null` si no está montado. */
+export function readNotesSidebar() {
+  const panel = document.querySelector('[data-testid="editor-panel-notes"]')
+  if (!panel) return null
+  return Array.from(panel.querySelectorAll("article")).map((article) => ({
+    anchor: article.querySelector("p")?.textContent ?? "",
+    body: article.querySelector("textarea")?.value ?? "",
+    badge: (article.querySelector("button")?.textContent ?? "").trim(),
+  }))
+}
+
+/** Abre el sidebar de notas con el botón real del status bar (si no lo está). */
+export async function openNotesSidebar() {
+  const toggle = await waitFor(
+    () => document.querySelector<HTMLElement>('button[aria-label="Notes panel"]'),
+    { label: 'botón "Notes panel"' },
+  )
+  if (toggle.getAttribute("aria-pressed") !== "true") {
+    await act(async () => {
+      toggle.click()
+    })
+    await flush(2)
+  }
+  return waitFor(() => readNotesSidebar(), { label: "sidebar de notas montado" })
+}
+
+/** El popup de selección, si está abierto. */
+export function selectionPopup() {
+  return document.querySelector<HTMLElement>('[data-testid="selection-popup"]')
+}
+
+/** Pulsa una acción del popup de selección con su gesto real (`pointerdown`). */
+export async function clickSelectionPopupAction(label: "Mark passage" | "Annotate passage" | "Add footnote") {
+  const button = selectionPopup()?.querySelector<HTMLElement>(`[aria-label="${label}"]`)
+  if (!button) throw new Error(`El popup de selección no está abierto (acción "${label}")`)
+  await pointerClick(button)
+}
