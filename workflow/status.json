@@ -84,6 +84,10 @@
       {
         "issue": "ODE-445",
         "reason": "Fase 10 closure issue (commit 29d8ac3d). Moved to Done by explicit owner decision without the standard built[] append: the formal DoD evidence (E2E on real DMG, side-by-side comparison vs prototypes, captures at 3 widths) was not executed, and the owner accepted the phase closure substituting that requirement — documented in active_phase.notes. Ignored for status drift; not a missing delivery record."
+      },
+      {
+        "issue": "ODE-628",
+        "reason": "Real production bug (High) found by the ODE-599 shell net and tracked separately, not delivered in this PR. Referenced by ODE-599 commit 49cd43ae ('pin ODE-628 as it.fails'); blocks ODE-599 Entrega 2. Ignored for status drift until delivered."
       }
     ]
   },
