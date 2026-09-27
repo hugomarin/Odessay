@@ -109,12 +109,15 @@ describe("studio shell contract", () => {
 
   it("makes focus mode full-bleed while reserving the native titlebar", () => {
     const shell = read("components/editor/editor-shell.tsx")
+    // Entering focus mode lives in its hook since ODE-602; the shell still
+    // owns the restoration ref and passes it in.
+    const focusMode = read("hooks/useFocusMode.ts")
 
     // The editor uses the viewport edge-to-edge in focus mode. Only the
     // overlay titlebar's 46px safe area remains above the sheet.
     expect(shell).toContain("focusModeRestorationRef")
-    expect(shell).toContain("setActivePanel(null)")
-    expect(shell).toContain("setIsFindReplaceOpen(false)")
+    expect(focusMode).toContain("setActivePanel(null)")
+    expect(focusMode).toContain("setIsFindReplaceOpen(false)")
     expect(shell).toContain('isFocusMode ? "gap-0 px-0 pb-0 pt-[46px]"')
     expect(shell).toContain('isFocusMode ? "rounded-none shadow-none" : "rounded-[10px] shadow-float"')
   })

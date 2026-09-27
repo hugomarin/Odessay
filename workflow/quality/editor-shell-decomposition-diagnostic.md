@@ -205,6 +205,22 @@ Cada caso se validó con una mutación que lo pone en rojo por la razón esperad
 
 **Bug encontrado — ODE-630.** En rich mode, `richFindMatches` se memoriza con `editor` (la misma instancia durante toda la vida de la shell) y no con el documento. Replace y Replace all insertan en las posiciones de ese memo rancio: dos Replace seguidos corrompen el texto, y tras cambiar de pestaña con la búsqueda abierta "Replace all" escribe en el documento nuevo con las posiciones del anterior, y se guarda. Sus dos casos quedan como `it.fails` y la mudanza no los arregla.
 
+**Actualización (2026-09-27, ODE-602 — corte 4a, entrega 2: la mudanza del chrome):** mudanza mecánica a tres hooks, cada uno llamado donde estaba su código, con el estado y los refs en la shell:
+
+- `hooks/useFocusMode.ts`: entrar, salir y alternar (solo callbacks).
+- `hooks/useTableOfContents.ts`: los dos espejos de la TOC, tal cual (su dueño lo decide ODE-609), descartar el item activo que desaparece, seguir el scroll y llevar el cursor al encabezado pulsado. Sus cuatro efectos en el mismo orden y posición.
+- `hooks/useFindReplace.ts`: coincidencias, decoraciones, abrir/cerrar, navegar y reemplazar. Se llama justo detrás del efecto que publica el estado de la pestaña: sus memos vivían delante de ese efecto, que no los lee, y sus efectos detrás. El bug de ODE-630 viaja tal cual. `handleRunAction`, más arriba, abre la búsqueda por una declaración de función elevada que delega en el hook, como hacía la declaración original.
+
+Se quedan en la shell, por triviales (menos de 20 líneas y un estado) o porque moverlos cambiaría el orden de efectos: los dos callbacks que la extensión TableOfContents necesita al crearse y su debounce, los dos efectos de limpieza de ese debounce, la clase de focus mode en `<body>`, el visor de imagen (abrir, cerrar y limpiarlo al cambiar de documento), `closeActivePanel` y `openInsertImageModal`. El manejador de teclado (Escape y atajos) es de los comandos, corte 4b (ODE-603). La red de la entrega 1 pasa idéntica antes y después, y sus mutaciones se repitieron sobre los hooks. Contra `main` (`be1ebf4b`), con el mismo método:
+
+```text
+4,628 líneas        (-464)
+   33 useEffect     (-7)
+   52 useCallback   (-8)
+   11 useMemo       (-3)
+    5 efectos espejo en la shell   (7 → 5; los dos de la TOC viven ahora en su hook)
+```
+
 ## 2. Hallazgo 1 — cada dato tiene dos dueños
 
 Diecinueve efectos existen solo para mantener una copia sombra del estado en un ref: `title → titleRef`, `version → versionRef`, `lifecycle → lifecycleRef`, y así con unos veinte campos. Y hay 602 puntos donde el código lee la sombra en vez del estado.
