@@ -17,6 +17,11 @@ import {
 import { useCorrectionActions, type CorrectionToastState } from "@/hooks/useCorrectionActions"
 import { useCorrectionBlocks } from "@/hooks/useCorrectionBlocks"
 import { useCorrectionLifecycle } from "@/hooks/useCorrectionLifecycle"
+import {
+  useExternalDocumentChanges,
+  type ExternalContentConflict,
+  type ExternalFileNotice,
+} from "@/hooks/useExternalDocumentChanges"
 import { type EditorCursorSnapshot, useFindReplace } from "@/hooks/useFindReplace"
 import { type FocusModeRestoration, useFocusMode } from "@/hooks/useFocusMode"
 import { useSessionRestore } from "@/hooks/useSessionRestore"
@@ -159,8 +164,6 @@ import {
 } from "@/lib/desktop/document-naming"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { consumePendingOpenFile } from "@/lib/editor/pending-open-file"
-import { computeHasPendingLocalEdit, resolveExternalContentChange } from "@/lib/editor/external-change-policy"
-import type { CatalogChange } from "@/lib/services/contracts/document-catalog"
 import {
   describeOpenOutcome,
   isUnifiedOpenEnabled,
@@ -269,25 +272,6 @@ type EditorPanel = "notes" | "properties" | "grammar" | "share" | null
 type RenameWritingSnapshot = {
   title: string
   bodyText: string
-}
-
-
-type ExternalFileNotice =
-  | { kind: "moved"; path: string | null }
-  | { kind: "deleted"; path: string | null }
-  | { kind: "relocate-failed"; path: string | null }
-  | { kind: "content-changed"; path: string | null }
-
-/**
- * WATCH-07 — set only while there is BOTH a pending local edit AND a known
- * external content change to the same document. Blocks persistEditorSnapshot
- * from auto-saving (which would otherwise silently overwrite the external
- * edit the moment the debounce fires) until the user explicitly resolves it
- * via "Reload external" or "Keep my version".
- */
-type ExternalContentConflict = {
-  externalContentHash: string
-  path: string | null
 }
 
 // Lectura/borrado de la caché de bloques de corrección para la hidratación
@@ -1797,199 +1781,31 @@ export function EditorShell({
     setSidebarMode("collapsed")
   }, [])
 
-  useEffect(() => {
-    if (!isDesktopRuntime() || !currentWritingId) {
-      currentCanonicalPathRef.current = null
-      setCanonicalPath(null)
-      setExternalFileNotice(null)
-      return
-    }
-
-    let cancelled = false
-
-    let unsubscribeCatalog: (() => void) | null = null
-
-    // Desktop presence and bindings live in SQLite's DocumentCatalog. The
-    // legacy IndexedDB change bus does not receive watcher detach events, so
-    // listening only to it leaves an externally removed file looking "Saved".
-    void import("@/lib/queries/document-catalog")
-      .then(({ getCatalogRecord, subscribeToCatalog }) => {
-        if (cancelled) return
-
-        const syncCurrentWritingState = async (reason?: CatalogChange["reason"]) => {
-          const catalogRecord = await getCatalogRecord(currentWritingId)
-          if (cancelled || !catalogRecord) return
-
-          // ODE-542: proyectar el estado durable de sync solo en lecturas de
-          // reconciliación. La lectura inicial es segura (al activar un
-          // documento no hay guardado en vuelo) y `cloud-snapshot` solo se
-          // emite tras un flush que confirmó el write que describe. Las demás
-          // razones (`content`, `upsert`, `excerpt`, `bulk`…) pueden llegar con
-          // la fila del guardado ANTERIOR mientras uno nuevo sigue en vuelo:
-          // proyectarlas mostraría un "Saved" falso.
-          if (
-            (reason === undefined || reason === "cloud-snapshot") &&
-            currentWritingIdRef.current === currentWritingId
-          ) {
-            const current = syncStatusRef.current
-            const reconciled = reconcileSaveStateFromDurable({
-              current,
-              durable: { syncStatus: catalogRecord.syncStatus, cloudPresent: catalogRecord.cloudPresent },
-              isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
-            })
-            if (reconciled) {
-              console.info(
-                formatSaveStateDiagnostic({
-                  writingId: currentWritingId,
-                  durableSyncStatus: catalogRecord.syncStatus,
-                  current,
-                  next: reconciled,
-                  reason: `catalog-${reason ?? "initial"}`,
-                }),
-              )
-              applySyncStatus(reconciled)
-              updateTabSaveState({
-                tabId: currentWritingId,
-                saveState: reconciled,
-                hasPendingSync: saveStateToHasPendingSync(reconciled),
-              })
-            }
-          }
-
-          const nextCanonicalPath = catalogRecord.binding?.canonicalPath ?? null
-          const previousCanonicalPath = currentCanonicalPathRef.current
-
-          if (!catalogRecord.localPresent && previousCanonicalPath) {
-            currentCanonicalPathRef.current = null
-            setCanonicalPath(null)
-            setExternalFileNotice({ kind: "deleted", path: previousCanonicalPath })
-            return
-          }
-
-          if (
-            previousCanonicalPath &&
-            nextCanonicalPath &&
-            previousCanonicalPath !== nextCanonicalPath
-          ) {
-            currentCanonicalPathRef.current = nextCanonicalPath
-            setCanonicalPath(nextCanonicalPath)
-            setExternalFileNotice({ kind: "moved", path: nextCanonicalPath })
-            return
-          }
-
-          currentCanonicalPathRef.current = nextCanonicalPath
-          setCanonicalPath(nextCanonicalPath)
-
-          // WATCH-07 — the file's content itself (not just its path/presence)
-          // may have changed externally. The very first run for a freshly
-          // opened document has no baseline yet: only seed the coordinator's
-          // own tracked baseline here, never reload — the separate hydration
-          // effect already owns setting the editor's initial content for
-          // that case, and racing it here would double-apply the same
-          // content. The coordinator (not a local ref) owns this baseline
-          // from here on — see its own getDurableContentHash doc comment
-          // for why a caller-local copy would race a queued second save.
-          const nextContentHash = catalogRecord.binding?.contentHash ?? null
-          if (!hasSeededBaselineRef.current) {
-            hasSeededBaselineRef.current = true
-            persistenceCoordinator.setDurableContentHash(currentWritingId, nextContentHash)
-            persistenceCoordinator.discardUnconfirmed(currentWritingId)
-            setExternalFileNotice(null)
-            return
-          }
-
-          const decision = resolveExternalContentChange({
-            baselineContentHash: persistenceCoordinator.getDurableContentHash(currentWritingId),
-            currentContentHash: nextContentHash,
-            hasPendingLocalEdit: computeHasPendingLocalEdit({
-              hasUnconfirmedLocalEdit: hasUnconfirmedLocalEditRef.current,
-              hasUnconfirmedPersistedContent: persistenceCoordinator.hasUnconfirmedContent({
-                writingId: currentWritingId,
-              }),
-            }),
-            reason,
-          })
-
-          if (decision.action === "none") {
-            setExternalFileNotice(null)
-            return
-          }
-
-          if (decision.action === "conflict") {
-            // Never auto-reload over an unsaved edit, and never let it
-            // silently save over the external one either — persistEditorSnapshot
-            // checks externalContentConflictRef before scheduling any write.
-            const conflict: ExternalContentConflict = { externalContentHash: nextContentHash!, path: nextCanonicalPath }
-            externalContentConflictRef.current = conflict
-            setExternalContentConflict(conflict)
-            return
-          }
-
-          // CLEAN auto-reload: nothing local is at risk, so silently keeping
-          // stale content would be strictly worse than adopting the external
-          // version. Re-read from the real service rather than trusting the
-          // catalog's own cached body (it has none — only the hash).
-          try {
-            const opened = await (await getDocumentService()).openWriting(currentWritingId)
-            const liveEditor = editorInstanceRef.current
-            if (cancelled || !opened.data || !liveEditor) return
-            isApplyingContentRef.current = true
-            liveEditor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
-            isApplyingContentRef.current = false
-            refreshRichFootnotes()
-            updateDerivedEditorState(liveEditor)
-            hasUnconfirmedLocalEditRef.current = false
-            persistenceCoordinator.discardUnconfirmed(currentWritingId)
-            persistenceCoordinator.setDurableContentHash(currentWritingId, nextContentHash)
-            setExternalFileNotice({ kind: "content-changed", path: nextCanonicalPath })
-          } catch {
-            // Leave the stale content open and the previous notice in place;
-            // the next catalog event or focus retries the reload.
-          }
-        }
-
-        // ODE-574: una lectura del catálogo que falla (p. ej. SQLite ocupado)
-        // no puede quedar como rechazo sin manejar. El contenido sigue abierto
-        // y el siguiente cambio del catálogo o la siguiente activación
-        // reintentan.
-        const logCatalogReadFailure = (error: unknown) => {
-          console.error("[editor] catalog state read failed", {
-            writingId: currentWritingId,
-            error: error instanceof Error ? error.message : String(error),
-          })
-        }
-        void syncCurrentWritingState().catch(logCatalogReadFailure)
-        unsubscribeCatalog = subscribeToCatalog((change) => {
-          if (change.documentIds.includes(currentWritingId)) {
-            void syncCurrentWritingState(change.reason).catch(logCatalogReadFailure)
-          }
-        })
-      })
-      .catch(() => {
-        // A catalog read failure leaves the editor content open; the next
-        // catalog event or document activation retries the state projection.
-      })
-
-    return () => {
-      cancelled = true
-      unsubscribeCatalog?.()
-      // Reset the canonical-path tracker when the watched writing changes.
-      // Otherwise the next writing's first sync sees the previous writing's path
-      // as the "previous" value and flashes a false "file moved" notice.
-      currentCanonicalPathRef.current = null
-      setCanonicalPath(null)
-      hasSeededBaselineRef.current = false
-      hasUnconfirmedLocalEditRef.current = false
-      externalContentConflictRef.current = null
-      setExternalContentConflict(null)
-    }
-  }, [
+  // ODE-599: la conexión con desktop (suscripción al catálogo, avisos de
+  // borrado/movimiento, recarga limpia y conflicto externo) vive en su hook.
+  // Se llama aquí, donde estaba el efecto, así que el orden de efectos no
+  // cambia; el estado y los refs siguen siendo de la shell.
+  const { keepMyVersion, reloadExternalVersion } = useExternalDocumentChanges({
     applySyncStatus,
+    currentCanonicalPathRef,
     currentWritingId,
+    currentWritingIdRef,
+    editor,
+    editorInstanceRef,
+    externalContentConflict,
+    externalContentConflictRef,
+    hasSeededBaselineRef,
+    hasUnconfirmedLocalEditRef,
+    isApplyingContentRef,
     persistenceCoordinator,
+    persistEditorSnapshot,
     refreshRichFootnotes,
+    setCanonicalPath,
+    setExternalContentConflict,
+    setExternalFileNotice,
+    syncStatusRef,
     updateDerivedEditorState,
-  ])
+  })
 
   useEffect(() => {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
@@ -4144,46 +3960,14 @@ export function EditorShell({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  void (async () => {
-                    const writingId = currentWritingIdRef.current
-                    if (!writingId || !editor) return
-                    const opened = await (await getDocumentService()).openWriting(writingId)
-                    if (!opened.data) return
-                    isApplyingContentRef.current = true
-                    editor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
-                    isApplyingContentRef.current = false
-                    refreshRichFootnotes()
-                    updateDerivedEditorState(editor)
-                    hasUnconfirmedLocalEditRef.current = false
-                    persistenceCoordinator.discardUnconfirmed(writingId)
-                    persistenceCoordinator.setDurableContentHash(writingId, externalContentConflict.externalContentHash)
-                    externalContentConflictRef.current = null
-                    setExternalContentConflict(null)
-                    setExternalFileNotice({ kind: "content-changed", path: externalContentConflict.path })
-                  })()
-                }}
+                onClick={reloadExternalVersion}
               >
                 Reload external
               </Button>
               <Button
                 type="button"
                 size="sm"
-                onClick={() => {
-                  const writingId = currentWritingIdRef.current
-                  if (!editor || !writingId) return
-                  // Pre-seed the coordinator's tracked baseline to exactly
-                  // the external hash this conflict was raised against —
-                  // disk really is at that version right now, so the write
-                  // this triggers targets it precisely (one deliberate
-                  // overwrite, never a bypass of the guard itself). Clear
-                  // the conflict *before* persisting so persistEditorSnapshot's
-                  // own guard doesn't refuse this call too.
-                  persistenceCoordinator.setDurableContentHash(writingId, externalContentConflict.externalContentHash)
-                  externalContentConflictRef.current = null
-                  setExternalContentConflict(null)
-                  void persistEditorSnapshot(editor, undefined, { awaitDurability: true })
-                }}
+                onClick={keepMyVersion}
               >
                 Keep my version
               </Button>
