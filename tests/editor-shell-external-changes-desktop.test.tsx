@@ -32,6 +32,11 @@
  * unificado real, que registra su carpeta como BindingRoot; la shell no se
  * siembra por dentro.
  *
+ * Orden de producción: el reconciliador arranca ANTES del Open File, como en
+ * `DesktopAppShell` al abrir la app. En ese orden hoy la cadena no llega a la
+ * shell (ODE-628: `registerExternalRoot` no refresca el watcher), así que los
+ * casos de cambio externo quedan como `it.fails`; ver la nota de su `describe`.
+ *
  * Completion events: el texto del `.md` en el disco real y el DOM (editor,
  * banner, aviso). Nunca "se llamó a X".
  *
@@ -220,18 +225,48 @@ async function openFromNativeMenu(path: string, body: string) {
 }
 
 /**
- * Arranca el reconciliador real, como `DesktopAppShell` al abrir la app, y
- * espera a que el watcher nativo cubra la carpeta de los documentos.
+ * Arranca el reconciliador real como `DesktopAppShell`: al abrir la app, ANTES
+ * de cualquier Open File. Así la prueba recorre el orden de producción; un
+ * arranque posterior al registro del BindingRoot sería un reinicio de la app,
+ * no la sesión en la que el usuario abrió el archivo (NON_PRODUCTION_PATH).
  */
 async function startReconciler() {
   await ensureWorkspaceReconciler()
-  const folder = documentsFolder()
-  await waitFor(
-    () => world.fsWatchers.some((watcher) => !watcher.closed && watcher.paths.some((path) => folder.startsWith(path) || path.startsWith(folder))),
-    { label: "watcher nativo sobre la carpeta de documentos", timeoutMs: 10_000 },
-  )
-  // El arranque proyecta una primera pasada; que asiente antes del cambio.
+  // El arranque proyecta una primera pasada; que asiente antes de abrir.
   await advance(100)
+}
+
+/** ¿Hay un watcher nativo vivo que cubra `folder`? */
+function watcherCovers(folder: string) {
+  return world.fsWatchers.some(
+    (watcher) =>
+      !watcher.closed && watcher.paths.some((path) => folder.startsWith(path) || path.startsWith(folder)),
+  )
+}
+
+/**
+ * Tras el Open File, espera a que el watcher nativo cubra la carpeta del
+ * BindingRoot externo recién registrado, sin reiniciar el reconciliador.
+ */
+async function waitForWatcherOnDocuments() {
+  const folder = documentsFolder()
+  await waitFor(() => watcherCovers(folder), {
+    label: "watcher nativo sobre la carpeta de documentos",
+    timeoutMs: 10_000,
+  })
+  await advance(100)
+}
+
+/**
+ * Secuencia de REINICIO, no la de producción: el reconciliador arranca con el
+ * BindingRoot externo ya registrado, así que lo lee al arrancar y su watcher
+ * cubre la carpeta. Solo la usa la caracterización de ODE-627, para que siga
+ * fallando por su propio bug (la aserción de `ODE627-LOCAL`) y no por ODE-628.
+ * Cuando ODE-628 se arregle, pasa al orden de producción como las demás.
+ */
+async function startReconcilerAfterOpen() {
+  await startReconciler()
+  await waitForWatcherOnDocuments()
 }
 
 /** Espera a que el reconciliador (coalesce de 250ms) proyecte y la shell reaccione. */
@@ -303,14 +338,24 @@ async function trackCatalogSubscriptions() {
  * ------------------------------------------------------------------ */
 
 describe("ODE-599 — la shell reacciona a cambios externos del documento abierto", () => {
-  it(
+  // BUG CONOCIDO, encontrado por esta red al seguir el orden de producción:
+  // ODE-628. `DesktopAppShell` arranca el reconciliador al abrir la app, ANTES
+  // del Open File; `registerExternalRoot` registra el BindingRoot externo pero
+  // no llama a `refreshWorkspaceReconcilerRoots()`, así que ningún watcher
+  // cubre la carpeta hasta reiniciar la app. Las seis pruebas fallan en
+  // `waitForWatcherOnDocuments` (el watcher nunca aparece), no en su aserción.
+  // Control: con una llamada a `refreshWorkspaceReconcilerRoots()` tras el
+  // open, las seis pasan con el cuerpo intacto. Al arreglar ODE-628 pasan a
+  // `it` sin tocar el cuerpo.
+  it.fails(
     "WATCH-07 limpio: recarga sola el contenido externo y no escribe al disco",
     async () => {
       const subscriptions = await trackCatalogSubscriptions()
       const path = writeMarkdownFile("Carta limpia", "ODE599 version original.")
+      await startReconciler()
       await mountLoaded()
       const writingId = await openFromNativeMenu(path, "ODE599 version original.")
-      await startReconciler()
+      await waitForWatcherOnDocuments()
       const liveSubscriptions = subscriptions()
       expect(liveSubscriptions, "control positivo: la shell escucha el catálogo").toBeGreaterThan(0)
 
@@ -342,13 +387,14 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
     TEST_TIMEOUT_MS,
   )
 
-  it(
+  it.fails(
     "WATCH-07 sucio: banner de conflicto, ninguna escritura pisa la externa, y «Keep my version» escribe la del usuario",
     async () => {
       const path = writeMarkdownFile("Carta sucia", "ODE599 base sucia.")
+      await startReconciler()
       await mountLoaded()
       const writingId = await openFromNativeMenu(path, "ODE599 base sucia.")
-      await startReconciler()
+      await waitForWatcherOnDocuments()
 
       // Una edición local en vuelo: el guardado llega al disco lento y queda
       // retenido, así que hay edición pendiente cuando llega el cambio externo.
@@ -394,13 +440,14 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
     TEST_TIMEOUT_MS,
   )
 
-  it(
+  it.fails(
     "WATCH-07 sucio: «Reload external» descarta la edición local y no escribe",
     async () => {
       const path = writeMarkdownFile("Carta recarga", "ODE599 base recarga.")
+      await startReconciler()
       await mountLoaded()
       await openFromNativeMenu(path, "ODE599 base recarga.")
-      await startReconciler()
+      await waitForWatcherOnDocuments()
 
       const held = holdWriteFile((candidate) => candidate === path)
       await typeInEditor(" ODE599-DESCARTAR")
@@ -431,13 +478,14 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
     TEST_TIMEOUT_MS,
   )
 
-  it(
+  it.fails(
     "borrado externo: aviso una vez, el contenido sigue abierto y la pestaña conserva la identidad",
     async () => {
       const path = writeMarkdownFile("Carta borrada", "ODE599 cuerpo borrado.")
+      await startReconciler()
       await mountLoaded()
       const writingId = await openFromNativeMenu(path, "ODE599 cuerpo borrado.")
-      await startReconciler()
+      await waitForWatcherOnDocuments()
       const tabsBefore = getEditorSessionState().session.tabs.filter((tab) => tab.writing_id === writingId).length
       expect(tabsBefore, "control positivo: una pestaña para el documento").toBe(1)
 
@@ -465,13 +513,14 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
     TEST_TIMEOUT_MS,
   )
 
-  it(
+  it.fails(
     "movimiento externo: aviso con la ruta nueva, una vez, y la misma identidad",
     async () => {
       const path = writeMarkdownFile("Carta movida", "ODE599 cuerpo movido.")
+      await startReconciler()
       await mountLoaded()
       const writingId = await openFromNativeMenu(path, "ODE599 cuerpo movido.")
-      await startReconciler()
+      await waitForWatcherOnDocuments()
 
       const appearances = countNoticeAppearances(MOVED_NOTICE)
       const nextPath = join(documentsFolder(), "Carta renombrada.md")
@@ -496,15 +545,16 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
     TEST_TIMEOUT_MS,
   )
 
-  it(
+  it.fails(
     "un cambio de pestaña entre el evento y su resolución no aplica el cambio de A sobre B",
     async () => {
       const pathA = writeMarkdownFile("Carta A", "ODE599 cuerpo A.")
       const pathB = writeMarkdownFile("Carta B", "ODE599 cuerpo B.")
+      await startReconciler()
       await mountLoaded()
       const writingA = await openFromNativeMenu(pathA, "ODE599 cuerpo A.")
       const writingB = await openFromNativeMenu(pathB, "ODE599 cuerpo B.")
-      await startReconciler()
+      await waitForWatcherOnDocuments()
 
       // Volver a A con el gesto real de la pestaña.
       const tabA = getEditorSessionState().session.tabs.find((tab) => tab.writing_id === writingA)!
@@ -562,7 +612,7 @@ describe("ODE-627 — caracterización: un autosave rechazado por CONFLICT antes
       const path = writeMarkdownFile("Carta rechazada", "ODE599 base rechazada.")
       await mountLoaded()
       await openFromNativeMenu(path, "ODE599 base rechazada.")
-      await startReconciler()
+      await startReconcilerAfterOpen()
 
       await typeInEditor(" ODE627-LOCAL")
       await advance(3_700)
@@ -590,6 +640,7 @@ describe("ODE-599 — cerrar la ventana espera el guardado pendiente", () => {
     "el texto tecleado justo antes de cerrar llega al disco antes de destroy()",
     async () => {
       const path = writeMarkdownFile("Carta cierre", "ODE599 cuerpo cierre.")
+      await startReconciler()
       await mountLoaded()
       await openFromNativeMenu(path, "ODE599 cuerpo cierre.")
       await waitForShell(() => world.windowCloseHandler, "la shell registró la guardia de cierre")

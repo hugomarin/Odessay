@@ -226,7 +226,7 @@ Nueve filas del capability map nombran este archivo (o el hook que salió de él
 
 - **STATE-05** — el seam `store → EditorShell` (aplicación al DOM) es literalmente el gap declarado de la fila.
 - **EXP-05** — `exportBinary`/`exportMarkdown` del shell nunca se conectan al `saveBinaryArtifact` ya probado.
-- **WATCH-07** — que el shell siembre el `content_hash` base correcto al abrir no lo prueba nadie; el proof de integración lo siembra a mano y lo documenta como tal. *(ODE-599: la red de la shell ya lo ejercita —la línea base la siembra la primera lectura del catálogo tras abrir por el opener real— y encontró un bug real de clasificación limpio/sucio tras un autosave rechazado, ODE-627; ver la fila del mapa.)*
+- **WATCH-07** — que el shell siembre el `content_hash` base correcto al abrir no lo prueba nadie; el proof de integración lo siembra a mano y lo documenta como tal. *(ODE-599: la red de la shell ya lo ejercita —la línea base la siembra la primera lectura del catálogo tras abrir por el opener real— y encontró dos bugs reales: la clasificación limpio/sucio tras un autosave rechazado, ODE-627, y, en el orden de producción, que el Open File fuera de todo Workspace no refresca el watcher, ODE-628; las pruebas afectadas quedan como `it.fails`; ver la fila del mapa.)*
 
 (STATE-07 salió de esta lista en ODE-598: el restore de cursor/selección vive desde ODE-562 en `hooks/useDocumentHydration.ts` y lo ejercita `tests/editor-shell-selection-restore.test.tsx`; ver la fila del mapa.)
 
