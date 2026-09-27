@@ -6,7 +6,6 @@ import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents
 import { generateHTML } from "@tiptap/html"
 import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
-import { TextSelection } from "@tiptap/pm/state"
 import { useRouter } from "next/navigation"
 import {
   activationHydrates,
@@ -18,7 +17,10 @@ import {
 import { useCorrectionActions, type CorrectionToastState } from "@/hooks/useCorrectionActions"
 import { useCorrectionBlocks } from "@/hooks/useCorrectionBlocks"
 import { useCorrectionLifecycle } from "@/hooks/useCorrectionLifecycle"
+import { type EditorCursorSnapshot, useFindReplace } from "@/hooks/useFindReplace"
+import { type FocusModeRestoration, useFocusMode } from "@/hooks/useFocusMode"
 import { useSessionRestore } from "@/hooks/useSessionRestore"
+import { useTableOfContents } from "@/hooks/useTableOfContents"
 import { useWorkspaceTabOpening } from "@/hooks/useWorkspaceTabOpening"
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs"
 import {
@@ -78,17 +80,6 @@ import {
 import { areFloatingOverlayAnchorsEqual } from "@/lib/reading/floating-overlay-position"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
-import {
-  clearFindReplaceQueryState,
-  clampFindReplaceIndex,
-  findDocumentMatches,
-  findTextMatches,
-  renderFindReplaceOverlayHtml,
-  replaceAllMatchesInText,
-  replaceMatchInText,
-  resolveNextFindReplaceIndex,
-  setFindReplaceQueryState,
-} from "@/lib/editor/find-replace"
 import {
   clearPublicationSuggestions,
   setPublicationSuggestions as setEditorPublicationSuggestions,
@@ -234,26 +225,6 @@ type PendingRichSelectionSnapshot = {
   popupPosition: SelectionPopupPosition
   bubblePosition: AnnotationBubblePosition
 }
-
-type EditorCursorSnapshot =
-  | {
-      mode: "rich"
-      from: number
-      to: number
-    }
-  | {
-      mode: "markdown"
-      start: number
-      end: number
-      scrollTop?: number
-      scrollLeft?: number
-      editorScrollTop?: number
-      editorScrollLeft?: number
-      shellScrollTop?: number
-      shellScrollLeft?: number
-      windowScrollX?: number
-      windowScrollY?: number
-    }
 
 type EditorPanel = "notes" | "properties" | "grammar" | "share" | null
 
@@ -769,44 +740,18 @@ export function EditorShell({
     hydrationGenerationOwnerRef.current = createHydrationGenerationOwner()
   }
   const currentCanonicalPathRef = useRef<string | null>(null)
-  const focusModeRestorationRef = useRef<{
-    activePanel: EditorPanel
-    isFindReplaceOpen: boolean
-  } | null>(null)
+  const focusModeRestorationRef = useRef<FocusModeRestoration | null>(null)
 
-  const enterFocusMode = useCallback(() => {
-    if (isFocusMode) {
-      return
-    }
-
-    focusModeRestorationRef.current = { activePanel, isFindReplaceOpen }
-
-    setActivePanel(null)
-    setIsFindReplaceOpen(false)
-    setIsFocusMode(true)
-  }, [activePanel, isFindReplaceOpen, isFocusMode])
-
-  const exitFocusMode = useCallback(() => {
-    if (!isFocusMode) {
-      return
-    }
-
-    const stateToRestore = focusModeRestorationRef.current
-    focusModeRestorationRef.current = null
-    if (stateToRestore) {
-      setActivePanel(stateToRestore.activePanel)
-      setIsFindReplaceOpen(stateToRestore.isFindReplaceOpen)
-    }
-    setIsFocusMode(false)
-  }, [isFocusMode])
-
-  const toggleFocusMode = useCallback(() => {
-    if (isFocusMode) {
-      exitFocusMode()
-    } else {
-      enterFocusMode()
-    }
-  }, [enterFocusMode, exitFocusMode, isFocusMode])
+  // ODE-602: focus mode (mudanza mecánica; mismos callbacks, en esta posición).
+  const { exitFocusMode, toggleFocusMode } = useFocusMode({
+    activePanel,
+    focusModeRestorationRef,
+    isFindReplaceOpen,
+    isFocusMode,
+    setActivePanel,
+    setIsFindReplaceOpen,
+    setIsFocusMode,
+  })
   const navigatedToDraftRef = useRef(false)
   const identityEnsuredRef = useRef(false)
   const desktopWebHandoffAppliedRef = useRef(false)
@@ -1600,97 +1545,17 @@ export function EditorShell({
     setImageModalOpen(true)
   }, [editor, persistEditorSnapshot])
 
-  useEffect(() => {
-    tableOfContentsItemsRef.current = tableOfContentsItems
-  }, [tableOfContentsItems])
-
-  useEffect(() => {
-    activeTableOfContentsItemIdRef.current = selectedTableOfContentsItemId
-  }, [selectedTableOfContentsItemId])
-
-  useEffect(() => {
-    if (
-      selectedTableOfContentsItemId &&
-      !tableOfContentsItems.some((item) => item.id === selectedTableOfContentsItemId)
-    ) {
-      setSelectedTableOfContentsItemId(null)
-    }
-  }, [selectedTableOfContentsItemId, tableOfContentsItems])
-
-  const syncActiveTableOfContentsItemFromScroll = useCallback(() => {
-    const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-    const items = tableOfContentsItemsRef.current
-
-    if (items.length === 0) {
-      return
-    }
-
-    const editorViewportRect = editorViewport?.getBoundingClientRect()
-    const usesEditorScroll = editorViewport
-      ? editorViewport.scrollHeight > editorViewport.clientHeight + 1
-      : false
-    const viewportTop = usesEditorScroll && editorViewportRect ? editorViewportRect.top : 0
-    const viewportBottom = usesEditorScroll && editorViewportRect ? editorViewportRect.bottom : window.innerHeight
-    const activationLine = viewportTop + 96
-    const visibleItems = items
-      .map((item) => ({ item, rect: item.dom.getBoundingClientRect() }))
-      .filter(({ rect }) => rect.bottom >= viewportTop && rect.top <= viewportBottom)
-
-    const nextActiveItem = visibleItems.reduce<TableOfContentDataItem | null>((closest, current) => {
-      if (!closest) {
-        return current.item
-      }
-
-      const closestRect = closest.dom.getBoundingClientRect()
-      const closestDistance = Math.abs(closestRect.top - activationLine)
-      const currentDistance = Math.abs(current.rect.top - activationLine)
-      return currentDistance < closestDistance ? current.item : closest
-    }, null)
-
-    if (nextActiveItem && nextActiveItem.id !== activeTableOfContentsItemIdRef.current) {
-      activeTableOfContentsItemIdRef.current = nextActiveItem.id
-      setSelectedTableOfContentsItemId(nextActiveItem.id)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!editor || typeof window === "undefined") {
-      return
-    }
-
-    const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-    const scrollHandler = editor.storage.tableOfContents?.scrollHandler
-
-    const handleScroll = () => {
-      if (typeof scrollHandler === "function") {
-        scrollHandler()
-      }
-
-      if (tableOfContentsScrollRafRef.current !== null) {
-        return
-      }
-
-      tableOfContentsScrollRafRef.current = window.requestAnimationFrame(() => {
-        tableOfContentsScrollRafRef.current = null
-        syncActiveTableOfContentsItemFromScroll()
-      })
-    }
-
-    editor.commands.updateTableOfContents()
-    handleScroll()
-    editorViewport?.addEventListener("scroll", handleScroll, { passive: true })
-    window.addEventListener("scroll", handleScroll, { passive: true })
-
-    return () => {
-      editorViewport?.removeEventListener("scroll", handleScroll)
-      window.removeEventListener("scroll", handleScroll)
-
-      if (tableOfContentsScrollRafRef.current !== null) {
-        window.cancelAnimationFrame(tableOfContentsScrollRafRef.current)
-        tableOfContentsScrollRafRef.current = null
-      }
-    }
-  }, [editor, syncActiveTableOfContentsItemFromScroll, tableOfContentsItems.length])
+  // ODE-602: tabla de contenidos (mudanza mecánica; mismos efectos, en el
+  // mismo orden y en esta posición).
+  const { navigateToTableOfContentsItem } = useTableOfContents({
+    activeTableOfContentsItemIdRef,
+    editor,
+    selectedTableOfContentsItemId,
+    setSelectedTableOfContentsItemId,
+    tableOfContentsItems,
+    tableOfContentsItemsRef,
+    tableOfContentsScrollRafRef,
+  })
 
   const persistCurrentWorkspaceViewState = useCallback(() => {
     const tabId = currentWritingIdRef.current ?? EDITOR_DRAFT_TAB_ID
@@ -2324,29 +2189,6 @@ export function EditorShell({
     setActivePanel(null)
   }, [])
 
-  const navigateToTableOfContentsItem = useCallback(
-    (item: TableOfContentDataItem) => {
-      if (!editor) {
-        return
-      }
-
-      const cursorPosition = Math.min(item.pos + 1, editor.state.doc.content.size)
-      setSelectedTableOfContentsItemId(item.id)
-      editor.chain().focus().setTextSelection({ from: cursorPosition, to: cursorPosition }).run()
-
-      // Scroll the heading to the center of the visible area so the caret
-      // isn't hidden by the fixed topbar or bottom status bar.
-      requestAnimationFrame(() => {
-        const domPosition = editor.view.domAtPos(cursorPosition)
-        const element =
-          domPosition.node instanceof Element
-            ? domPosition.node
-            : domPosition.node.parentElement
-        element?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
-      })
-    },
-    [editor],
-  )
 
   const getRichSelectionOverlayPositions = useCallback((from: number, to: number) => {
     if (!editor) return null
@@ -3579,24 +3421,6 @@ export function EditorShell({
     titleRef,
     updatePersistedBlocksFromSuggestions,
   })
-  const markdownFindMatches = useMemo(
-    () => (isFindReplaceOpen ? findTextMatches(markdownValue, findQuery, findCaseSensitive) : []),
-    [findCaseSensitive, findQuery, isFindReplaceOpen, markdownValue],
-  )
-  const richFindMatches = useMemo(
-    () => (editor && isFindReplaceOpen ? findDocumentMatches(editor.state.doc, findQuery, findCaseSensitive) : []),
-    [editor, findCaseSensitive, findQuery, isFindReplaceOpen],
-  )
-  const matchCount =
-    mode === "markdown" ? markdownFindMatches.length : richFindMatches.length
-  const activeMatchIndex = clampFindReplaceIndex(matchCount, findActiveIndex)
-  const markdownOverlayHtml = useMemo(
-    () =>
-      mode === "markdown" && isFindReplaceOpen && findQuery.trim()
-        ? renderFindReplaceOverlayHtml(markdownValue, findQuery, findCaseSensitive, activeMatchIndex)
-        : undefined,
-    [activeMatchIndex, findCaseSensitive, findQuery, isFindReplaceOpen, markdownValue, mode],
-  )
 
   useEffect(() => {
     if (!sessionLoaded) {
@@ -3636,336 +3460,48 @@ export function EditorShell({
     })
   }, [currentWritingId, displayTitle, hydrationPhase, routeWritingId, sessionLoaded, syncStatus, writingSlug])
 
-  useEffect(() => {
-    if (!editor) {
-      return
-    }
-
-    if (!isFindReplaceOpen || !findQuery.trim()) {
-      clearFindReplaceQueryState(editor)
-      return
-    }
-
-    setFindReplaceQueryState(editor, {
-      query: findQuery,
-      caseSensitive: findCaseSensitive,
-      activeIndex: activeMatchIndex,
-    })
-  }, [activeMatchIndex, editor, findCaseSensitive, findQuery, isFindReplaceOpen])
-
-  useEffect(() => {
-    if (findActiveIndex !== activeMatchIndex) {
-      setFindActiveIndex(activeMatchIndex)
-    }
-  }, [activeMatchIndex, findActiveIndex])
-
-  useEffect(() => {
-    if (!isFindReplaceOpen || !findQuery.trim()) {
-      setFindActiveIndex(0)
-      return
-    }
-
-    setFindActiveIndex(0)
-  }, [findCaseSensitive, findQuery, isFindReplaceOpen])
-
-  function captureEditorCursorSnapshot(): EditorCursorSnapshot | null {
-    if (modeRef.current === "markdown") {
-      const textarea = markdownTextareaRef.current
-      const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-      const shellViewport = document.querySelector<HTMLElement>("main")
-
-      if (!textarea) {
-        return null
-      }
-
-      return {
-        mode: "markdown",
-        start: textarea.selectionStart,
-        end: textarea.selectionEnd,
-        scrollTop: textarea.scrollTop,
-        scrollLeft: textarea.scrollLeft,
-        editorScrollTop: editorViewport?.scrollTop,
-        editorScrollLeft: editorViewport?.scrollLeft,
-        shellScrollTop: shellViewport?.scrollTop,
-        shellScrollLeft: shellViewport?.scrollLeft,
-        windowScrollX: window.scrollX,
-        windowScrollY: window.scrollY,
-      }
-    }
-
-    if (!editor) {
-      return null
-    }
-
-    return {
-      mode: "rich",
-      from: editor.state.selection.from,
-      to: editor.state.selection.to,
-    }
-  }
-
-  function restoreEditorCursorSnapshot(snapshot: EditorCursorSnapshot | null) {
-    if (!snapshot) {
-      return
-    }
-
-    if (snapshot.mode === "markdown") {
-      queueMarkdownSelectionRestore(snapshot.start, snapshot.end, snapshot)
-      return
-    }
-
-    if (!editor) {
-      return
-    }
-
-    editor.chain().focus().setTextSelection({ from: snapshot.from, to: snapshot.to }).run()
-  }
-
-  function closeFindReplacePanel(options?: { restoreSelection?: boolean }) {
-    const snapshot = editorCursorSnapshotRef.current
-
-    setIsFindReplaceOpen(false)
-    setFindQuery("")
-    setReplaceValue("")
-    setFindActiveIndex(0)
-
-    if (editor) {
-      clearFindReplaceQueryState(editor)
-    }
-
-    if (options?.restoreSelection !== false) {
-      window.requestAnimationFrame(() => {
-        restoreEditorCursorSnapshot(snapshot)
-      })
-    }
-  }
-
-  function openFindReplacePanel(options?: { focusReplace?: boolean }) {
-    editorCursorSnapshotRef.current = captureEditorCursorSnapshot()
-
-    if (!isFindReplaceOpen) {
-      setFindActiveIndex(0)
-    }
-
-    setIsFindReplaceOpen(true)
-
-    window.requestAnimationFrame(() => {
-      if (options?.focusReplace) {
-        replaceInputRef.current?.focus()
-        return
-      }
-
-      findInputRef.current?.focus()
-      findInputRef.current?.select()
-    })
-  }
-
-  function syncActiveRichMatchSelection(nextActiveIndex: number) {
-    if (!editor || !isFindReplaceOpen || !findQuery.trim()) {
-      return
-    }
-
-    const targetMatch = richFindMatches[clampFindReplaceIndex(richFindMatches.length, nextActiveIndex)]
-
-    if (!targetMatch) {
-      return
-    }
-
-    const transaction = editor.state.tr
-    transaction.setSelection(TextSelection.create(transaction.doc, targetMatch.from, targetMatch.to))
-    transaction.scrollIntoView()
-    transaction.setMeta("addToHistory", false)
-    editor.view.dispatch(transaction)
-
-    window.requestAnimationFrame(() => {
-      const activeMatchElement = editor.view.dom.querySelector<HTMLElement>(".od-find-match-active")
-
-      if (activeMatchElement) {
-        activeMatchElement.scrollIntoView({
-          block: "center",
-          inline: "nearest",
-          behavior: "auto",
-        })
-        return
-      }
-
-      const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-      const startCoords = editor.view.coordsAtPos(targetMatch.from)
-      const endCoords = editor.view.coordsAtPos(targetMatch.to)
-
-      if (!editorViewport) {
-        return
-      }
-
-      const viewportRect = editorViewport.getBoundingClientRect()
-      const matchTop = startCoords.top
-      const matchBottom = Math.max(startCoords.bottom, endCoords.bottom)
-      const topInset = 96
-      const bottomInset = 56
-
-      if (matchTop < viewportRect.top + topInset) {
-        editorViewport.scrollBy({
-          top: matchTop - viewportRect.top - topInset,
-          behavior: "auto",
-        })
-        return
-      }
-
-      if (matchBottom > viewportRect.bottom - bottomInset) {
-        editorViewport.scrollBy({
-          top: matchBottom - viewportRect.bottom + bottomInset,
-          behavior: "auto",
-        })
-      }
-    })
-  }
-
-  function syncActiveMarkdownMatchSelection(nextActiveIndex: number) {
-    const textarea = markdownTextareaRef.current
-    const targetMatch = markdownFindMatches[clampFindReplaceIndex(markdownFindMatches.length, nextActiveIndex)]
-
-    if (!textarea || !targetMatch) {
-      return
-    }
-
-    textarea.focus()
-    textarea.setSelectionRange(targetMatch.start, targetMatch.end)
-    markdownSelectionRef.current = {
-      start: targetMatch.start,
-      end: targetMatch.end,
-      text: textarea.value.slice(targetMatch.start, targetMatch.end),
-    }
-  }
-
-  const navigateFindMatches = useCallback(
-    (direction: 1 | -1) => {
-      if (matchCount === 0) {
-        return
-      }
-
-      const nextActiveIndex = resolveNextFindReplaceIndex(matchCount, activeMatchIndex, direction)
-      setFindActiveIndex(nextActiveIndex)
-
-      if (modeRef.current === "markdown") {
-        window.requestAnimationFrame(() => {
-          syncActiveMarkdownMatchSelection(nextActiveIndex)
-        })
-        return
-      }
-
-      syncActiveRichMatchSelection(nextActiveIndex)
-    },
-    [activeMatchIndex, matchCount, syncActiveMarkdownMatchSelection, syncActiveRichMatchSelection],
-  )
-
-  const handleReplaceCurrentMatch = useCallback(() => {
-    if (!findQuery.trim()) {
-      return
-    }
-
-    if (modeRef.current === "markdown") {
-      const currentMatch = markdownFindMatches[activeMatchIndex]
-
-      if (!currentMatch) {
-        return
-      }
-
-      const nextMarkdown = replaceMatchInText(markdownValue, currentMatch, replaceValue)
-      const nextMatches = findTextMatches(nextMarkdown, findQuery, findCaseSensitive)
-      const nextActive = clampFindReplaceIndex(nextMatches.length, activeMatchIndex)
-
-      handleMarkdownChange(nextMarkdown)
-      setFindActiveIndex(nextActive)
-
-      window.requestAnimationFrame(() => {
-        syncActiveMarkdownMatchSelection(nextActive)
-      })
-      return
-    }
-
-    if (!editor) {
-      return
-    }
-
-    const currentMatch = richFindMatches[activeMatchIndex]
-
-    if (!currentMatch) {
-      return
-    }
-
-    const transaction = editor.state.tr.insertText(replaceValue, currentMatch.from, currentMatch.to)
-    editor.view.dispatch(transaction)
-    updateDerivedEditorState(editor)
-    void persistEditorSnapshot(editor)
-
-    const nextActive = clampFindReplaceIndex(findDocumentMatches(editor.state.doc, findQuery, findCaseSensitive).length, activeMatchIndex)
-    setFindActiveIndex(nextActive)
-    syncActiveRichMatchSelection(nextActive)
-  }, [
+  // ODE-602: buscar y reemplazar (mudanza mecánica; mismos efectos, en el
+  // mismo orden y en esta posición).
+  const findReplace = useFindReplace({
+    editor,
+    editorCursorSnapshotRef,
+    findActiveIndex,
+    findCaseSensitive,
+    findInputRef,
+    findQuery,
+    handleMarkdownChange,
+    isFindReplaceOpen,
+    markdownSelectionRef,
+    markdownTextareaRef,
+    markdownValue,
+    mode,
+    modeRef,
+    persistEditorSnapshot,
+    queueMarkdownSelectionRestore,
+    replaceInputRef,
+    replaceValue,
+    setFindActiveIndex,
+    setFindQuery,
+    setIsFindReplaceOpen,
+    setReplaceValue,
+    updateDerivedEditorState,
+  })
+  const {
     activeMatchIndex,
-    editor,
-    findCaseSensitive,
-    findQuery,
-    handleMarkdownChange,
-    markdownFindMatches,
-    markdownValue,
-    persistEditorSnapshot,
-    replaceValue,
-    richFindMatches,
-    syncActiveMarkdownMatchSelection,
-    syncActiveRichMatchSelection,
-    updateDerivedEditorState,
-  ])
-
-  const handleReplaceAllMatches = useCallback(() => {
-    if (!findQuery.trim() || matchCount === 0) {
-      return
-    }
-
-    const confirmation = window.confirm(`Replace ${matchCount} matches with "${replaceValue}"?`)
-
-    if (!confirmation) {
-      return
-    }
-
-    if (modeRef.current === "markdown") {
-      const result = replaceAllMatchesInText(markdownValue, findQuery, replaceValue, findCaseSensitive)
-      handleMarkdownChange(result.value)
-      setFindActiveIndex(0)
-      return
-    }
-
-    if (!editor) {
-      return
-    }
-
-    if (richFindMatches.length === 0) {
-      return
-    }
-
-    const transaction = editor.state.tr
-
-    for (let index = richFindMatches.length - 1; index >= 0; index -= 1) {
-      const match = richFindMatches[index]
-      transaction.insertText(replaceValue, match.from, match.to)
-    }
-
-    editor.view.dispatch(transaction)
-    updateDerivedEditorState(editor)
-    void persistEditorSnapshot(editor)
-    setFindActiveIndex(0)
-  }, [
-    editor,
-    findCaseSensitive,
-    findQuery,
-    handleMarkdownChange,
-    markdownValue,
+    closeFindReplacePanel,
+    handleReplaceAllMatches,
+    handleReplaceCurrentMatch,
+    markdownOverlayHtml,
     matchCount,
-    persistEditorSnapshot,
-    replaceValue,
-    richFindMatches,
-    updateDerivedEditorState,
-  ])
+    navigateFindMatches,
+  } = findReplace
+  // `handleRunAction`, más arriba, abre la búsqueda. Antes de ODE-602 esto era
+  // una declaración de función aquí mismo, y se elevaba; sigue siéndolo, así
+  // que el atajo la encuentra, y solo lee el resultado del hook al ejecutarse,
+  // cuando el render ya lo creó. Se recrea en cada render, como antes.
+  function openFindReplacePanel(options?: { focusReplace?: boolean }) {
+    findReplace.openFindReplacePanel(options)
+  }
 
   // ODE-587: pestañas del editor (mudanza mecánica; mismos efectos y orden).
   const {
