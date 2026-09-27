@@ -92,6 +92,10 @@
       {
         "issue": "ODE-629",
         "reason": "Real desktop data-loss follow-up (High) found by ODE-604 and tracked separately. PR #525 pins the rename race as it.fails but does not deliver the ODE-629 fix; ODE-629 appears in ODE-604 commit subjects. Ignored for status drift until delivered."
+      },
+      {
+        "issue": "ODE-632",
+        "reason": "Real production bug (Medium) found by the ODE-603 command net and tracked separately: six document commands have no Markdown branch. PR #535 pins them as it.fails but does not deliver the ODE-632 fix; ODE-632 appears in ODE-603 commit subjects. Ignored for status drift until delivered."
       }
     ]
   },
