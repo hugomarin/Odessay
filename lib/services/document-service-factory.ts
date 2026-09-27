@@ -157,6 +157,17 @@ async function resolveDesktopRuntimeServices(): Promise<DesktopRuntimeServices> 
 }
 
 class DesktopDocumentService implements DocumentService {
+  /**
+   * ODE-629 — a rename is not atomic: `rename_file` moves the `.md` first and
+   * the catalog commit (`workspace_sync` + `commitDualWrite`) lands after it.
+   * During that window the catalog still binds the old path while the file no
+   * longer exists there, so a save in flight that CONFLICTs must not trust a
+   * catalog read until the rename of that document has finished. Keyed by
+   * writingId; renames are user gestures and the entry is removed only after
+   * the catalog commit, so "no entry" means the catalog is already settled.
+   */
+  private readonly renamesInFlight = new Map<string, Promise<ServiceResponse<WritingRecord>>>()
+
   constructor(private readonly runtime: DesktopRuntimeServices) {}
 
   private serialize(record: WritingRecord) {
@@ -346,6 +357,13 @@ class DesktopDocumentService implements DocumentService {
    * an external edit: the save retries against the new path so the content
    * lands instead of living only in memory. A CONFLICT at a still-current path
    * is a real external-change conflict and is rethrown untouched.
+   *
+   * The retry must also wait for a rename of this document that is mid-flight:
+   * the rename moves the file before committing the catalog, so a save can
+   * CONFLICT inside that window (`rename_file` already moved it) and a bare
+   * catalog read would still return the old path — the same conflict again.
+   * Awaiting the in-flight rename commits the catalog first; the loop stays
+   * bounded by its own attempt budget.
    */
   private async persistFollowingRename(
     record: WritingRecord,
@@ -360,6 +378,7 @@ class DesktopDocumentService implements DocumentService {
       } catch (error) {
         lastError = error
         if (!isConflictError(error)) throw error
+        await this.renamesInFlight.get(record.id)?.catch(() => undefined)
         const current = await this.runtime.catalog.getById(record.id)
         const currentPath = current?.binding?.canonicalPath ?? null
         if (!currentPath || currentPath === target) throw error
@@ -484,6 +503,23 @@ class DesktopDocumentService implements DocumentService {
   }
 
   async renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
+    // ODE-629: register the whole rename — from before the file move to after
+    // the catalog commit — so a save that CONFLICTs inside the move→commit
+    // window can wait for it instead of reading a half-committed catalog (see
+    // persistFollowingRename). The entry is removed only once the rename has
+    // fully settled, so an absent entry means the catalog is already current.
+    const inFlight = this.performRenameWriting(input)
+    this.renamesInFlight.set(input.writingId, inFlight)
+    try {
+      return await inFlight
+    } finally {
+      if (this.renamesInFlight.get(input.writingId) === inFlight) {
+        this.renamesInFlight.delete(input.writingId)
+      }
+    }
+  }
+
+  private async performRenameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
       const existing = await this.openWriting(input.writingId)
       if (existing.error || !existing.data) return existing

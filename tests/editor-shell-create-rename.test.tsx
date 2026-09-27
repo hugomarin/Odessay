@@ -51,6 +51,14 @@
  * ocurra de verdad mientras está en vuelo y el fix lo reencamina a la ruta
  * nueva.
  *
+ * Hallazgo (ODE-629, review del PR #537, P0): la carrera seguía abierta en la
+ * ventana entre el `rename_file` y el commit del catálogo del rename — el
+ * `CONFLICT` del guardado se producía mientras el catálogo todavía ligaba la
+ * ruta vieja, y el reintento la volvía a leer y relanzaba el error. Cubierto
+ * por el caso "aterriza entre el move y el commit": el rename se retiene en su
+ * `open_file` de la ruta nueva (`holdOpenFile`) y el guardado aterriza dentro
+ * de esa ventana; el fix espera al rename en curso antes de releer el catálogo.
+ *
  * Mutation test (ODE-604): en `DesktopDocumentService.renameWriting`
  * (`lib/services/document-service-factory.ts`), devolver el registro
  * renombrado sin `persist()` (el archivo se mueve pero el catálogo no se
@@ -59,7 +67,9 @@
  * Mutation test (ODE-629): quitar el reintento de `persistFollowingRename`
  * (que el CONFLICT se propague) o volver a escribir el cuerpo en el rename
  * (`writeContent: true` con el snapshot de `openWriting`) pone en rojo el caso
- * de la carrera.
+ * de la carrera. Quitar el `await this.renamesInFlight…` que espera al rename
+ * en curso antes de releer el catálogo pone en rojo —con `save_state = error`,
+ * el síntoma del P0— el caso de la ventana move→commit. Verificado en vivo.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -455,6 +465,70 @@ describe("ODE-604 — DOC-07: renombrar un documento durable (desktop)", () => {
       const rows = await catalogRows()
       expect(rows.map((row) => row.id), "un solo documento, el mismo UUID").toEqual([writingId])
       expect(rows[0]?.binding?.canonicalPath, "apuntando al archivo renombrado").toBe(files[0]?.path)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  // Regresión de ODE-629 (P0 del review: la ventana entre `rename_file` y el
+  // commit del catálogo). El guardado retenido aterriza justo ahí: el rename ya
+  // movió el archivo (su lectura de la ruta nueva queda retenida), pero el
+  // catálogo todavía liga el UUID a la ruta vieja. El `CONFLICT` del guardado
+  // tiene que esperar al rename en curso antes de releer el catálogo; si
+  // relee a medias, sigue viendo la ruta vieja, relanza el `CONFLICT` y la
+  // pestaña queda en `error` con lo nuevo solo en memoria.
+  it(
+    "un guardado que aterriza entre el move y el commit del rename llega a la ruta nueva (ODE-629)",
+    async () => {
+      await mountLoaded()
+      await clickNewArtifact(mounted!.container)
+      await typeInEditor("ODE629-VENTANA-BASE")
+      await advance(SAVE_WINDOW_MS)
+      const original = await waitForMarkdownContaining("ODE629-VENTANA-BASE")
+      const writingId = await waitForMaterializedWritingId()
+
+      // El guardado más nuevo sale y queda retenido en `write_file` sobre la
+      // ruta vieja.
+      const heldWrite = holdWriteFile((path) => path === original.path)
+      await typeInEditor(" ODE629-VENTANA-NUEVO")
+      await advance(SAVE_WINDOW_MS)
+      await heldWrite.started
+
+      // El rename se retiene DESPUÉS de mover el archivo (`open_file` de la
+      // ruta nueva) y ANTES de commitear el catálogo: la ventana del P0.
+      const renamedName = "ODE629 Ventana.md"
+      const heldRenameRead = holdOpenFile((path) => path.endsWith(`/${renamedName}`))
+      await renameActiveTab("ODE629 Ventana")
+      await heldRenameRead.started
+
+      // El guardado aterriza dentro de la ventana: la ruta vieja ya no existe
+      // y el catálogo todavía la liga. No puede rendirse.
+      heldWrite.release()
+      await flush(3)
+      expect(
+        activeTab()?.save_state,
+        "el guardado no se rinde mientras el rename está a medio commitear",
+      ).not.toBe("error")
+
+      heldRenameRead.release()
+      await waitFor(() => !renameInput(), { label: "el modal se cierra", timeoutMs: 15_000 })
+      await eventually(
+        async () =>
+          (await readWorkspaceMarkdown()).some((file) => file.contents.includes("ODE629-VENTANA-NUEVO")),
+        "el guardado aterrizó en el archivo renombrado",
+      )
+      await flush(3)
+
+      const files = await readWorkspaceMarkdown()
+      expect(files.map((file) => file.path.split("/").pop()), "un solo archivo, con el nombre nuevo").toEqual([
+        renamedName,
+      ])
+      expect(files[0]?.contents, "el guardado más nuevo sobrevive al renombrado").toContain(
+        "ODE629-VENTANA-NUEVO",
+      )
+      const rows = await catalogRows()
+      expect(rows.map((row) => row.id), "un solo documento, el mismo UUID").toEqual([writingId])
+      expect(rows[0]?.binding?.canonicalPath, "apuntando al archivo renombrado").toBe(files[0]?.path)
+      expect(activeTab()?.writing_id, "la pestaña conserva el UUID").toBe(writingId)
     },
     TEST_TIMEOUT_MS,
   )
