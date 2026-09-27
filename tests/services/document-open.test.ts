@@ -315,6 +315,141 @@ describe("openDocument — files outside a BindingRoot", () => {
     expect(result).toMatchObject({ status: "opened", strategy: "minted" })
     expect(catalog.registerBinding).toHaveBeenCalledTimes(1)
   })
+
+  // ODE-628: observers learn about the new root only once its binding is durable.
+  it("notifies the new external root after the binding is registered", async () => {
+    const order: string[] = []
+    const onExternalRootRegistered = vi.fn(async () => {
+      order.push("notify")
+    })
+    const { ports, catalog } = makePorts({
+      locateBindingRoot: vi.fn(
+        async (): Promise<BindingRootLocation> => ({ kind: "outside", parentDir: "/Users/me/Notes" }),
+      ),
+      onExternalRootRegistered,
+    })
+    const registerBinding = catalog.registerBinding.getMockImplementation()!
+    catalog.registerBinding.mockImplementation(async (input) => {
+      order.push("registerBinding")
+      return registerBinding(input)
+    })
+    const open = createOpenDocumentUseCase(ports)
+    const result = await open({
+      kind: "path",
+      path: "/Users/me/Notes/note.md",
+      confirmRegisterRoot: true,
+    })
+    expect(result).toMatchObject({ status: "opened" })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(onExternalRootRegistered).toHaveBeenCalledTimes(1)
+    expect(onExternalRootRegistered).toHaveBeenCalledWith(
+      expect.objectContaining({ bindingRootId: "external-root", rootPath: "/Users/me/Notes" }),
+    )
+    expect(order).toEqual(["registerBinding", "notify"])
+  })
+
+  it("keeps the open when notifying the new root fails", async () => {
+    const { ports } = makePorts({
+      locateBindingRoot: vi.fn(
+        async (): Promise<BindingRootLocation> => ({ kind: "outside", parentDir: "/Users/me/Notes" }),
+      ),
+      onExternalRootRegistered: vi.fn(async () => {
+        throw new Error("watcher restart failed")
+      }),
+    })
+    const open = createOpenDocumentUseCase(ports)
+    const result = await open({
+      kind: "path",
+      path: "/Users/me/Notes/note.md",
+      confirmRegisterRoot: true,
+    })
+    expect(result).toMatchObject({ status: "opened", strategy: "minted" })
+  })
+
+  // ODE-628 (re-BUILD): the new root is durable on every outcome after it was
+  // registered, so every exit notifies — once the outcome is final — and none
+  // of them waits for the notification (it rescans every root).
+  const outside = () =>
+    vi.fn(async (): Promise<BindingRootLocation> => ({ kind: "outside", parentDir: "/Users/me/Notes" }))
+  const openOutside = (ports: OpenDocumentPorts) =>
+    createOpenDocumentUseCase(ports)({ kind: "path", path: "/Users/me/Notes/note.md", confirmRegisterRoot: true })
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it("returns the open without waiting for the notification", async () => {
+    let release!: () => void
+    const onExternalRootRegistered = vi.fn(() => new Promise<void>((resolve) => (release = resolve)))
+    const { ports } = makePorts({ locateBindingRoot: outside(), onExternalRootRegistered })
+    const result = await openOutside(ports)
+    expect(result).toMatchObject({ status: "opened" })
+    await settled()
+    expect(onExternalRootRegistered, "control positivo: la notificación sí arrancó").toHaveBeenCalledTimes(1)
+    release()
+  })
+
+  it("notifies the new root when the open ends ambiguous", async () => {
+    const onExternalRootRegistered = vi.fn(async () => {})
+    const { ports, catalog } = makePorts({
+      locateBindingRoot: outside(),
+      onExternalRootRegistered,
+      readFileEvidence: vi.fn(async ({ path }) => evidence({ canonicalPath: path, contentHash: "duplicate" })),
+      cloudHashLookup: vi.fn(async () => "ambiguous" as const),
+    })
+    const result = await openOutside(ports)
+    expect(result.status).toBe("ambiguous")
+    expect(catalog.registerBinding, "la notificación no elige identidad").not.toHaveBeenCalled()
+    await settled()
+    expect(onExternalRootRegistered).toHaveBeenCalledTimes(1)
+  })
+
+  it("notifies the new root when reading the file evidence fails", async () => {
+    const onExternalRootRegistered = vi.fn(async () => {})
+    const { ports } = makePorts({
+      locateBindingRoot: outside(),
+      onExternalRootRegistered,
+      readFileEvidence: vi.fn(async () => {
+        throw new Error("file unreadable")
+      }),
+    })
+    const result = await openOutside(ports)
+    expect(result.status).toBe("failed")
+    await settled()
+    expect(onExternalRootRegistered).toHaveBeenCalledTimes(1)
+  })
+
+  it("notifies the new root when registering the binding fails, keeping the failure", async () => {
+    const onExternalRootRegistered = vi.fn(async () => {
+      throw new Error("watcher restart failed")
+    })
+    const { ports, catalog } = makePorts({ locateBindingRoot: outside(), onExternalRootRegistered })
+    catalog.registerBinding.mockImplementationOnce(async () => {
+      throw new Error("catalog write failed")
+    })
+    const result = await openOutside(ports)
+    expect(result).toMatchObject({ status: "failed", reason: "catalog write failed" })
+    await settled()
+    expect(onExternalRootRegistered).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not notify when registering the root itself fails", async () => {
+    const onExternalRootRegistered = vi.fn(async () => {})
+    const { ports, registerExternalRoot } = makePorts({ locateBindingRoot: outside(), onExternalRootRegistered })
+    registerExternalRoot.mockImplementationOnce(async () => {
+      throw new Error("settings write failed")
+    })
+    const result = await openOutside(ports)
+    expect(result.status).toBe("failed")
+    await settled()
+    expect(onExternalRootRegistered).not.toHaveBeenCalled()
+  })
+
+  it("does not notify when the file is already inside a registered root", async () => {
+    const onExternalRootRegistered = vi.fn(async () => {})
+    const { ports } = makePorts({ onExternalRootRegistered })
+    const open = createOpenDocumentUseCase(ports)
+    const result = await open({ kind: "path", path: "/root/inside.md" })
+    expect(result).toMatchObject({ status: "opened" })
+    expect(onExternalRootRegistered).not.toHaveBeenCalled()
+  })
 })
 
 // ── Failure never fabricates identity ───────────────────────────────────────────
