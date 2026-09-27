@@ -1,18 +1,20 @@
 /**
  * @vitest-environment happy-dom
  *
- * ODE-625 — document ownership for annotation projections and Markdown selection.
+ * ODE-625 — the Notes panel follows the document that finished hydration.
  *
- * These regressions use the real shell/hydration path. The only held work is
- * requestAnimationFrame, which opens the production window between applying a
- * document and restoring its saved selection.
+ * Real shell/hydration path. This case keeps the Notes panel OPEN while the
+ * route switches from A to B (same `version`), the path the network cases in
+ * `editor-shell-annotation-roundtrip.test.tsx` do not take (they open the
+ * panel after switching). The Markdown-selection regression that used to live
+ * here was an exact duplicate of the ODE-606 case in
+ * `editor-shell-selection-restore.test.tsx` and was removed in favor of it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { act } from "react"
 
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
-import { getEditorSessionState } from "@/lib/stores/editor-session-store"
 
 vi.mock("@tiptap/react", async (importOriginal) => {
   const { createTiptapCaptureModule } = await import("./support/editor-shell-doubles")
@@ -42,17 +44,13 @@ vi.mock("@/lib/services/ai-service-factory", async () =>
 const {
   assertNoUnhandledErrors,
   flush,
-  holdAnimationFrames,
   mountEditorShell,
-  pointerClick,
   resetEditorShellWorld,
   waitFor,
 } = await import("./support/editor-shell-harness")
 
 const ANNOTATED_A = "62511111-1111-4111-8111-111111111111"
 const EMPTY_B = "62522222-2222-4222-8222-222222222222"
-const SELECTION_A = "62533333-3333-4333-8333-333333333333"
-const SELECTION_B = "62544444-4444-4444-8444-444444444444"
 
 const SHELL_TEST_TIMEOUT_MS = 30_000
 
@@ -82,22 +80,6 @@ function makeLocalWriting(
   } as LocalWriting
 }
 
-function tabFor(writingId: string) {
-  return getEditorSessionState().session.tabs.find((tab) => tab.writing_id === writingId)
-}
-
-async function clickTab(writingId: string) {
-  const tab = tabFor(writingId)
-  if (!tab) throw new Error(`No hay pestaña abierta para ${writingId}`)
-  const node = document.querySelector<HTMLElement>(`[data-editor-tab-id="${tab.id}"]`)
-  if (!node) throw new Error(`La pestaña de ${writingId} no está en el DOM`)
-
-  await pointerClick(node)
-  if (getEditorSessionState().session.active_tab_id !== tab.id) {
-    throw new Error(`El gesto no activó la pestaña de ${writingId}`)
-  }
-}
-
 async function clickButton(container: HTMLElement, label: string) {
   const button = Array.from(container.querySelectorAll("button")).find(
     (candidate) => candidate.getAttribute("aria-label") === label,
@@ -106,34 +88,6 @@ async function clickButton(container: HTMLElement, label: string) {
 
   await act(async () => button.click())
   await flush(2)
-}
-
-async function clickButtonByText(container: HTMLElement, label: string) {
-  const button = Array.from(container.querySelectorAll("button")).find(
-    (candidate) => candidate.textContent?.trim() === label,
-  )
-  if (!button) throw new Error(`No existe el botón ${label}`)
-
-  await act(async () => button.click())
-  await flush(2)
-}
-
-async function setMarkdownSelection(container: HTMLElement, selectedText: string) {
-  const textarea = await waitFor(
-    () => container.querySelector<HTMLTextAreaElement>('[aria-label="Markdown source"]'),
-    { label: "textarea Markdown visible" },
-  )
-  const start = textarea.value.indexOf(selectedText)
-  if (start < 0) throw new Error(`No se encontró la selección ${selectedText} en Markdown`)
-  const end = start + selectedText.length
-
-  await act(async () => {
-    textarea.setSelectionRange(start, end)
-    textarea.dispatchEvent(new Event("select", { bubbles: true }))
-  })
-  await flush(1)
-
-  return { start, end }
 }
 
 let mounted: Awaited<ReturnType<typeof mountEditorShell>> | null = null
@@ -207,76 +161,5 @@ describe("ODE-625 — editor state stays with its document", () => {
     const visibleNotes = Array.from(notesPanel.querySelectorAll("textarea")).map((textarea) => textarea.value)
     expect(visibleNotes).not.toContain("Instrucción exclusiva de A")
     expect(notesPanel.textContent).toContain("No notes yet.")
-  }, SHELL_TEST_TIMEOUT_MS)
-
-  it("keeps B's saved Markdown selection when leaving before B's restore frame runs", async () => {
-    await localDB.writings.save(
-      makeLocalWriting(SELECTION_A, "Documento A", "Texto propio de A para seleccionar."),
-    )
-    await localDB.writings.save(
-      makeLocalWriting(SELECTION_B, "Documento B", "Texto propio de B con selección distinta."),
-    )
-
-    mounted = await mountEditorShell({ writingId: SELECTION_A })
-    await waitFor(() => mounted!.editor().getText().includes("Texto propio de A"), {
-      label: "hidratación de A",
-    })
-
-    // Abrir B por la ruta real produce la segunda pestaña; su selección se
-    // establece después de activar cada pestaña y el shell la guarda al salir.
-    await mounted.render({ writingId: SELECTION_B })
-    await waitFor(() => mounted!.editor().getText().includes("Texto propio de B"), {
-      label: "hidratación de B",
-    })
-
-    await clickTab(SELECTION_A)
-    await waitFor(() => mounted!.editor().getText().includes("Texto propio de A"), {
-      label: "A activo antes de fijar su selección",
-    })
-    await clickButtonByText(mounted.container, "Markdown")
-    const selectionA = await setMarkdownSelection(mounted.container, "seleccionar")
-
-    await clickTab(SELECTION_B)
-    await waitFor(() => mounted!.editor().getText().includes("Texto propio de B"), {
-      label: "B activo antes de fijar su selección",
-    })
-    await clickButtonByText(mounted.container, "Markdown")
-    const selectionB = await setMarkdownSelection(mounted.container, "selección distinta")
-
-    await clickTab(SELECTION_A)
-    await waitFor(
-      () => mounted!.container.querySelector<HTMLTextAreaElement>('[aria-label="Markdown source"]')?.value.includes("Texto propio de A"),
-      { label: "A vuelve en modo Markdown" },
-    )
-    await flush(4)
-
-    expect(tabFor(SELECTION_B)?.view_state?.markdownSelectionStart).toBe(selectionB.start)
-    expect(tabFor(SELECTION_B)?.view_state?.markdownSelectionEnd).toBe(selectionB.end)
-
-    const textareaA = mounted.container.querySelector<HTMLTextAreaElement>('[aria-label="Markdown source"]')
-    expect(textareaA?.selectionStart).toBe(selectionA.start)
-    expect(textareaA?.selectionEnd).toBe(selectionA.end)
-
-    const frames = holdAnimationFrames()
-    try {
-      await clickTab(SELECTION_B)
-      await waitFor(
-        () => mounted!.container.querySelector<HTMLTextAreaElement>('[aria-label="Markdown source"]')?.value.includes("Texto propio de B"),
-        { label: "B contenido aplicado antes del frame de restauración" },
-      )
-      expect(mounted.container.querySelector("[data-hydration-phase]")?.getAttribute("data-hydration-phase")).toBe(
-        "loading",
-      )
-      expect(frames.pending(), "B tiene trabajo de restauración diferido pendiente").toBeGreaterThan(0)
-
-      // Salir de B con su rAF de restauración todavía retenido debe guardar su
-      // selección anterior, nunca el ref que sigue perteneciendo a A.
-      await clickTab(SELECTION_A)
-
-      expect(tabFor(SELECTION_B)?.view_state?.markdownSelectionStart).toBe(selectionB.start)
-      expect(tabFor(SELECTION_B)?.view_state?.markdownSelectionEnd).toBe(selectionB.end)
-    } finally {
-      frames.restore()
-    }
   }, SHELL_TEST_TIMEOUT_MS)
 })
