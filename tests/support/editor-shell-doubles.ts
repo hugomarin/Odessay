@@ -13,7 +13,7 @@
 import { useLayoutEffect } from "react"
 import { vi } from "vitest"
 
-import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
+import type { LearnWordInput, LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 
 /* ------------------------------------------------------------------ *
  * Estado compartido de los dobles
@@ -57,6 +57,8 @@ export type HarnessWorld = {
   learnedWords: LearnedWordEntry[]
   /** Veces que el shell pidió la lista de palabras aprendidas. */
   learnedWordsCalls: number
+  /** Palabras que el shell mandó a aprender al proveedor, en orden. */
+  learnWordCalls: LearnWordInput[]
   /**
    * Handler de la hidratación remota de bloques de corrección. Devolver una
    * promesa pendiente deja la respuesta "en vuelo" (ODE-464, ODE-574).
@@ -64,8 +66,12 @@ export type HarnessWorld = {
   hydrateCorrectionBlocks: (writingId: string) => Promise<{ error: unknown; data: unknown[] | null }>
   /** Documentos cuya hidratación remota de correcciones se pidió, en orden. */
   correctionHydrationCalls: string[]
-  /** Volcados remotos de bloques de corrección, en orden. */
-  correctionPersistCalls: Array<{ writingId?: string; blockId?: string }>
+  /**
+   * Volcados remotos de bloques de corrección, en orden, con el estado de cada
+   * sugerencia del bloque volcado (ODE-597: aceptar o rechazar se afirma sobre
+   * lo que llegó al proveedor, no sobre la caché local).
+   */
+  correctionPersistCalls: Array<{ writingId?: string; blockId?: string; suggestionStatuses?: string[] }>
   /**
    * Se llama en cada commit del shell, en fase de layout: después del commit
    * y ANTES de sus efectos pasivos. Es la ventana donde un efecto pasivo
@@ -167,6 +173,7 @@ export const world: HarnessWorld = {
   suggestTitleCalls: [],
   learnedWords: [],
   learnedWordsCalls: 0,
+  learnWordCalls: [],
   hydrateCorrectionBlocks: async () => ({ error: null, data: [] }),
   correctionHydrationCalls: [],
   correctionPersistCalls: [],
@@ -359,7 +366,18 @@ export function aiServiceDouble() {
         world.learnedWordsCalls += 1
         return { error: null, data: { items: [...world.learnedWords], nextCursor: null } }
       },
-      learnWord: async () => ({ error: null }),
+      // Contrato real: `{ error, data: LearnedWordEntry }`. Sin `data`, el
+      // shell lo trata como fallo y revierte el aprendizaje (ODE-597).
+      learnWord: async (input: LearnWordInput) => {
+        world.learnWordCalls.push({ word: input.word, language: input.language })
+        const entry: LearnedWordEntry = {
+          id: `learned:${input.word}`,
+          word: input.word.trim().toLowerCase(),
+          language: input.language ?? "unknown",
+          createdAt: new Date().toISOString(),
+        }
+        return { error: null, data: entry }
+      },
       deleteLearnedWord: async () => ({ error: null }),
       reviewPublication: async (input: AiReviewInput) => {
         world.aiReviewCalls.push(input)
@@ -373,8 +391,15 @@ export function aiServiceDouble() {
         world.correctionHydrationCalls.push(writingId)
         return world.hydrateCorrectionBlocks(writingId)
       },
-      persistCorrectionBlock: async (input: { writingId?: string; block?: { id?: string; blockId?: string } }) => {
-        world.correctionPersistCalls.push({ writingId: input.writingId, blockId: input.block?.blockId })
+      persistCorrectionBlock: async (input: {
+        writingId?: string
+        block?: { id?: string; blockId?: string; suggestions?: Array<{ status?: string }> }
+      }) => {
+        world.correctionPersistCalls.push({
+          writingId: input.writingId,
+          blockId: input.block?.blockId,
+          suggestionStatuses: input.block?.suggestions?.map((suggestion) => suggestion.status ?? ""),
+        })
         return {
           error: null,
           data: { persistedId: input.block?.id ?? null, deletedIds: [], syncedAt: new Date().toISOString() },
