@@ -285,6 +285,52 @@ Persistencia real en una muestra por familia — formato (`bold`), inserción (`
 
 **Bug encontrado — ODE-632 (Medium).** En modo Markdown, `codeBlock` y `horizontalRule` (cuyo atajo la ayuda publica como disponible en ambos runtimes) y los de menú `clearStyles`/`copyAsMarkdown`/`copyAsHtml`/`date` no tienen rama y caen en `default: return`: el comando queda mudo. La toolbar sigue visible en Markdown y su "Text → Code" es clickeable y no hace nada. La red fija el no-op actual (para que la mudanza no lo cambie) y seis `it.fails` documentan el efecto esperado; no se arregla en este corte.
 
+**Actualización (2026-09-27, ODE-603 — corte 4b, entrega 2: la mudanza de los comandos):** `handleRunAction` sale tal cual a `hooks/useEditorCommands.ts`, llamado donde estaba su código (detrás de `captureRichSelectionSnapshot`), así que ni el orden de los hooks ni el de los efectos de la shell cambian; el hook no tiene efectos. Mudanza mecánica, como ODE-602: el cuerpo (513 líneas) es el de la shell, sin cambios. El estado y los refs siguen siendo de la shell y llegan por `input` (identidades estables: la memoización no cambia); los helpers puros `markdownSelectionOwnerId` y `readMarkdownSelectionForActiveDocument` también llegan por `input`, como en ODE-587, para no crear un ciclo de imports. Las dependencias de la shell se conservan tal cual, más los refs, setters y helpers nuevos (todos estables). La lista de acciones sigue siendo `EditorShortcutAction` (`lib/editor/shortcuts.ts`): no se declara una copia. Los tipos `PendingRichSelectionSnapshot` y `PendingAnnotationSnapshot` viven ahora en el hook porque el contrato de `input` los expone; la shell los importa.
+
+Los tres manejadores de inserción (`handleInsertLink`, `handleInsertTable`, `handleInsertImage`) y `handleBackupLocalImage` se quedan en la shell: su lógica ya tiene dueño (`lib/editor/transactions.ts` y `lib/editor/local-image-backup.ts`) y su contrato con los modales reales no cambia; la red de la entrega 1 los cubre enteros. Este corte mueve el despachador, no cambia dueños.
+
+El warning de `exhaustive-deps` de `openFindReplacePanel` —la declaración de función elevada que se recrea en cada render, a propósito, como dejó ODE-602— deja de aparecer: la regla ya no puede seguir su identidad a través de `input`. La conducta es la misma (el callback se recrea en cada render, como antes). Lint total sin cambios en número (14 → 14) y sin warnings nuevos.
+
+La red de la entrega 1 pasa **idéntica**: `tests/editor-shell-commands.test.tsx` → 43 passed | 6 expected fail (49). Los seis `it.fails` de ODE-632 siguen rojos. Mutaciones repetidas sobre el hook: renombrar `case "bold"` deja rojo `bold` en ambos modos (2 failed), e invertir `if (modeRef.current === "markdown")` deja rojo `bold`; ambas revertidas. La suite completa quedó verde (314 files, 2307 passed | 7 expected fail | 3 skipped) en las corridas limpias de la rama. Nota: `tests/editor-shell-chrome-toc.test.tsx` (el caso de coste de ODE-602, con timers reales y el debounce de 180 ms) puede fallar en corridas completas bajo carga de la máquina; no se reproduce aislado (10/10 en la rama, 6/6 en HEAD) ni en HEAD bajo quemadores de CPU (5/5), y este corte no toca ese camino.
+
+Contra `main`, con el mismo método:
+
+```text
+4,011 líneas        (-510)
+   32 useEffect     (sin cambio: el hook no tiene efectos)
+   52 useCallback   (-1)
+   19 useRef        (sin cambio)
+   26 useState      (sin cambio)
+   11 useMemo       (sin cambio)
+```
+
+Los 12 hooks extraídos por los cortes, en orden de llamada en la shell:
+
+```text
+L742   useFocusMode               (ODE-602, corte 4a entrega 2)
+L1145  useCorrectionBlocks        (ODE-586, corte 2 entrega 2a)
+L1556  useTableOfContents         (ODE-602, corte 4a entrega 2)
+L1745  useSessionRestore          (ODE-587, corte 3 entrega 1b)
+L1768  useExternalDocumentChanges (ODE-599, corte 3b entrega 2)
+L1828  useDocumentHydration       (ODE-562, corte 1)
+L2023  useCorrectionActions       (ODE-586, corte 2 entrega 2b)
+L2100  useEditorCommands          (ODE-603, corte 4b entrega 2)
+L2795  useCorrectionLifecycle     (ODE-586, corte 2 entrega 2b)
+L2866  useFindReplace             (ODE-602, corte 4a entrega 2)
+L2921  useWorkspaceTabs           (ODE-587, corte 3 entrega 1a)
+L3024  useWorkspaceTabOpening     (ODE-587, corte 3 entrega 1c)
+```
+
+Los 5 efectos espejo que quedan son los mismos; las líneas se corren con el archivo:
+
+```text
+L732   reconcileActiveSaveStateRef.current = reconcileActiveSaveState
+L1521  editorInstanceRef.current = editor ?? null
+L1668  modeRef.current = mode
+L1736  activeEditorTabIdRef.current = editorSession.active_tab_id   (la excepción declarada del ADR)
+L2784  currentDocumentMarkdownRef.current = currentDocumentMarkdown
+```
+
 ## 2. Hallazgo 1 — cada dato tiene dos dueños
 
 Diecinueve efectos existen solo para mantener una copia sombra del estado en un ref: `title → titleRef`, `version → versionRef`, `lifecycle → lifecycleRef`, y así con unos veinte campos. Y hay 602 puntos donde el código lee la sombra en vez del estado.
