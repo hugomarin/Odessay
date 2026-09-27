@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Single responsibility: branch/PR/ODE traceability, commit traceability, and
-// the infra/process exemption. No performance concerns here — see
+// documentation and infra/process exemptions. No performance concerns here — see
 // scripts/check-performance-gate.mjs for that, invoked independently (or via
 // the scripts/check-delivery-gate.mjs wrapper) instead of being bundled into
 // this gate. This lets traceability fail in seconds, before anything that
@@ -37,6 +37,18 @@ if (branch === "main" || branch === "HEAD") {
 // etc.) puts the ODE-XX requirement right back.
 const INFRA_PROCESS_BRANCH_PREFIXES = ["infra/", "process/"];
 const INFRA_PROCESS_LABELS = new Set(["infra", "process"]);
+// Pure documentation changes can use the lightweight path-based exemption:
+// no issue ID, special branch prefix, or PR label is needed. Keep the list
+// narrow so adding product code immediately restores normal traceability.
+const DOCUMENTATION_ONLY_PATH_PATTERNS = [
+  /^\.agents\/.*\.md$/,
+  /^docs\//,
+  /^workflow\/.*\.md$/,
+  /^workflow\/docs\.json$/,
+  /^[^/]+\.md$/,
+  /^\.claude\/launch\.json$/,
+  /^artifacts\/.*\.(?:png|jpe?g|gif|webp|svg)$/i,
+];
 const INFRA_PROCESS_PATH_PATTERNS = [
   /^\.github\//,
   /^\.agents\//,
@@ -47,6 +59,8 @@ const INFRA_PROCESS_PATH_PATTERNS = [
   // included) — narrowly scoped to that naming, not a blanket tests/**.
   /^tests\/traceability-.*\.test\.ts$/,
   /^docs\//,
+  /^[^/]+\.md$/,
+  /^artifacts\/.*\.(?:png|jpe?g|gif|webp|svg)$/i,
   /^workflow\//,
   /^README\.md$/,
   /^AGENTS\.md$/,
@@ -118,26 +132,40 @@ const issueIds = Array.from(new Set([...extractIssueIds(branch), ...pinnedIssueI
 
 let infraProcessExempt = false;
 if (issueIds.length === 0) {
-  if (!isInfraProcessCategory) {
+  const changed = changedFiles();
+  const documentationOnly = changed.length > 0 && changed.every((filePath) =>
+    DOCUMENTATION_ONLY_PATH_PATTERNS.some((pattern) => pattern.test(filePath)),
+  );
+
+  if (documentationOnly) {
+    infraProcessExempt = true;
+    console.log(
+      "[ops:traceability:gate] OK - documentation-only diff; issue ID and process label are not required.",
+    );
+  }
+
+  if (!documentationOnly && !isInfraProcessCategory) {
     fail(
       `Branch "${branch}" does not include an issue ID (expected ODE-XX in branch name).`,
     );
   }
 
-  const outOfScope = changedFiles().filter(
-    (filePath) => !INFRA_PROCESS_PATH_PATTERNS.some((pattern) => pattern.test(filePath)),
-  );
-  if (outOfScope.length > 0) {
-    const listed = outOfScope.map((filePath) => `- ${filePath}`).join("\n");
-    fail(
-      `Branch "${branch}" is marked infra/process (branch prefix or PR label) but the diff touches paths outside the infra/process allowlist:\n${listed}\nAdd an ODE-XX issue id instead, or scope this PR to infra/process paths only.`,
+  if (!documentationOnly) {
+    const outOfScope = changed.filter(
+      (filePath) => !INFRA_PROCESS_PATH_PATTERNS.some((pattern) => pattern.test(filePath)),
+    );
+    if (outOfScope.length > 0) {
+      const listed = outOfScope.map((filePath) => `- ${filePath}`).join("\n");
+      fail(
+        `Branch "${branch}" is marked infra/process (branch prefix or PR label) but the diff touches paths outside the infra/process allowlist:\n${listed}\nAdd an ODE-XX issue id instead, or scope this PR to infra/process paths only.`,
+      );
+    }
+
+    infraProcessExempt = true;
+    console.log(
+      `[ops:traceability:gate] OK - infra/process category, diff limited to the infra/process allowlist. ODE-XX not required.`,
     );
   }
-
-  infraProcessExempt = true;
-  console.log(
-    `[ops:traceability:gate] OK - infra/process category, diff limited to the infra/process allowlist. ODE-XX not required.`,
-  );
 }
 const baseRef = range.base;
 const headRef = range.head;

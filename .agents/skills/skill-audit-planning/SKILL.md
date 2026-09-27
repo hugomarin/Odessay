@@ -1,6 +1,6 @@
 ---
 name: skill-audit-planning
-description: Audita una fase o un conjunto de Issue Briefs para comprobar cobertura, secuencia, owners, contratos y evidencia antes de BUILD.
+description: Audita una fase, un conjunto de Issue Briefs o un issue individual para comprobar definición, cobertura, secuencia, owners, contratos, reutilización y evidencia antes de BUILD.
 ---
 
 # Audit Planning
@@ -13,7 +13,7 @@ Pregunta guía: **¿Qué falta, se solapa o está mal secuenciado para que este 
 
 ## 2. Ámbito y activación
 
-Aplicar antes de BUILD, después de definir una fase o cuando cambian varios briefs conectados. Auditar el conjunto permite encontrar huecos que un issue individual no revela.
+Aplicar antes de BUILD, después de definir una fase o cuando cambian briefs conectados. También se puede aplicar a un issue individual para comprobar que BUILD no tenga que descubrir su alcance, owner, reutilización o aceptación por inferencia. Auditar el conjunto permite encontrar huecos que un issue individual no revela.
 
 ## 3. Entradas y fuentes de autoridad
 
@@ -44,4 +44,5 @@ Planning produce briefs ejecutables; Audit Planning comprueba la coherencia del 
 ## 8. Recursos asociados
 
 - **Especialidad local:** en Odessay, [specialties/phase-audit-contract.md](specialties/phase-audit-contract.md) contiene fuentes de roadmap y DoD, preguntas de auditoría, criterios de rechazo, severidad y formato de salida. Cargarla al auditar una fase del proyecto.
+- **Prompt por issue:** la misma especialidad incluye un prompt reutilizable para auditar un issue individual; aplicarlo junto con el schema del Issue Brief cuando se revise readiness para BUILD.
 - **Mecanismos:** reutilizar la información del tracker y checks existentes; este skill no requiere scripts propios.
