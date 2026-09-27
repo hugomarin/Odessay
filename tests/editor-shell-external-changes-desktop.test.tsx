@@ -260,8 +260,8 @@ async function waitForWatcherOnDocuments() {
 /**
  * Secuencia de REINICIO, no la de producción: el reconciliador arranca con el
  * BindingRoot externo ya registrado, así que lo lee al arrancar y su watcher
- * cubre la carpeta. Solo la usa la caracterización de ODE-627, para que siga
- * fallando por su propio bug (la aserción de `ODE627-LOCAL`) y no por ODE-628.
+ * cubre la carpeta. Solo la usa la regresión de ODE-627, para que dependa de
+ * su propio bug (la aserción de `ODE627-LOCAL`) y no de ODE-628.
  * Cuando ODE-628 se arregle, pasa al orden de producción como las demás.
  */
 async function startReconcilerAfterOpen() {
@@ -596,17 +596,17 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
   )
 })
 
-describe("ODE-627 — caracterización: un autosave rechazado por CONFLICT antes del evento", () => {
-  // BUG CONOCIDO, encontrado por esta red: ODE-627. Se deja como `it.fails`
-  // para que el comportamiento correcto quede escrito y la red avise en cuanto
-  // cambie. Al arreglar ODE-627 pasa a `it` sin tocar el cuerpo.
+describe("ODE-627 — regresión: un autosave rechazado por CONFLICT antes del evento", () => {
+  // Regresión de ODE-627 (encontrado por esta red, arreglado en el
+  // PersistenceCoordinator: un guardado fallido conserva la marca de contenido
+  // sin confirmar). Era `it.fails`; pasó a `it` sin tocar el cuerpo.
   //
   // Secuencia: el usuario teclea; el archivo cambia fuera justo antes del
   // autosave desktop (DESKTOP_PERSISTENCE_DEBOUNCE_MS = 4s); la guardia de hash
   // rechaza bien ese guardado (CONFLICT); el evento del watcher llega después
-  // (300ms de delay + 250ms de coalesce). Hoy la shell ve el documento limpio
-  // y recarga la externa: el texto tecleado se pierde sin banner.
-  it.fails(
+  // (300ms de delay + 250ms de coalesce). Antes del fix la shell veía el
+  // documento limpio y recargaba la externa: el texto tecleado se perdía sin banner.
+  it(
     "la edición local rechazada sigue contando como sucia: banner de conflicto, sin recarga",
     async () => {
       const path = writeMarkdownFile("Carta rechazada", "ODE599 base rechazada.")

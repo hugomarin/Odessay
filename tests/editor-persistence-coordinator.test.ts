@@ -336,6 +336,86 @@ describe("editor persistence coordinator", () => {
     }))
   })
 
+  it.each([
+    ["CONFLICT", "external content changed"],
+    ["STORAGE_ERROR", "disk is unavailable"],
+  ] as const)("retains unconfirmed content after %s and clears it only on explicit discard", async (code, message) => {
+    const target = { writingId: "writing-1" }
+    const coordinator = createPersistenceCoordinator({
+      runtime: "desktop",
+      documentService: {
+        saveWriting: async () => ({
+          data: null,
+          error: { code, message, retryable: true },
+        }),
+      },
+      createWritingId: () => "unused",
+      now: () => "2026-08-27T00:00:02.000Z",
+    })
+
+    const request = coordinator.persist(snapshot())
+    expect(coordinator.hasUnconfirmedContent(target)).toBe(true)
+    await expect(request).resolves.toBe(false)
+
+    expect(coordinator.hasPending(target)).toBe(false)
+    expect(coordinator.hasUnconfirmedContent(target)).toBe(true)
+    coordinator.discardUnconfirmed("writing-1")
+    expect(coordinator.hasUnconfirmedContent(target)).toBe(false)
+  })
+
+  it("clears unconfirmed content after the durable save commits", async () => {
+    const deferred: { resolve: (() => void) | null } = { resolve: null }
+    const coordinator = createPersistenceCoordinator({
+      runtime: "desktop",
+      documentService: {
+        saveWriting: vi.fn((input: { writing: WritingRecord }) =>
+          new Promise<{ data: WritingRecord; error: null }>((resolve) => {
+            deferred.resolve = () => resolve(response(input.writing))
+          }),
+        ),
+      },
+      createWritingId: () => "unused",
+      now: () => "2026-08-27T00:00:02.000Z",
+    })
+    const target = { writingId: "writing-1" }
+
+    const request = coordinator.persist(snapshot())
+    expect(coordinator.hasUnconfirmedContent(target)).toBe(true)
+    deferred.resolve?.()
+    await expect(request).resolves.toBe(true)
+    expect(coordinator.hasUnconfirmedContent(target)).toBe(false)
+  })
+
+  it("does not let an older commit clear a newer unconfirmed request for the same writing", async () => {
+    const deferredSaves: Array<() => void> = []
+    const saveWriting = vi.fn((input: { writing: WritingRecord }) =>
+      new Promise<{ data: WritingRecord; error: null }>((resolve) => {
+        deferredSaves.push(() => resolve(response(input.writing)))
+      }),
+    )
+    const coordinator = createPersistenceCoordinator({
+      runtime: "desktop",
+      documentService: { saveWriting },
+      createWritingId: () => "unused",
+      now: () => "2026-08-27T00:00:02.000Z",
+    })
+    const target = { writingId: "writing-1" }
+
+    const first = coordinator.persist(snapshot({ bodyText: "first save" }))
+    await vi.waitFor(() => expect(saveWriting).toHaveBeenCalledTimes(1))
+    void coordinator.persist(snapshot({ bodyText: "newer save" }))
+    expect(coordinator.hasUnconfirmedContent(target)).toBe(true)
+
+    deferredSaves[0]?.()
+    await expect(first).resolves.toBe(true)
+    await vi.waitFor(() => expect(saveWriting).toHaveBeenCalledTimes(2))
+    expect(coordinator.hasUnconfirmedContent(target)).toBe(true)
+
+    deferredSaves[1]?.()
+    await expect(coordinator.settle(target)).resolves.toBe(true)
+    expect(coordinator.hasUnconfirmedContent(target)).toBe(false)
+  })
+
   it("suppresses stale completion callbacks after document cancellation", async () => {
     const deferred: { resolve: (() => void) | null } = { resolve: null }
     const saveWriting = vi.fn(() => new Promise<{ data: WritingRecord; error: null }>((resolve) => {
