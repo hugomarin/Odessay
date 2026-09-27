@@ -124,7 +124,7 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
    - Si aparece un identificador histórico inválido o huérfano, registrarlo en `workflow/status.json.traceability_exceptions.ignored_issue_ids` con razón concreta. No volver a copiar ese falso positivo en notas de `status.json`, PRs o reviews posteriores.
 
 **Ejecución**
-4. Architecture Recon: si el cambio no es trivial (ver criterios de activación en `.agents/skills/architecture-recon/SKILL.md`), ejecutar Recon antes de escribir código — owner canónico, reusable API/abstraction, canonical reference/sibling, siblings, consumers, contratos, hotspots y tests canónicos — y declarar el output completo en el contexto de ejecución del propio Build Agent (no se persiste como documento del repo). Si Recon revela ambigüedad material de ownership o contrato, detener BUILD con `Context Gap — Architecture Recon` en vez de resolverlo por inferencia. Declarar `Construction order` (extender owner → reutilizar API/abstraction → seguir canonical reference/sibling si hace falta algo nuevo → extraer de hotspot → crear abstraction nueva) según `.agents/agents/build-agent.md`.
+4. Architecture Recon: si el cambio no es trivial (ver criterios de activación en `.agents/skills/architecture-recon/SKILL.md`), ejecutar Recon antes de escribir código — owner canónico, reusable API/abstraction, canonical reference/sibling, siblings, consumers, contratos, hotspots y tests canónicos — y declarar el output completo en el contexto de ejecución del propio Build Agent (no se persiste como documento del repo). Declarar explícitamente el `Reuse Check`: qué owner/API existente se extenderá o reutilizará, o qué evidencia justifica una abstracción nueva. Si no hay API reutilizable, decirlo. Si Recon revela ambigüedad material de ownership o contrato, detener BUILD con `Context Gap — Architecture Recon` en vez de resolverlo por inferencia. Declarar `Construction order` (extender owner → reutilizar API/abstraction → seguir canonical reference/sibling si hace falta algo nuevo → extraer de hotspot → crear abstraction nueva) según `.agents/agents/build-agent.md`.
 5. Implementar según el brief y el Recon declarado. Si el entregable es evidencia de una fila del `workflow/quality/capability-integration-map.md`, el proof se construye según `workflow/quality/capability-proof-contract.md` y su `coverage_status` se deriva al cerrar contra el checklist de pre-upgrade — nunca se fija como meta del issue. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`. Si el diff real se desvía materialmente del change surface declarado en Recon, o revela un owner distinto, detener la edición, actualizar Recon y solo entonces continuar.
 
 **Validación**
@@ -132,7 +132,7 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
 7. `npm run ops:delivery:gate` (con `OPS_PERF_TRACE_PATH=...` solo cuando el contrato seleccionó el gate del editor). Debe terminar en verde.
 
 **Entrega**
-8. `git push -u origin {rama}`. Abrir el PR con body completo (link al issue, qué se hizo, cómo testear, outputs del paso 6). Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`. Si falla, editar con `gh pr edit {n} --body "..."` antes de continuar.
+8. `git push -u origin {rama}`. Abrir el PR con body completo (link al issue, qué se hizo, `Reuse Check` resumido desde Recon para cambios no triviales, o el owner local evidente para cambios triviales, cómo testear, outputs del paso 6). Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`. Si falla, editar con `gh pr edit {n} --body "..."` antes de continuar.
 9. Confirmar PR en OPEN: `gh pr view {número} --json state`. Mover issue a `In Review` en Linear. Dejar comentario con Context Report completo:
    - `Context Gaps Detected = yes` si faltó o fue ambiguo al menos uno de: alcance, contrato de datos, evidencia requerida, dependencias, referencias documentales.
    - `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
@@ -241,7 +241,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
    - el owner efectivo del cambio coincide con `Owner`;
    - `Contracts touched` e `Invariants` están preservados o actualizados explícitamente;
    - los `Required docs` del brief siguen alineados con la implementación final.
-4. Revisar diff contra el brief (scope, calidad, seguridad, performance).
+4. Revisar diff contra el brief (scope, calidad, seguridad, performance) y comprobar explícitamente el `Reuse Check`: verificar de forma independiente el owner esperado, la abstracción/API reutilizable, los siblings y consumers relevantes, y si el diff extiende/reutiliza el owner o introduce duplicación. La justificación de BUILD no sustituye esta comprobación; si aparece un owner paralelo o se ignoró una abstracción que cubre la misma responsabilidad, reportarlo como finding de arquitectura con evidencia.
 5. Dejar comentario en Linear: resultado de revisión.
    - El comentario de REVIEW debe separar explícitamente:
      - `TechnicalVerdict` (PASS/FAIL — el juicio técnico del Review Agent: findings, contratos que las referencias de review evaluaron, seguridad),

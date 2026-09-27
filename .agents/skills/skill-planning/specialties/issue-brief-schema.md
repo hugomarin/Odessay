@@ -93,6 +93,19 @@ Formato — siempre texto plano, nunca Markdown links:
 
 Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados.
 
+## Reuse Check *(required para cambios de código no triviales)*
+
+Declarar la responsabilidad semántica y el owner esperado, además de la hipótesis de reutilización que BUILD debe comprobar contra el repositorio:
+
+```text
+Responsabilidad / owner esperado: [qué responsabilidad cambia y dónde debe vivir]
+Extender o reutilizar: [owner/API existente y cómo cubre el caso | no se conoce una API que lo cubra]
+Referencia sibling: [si hace falta una pieza nueva, sibling canónico que aporta forma | ninguna]
+Consumers / pruebas a revisar: [consumidores y pruebas canónicas conocidos]
+```
+
+No presentar como hecho una exploración de código que aún no se realizó: marcar la API como desconocida y hacer que BUILD la confirme con Architecture Recon. `Reuse Check` no sustituye `Architecture Contract`; cuando el issue cambia ownership, contratos, fuente de verdad, runtime o boundaries, ambos campos aplican.
+
 ## Handoff *(solo si el issue requiere acción humana)*
 
 Omitir esta sección si el issue es código puro. Incluirla cuando el agente llega a un punto que no puede resolver solo — crear un servicio externo, aprobar un acceso, llenar credenciales.

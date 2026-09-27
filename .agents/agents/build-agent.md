@@ -119,6 +119,12 @@ El patrón correcto para `/wf-build` es:
 5. Implementar dentro del change surface declarado.
 6. Si durante la implementación de un cambio con Recon aparece evidencia que lo contradice — surge otro owner, aparecen consumers relevantes no identificados, o el diff excede materialmente el `Proposed change surface` — detener la edición, actualizar el Recon y solo entonces continuar. Si un cambio inicialmente trivial revela una responsabilidad nueva, activar Recon antes de ampliarlo.
 
+### Reuse Check explícito
+
+Para todo cambio que active Architecture Recon, declarar antes de editar un `Reuse Check` breve: owner canónico, API/abstracción existente a extender o reutilizar, siblings/consumers/tests relevantes y decisión de construcción según `Construction order`. Si se crea una abstracción nueva, explicar qué evidencia muestra que el owner y las APIs existentes no bastan. Si no hay API reutilizable, decirlo explícitamente; no usar un sibling como prueba automática de que su implementación debe copiarse. Para cambios triviales sin Recon, identificar el owner local evidente en una línea.
+
+Incluir un resumen del `Reuse Check` en el body del PR para que REVIEW pueda contrastarlo con el diff. No es un artefacto persistido separado del Recon.
+
 A partir de aquí, `workflow/workflow.md` retoma el protocolo (validación, PR, Linear). Este rol termina su responsabilidad al cerrar la fase de Ejecución.
 
 Si el cambio no trivial trae arquitectura clara (owner obvio, sin siblings ni duplicados plausibles), Recon puede ser breve, pero queda declarado. Un ajuste trivial sigue la regla de activación de Recon y los skills de su superficie.
