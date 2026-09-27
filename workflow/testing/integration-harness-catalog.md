@@ -40,7 +40,7 @@ editor-shell-desktop-doubles.ts  camino desktop; delega en real-desktop-doubles
 
 **Qué dobla.** Solo lo que no puede ejecutarse fuera de la app: la red, el transporte nativo de Tauri, los diálogos del sistema operativo, el proveedor de AI y el router de Next. Cinco en modo web, siete en desktop.
 
-**Cuándo NO es el adecuado.** Si la propiedad bajo prueba no depende de que el shell esté montado. Montar la UI para probar una regla de un servicio es caro y frágil: baja al nivel de servicio. Tampoco sirve para propiedades que dependen de layout real (alturas, overflow, scroll con medidas) — eso es Playwright, porque happy-dom no calcula layout.
+**Cuándo NO es el adecuado.** Si la propiedad bajo prueba no depende de que el shell esté montado. Montar la UI para probar una regla de un servicio es caro y frágil: baja al nivel de servicio. Tampoco sirve para propiedades que dependen de layout real (alturas, overflow, scroll con medidas) — eso es Playwright, porque happy-dom no calcula layout. El scroll como valor que la shell guarda y restaura sí se puede leer (`scrollViewport`/`readViewport`; `withAppMain` monta el `<main>` desplazable del layout de la app, que la shell también guarda). Lo que no se puede leer es el recorte que hace el navegador cuando cambia el contenido: un test que dependa de él tiene que declararlo (ODE-600).
 
 **Dónde se extiende.** Drivers y montaje en `editor-shell-harness.tsx`; dobles de boundary en `editor-shell-doubles.ts`; lo específico de desktop en `editor-shell-desktop-doubles.ts`, que **delega** en el módulo de abajo en vez de duplicarlo.
 
