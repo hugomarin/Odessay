@@ -40,10 +40,12 @@ import {
   resetSettingsStoreDouble,
   resetWriteFileFailureState,
   tauriCatalogActivateBindingRootDouble,
+  tauriCatalogApplyReconcileDouble,
   tauriCatalogDetachLocalFileDouble,
   tauriCatalogApplyCloudSnapshotsDouble,
   tauriCatalogDualWriteDouble,
   tauriCatalogGetByIdDouble,
+  tauriCatalogListBindingRootDocumentsDouble,
   tauriCatalogListCollectionSnapshotDouble,
   tauriCatalogListDouble,
   tauriCatalogListRetiredBindingRootsDouble,
@@ -88,8 +90,17 @@ export function tauriPathDouble() {
 /**
  * Doble del transporte nativo. Es el único boundary que este modo añade
  * respecto al modo web: no existe puente de Tauri dentro de Vitest.
+ *
+ * `withReconciler` cablea los dos comandos que usa el WorkspaceReconciler
+ * (`catalog_apply_reconcile`, `catalog_list_binding_root_documents`) a sus
+ * espejos reales. Es opt-in a propósito: con ellos, cualquier arranque del
+ * reconciliador —p. ej. el `refreshWorkspaceReconcilerRoots` de un "Save As" a
+ * una carpeta nueva— empieza a proyectar ráfagas `bulk` al catálogo, y eso es
+ * justo el tipo de efecto asíncrono desbloqueado que rompió `main` en
+ * ODE-580. Solo lo activan las pruebas que conducen la cadena del watcher
+ * (ODE-599).
  */
-export function tauriCommandsDouble() {
+export function tauriCommandsDouble({ withReconciler = false }: { withReconciler?: boolean } = {}) {
   return {
     tauriCreateFile: tauriCreateFileDouble,
     tauriWriteFile: tauriWriteFileDouble,
@@ -113,13 +124,17 @@ export function tauriCommandsDouble() {
     tauriCatalogList: tauriCatalogListDouble,
     tauriCatalogDetachLocalFile: tauriCatalogDetachLocalFileDouble,
     tauriCatalogHydrateExcerpts: vi.fn(async () => []),
-    tauriCatalogApplyReconcile: unimplemented("tauriCatalogApplyReconcile"),
+    tauriCatalogApplyReconcile: withReconciler
+      ? tauriCatalogApplyReconcileDouble
+      : unimplemented("tauriCatalogApplyReconcile"),
     tauriCatalogApplyCloudSnapshots: tauriCatalogApplyCloudSnapshotsDouble,
     tauriCatalogApplyWorkspaceRemoval: unimplemented("tauriCatalogApplyWorkspaceRemoval"),
     // Registrar un Workspace (abrir desde su árbol, ODE-580).
     tauriCatalogActivateBindingRoot: tauriCatalogActivateBindingRootDouble,
     tauriCatalogCountBindingRootDocuments: unimplemented("tauriCatalogCountBindingRootDocuments"),
-    tauriCatalogListBindingRootDocuments: unimplemented("tauriCatalogListBindingRootDocuments"),
+    tauriCatalogListBindingRootDocuments: withReconciler
+      ? tauriCatalogListBindingRootDocumentsDouble
+      : unimplemented("tauriCatalogListBindingRootDocuments"),
     tauriCatalogListRetiredBindingRoots: tauriCatalogListRetiredBindingRootsDouble,
     tauriCatalogReactivateBindingRoot: tauriCatalogReactivateBindingRootDouble,
     // El panel de propiedades lee las colecciones al abrirse (camino a Export, ODE-601).
