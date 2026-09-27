@@ -20,13 +20,12 @@
  * identidad. Lo que faltaba y está aquí: que la identidad sobrevive a
  * reabrir el documento por su UUID (desktop), y DOC-01 en web.
  *
- * Hallazgo (ODE-626): en web, un borrador en blanco SÍ deja fila durable en
- * `localDB` y encola un `upsert` de sync. Queda como caracterización
- * (`it.fails`) hasta que ODE-626 lo arregle, en dos casos: el borrador en
- * blanco, y "crear y escribir" con la cardinalidad exacta (una sola fila nueva,
- * la de la pestaña). El caso verde de "crear y escribir" afirma sobre TODAS
- * las filas nuevas, sin filtrar por texto: la de la pestaña tiene lo escrito y
- * lo único extra admitido es un borrador en blanco "Untitled".
+ * Hallazgo (ODE-626, ya arreglado): en web, un borrador en blanco dejaba fila
+ * durable en `localDB` y encolaba un `upsert` de sync. Los dos casos que lo
+ * caracterizaban como `it.fails` son ahora `it`: el borrador en blanco no crea
+ * fila ni mutación, y "crear y escribir" deja exactamente una fila nueva, la
+ * de la pestaña. El caso "crear y escribir" afirma sobre TODAS las filas
+ * nuevas, sin filtrar por texto.
  *
  * DOC-07. Property: renombrar un documento durable desde la shell (lápiz de
  * la pestaña y modal reales) conserva su UUID y cambia de forma coherente la
@@ -295,13 +294,9 @@ describe("ODE-604 — DOC-01: crear documento (web)", () => {
       expect(own.map((writing) => writing.body_text), "la fila de la pestaña, con lo escrito").toEqual([
         expect.stringContaining("ODE604-WEB-CREAR"),
       ])
-      // Cardinalidad sobre TODAS las filas nuevas: la única fila extra
-      // admitida es el borrador en blanco de ODE-626 (ver el `it.fails` de
-      // abajo). Una fila extra con contenido, o una segunda en blanco, rompe
-      // esta aserción.
-      expect(others, "fuera de la pestaña, como mucho el borrador en blanco de ODE-626").toEqual(
-        others.length === 0 ? [] : [{ blank: true, title: expect.stringMatching(/^Untitled/) }],
-      )
+      // Cardinalidad sobre TODAS las filas nuevas: ninguna fuera de la pestaña,
+      // ni siquiera un borrador en blanco (ODE-626).
+      expect(others, "ninguna fila nueva fuera de la pestaña").toEqual([])
 
       await typeInEditor(" ODE604-WEB-SIGUE")
       await eventually(
@@ -311,17 +306,15 @@ describe("ODE-604 — DOC-01: crear documento (web)", () => {
       expect(activeTab()?.writing_id, "la identidad no cambia al seguir escribiendo").toBe(writingId)
       const after = partitionNewRows(await newLocalWritings(before), writingId)
       expect(after.own, "sigue habiendo una sola fila de la pestaña").toHaveLength(1)
-      expect(after.others, "y seguir escribiendo no añade ninguna fila").toEqual(others)
+      expect(after.others, "y seguir escribiendo no añade ninguna fila").toEqual([])
     },
     TEST_TIMEOUT_MS,
   )
 
-  // Caracterización de ODE-626 sobre el caso "crear y escribir": el invariante
+  // Regresión de ODE-626 sobre el caso "crear y escribir": el invariante
   // completo de DOC-01 es que quede exactamente UNA fila durable nueva, la de
-  // la pestaña. Hoy queda además la fila en blanco de ODE-626. `it.fails`
-  // pasa mientras el bug exista; cuando ODE-626 lo arregle se pondrá en rojo:
-  // quitar el `.fails` (y la holgura del caso de arriba).
-  it.fails(
+  // la pestaña. Antes del fix quedaba además la fila en blanco.
+  it(
     "crear y escribir deja exactamente una fila durable nueva, la de la pestaña (ODE-626)",
     async () => {
       const before = await localWritingIds()
@@ -333,13 +326,11 @@ describe("ODE-604 — DOC-01: crear documento (web)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  // Caracterización de ODE-626 (hallazgo de ODE-604): en web, abrir /write sin
-  // sesión y pulsar "New Artifact" escriben filas vacías en `localDB`
-  // ("Untitled — <fecha>", `local-only`) con un `upsert` encolado en la cola de
-  // sync. Desktop no lo hace (guard `isBodyBlank`). `it.fails` pasa mientras el
-  // bug exista; cuando ODE-626 lo arregle se pondrá en rojo: quitar el `.fails`
-  // y actualizar DOC-01 en el mapa.
-  it.fails(
+  // Regresión de ODE-626 (hallazgo de ODE-604): en web, pulsar "New Artifact"
+  // escribía una fila vacía en `localDB` ("Untitled — <fecha>", `local-only`)
+  // con un `upsert` encolado en la cola de sync. El montaje sin sesión lo cubre
+  // `tests/editor-shell-blank-draft-web.test.tsx`, con control positivo.
+  it(
     "un borrador en blanco no crea documento durable ni encola sync (ODE-626)",
     async () => {
       const before = await localWritingIds()
