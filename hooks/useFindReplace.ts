@@ -16,14 +16,18 @@
  * y llegan por `input`; las dependencias son las de la shell más esos refs y
  * setters (identidades estables).
  *
- * Conocido y NO arreglado aquí (ODE-630): `richFindMatches` se memoriza con
- * `editor` y no con el documento, así que Replace y Replace all pueden escribir
- * en posiciones rancias. Viaja tal cual; sus casos son `it.fails` en
+ * ODE-630: `richFindMatches` se memorizaba con `editor`, que es la misma
+ * instancia durante toda la vida de la shell, así que no veía los cambios del
+ * documento y Replace/Replace all escribían en posiciones rancias. Ahora las
+ * coincidencias del panel salen del estado vivo del editor (`useEditorState`)
+ * y las acciones leen el documento vivo en el momento de usarlo; con el panel
+ * cerrado el selector devuelve la misma lista vacía, sin recorrer el
+ * documento. Sus casos son los dos `it` de ODE-630 en
  * `tests/editor-shell-chrome-find-replace.test.tsx`.
  */
 import { useCallback, useEffect, useMemo } from "react"
 import { TextSelection } from "@tiptap/pm/state"
-import { type Editor } from "@tiptap/react"
+import { type Editor, useEditorState } from "@tiptap/react"
 import type { MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
 import {
   clampFindReplaceIndex,
@@ -35,6 +39,7 @@ import {
   replaceMatchInText,
   resolveNextFindReplaceIndex,
   setFindReplaceQueryState,
+  type FindReplaceMatch,
 } from "@/lib/editor/find-replace"
 
 export type EditorCursorSnapshot =
@@ -58,6 +63,11 @@ export type EditorCursorSnapshot =
     }
 
 type MarkdownCursorScroll = Omit<Extract<EditorCursorSnapshot, { mode: "markdown" }>, "mode" | "start" | "end">
+
+// Identidad estable para el selector mientras no hay panel abierto ni editor:
+// `useEditorState` compara el resultado con `deepEqual`, así que devolver la
+// misma lista evita renders y recorridos del documento por cada transacción.
+const EMPTY_RICH_MATCHES: FindReplaceMatch[] = []
 
 // ODE-625: la selección Markdown cacheada lleva el documento al que pertenece.
 type OwnedMarkdownSelectionSnapshot = MarkdownSelectionSnapshot & {
@@ -125,9 +135,22 @@ export function useFindReplace(input: FindReplaceInput) {
     () => (isFindReplaceOpen ? findTextMatches(markdownValue, findQuery, findCaseSensitive) : []),
     [findCaseSensitive, findQuery, isFindReplaceOpen, markdownValue],
   )
-  const richFindMatches = useMemo(
-    () => (editor && isFindReplaceOpen ? findDocumentMatches(editor.state.doc, findQuery, findCaseSensitive) : []),
-    [editor, findCaseSensitive, findQuery, isFindReplaceOpen],
+  // ODE-630: las coincidencias ricas dependen del documento vivo, no de la
+  // instancia de `editor` (estable). `useEditorState` las recalcula en cada
+  // transacción del editor y solo re-renderiza cuando el resultado cambia.
+  const richFindMatches =
+    useEditorState({
+      editor,
+      selector: ({ editor: currentEditor }) =>
+        currentEditor && isFindReplaceOpen
+          ? findDocumentMatches(currentEditor.state.doc, findQuery, findCaseSensitive)
+          : EMPTY_RICH_MATCHES,
+    }) ?? EMPTY_RICH_MATCHES
+  // ODE-630: Replace y Replace all leen las posiciones del documento en el
+  // momento de la acción, no de un render anterior.
+  const readLiveRichMatches = useCallback(
+    () => (editor ? findDocumentMatches(editor.state.doc, findQuery, findCaseSensitive) : EMPTY_RICH_MATCHES),
+    [editor, findCaseSensitive, findQuery],
   )
   const matchCount =
     mode === "markdown" ? markdownFindMatches.length : richFindMatches.length
@@ -269,7 +292,8 @@ export function useFindReplace(input: FindReplaceInput) {
       return
     }
 
-    const targetMatch = richFindMatches[clampFindReplaceIndex(richFindMatches.length, nextActiveIndex)]
+    const richMatches = readLiveRichMatches()
+    const targetMatch = richMatches[clampFindReplaceIndex(richMatches.length, nextActiveIndex)]
 
     if (!targetMatch) {
       return
@@ -398,7 +422,7 @@ export function useFindReplace(input: FindReplaceInput) {
       return
     }
 
-    const currentMatch = richFindMatches[activeMatchIndex]
+    const currentMatch = readLiveRichMatches()[activeMatchIndex]
 
     if (!currentMatch) {
       return
@@ -409,7 +433,7 @@ export function useFindReplace(input: FindReplaceInput) {
     updateDerivedEditorState(editor)
     void persistEditorSnapshot(editor)
 
-    const nextActive = clampFindReplaceIndex(findDocumentMatches(editor.state.doc, findQuery, findCaseSensitive).length, activeMatchIndex)
+    const nextActive = clampFindReplaceIndex(readLiveRichMatches().length, activeMatchIndex)
     setFindActiveIndex(nextActive)
     syncActiveRichMatchSelection(nextActive)
   }, [
@@ -424,8 +448,8 @@ export function useFindReplace(input: FindReplaceInput) {
     markdownValue,
     modeRef,
     persistEditorSnapshot,
+    readLiveRichMatches,
     replaceValue,
-    richFindMatches,
     setFindActiveIndex,
     syncActiveMarkdownMatchSelection,
     syncActiveRichMatchSelection,
@@ -454,14 +478,16 @@ export function useFindReplace(input: FindReplaceInput) {
       return
     }
 
-    if (richFindMatches.length === 0) {
+    const richMatches = readLiveRichMatches()
+
+    if (richMatches.length === 0) {
       return
     }
 
     const transaction = editor.state.tr
 
-    for (let index = richFindMatches.length - 1; index >= 0; index -= 1) {
-      const match = richFindMatches[index]
+    for (let index = richMatches.length - 1; index >= 0; index -= 1) {
+      const match = richMatches[index]
       transaction.insertText(replaceValue, match.from, match.to)
     }
 
@@ -478,8 +504,8 @@ export function useFindReplace(input: FindReplaceInput) {
     matchCount,
     modeRef,
     persistEditorSnapshot,
+    readLiveRichMatches,
     replaceValue,
-    richFindMatches,
     setFindActiveIndex,
     updateDerivedEditorState,
   ])
