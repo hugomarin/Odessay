@@ -161,6 +161,85 @@ export function syncServiceDouble() {
 }
 
 /* ------------------------------------------------------------------ *
+ * Asset service de desktop (copia de imágenes locales, ODE-603)
+ * ------------------------------------------------------------------ */
+
+export type DesktopAssetCalls = {
+  reads: Array<{ documentPath: string; source: string }>
+  uploads: Array<{ writingId: string; fileName: string; contentType: string; sizeBytes: number; alt: string | null }>
+}
+
+/**
+ * Registro de llamadas del asset service doblado. El doble sustituye el
+ * boundary real (lectura del archivo de imagen por el puente nativo + subida a
+ * Supabase Storage), no la cadena interna: `backUpLocalImage` (su canonical
+ * owner) corre entero sobre él.
+ */
+export const desktopAssetCalls: DesktopAssetCalls = { reads: [], uploads: [] }
+
+export function resetDesktopAssetCalls() {
+  desktopAssetCalls.reads.length = 0
+  desktopAssetCalls.uploads.length = 0
+}
+
+/**
+ * Doble de `@/lib/services/asset-service-factory` para el runtime desktop.
+ * `readLocalImageAsset` devuelve bytes de una imagen PNG mínima y
+ * `uploadImageAsset` un URL de CDN fijo, para poder afirmar la sustitución del
+ * src local y su persistencia.
+ */
+export function desktopAssetServiceDouble() {
+  return {
+    getAssetService: () => ({
+      readLocalImageAsset: async (input: { documentPath: string; source: string }) => {
+        desktopAssetCalls.reads.push(input)
+        return {
+          data: {
+            sourcePath: `${input.documentPath.replace(/[^/]+$/, "")}${input.source}`,
+            fileName: input.source.split("/").pop() ?? "image.png",
+            mimeType: "image/png",
+            sizeBytes: 4,
+            bytes: new Uint8Array([137, 80, 78, 71]),
+          },
+          error: null,
+        }
+      },
+      uploadImageAsset: async (input: {
+        writingId: string
+        fileName: string
+        contentType: string
+        sizeBytes: number
+        alt: string | null
+      }) => {
+        desktopAssetCalls.uploads.push({
+          writingId: input.writingId,
+          fileName: input.fileName,
+          contentType: input.contentType,
+          sizeBytes: input.sizeBytes,
+          alt: input.alt,
+        })
+        return {
+          data: {
+            assetId: "asset-ode603",
+            writingId: input.writingId,
+            url: "https://cdn.example.test/foto-subida.png",
+            alt: input.alt,
+            mimeType: input.contentType,
+            sizeBytes: input.sizeBytes,
+          },
+          error: null,
+        }
+      },
+      resolveImageAssetUrl: async (source: string) => ({ data: source, error: null }),
+      resolveAssetPath: async () => ({
+        data: null,
+        error: { code: "NOT_FOUND", message: "resolveAssetPath no se usa en esta prueba", retryable: false },
+      }),
+    }),
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * Workspace temporal
  * ------------------------------------------------------------------ */
 
@@ -199,6 +278,7 @@ export function resetDesktopWorkspace() {
   resetCatalogDoubles()
   resetWriteFileFailureState()
   resetSettingsStoreDouble()
+  resetDesktopAssetCalls()
   if (!workspaceRoot) return
   // Todo lo que haya bajo el root, no solo data/ y config/: una prueba puede
   // crear carpetas propias (p. ej. el destino de un "Save As", ODE-574).

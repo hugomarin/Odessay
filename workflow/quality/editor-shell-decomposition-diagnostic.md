@@ -263,6 +263,28 @@ L1756  activeEditorTabIdRef.current = editorSession.active_tab_id   (la excepci�
 L3294  currentDocumentMarkdownRef.current = currentDocumentMarkdown
 ```
 
+**Actualización (2026-09-27, ODE-603 — corte 4b, entrega 1: la red de los comandos):** sin cambio de producto. `tests/editor-shell-commands.test.tsx` recorre **cada acción de `EditorShortcutAction`** (41) con una tabla tipada `satisfies Record<EditorShortcutAction, …>` — una acción nueva sin fila rompe `tsc` — y `it.each` sobre la propia tabla, sin copia de la lista. Cada fila entra por su **entrada real**: el `keydown` de `window` que traduce `getEditorShortcutAction` para los comandos con atajo, el canal `menu:<acción>` del menú nativo (desktop) para los que solo existen ahí, y el formulario real de cada modal para link, tabla, imagen y footnote. Los modos se cambian con los botones reales "Rich"/"Markdown" de la status bar.
+
+Qué fija, por modo. La tabla **no declara modos**: el runner recorre cada fila en ambos (Rich primero, Markdown después) y una fila sin aserción de Markdown rompe `tsc`:
+
+```text
+24 acciones con rama en ambos modos   rich y markdown, cada una con su aserción del efecto
+ 6 acciones sin rama Markdown         rich con efecto; markdown fija el no-op actual (control
+   (codeBlock, horizontalRule,        positivo en el mismo test), más un it.fails por comando
+   clearStyles, copyAsMarkdown,       que documenta el bug vigente ODE-632
+   copyAsHtml, date)
+17 acciones globales / de menú        rich y markdown, cada una con su transición observable
+                                       en Markdown (navegación contada por pasada, panel,
+                                       pestaña, cookie, modal o borrador), no con el mismo
+                                       chequeo repetido
+```
+
+`focusMode` es la única fila con `freshMountPerMode`: activar el foco oculta la status bar, que es la entrada real del cambio de modo, así que cada modo arranca de un montaje limpio. El driver de modo (`setMode`) verifica su propio efecto y reintenta el click del botón real hasta 10 s: tras cambiar de pestaña, el click puede caer mientras el shell hidrata (el `editor` todavía es null y `handleToggleMode` retorna sin cambiar de modo) — la flake de `nextTab`/`prevTab` bajo carga que la ronda de corrección encontró y fijó.
+
+Persistencia real en una muestra por familia — formato (`bold`), inserción (`table`) y nota (`footnote`) — afirmada sobre `localDB` en web y sobre el `.md` en desktop. `handleBackupLocalImage` corre entero en desktop por su entrada real (botón del node view de la imagen local → modal → `backUpLocalImage` → sustitución del src y persistencia en el `.md`). Mutaciones: renombrar el `case "<acción>"` de producción pone en rojo el caso de esa acción (barrido 41/41 en la ronda inicial, barrido de las 17 globales en la ronda de corrección); invertir `if (modeRef.current === "markdown")` en `handleRunAction` pone en rojo `bold` en ambos modos; y un `return` temprano para `markdown` antes del despacho global puso rojas las 17 aserciones nuevas de Markdown, cada una por su propia etiqueta (no por timeout de montaje).
+
+**Bug encontrado — ODE-632 (Medium).** En modo Markdown, `codeBlock` y `horizontalRule` (cuyo atajo la ayuda publica como disponible en ambos runtimes) y los de menú `clearStyles`/`copyAsMarkdown`/`copyAsHtml`/`date` no tienen rama y caen en `default: return`: el comando queda mudo. La toolbar sigue visible en Markdown y su "Text → Code" es clickeable y no hace nada. La red fija el no-op actual (para que la mudanza no lo cambie) y seis `it.fails` documentan el efecto esperado; no se arregla en este corte.
+
 ## 2. Hallazgo 1 — cada dato tiene dos dueños
 
 Diecinueve efectos existen solo para mantener una copia sombra del estado en un ref: `title → titleRef`, `version → versionRef`, `lifecycle → lifecycleRef`, y así con unos veinte campos. Y hay 602 puntos donde el código lee la sombra en vez del estado.
