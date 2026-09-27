@@ -44,15 +44,22 @@
  * doble de sus comandos nativos. En web, `localDB` real sobre fake-indexeddb.
  *
  * Hallazgo (ODE-629, review de ODE-604): renombrar con un guardado más nuevo
- * en vuelo pierde ese guardado — el archivo renombrado queda con el snapshot
- * que el rename leyó antes de mover. Caracterización `it.fails` en el bloque
- * DOC-07; el guardado se retiene en `write_file` (`holdWriteFile`) para que el
- * rename ocurra de verdad mientras está en vuelo.
+ * en vuelo perdía ese guardado — el archivo renombrado quedaba con el snapshot
+ * que el rename leía antes de mover, y el guardado retenido en `write_file`
+ * fallaba con CONFLICT sin reintento. Regresión cubierta por ODE-629: el
+ * guardado se retiene en `write_file` (`holdWriteFile`) para que el rename
+ * ocurra de verdad mientras está en vuelo y el fix lo reencamina a la ruta
+ * nueva.
  *
  * Mutation test (ODE-604): en `DesktopDocumentService.renameWriting`
  * (`lib/services/document-service-factory.ts`), devolver el registro
  * renombrado sin `persist()` (el archivo se mueve pero el catálogo no se
  * actualiza) pone en rojo el caso DOC-07.
+ *
+ * Mutation test (ODE-629): quitar el reintento de `persistFollowingRename`
+ * (que el CONFLICT se propague) o volver a escribir el cuerpo en el rename
+ * (`writeContent: true` con el snapshot de `openWriting`) pone en rojo el caso
+ * de la carrera.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -99,7 +106,7 @@ const {
 } = await import("./support/editor-shell-harness")
 const { createDesktopWorkspace, destroyDesktopWorkspace, readWorkspaceMarkdown, resetDesktopWorkspace } =
   await import("./support/editor-shell-desktop-doubles")
-const { holdWriteFile, writeFileCalls } = await import("./integration/documents/support/real-desktop-doubles")
+const { holdOpenFile, holdWriteFile, writeFileCalls } = await import("./integration/documents/support/real-desktop-doubles")
 const { DESKTOP_PERSISTENCE_DEBOUNCE_MS } = await import("@/components/editor/editor-shell")
 const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
@@ -394,17 +401,13 @@ describe("ODE-604 — DOC-07: renombrar un documento durable (desktop)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  // Caracterización de ODE-629 (hallazgo del review de ODE-604, P1). El
-  // guardado más nuevo ya decidió escribir en la ruta vieja cuando el
-  // renombrado mueve el archivo: al soltarse, `write_file` lo rechaza con
-  // CONFLICT ("no longer exists on disk") y no se reintenta, mientras
-  // `DesktopDocumentService.renameWriting` persiste en la ruta nueva el
-  // snapshot que leyó ANTES de mover (`openWriting`). Resultado: el archivo
-  // renombrado queda con el contenido viejo y lo nuevo solo vive en el editor
-  // (la pestaña queda en `error`); cerrar la app lo pierde. `it.fails` pasa
-  // mientras el bug exista; cuando ODE-629 lo arregle se pondrá en rojo: quitar
-  // el `.fails` y actualizar DOC-07 en el mapa.
-  it.fails(
+  // Regresión de ODE-629 (hallazgo del review de ODE-604, P1). El guardado más
+  // nuevo ya decidió escribir en la ruta vieja cuando el renombrado mueve el
+  // archivo. Fix: el rename ya no reescribe el cuerpo con el snapshot que leyó
+  // antes de mover, y un guardado que choca con el rename vuelve a resolver su
+  // ruta en el catálogo y reintenta en la ruta nueva en vez de quedarse en
+  // `error`. `it` desde ODE-629, con el cuerpo sin cambios.
+  it(
     "renombrar con un guardado más nuevo en vuelo no pierde ese guardado (ODE-629)",
     async () => {
       await mountLoaded()
@@ -452,6 +455,59 @@ describe("ODE-604 — DOC-07: renombrar un documento durable (desktop)", () => {
       const rows = await catalogRows()
       expect(rows.map((row) => row.id), "un solo documento, el mismo UUID").toEqual([writingId])
       expect(rows[0]?.binding?.canonicalPath, "apuntando al archivo renombrado").toBe(files[0]?.path)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  // Regresión de ODE-629 (la otra mitad del fix): el rename no puede reescribir
+  // el `.md` con el snapshot que leyó antes de mover. La lectura del rename
+  // queda retenida y el archivo recibe un guardado más nuevo mientras tanto;
+  // al soltarla, el rename mueve el archivo pero no escribe encima su snapshot
+  // viejo. La mutación que vuelve a escribir el cuerpo en el rename
+  // (`writeContent: true`) pone rojo este caso.
+  it(
+    "el rename no reescribe el cuerpo con el snapshot que leyó antes de mover (ODE-629)",
+    async () => {
+      await mountLoaded()
+      await clickNewArtifact(mounted!.container)
+      await typeInEditor("ODE629-REWRITE-BASE")
+      await advance(SAVE_WINDOW_MS)
+      const original = await waitForMarkdownContaining("ODE629-REWRITE-BASE")
+      const writingId = await waitForMaterializedWritingId()
+
+      // La lectura que el rename hace antes de mover queda retenida y captura
+      // el contenido de ese instante.
+      const heldRead = holdOpenFile((path) => path === original.path)
+      await renameActiveTab("ODE629 Rewrite")
+      await heldRead.started
+
+      // Mientras el rename tiene en la mano el snapshot viejo, un guardado más
+      // nuevo llega de verdad al archivo (control positivo de que la carrera es
+      // alcanzable y de que el archivo quedó con lo nuevo).
+      await typeInEditor(" ODE629-REWRITE-NUEVO")
+      await advance(SAVE_WINDOW_MS)
+      await eventually(
+        async () =>
+          (await readWorkspaceMarkdown()).some(
+            (file) => file.path === original.path && file.contents.includes("ODE629-REWRITE-NUEVO"),
+          ),
+        "el guardado nuevo llegó al archivo que el rename va a mover",
+      )
+
+      heldRead.release()
+      await waitFor(() => !renameInput(), { label: "el modal se cierra", timeoutMs: 15_000 })
+
+      const files = await readWorkspaceMarkdown()
+      expect(files.map((file) => file.path.split("/").pop()), "un solo archivo, con el nombre nuevo").toEqual([
+        "ODE629 Rewrite.md",
+      ])
+      expect(files[0]?.contents, "el rename no pisa el guardado con su snapshot viejo").toContain(
+        "ODE629-REWRITE-NUEVO",
+      )
+      const rows = await catalogRows()
+      expect(rows.map((row) => row.id), "un solo documento, el mismo UUID").toEqual([writingId])
+      expect(rows[0]?.binding?.canonicalPath, "apuntando al archivo renombrado").toBe(files[0]?.path)
+      expect(activeTab()?.writing_id, "la pestaña conserva el UUID").toBe(writingId)
     },
     TEST_TIMEOUT_MS,
   )
