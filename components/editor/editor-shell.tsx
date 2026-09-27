@@ -543,19 +543,13 @@ export function EditorShell({
   /** WATCH-07 — has this document's durable-content-hash baseline been seeded into the coordinator yet, for the currently watched writingId? */
   const hasSeededBaselineRef = useRef(false)
   /**
-   * WATCH-07 — true from the moment the editor's content genuinely diverges
-   * from the last known durable baseline (set in TipTap's own `onUpdate`,
-   * and the markdown-mode equivalents, on every real edit — never on a
-   * programmatic setContent, which is already guarded by
-   * isApplyingContentRef) until `persistEditorSnapshot` actually hands that
-   * content to `persistenceCoordinator.persist()`. `hasPending()` alone is
-   * NOT sufficient here: the desktop debounce (150ms rich /
-   * MARKDOWN_SAVE_DEBOUNCE_MS markdown) means there is a real window after a
-   * keystroke where the editor holds an unconfirmed edit but no persist
-   * request exists yet for the coordinator to report as pending. Cleared as
-   * soon as persist() is actually called — hasPending() is authoritative
-   * for durability from that point on, so this ref only needs to cover the
-   * gap before that call, not duplicate the coordinator's own tracking.
+   * WATCH-07 — true only between a real editor change and handing that
+   * content to `persistenceCoordinator.persist()`. The desktop debounce
+   * means this pre-handoff window exists before the coordinator knows about
+   * the edit. The coordinator owns the distinct post-handoff lifecycle via
+   * `hasUnconfirmedContent()`; `computeHasPendingLocalEdit` combines both.
+   * Programmatic `setContent` calls are already guarded by
+   * `isApplyingContentRef`.
    */
   const hasUnconfirmedLocalEditRef = useRef(false)
   const [showCorrections, setShowCorrections] = useState(true)
@@ -1271,10 +1265,9 @@ export function EditorShell({
       // races a second save queued behind a first one). Nothing to pass
       // through here any more.
       //
-      // Clear the "unconfirmed edit" flag now, synchronously, in the same
-      // tick as the call below — persist() registers this request with the
-      // coordinator's own pending/in-flight tracking synchronously too, so
-      // there is no window where neither signal reports the edit as unsaved.
+      // End the shell's pre-handoff lifecycle and begin the coordinator's
+      // post-handoff lifecycle in the same tick. `persist()` records its
+      // unconfirmed-content marker synchronously before returning.
       hasUnconfirmedLocalEditRef.current = false
       const result = await persistenceCoordinator.persist(
         {
@@ -1982,6 +1975,7 @@ export function EditorShell({
           if (!hasSeededBaselineRef.current) {
             hasSeededBaselineRef.current = true
             persistenceCoordinator.setDurableContentHash(currentWritingId, nextContentHash)
+            persistenceCoordinator.discardUnconfirmed(currentWritingId)
             setExternalFileNotice(null)
             return
           }
@@ -1991,7 +1985,9 @@ export function EditorShell({
             currentContentHash: nextContentHash,
             hasPendingLocalEdit: computeHasPendingLocalEdit({
               hasUnconfirmedLocalEdit: hasUnconfirmedLocalEditRef.current,
-              hasPendingPersistence: persistenceCoordinator.hasPending({ writingId: currentWritingId }),
+              hasUnconfirmedPersistedContent: persistenceCoordinator.hasUnconfirmedContent({
+                writingId: currentWritingId,
+              }),
             }),
             reason,
           })
@@ -2023,6 +2019,8 @@ export function EditorShell({
             liveEditor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
             isApplyingContentRef.current = false
             updateDerivedEditorState(liveEditor)
+            hasUnconfirmedLocalEditRef.current = false
+            persistenceCoordinator.discardUnconfirmed(currentWritingId)
             persistenceCoordinator.setDurableContentHash(currentWritingId, nextContentHash)
             setExternalFileNotice({ kind: "content-changed", path: nextCanonicalPath })
           } catch {
@@ -4522,6 +4520,8 @@ export function EditorShell({
                     editor.commands.setContent(opened.data.content.richText ?? EMPTY_EDITOR_JSON)
                     isApplyingContentRef.current = false
                     updateDerivedEditorState(editor)
+                    hasUnconfirmedLocalEditRef.current = false
+                    persistenceCoordinator.discardUnconfirmed(writingId)
                     persistenceCoordinator.setDurableContentHash(writingId, externalContentConflict.externalContentHash)
                     externalContentConflictRef.current = null
                     setExternalContentConflict(null)
