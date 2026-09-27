@@ -160,7 +160,8 @@ describe("open-document-desktop", () => {
     // No empty draft is ever seeded into IndexedDB by the opener.
     expect(mocks.localSave).not.toHaveBeenCalled()
     // ODE-628: the running watcher picks up the new root, after its binding.
-    expect(mocks.refreshReconcilerRoots).toHaveBeenCalledTimes(1)
+    // The refresh is not awaited by the open (it rescans every root, ODE-628).
+    await vi.waitFor(() => expect(mocks.refreshReconcilerRoots).toHaveBeenCalledTimes(1))
     expect(mocks.catalogRegisterBinding.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.refreshReconcilerRoots.mock.invocationCallOrder[0],
     )
@@ -187,7 +188,7 @@ describe("open-document-desktop", () => {
     const result = await openDesktopDocument({ kind: "path", path, confirmRegisterRoot: true })
 
     expect(result.status).toBe("opened")
-    expect(mocks.refreshReconcilerRoots).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(mocks.refreshReconcilerRoots).toHaveBeenCalledTimes(1))
   })
 
   it("does not seed IndexedDB when opening an already-bound path", async () => {

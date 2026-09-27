@@ -129,11 +129,13 @@ export type OpenDocumentPorts = {
    */
   registerExternalRoot(input: { parentDir: string; filePath: string }): Promise<BindingRootMatch>
   /**
-   * Runs after a root registered by `registerExternalRoot` has its first binding
-   * durable in the catalog, so observers (the desktop watcher) can pick up the
-   * new root without an app restart (ODE-628). Runs only after the binding is
-   * registered, so a rescan it triggers sees the known binding instead of racing
-   * the open for the file's identity. Best-effort: a throw never fails the open.
+   * Tells observers (the desktop watcher) that `registerExternalRoot` made a new
+   * root durable, so it is watched in this session instead of after a restart
+   * (ODE-628). Fires on EVERY outcome of that open — `opened`, `ambiguous` or
+   * `failed` — because the root stays durable either way, and only once that
+   * outcome is final, so a rescan it triggers never races the open for the
+   * file's identity. It is not awaited (a refresh rescans every root) and it is
+   * best-effort: it never changes the open's result.
    */
   onExternalRootRegistered?: (match: BindingRootMatch) => Promise<void>
   /** Prior local bindings for a root, feeding the reconciliation priority. */
@@ -257,17 +259,37 @@ export function createOpenDocumentUseCase(ports: OpenDocumentPorts) {
     }
 
     const location = await ports.locateBindingRoot(path)
-    const registersRoot = location.kind === "outside"
-    let match: BindingRootMatch
-    if (location.kind === "outside") {
-      if (!confirmRegisterRoot) {
-        return { status: "needs-binding-root-confirmation", path, parentDir: location.parentDir }
-      }
-      match = await ports.registerExternalRoot({ parentDir: location.parentDir, filePath: path })
-    } else {
-      match = location.match
+    if (location.kind !== "outside") {
+      return resolveAndOpen(path, location.match)
     }
+    if (!confirmRegisterRoot) {
+      return { status: "needs-binding-root-confirmation", path, parentDir: location.parentDir }
+    }
+    // A throw here persisted no root in Settings, so there is nothing to observe.
+    const match = await ports.registerExternalRoot({ parentDir: location.parentDir, filePath: path })
+    try {
+      return await resolveAndOpen(path, match)
+    } finally {
+      notifyExternalRootRegistered(match)
+    }
+  }
 
+  function notifyExternalRootRegistered(match: BindingRootMatch) {
+    const notify = ports.onExternalRootRegistered
+    if (!notify) return
+    void Promise.resolve()
+      .then(() => notify(match))
+      .catch((error: unknown) => {
+        // The root is durable and the open already has its outcome; the next
+        // app start observes the root anyway.
+        console.warn("[open-document] could not refresh observers of the new root", {
+          bindingRootId: match.bindingRootId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+  }
+
+  async function resolveAndOpen(path: string, match: BindingRootMatch): Promise<OpenDocumentResult> {
     const evidence = await ports.readFileEvidence({ ...match, path })
     const knownBindings = await ports.listKnownBindings(match.bindingRootId)
     const cloudHashResult = evidence.contentHash && ports.cloudHashLookup
@@ -293,16 +315,7 @@ export function createOpenDocumentUseCase(ports: OpenDocumentPorts) {
       return { status: "ambiguous", path, candidates: resolved.candidates ?? [] }
     }
 
-    const result = await registerAndOpen(resolved.documentId, resolved.strategy, match, evidence)
-    if (registersRoot && ports.onExternalRootRegistered) {
-      try {
-        await ports.onExternalRootRegistered(match)
-      } catch {
-        // The document is already open and its binding durable; observation of
-        // the new root recovers on the next app start.
-      }
-    }
-    return result
+    return registerAndOpen(resolved.documentId, resolved.strategy, match, evidence)
   }
 
   return async function openDocument(
