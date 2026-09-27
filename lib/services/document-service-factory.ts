@@ -65,6 +65,14 @@ function ok<T>(data: T): ServiceResponse<T> { return { data, error: null } }
 function err<T>(code: ServiceError["code"], message: string): ServiceResponse<T> {
   return { data: null, error: { code, message, retryable: false } }
 }
+function isConflictError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: unknown }).code === "CONFLICT"
+  )
+}
 function unexpected(error: unknown, fallback: ServiceError["code"] = "UNAVAILABLE"): ServiceError {
   // A caller inside this class (persist()) can throw an already-well-formed
   // ServiceError — e.g. the WATCH-07 CONFLICT from a write-side hash
@@ -149,6 +157,17 @@ async function resolveDesktopRuntimeServices(): Promise<DesktopRuntimeServices> 
 }
 
 class DesktopDocumentService implements DocumentService {
+  /**
+   * ODE-629 — a rename is not atomic: `rename_file` moves the `.md` first and
+   * the catalog commit (`workspace_sync` + `commitDualWrite`) lands after it.
+   * During that window the catalog still binds the old path while the file no
+   * longer exists there, so a save in flight that CONFLICTs must not trust a
+   * catalog read until the rename of that document has finished. Keyed by
+   * writingId; renames are user gestures and the entry is removed only after
+   * the catalog commit, so "no entry" means the catalog is already settled.
+   */
+  private readonly renamesInFlight = new Map<string, Promise<ServiceResponse<WritingRecord>>>()
+
   constructor(private readonly runtime: DesktopRuntimeServices) {}
 
   private serialize(record: WritingRecord) {
@@ -164,9 +183,10 @@ class DesktopDocumentService implements DocumentService {
     canonicalPath: string,
     operation: "upsert" | "delete" = "upsert",
     expectedContentHash?: string | null,
+    options: { writeContent?: boolean } = {},
   ): Promise<WritingRecord> {
-    const markdown = this.serialize(record)
-    if (operation === "upsert") {
+    if (operation === "upsert" && options.writeContent !== false) {
+      const markdown = this.serialize(record)
       const fileResult = await this.runtime.filesystem.saveWriting({
         writing: {
           ...record,
@@ -328,11 +348,51 @@ class DesktopDocumentService implements DocumentService {
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 
+  /**
+   * ODE-629 — a save resolves its canonical path once (`catalog.getById`) and
+   * `write_file` guards that path with `expectedContentHash`. When a rename
+   * moves the `.md` while the save is in flight, the old path is gone and the
+   * write is refused with CONFLICT. If the catalog now binds the same UUID to a
+   * different path, that CONFLICT is the rename having moved the document, not
+   * an external edit: the save retries against the new path so the content
+   * lands instead of living only in memory. A CONFLICT at a still-current path
+   * is a real external-change conflict and is rethrown untouched.
+   *
+   * The retry must also wait for a rename of this document that is mid-flight:
+   * the rename moves the file before committing the catalog, so a save can
+   * CONFLICT inside that window (`rename_file` already moved it) and a bare
+   * catalog read would still return the old path — the same conflict again.
+   * Awaiting the in-flight rename commits the catalog first; the loop stays
+   * bounded by its own attempt budget.
+   */
+  private async persistFollowingRename(
+    record: WritingRecord,
+    canonicalPath: string,
+    expectedContentHash?: string | null,
+  ): Promise<WritingRecord> {
+    let target = canonicalPath
+    let lastError: unknown = null
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.persist(record, target, "upsert", expectedContentHash)
+      } catch (error) {
+        lastError = error
+        if (!isConflictError(error)) throw error
+        await this.renamesInFlight.get(record.id)?.catch(() => undefined)
+        const current = await this.runtime.catalog.getById(record.id)
+        const currentPath = current?.binding?.canonicalPath ?? null
+        if (!currentPath || currentPath === target) throw error
+        target = currentPath
+      }
+    }
+    throw lastError ?? new Error("Save retry exhausted")
+  }
+
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
       const existing = await this.runtime.catalog.getById(input.writing.id)
       if (!existing?.binding?.canonicalPath) return err("NOT_FOUND", `Writing ${input.writing.id} has no local binding`)
-      return ok(await this.persist(input.writing, existing.binding.canonicalPath, "upsert", input.expectedContentHash))
+      return ok(await this.persistFollowingRename(input.writing, existing.binding.canonicalPath, input.expectedContentHash))
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 
@@ -443,6 +503,23 @@ class DesktopDocumentService implements DocumentService {
   }
 
   async renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
+    // ODE-629: register the whole rename — from before the file move to after
+    // the catalog commit — so a save that CONFLICTs inside the move→commit
+    // window can wait for it instead of reading a half-committed catalog (see
+    // persistFollowingRename). The entry is removed only once the rename has
+    // fully settled, so an absent entry means the catalog is already current.
+    const inFlight = this.performRenameWriting(input)
+    this.renamesInFlight.set(input.writingId, inFlight)
+    try {
+      return await inFlight
+    } finally {
+      if (this.renamesInFlight.get(input.writingId) === inFlight) {
+        this.renamesInFlight.delete(input.writingId)
+      }
+    }
+  }
+
+  private async performRenameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
       const existing = await this.openWriting(input.writingId)
       if (existing.error || !existing.data) return existing
@@ -453,7 +530,13 @@ class DesktopDocumentService implements DocumentService {
       })
       if (renamed.error || !renamed.data) return err("UNAVAILABLE", renamed.error?.message ?? "Rename failed")
       const next = { ...existing.data, title: renamed.data.title, updatedAt: input.updatedAt }
-      return ok(await this.persist(next, renamed.data.id))
+      // ODE-629: the move already transported the bytes that were on disk; the
+      // rename only rebinds. Writing `next` here would resurrect the snapshot
+      // `openWriting()` read before the move and could silently clobber a save
+      // that landed in between. The binding is refreshed from the real file
+      // stats (`writeContent: false`), so a save racing the rename lands on the
+      // new path through `persistFollowingRename`.
+      return ok(await this.persist(next, renamed.data.id, "upsert", null, { writeContent: false }))
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 

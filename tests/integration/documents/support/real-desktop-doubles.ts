@@ -198,6 +198,7 @@ export function resetWriteFileFailureState(): void {
   failingWriteFileCallNumber = null
   writeFileFailureFactory = null
   heldWriteFile = null
+  heldOpenFile = null
   failingWriteFileMatching = null
   writeFileLog.length = 0
   failingCatalogGetById.clear()
@@ -244,6 +245,29 @@ export function holdWriteFile(matches: (path: string) => boolean): { release: ()
     arrived = resolve
   })
   heldWriteFile = { matches, gate, arrived }
+  return { release, started }
+}
+
+/**
+ * Retiene la próxima lectura (`tauriOpenFile`) cuya ruta cumpla `matches`,
+ * capturando el contenido en el momento en que la lectura llegó y
+ * entregándolo cuando `release()` la suelta — aunque el archivo cambie
+ * mientras está retenida. Modela una lectura en vuelo que aterriza tarde: la
+ * ventana exacta en la que un snapshot leído antes de mover un archivo puede
+ * pisar contenido más nuevo (ODE-629). `started()` resuelve cuando la lectura
+ * llegó. Se limpia con `resetWriteFileFailureState`.
+ */
+let heldOpenFile: { matches: (path: string) => boolean; gate: Promise<void>; arrived: () => void } | null = null
+export function holdOpenFile(matches: (path: string) => boolean): { release: () => void; started: Promise<void> } {
+  let release!: () => void
+  let arrived!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  heldOpenFile = { matches, gate, arrived }
   return { release, started }
 }
 
@@ -381,6 +405,16 @@ export async function tauriRenameFileDouble(oldPath: string, newPath: string): P
 }
 
 export async function tauriOpenFileDouble(path: string): Promise<string> {
+  if (heldOpenFile?.matches(path)) {
+    const held = heldOpenFile
+    heldOpenFile = null
+    // Capture at arrival, deliver on release: the caller reads the file as it
+    // was when the read was issued, even if it changes while held.
+    const captured = await fs.readFile(path, "utf8")
+    held.arrived()
+    await held.gate
+    return captured
+  }
   return fs.readFile(path, "utf8")
 }
 
