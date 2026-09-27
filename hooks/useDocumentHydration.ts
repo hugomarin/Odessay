@@ -307,6 +307,19 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
       applyCorrectionSuggestionUpdate(() => [], { immediate: true })
       currentCanonicalPathRef.current = null
       setCanonicalPath(null)
+      // STATE-05: el borrador no tiene view_state que restaurar, así que
+      // empieza arriba; sin esto hereda el scroll del documento que se dejó.
+      // Desde ODE-626 "New Artifact" en web también llega aquí (antes creaba
+      // una fila y pasaba por la restauración de abajo).
+      for (const viewport of [
+        document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]'),
+        document.querySelector<HTMLElement>("main"),
+      ]) {
+        if (viewport) {
+          viewport.scrollTop = 0
+          viewport.scrollLeft = 0
+        }
+      }
       window.requestAnimationFrame(() => {
         editor.commands.focus("start")
       })
