@@ -840,7 +840,6 @@ export function EditorShell({
     }
   }, [enterFocusMode, exitFocusMode, isFocusMode])
   const navigatedToDraftRef = useRef(false)
-  const identityEnsuredRef = useRef(false)
   const desktopWebHandoffAppliedRef = useRef(false)
   const desktopSessionRestoreTimingRef = useRef<{ writingId: string; startedAt: number } | null>(null)
   const forceNewWritingRequestedRef = useRef(false)
@@ -1073,7 +1072,7 @@ export function EditorShell({
             "identity",
           )
 
-          if (!routeWritingIdRef.current && !navigatedToDraftRef.current) {
+          if (!routeWritingIdRef.current) {
             navigatedToDraftRef.current = true
             navigateToWriting(routerRef.current, `/write/${writingId}`, { mode: "replace", skipOnDesktop: false })
           }
@@ -1916,24 +1915,17 @@ export function EditorShell({
   // mismo orden y en esta posición).
   useSessionRestore({
     activateDocument,
-    applyDocumentMetadata,
-    createDesktopDraftFn,
     currentWritingIdRef,
-    deriveAutoTitle,
     desktopSessionRestoreTimingRef,
-    desktopUntitledWritingTitle: DESKTOP_UNTITLED_WRITING_TITLE,
     editorSession,
     ephemeralDraftWritingIdRef,
     forceNewWriting,
-    identityEnsuredRef,
     isPerfHarness,
     navigatedToDraftRef,
     navigateToWriting,
     routeWritingId,
     router,
     sessionLoaded,
-    setBodyText,
-    applySyncStatus,
   })
 
   useEffect(() => {
@@ -4196,10 +4188,7 @@ export function EditorShell({
     activateDocument,
     activeEditorTabIdRef,
     createWorkspaceTabRef,
-    createWritingId,
-    currentWritingId,
     currentWritingIdRef,
-    deriveAutoTitle,
     editor,
     editorSession,
     ephemeralDraftWritingIdRef,

@@ -24,16 +24,18 @@
  * Control positivo: volver a A por su pestaña restaura el scroll y la
  * selección de A.
  *
- * Lo que la shell NO hace en desktop, y por qué el scroll se mide distinto
- * que en web: el único lector del `view_state` de una pestaña es la rama que
- * hidrata un documento con identidad (`useDocumentHydration`). La llegada a un
- * borrador (rama "sin documento") vacía el editor y pone el cursor al inicio,
- * pero no escribe el scroll ni lee el `view_state` del slot. En un navegador,
- * el scroll vuelve a 0 porque el contenido vacío ya no da para desplazarse
- * (recorte de layout); happy-dom no tiene layout y conserva el `scrollTop`
- * que tenía A. `modelLayoutClamp()` aplica ese recorte de forma declarada, y
- * lo que se prueba del scroll es que la shell no vuelve a escribir encima el
- * de A — en particular, la restauración diferida de A (caso 3).
+ * Owner del scroll del borrador (compartido web/desktop): la llegada a un
+ * borrador — rama "sin documento" de `useDocumentHydration` — vacía el editor,
+ * pone el cursor al inicio y, desde ODE-626, resetea a 0 el scroll de los dos
+ * contenedores que la shell lee (`[data-testid="editor-writing-area"]` y el
+ * `<main>` del layout). Esa rama no lee el `view_state` del slot del borrador:
+ * el único lector de `view_state` sigue siendo la rama que hidrata un
+ * documento con identidad.
+ *
+ * El scroll se prueba sin modelar layout: happy-dom conserva el `scrollTop`
+ * que tenía A, así que B en 0 solo puede venir de ese reset. Mutación: quitar
+ * el reset de la rama "sin documento" → los tres casos en rojo (B muestra el
+ * scroll 140 de A).
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -185,16 +187,6 @@ async function waitForDraftB() {
   return tab
 }
 
-/**
- * El recorte que hace el navegador al vaciar el editor (ver cabecera): un
- * borrador vacío cabe en su contenedor y el `scrollTop` cae a 0. Es layout,
- * un boundary del runtime que happy-dom no reproduce; no es estado de la app.
- */
-async function modelLayoutClamp() {
-  scrollViewport({ editorScrollTop: 0, shellScrollTop: 0 })
-  await flush(4)
-}
-
 function expectCleanB(label: string) {
   const stored = tabById(EDITOR_DRAFT_TAB_ID)?.view_state
   expect(stored?.scrollTop ?? 0, `${label}: el slot de B no guarda scroll ajeno`).toBe(0)
@@ -223,7 +215,6 @@ describe("ODE-600 — STATE-05 (desktop): el borrador nuevo empieza limpio", () 
       await clickNewArtifact(mounted!.container)
       expectSavedA(tabAId)
       await waitForDraftB()
-      await modelLayoutClamp()
       expectCleanB("borrador nuevo")
 
       await expectARestoresOnReturn(tabAId)
@@ -254,7 +245,6 @@ describe("ODE-600 — STATE-05 (desktop): el borrador nuevo empieza limpio", () 
       await clickNewArtifact(mounted!.container)
       const draftB = await waitForDraftB()
       expect(draftB.draft_writing_id, "el slot tiene una identidad nueva").not.toBe(draftD)
-      await modelLayoutClamp()
       expectCleanB("slot reutilizado")
 
       await expectARestoresOnReturn(tabAId)
@@ -288,7 +278,6 @@ describe("ODE-600 — STATE-05 (desktop): el borrador nuevo empieza limpio", () 
         { label: "borrador B activo y vacío" },
       )
       await frames.settle()
-      scrollViewport({ editorScrollTop: 0, shellScrollTop: 0 }) // recorte de layout, ver `modelLayoutClamp`
 
       // La restauración de A llega TARDE, sobre B ya activo.
       await frames.runCallbacks(lateRestoreOfA)

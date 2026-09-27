@@ -540,12 +540,11 @@ export function createPersistenceCoordinator(
     // to `current` instead of firing unconditionally (ODE-478 case 1).
     const startedAt = nowMs()
 
-    if (!snapshot.writingId && deps.runtime === "desktop") {
-      // Desktop drafts are not durable until they carry either real content
-      // or an explicit name. An empty "Untitled" with nothing typed into it
-      // stays ephemeral — but naming a still-blank draft is just as
-      // deliberate a signal as the first keystroke, and must materialize the
-      // same way, not silently no-op (ODE-478 case 3).
+    if (!snapshot.writingId) {
+      // A blank, unmaterialized draft stays ephemeral on every runtime until
+      // it has real content or an explicit name. Naming a still-blank draft
+      // is just as deliberate a signal as the first keystroke, and must
+      // materialize the same way, not silently no-op (ODE-478 case 3).
       const hasExplicitTitle = Boolean(overrides?.title?.trim())
       // bodyText alone misses atomic non-text content (an image, table, etc.
       // has no extractable text but is real content) — trust the caller's
@@ -557,7 +556,11 @@ export function createPersistenceCoordinator(
         clearUnconfirmedContentForCommit(request)
         return true
       }
+    }
 
+    if (!snapshot.writingId && deps.runtime === "desktop") {
+      // A desktop draft that passed the shared admission guard needs its
+      // filesystem-aware materialization path before the ordinary save path.
       emit("persisting_local", request, null)
 
       if (!deps.createDesktopDraft) {

@@ -2,7 +2,7 @@
 
 /**
  * Abrir documentos en pestañas: crear una pestaña nueva ("New Artifact": un
- * borrador efímero en desktop, una identidad local nueva en web), abrir un
+ * borrador efímero hasta su primer contenido en ambos runtimes), abrir un
  * documento desde el árbol del workspace, pasar a la pestaña contigua con el
  * teclado y la creación forzada de `/write?new`.
  *
@@ -11,17 +11,14 @@
  * `selectAdjacentTabRef` (en render, como antes) y el efecto de
  * `forceNewWriting` son los que vivían en la shell, en el mismo orden, y la
  * shell llama a este hook donde empezaba ese bloque. El estado y los refs
- * siguen siendo de la shell y llegan por `input`, igual que los helpers puros
- * de su módulo (`createWritingId`, `deriveAutoTitle`) y el título en blanco.
+ * siguen siendo de la shell y llegan por `input`, igual que el título en blanco.
  * Dependencias: las de la shell más esos refs, helpers y constante (estables).
  */
 import { useCallback, useEffect } from "react"
 import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
 import { createBlankDraftIdentity } from "@/lib/editor/hydration-session"
 import { EDITOR_DRAFT_TAB_ID } from "@/lib/local-db/editor-sessions"
-import { type WritingRecord } from "@/lib/services/contracts/document-service"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
-import { getDocumentService } from "@/lib/services/document-service-factory"
 import { describeOpenOutcome, openDocumentById } from "@/lib/services/open-document-factory"
 import { getEditorSessionState, openDraftTab, openWritingTab } from "@/lib/stores/editor-session-store"
 import { type Editor } from "@tiptap/react"
@@ -36,10 +33,7 @@ export type WorkspaceTabOpeningInput = {
   activateDocument: DocumentHydrationInput["activateDocument"]
   activeEditorTabIdRef: React.RefObject<string | null>
   createWorkspaceTabRef: React.RefObject<((options?: { skipConfirm?: boolean }) => Promise<void>) | null>
-  createWritingId: () => string
-  currentWritingId: string | null
   currentWritingIdRef: React.RefObject<string | null>
-  deriveAutoTitle: (bodyText: string, createdAt: string | null) => string
   editor: Editor | null
   editorSession: LocalEditorSession
   ephemeralDraftWritingIdRef: React.RefObject<string | null>
@@ -63,10 +57,7 @@ export function useWorkspaceTabOpening(input: WorkspaceTabOpeningInput) {
     activateDocument,
     activeEditorTabIdRef,
     createWorkspaceTabRef,
-    createWritingId,
-    currentWritingId,
     currentWritingIdRef,
-    deriveAutoTitle,
     editor,
     editorSession,
     ephemeralDraftWritingIdRef,
@@ -133,104 +124,31 @@ export function useWorkspaceTabOpening(input: WorkspaceTabOpeningInput) {
       return
     }
 
-    // Block publishTabState while we are mid-creation. Web claims the final id
-    // synchronously so persistEditorSnapshot never races against it.
+    // Keep a stale passive publication from relabeling the prior tab while
+    // the active document becomes a new ephemeral draft.
     isCreatingWorkspaceTabRef.current = true
 
-    // Web: el volcado no aplica (la cola del editor se vacía de forma síncrona
-    // en web) y el borrador no se conserva aquí; solo la vista saliente.
+    // Web saves already enter the coordinator on each content change. A new
+    // blank draft therefore needs a session identity only; its durable UUID,
+    // local row, and sync upsert arrive through the coordinator after content
+    // or an explicit title.
     prepareDocumentExit({ flushPendingEdit: false, snapshotDraft: false, saveViewState: true })
-    const activeDraftTabId = currentWritingId ?? EDITOR_DRAFT_TAB_ID
-    const isActiveDraft =
-      !currentWritingId ||
-      editorSession.tabs.some((tab) => tab.id === activeDraftTabId && tab.writing_id === null)
+    persistenceCoordinator.activateDocument(null)
+    activateDocument({ writingId: null, href: "/write" }, "create")
+    ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
+    navigatedToDraftRef.current = true
 
-    const nowIso = new Date().toISOString()
-    const nextWritingId = createWritingId()
-    const nextTitle = deriveAutoTitle("", nowIso)
-
-    // Claim ownership of the blank-draft -> identified-local-writing transition
-    // synchronously so persistEditorSnapshot never races against it.
-    activateDocument(
-      { writingId: nextWritingId, href: `/write/${nextWritingId}` },
-      "create",
-    )
-
-    const finishCreation = () => {
-      isCreatingWorkspaceTabRef.current = false
+    if (editor) {
+      isApplyingContentRef.current = true
+      editor.commands.setContent(EMPTY_EDITOR_JSON)
+      isApplyingContentRef.current = false
+      updateDerivedEditorState(editor)
     }
 
-    const blankDraftRecord: WritingRecord = {
-      id: nextWritingId,
-      authorId: null,
-      title: nextTitle,
-      content: {
-        richText: EMPTY_EDITOR_JSON as Record<string, unknown>,
-        markdown: null,
-        plainText: "",
-        canonicalSource: "rich-text",
-      },
-      slug: null,
-      status: "draft",
-      artifactType: "general",
-      visibility: "private",
-      parentId: null,
-      correspondenceId: null,
-      version: 1,
-      deletedAt: null,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      contentUpdatedAt: nowIso,
-      metadataUpdatedAt: nowIso,
-    }
-
-    if (isActiveDraft) {
-      try {
-        await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
-      } catch {
-        // If save fails, revert the optimistic claim so persistEditorSnapshot
-        // can fall back to identity-on-first-input.
-        activateDocument({ writingId: null }, "revert")
-        return
-      } finally {
-        finishCreation()
-      }
-
-      openWritingTab({
-        writingId: currentWritingIdRef.current ?? nextWritingId,
-        title: nextTitle,
-        saveState: "saved",
-        hasPendingSync: false,
-      })
-      activeEditorTabIdRef.current = currentWritingIdRef.current ?? nextWritingId
-      // Double rAF: first waits for React to commit the new tab to the DOM,
-      // second ensures the editor contenteditable is focusable.
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
-          editorEl?.focus()
-        })
-      })
-      return
-    }
-
-    try {
-      await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
-    } catch {
-      activateDocument({ writingId: null }, "revert")
-      return
-    } finally {
-      finishCreation()
-    }
-
-    openWritingTab({
-      writingId: currentWritingIdRef.current ?? nextWritingId,
-      title: nextTitle,
-      saveState: "saved",
-      hasPendingSync: false,
-    })
-    activeEditorTabIdRef.current = currentWritingIdRef.current ?? nextWritingId
+    openDraftTab(ephemeralDraftWritingIdRef.current)
+    activeEditorTabIdRef.current = getEditorSessionState().session.active_tab_id ?? EDITOR_DRAFT_TAB_ID
     window.requestAnimationFrame(() => {
+      isCreatingWorkspaceTabRef.current = false
       window.requestAnimationFrame(() => {
         const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
         editorEl?.focus()
@@ -238,7 +156,6 @@ export function useWorkspaceTabOpening(input: WorkspaceTabOpeningInput) {
     })
   }, [
     activateDocument,
-    currentWritingId,
     editor,
     editorSession.tabs,
     persistenceCoordinator,
@@ -246,9 +163,6 @@ export function useWorkspaceTabOpening(input: WorkspaceTabOpeningInput) {
     refreshRichFootnotes,
     updateDerivedEditorState,
     activeEditorTabIdRef,
-    createWritingId,
-    currentWritingIdRef,
-    deriveAutoTitle,
     ephemeralDraftWritingIdRef,
     isApplyingContentRef,
     isCreatingWorkspaceTabRef,
