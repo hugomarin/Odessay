@@ -29,6 +29,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { isMacPlatform } from "@/lib/keyboard-shortcuts"
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { getEditorSessionState } from "@/lib/stores/editor-session-store"
@@ -58,9 +59,20 @@ vi.mock("@/lib/services/ai-service-factory", async () =>
   (await import("./support/editor-shell-doubles")).aiServiceDouble(),
 )
 
-const { flush, mountEditorShell, pointerClick, resetEditorShellWorld, waitFor } = await import(
-  "./support/editor-shell-harness"
-)
+const {
+  clickSelectionPopupAction,
+  flush,
+  holdAnimationFrames,
+  mountEditorShell,
+  pointerClick,
+  readEditorAnnotations,
+  resetEditorShellWorld,
+  selectEditorText,
+  selectionPopup,
+  waitFor,
+  waitForAsync,
+} = await import("./support/editor-shell-harness")
+const { act } = await import("react")
 
 const WRITING_A = "31111111-1111-4111-8111-111111111111"
 const WRITING_B = "32222222-2222-4222-8222-222222222222"
@@ -175,5 +187,240 @@ describe("ODE-562 — STATE-07: la selección de un documento se restaura al vol
     await flush(4)
 
     expect(currentSelection(), "A recupera su propia selección").toEqual(SELECTION_A)
+  }, SHELL_TEST_TIMEOUT_MS)
+})
+
+/*
+ * ODE-606 — STATE-06: la selección de un documento no se fuga a otro.
+ *
+ * Property: con dos pestañas, cada una conserva su selección; el popup de
+ * selección de A no aparece en B; y una acción del popup hecha después de
+ * cambiar se aplica al documento activo, no al anterior.
+ *
+ * Camino de producción: igual que STATE-07, pero la selección se hace por el
+ * DOM (`selectEditorText`: `Range` + `selectionchange`, lo que lee
+ * ProseMirror al arrastrar) y el popup se abre solo, por el `selectionUpdate`
+ * del shell. Se cambia de pestaña por los dos gestos del producto: el
+ * puntero (cuyo `pointerdown` también cierra el popup por "click fuera") y el
+ * atajo de teclado `nextTab`, que NO pasa por ese cierre — es el camino en el
+ * que un popup viejo podría sobrevivir al cambio.
+ *
+ * Failure modes cubiertos (brief de ODE-606):
+ *   - el snapshot de la selección se toma del editor anterior tras cambiar
+ *     de pestaña (`editorInstanceRef` es un espejo): la acción del popup
+ *     marcaría el rango de A en B;
+ *   - la restauración Markdown se fusiona con otra y se pierde (ODE-582): dos
+ *     restauraciones seguidas, con los frames retenidos, y cada documento
+ *     tiene que acabar con SU selección.
+ *
+ * Mutation tests (ODE-606, verificados en vivo):
+ *   - guardar el view_state sin la identidad del documento
+ *     (`persistCurrentWorkspaceViewState` con un `tabId` fijo en vez de
+ *     `currentWritingIdRef.current`) pone en rojo STATE-07 y los casos Rich y
+ *     Markdown de STATE-06: A deja de recuperar su propia selección;
+ *   - que el `selectionUpdate` del shell no cierre el popup cuando la
+ *     selección deja de ser un rango pone en rojo los dos casos Rich, por
+ *     puntero y por teclado: el popup de A aparece en B.
+ *
+ * Bug encontrado (ODE-625, bug 2): salir de un documento Markdown con su
+ * restauración todavía encolada le guarda la selección del documento
+ * anterior. Queda fijado como `it.fails` al final del bloque.
+ */
+
+const STATE06_TEXT_A = "Documento A con una frase bastante larga para seleccionar."
+const STATE06_TEXT_B = "Documento B con otro texto distinto."
+
+async function openPair(writingA: string, writingB: string) {
+  await localDB.writings.save(makeLocalWriting(writingA, STATE06_TEXT_A, "Documento A"))
+  await localDB.writings.save(makeLocalWriting(writingB, STATE06_TEXT_B, "Documento B"))
+  mounted = await mountEditorShell({ writingId: writingA })
+  await waitFor(() => mounted!.editor().getText().includes("Documento A"), { label: "hidratación de A" })
+  await mounted.render({ writingId: writingB })
+  await waitFor(() => tabFor(writingB), { label: "pestaña de B" })
+}
+
+async function activate(writingId: string, marker: string) {
+  await clickTab(writingId)
+  await waitFor(() => mounted!.editor().getText().includes(marker), { label: `${marker} activo` })
+  await flush(4)
+}
+
+async function persistedHighlights(writingId: string) {
+  const writing = await localDB.writings.get(writingId)
+  return JSON.stringify(writing?.body_json ?? {}).includes('"highlight"')
+}
+
+describe("ODE-606 — STATE-06: la selección y el popup de un documento no se fugan a otro", () => {
+  it("cada pestaña conserva su selección, el popup de A no aparece en B y la acción del popup cae en B", async () => {
+    const writingA = "81111111-1111-4111-8111-111111111111"
+    const writingB = "82222222-2222-4222-8222-222222222222"
+    await openPair(writingA, writingB)
+
+    await activate(writingA, "Documento A")
+    const selectionA = await selectEditorText("una frase")
+    expect(selectionPopup(), "control positivo: la selección de A abre el popup en A").not.toBeNull()
+
+    await activate(writingB, "Documento B")
+    expect(selectionPopup(), "el popup de A no aparece en B").toBeNull()
+    expect(currentSelection(), "B no hereda la selección de A").not.toEqual(selectionA)
+
+    const selectionB = await selectEditorText("otro texto")
+    expect(selectionPopup(), "la selección de B abre su propio popup").not.toBeNull()
+    await clickSelectionPopupAction("Mark passage")
+    expect(readEditorAnnotations().marks, "la acción del popup marca el rango de B, en B").toEqual([
+      { from: selectionB.from, to: selectionB.to, text: "otro texto", type: "highlight" },
+    ])
+    const selectionBAfterMark = currentSelection()
+
+    // Ida y vuelta varias veces: cada documento vuelve con lo suyo.
+    for (let round = 0; round < 2; round += 1) {
+      await activate(writingA, "Documento A")
+      expect(currentSelection(), `vuelta ${round + 1} a A: su propia selección`).toEqual(selectionA)
+      expect(readEditorAnnotations().marks, `vuelta ${round + 1} a A: la marca de B no está en A`).toEqual([])
+
+      await activate(writingB, "Documento B")
+      expect(currentSelection(), `vuelta ${round + 1} a B: su propia selección`).toEqual(selectionBAfterMark)
+      expect(readEditorAnnotations().marks, `vuelta ${round + 1} a B: conserva su marca`).toEqual([
+        { from: selectionB.from, to: selectionB.to, text: "otro texto", type: "highlight" },
+      ])
+    }
+
+    await waitForAsync(async () => persistedHighlights(writingB), { label: "la marca de B persistida en B" })
+    expect(await persistedHighlights(writingA), "lo persistido de A no tiene la marca").toBe(false)
+  }, SHELL_TEST_TIMEOUT_MS)
+
+  it("cambiar por teclado con el popup de A abierto no lo lleva a B", async () => {
+    const writingA = "83111111-1111-4111-8111-111111111111"
+    const writingB = "84222222-2222-4222-8222-222222222222"
+    await openPair(writingA, writingB)
+
+    // B queda a la derecha de A: `nextTab` desde A lleva a B.
+    await activate(writingA, "Documento A")
+    await selectEditorText("bastante larga")
+    expect(selectionPopup(), "control positivo: el popup de A está abierto").not.toBeNull()
+
+    const mac = isMacPlatform()
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "]",
+          code: "BracketRight",
+          shiftKey: true,
+          metaKey: mac,
+          ctrlKey: !mac,
+          bubbles: true,
+        }),
+      )
+    })
+    await flush(2)
+    expect(getEditorSessionState().session.active_tab_id, "el atajo activó la pestaña de B").toBe(
+      tabFor(writingB)?.id,
+    )
+    await waitFor(() => mounted!.editor().getText().includes("Documento B"), { label: "B activo" })
+    await flush(4)
+
+    expect(selectionPopup(), "el popup de A no sobrevive al cambio por teclado").toBeNull()
+    expect(readEditorAnnotations().marks, "B sigue sin marcas").toEqual([])
+    expect(await persistedHighlights(writingA), "A sigue sin marcas persistidas").toBe(false)
+  }, SHELL_TEST_TIMEOUT_MS)
+
+  const markdownSource = () =>
+    document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]')
+
+  const markdownSelection = () => {
+    const textarea = markdownSource()!
+    return { start: textarea.selectionStart, end: textarea.selectionEnd }
+  }
+
+  /** Selección en el textarea real; el shell la lee por su `onMouseUp`. */
+  async function selectInMarkdown(start: number, end: number) {
+    const textarea = markdownSource()
+    if (!textarea) throw new Error("No hay textarea de Markdown")
+    await act(async () => {
+      textarea.focus()
+      textarea.setSelectionRange(start, end)
+      textarea.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }))
+    })
+    await flush(1)
+    expect(markdownSelection()).toEqual({ start, end })
+  }
+
+  async function activateMarkdown(writingId: string, marker: string) {
+    await clickTab(writingId)
+    await waitFor(() => markdownSource()?.value.includes(marker) ?? false, { label: `${marker} en Markdown` })
+    await flush(4)
+  }
+
+  /** El modo es por pestaña: se cambia con el botón real de la status bar. */
+  async function switchToMarkdown(marker: string) {
+    const modeButton = [
+      ...document.querySelectorAll<HTMLButtonElement>('[data-testid="editor-statusbar"] button'),
+    ].find((candidate) => candidate.textContent?.trim() === "Markdown")
+    if (!modeButton) throw new Error("No está el botón de modo Markdown en la status bar")
+    await act(async () => {
+      modeButton.click()
+    })
+    await waitFor(() => markdownSource()?.value.includes(marker) ?? false, { label: `${marker} en Markdown` })
+    await flush(2)
+  }
+
+  const SELECTION_A_MD = { start: 16, end: 25 }
+  const SELECTION_B_MD = { start: 16, end: 26 }
+
+  /**
+   * A y B en Markdown con su selección cada uno; control positivo: una vuelta
+   * simple a A le devuelve la suya. Después, A → B → A con los frames
+   * retenidos: la restauración de B sigue encolada cuando llega la de A y la
+   * cola las fusiona (la situación de ODE-582).
+   */
+  async function markdownDoubleRestore(writingA: string, writingB: string) {
+    await openPair(writingA, writingB)
+    await activate(writingB, "Documento B")
+    await switchToMarkdown("Documento B")
+    await activate(writingA, "Documento A")
+    await switchToMarkdown("Documento A")
+
+    await selectInMarkdown(SELECTION_A_MD.start, SELECTION_A_MD.end)
+    await activateMarkdown(writingB, "Documento B")
+    await selectInMarkdown(SELECTION_B_MD.start, SELECTION_B_MD.end)
+
+    await activateMarkdown(writingA, "Documento A")
+    expect(markdownSelection(), "control positivo: una vuelta simple a A").toEqual(SELECTION_A_MD)
+
+    const frames = holdAnimationFrames()
+    try {
+      await clickTab(writingB)
+      await clickTab(writingA)
+      await frames.settleUntil(
+        () =>
+          (markdownSource()?.value.includes("Documento A") ?? false) &&
+          document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") === "ready",
+        { label: "A hidratado tras la fusión" },
+      )
+      await frames.settle(6)
+    } finally {
+      frames.restore()
+    }
+    await flush(4)
+  }
+
+  it("Markdown: dos restauraciones seguidas dejan a A con su selección", async () => {
+    await markdownDoubleRestore("85111111-1111-4111-8111-111111111111", "86222222-2222-4222-8222-222222222222")
+    expect(markdownSelection(), "tras la fusión, A tiene su selección").toEqual(SELECTION_A_MD)
+    expect(tabFor("85111111-1111-4111-8111-111111111111")?.id).toBe(getEditorSessionState().session.active_tab_id)
+  }, SHELL_TEST_TIMEOUT_MS)
+
+  // BUG CONOCIDO — ODE-625 (bug 2). Salir de B con su restauración todavía
+  // encolada guarda en el view_state de B la selección de A: el
+  // `markdownSelectionRef` del shell no está atado a la identidad del
+  // documento. `it.fails` pasa mientras el bug exista y se pone en rojo
+  // cuando se arregle: entonces hay que pasarlo a `it`. Las precondiciones
+  // son las mismas que las del caso de arriba, que sí está en verde.
+  it.fails("BUG ODE-625 — Markdown: salir de B antes de su restauración no le deja la selección de A", async () => {
+    const writingA = "87111111-1111-4111-8111-111111111111"
+    const writingB = "88222222-2222-4222-8222-222222222222"
+    await markdownDoubleRestore(writingA, writingB)
+    await activateMarkdown(writingB, "Documento B")
+    expect(markdownSelection(), "B conserva su propia selección").toEqual(SELECTION_B_MD)
   }, SHELL_TEST_TIMEOUT_MS)
 })
