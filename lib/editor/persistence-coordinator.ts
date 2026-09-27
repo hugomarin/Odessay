@@ -131,6 +131,15 @@ export type PersistenceCoordinator = {
   dispose(): void
   hasPending(target?: PersistenceSettleTarget): boolean
   /**
+   * Whether content handed to `persist()` is still not confirmed durable for
+   * this document/tab. Unlike `hasPending()`, this remains true after a write
+   * fails and is cleared only by a successful superseding commit or an
+   * explicit content replacement.
+   */
+  hasUnconfirmedContent(target: PersistenceSettleTarget): boolean
+  /** Clear unconfirmed content only when the caller replaces it from disk. */
+  discardUnconfirmed(writingId: string): void
+  /**
    * Resolves once nothing is in flight, debounced or queued — flushing a
    * pending debounce immediately rather than waiting out its timer. For a
    * caller that needs to know a write has actually landed before proceeding
@@ -171,7 +180,19 @@ type PersistenceRequest = {
   overrides?: PersistenceSnapshotOverrides
   generation: number
   key: string
+  unconfirmedToken: UnconfirmedContentToken | null
   waiters: Array<(result: boolean) => void>
+}
+
+type PersistenceTargetIdentity = Pick<PersistenceSnapshot, "writingId" | "draftWritingId" | "sourceTabId">
+
+type UnconfirmedContentEntry = PersistenceTargetIdentity & {
+  sequence: number
+}
+
+type UnconfirmedContentToken = {
+  key: string
+  sequence: number
 }
 
 function unexpected(error: unknown): ServiceError {
@@ -231,6 +252,14 @@ export function createPersistenceCoordinator(
   // object for why this must be read fresh at write time, not frozen into a
   // snapshot at persist()-call time.
   const durableContentHashByWritingId = new Map<string, string | null>()
+  // WATCH-07 — persistence work and durability are separate lifecycles.
+  // Keep the latest identity marker per request key so a failed request
+  // remains visible after it leaves `pendingRequests`, and an older commit
+  // cannot make a newer request clean. The alias index makes target queries
+  // constant-time without retaining content snapshots.
+  const unconfirmedContentByKey = new Map<string, UnconfirmedContentEntry>()
+  const unconfirmedContentKeysByAlias = new Map<string, Set<string>>()
+  let nextUnconfirmedSequence = 0
 
   const isCurrent = (request: PersistenceRequest) => !disposed && request.generation === generation
 
@@ -277,7 +306,107 @@ export function createPersistenceCoordinator(
     return false
   }
 
-  const rebindMaterializedDraftRequests = (draftWritingId: string, record: WritingRecord) => {
+  const aliasesFor = (identity: PersistenceTargetIdentity) =>
+    [identity.writingId, identity.draftWritingId, identity.sourceTabId].filter(
+      (alias): alias is string => Boolean(alias),
+    )
+
+  const deleteUnconfirmedEntry = (key: string) => {
+    const entry = unconfirmedContentByKey.get(key)
+    if (!entry) return
+    unconfirmedContentByKey.delete(key)
+    aliasesFor(entry).forEach((alias) => {
+      const keys = unconfirmedContentKeysByAlias.get(alias)
+      keys?.delete(key)
+      if (keys?.size === 0) unconfirmedContentKeysByAlias.delete(alias)
+    })
+  }
+
+  const setUnconfirmedEntry = (key: string, entry: UnconfirmedContentEntry) => {
+    deleteUnconfirmedEntry(key)
+    unconfirmedContentByKey.set(key, entry)
+    aliasesFor(entry).forEach((alias) => {
+      const keys = unconfirmedContentKeysByAlias.get(alias) ?? new Set<string>()
+      keys.add(key)
+      unconfirmedContentKeysByAlias.set(alias, keys)
+    })
+  }
+
+  const markUnconfirmedContent = (snapshot: PersistenceSnapshot): UnconfirmedContentToken | null => {
+    if (!snapshot.writingId && !snapshot.draftWritingId && !snapshot.sourceTabId) return null
+
+    const sequence = ++nextUnconfirmedSequence
+    const key = getRequestKey(snapshot)
+    setUnconfirmedEntry(key, {
+      writingId: snapshot.writingId,
+      draftWritingId: snapshot.draftWritingId,
+      sourceTabId: snapshot.sourceTabId,
+      sequence,
+    })
+    return { key, sequence }
+  }
+
+  const replaceUnconfirmedToken = (request: PersistenceRequest, token: UnconfirmedContentToken | null) => {
+    const previous = request.unconfirmedToken
+    if (previous && previous.key !== token?.key && unconfirmedContentByKey.get(previous.key)?.sequence === previous.sequence) {
+      deleteUnconfirmedEntry(previous.key)
+    }
+    request.unconfirmedToken = token
+  }
+
+  const clearUnconfirmedContentForCommit = (request: PersistenceRequest) => {
+    const token = request.unconfirmedToken
+    if (token && unconfirmedContentByKey.get(token.key)?.sequence === token.sequence) {
+      deleteUnconfirmedEntry(token.key)
+    }
+  }
+
+  const discardUnconfirmedContentForWriting = (writingId: string) => {
+    const keys = new Set(unconfirmedContentKeysByAlias.get(writingId) ?? [])
+    if (unconfirmedContentByKey.has(writingId)) keys.add(writingId)
+    keys.forEach(deleteUnconfirmedEntry)
+  }
+
+  const hasUnconfirmedContentForTarget = (target: PersistenceSettleTarget) => {
+    const aliases = new Set<string>()
+    if (target.writingId) aliases.add(target.writingId)
+    if (target.draftWritingId) aliases.add(target.draftWritingId)
+    if (target.sourceTabId) aliases.add(target.sourceTabId)
+    if (target.draftWritingId) {
+      const materialized = materializedDrafts.get(target.draftWritingId)
+      if (materialized) aliases.add(materialized.id)
+    }
+
+    return Array.from(aliases).some((alias) => (unconfirmedContentKeysByAlias.get(alias)?.size ?? 0) > 0)
+  }
+
+  const rebindMaterializedDraftRequests = (
+    draftWritingId: string,
+    record: WritingRecord,
+    materializingRequest: PersistenceRequest,
+  ) => {
+    const markerKeys = new Set([
+      ...(unconfirmedContentKeysByAlias.get(draftWritingId) ?? []),
+      ...(unconfirmedContentKeysByAlias.get(record.id) ?? []),
+    ])
+    if (unconfirmedContentByKey.has(draftWritingId)) markerKeys.add(draftWritingId)
+    if (unconfirmedContentByKey.has(record.id)) markerKeys.add(record.id)
+    const latestMarker = Array.from(markerKeys)
+      .map((key) => unconfirmedContentByKey.get(key))
+      .filter((entry): entry is UnconfirmedContentEntry => Boolean(entry))
+      .sort((left, right) => right.sequence - left.sequence)[0]
+    markerKeys.forEach(deleteUnconfirmedEntry)
+    if (latestMarker) {
+      setUnconfirmedEntry(record.id, {
+        ...latestMarker,
+        writingId: record.id,
+        sourceTabId: record.id,
+      })
+    }
+    if (materializingRequest.unconfirmedToken?.key === draftWritingId) {
+      materializingRequest.unconfirmedToken = { ...materializingRequest.unconfirmedToken, key: record.id }
+    }
+
     const rebinding = Array.from(pendingRequests.entries()).filter(
       ([, request]) => request.snapshot.writingId === null && request.snapshot.draftWritingId === draftWritingId,
     )
@@ -294,7 +423,17 @@ export function createPersistenceCoordinator(
       const existing = pendingRequests.get(nextKey)
 
       pendingRequests.delete(pendingKey)
+      const requestToken = request.unconfirmedToken?.key === draftWritingId
+        ? { ...request.unconfirmedToken, key: record.id }
+        : request.unconfirmedToken
+      request.unconfirmedToken = requestToken
       if (existing && existing !== request) {
+        const existingToken = existing.unconfirmedToken?.key === draftWritingId
+          ? { ...existing.unconfirmedToken, key: record.id }
+          : existing.unconfirmedToken
+        existing.unconfirmedToken = requestToken && (!existingToken || requestToken.sequence > existingToken.sequence)
+          ? requestToken
+          : existingToken
         existing.snapshot = nextSnapshot
         existing.overrides = request.overrides
         existing.generation = request.generation
@@ -412,6 +551,9 @@ export function createPersistenceCoordinator(
       // richer signal when it provides one (ODE-478 follow-up).
       const isBodyBlank = snapshot.bodyIsEmpty ?? snapshot.bodyText.trim() === ""
       if (isBodyBlank && !hasExplicitTitle) {
+        // This request contains no content that needs a durable commit.
+        // Do not clear a later edit that arrived while this one was queued.
+        clearUnconfirmedContentForCommit(request)
         return true
       }
     }
@@ -456,13 +598,14 @@ export function createPersistenceCoordinator(
         durableContentHashByWritingId.set(materialized.id, materialized.contentHash ?? null)
         if (snapshot.draftWritingId) {
           materializedDrafts.set(snapshot.draftWritingId, materialized)
-          rebindMaterializedDraftRequests(snapshot.draftWritingId, materialized)
+          rebindMaterializedDraftRequests(snapshot.draftWritingId, materialized, request)
           while (materializedDrafts.size > MATERIALIZED_DRAFTS_CACHE_LIMIT) {
             const oldestKey = materializedDrafts.keys().next().value
             if (oldestKey === undefined) break
             materializedDrafts.delete(oldestKey)
           }
         }
+        clearUnconfirmedContentForCommit(request)
         const current = isCurrent(request)
         // Only a still-current request may reassign the coordinator's own
         // notion of "the active document" — otherwise this background write
@@ -562,6 +705,7 @@ export function createPersistenceCoordinator(
       // Only after a real durable commit — never optimistically, and never
       // from the caller's own (possibly stale) belief about the content.
       durableContentHashByWritingId.set(savedRecord.id, savedRecord.contentHash ?? null)
+      clearUnconfirmedContentForCommit(request)
       const current = isCurrent(request)
       advancePendingVersions(savedRecord)
       const diagnostics: PersistenceDiagnostics = {
@@ -784,6 +928,7 @@ export function createPersistenceCoordinator(
       if (disposed) return Promise.resolve(false)
 
       const normalizedSnapshot = normalizeSnapshot(snapshot)
+      const unconfirmedToken = markUnconfirmedContent(normalizedSnapshot)
 
       // A snapshot is the caller's explicit document identity. If that
       // identity differs, invalidate the previous document's completion
@@ -805,12 +950,14 @@ export function createPersistenceCoordinator(
           pending.request.snapshot = normalizedSnapshot
           pending.request.overrides = overrides
           pending.request.generation = generation
+          replaceUnconfirmedToken(pending.request, unconfirmedToken)
         } else {
           pendingRequests.set(key, {
             snapshot: normalizedSnapshot,
             overrides,
             generation,
             key,
+            unconfirmedToken,
             waiters: [],
           })
         }
@@ -829,6 +976,7 @@ export function createPersistenceCoordinator(
           pending.request.snapshot = normalizedSnapshot
           pending.request.overrides = overrides
           pending.request.generation = generation
+          replaceUnconfirmedToken(pending.request, unconfirmedToken)
           pending.request.waiters.push(resolve)
         } else {
           pendingRequests.set(key, {
@@ -836,6 +984,7 @@ export function createPersistenceCoordinator(
             overrides,
             generation,
             key,
+            unconfirmedToken,
             waiters: [resolve],
           })
         }
@@ -870,6 +1019,12 @@ export function createPersistenceCoordinator(
     },
 
     hasPending: hasPendingFor,
+    hasUnconfirmedContent(target) {
+      return hasUnconfirmedContentForTarget(target)
+    },
+    discardUnconfirmed(writingId) {
+      discardUnconfirmedContentForWriting(writingId)
+    },
     settle,
 
     getDurableContentHash(writingId) {

@@ -33,6 +33,20 @@
  * Mutation test (ODE-567): quitar el volcado de la edición en cola, o el
  * guardado del view_state, del protocolo de salida pone en rojo los casos
  * correspondientes.
+ *
+ * ODE-604 — DOC-05 completo (guardar mientras se cambia de pestaña). Los casos
+ * de arriba prueban que la edición en vuelo llega al disco de A y no al de B.
+ * El bloque "DOC-05" añade lo que faltaba del guion A → B → escribir en B →
+ * volver a A: que B no recibe nada de A, que al volver a A el editor muestra
+ * lo último de A, que la barra y la pestaña de cada documento dicen el estado
+ * que proyecta su fila durable, y el mismo guion en **web**. En web la cola
+ * del editor se vacía en un frame (no en un debounce), así que la edición
+ * pendiente se retiene con `holdAnimationFrames`: si la salida no la volcara,
+ * el frame retenido correría con B ya activo y la edición de A se perdería.
+ *
+ * Mutation test (ODE-604): en `prepareDocumentExit`, no llamar a
+ * `flushQueuedRichModeUpdate()` pone en rojo los dos casos DOC-05: al volver a
+ * A, su editor no muestra la edición que tenía pendiente al salir.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -68,6 +82,7 @@ vi.mock("@/lib/sync/sync-service-factory", async () =>
 const {
   advance,
   clickNewArtifact,
+  holdAnimationFrames,
   mountEditorShell,
   pointerClick,
   resetEditorShellWorld,
@@ -78,7 +93,13 @@ const {
 const { createDesktopWorkspace, destroyDesktopWorkspace, readWorkspaceMarkdown, resetDesktopWorkspace } =
   await import("./support/editor-shell-desktop-doubles")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
-const { EDITOR_DRAFT_TAB_ID } = await import("@/lib/local-db/editor-sessions")
+const { EDITOR_DRAFT_TAB_ID, createEditorSessionTab, createEmptyEditorSession } = await import(
+  "@/lib/local-db/editor-sessions"
+)
+const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
+const { mapCatalogRecordToSaveState, mapLocalSyncStatusToSaveState } = await import("@/components/editor/save-state")
+const { localDB } = await import("@/lib/local-db")
+const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 
 const TEST_TIMEOUT_MS = 60_000
 
@@ -217,6 +238,222 @@ describe("ODE-567 — protocolo de salida del documento activo (desktop)", () =>
         PENDING_EDIT.trim(),
       )
       expect(await contentsOf(b.file.path), "y no a B").not.toContain(PENDING_EDIT.trim())
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+/* ------------------------------------------------------------------ *
+ * ODE-604 — DOC-05: el guion completo, en desktop y en web
+ * ------------------------------------------------------------------ */
+
+const PENDING_A = "ODE604-PENDIENTE-DE-A"
+const TYPED_IN_B = "ODE604-ESCRITO-EN-B"
+
+const SAVE_STATE_BY_LABEL: Record<string, string> = {
+  Saved: "saved",
+  "Saving...": "saving",
+  "Saved locally": "saved-local",
+  "Needs attention": "error",
+}
+
+/** Lo que muestra la status bar, traducido a `EditorSaveState`. */
+function barSaveState() {
+  const label = mounted?.container
+    .querySelector('[data-testid="editor-statusbar"] [aria-live="polite"]')
+    ?.textContent?.trim()
+  if (label === undefined) return null
+  return SAVE_STATE_BY_LABEL[label] ?? `desconocido: ${label}`
+}
+
+function activeWritingId() {
+  const { session } = getEditorSessionState()
+  return session.tabs.find((tab) => tab.id === session.active_tab_id)?.writing_id ?? null
+}
+
+/**
+ * La pestaña de cada documento dice el estado que proyecta su fila durable, y
+ * la barra dice el de la pestaña activa. `project` es la proyección de
+ * producción de cada runtime (catálogo en desktop, `localDB` en web).
+ */
+async function expectBarAndTabsMatchDurable(
+  writingIds: string[],
+  project: (writingId: string) => Promise<string>,
+) {
+  for (const writingId of writingIds) {
+    const expected = await project(writingId)
+    await waitFor(() => tabFor(writingId)?.save_state === expected, {
+      label: `la pestaña de ${writingId} en ${expected}`,
+      timeoutMs: 10_000,
+    })
+  }
+  expect(barSaveState(), "la barra dice el estado de la pestaña activa").toBe(
+    tabFor(activeWritingId()!)?.save_state,
+  )
+}
+
+/** Como `waitFor`, pero para lecturas asíncronas del estado durable. */
+async function eventually<T>(read: () => Promise<T | null>, label: string, timeoutMs = 10_000): Promise<T> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const value = await read()
+    if (value) return value
+    await advance(100)
+  }
+  throw new Error(`eventually agotó ${timeoutMs}ms esperando: ${label}`)
+}
+
+async function projectDesktopSaveState(writingId: string) {
+  const record = await (await getDocumentCatalog()).getById(writingId)
+  if (!record) throw new Error(`Sin fila de catálogo para ${writingId}`)
+  return mapCatalogRecordToSaveState(record, navigator.onLine)
+}
+
+async function projectWebSaveState(writingId: string) {
+  const row = await localDB.writings.get(writingId)
+  if (!row) throw new Error(`Sin fila local para ${writingId}`)
+  return mapLocalSyncStatusToSaveState(row.sync_status, row.lifecycle, navigator.onLine)
+}
+
+describe("ODE-604 — DOC-05: guardar mientras se cambia de pestaña", () => {
+  it(
+    "desktop: A → B con la edición de A pendiente → escribir en B → volver a A",
+    async () => {
+      mounted = await mountEditorShell()
+      const a = await createDocument(TEXT_A)
+      const b = await createDocument(TEXT_B)
+
+      await pointerClick(tabNode(a.writingId))
+      await waitFor(() => mounted!.editor().getText().includes(TEXT_A), { label: "A activo con su contenido" })
+      await advance(300)
+      await typeInEditor(` ${PENDING_A}`)
+      // Control del estado de partida: la edición de A todavía no está en disco.
+      expect(await contentsOf(a.file.path), "la edición de A está pendiente al salir").not.toContain(PENDING_A)
+
+      await pointerClick(tabNode(b.writingId))
+      await waitFor(() => activeWritingId() === b.writingId && mounted!.editor().getText().includes(TEXT_B), {
+        label: "B activo con su contenido",
+      })
+      expect(mounted!.editor().getText(), "B no muestra la edición de A").not.toContain(PENDING_A)
+      await advance(300)
+      await typeInEditor(` ${TYPED_IN_B}`)
+
+      await pointerClick(tabNode(a.writingId))
+      await waitFor(
+        () => activeWritingId() === a.writingId && mounted!.editor().getText().includes(PENDING_A),
+        { label: "al volver, A muestra lo último de A", timeoutMs: 10_000 },
+      )
+      expect(mounted!.editor().getText(), "sin lo escrito en B").not.toContain(TYPED_IN_B)
+
+      // Completion events, uno por documento: el `.md` de A con lo último de
+      // A y el de B con lo escrito en B (su guardado es el que más tarda: sale
+      // del debounce de B tras volver a A).
+      const diskA = await eventually(async () => {
+        const contents = await contentsOf(a.file.path)
+        return contents.includes(PENDING_A) ? contents : null
+      }, "el .md de A con su edición")
+      const diskB = await eventually(async () => {
+        const contents = await contentsOf(b.file.path)
+        return contents.includes(TYPED_IN_B) ? contents : null
+      }, "el .md de B con lo escrito en B")
+      expect(diskA, "el disco de A tiene lo último de A").toContain(PENDING_A)
+      expect(diskB, "control positivo: B guarda lo suyo").toContain(TYPED_IN_B)
+      expect(diskB, "B no tiene nada de A").not.toContain(PENDING_A)
+      expect(diskA, "ni A nada de B").not.toContain(TYPED_IN_B)
+
+      await expectBarAndTabsMatchDurable([a.writingId, b.writingId], projectDesktopSaveState)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "web: A → B con la edición de A en un frame retenido → escribir en B → volver a A",
+    async () => {
+      const writingA = crypto.randomUUID()
+      const writingB = crypto.randomUUID()
+      const seed = (id: string, text: string) =>
+        localDB.writings.save({
+          id,
+          title: text,
+          body_json: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] },
+          body_text: text,
+          status: "draft",
+          visibility: "private",
+          version: 1,
+          sync_status: "synced",
+          lifecycle: "server-confirmed",
+          created_at: "2026-09-20T00:00:00.000Z",
+          updated_at: "2026-09-20T00:00:00.000Z",
+          local_updated_at: Date.now(),
+        } as Parameters<typeof localDB.writings.save>[0])
+      await seed(writingA, TEXT_A)
+      await seed(writingB, TEXT_B)
+      resetEditorShellWorld()
+      await writeEditorSession({
+        ...createEmptyEditorSession(),
+        active_tab_id: writingA,
+        tabs: [
+          createEditorSessionTab({ id: writingA, writingId: writingA, title: TEXT_A }),
+          createEditorSessionTab({ id: writingB, writingId: writingB, title: TEXT_B }),
+        ],
+      })
+
+      mounted = await mountEditorShell({ writingId: writingA })
+      await waitFor(() => getEditorSessionState().loaded, { label: "sesión cargada" })
+      await waitFor(() => mounted!.editor().getText().includes(TEXT_A), { label: "A hidratado", timeoutMs: 10_000 })
+      await waitFor(() => document.querySelector(`[data-editor-tab-id="${writingB}"]`), { label: "pestaña de B" })
+      await advance(300)
+
+      const frames = holdAnimationFrames()
+      try {
+        await typeInEditor(` ${PENDING_A}`)
+        expect(frames.pending(), "la edición de A queda en un frame retenido").toBeGreaterThan(0)
+        expect((await localDB.writings.get(writingA))?.body_text, "y todavía no está guardada").not.toContain(
+          PENDING_A,
+        )
+
+        await pointerClick(tabNode(writingB))
+        await frames.settleUntil(
+          () => activeWritingId() === writingB && mounted!.editor().getText().includes(TEXT_B),
+          { label: "B activo con su contenido" },
+        )
+        expect(mounted!.editor().getText(), "B no muestra la edición de A").not.toContain(PENDING_A)
+        await frames.settle()
+        await typeInEditor(` ${TYPED_IN_B}`)
+        await frames.settle()
+
+        await pointerClick(tabNode(writingA))
+        await frames.settleUntil(
+          () => activeWritingId() === writingA && mounted!.editor().getText().includes(PENDING_A),
+          { label: "al volver, A muestra lo último de A" },
+        )
+        expect(mounted!.editor().getText(), "sin lo escrito en B").not.toContain(TYPED_IN_B)
+        await frames.settle()
+      } finally {
+        frames.restore()
+      }
+      // Completion event: la fila local de A con lo último de A.
+      const rowA = await eventually(
+        async () => {
+          const row = await localDB.writings.get(writingA)
+          return row?.body_text?.includes(PENDING_A) ? row : null
+        },
+        "la fila local de A con su edición",
+      )
+      // Y la de B con lo escrito en B.
+      const rowB = await eventually(
+        async () => {
+          const row = await localDB.writings.get(writingB)
+          return row?.body_text?.includes(TYPED_IN_B) ? row : null
+        },
+        "la fila local de B con lo escrito en B",
+      )
+      expect(rowA?.body_text, "la fila local de A tiene lo último de A").toContain(PENDING_A)
+      expect(rowB?.body_text, "control positivo: B guarda lo suyo").toContain(TYPED_IN_B)
+      expect(rowB?.body_text, "B no tiene nada de A").not.toContain(PENDING_A)
+      expect(rowA?.body_text, "ni A nada de B").not.toContain(TYPED_IN_B)
+
+      await expectBarAndTabsMatchDurable([writingA, writingB], projectWebSaveState)
     },
     TEST_TIMEOUT_MS,
   )

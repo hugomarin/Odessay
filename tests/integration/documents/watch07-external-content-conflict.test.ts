@@ -200,6 +200,12 @@ describe("WATCH-07 — write-side conflict guard", () => {
     expect(onDisk).toBe("# External Edit\n\nSomeone else's content.\n")
     expect(onDisk).not.toContain("my conflicting local edit")
 
+    // `hasPending()` describes only in-flight/queued work. The rejected
+    // write has settled, but its local content remains unconfirmed until the
+    // user reloads the external file or explicitly retries their version.
+    expect(coordinator.hasPending({ writingId: record.id })).toBe(false)
+    expect(coordinator.hasUnconfirmedContent({ writingId: record.id })).toBe(true)
+
     expect(errorEvents).toHaveLength(1)
     expect(errorEvents[0]!.code).toBe("CONFLICT")
     expect(errorEvents[0]!.message).toContain("CONFLICT:")
