@@ -42,6 +42,7 @@ Los documentos de apoyo se seleccionan por la pregunta concreta y conservan la p
 - Antes de cualquier `git commit`, verificar la rama actual con `git branch --show-current`.
 - Si la rama actual es `main`, crear y cambiar a una rama `codex/<issue-o-tarea>` antes de editar o commitear.
 - Si el trabajo ya quedó en `main` por error, corregirlo moviendo los commits a la rama de feat y restaurando `main` al commit previo.
+- Un cambio formado solo por documentos y evidencia documental puede omitir el ID de issue y usar el flujo documental ligero; el gate de trazabilidad lo determina por las rutas del diff. Si el diff incluye código de producto, vuelve a aplicar la rama y los commits con ID de issue. Los cambios de infraestructura/proceso siguen usando la categoría `infra` o `process` y su allowlist.
 
 ## Regla de transición a In Review
 
