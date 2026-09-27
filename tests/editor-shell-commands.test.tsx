@@ -352,24 +352,35 @@ async function pressRealEntry(entry: RealEntry) {
 
 async function setMode(mode: CommandMode) {
   const label = mode === "rich" ? "Rich" : "Markdown"
-  const button = await waitFor(
-    () =>
-      Array.from(
-        mounted!.container.querySelectorAll<HTMLButtonElement>('[data-testid="editor-statusbar"] button'),
-      ).find((candidate) => (candidate.textContent ?? "").trim() === label),
-    { label: `botón "${label}" de la status bar` },
-  )
-  await act(async () => {
-    button.click()
-  })
-  await flush(2)
-  await waitFor(
-    () =>
-      mode === "markdown"
-        ? markdownSource()
-        : !markdownSource() && mounted!.prosemirror(),
-    { label: `editor en modo ${mode}` },
-  )
+  const findButton = () =>
+    Array.from(
+      mounted!.container.querySelectorAll<HTMLButtonElement>('[data-testid="editor-statusbar"] button'),
+    ).find((candidate) => (candidate.textContent ?? "").trim() === label)
+  const reached = () =>
+    mode === "markdown" ? markdownSource() : !markdownSource() && mounted!.prosemirror()
+
+  await waitFor(findButton, { label: `botón "${label}" de la status bar` })
+
+  // El click puede caer mientras el shell hidrata otra pestaña: con el
+  // `editor` todavía null, `handleToggleMode` retorna sin cambiar de modo.
+  // Se reintenta el mismo botón real (y se vuelve a buscar: la status bar
+  // puede remontarse) hasta que el modo se alcanza.
+  const deadline = Date.now() + 10_000
+  while (!reached() && Date.now() < deadline) {
+    const button = findButton()
+    if (button) {
+      await act(async () => {
+        button.click()
+      })
+      await flush(2)
+    } else {
+      await flush(1)
+    }
+  }
+
+  if (!reached()) {
+    throw new Error(`El botón "${label}" no llevó el editor al modo ${mode}`)
+  }
 }
 
 async function selectMarkdownText(needle: string) {

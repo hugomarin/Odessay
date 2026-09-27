@@ -279,7 +279,7 @@ Qué fija, por modo. La tabla **no declara modos**: el runner recorre cada fila 
                                        chequeo repetido
 ```
 
-`focusMode` es la única fila con `freshMountPerMode`: activar el foco oculta la status bar, que es la entrada real del cambio de modo, así que cada modo arranca de un montaje limpio.
+`focusMode` es la única fila con `freshMountPerMode`: activar el foco oculta la status bar, que es la entrada real del cambio de modo, así que cada modo arranca de un montaje limpio. El driver de modo (`setMode`) verifica su propio efecto y reintenta el click del botón real hasta 10 s: tras cambiar de pestaña, el click puede caer mientras el shell hidrata (el `editor` todavía es null y `handleToggleMode` retorna sin cambiar de modo) — la flake de `nextTab`/`prevTab` bajo carga que la ronda de corrección encontró y fijó.
 
 Persistencia real en una muestra por familia — formato (`bold`), inserción (`table`) y nota (`footnote`) — afirmada sobre `localDB` en web y sobre el `.md` en desktop. `handleBackupLocalImage` corre entero en desktop por su entrada real (botón del node view de la imagen local → modal → `backUpLocalImage` → sustitución del src y persistencia en el `.md`). Mutaciones: renombrar el `case "<acción>"` de producción pone en rojo el caso de esa acción (barrido 41/41 en la ronda inicial, barrido de las 17 globales en la ronda de corrección); invertir `if (modeRef.current === "markdown")` en `handleRunAction` pone en rojo `bold` en ambos modos; y un `return` temprano para `markdown` antes del despacho global puso rojas las 17 aserciones nuevas de Markdown, cada una por su propia etiqueta (no por timeout de montaje).
 
