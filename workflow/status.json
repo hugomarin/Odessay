@@ -88,6 +88,10 @@
       {
         "issue": "ODE-628",
         "reason": "Real production bug (High) found by the ODE-599 shell net and tracked separately, not delivered in this PR. Referenced by ODE-599 commit 49cd43ae ('pin ODE-628 as it.fails'); blocks ODE-599 Entrega 2. Ignored for status drift until delivered."
+      },
+      {
+        "issue": "ODE-629",
+        "reason": "Real desktop data-loss follow-up (High) found by ODE-604 and tracked separately. PR #525 pins the rename race as it.fails but does not deliver the ODE-629 fix; ODE-629 appears in ODE-604 commit subjects. Ignored for status drift until delivered."
       }
     ]
   },
