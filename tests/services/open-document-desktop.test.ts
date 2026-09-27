@@ -20,6 +20,11 @@ const mocks = vi.hoisted(() => ({
   localSave: vi.fn(),
   getSession: vi.fn(),
   fetchCloudWriting: vi.fn(),
+  refreshReconcilerRoots: vi.fn(),
+}))
+
+vi.mock("@/lib/services/desktop/desktop-workspace-reconciler", () => ({
+  refreshWorkspaceReconcilerRoots: mocks.refreshReconcilerRoots,
 }))
 
 vi.mock("@tauri-apps/api/path", () => ({
@@ -154,6 +159,35 @@ describe("open-document-desktop", () => {
     expect(syncOrder).toBeLessThan(upsertOrder)
     // No empty draft is ever seeded into IndexedDB by the opener.
     expect(mocks.localSave).not.toHaveBeenCalled()
+    // ODE-628: the running watcher picks up the new root, after its binding.
+    expect(mocks.refreshReconcilerRoots).toHaveBeenCalledTimes(1)
+    expect(mocks.catalogRegisterBinding.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.refreshReconcilerRoots.mock.invocationCallOrder[0],
+    )
+  })
+
+  it("keeps an Open File outside every root opened when the watcher refresh fails", async () => {
+    const path = "/Users/me/Notes/note.md"
+    mocks.catalogResolvePath.mockResolvedValue({ kind: "unbound", path })
+    mocks.workspaceSync.mockResolvedValue({
+      rootPath: "/Users/me/Notes",
+      bindingRootId: "manifest-root-id",
+      name: "Notes",
+      fileCount: 1,
+      folderCount: 0,
+      updatedAt: 1,
+      selectedPaths: ["note.md"],
+      files: [
+        { id: "manifest-doc-id", path, relativePath: "note.md", name: "note.md", modifiedAt: 1, size: 10, inode: 5, contentHash: "h" },
+      ],
+    })
+    mocks.refreshReconcilerRoots.mockRejectedValue(new Error("rescan failed"))
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "path", path, confirmRegisterRoot: true })
+
+    expect(result.status).toBe("opened")
+    expect(mocks.refreshReconcilerRoots).toHaveBeenCalledTimes(1)
   })
 
   it("does not seed IndexedDB when opening an already-bound path", async () => {
