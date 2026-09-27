@@ -344,10 +344,18 @@ describe("ODE-604 — DOC-05: guardar mientras se cambia de pestaña", () => {
         { label: "al volver, A muestra lo último de A", timeoutMs: 10_000 },
       )
       expect(mounted!.editor().getText(), "sin lo escrito en B").not.toContain(TYPED_IN_B)
-      await advance(6_000)
 
-      const diskA = await contentsOf(a.file.path)
-      const diskB = await contentsOf(b.file.path)
+      // Completion events, uno por documento: el `.md` de A con lo último de
+      // A y el de B con lo escrito en B (su guardado es el que más tarda: sale
+      // del debounce de B tras volver a A).
+      const diskA = await eventually(async () => {
+        const contents = await contentsOf(a.file.path)
+        return contents.includes(PENDING_A) ? contents : null
+      }, "el .md de A con su edición")
+      const diskB = await eventually(async () => {
+        const contents = await contentsOf(b.file.path)
+        return contents.includes(TYPED_IN_B) ? contents : null
+      }, "el .md de B con lo escrito en B")
       expect(diskA, "el disco de A tiene lo último de A").toContain(PENDING_A)
       expect(diskB, "control positivo: B guarda lo suyo").toContain(TYPED_IN_B)
       expect(diskB, "B no tiene nada de A").not.toContain(PENDING_A)
@@ -432,9 +440,15 @@ describe("ODE-604 — DOC-05: guardar mientras se cambia de pestaña", () => {
         },
         "la fila local de A con su edición",
       )
-      await advance(1_500)
+      // Y la de B con lo escrito en B.
+      const rowB = await eventually(
+        async () => {
+          const row = await localDB.writings.get(writingB)
+          return row?.body_text?.includes(TYPED_IN_B) ? row : null
+        },
+        "la fila local de B con lo escrito en B",
+      )
       expect(rowA?.body_text, "la fila local de A tiene lo último de A").toContain(PENDING_A)
-      const rowB = await localDB.writings.get(writingB)
       expect(rowB?.body_text, "control positivo: B guarda lo suyo").toContain(TYPED_IN_B)
       expect(rowB?.body_text, "B no tiene nada de A").not.toContain(PENDING_A)
       expect(rowA?.body_text, "ni A nada de B").not.toContain(TYPED_IN_B)
