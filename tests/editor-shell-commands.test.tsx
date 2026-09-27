@@ -17,12 +17,17 @@
  *      el menú nativo entran por `menu:<acción>` en el bus real
  *      (`useTauriEditorMenuEvents` / `useTauriMenuEvents`). Los modales se
  *      abren por su atajo y se confirman por el formulario real.
- *   3. **Modo Rich y modo Markdown.** Cada caso declara en qué modos tiene
- *      rama; los que existen en ambos corren en ambos y afirman el efecto de
- *      cada modo. Los que solo existen en Rich afirman además el no-op de
- *      Markdown, con su control positivo en la misma prueba (el Rich sí
- *      aplica), y un `it.fails` por comando documenta el bug vigente ODE-632
- *      (esos comandos no tienen rama Markdown).
+ *   3. **Modo Rich y modo Markdown, para cada fila.** La tabla no declara
+ *      modos: el runner recorre cada caso en ambos, Rich primero y Markdown
+ *      después, y la aserción de Markdown es obligatoria (`tsc` no admite una
+ *      fila sin ella). Las 17 acciones globales —despachadas antes de la rama
+ *      de modo— también corren en Markdown con una transición observable
+ *      (navegación, panel, pestaña, cookie, modal o borrador), no con el mismo
+ *      chequeo repetido. `focusMode` es la única fila con `freshMountPerMode`:
+ *      activar el foco oculta la status bar, que es la entrada real del cambio
+ *      de modo, así que cada modo arranca de un montaje limpio. Los seis
+ *      comandos sin rama Markdown (ODE-632) fijan el no-op actual con control
+ *      positivo y un `it.fails` por comando.
  *   4. **Efecto canónico.** La marca, el nodo o la navegación del documento —
  *      no "se llamó a X". Tres familias (formato, inserción y nota) afirman
  *      además que el cambio llega a la persistencia real (`localDB` en web,
@@ -48,8 +53,11 @@
  * temporal y `backUpLocalImage`.
  *
  * Mutaciones: cada fila se verificó rompiendo el `case "<acción>"` de
- * producción (el test de esa acción se pone rojo) y restaurándolo; la rama de
- * modo se invirtió en `bold` (rojo en ambos modos). El barrido completo está
+ * producción (el test de esa acción se pone rojo) y restaurándolo — barrido
+ * 41/41 en la ronda inicial y barrido de las 17 globales en la ronda de
+ * corrección; la rama de modo se invirtió en `bold` (rojo en ambos modos); y
+ * un `return` temprano para `markdown` antes del despacho global puso rojas
+ * las 17 aserciones nuevas de Markdown por su propia etiqueta. El detalle está
  * en la Guía de review del issue.
  *
  * Bug encontrado por la red: **ODE-632** (Medium) — los comandos de documento
@@ -131,6 +139,7 @@ const {
   flush,
   mountEditorShell,
   pressEditorShortcut,
+  pressEscape,
   resetEditorShellWorld,
   selectEditorText,
   waitFor,
@@ -147,7 +156,9 @@ const {
 const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 const { writeEditorSession } = await import("@/lib/editor/session-persistence")
-const { createEditorSessionTab, createEmptyEditorSession } = await import("@/lib/local-db/editor-sessions")
+const { EDITOR_DRAFT_TAB_ID, createEditorSessionTab, createEmptyEditorSession } = await import(
+  "@/lib/local-db/editor-sessions"
+)
 const { EDITOR_SHORTCUT_HELP_SECTIONS } = await import("@/lib/editor/shortcuts")
 
 const TEST_TIMEOUT_MS = 30_000
@@ -280,27 +291,24 @@ type CommandCheck = (world: CommandWorld) => void | Promise<void>
 type CommandSetup = (world: CommandWorld) => Promise<void>
 
 /**
- * La tabla de la red. `modes` declara dónde tiene rama el comando; el chequeo
- * de cada modo entra por la entrada real del caso y afirma el efecto en el
- * documento (o el no-op cuando el modo no tiene rama, con su control positivo).
+ * La tabla de la red. `rich` y `markdown` son obligatorios: el runner recorre
+ * ambos modos para cada fila y una acción sin aserción de Markdown rompe
+ * `tsc`. El chequeo de cada modo entra por la entrada real del caso y afirma
+ * el efecto (o el no-op cuando el modo no tiene rama, con su control positivo).
  */
-type CommandCase =
-  | {
-      entry: RealEntry
-      runtime?: "desktop"
-      modes: readonly ["rich"]
-      rich: CommandCheck
-      markdown?: never
-      setup?: CommandSetup
-    }
-  | {
-      entry: RealEntry
-      runtime?: "desktop"
-      modes: readonly ["rich", "markdown"]
-      rich: CommandCheck
-      markdown: CommandCheck
-      setup?: CommandSetup
-    }
+type CommandCase = {
+  entry: RealEntry
+  runtime?: "desktop"
+  rich: CommandCheck
+  markdown: CommandCheck
+  setup?: CommandSetup
+  /**
+   * Cada modo arranca de un montaje limpio. Necesario cuando una pasada deja
+   * el shell en un estado que impide cambiar de modo: `focusMode` oculta la
+   * status bar, que es la entrada real del cambio de modo.
+   */
+  freshMountPerMode?: boolean
+}
 
 const shortcut = (
   key: string,
@@ -576,11 +584,89 @@ async function submitLocalImageModal(alt: string) {
   await flush(2)
 }
 
+/**
+ * La navegación global corre antes de la rama de modo: la aserción de cada
+ * modo exige que *esa* pasada haya producido la navegación, no que exista una
+ * anterior (Rich y Markdown comparten el contador del router doblado).
+ */
+function navigatesTo(href: string): CommandCheck {
+  return async (w) => {
+    const before = world.navigations.length
+    await w.enter()
+    await waitFor(
+      () => world.navigations.length === before + 1 && world.navigations.at(-1)?.href === href,
+      { label: `navega a ${href} desde el modo actual` },
+    )
+  }
+}
+
+/** El evento global de búsqueda, contado por pasada (el listener es nuevo en cada una). */
+function emitsOpenSearch(): CommandCheck {
+  return async (w) => {
+    const received: Event[] = []
+    const listener = (event: Event) => received.push(event)
+    window.addEventListener("odessay:open-search", listener)
+    try {
+      await w.enter()
+      await waitFor(() => received.length === 1, { label: "evento odessay:open-search" })
+    } finally {
+      window.removeEventListener("odessay:open-search", listener)
+    }
+  }
+}
+
+/**
+ * Los paneles que la pasada de Rich deja abiertos se cierran por su camino
+ * real (Escape) y se vuelven a abrir desde Markdown: sin la transición, el
+ * panel ya abierto no probaría que el comando corrió en este modo.
+ */
+function reopensPanelFromMarkdown(testId: string, label: string): CommandCheck {
+  return async (w) => {
+    expect(document.querySelector(`[data-testid="${testId}"]`), `control: Rich abrió ${label}`).toBeTruthy()
+    await pressEscape()
+    await waitFor(() => (document.querySelector(`[data-testid="${testId}"]`) ? null : true), {
+      label: `${label} se cierra`,
+    })
+    await w.enter()
+    await waitFor(() => document.querySelector(`[data-testid="${testId}"]`), {
+      label: `${label} se abre desde Markdown`,
+    })
+  }
+}
+
+/** Paneles que alternan: la pasada de Markdown los apaga (transición observable). */
+function togglesPanelOffFromMarkdown(testId: string, label: string): CommandCheck {
+  return async (w) => {
+    expect(document.querySelector(`[data-testid="${testId}"]`), `control: Rich abrió ${label}`).toBeTruthy()
+    await w.enter()
+    await waitFor(() => (document.querySelector(`[data-testid="${testId}"]`) ? null : true), {
+      label: `${label} se cierra desde Markdown`,
+    })
+  }
+}
+
+/**
+ * `focusMode` se prueba igual en ambos modos: control apagado, la entrada real
+ * lo enciende. Corre con `freshMountPerMode` porque con el foco activo la
+ * status bar —el botón real de cambio de modo— no existe.
+ */
+const focusModeTurnsOn: CommandCheck = async (w) => {
+  expect(
+    document.querySelector<HTMLElement>('[data-page="editor"]')?.dataset.focusMode,
+    "control: el foco arranca apagado",
+  ).toBe("false")
+  await w.enter()
+  expect(
+    document.querySelector<HTMLElement>('[data-page="editor"]')?.dataset.focusMode,
+    "focus mode activo",
+  ).toBe("true")
+  expect(document.body.classList.contains("od-editor-focus-mode"), "clase de focus mode").toBe(true)
+}
+
 const COMMAND_CASES = {
   /* --- Formato (marcas en línea) --- */
   bold: {
     entry: shortcut("b", "KeyB"),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -599,7 +685,6 @@ const COMMAND_CASES = {
   },
   italic: {
     entry: shortcut("i", "KeyI"),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -613,7 +698,6 @@ const COMMAND_CASES = {
   },
   strike: {
     entry: shortcut("x", "KeyX", { shift: true }),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -627,7 +711,6 @@ const COMMAND_CASES = {
   },
   highlight: {
     entry: shortcut("h", "KeyH", { shift: true }),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -645,7 +728,6 @@ const COMMAND_CASES = {
   },
   inlineCode: {
     entry: shortcut("e", "KeyE"),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -659,7 +741,6 @@ const COMMAND_CASES = {
   },
   codeBlock: {
     entry: shortcut("e", "KeyE", { shift: true }),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -675,7 +756,6 @@ const COMMAND_CASES = {
   },
   link: {
     entry: shortcut("k", "KeyK", { shift: true }),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -713,7 +793,6 @@ const COMMAND_CASES = {
   /* --- Estructura (bloques) --- */
   paragraph: {
     entry: shortcut("0", "Digit0"),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.press(shortcut("1", "Digit1"))
@@ -732,7 +811,6 @@ const COMMAND_CASES = {
   },
   heading1: {
     entry: shortcut("1", "Digit1"),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -749,7 +827,6 @@ const COMMAND_CASES = {
   },
   heading2: {
     entry: shortcut("2", "Digit2"),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -764,7 +841,6 @@ const COMMAND_CASES = {
   },
   heading3: {
     entry: shortcut("3", "Digit3"),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -779,7 +855,6 @@ const COMMAND_CASES = {
   },
   bulletList: {
     entry: shortcut("l", "KeyL"),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -794,7 +869,6 @@ const COMMAND_CASES = {
   },
   orderedList: {
     entry: shortcut("l", "KeyL", { shift: true }),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -809,7 +883,6 @@ const COMMAND_CASES = {
   },
   blockquote: {
     entry: shortcut("b", "KeyB", { shift: true }),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.enter()
@@ -826,7 +899,6 @@ const COMMAND_CASES = {
   /* --- Inserción --- */
   footnote: {
     entry: shortcut("a", "KeyA", { shift: true }),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.enter()
       const note = await waitFor(
@@ -863,7 +935,6 @@ const COMMAND_CASES = {
   },
   table: {
     entry: shortcut("t", "KeyT"),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.enter()
       const cell = await waitFor(
@@ -903,7 +974,6 @@ const COMMAND_CASES = {
   },
   image: {
     entry: shortcut("i", "KeyI", { shift: true }),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       installImageUploadNetwork()
       await w.enter()
@@ -923,7 +993,6 @@ const COMMAND_CASES = {
   },
   horizontalRule: {
     entry: shortcut("-", "Minus", { shift: true }),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.enter()
       expect(nodeTypes(w.json()), "horizontalRule insertado en Rich").toContain("horizontalRule")
@@ -939,58 +1008,42 @@ const COMMAND_CASES = {
   /* --- Navegación global --- */
   goDesk: {
     entry: shortcut("1", "Digit1", { alt: true }),
-    modes: ["rich"],
-    rich: async (w) => {
-      await w.enter()
-      await waitFor(() => world.navigations.some((entry) => entry.href === "/desk"), { label: "navega a /desk" })
-    },
+    rich: navigatesTo("/desk"),
+    markdown: navigatesTo("/desk"),
   },
   goWorkspace: {
     entry: shortcut("2", "Digit2", { alt: true }),
-    modes: ["rich"],
-    rich: async (w) => {
-      await w.enter()
-      await waitFor(() => world.navigations.some((entry) => entry.href === "/workspace"), {
-        label: "navega a /workspace",
-      })
-    },
+    rich: navigatesTo("/workspace"),
+    markdown: navigatesTo("/workspace"),
   },
   goStudio: {
     entry: shortcut("3", "Digit3", { alt: true }),
-    modes: ["rich"],
-    rich: async (w) => {
-      await w.enter()
-      await waitFor(() => world.navigations.some((entry) => entry.href === "/write"), {
-        label: "navega a /write",
-      })
-    },
+    rich: navigatesTo("/write"),
+    markdown: navigatesTo("/write"),
   },
   search: {
     entry: shortcut("k", "KeyK"),
-    modes: ["rich"],
-    rich: async (w) => {
-      const received: Event[] = []
-      const listener = (event: Event) => received.push(event)
-      window.addEventListener("odessay:open-search", listener)
-      try {
-        await w.enter()
-        await waitFor(() => received.length === 1, { label: "evento odessay:open-search" })
-      } finally {
-        window.removeEventListener("odessay:open-search", listener)
-      }
-    },
+    rich: emitsOpenSearch(),
+    markdown: emitsOpenSearch(),
   },
   nextTab: {
     entry: shortcut("]", "BracketRight", { shift: true }),
-    modes: ["rich"],
     rich: async (w) => {
       await w.enter()
       await waitFor(() => activeTabWritingId() === writingB, { label: "pasa a la pestaña siguiente" })
     },
+    markdown: async (w) => {
+      // La pasada de Rich dejó B activa; ⌘⇧] desde Markdown debe seguir
+      // rotando (B → A). El control fija de dónde parte la transición.
+      expect(activeTabWritingId(), "control: Rich dejó la pestaña B activa").toBe(writingB)
+      await w.enter()
+      await waitFor(() => activeTabWritingId() === writingA, {
+        label: "rota a la pestaña siguiente desde Markdown",
+      })
+    },
   },
   prevTab: {
     entry: shortcut("[", "BracketLeft", { shift: true }),
-    modes: ["rich"],
     setup: async () => {
       await clickEditorTab(writingB)
       await flush(2)
@@ -999,50 +1052,58 @@ const COMMAND_CASES = {
       await w.enter()
       await waitFor(() => activeTabWritingId() === writingA, { label: "vuelve a la pestaña anterior" })
     },
+    markdown: async (w) => {
+      // La pasada de Rich dejó A activa; ⌘⇧[ desde Markdown debe rotar en
+      // sentido contrario y envolver (A → B).
+      expect(activeTabWritingId(), "control: Rich dejó la pestaña A activa").toBe(writingA)
+      await w.enter()
+      await waitFor(() => activeTabWritingId() === writingB, {
+        label: "rota a la pestaña anterior desde Markdown",
+      })
+    },
   },
 
   /* --- Anotar / Voz / Documento --- */
   addNote: {
     entry: shortcut("n", "KeyN", { shift: true }),
-    modes: ["rich"],
     rich: async (w) => {
       await w.enter()
       await waitFor(() => document.querySelector('[data-testid="editor-panel-notes"]'), { label: "panel de notas" })
     },
+    markdown: reopensPanelFromMarkdown("editor-panel-notes", "el panel de notas"),
   },
   voiceNote: {
     entry: shortcut("r", "KeyR", { alt: true }),
-    modes: ["rich"],
     rich: async (w) => {
       await w.enter()
       await waitFor(() => document.querySelector('[data-testid="editor-panel-notes"]'), { label: "panel de notas" })
     },
+    markdown: reopensPanelFromMarkdown("editor-panel-notes", "el panel de notas"),
   },
   documentProperties: {
     entry: shortcut("p", "KeyP", { alt: true }),
-    modes: ["rich"],
     rich: async (w) => {
       await w.enter()
       await waitFor(() => document.querySelector('[data-testid="editor-panel-properties"]'), {
         label: "panel de propiedades",
       })
     },
+    markdown: togglesPanelOffFromMarkdown("editor-panel-properties", "el panel de propiedades"),
   },
   corrections: {
     entry: shortcut("s", "KeyS", { alt: true }),
-    modes: ["rich"],
     rich: async (w) => {
       await w.enter()
       await waitFor(() => document.querySelector('[data-testid="editor-panel-corrections"]'), {
         label: "panel de gramática",
       })
     },
+    markdown: togglesPanelOffFromMarkdown("editor-panel-corrections", "el panel de gramática"),
   },
 
   /* --- Editor / Vista --- */
   find: {
     entry: shortcut("f", "KeyF"),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.enter()
       await waitFor(() => document.querySelector('input[aria-label="Find text"]'), { label: "panel de find" })
@@ -1056,7 +1117,6 @@ const COMMAND_CASES = {
   },
   replace: {
     entry: shortcut("f", "KeyF", { alt: true }),
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.enter()
       const input = await waitFor(() => document.querySelector<HTMLInputElement>('input[aria-label="Replace text"]'), {
@@ -1076,19 +1136,14 @@ const COMMAND_CASES = {
   },
   focusMode: {
     entry: shortcut("f", "KeyF", { shift: true }),
-    modes: ["rich"],
-    rich: async (w) => {
-      await w.enter()
-      expect(
-        document.querySelector<HTMLElement>('[data-page="editor"]')?.dataset.focusMode,
-        "focus mode activo",
-      ).toBe("true")
-      expect(document.body.classList.contains("od-editor-focus-mode"), "clase de focus mode").toBe(true)
-    },
+    // Activar el foco esconde la status bar (el botón real de cambio de modo),
+    // así que cada modo necesita su propio montaje para poder cambiar de modo.
+    freshMountPerMode: true,
+    rich: focusModeTurnsOn,
+    markdown: focusModeTurnsOn,
   },
   toggleSidebar: {
     entry: shortcut("\\", "Backslash"),
-    modes: ["rich"],
     rich: async (w) => {
       await w.enter()
       await waitFor(
@@ -1096,10 +1151,19 @@ const COMMAND_CASES = {
         { label: "la preferencia del sidebar queda persistida" },
       )
     },
+    markdown: async (w) => {
+      expect(document.cookie, "control: Rich dejó el sidebar expandido").toContain(
+        "odessay-sidebar-mode=expanded",
+      )
+      await w.enter()
+      await waitFor(
+        () => (document.cookie.includes("odessay-sidebar-mode=collapsed") ? true : null),
+        { label: "el sidebar vuelve a collapsed desde Markdown" },
+      )
+    },
   },
   shortcutHelp: {
     entry: shortcut("/", "Slash"),
-    modes: ["rich"],
     rich: async (w) => {
       await w.enter()
       const modal = await waitFor(() => document.querySelector('[data-testid="display-modal"]'), {
@@ -1107,11 +1171,27 @@ const COMMAND_CASES = {
       })
       expect(modal.textContent, "el modal es el de atajos").toContain("Keyboard shortcuts")
     },
+    markdown: async (w) => {
+      const modal = document.querySelector('[data-testid="display-modal"]')
+      expect(modal, "control: Rich abrió el modal de atajos").toBeTruthy()
+      const close = modal!.querySelector<HTMLButtonElement>('[aria-label="Close"]')
+      if (!close) throw new Error("El modal de atajos no tiene botón de cierre")
+      await act(async () => {
+        close.click()
+      })
+      await waitFor(() => (document.querySelector('[data-testid="display-modal"]') ? null : true), {
+        label: "el modal de atajos se cierra",
+      })
+      await w.enter()
+      const reopened = await waitFor(() => document.querySelector('[data-testid="display-modal"]'), {
+        label: "el modal de atajos se reabre desde Markdown",
+      })
+      expect(reopened.textContent, "el modal reabierto es el de atajos").toContain("Keyboard shortcuts")
+    },
   },
   newWriting: {
     entry: shortcut("n", "KeyN"),
     runtime: "desktop",
-    modes: ["rich"],
     rich: async (w) => {
       const tabsBefore = getEditorSessionState().session.tabs.length
       await w.enter()
@@ -1119,25 +1199,42 @@ const COMMAND_CASES = {
         label: "se abre una pestaña nueva",
       })
       const { session } = getEditorSessionState()
-      expect(session.active_tab_id, "la pestaña nueva queda activa").toBe("draft")
+      expect(session.active_tab_id, "la pestaña nueva queda activa").toBe(EDITOR_DRAFT_TAB_ID)
+    },
+    markdown: async (w) => {
+      // La pasada de Rich dejó la pestaña borrador activa. ⌘N otra vez en
+      // Markdown reutiliza esa pestaña (no duplica) y rota su identidad
+      // efímera: ese cambio de identidad es el efecto observable del comando.
+      const draftBefore = getEditorSessionState().session.tabs.find(
+        (tab) => tab.id === EDITOR_DRAFT_TAB_ID,
+      )
+      expect(draftBefore, "control: Rich dejó la pestaña borrador abierta").toBeTruthy()
+      const tabsBefore = getEditorSessionState().session.tabs.length
+      await w.enter()
+      await waitFor(
+        () => {
+          const { session } = getEditorSessionState()
+          const draft = session.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID)
+          return session.active_tab_id === EDITOR_DRAFT_TAB_ID &&
+            draft?.draft_writing_id !== draftBefore?.draft_writing_id
+            ? draft
+            : null
+        },
+        { label: "⌘N desde Markdown abre un borrador nuevo" },
+      )
+      expect(getEditorSessionState().session.tabs.length, "reutiliza la pestaña borrador").toBe(tabsBefore)
     },
   },
   settings: {
     entry: shortcut(",", "Comma"),
-    modes: ["rich"],
-    rich: async (w) => {
-      await w.enter()
-      await waitFor(() => world.navigations.some((entry) => entry.href === "/settings"), {
-        label: "navega a /settings",
-      })
-    },
+    rich: navigatesTo("/settings"),
+    markdown: navigatesTo("/settings"),
   },
 
   /* --- Solo menú nativo (desktop) --- */
   clearStyles: {
     entry: menu("clearStyles"),
     runtime: "desktop",
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.selectRichText("bravo")
       await w.press(shortcut("b", "KeyB"))
@@ -1155,7 +1252,6 @@ const COMMAND_CASES = {
   copyAsMarkdown: {
     entry: menu("copyAsMarkdown"),
     runtime: "desktop",
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.enter()
       await waitFor(() => clipboardWrites.length > 0, { label: "el Markdown llega al portapapeles" })
@@ -1172,7 +1268,6 @@ const COMMAND_CASES = {
   copyAsHtml: {
     entry: menu("copyAsHtml"),
     runtime: "desktop",
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.enter()
       await waitFor(() => clipboardWrites.length > 0, { label: "el HTML llega al portapapeles" })
@@ -1189,7 +1284,6 @@ const COMMAND_CASES = {
   date: {
     entry: menu("date"),
     runtime: "desktop",
-    modes: ["rich", "markdown"],
     rich: async (w) => {
       await w.enter()
       await waitFor(() => (w.text().includes(todayIsoDate()) ? true : null), {
@@ -1206,7 +1300,6 @@ const COMMAND_CASES = {
   toggleTopbar: {
     entry: menu("toggleTopbar"),
     runtime: "desktop",
-    modes: ["rich"],
     rich: async (w) => {
       expect(document.querySelector('[data-testid="editor-topbar"]'), "control: la topbar existe").toBeTruthy()
       await w.enter()
@@ -1214,11 +1307,20 @@ const COMMAND_CASES = {
         label: "la topbar se oculta",
       })
     },
+    markdown: async (w) => {
+      expect(
+        document.querySelector('[data-testid="editor-topbar"]'),
+        "control: Rich ocultó la topbar",
+      ).toBeFalsy()
+      await w.enter()
+      await waitFor(() => document.querySelector('[data-testid="editor-topbar"]'), {
+        label: "la topbar vuelve desde Markdown",
+      })
+    },
   },
   toggleTabBar: {
     entry: menu("toggleTabBar"),
     runtime: "desktop",
-    modes: ["rich"],
     rich: async (w) => {
       expect(document.querySelector("[data-editor-tab-id]"), "control: la barra de pestañas existe").toBeTruthy()
       await w.enter()
@@ -1226,16 +1328,23 @@ const COMMAND_CASES = {
         label: "la barra de pestañas se oculta",
       })
     },
+    markdown: async (w) => {
+      expect(
+        document.querySelector("[data-editor-tab-id]"),
+        "control: Rich ocultó la barra de pestañas",
+      ).toBeFalsy()
+      await w.enter()
+      await waitFor(() => document.querySelector("[data-editor-tab-id]"), {
+        label: "la barra de pestañas vuelve desde Markdown",
+      })
+    },
   },
 } satisfies Record<EditorShortcutAction, CommandCase>
 
 const COMMAND_ENTRIES = Object.entries(COMMAND_CASES) as Array<[EditorShortcutAction, CommandCase]>
 
-function checkFor(testCase: CommandCase, mode: CommandMode): CommandCheck {
-  const check = mode === "rich" ? (testCase as { rich?: CommandCheck }).rich : (testCase as { markdown?: CommandCheck }).markdown
-  if (!check) throw new Error(`El caso no declara chequeo para el modo ${mode}`)
-  return check
-}
+/** Todo caso corre en ambos modos, en este orden. */
+const COMMAND_MODES: readonly CommandMode[] = ["rich", "markdown"]
 
 /* ------------------------------------------------------------------ *
  * Pruebas
@@ -1258,18 +1367,25 @@ describe("ODE-603 — red de comandos de la shell", () => {
   it.each(COMMAND_ENTRIES)(
     "%s",
     async (action, testCase) => {
-      const commandWorld =
-        testCase.runtime === "desktop"
-          ? await mountDesktopCommandWorld(action, testCase)
-          : await mountWebCommandWorld(action, testCase)
+      let commandWorld: CommandWorld | null = null
 
-      if (testCase.setup) {
-        await testCase.setup(commandWorld)
-      }
+      for (const mode of COMMAND_MODES) {
+        if (!commandWorld || testCase.freshMountPerMode) {
+          if (commandWorld) {
+            await mounted?.unmount()
+            mounted = null
+          }
+          commandWorld =
+            testCase.runtime === "desktop"
+              ? await mountDesktopCommandWorld(action, testCase)
+              : await mountWebCommandWorld(action, testCase)
+          if (testCase.setup) {
+            await testCase.setup(commandWorld)
+          }
+        }
 
-      for (const mode of testCase.modes) {
         await commandWorld.setMode(mode)
-        await checkFor(testCase, mode)(commandWorld)
+        await testCase[mode](commandWorld)
       }
 
       assertNoUnhandledErrors()
