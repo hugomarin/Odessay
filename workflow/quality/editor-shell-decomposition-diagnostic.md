@@ -185,6 +185,26 @@ Los cortes que faltan, con su issue:
 
 ODE-598 no mueve líneas de producto: quita los rodeos de ODE-577 en 4 tests de la shell desktop (ahora actúan determinísticamente pre-carga, sin espera de sesión ni reapertura por ruta), re-exige la aserción de nombre in-flight de ODE-585, y deja la fila STATE-07 del capability map en `INTEGRATION` con su prueba citada. La red para los cortes 3b–7 queda así: `tests/editor-shell-selection-restore.test.tsx` (STATE-07), `tests/editor-shell-draft-adoption-desktop.test.tsx` (ODE-577) y los 4 archivos sin rodeos.
 
+**Actualización (2026-09-27, ODE-602 — corte 4a, entrega 1: la red del chrome):** sin cambio de producto. Cuatro archivos nuevos montan la shell (web) y conducen el chrome por sus entradas reales —atajos sobre `window`, botones del status bar, de la cabecera de la hoja y del panel, el node view de la imagen—, leyendo lo guardado en `localDB` cuando la propiedad es de persistencia:
+
+```text
+tests/editor-shell-chrome-toc.test.tsx            TOC: encabezados del activo, cambio de documento,
+                                                   click → cursor, activo por scroll, caso de coste
+tests/editor-shell-chrome-find-replace.test.tsx   resaltado, Replace/Replace all → sucio y guardado,
+                                                   cambio de documento con la búsqueda abierta
+tests/editor-shell-chrome-focus-panels.test.tsx   focus mode (selección, contenido, restauración),
+                                                   closeActivePanel y precedencia de Escape
+tests/editor-shell-chrome-modals.test.tsx         visor de imagen; renombrar e insertar imagen
+                                                   sobre el documento activo
+```
+
+Cada caso se validó con una mutación que lo pone en rojo por la razón esperada. Dos observaciones de esa calibración:
+
+- **La TOC tiene dos defensas al cambiar de documento**, no una: el vaciado de `tableOfContentsItems` al cambiar `currentWritingId` y la propia extensión TableOfContents, que vuelve a emitir con el `setContent` del documento nuevo. Quitar solo una deja la prueba verde.
+- **El caso de coste de la TOC** es una ráfaga de cinco teclas dentro de un encabezado: hoy produce un solo recálculo visible (el debounce de 180ms). Sin el debounce, cinco.
+
+**Bug encontrado — ODE-630.** En rich mode, `richFindMatches` se memoriza con `editor` (la misma instancia durante toda la vida de la shell) y no con el documento. Replace y Replace all insertan en las posiciones de ese memo rancio: dos Replace seguidos corrompen el texto, y tras cambiar de pestaña con la búsqueda abierta "Replace all" escribe en el documento nuevo con las posiciones del anterior, y se guarda. Sus dos casos quedan como `it.fails` y la mudanza no los arregla.
+
 ## 2. Hallazgo 1 — cada dato tiene dos dueños
 
 Diecinueve efectos existen solo para mantener una copia sombra del estado en un ref: `title → titleRef`, `version → versionRef`, `lifecycle → lifecycleRef`, y así con unos veinte campos. Y hay 602 puntos donde el código lee la sombra en vez del estado.
@@ -216,17 +236,17 @@ Tres problemas, en orden de gravedad:
 | Correcciones (persistencia y aplicación de sugerencias del análisis manual) | ~305 refs *(era ~533; ODE-558 eliminó la cola automática inalcanzable)* | AI-05 | humo del camino real (`editor-shell-corrections-path.test.tsx`), aislamiento entre documentos (`editor-shell-corrections-isolation.test.tsx`, ODE-559) y aceptar/rechazar por la shell (`editor-shell-corrections-accept.test.tsx`, ODE-586) |
 | Save / persistencia | ~317 refs | WATCH-07, DOC-02/03/06 | **ninguna** (el coordinator sí, por debajo) |
 | Hidratación / identidad | ~104 refs, 7 efectos | STATE-01/03/04/05 | 1 e2e + unit del coordinator |
-| Find / replace | ~122 refs | — | unit de `lib/editor/find-replace.ts` |
-| Desktop wiring (canonical path, conflicto externo, open-file, menús, close guard) | ~103 refs | WATCH-07, WS-* | **ninguna** |
+| Find / replace | ~122 refs | — | unit de `lib/editor/find-replace.ts`; por la shell desde ODE-602: resaltado, Replace/Replace all hasta lo guardado y cambio de documento con la búsqueda abierta (`editor-shell-chrome-find-replace.test.tsx`), con un bug real fijado como `it.fails` (ODE-630) |
+| Desktop wiring (canonical path, conflicto externo, open-file, menús, close guard) | ~103 refs | WATCH-07, WS-* | reacción a cambios externos (limpio, sucio con sus dos botones, borrado, movimiento, cambio de pestaña a mitad) y guardia de cierre por la shell con la cadena real watcher → reconciliador → catálogo (`editor-shell-external-changes-desktop.test.tsx`, ODE-599); open-file y Save As por ODE-581/ODE-574 |
 | Anotaciones / selección | ~90 refs | ANN-04/05 | 1 e2e |
 | Tabs / sesión / catálogo | ~62 refs | STATE-05, STATE-08 | unit del store, no el seam al shell |
-| Chrome (TOC, modales, focus mode) | ~106 refs | — | **ninguna** |
+| Chrome (TOC, modales, focus mode) | ~106 refs | — | por la shell desde ODE-602: TOC (`editor-shell-chrome-toc`), focus mode y paneles (`editor-shell-chrome-focus-panels`), visor de imagen y modales de renombrar e insertar imagen (`editor-shell-chrome-modals`) |
 
 Nueve filas del capability map nombran este archivo (o el hook que salió de él) en su chain o su evidencia: **AI-05, EXP-05, STATE-01, STATE-03, STATE-04, STATE-05, STATE-07, STATE-08, WATCH-07**. De ellas, cuatro están en `PARTIAL_INTEGRATION` o `NONE`, y en tres el tramo no probado **es precisamente este archivo**:
 
 - **STATE-05** — el seam `store → EditorShell` (aplicación al DOM) es literalmente el gap declarado de la fila.
 - **EXP-05** — `exportBinary`/`exportMarkdown` del shell nunca se conectan al `saveBinaryArtifact` ya probado.
-- **WATCH-07** — que el shell siembre el `content_hash` base correcto al abrir no lo prueba nadie; el proof de integración lo siembra a mano y lo documenta como tal.
+- **WATCH-07** — que el shell siembre el `content_hash` base correcto al abrir no lo prueba nadie; el proof de integración lo siembra a mano y lo documenta como tal. *(ODE-599: la red de la shell ya lo ejercita —la línea base la siembra la primera lectura del catálogo tras abrir por el opener real— y encontró dos bugs reales: la clasificación limpio/sucio tras un autosave rechazado, ODE-627, y, en el orden de producción, que el Open File fuera de todo Workspace no refresca el watcher, ODE-628; las pruebas afectadas quedan como `it.fails`; ver la fila del mapa.)*
 
 (STATE-07 salió de esta lista en ODE-598: el restore de cursor/selección vive desde ODE-562 en `hooks/useDocumentHydration.ts` y lo ejercita `tests/editor-shell-selection-restore.test.tsx`; ver la fila del mapa.)
 

@@ -25,7 +25,7 @@
  * suelto (marca `highlight` sin `annotationType` y sin nodo de referencia), que
  * es lo que produce importar Markdown con `==texto==`. Es contenido durable de
  * entrada, no estado interno del shell: el sidebar lo descubre por sí mismo
- * (con `version: 2`, para no tropezar con el bug 1 de ODE-625).
+ * (con `version: 2`, que esquivaba el bug 1 de ODE-625, ya arreglado).
  *
  * Completion events: el DOM del sidebar tras el commit, y `localDB` cuando ya
  * tiene el cuerpo nuevo.
@@ -232,10 +232,10 @@ describe("ODE-606 — acciones del popup de selección", () => {
 
   it("convertir un highlight suelto en anotación lo reemplaza sin duplicarlo", async () => {
     const writingId = "73111111-1111-4111-8111-111111111111"
-    // `version: 2` y no 1: con la misma `version` que el shell tiene en estado,
-    // el sidebar no lista lo que ya traía el documento (bug 1 de ODE-625,
-    // fijado en `editor-shell-annotation-roundtrip.test.tsx`). Aquí se aísla
-    // la conversión, no ese bug.
+    // `version: 2` y no 1: esquivaba el bug 1 de ODE-625 (el sidebar no
+    // listaba lo que ya traía el documento con la misma `version`), ya
+    // arreglado y cubierto en `editor-shell-annotation-roundtrip.test.tsx`.
+    // Aquí se aísla la conversión, no ese bug.
     await openDocument(writingId, paragraphWithStandaloneHighlight(), 2)
 
     // Control positivo: el highlight suelto existe y el sidebar lo lista como tal.
