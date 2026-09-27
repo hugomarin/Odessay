@@ -59,6 +59,7 @@ const {
   clickEditorTab,
   fillTextField,
   flush,
+  holdAnimationFrames,
   mountEditorShell,
   pressEditorShortcut,
   pressEscape,
@@ -326,3 +327,99 @@ describe("ODE-602 — find/replace a través de la shell", () => {
     TEST_TIMEOUT_MS,
   )
 })
+
+/** Pulsa el botón real "Rich" o "Markdown" de la status bar. */
+async function switchMode(label: "Rich" | "Markdown") {
+  const button = await waitFor(
+    () =>
+      Array.from(
+        mounted!.container.querySelectorAll<HTMLButtonElement>('[data-testid="editor-statusbar"] button'),
+      ).find((candidate) => (candidate.textContent ?? "").trim() === label),
+    { label: `botón "${label}" de la status bar` },
+  )
+  await act(async () => {
+    button.click()
+  })
+  await flush(2)
+  await waitFor(() => (label === "Markdown" ? markdownSource() : !markdownSource() && mounted!.prosemirror()), {
+    label: `el editor en modo ${label}`,
+  })
+}
+
+function markdownSource() {
+  return mounted!.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]')
+}
+
+async function pressNextMatch() {
+  const button = document.querySelector<HTMLButtonElement>('button[aria-label="Next match"]')
+  if (!button) throw new Error('El panel no tiene el botón "Next match"')
+  await act(async () => {
+    button.click()
+  })
+  await flush(2)
+}
+
+// ODE-625 en el camino de find/replace. La navegación en Markdown mueve la
+// selección del textarea en un frame diferido; ese frame lleva la identidad
+// del documento que lo pidió. Si el usuario cambia de pestaña antes de que
+// corra, el frame tardío no puede escribir en el textarea (ni en la selección
+// cacheada) del documento nuevo las posiciones del anterior. Mudado con
+// ODE-602 a `hooks/useFindReplace.ts`; este caso fija que la guarda viajó.
+describe("ODE-625 — la navegación de find/replace en Markdown no escribe en otro documento", () => {
+  it(
+    "un 'Next match' de A que corre tarde no mueve la selección de B",
+    async () => {
+      await openA()
+      await switchMode("Markdown")
+      const find = await openFindPanel()
+      await fillTextField(find, "gato")
+      await waitFor(() => statusLabel().includes("of 3"), { label: "3 coincidencias en A" })
+
+      // Control positivo: en A, 'Next match' sí mueve la selección a la 2.ª coincidencia.
+      await pressNextMatch()
+      await advance(50)
+      const second = TEXT_A.indexOf("gato", TEXT_A.indexOf("gato") + 1)
+      await waitFor(() => markdownSource()?.selectionStart === second, {
+        label: "control positivo: la selección de A sigue a la navegación",
+      })
+
+      const frames = holdAnimationFrames()
+      try {
+        // 'Next match' agenda su frame; lo retenemos y cambiamos a B antes de que corra.
+        await pressNextMatch()
+        const lateFromA = frames.takePending()
+        expect(lateFromA.length, "la navegación agendó su frame diferido").toBeGreaterThan(0)
+
+        await clickEditorTab(writingB)
+        await frames.settleUntil(
+          () =>
+            (mounted!.prosemirror()?.textContent?.includes("Documento B") ?? false) &&
+            document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") === "ready",
+          { label: "B hidratado" },
+        )
+        // Cada documento abre en su propio modo (B abre en Rich). Se pasa B a
+        // Markdown para que exista el textarea donde el frame de A escribiría.
+        await switchMode("Markdown")
+        await frames.settleUntil(() => markdownSource()?.value.includes("Documento B") ?? false, {
+          label: "B en Markdown",
+        })
+        await frames.settle(6)
+        const before = { start: markdownSource()!.selectionStart, end: markdownSource()!.selectionEnd }
+
+        // El frame de A llega tarde, con B ya activo.
+        await frames.runCallbacks(lateFromA)
+        await frames.settle(2)
+
+        const third = TEXT_A.lastIndexOf("gato")
+        const after = { start: markdownSource()!.selectionStart, end: markdownSource()!.selectionEnd }
+        expect(after, "B conserva su selección").toEqual(before)
+        expect(after, "B no recibe la posición de la coincidencia de A").not.toEqual({ start: third, end: third + 4 })
+      } finally {
+        frames.restore()
+      }
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
