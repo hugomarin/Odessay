@@ -222,9 +222,9 @@ describe("ODE-562 — STATE-07: la selección de un documento se restaura al vol
  *     selección deja de ser un rango pone en rojo los dos casos Rich, por
  *     puntero y por teclado: el popup de A aparece en B.
  *
- * Bug encontrado (ODE-625, bug 2): salir de un documento Markdown con su
- * restauración todavía encolada le guarda la selección del documento
- * anterior. Queda fijado como `it.fails` al final del bloque.
+ * Bug encontrado (ODE-625, bug 2, arreglado): salir de un documento Markdown
+ * con su restauración todavía encolada le guardaba la selección del documento
+ * anterior. Su caso, antes `it.fails`, es un `it` al final del bloque.
  */
 
 const STATE06_TEXT_A = "Documento A con una frase bastante larga para seleccionar."
@@ -410,13 +410,12 @@ describe("ODE-606 — STATE-06: la selección y el popup de un documento no se f
     expect(tabFor("85111111-1111-4111-8111-111111111111")?.id).toBe(getEditorSessionState().session.active_tab_id)
   }, SHELL_TEST_TIMEOUT_MS)
 
-  // BUG CONOCIDO — ODE-625 (bug 2). Salir de B con su restauración todavía
-  // encolada guarda en el view_state de B la selección de A: el
-  // `markdownSelectionRef` del shell no está atado a la identidad del
-  // documento. `it.fails` pasa mientras el bug exista y se pone en rojo
-  // cuando se arregle: entonces hay que pasarlo a `it`. Las precondiciones
-  // son las mismas que las del caso de arriba, que sí está en verde.
-  it.fails("BUG ODE-625 — Markdown: salir de B antes de su restauración no le deja la selección de A", async () => {
+  // ODE-625 (bug 2, arreglado). Salir de B con su restauración todavía
+  // encolada guardaba en el view_state de B la selección de A: el
+  // `markdownSelectionRef` del shell no estaba atado a la identidad del
+  // documento. Era `it.fails`; pasó a `it` sin tocar el cuerpo. Mutation
+  // check: revertir el fix de ODE-625 en `editor-shell.tsx` lo pone en rojo.
+  it("ODE-625 — Markdown: salir de B antes de su restauración no le deja la selección de A", async () => {
     const writingA = "87111111-1111-4111-8111-111111111111"
     const writingB = "88222222-2222-4222-8222-222222222222"
     await markdownDoubleRestore(writingA, writingB)
