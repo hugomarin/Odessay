@@ -14,8 +14,9 @@
  *      resultados del anterior.
  *
  * La red encontró un bug real (ODE-630): en rich mode las coincidencias con
- * las que actúan Replace/Replace all no se recalculan tras editar ni tras
- * cambiar de documento. Sus dos casos quedan como `it.fails`.
+ * las que actúan Replace/Replace all no se recalculaban tras editar ni tras
+ * cambiar de documento. ODE-630 lo arregló en `hooks/useFindReplace.ts` y sus
+ * dos casos quedan como regresión (ya sin `it.fails`).
  *
  * Camino de producción (web): A y B abiertos como pestañas; atajo real ⌘F /
  * Ctrl+F sobre `window`; los campos y botones reales del panel. Persistencia
@@ -64,6 +65,8 @@ const {
   pressEditorShortcut,
   pressEscape,
   resetEditorShellWorld,
+  selectEditorText,
+  typeInEditor,
   waitFor,
 } = await import("./support/editor-shell-harness")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
@@ -239,11 +242,11 @@ describe("ODE-602 — find/replace a través de la shell", () => {
     TEST_TIMEOUT_MS,
   )
 
-  // ODE-630: `richFindMatches` se memoriza con `editor` (misma instancia) y no
-  // con el documento, así que el segundo Replace usa las posiciones de antes
-  // del primero (observado: "Uno perroo dos gato tres gato."). Caracterización
-  // del bug; pasa a `it` sin editar el cuerpo cuando ODE-630 se arregle.
-  it.fails(
+  // ODE-630: `richFindMatches` se memorizaba con `editor` (misma instancia) y
+  // no con el documento, así que el segundo Replace usaba las posiciones de
+  // antes del primero (observado: "Uno perroo dos gato tres gato."). Regresión
+  // del arreglo: Replace lee el documento vivo en el momento de la acción.
+  it(
     "ODE-630 — dos Replace seguidos reemplazan dos coincidencias distintas",
     async () => {
       await openA()
@@ -285,11 +288,11 @@ describe("ODE-602 — find/replace a través de la shell", () => {
     TEST_TIMEOUT_MS,
   )
 
-  // ODE-630: al pasar a B el panel sigue con las coincidencias de A ("1 of 3")
-  // y "Replace all" escribe en B con las posiciones de A, y se guarda
-  // (observado: "Docuperroo B sperroa palaperrobuscada…"). Caracterización del
-  // bug; pasa a `it` sin editar el cuerpo cuando ODE-630 se arregle.
-  it.fails(
+  // ODE-630: al pasar a B el panel seguía con las coincidencias de A ("1 of 3")
+  // y "Replace all" escribía en B con las posiciones de A, y se guardaba
+  // (observado: "Docuperroo B sperroa palaperrobuscada…"). Regresión del
+  // arreglo: el recuento sale del documento vivo y las acciones también.
+  it(
     "ODE-630 — al cambiar de documento, la búsqueda abierta se recalcula sobre el nuevo",
     async () => {
       // Control positivo: en A la búsqueda encuentra 3. Después de pasar a B
@@ -323,6 +326,29 @@ describe("ODE-602 — find/replace a través de la shell", () => {
       await advance(500)
       expect((await localDB.writings.get(writingB))?.body_text, "lo guardado de B sigue intacto").toBe(TEXT_B)
       expect((await localDB.writings.get(writingA))?.body_text, "A tampoco cambió").toBe(TEXT_A)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "ODE-630 — el recuento se recalcula cuando una edición cambia el documento",
+    async () => {
+      // Mutación: devolver `richFindMatches` a un memo con `[editor, ...]`
+      // (sin dependencia del documento) → las decoraciones ya son 2 pero el
+      // panel sigue diciendo "1 of 3".
+      await openA()
+      const find = await openFindPanel()
+      await fillTextField(find, "gato")
+      await waitFor(() => highlightedMatches().length === 3, { label: "tres coincidencias" })
+      expect(statusLabel()).toContain("1 of 3")
+
+      await selectEditorText("gato", 0)
+      await typeInEditor("perro")
+
+      await waitFor(() => highlightedMatches().length === 2, { label: "quedan dos coincidencias" })
+      await waitFor(() => statusLabel().includes("of 2"), { label: "el recuento baja a 2" })
+      expect(statusLabel()).toContain("1 of 2")
+      assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
   )
