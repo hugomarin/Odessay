@@ -58,6 +58,7 @@ import { createRoot, type Root } from "react-dom/client"
 
 import { EditorShell } from "@/components/editor/editor-shell"
 import { resetLearnedWordsCacheForTest } from "@/lib/corrections/learned-words-loader"
+import { isMacPlatform } from "@/lib/keyboard-shortcuts"
 import { getSyncWorker } from "@/lib/sync/worker"
 import { getEditorSessionState, resetEditorSessionStoreForTests } from "@/lib/stores/editor-session-store"
 
@@ -698,6 +699,50 @@ export async function waitForMarkdownContaining(needle: string, timeoutMs = 20_0
 /* ------------------------------------------------------------------ *
  * Drivers de selección y formularios (ODE-606)
  * ------------------------------------------------------------------ */
+
+/**
+ * Pulsa un atajo de la shell por el camino real: un `keydown` en `window`,
+ * donde la shell escucha, con el modificador de comando de la plataforma que
+ * detecta la app (⌘ en Mac, Ctrl en el resto). Un solo evento: disparar los
+ * dos modificadores "por si acaso" rompería los atajos que alternan (focus
+ * mode) (ODE-602).
+ */
+export async function pressEditorShortcut({
+  key,
+  code,
+  shift = false,
+  alt = false,
+}: {
+  key: string
+  code?: string
+  shift?: boolean
+  alt?: boolean
+}) {
+  const mac = isMacPlatform()
+  await act(async () => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key,
+        code,
+        shiftKey: shift,
+        altKey: alt,
+        metaKey: mac,
+        ctrlKey: !mac,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+  })
+  await flush(2)
+}
+
+/** Pulsa Escape donde lo escucha la shell (`window`). */
+export async function pressEscape() {
+  await act(async () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+  })
+  await flush(2)
+}
 
 /**
  * Selecciona `needle` en el editor REAL por el camino del navegador: foco en
