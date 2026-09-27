@@ -173,7 +173,7 @@ L3540  currentDocumentMarkdownRef.current = currentDocumentMarkdown
 Los cortes que faltan, con su issue:
 
 ```text
-3b  ODE-599  red y extracción de la conexión con desktop (cambios externos, menú, cierre)
+3b  ODE-599  hecha (entrega 2): cambios externos a hook; menú y cierre se quedan en la shell (sus callbacks van con su dueño natural: apertura/guardado)
 4a  ODE-602  red y extracción del chrome (TOC, focus mode, find/replace, visor de imagen, paneles y modales)
 4b  ODE-603  red y extracción de los comandos (handleRunAction e inserts de link/tabla/imagen)
 5   ODE-605  extraer el cluster de guardado/persistencia
@@ -221,6 +221,48 @@ Se quedan en la shell, por triviales (menos de 20 líneas y un estado) o porque 
     5 efectos espejo en la shell   (7 → 5; los dos de la TOC viven ahora en su hook)
 ```
 
+**Actualización (2026-09-27, ODE-599 — corte 3b, entrega 2: la conexión con desktop):** la reacción a cambios externos sale tal cual a `hooks/useExternalDocumentChanges.ts`, llamado donde estaba el efecto (entre `useSessionRestore` y `useDocumentHydration`), así que el orden de efectos no cambia. Se mueven:
+
+- la suscripción al catálogo del documento activo (borrado, movimiento y cambio de contenido), con la proyección del estado durable de sync de ODE-542;
+- los dos manejadores del banner de conflicto ("Reload external" y "Keep my version").
+
+El estado (`externalFileNotice`, `externalContentConflict`), los refs y `persistEditorSnapshot` siguen siendo de la shell y llegan por `input`; los tipos `ExternalFileNotice` y `ExternalContentConflict` viven ahora en el hook. No se crean envoltorios sobre `useTauriCloseGuard`/`useTauriEditorMenuEvents`/`useTauriMenuEvents`: sus callbacks (`handleMenuOpenFile`, `handleMenuNewFile`, `handleSaveToDisk`, `settleBeforeClose`) se quedan en la shell, como estaban; moverlos es de su dueño natural (apertura/guardado, cortes 5 y 7). `publishTabState` también se queda: publica metadatos de la pestaña activa y su dueño se decide en el corte 7 (espejos, ODE-609); el ADR del documento activo fija su contrato (solo metadatos, nunca crea/activa/reemplaza pestañas). La red (`tests/editor-shell-external-changes-desktop.test.tsx`) pasa idéntica (8 passed) sin tocar sus tests, el conteo de suscripciones vivas y de lecturas por evento no cambia, y dos mutaciones en vivo sobre el hook (quitar el banner, no persistir en "Keep my version") ponen en rojo sus casos. Contra `main` (`9efb5fa0`), con el mismo método:
+
+```text
+4,521 líneas        (-216)
+   32 useEffect     (-1)
+   53 useCallback   (sin cambio; los manejadores inline pasan a useCallback en el hook)
+   19 useRef        (sin cambio)
+   26 useState      (sin cambio)
+   11 useMemo       (sin cambio)
+```
+
+Los 11 hooks extraídos por los cortes, en orden de llamada en la shell:
+
+```text
+L762   useFocusMode               (ODE-602, corte 4a entrega 2)
+L1165  useCorrectionBlocks        (ODE-586, corte 2 entrega 2a)
+L1576  useTableOfContents         (ODE-602, corte 4a entrega 2)
+L1765  useSessionRestore          (ODE-587, corte 3 entrega 1b)
+L1788  useExternalDocumentChanges (ODE-599, corte 3b entrega 2)
+L1848  useDocumentHydration       (ODE-562, corte 1)
+L2043  useCorrectionActions       (ODE-586, corte 2 entrega 2b)
+L3305  useCorrectionLifecycle     (ODE-586, corte 2 entrega 2b)
+L3376  useFindReplace             (ODE-602, corte 4a entrega 2)
+L3431  useWorkspaceTabs           (ODE-587, corte 3 entrega 1a)
+L3534  useWorkspaceTabOpening     (ODE-587, corte 3 entrega 1c)
+```
+
+Los 5 efectos espejo que quedan son los mismos que dejó ODE-602; este movimiento no los toca:
+
+```text
+L752   reconcileActiveSaveStateRef.current = reconcileActiveSaveState
+L1541  editorInstanceRef.current = editor ?? null
+L1688  modeRef.current = mode
+L1756  activeEditorTabIdRef.current = editorSession.active_tab_id   (la excepción declarada del ADR)
+L3294  currentDocumentMarkdownRef.current = currentDocumentMarkdown
+```
+
 ## 2. Hallazgo 1 — cada dato tiene dos dueños
 
 Diecinueve efectos existen solo para mantener una copia sombra del estado en un ref: `title → titleRef`, `version → versionRef`, `lifecycle → lifecycleRef`, y así con unos veinte campos. Y hay 602 puntos donde el código lee la sombra en vez del estado.
@@ -262,7 +304,7 @@ Nueve filas del capability map nombran este archivo (o el hook que salió de él
 
 - **STATE-05** — el seam `store → EditorShell` (aplicación al DOM) es literalmente el gap declarado de la fila.
 - **EXP-05** — `exportBinary`/`exportMarkdown` del shell nunca se conectan al `saveBinaryArtifact` ya probado.
-- **WATCH-07** — que el shell siembre el `content_hash` base correcto al abrir no lo prueba nadie; el proof de integración lo siembra a mano y lo documenta como tal. *(ODE-599: la red de la shell ya lo ejercita —la línea base la siembra la primera lectura del catálogo tras abrir por el opener real— y encontró dos bugs reales: la clasificación limpio/sucio tras un autosave rechazado, ODE-627, y, en el orden de producción, que el Open File fuera de todo Workspace no refresca el watcher, ODE-628; las pruebas afectadas quedan como `it.fails`; ver la fila del mapa.)*
+- **WATCH-07** — que el shell siembre el `content_hash` base correcto al abrir no lo prueba nadie; el proof de integración lo siembra a mano y lo documenta como tal. *(ODE-599: la red de la shell ya lo ejercita —la línea base la siembra la primera lectura del catálogo tras abrir por el opener real— y encontró dos bugs reales: la clasificación limpio/sucio tras un autosave rechazado, ODE-627, y, en el orden de producción, que el Open File fuera de todo Workspace no refresca el watcher, ODE-628. Ambos están arreglados y sus casos son `it` de nuevo, sin tocar el cuerpo; la reacción de la shell vive desde la entrega 2 en `hooks/useExternalDocumentChanges.ts`. Ver la fila del mapa.)*
 
 (STATE-07 salió de esta lista en ODE-598: el restore de cursor/selección vive desde ODE-562 en `hooks/useDocumentHydration.ts` y lo ejercita `tests/editor-shell-selection-restore.test.tsx`; ver la fila del mapa.)
 
