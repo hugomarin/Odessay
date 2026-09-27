@@ -117,6 +117,25 @@ async function waitForMaterializedWritingId() {
   )
 }
 
+function reopenedEditorState(writingId: string) {
+  const sessionState = getEditorSessionState()
+  const activeTab = sessionState.session.tabs.find(
+    (tab) => tab.id === sessionState.session.active_tab_id,
+  )
+  const editorText = mounted?.editor().getText() ?? ""
+
+  return {
+    writingId,
+    sessionLoaded: sessionState.loaded,
+    activeTabId: sessionState.session.active_tab_id,
+    activeWritingId: activeTab?.writing_id ?? null,
+    hydrationPhase:
+      document.querySelector<HTMLElement>('[data-page="editor"]')?.getAttribute("data-hydration-phase") ?? null,
+    editorTextLength: editorText.length,
+    editorTextPreview: editorText.slice(0, 160),
+  }
+}
+
 describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", () => {
   it("la anotación del popup llega al .md y vuelve intacta al reabrir desde disco", async () => {
     mounted = await mountEditorShell()
@@ -161,10 +180,17 @@ describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", 
     resetEditorShellWorld({ isDesktop: true })
     mounted = await mountEditorShell({ writingId })
     await waitFor(() => getEditorSessionState().loaded, { label: "sesión vacía cargada" })
-    await waitFor(() => mounted!.editor().getText().includes("ODE606"), {
-      label: "reapertura desde el .md",
-      timeoutMs: 15_000,
-    })
+    try {
+      await waitFor(() => mounted!.editor().getText().includes("ODE606"), {
+        label: "reapertura desde el .md",
+        timeoutMs: 15_000,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(
+        `${message}; estado de reapertura: ${JSON.stringify(reopenedEditorState(writingId))}`,
+      )
+    }
     await flush(4)
 
     const reopened = readEditorAnnotations()
