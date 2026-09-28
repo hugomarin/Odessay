@@ -22,6 +22,7 @@ import {
   type PendingRichSelectionSnapshot,
 } from "@/hooks/useEditorCommands"
 import { useEditorPersistence } from "@/hooks/useEditorPersistence"
+import { useDocumentExit, type PendingMarkdownSelection } from "@/hooks/useDocumentExit"
 import {
   useExternalDocumentChanges,
   type ExternalContentConflict,
@@ -176,7 +177,6 @@ import {
   initializeEditorSessionStore,
   openWritingTab,
   publishTabState,
-  saveTabViewState,
   updateTabSaveState,
   useEditorSessionStore,
 } from "@/lib/stores/editor-session-store"
@@ -764,30 +764,17 @@ export function EditorShell({
   const tableOfContentsScrollRafRef = useRef<number | null>(null)
   const tableOfContentsDebounceRef = useRef<number | null>(null)
   const markdownSelectionRafRef = useRef<number | null>(null)
-  const pendingMarkdownSelectionRef = useRef<{
-    start: number
-    end: number
-    writingId: string
-    scrollTop?: number
-    scrollLeft?: number
-    editorScrollTop?: number
-    editorScrollLeft?: number
-    shellScrollTop?: number
-    shellScrollLeft?: number
-    windowScrollX?: number
-    windowScrollY?: number
-    // Cross-document-leak guard (ODE-555 follow-up): this queue is shared by
-    // every caller (typing, hydration, ...), and its deferred rAF has no
-    // built-in notion of "which document this was for" — without a guard, a
-    // hydration restore queued for A that hasn't fired yet would apply to
-    // whatever document/DOM is current by the time the frame runs, even a
-    // different one the user already switched to. Callers that care (only
-    // hydration does today) pass `isStillValid`; callers that don't (plain
-    // typing, always operating on the currently-active document) omit it and
-    // get the prior, unguarded behavior.
-    isStillValid?: () => boolean
-    onSettled?: () => void
-  } | null>(null)
+  // Cross-document-leak guard (ODE-555 follow-up): this queue is shared by
+  // every caller (typing, hydration, ...), and its deferred rAF has no
+  // built-in notion of "which document this was for" — without a guard, a
+  // hydration restore queued for A that hasn't fired yet would apply to
+  // whatever document/DOM is current by the time the frame runs, even a
+  // different one the user already switched to. Callers that care (only
+  // hydration does today) pass `isStillValid`; callers that don't (plain
+  // typing, always operating on the currently-active document) omit it and
+  // get the prior, unguarded behavior. El tipo vive en `useDocumentExit`,
+  // que consume este ref por `input`.
+  const pendingMarkdownSelectionRef = useRef<PendingMarkdownSelection | null>(null)
   const suppressNextSelectionPopupRef = useRef(false)
   const currentDocumentMarkdownRef = useRef("")
   const automaticCorrectionSuggestionsRef = useRef<PublicationSuggestion[]>([])
@@ -1181,19 +1168,6 @@ export function EditorShell({
     editorInstanceRef.current = editor ?? null
   }, [editor])
 
-  // Captures the still-blank draft's live content right before leaving it, so
-  // the "no active document" effect can restore it on return instead of
-  // wiping it (ODE-478 case 4). No-op when the outgoing tab isn't the draft.
-  const snapshotOutgoingDraftContent = useCallback(() => {
-    if (currentWritingIdRef.current || !editor || !ephemeralDraftWritingIdRef.current) {
-      return
-    }
-    draftContentSnapshotRef.current = {
-      draftId: ephemeralDraftWritingIdRef.current,
-      bodyJson: editor.getJSON() as Record<string, unknown>,
-    }
-  }, [editor])
-
   // Uploading an image needs a real writingId to attach the asset to
   // (server-side storage path + RLS), so a still-blank draft must
   // materialize first — the same principle as naming it (case 3) or Save As.
@@ -1222,88 +1196,6 @@ export function EditorShell({
     tableOfContentsItemsRef,
     tableOfContentsScrollRafRef,
   })
-
-  const persistCurrentWorkspaceViewState = useCallback(() => {
-    // ODE-624: mientras la hidratación del documento activo no terminó, lo que
-    // hay en el editor todavía no es la vista del documento. `setContent` dejó
-    // el cursor al final y el scroll/selección del documento se restauran en
-    // frames diferidos; `hydrationPhase` sigue en "loading" hasta que esos
-    // frames corren — rich mode llama a `finishHydration` (la única transición
-    // a "ready") dentro del segundo frame, después de aplicar los scrolls
-    // (`useDocumentHydration.ts`), y markdown en el `onSettled` del restore,
-    // tras sus re-aplicaciones. Guardar aquí la vista previa a restaurar pisa
-    // la vista propia que la pestaña ya tenía (hallazgo de ODE-600).
-    // El ref, no el estado: este callback es de larga vida (cleanup de
-    // unmount) y no debe recrearse con cada transición de fase.
-    if (hydrationPhaseRef.current !== "ready") {
-      return
-    }
-
-    const tabId = currentWritingIdRef.current ?? EDITOR_DRAFT_TAB_ID
-    const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-    const shellViewport = document.querySelector<HTMLElement>("main")
-    const currentTab = getEditorSessionState().session.tabs.find((tab) => tab.id === tabId)
-    const markdownSelection = readMarkdownSelectionForActiveDocument(
-      markdownSelectionRef.current,
-      currentWritingIdRef.current,
-    )
-
-    saveTabViewState({
-      tabId,
-      viewState: {
-        mode: modeRef.current,
-        scrollTop: editorViewport?.scrollTop ?? 0,
-        scrollLeft: editorViewport?.scrollLeft ?? 0,
-        windowScrollX: window.scrollX,
-        windowScrollY: window.scrollY,
-        shellScrollTop: shellViewport?.scrollTop ?? 0,
-        shellScrollLeft: shellViewport?.scrollLeft ?? 0,
-        selectionFrom: modeRef.current === "rich" && editor ? editor.state.selection.from : null,
-        selectionTo: modeRef.current === "rich" && editor ? editor.state.selection.to : null,
-        markdownSelectionStart:
-          modeRef.current === "markdown"
-            ? markdownSelection.selection?.start ??
-              (markdownSelection.belongsToOtherDocument
-                ? currentTab?.view_state?.markdownSelectionStart ?? null
-                : markdownTextareaRef.current?.selectionStart ?? null)
-            : null,
-        markdownSelectionEnd:
-          modeRef.current === "markdown"
-            ? markdownSelection.selection?.end ??
-              (markdownSelection.belongsToOtherDocument
-                ? currentTab?.view_state?.markdownSelectionEnd ?? null
-                : markdownTextareaRef.current?.selectionEnd ?? null)
-            : null,
-      },
-    })
-  }, [editor])
-
-  /**
-   * Protocolo de salida del documento activo (ADR documento activo, Hecho 4;
-   * Fase 1 — ODE-567). Antes estaba copiado en cada handler de transición.
-   *
-   * Los tres pasos son explícitos porque hoy NO todas las transiciones hacen
-   * los mismos, y la Fase 1 es una mudanza, no un cambio de comportamiento:
-   * cada sitio declara lo que ya hacía. Uniformizarlos es una decisión aparte.
-   * Va separado de `activateDocument` porque algunas transiciones (cerrar,
-   * abrir) salen ANTES de un `await` y activan DESPUÉS.
-   */
-  const prepareDocumentExit = useCallback(
-    (steps: { flushPendingEdit: boolean; snapshotDraft: boolean; saveViewState: boolean }) => {
-      // La edición en cola todavía apunta al editor del documento saliente:
-      // volcarla antes de que cambie la identidad (ODE-478 caso 2).
-      if (steps.flushPendingEdit) {
-        flushQueuedRichModeUpdate()
-      }
-      if (steps.snapshotDraft) {
-        snapshotOutgoingDraftContent()
-      }
-      if (steps.saveViewState) {
-        persistCurrentWorkspaceViewState()
-      }
-    },
-    [flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, snapshotOutgoingDraftContent],
-  )
 
   useEffect(() => {
     void initializeEditorSessionStore()
@@ -1664,39 +1556,30 @@ export function EditorShell({
     })
   }, [applyDocumentMetadata, applySyncStatus, routeWritingId, router])
 
-  useEffect(() => {
-    return () => {
-      if (markdownSaveTimeoutRef.current) {
-        window.clearTimeout(markdownSaveTimeoutRef.current)
-      }
-
-      if (richUpdateRafRef.current !== null) {
-        window.cancelAnimationFrame(richUpdateRafRef.current)
-      }
-
-      if (richUpdateDebounceRef.current !== null) {
-        window.clearTimeout(richUpdateDebounceRef.current)
-      }
-
-      if (markdownSelectionRafRef.current !== null) {
-        window.cancelAnimationFrame(markdownSelectionRafRef.current)
-      }
-
-      // El timer del toast lo arma `showCorrectionToast` (useCorrectionActions)
-      // en cualquier momento; hay que leer su valor al desmontar, no al montar.
-      if (correctionToastDismissRef.current !== null) {
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        window.clearTimeout(correctionToastDismissRef.current)
-      }
-
-      richUpdateRafRef.current = null
-      richUpdateDebounceRef.current = null
-      richUpdateEditorRef.current = null
-      markdownSelectionRafRef.current = null
-      pendingMarkdownSelectionRef.current = null
-      persistCurrentWorkspaceViewState()
-    }
-  }, [persistCurrentWorkspaceViewState])
+  // ODE-605 — corte 5, paso 2: la salida del documento (snapshot, vista) y el
+  // cleanup de desmontaje viven en su hook (mudanza mecánica; el estado y los
+  // refs siguen siendo de la shell). Se llama aquí, donde estaba el efecto de
+  // unmount, así que su cleanup sigue declarado después del volcado de
+  // `useEditorPersistence` (ODE-573) y de la suscripción a sync.
+  const { prepareDocumentExit } = useDocumentExit({
+    correctionToastDismissRef,
+    currentWritingIdRef,
+    draftContentSnapshotRef,
+    editor,
+    ephemeralDraftWritingIdRef,
+    flushQueuedRichModeUpdate,
+    hydrationPhaseRef,
+    markdownSaveTimeoutRef,
+    markdownSelectionRafRef,
+    markdownSelectionRef,
+    markdownTextareaRef,
+    modeRef,
+    pendingMarkdownSelectionRef,
+    readMarkdownSelectionForActiveDocument,
+    richUpdateDebounceRef,
+    richUpdateEditorRef,
+    richUpdateRafRef,
+  })
 
   const applyMarkdownFromPanel = useCallback(
     (nextMarkdown: string) => {
