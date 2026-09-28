@@ -72,6 +72,8 @@ Buscar defectos sistémicos antes que defectos locales:
 
 Un finding sistémico cambia cómo se debe corregir el PR entero, no solo una línea — vale más que varios findings locales y debe aparecer primero en el reporte.
 
+Si el brief trae `Recon Pack` (piloto desde ODE-605), contrastar el diff con su `No tocar` y con los símbolos que declara. Un cambio fuera del pack sin `Recon correction` que lo explique es un finding de alcance; una `Recon correction` reportada no lo es.
+
 ---
 
 ## 5. Resultado y evidencia

@@ -28,6 +28,7 @@ Cargar las guías de arquitectura, rendimiento, dominio o experiencia cuando el 
 1. Formular el resultado observable y la responsabilidad que cambia.
 2. Contrastar la definición con producto, contratos, código y trabajo ya planificado. Registrar las contradicciones con su fuente y efecto antes de basar el brief en ellas.
 3. Identificar owner, consumidores, interfaces y dependencias. Dividir el trabajo si dos resultados independientes requieren owners, gates o secuencias distintos.
+   - **Recon de área (piloto desde ODE-605):** cuando varios issues tocan la misma área de código, hacer un Recon profundo una sola vez al planificar: símbolos con rango de líneas, orden de efectos, flujo, tests que la cubren y trampas ya pagadas. El mapa vive en el documento existente del área (no en uno nuevo) con el commit de `main` contra el que se verificó. De ese mapa sale el `Recon Pack` de cada brief; las correcciones que BUILD reporte se aplican al mapa.
 4. Escribir requisitos verificables: entrada, comportamiento, resultado y límites. Incluir estados de error, interrupción, retry o degradación cuando el flujo los tenga.
 5. Declarar los contratos de arquitectura, costo al crecer y experiencia que el cambio activa. Pedir a los skills de dominio pertinentes una revisión de las decisiones que les pertenecen.
 6. Elegir evidencia proporcional: qué prueba, inspección o recorrido podría falsificar cada requisito material y en qué entorno.

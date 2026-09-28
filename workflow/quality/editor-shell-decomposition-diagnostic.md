@@ -384,6 +384,58 @@ Que el shell use un stub fue una decisión de comodidad, no una limitación de l
 
 ---
 
+## 6. Mapa de Recon — cluster de guardado/persistencia (piloto, ODE-605)
+
+Mapa de área del piloto de Recon inteligente (`issue-brief-schema.md`, sección `Recon Pack`): se exploró una vez al planificar para que los BUILD del área (el corte 5, ODE-605, y los que toquen el guardado después) **validen** en vez de redescubrir.
+
+```text
+Verificado en: main@a76f658d (2026-09-28), después de ODE-624 y ODE-590
+Archivo:       components/editor/editor-shell.tsx — 4.101 líneas
+Validar con:   git diff a76f658d..origin/main -- components/editor/editor-shell.tsx
+```
+
+Si el diff toca estos rangos, re-verificar solo los afectados y reportar la diferencia como `Recon correction`; el planner la aplica aquí.
+
+### La cadena
+
+| Tramo | Símbolo | Líneas | Qué hace |
+|---|---|---|---|
+| Entrada rich | `onUpdate` del editor | 1516–1533 | ignora mientras se aplica contenido o en modo markdown; marca `hasUnconfirmedLocalEditRef` (WATCH-07) y encola un solo rAF |
+| Debounce rich | `scheduleQueuedRichModeUpdate` | 1316–1329 | web: vuelca en el rAF; desktop: espera `DESKTOP_EDITOR_OUTPUT_DEBOUNCE_MS` = 150 |
+| Volcado rich | `flushQueuedRichModeUpdate` → `runRichModeUpdateSideEffects` | 1291–1308, 1283–1289 | cancela rAF/timer y llama a `persistEditorSnapshot` |
+| Entrada markdown | `handleMarkdownChange` y los inserts (`handleInsertLink`, `handleInsertTable`, `handleInsertImage`) | 2528, 2569, 2666, 2717 | programan el guardado con `scheduleMarkdownSave` |
+| Debounce markdown | `scheduleMarkdownSave` / `flushPendingMarkdownSave` | 637–643, 645–654 | 800 ms (`MARKDOWN_SAVE_DEBOUNCE_MS`); el run pendiente queda en `pendingMarkdownSaveRef` para volcarlo al salir o desmontar (ODE-573) |
+| Snapshot | `persistEditorSnapshot` | 1195–1281 | arma el snapshot **leyendo refs** (`currentWritingIdRef`, `activeEditorTabIdRef`, `titleRef`…) y llama a `persistenceCoordinator.persist`; con `awaitDurability`, `settle` |
+| Coordinador | `persistenceCoordinator` (`useMemo`) | 842–1042 | instancia de `PersistenceCoordinator` con `onStateChange`, `onMaterialized`, `onIdentityCreated`, `onCommitted`/`onBackgroundCommitted` y `onError` |
+| Documento activo del coordinador | efecto | 1044–1046 | `persistenceCoordinator.activateDocument(currentWritingId)` |
+| Estado de guardado | `applySyncStatus` | 509–512 | único escritor de `syncStatus` + `syncStatusRef` |
+| Reconciliación del activo | `reconcileActiveSaveState` (+ espejo `reconcileActiveSaveStateRef`) | 710–747, 750–753 | relee la fila durable del documento activo (O(1)) |
+| Suscripción a sync | efecto | 1912–2025 | **una por shell** (ODE-542). Activo → reconciliación. Fondo en `synced` → `getCatalogRecord` + `reconcileSaveStateFromDurable` antes de `updateTabSaveState` (1952–2002, ODE-590) |
+| Salida | `prepareDocumentExit` | 1651–1666 | vuelca la edición en cola, `snapshotOutgoingDraftContent` (1547–1555) y `persistCurrentWorkspaceViewState` (1586–1639) |
+| Vista | `persistCurrentWorkspaceViewState` | 1586–1639 | no guarda mientras la hidratación no terminó: lee `hydrationPhaseRef` (481), escrito solo por `applyHydrationPhase` (491–495) (ODE-624) |
+| Unmount 1 | efecto | 1054–1065 | vuelca `flushPendingEditOnUnmountRef` (asignado en el efecto 1310–1315) y **después** `persistenceCoordinator.dispose()` |
+| Unmount 2 | efecto | 2027–2059 | cancela timers y rAF de rich/markdown/selección y guarda la vista |
+
+### Orden de efectos que el corte no puede cambiar
+
+1044 (activar en el coordinador) → 1054 (volcado + `dispose` al desmontar) → 1310 (asignar el volcado) → 1912 (suscripción a sync) → 2027 (cancelar colas + guardar la vista). React corre las limpiezas en orden de declaración: si 2027 quedara antes que 1054, las colas se cancelarían antes del volcado y se perdería lo escrito en los últimos 150/800 ms (ODE-573).
+
+### Tests que deben pasar idénticos
+
+`tests/editor-persistence-coordinator.test.ts`, `editor-shell-durable-save-state.test.tsx` (incluye el caso de costo: lecturas y listeners), `editor-shell-exit-protocol.test.tsx`, `editor-shell-open-exit-protocol.test.tsx`, `editor-shell-close-commit-window-desktop.test.tsx`, `editor-shell-unmount-flush.test.tsx`, `editor-shell-mode-toggle-persistence.test.tsx`, `editor-shell-draft-materialization-desktop.test.tsx`, `editor-shell-create-rename.test.tsx`, `editor-shell-new-tab-clean-view-state.test.tsx` y `-desktop`, `editor-shell-selection-restore.test.tsx`, y `tests/architecture/persistence-boundary.test.ts` (ratchet de `architecture/boundaries.yml`; `ui-no-direct-persistence` también escanea `hooks/`).
+
+### Trampas ya pagadas
+
+- **Orden de limpiezas (ODE-573):** ver arriba.
+- **Refs, no estado, en los callbacks de larga vida:** `persistEditorSnapshot` y `persistCurrentWorkspaceViewState` leen refs a propósito. Pasarlos a dependencias de estado recrea los callbacks (y re-ejecuta el cleanup que guarda la vista) o persiste con el documento viejo: DOC-05, A escrito en B.
+- **Cortocircuito de WATCH-07:** `persistEditorSnapshot` no persiste si `externalContentConflictRef` está activo (primera guarda de la función).
+- **Costo de sync:** 1 `getById` por evento del activo o por `synced` de fondo, 0 `list`, una sola suscripción. Un hook por pestaña o por cluster rompe el caso de costo.
+- **Tests:** fijar scroll o selección exige `waitForHydrationReady`, no `flush()`; la sesión en `fake-indexeddb` es estado compartido entre tests (ODE-624).
+
+### Espejos del área (inventario para el corte 7, ODE-609)
+
+`syncStatusRef` (escritor único, `applySyncStatus`), `reconcileActiveSaveStateRef` (espejo por efecto, 750–753), `hydrationPhaseRef` (escritor único, `applyHydrationPhase`), `currentDocumentMarkdownRef` (828; se escribe en 2874) y `activeEditorTabIdRef` (espejo por efecto en 1770; ODE-608).
+
 ## Plan
 
 ### Fase 0 — Banco de pruebas (harness)
