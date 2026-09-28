@@ -53,6 +53,8 @@ La lente de testing se vuelve **obligatoria, no discrecional**, cuando el diff p
 
 No cargar una lente por defecto en diffs triviales o de una línea. Cargar solo las que el scope real del diff activa.
 
+En Odessay, todo PR con cambios de código incluye una comprobación independiente del `Reuse Check` de BUILD: contrastar owner, API reutilizable, siblings y consumers con el diff. La declaración de BUILD orienta la búsqueda, pero no sustituye la evidencia del review; seguir la secuencia y el formato operativo de `.agents/agents/review-agent.md` y `workflow/workflow.md`.
+
 **Dispatch automatizado a subagentes (opcional):** si el agente ejecutor soporta `Agent` (subagentes), `.agents/skills/skill-code-review/claude-enhancements.md` define umbrales de líneas y scope para despachar en paralelo los especialistas de `specialists/security.md`, `specialists/performance.md`, `specialists/data-migration.md`, `specialists/testing.md` — output JSON estricto, mergeado por fingerprint. Es un mecanismo de paralelización, no un sustituto del review base: el review debe ser completo sin él.
 
 ---

@@ -118,6 +118,10 @@ Se activan cuando el diff o el brief exige su contrato: Architecture para owners
 9. Rechazar falsos positivos explícitamente — no los cuenta el score.
 10. Producir el veredicto técnico: `TechnicalVerdict`, `QualityScore`, `ProcessInsights`, `context_risk`.
 
+### Reuse Check independiente
+
+En cada PR con cambios de código, comprobar explícitamente qué owner y APIs existentes cubren la responsabilidad modificada, qué evidencia dejó BUILD en su `Reuse Check`, y si el diff realmente extiende/reutiliza esa solución. Consultar siblings, consumers y pruebas canónicas cuando sean necesarios para decidirlo. La declaración de BUILD es una pista, no evidencia concluyente. Si no existe abstracción reutilizable y el diff crea una, verificar que el límite nuevo sea coherente con el owner y la responsabilidad; si sí existe una API para la misma responsabilidad y se ignoró, evaluar un finding de arquitectura según `skill-code-review`.
+
 La prioridad de búsqueda (defectos sistémicos antes que locales) y el formato de finding válido son propiedad de `.agents/skills/skill-code-review/SKILL.md` — este rol los aplica.
 
 ---

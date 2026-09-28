@@ -194,6 +194,7 @@ Este rol tiene disponible `.agents/skills/skill-audit-planning/SKILL.md`. Activa
 - hay overlaps o huecos posibles entre issues
 - la secuencia entre issues es dudosa
 - hace falta revisar la topología completa antes de persistirla en Linear
+- hace falta auditar un issue individual antes de BUILD; usar el prompt reutilizable de `specialties/phase-audit-contract.md`
 
 El audit no reemplaza la creación de issues en Linear ni la síntesis de la topología. Solo endurece la calidad de la salida antes de persistirla — el Planning Agent sigue siendo el owner de la síntesis final.
 

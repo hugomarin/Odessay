@@ -470,6 +470,11 @@
       "description": "Propuesta conceptual para productizar los 12 skills operativos de .agents: método reusable, conocimiento técnico condicionado, especialidades locales, estructura editorial común y criterios de portabilidad."
     },
     {
+      "path": ".orca-coordinator-brief.md",
+      "type": "ops",
+      "description": "Brief operativo para coordinar en Orca el Quality Harness de P-ODE-43: despacho supervisado de workers por waves, gates de dependencias mergeadas y reporte de PRs a Hugo."
+    },
+    {
       "path": ".agents/skills/skill-architecture/specialties/ownership-and-sources.md",
       "type": "architecture",
       "description": "Binding local de los skills Architecture y Architecture Recon: taxonomía, routing de fuentes aceptadas, protocolo BUILD, hotspots y formato operativo en Odessay."
