@@ -23,6 +23,7 @@ import {
 } from "@/hooks/useEditorCommands"
 import { useEditorPersistence } from "@/hooks/useEditorPersistence"
 import { useDocumentExit, type PendingMarkdownSelection } from "@/hooks/useDocumentExit"
+import { useSaveStateSync } from "@/hooks/useSaveStateSync"
 import {
   useExternalDocumentChanges,
   type ExternalContentConflict,
@@ -34,13 +35,7 @@ import { useSessionRestore } from "@/hooks/useSessionRestore"
 import { useTableOfContents } from "@/hooks/useTableOfContents"
 import { useWorkspaceTabOpening } from "@/hooks/useWorkspaceTabOpening"
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs"
-import {
-  formatSaveStateDiagnostic,
-  mapSyncLifecycleToSaveState,
-  reconcileSaveStateFromDurable,
-  saveStateToHasPendingSync,
-  type EditorSaveState,
-} from "@/components/editor/save-state"
+import type { EditorSaveState } from "@/components/editor/save-state"
 import { Button } from "@/components/ui/button"
 import { WritingEditorContent } from "@/components/editor/editor-content"
 import { ImagePresentationViewer } from "@/components/editor/image-presentation-viewer"
@@ -137,7 +132,7 @@ import {
   deleteLocalCorrectionBlocks,
   readLocalCorrectionBlocks,
 } from "@/lib/corrections/persistence"
-import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
+import { getLocalDBScope, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
   ArtifactType,
   LocalCorrectionBlock,
@@ -146,7 +141,6 @@ import type {
   WritingStatus,
   WritingVisibility,
 } from "@/lib/local-db/schema"
-import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { getAssetService } from "@/lib/services/asset-service-factory"
 import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 import {
@@ -177,7 +171,6 @@ import {
   initializeEditorSessionStore,
   openWritingTab,
   publishTabState,
-  updateTabSaveState,
   useEditorSessionStore,
 } from "@/lib/stores/editor-session-store"
 import { setSidebarMode } from "@/lib/stores/ui-shell-store"
@@ -662,59 +655,12 @@ export function EditorShell({
     },
     [applyHydrationPhase, setActiveWritingId],
   )
-  /**
-   * ODE-542: reconcilia el estado de guardado del documento activo (status bar
-   * y su pestaña) desde el catálogo durable. Los eventos de sync son solo
-   * invalidaciones: disparan esta lectura O(1), nunca fijan un estado terminal
-   * por sí mismos. Un evento perdido no deja la UI atascada en "Saving…",
-   * porque terminar de hidratar (también tras materializar un borrador) y el
-   * `cloud-snapshot` del catálogo convergen por la misma lectura. Solo cura hacia un terminal durable, y
-   * nunca borra un `error` local (ODE-461).
-   */
-  const reconcileActiveSaveState = useCallback(
-    async (reason: string) => {
-      const writingId = currentWritingIdRef.current
-      if (!writingId) {
-        return
-      }
-
-      try {
-        const { getCatalogRecord } = await import("@/lib/queries/document-catalog")
-        const record = await getCatalogRecord(writingId)
-        if (!record || currentWritingIdRef.current !== writingId) {
-          return
-        }
-
-        const current = syncStatusRef.current
-        const next = reconcileSaveStateFromDurable({
-          current,
-          durable: { syncStatus: record.syncStatus, cloudPresent: record.cloudPresent },
-          isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
-        })
-        if (!next) {
-          return
-        }
-
-        console.info(formatSaveStateDiagnostic({ writingId, durableSyncStatus: record.syncStatus, current, next, reason }))
-        applySyncStatus(next)
-        updateTabSaveState({ tabId: writingId, saveState: next, hasPendingSync: saveStateToHasPendingSync(next) })
-      } catch (error) {
-        // El contenido sigue abierto; el siguiente evento de sync, cambio del
-        // catálogo o activación reintenta.
-        console.error("[editor:save-state] reconcile read failed", {
-          writingId,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    },
-    [applySyncStatus],
-  )
   // Los callbacks del coordinador de persistencia se crean una vez; leen la
-  // versión vigente por ref.
-  const reconcileActiveSaveStateRef = useRef(reconcileActiveSaveState)
-  useEffect(() => {
-    reconcileActiveSaveStateRef.current = reconcileActiveSaveState
-  }, [reconcileActiveSaveState])
+  // versión vigente por ref. La reconciliación vive en `useSaveStateSync` (paso
+  // 3) y este espejo lo asigna su efecto; hasta entonces el valor es un no-op y
+  // ningún llamador corre antes: la hidratación lo invoca al terminar, de forma
+  // asíncrona, y la suscripción se registra en el mismo efecto del hook.
+  const reconcileActiveSaveStateRef = useRef<(reason: string) => Promise<void>>(async () => {})
   const hydrationGenerationOwnerRef = useRef<ReturnType<typeof createHydrationGenerationOwner> | null>(null)
   if (hydrationGenerationOwnerRef.current === null) {
     hydrationGenerationOwnerRef.current = createHydrationGenerationOwner()
@@ -1434,127 +1380,23 @@ export function EditorShell({
     isExplicitWritingTitle,
   })
 
-  // ODE-542: una sola suscripción global a los eventos de sync. La identidad
-  // se resuelve por ref en el momento del evento, nunca con un
-  // `currentWritingId` capturado: un `synced` que llega durante la
-  // materialización o la hidratación no se pierde en la ventana de
-  // re-suscripción. Los eventos son invalidaciones: el documento activo
-  // relee su estado durable (O(1)); los de fondo, en `synced`, releen la fila
-  // de ese documento antes de proyectar su pestaña (ODE-590).
-  useEffect(() => {
-    return subscribeToSyncStatusChanges((event) => {
-      const activeWritingId = currentWritingIdRef.current
-
-      if (activeWritingId && event.writingId === activeWritingId) {
-        // Sin conexión no hay transición durable que releer: el commit local
-        // ya es durable y la nube no está disponible. Se proyecta "Saved
-        // locally" directamente, salvo que un fallo local sea dueño del
-        // indicador.
-        if (event.status === "offline") {
-          if (syncStatusRef.current !== "error") {
-            applySyncStatus("saved-local")
-            updateTabSaveState({
-              tabId: activeWritingId,
-              saveState: "saved-local",
-              hasPendingSync: saveStateToHasPendingSync("saved-local"),
-            })
-          }
-          return
-        }
-
-        void reconcileActiveSaveStateRef.current(`sync-${event.status}`)
-
-        if (event.status !== "synced") {
-          return
-        }
-
-        void (async () => {
-          const localWriting = await localDB.writings.get(activeWritingId)
-
-          if (!localWriting?.slug || routeWritingId === localWriting.slug) {
-            return
-          }
-
-          applyDocumentMetadata({ slug: localWriting.slug })
-          navigateToWriting(router, `/write/${localWriting.slug}`, { mode: "replace", skipOnDesktop: true })
-        })()
-        return
-      }
-
-      // Documento de fondo: converge su pestaña sin tocar la status bar
-      // activa. ODE-590: un `synced` no basta para mostrar "Saved" — es una
-      // invalidación como la del activo, así que se relee la fila durable de
-      // ESE documento (O(1)) antes de proyectar. El resto de lifecycle
-      // statuses no son terminales y se proyectan sin leer. Un evento perdido
-      // se cura al activarlo (relectura durable tras hidratar); un `error`
-      // local nunca lo borra un evento de la nube.
-      const tab = getEditorSessionState().session.tabs.find(
-        (candidate) => candidate.writing_id === event.writingId || candidate.id === event.writingId,
-      )
-      if (!tab || tab.save_state === "error") {
-        return
-      }
-
-      if (event.status === "synced") {
-        const tabId = tab.id
-        void (async () => {
-          try {
-            const { getCatalogRecord } = await import("@/lib/queries/document-catalog")
-            const record = await getCatalogRecord(event.writingId)
-            if (!record) {
-              return
-            }
-            // Si la pestaña pasó a ser el documento activo mientras la lectura
-            // estaba en vuelo, la reconciliación activa manda: el resultado de
-            // fondo no pisa el estado que esa transición ya calculó.
-            if (currentWritingIdRef.current === event.writingId) {
-              return
-            }
-            const currentTab = getEditorSessionState().session.tabs.find((candidate) => candidate.id === tabId)
-            if (!currentTab || currentTab.save_state === "error") {
-              return
-            }
-            const next = reconcileSaveStateFromDurable({
-              current: currentTab.save_state,
-              durable: { syncStatus: record.syncStatus, cloudPresent: record.cloudPresent },
-              isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
-            })
-            if (!next) {
-              return
-            }
-            console.info(
-              formatSaveStateDiagnostic({
-                writingId: event.writingId,
-                durableSyncStatus: record.syncStatus,
-                current: currentTab.save_state,
-                next,
-                reason: "sync-synced-background",
-              }),
-            )
-            updateTabSaveState({ tabId, saveState: next, hasPendingSync: saveStateToHasPendingSync(next) })
-          } catch (error) {
-            // La pestaña conserva su estado; el siguiente evento o su
-            // activación reintenta.
-            console.error("[editor:save-state] background reconcile read failed", {
-              writingId: event.writingId,
-              error: error instanceof Error ? error.message : String(error),
-            })
-          }
-        })()
-        return
-      }
-
-      const nextTabState = mapSyncLifecycleToSaveState(event.status)
-      if (tab.save_state === nextTabState) {
-        return
-      }
-      updateTabSaveState({
-        tabId: tab.id,
-        saveState: nextTabState,
-        hasPendingSync: saveStateToHasPendingSync(nextTabState),
-      })
-    })
-  }, [applyDocumentMetadata, applySyncStatus, routeWritingId, router])
+  // ODE-605 — corte 5, paso 3: el estado de guardado (reconciliación contra el
+  // catálogo durable) y la suscripción única a sync viven en su hook (mudanza
+  // mecánica; el estado, sus refs y `applySyncStatus` siguen siendo de la
+  // shell). Se llama aquí, donde estaba la suscripción, así que el orden de
+  // efectos no cambia: después del volcado de `useEditorPersistence` (ODE-573)
+  // y antes del cleanup de `useDocumentExit`, y sigue habiendo una sola
+  // suscripción por shell (ODE-542/ODE-590).
+  useSaveStateSync({
+    applyDocumentMetadata,
+    applySyncStatus,
+    currentWritingIdRef,
+    navigateToWriting,
+    reconcileActiveSaveStateRef,
+    routeWritingId,
+    router,
+    syncStatusRef,
+  })
 
   // ODE-605 — corte 5, paso 2: la salida del documento (snapshot, vista) y el
   // cleanup de desmontaje viven en su hook (mudanza mecánica; el estado y los

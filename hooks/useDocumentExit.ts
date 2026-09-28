@@ -11,9 +11,9 @@
  * MUDANZA MECÁNICA: los cuerpos son los que vivían en la shell, con las
  * mismas dependencias, y la propiedad del estado NO cambia: el estado y los
  * refs siguen siendo de la shell y llegan aquí por `input` (identidades
- * estables, así que la memoización no cambia). Los helpers puros de la shell
- * (`markdownSelectionOwnerId` y `readMarkdownSelectionForActiveDocument`)
- * llegan por `input` para no crear un ciclo de imports, como en ODE-587.
+ * estables, así que la memoización no cambia). El helper puro de la shell
+ * (`readMarkdownSelectionForActiveDocument`) llega por `input` para no crear
+ * un ciclo de imports, como en ODE-587.
  *
  * Reglas del corte:
  * - El ref, nunca un snapshot de `.current`: `persistCurrentWorkspaceViewState`
