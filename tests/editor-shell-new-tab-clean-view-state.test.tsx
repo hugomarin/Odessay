@@ -26,10 +26,13 @@
  * Mutation tests (ODE-600): cada caso nombra en su comentario la mutación que
  * lo pone en rojo.
  */
+import { act } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
+import { writeEditorSession } from "@/lib/editor/session-persistence"
+import { createEditorSessionTab, createEmptyEditorSession } from "@/lib/local-db/editor-sessions"
 import { getEditorSessionState } from "@/lib/stores/editor-session-store"
 
 vi.mock("@tiptap/react", async (importOriginal) => {
@@ -60,6 +63,7 @@ vi.mock("@/lib/services/ai-service-factory", async () =>
 const {
   assertNoUnhandledErrors,
   clickNewArtifact,
+  dispatchPointerClick,
   flush,
   holdAnimationFrames,
   mountEditorShell,
@@ -67,6 +71,7 @@ const {
   readViewport,
   resetEditorShellWorld,
   scrollViewport,
+  typeInEditor,
   waitFor,
 } = await import("./support/editor-shell-harness")
 
@@ -145,10 +150,24 @@ async function prepareA() {
   await waitFor(() => mounted!.editor().getText().includes("Documento A"), { label: "hidratación de A" })
   await waitFor(() => tabFor(WRITING_A), { label: "pestaña de A" })
   await flush(3)
+  await waitForHydrationReady()
   mounted.editor().commands.setTextSelection(SELECTION_A)
   scrollViewport(SCROLL_A)
   expect(currentSelection()).toEqual(SELECTION_A)
   expect(readViewport()).toEqual(SCROLL_A)
+}
+
+/**
+ * La fase de hidratación del documento activo, publicada por la shell en el
+ * DOM. `prepareA` la espera antes de fijar scroll y selección: con la fase
+ * todavía en "loading" la restauración diferida pisaría lo que fija el test y,
+ * desde ODE-624, la salida ni siquiera guardaría esa vista.
+ */
+async function waitForHydrationReady() {
+  await waitFor(
+    () => document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") === "ready",
+    { label: "fase de hidratación en ready" },
+  )
 }
 
 /** El view_state de A que la shell guardó al salir: precondición del caso. */
@@ -259,6 +278,187 @@ describe("ODE-600 — STATE-05 (web): la pestaña nueva de \"New Artifact\" empi
       // control positivo de esta costura es el caso anterior, y la mutación
       // de la guarda demuestra que los frames retenidos SÍ son la
       // restauración de A y alcanzan a B cuando nada los descarta.
+      assertNoUnhandledErrors()
+    },
+    SHELL_TEST_TIMEOUT_MS,
+  )
+})
+
+/**
+ * ODE-624 — Salir de A antes de que corra su restauración diferida no pisa su
+ * view_state guardado (runtime web).
+ *
+ * El caso de carrera de ODE-600 deja a A con su restauración agendada y sale
+ * sin volver: esa salida guardaba en la pestaña de A la vista previa a
+ * restaurar — el `setContent` de la hidratación deja el cursor al final del
+ * texto — así que al volver A perdía su propia selección y su scroll. Aquí se
+ * sigue la secuencia completa del brief y se vuelve a A por su pestaña.
+ *
+ * La señal de "restauración pendiente" es `hydrationPhase`: verificado en
+ * `hooks/useDocumentHydration.ts`, `finishHydration()` (la única transición a
+ * "ready") corre DESPUÉS de los dos frames del restore en rich mode
+ * (`:698-705`) y en el `onSettled` del restore de markdown, tras sus
+ * re-aplicaciones diferidas (`:1400-1411`). Mientras la fase es "loading",
+ * lo que hay en el editor todavía no es la vista del documento.
+ *
+ * Mutación: quitar la guarda de `persistCurrentWorkspaceViewState` → los tres
+ * casos de salida durante la restauración en rojo (A restaura {71,71} y no su
+ * vista); el control positivo, que sale con la fase "ready", sigue verde.
+ */
+describe("ODE-624 — la salida durante la restauración diferida no pisa la vista de A (web)", () => {
+  // La sesión persistida (fake-indexeddb) es estado compartido entre tests:
+  // partir de A abierto evita que la sesión que dejó el test anterior — con la
+  // pestaña de A ya cerrada, o con el cierre todavía asentándose — decida qué
+  // pestañas hay en este montaje.
+  beforeEach(async () => {
+    await writeEditorSession({
+      ...createEmptyEditorSession(),
+      active_tab_id: WRITING_A,
+      tabs: [createEditorSessionTab({ id: WRITING_A, writingId: WRITING_A, title: "Documento A" })],
+    })
+  })
+
+  /** Pestaña por id de pestaña (el borrador no tiene `writing_id`). */
+  async function clickTabById(tabId: string) {
+    const node = document.querySelector<HTMLElement>(`[data-editor-tab-id="${tabId}"]`)
+    if (!node) throw new Error(`La pestaña ${tabId} no está en el DOM`)
+    await pointerClick(node)
+    if (getEditorSessionState().session.active_tab_id !== tabId) {
+      throw new Error(`El gesto sobre la pestaña ${tabId} no la activó`)
+    }
+  }
+
+  function closeButtonFor(tabId: string) {
+    const node = document.querySelector<HTMLElement>(`[data-editor-tab-id="${tabId}"]`)
+    const close = node?.querySelector<HTMLElement>('[aria-label^="Close "]')
+    if (!close) throw new Error(`La pestaña ${tabId} no tiene botón de cerrar en el DOM`)
+    return close
+  }
+
+  /**
+   * Deja a A con su restauración agendada, sin ejecutar: A hidratado una vez,
+   * una pestaña de borrador abierta (para tener adónde salir), vuelta a A con
+   * los frames retenidos. Devuelve el id de la pestaña del borrador.
+   */
+  async function holdRestoreOfA() {
+    await prepareA()
+    await clickNewArtifact(mounted!.container)
+    expectSavedA()
+    await waitFor(() => mounted!.editor().isEmpty, { label: "borrador intermedio hidratado" })
+    await flush(4)
+    const draftTabId = activeTab()!.id
+
+    frames = holdAnimationFrames()
+    await clickTab(WRITING_A)
+    await waitFor(() => mounted!.editor().getText().includes("Documento A"), {
+      label: "A rehidratado (frames retenidos)",
+    })
+    await flush(2)
+    expect(frames.pending(), "la restauración de A quedó agendada, sin ejecutar").toBeGreaterThan(0)
+
+    return draftTabId
+  }
+
+  it.fails(
+    "A conserva su vista si se crea una pestaña nueva antes de soltar sus frames",
+    async () => {
+      // Mutación: quitar la guarda de hidratación de
+      // `persistCurrentWorkspaceViewState` → rojo en la vuelta a A.
+      await holdRestoreOfA()
+
+      await clickNewArtifact(mounted!.container)
+      await frames!.settleUntil(() => mounted!.editor().isEmpty, { label: "borrador B activo y vacío" })
+      await frames!.settle()
+
+      frames!.restore()
+      frames = null
+      await expectARestoresOnReturn()
+      assertNoUnhandledErrors()
+    },
+    SHELL_TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "A conserva su vista si se cambia de pestaña antes de soltar sus frames",
+    async () => {
+      // Mutación: quitar la guarda de hidratación de
+      // `persistCurrentWorkspaceViewState` → rojo en la vuelta a A.
+      const draftTabId = await holdRestoreOfA()
+
+      // Salir por el gesto real de la pestaña del borrador.
+      await clickTabById(draftTabId)
+      await frames!.settleUntil(() => mounted!.editor().isEmpty, { label: "borrador B activo y vacío" })
+      await frames!.settle()
+
+      frames!.restore()
+      frames = null
+      await expectARestoresOnReturn()
+      assertNoUnhandledErrors()
+    },
+    SHELL_TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "cerrar la pestaña de A con su restauración pendiente no guarda la vista previa a restaurar",
+    async () => {
+      // Mutación: quitar la guarda de hidratación de
+      // `persistCurrentWorkspaceViewState` → rojo: la pestaña que espera al
+      // write guarda el cursor previo a restaurar.
+      await holdRestoreOfA()
+
+      // Una edición en vuelo hace que el cierre espere al write (comportamiento
+      // de producción, ODE-574): la pestaña sigue abierta y su view_state es
+      // observable mientras el cierre está diferido. Al asentar el write, el
+      // cierre continúa y la pestaña se retira.
+      await typeInEditor(" x")
+      const tabA = tabFor(WRITING_A)!
+      await act(async () => {
+        dispatchPointerClick(closeButtonFor(tabA.id))
+        const pendingClose = tabFor(WRITING_A)
+        expect(pendingClose, "el cierre espera al write pendiente: la pestaña sigue abierta").toBeTruthy()
+        expect(pendingClose?.save_state, "y la pestaña dice que está guardando").toBe("saving")
+        expect(
+          pendingClose?.view_state?.selectionFrom,
+          "el cierre no guarda el cursor previo a restaurar",
+        ).toBe(SELECTION_A.from)
+        expect(pendingClose?.view_state?.selectionTo).toBe(SELECTION_A.to)
+      })
+
+      await waitFor(() => !tabFor(WRITING_A), { label: "la pestaña de A se cierra al asentar el write" })
+      frames!.restore()
+      frames = null
+      assertNoUnhandledErrors()
+    },
+    SHELL_TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "control positivo: una salida con la restauración ya asentada sí guarda la vista nueva",
+    async () => {
+      await prepareA()
+
+      // Vista nueva, distinta de la que ya estaba guardada, con la fase ya
+      // "ready": la salida debe guardarla (la guarda no puede congelar el
+      // view_state).
+      const newSelection = { from: 3, to: 9 }
+      const newScroll = { editorScrollTop: 40, shellScrollTop: 20 }
+      mounted!.editor().commands.setTextSelection(newSelection)
+      scrollViewport(newScroll)
+
+      await clickNewArtifact(mounted!.container)
+      const saved = tabFor(WRITING_A)?.view_state
+      expect(saved?.selectionFrom, "la salida guarda la selección nueva").toBe(newSelection.from)
+      expect(saved?.selectionTo).toBe(newSelection.to)
+      expect(saved?.scrollTop, "y el scroll nuevo").toBe(newScroll.editorScrollTop)
+      expect(saved?.shellScrollTop).toBe(newScroll.shellScrollTop)
+
+      await waitFor(() => mounted!.editor().isEmpty, { label: "borrador B activo y vacío" })
+      await flush(4)
+      await clickTab(WRITING_A)
+      await waitFor(() => mounted!.editor().getText().includes("Documento A"), { label: "A rehidratado" })
+      await flush(4)
+      expect(currentSelection(), "A restaura la vista nueva").toEqual(newSelection)
+      expect(readViewport()).toEqual(newScroll)
       assertNoUnhandledErrors()
     },
     SHELL_TEST_TIMEOUT_MS,
