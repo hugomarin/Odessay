@@ -54,7 +54,7 @@ El rol de planificación diseña la topología y secuencia de la fase. Planning 
 ## 8. Recursos asociados
 
 - **Definición y fuentes:** cargar [definition-and-sources.md](specialties/definition-and-sources.md) al preparar o revisar un brief de Odessay; usarlo para comprobar premisas, seleccionar fuentes y pedir revisión a los skills del dominio.
-- **Schema de salida:** cargar [issue-brief-schema.md](specialties/issue-brief-schema.md) al redactar o validar el Issue Brief y la Execution Trace; aplicar sus campos y criterios de evidencia, incluido el `Reuse Check` requerido para cambios de código no triviales.
+- **Schema de salida:** cargar [issue-brief-schema.md](specialties/issue-brief-schema.md) al redactar o validar el Issue Brief y la Execution Trace; aplicar sus campos y criterios de evidencia, incluido el `Reuse Check` requerido para cambios de código no triviales. Cuando el planner ya exploró el código, el `Reuse Check` cita archivo y rango de líneas del owner y del test canónico, verificados contra un commit de `main` que se nombra: el Recon de BUILD empieza por esas líneas y las confirma en vez de volver a buscarlas.
 - **Publicación en Linear:** cargar [linear-conventions.md](specialties/linear-conventions.md) al crear o actualizar proyectos e issues mediante `wf-define`; usar su jerarquía, labels y asignación sin cargarlo para una revisión local del brief.
 - **Fuentes del repo:** roadmap, DoD, contratos y registro documental nombrados por la especialidad.
 - **Mecanismos:** usar checks y validación existentes; sus rutas y umbrales pertenecen al proyecto.
