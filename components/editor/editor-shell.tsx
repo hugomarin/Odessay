@@ -1907,7 +1907,8 @@ export function EditorShell({
   // `currentWritingId` capturado: un `synced` que llega durante la
   // materialización o la hidratación no se pierde en la ventana de
   // re-suscripción. Los eventos son invalidaciones: el documento activo
-  // relee su estado durable (O(1)); los de fondo solo actualizan su pestaña.
+  // relee su estado durable (O(1)); los de fondo, en `synced`, releen la fila
+  // de ese documento antes de proyectar su pestaña (ODE-590).
   useEffect(() => {
     return subscribeToSyncStatusChanges((event) => {
       const activeWritingId = currentWritingIdRef.current
@@ -1949,14 +1950,68 @@ export function EditorShell({
       }
 
       // Documento de fondo: converge su pestaña sin tocar la status bar
-      // activa. Un evento perdido se cura al activarlo (relectura durable tras
-      // hidratar); un `error` local nunca lo borra un evento de la nube.
+      // activa. ODE-590: un `synced` no basta para mostrar "Saved" — es una
+      // invalidación como la del activo, así que se relee la fila durable de
+      // ESE documento (O(1)) antes de proyectar. El resto de lifecycle
+      // statuses no son terminales y se proyectan sin leer. Un evento perdido
+      // se cura al activarlo (relectura durable tras hidratar); un `error`
+      // local nunca lo borra un evento de la nube.
       const tab = getEditorSessionState().session.tabs.find(
         (candidate) => candidate.writing_id === event.writingId || candidate.id === event.writingId,
       )
       if (!tab || tab.save_state === "error") {
         return
       }
+
+      if (event.status === "synced") {
+        const tabId = tab.id
+        void (async () => {
+          try {
+            const { getCatalogRecord } = await import("@/lib/queries/document-catalog")
+            const record = await getCatalogRecord(event.writingId)
+            if (!record) {
+              return
+            }
+            // Si la pestaña pasó a ser el documento activo mientras la lectura
+            // estaba en vuelo, la reconciliación activa manda: el resultado de
+            // fondo no pisa el estado que esa transición ya calculó.
+            if (currentWritingIdRef.current === event.writingId) {
+              return
+            }
+            const currentTab = getEditorSessionState().session.tabs.find((candidate) => candidate.id === tabId)
+            if (!currentTab || currentTab.save_state === "error") {
+              return
+            }
+            const next = reconcileSaveStateFromDurable({
+              current: currentTab.save_state,
+              durable: { syncStatus: record.syncStatus, cloudPresent: record.cloudPresent },
+              isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
+            })
+            if (!next) {
+              return
+            }
+            console.info(
+              formatSaveStateDiagnostic({
+                writingId: event.writingId,
+                durableSyncStatus: record.syncStatus,
+                current: currentTab.save_state,
+                next,
+                reason: "sync-synced-background",
+              }),
+            )
+            updateTabSaveState({ tabId, saveState: next, hasPendingSync: saveStateToHasPendingSync(next) })
+          } catch (error) {
+            // La pestaña conserva su estado; el siguiente evento o su
+            // activación reintenta.
+            console.error("[editor:save-state] background reconcile read failed", {
+              writingId: event.writingId,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        })()
+        return
+      }
+
       const nextTabState = mapSyncLifecycleToSaveState(event.status)
       if (tab.save_state === nextTabState) {
         return

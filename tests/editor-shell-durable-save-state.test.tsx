@@ -117,12 +117,14 @@ vi.mock("@/lib/sync/sync-service-factory", async () =>
 
 const {
   advance,
+  clickEditorTab,
   clickNewArtifact,
   flush,
   mountEditorShell,
   resetEditorShellWorld,
   typeInEditor,
   waitFor,
+  waitForHydrationReady,
   waitForMarkdownContaining,
 } = await import("./support/editor-shell-harness")
 const { createDesktopWorkspace, destroyDesktopWorkspace, resetDesktopWorkspace } = await import(
@@ -369,7 +371,7 @@ describe("ODE-542 — el estado de guardado converge desde el catálogo durable"
   // Un `synced` sin fila confirmada no la pone en "Saved"; con la fila
   // `synced`, sí. Era `it.fails` (la proyección optimista la dejaba en
   // "Saved"); pasó a `it` sin tocar el cuerpo.
-  it.fails(
+  it(
     "un evento `synced` de una pestaña de fondo sin confirmación durable no muestra Saved",
     async () => {
       await mountLoaded()
@@ -397,10 +399,11 @@ describe("ODE-542 — el estado de guardado converge desde el catálogo durable"
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "coste por evento: una lectura puntual del catálogo, ningún escaneo, ningún listener por pestaña",
     async () => {
       const listeners = trackSyncListeners()
+      let restoreCatalogSpies: (() => void) | null = null
       try {
         await mountLoaded()
         const listenersWithOneTab = listeners.live()
@@ -419,6 +422,11 @@ describe("ODE-542 — el estado de guardado converge desde el catálogo durable"
         const getById = vi.spyOn(catalog, "getById")
         const list = vi.spyOn(catalog, "list")
         const updateTab = vi.spyOn(sessionStore, "updateTabSaveState")
+        restoreCatalogSpies = () => {
+          updateTab.mockRestore()
+          list.mockRestore()
+          getById.mockRestore()
+        }
         const resetCounts = () => {
           getById.mockClear()
           list.mockClear()
@@ -499,11 +507,76 @@ describe("ODE-542 — el estado de guardado converge desde el catálogo durable"
           { label: "pestaña de fondo del burst en Saved" },
         )
       } finally {
+        restoreCatalogSpies?.()
         listeners.restore()
       }
     },
     TEST_TIMEOUT_MS,
   )
+
+  // ODE-590 — carrera de activación. Si la pestaña pasa a activa con la
+  // lectura de fondo en vuelo, el resultado de fondo se descarta: la
+  // reconciliación del activo (aquí, una proyección offline posterior) manda.
+  // Mutation: quitar la valla `currentWritingIdRef` de la rama de fondo deja
+  // que la lectura resuelva y pise "Saved locally" con "Saved".
+  it(
+    "carrera: la lectura de fondo en vuelo no pisa el estado que ya calculó el documento activo",
+    async () => {
+      await mountLoaded()
+      const raced = await openSavedLocally("ODE590-CARRERA-FONDO")
+      await openSavedLocally("ODE590-CARRERA-ACTIVO")
+
+      const catalog = await getDocumentCatalog()
+      const readRow = catalog.getById.bind(catalog)
+      let releaseRead!: () => void
+      const readGate = new Promise<void>((resolve) => {
+        releaseRead = resolve
+      })
+      let held = false
+      const getById = vi.spyOn(catalog, "getById").mockImplementation(async (id) => {
+        if (id === raced && !held) {
+          held = true
+          await readGate
+        }
+        return readRow(id)
+      })
+
+      try {
+        // La lectura de la fila de la pestaña de fondo queda en vuelo.
+        await emitSync(raced, "synced")
+        expect(held, "control positivo: la lectura de fondo quedó en vuelo").toBe(true)
+
+        // La pestaña pasa a activa mientras la lectura sigue en vuelo.
+        await clickEditorTab(raced)
+        await waitForHydrationReady("el documento de fondo quedó activo")
+        expect(activeTab()?.writing_id, "control positivo: la pestaña es la activa").toBe(raced)
+
+        // Estado activo posterior, ajeno a esa lectura: sin conexión.
+        await act(async () => {
+          emitSyncStatusChange({ writingId: raced, status: "offline" })
+        })
+        await flush(5)
+        await waitFor(() => activeTab()?.save_state === "saved-local" && barSaveState() === "saved-local", {
+          label: "el estado activo dice Saved locally",
+        })
+
+        // La lectura en vuelo resuelve con la fila ya confirmada: si el
+        // resultado de fondo se proyectara, pisaría el estado activo.
+        confirmCatalogUpsertSyncedDouble(raced)
+        releaseRead()
+        await flush(5)
+        await advance(50)
+        await flush(5)
+        expect(activeTab()?.save_state, "el resultado de fondo no pisa el estado activo").toBe("saved-local")
+        expect(barSaveState(), "la barra sigue en Saved locally").toBe("saved-local")
+      } finally {
+        releaseRead()
+        getById.mockRestore()
+      }
+    },
+    TEST_TIMEOUT_MS,
+  )
+
   it(
     "error de escritura: barra y pestaña en Needs attention a la vez; el reintento las devuelve juntas a Saved",
     async () => {
