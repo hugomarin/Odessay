@@ -594,6 +594,21 @@ export async function waitFor<T>(
   throw new Error(`waitFor agotó ${timeoutMs}ms esperando: ${label}`)
 }
 
+/**
+ * La fase de hidratación del documento activo, publicada por la shell en el
+ * DOM (`data-hydration-phase`). Los tests que fijan scroll/selección sobre un
+ * documento o afirman que su salida guardó la vista deben esperarla: con la
+ * fase todavía en "loading", la restauración diferida está pendiente y, desde
+ * ODE-624, la salida ya no guarda esa vista (y la restauración pisaría lo que
+ * el test fije antes).
+ */
+export async function waitForHydrationReady(label = "fase de hidratación en ready") {
+  await waitFor(
+    () => document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") === "ready",
+    { label, timeoutMs: 10_000 },
+  )
+}
+
 /* ------------------------------------------------------------------ *
  * Drivers de modo desktop
  * ------------------------------------------------------------------ */

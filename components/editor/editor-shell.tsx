@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react"
 import { getMarkRange } from "@tiptap/core"
 import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents"
 import type { Editor } from "@tiptap/react"
@@ -473,6 +473,26 @@ export function EditorShell({
   const [hydrationPhase, setHydrationPhase] = useState<HydrationPhase>(
     initialHydrationSession.hydrationWritingId ? "loading" : "ready",
   )
+  // ODE-624: espejo de la fase para los callbacks de larga vida. Se escribe
+  // junto al estado en `applyHydrationPhase` (mismo patrón que
+  // `setActiveWritingId`/`applySyncStatus`), no en un efecto espejo: el
+  // cleanup de unmount lee la fase vigente, y una escritura de fase en el
+  // mismo tick que una salida no puede quedar por detrás.
+  const hydrationPhaseRef = useRef<HydrationPhase>(
+    initialHydrationSession.hydrationWritingId ? "loading" : "ready",
+  )
+  /**
+   * Único escritor de la fase de hidratación: estado y ref en el mismo paso.
+   * Los callbacks de larga vida — `persistCurrentWorkspaceViewState`, y el
+   * cleanup de unmount que lo llama — no pueden depender de `hydrationPhase`
+   * sin recrearse en cada transición (eso volvería a correr el cleanup, que
+   * guarda la vista, en cada cambio de fase); leen el ref.
+   */
+  const applyHydrationPhase = useCallback((next: SetStateAction<HydrationPhase>) => {
+    const resolved = typeof next === "function" ? next(hydrationPhaseRef.current) : next
+    hydrationPhaseRef.current = resolved
+    setHydrationPhase(resolved)
+  }, [])
   const [title, setTitle] = useState(UNTITLED_WRITING_TITLE)
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
@@ -670,13 +690,13 @@ export function EditorShell({
       reason: ActivationReason,
     ) => {
       setActiveWritingId(target.writingId)
-      setHydrationPhase(activationHydrates(target.writingId, reason) ? "loading" : "ready")
+      applyHydrationPhase(activationHydrates(target.writingId, reason) ? "loading" : "ready")
       setActivationSeq((current) => current + 1)
       if (target.href !== undefined) {
         replaceEditorHistory(target.href)
       }
     },
-    [setActiveWritingId],
+    [applyHydrationPhase, setActiveWritingId],
   )
   /**
    * ODE-542: reconcilia el estado de guardado del documento activo (status bar
@@ -1564,6 +1584,21 @@ export function EditorShell({
   })
 
   const persistCurrentWorkspaceViewState = useCallback(() => {
+    // ODE-624: mientras la hidratación del documento activo no terminó, lo que
+    // hay en el editor todavía no es la vista del documento. `setContent` dejó
+    // el cursor al final y el scroll/selección del documento se restauran en
+    // frames diferidos; `hydrationPhase` sigue en "loading" hasta que esos
+    // frames corren — rich mode llama a `finishHydration` (la única transición
+    // a "ready") dentro del segundo frame, después de aplicar los scrolls
+    // (`useDocumentHydration.ts`), y markdown en el `onSettled` del restore,
+    // tras sus re-aplicaciones. Guardar aquí la vista previa a restaurar pisa
+    // la vista propia que la pestaña ya tenía (hallazgo de ODE-600).
+    // El ref, no el estado: este callback es de larga vida (cleanup de
+    // unmount) y no debe recrearse con cada transición de fase.
+    if (hydrationPhaseRef.current !== "ready") {
+      return
+    }
+
     const tabId = currentWritingIdRef.current ?? EDITOR_DRAFT_TAB_ID
     const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
     const shellViewport = document.querySelector<HTMLElement>("main")
@@ -1840,7 +1875,7 @@ export function EditorShell({
     ephemeralDraftWritingIdRef,
     draftContentSnapshotRef,
     suppressCorrectionAnalysisUntilRef,
-    setHydrationPhase,
+    setHydrationPhase: applyHydrationPhase,
     setMode,
     setMarkdownValue,
     setBodyText,

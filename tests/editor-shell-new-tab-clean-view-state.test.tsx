@@ -73,6 +73,7 @@ const {
   scrollViewport,
   typeInEditor,
   waitFor,
+  waitForHydrationReady,
 } = await import("./support/editor-shell-harness")
 
 const WRITING_A = "61111111-1111-4111-8111-111111111111"
@@ -155,19 +156,6 @@ async function prepareA() {
   scrollViewport(SCROLL_A)
   expect(currentSelection()).toEqual(SELECTION_A)
   expect(readViewport()).toEqual(SCROLL_A)
-}
-
-/**
- * La fase de hidratación del documento activo, publicada por la shell en el
- * DOM. `prepareA` la espera antes de fijar scroll y selección: con la fase
- * todavía en "loading" la restauración diferida pisaría lo que fija el test y,
- * desde ODE-624, la salida ni siquiera guardaría esa vista.
- */
-async function waitForHydrationReady() {
-  await waitFor(
-    () => document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") === "ready",
-    { label: "fase de hidratación en ready" },
-  )
 }
 
 /** El view_state de A que la shell guardó al salir: precondición del caso. */
@@ -359,7 +347,7 @@ describe("ODE-624 — la salida durante la restauración diferida no pisa la vis
     return draftTabId
   }
 
-  it.fails(
+  it(
     "A conserva su vista si se crea una pestaña nueva antes de soltar sus frames",
     async () => {
       // Mutación: quitar la guarda de hidratación de
@@ -378,7 +366,7 @@ describe("ODE-624 — la salida durante la restauración diferida no pisa la vis
     SHELL_TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "A conserva su vista si se cambia de pestaña antes de soltar sus frames",
     async () => {
       // Mutación: quitar la guarda de hidratación de
@@ -398,7 +386,7 @@ describe("ODE-624 — la salida durante la restauración diferida no pisa la vis
     SHELL_TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "cerrar la pestaña de A con su restauración pendiente no guarda la vista previa a restaurar",
     async () => {
       // Mutación: quitar la guarda de hidratación de
