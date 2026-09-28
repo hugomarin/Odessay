@@ -34,6 +34,8 @@ El contrato y las decisiones aceptadas indican qué debe ser verdad. El código 
 
 Acotar la búsqueda a la responsabilidad y sus consumidores reales; ampliar el alcance solo cuando una dependencia encontrada lo justifique.
 
+En archivos grandes y hotspots (p. ej. `components/editor/editor-shell.tsx`), localizar por símbolo y leer el rango alrededor; no paginar el archivo de principio a fin. Si el brief ya cita archivo y líneas, empezar por ahí y confirmarlas. Agrupar en una sola llamada las lecturas independientes.
+
 ## 5. Resultado y evidencia
 
 Entregar antes de implementar un Recon breve, con rutas o símbolos comprobables:

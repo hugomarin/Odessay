@@ -24,6 +24,13 @@ Si el MCP no está disponible en la sesión, usar la API GraphQL como fallback:
 - Mover estado: `mutation { issueUpdate(id: "...", input: { stateId: "..." }) { success } }`
 - Comentar: `mutation { commentCreate(input: { issueId: "...", body: "..." }) { success } }`
 
+El repo trae un CLI sobre esa misma API, `scripts/linear-cli.mjs`:
+- `node scripts/linear-cli.mjs get ODE-42` — leer el issue.
+- `node scripts/linear-cli.mjs comment ODE-42 "texto"` — comentar.
+- `node scripts/linear-cli.mjs move ODE-42 "In Review"` — cambiar estado.
+
+Lee `LINEAR_API_KEY` de `.env.local` en el directorio actual o del entorno. Desde un worktree sin `.env.local`, exportar la variable o ejecutarlo desde el checkout principal.
+
 ---
 
 ## `/wf-define [fase?]` o `wf-define [fase?]` — PLAN
@@ -119,20 +126,30 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
 1. Leer brief. Si el cambio activa performance por carga, datos, hydration, sync, listeners, bootstrap, operaciones bulk, desktop o background work, consultar `.agents/skills/skill-performance/SKILL.md` y declarar el `Performance Architecture Contract`. Si no se activa, no crear una sección de performance artificial. Declarar `Presentation Contract` solo cuando la superficie realmente cambia.
    > _Presentation Contract: paridad cross-surface en `/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}` — `tables`, `pre/code` y URLs largas con wrap, contención y scroll equivalentes entre superficies._
    > _Architecture Contract: cuando el brief activa Architecture, BUILD debe operar dentro de `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants` y `Required docs` ya definidos. Si falta uno, o los docs requeridos no bastan para ejecutar sin inferir arquitectura desde el código, detenerse._
-2. Mover issue a `In Progress` en Linear. Verificar rama con `git branch --show-current` — si es `main`, crear `codex/{issue-id}-{descripcion}` antes de cualquier edición.
+2. Mover issue a `In Progress` en Linear. `git fetch origin main` y verificar rama con `git branch --show-current` — si es `main`, crear `codex/{issue-id}-{descripcion}` desde `origin/main` actualizado antes de cualquier edición.
 3. Pre-flight: `npm run env:check --if-present` + `npm run ops:status:drift --if-present`.
    - Si aparece un identificador histórico inválido o huérfano, registrarlo en `workflow/status.json.traceability_exceptions.ignored_issue_ids` con razón concreta. No volver a copiar ese falso positivo en notas de `status.json`, PRs o reviews posteriores.
 
 **Ejecución**
 4. Architecture Recon: si el cambio no es trivial (ver criterios de activación en `.agents/skills/architecture-recon/SKILL.md`), ejecutar Recon antes de escribir código — owner canónico, reusable API/abstraction, canonical reference/sibling, siblings, consumers, contratos, hotspots y tests canónicos — y declarar el output completo en el contexto de ejecución del propio Build Agent (no se persiste como documento del repo). Declarar explícitamente el `Reuse Check`: qué owner/API existente se extenderá o reutilizará, o qué evidencia justifica una abstracción nueva. Si no hay API reutilizable, decirlo. Si Recon revela ambigüedad material de ownership o contrato, detener BUILD con `Context Gap — Architecture Recon` en vez de resolverlo por inferencia. Declarar `Construction order` (extender owner → reutilizar API/abstraction → seguir canonical reference/sibling si hace falta algo nuevo → extraer de hotspot → crear abstraction nueva) según `.agents/agents/build-agent.md`.
 5. Implementar según el brief y el Recon declarado. Si el entregable es evidencia de una fila del `workflow/quality/capability-integration-map.md`, el proof se construye según `workflow/quality/capability-proof-contract.md` y su `coverage_status` se deriva al cerrar contra el checklist de pre-upgrade — nunca se fija como meta del issue. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`. Si el diff real se desvía materialmente del change surface declarado en Recon, o revela un owner distinto, detener la edición, actualizar Recon y solo entonces continuar.
+   - Mientras se implementa, correr solo los archivos de test afectados por el cambio; la suite completa es del paso 6.
+   - Mutaciones, una sola vez en el ciclo:
+     - si el entregable arregla un bug, el test entra primero, en su propio commit, en rojo por el bug real (`it.fails`), y el commit del arreglo lo pasa a verde sin editar su cuerpo. Esa fase roja es la mutación de BUILD (regla 8 de `workflow/quality/capability-proof-contract.md`);
+     - si no hay bug (red de caracterización o proof de un comportamiento correcto), BUILD corre una sola mutación: el modo de fallo plausible;
+     - el resto de mutaciones (quitar el guard, forzar la rama contraria, el control positivo) no se corren en BUILD: se listan en la Guía de review con el cambio a aplicar y el test que debe ponerse rojo. Las ejecuta REVIEW.
+   - Archivos temporales (logs, backups, scripts de mutación) en `.cache/` dentro del worktree, que git ignora; no en `/tmp` ni fuera del worktree. Algunos agentes piden permiso para escribir fuera del proyecto, y ese prompt sin respuesta detiene el BUILD.
+   - Git: antes de `git commit --amend`, confirmar con `git log -1` que el último commit es el que se quiere enmendar. Si `main` avanzó, terminar primero las ediciones en curso, después mergear `origin/main`; tras el merge, añadir solo archivos propios (nunca `git add -A`) y re-correr solo los archivos de test afectados.
 
 **Validación**
-6. `npm run typecheck` + `npm run lint` + `npm test`. Si el `Performance Architecture Contract` seleccionó evidencia ejecutable, generarla con el instrumento correspondiente. Guardar outputs — van en el body del PR.
+6. Con el cambio terminado: `npm run typecheck` + `npm run lint` + `npm test` (suite completa) **una sola vez**. Si el `Performance Architecture Contract` seleccionó evidencia ejecutable, generarla con el instrumento correspondiente. Guardar outputs — van en el body del PR.
+   - Si la suite falla en archivos que el cambio no toca, re-correr **solo esos archivos**, aislados. Si pasan aislados, es un fallo intermitente por carga: nombrarlo en el Context Report y seguir. Comparar contra `main` solo si el fallo se reproduce aislado.
+   - Una nueva corrida completa solo si el código cambió después (ronda de corrección del review). CI corre la suite completa en cada push.
 7. `npm run ops:delivery:gate` (con `OPS_PERF_TRACE_PATH=...` solo cuando el contrato seleccionó el gate del editor). Debe terminar en verde.
 
 **Entrega**
 8. `git push -u origin {rama}`. Abrir el PR con body completo (link al issue, qué se hizo, `Reuse Check` resumido desde Recon para cambios no triviales, o el owner local evidente para cambios triviales, cómo testear, outputs del paso 6). Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`. Si falla, editar con `gh pr edit {n} --body "..."` antes de continuar.
+   - No esperar a que termine CI: el body del PR, el Context Report y la Guía de review se escriben mientras CI corre. Verificar CI es responsabilidad de REVIEW.
 9. Confirmar PR en OPEN: `gh pr view {número} --json state`. Mover issue a `In Review` en Linear. Dejar comentario con Context Report completo:
    - `Context Gaps Detected = yes` si faltó o fue ambiguo al menos uno de: alcance, contrato de datos, evidencia requerida, dependencias, referencias documentales.
    - `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
@@ -242,6 +259,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
    - `Contracts touched` e `Invariants` están preservados o actualizados explícitamente;
    - los `Required docs` del brief siguen alineados con la implementación final.
 4. Revisar diff contra el brief (scope, calidad, seguridad, performance) y comprobar explícitamente el `Reuse Check`: verificar de forma independiente el owner esperado, la abstracción/API reutilizable, los siblings y consumers relevantes, y si el diff extiende/reutiliza el owner o introduce duplicación. La justificación de BUILD no sustituye esta comprobación; si aparece un owner paralelo o se ignoró una abstracción que cubre la misma responsabilidad, reportarlo como finding de arquitectura con evidencia.
+   - Ejecutar las mutaciones que la Guía de review lista (BUILD solo corrió la fase roja del bug real, o una mutación si no había bug): aplicar cada una, confirmar que el test indicado se pone rojo por la razón declarada y revertir. Una mutación que queda en verde, o una Guía sin mutaciones para un test nuevo, es finding de testing.
 5. Dejar comentario en Linear: resultado de revisión.
    - El comentario de REVIEW debe separar explícitamente:
      - `TechnicalVerdict` (PASS/FAIL — el juicio técnico del Review Agent: findings, contratos que las referencias de review evaluaron, seguridad),
@@ -356,7 +374,7 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 5. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
 
 **Validación**
-6. `npm run typecheck` + `npm run lint` + `npx vitest run`. Si el `Performance Architecture Contract` seleccionó evidencia ejecutable, generarla con el instrumento correspondiente. Guardar outputs.
+6. `npm run typecheck` + `npm run lint` + `npx vitest run`, con la misma regla que BUILD paso 6: suite completa una sola vez con el cambio terminado, y fallos ajenos al cambio se re-corren aislados antes de comparar contra `main`. Si el `Performance Architecture Contract` seleccionó evidencia ejecutable, generarla con el instrumento correspondiente. Guardar outputs.
 7. Ejecutar el delivery gate con el base ref correcto:
    - **Sin `--branch`** (rama propia del issue): `npm run ops:delivery:gate`
    - **Con `--branch`** (rama compartida con otros issues): `GITHUB_BASE_REF=origin/{branch} npm run ops:delivery:gate`
