@@ -24,6 +24,19 @@ function loadEnv(path) {
   } catch {}
 }
 
+const USAGE = `Uso:
+  node scripts/linear-cli.mjs get ODE-42
+  node scripts/linear-cli.mjs comment ODE-42 "Review aprobado"
+  node scripts/linear-cli.mjs move ODE-42 "In Review"
+  node scripts/linear-cli.mjs list ODE --limit 10
+
+Lee LINEAR_API_KEY del entorno o de .env.local en el directorio actual.`;
+
+if (['--help', '-h', 'help'].includes(process.argv[2])) {
+  console.log(USAGE);
+  process.exit(0);
+}
+
 loadEnv('.env.local');
 
 const API_KEY = process.env.LINEAR_API_KEY;
