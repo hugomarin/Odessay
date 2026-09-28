@@ -32,6 +32,7 @@ Antes de buscar findings:
 2. Suficiente código circundante para entender cada path cambiado, no solo las líneas con `+`/`-`.
 3. El owner, siblings relevantes y call sites cuando la corrección del cambio dependa de ellos.
 4. El estado de CI del head que se revisa. BUILD entrega sin esperar a CI, así que confirmarlo es parte del review. Si el Context Report declara fallos intermitentes por carga, comprobar que CI pasó esos archivos; un fallo que se reproduce aislado no es intermitente y cuenta como finding.
+5. Las mutaciones que lista la Guía de review. BUILD ya no las corre todas, así que ejecutarlas es parte de la evidencia de testing del review: cada una debe poner rojo el test declarado por la razón declarada.
 
 No es necesario releer toda la documentación de producto — solo lo que el `Architecture Contract` o `Performance Architecture Contract` del brief ya citó como `Required docs`.
 
