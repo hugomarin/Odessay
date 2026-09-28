@@ -71,6 +71,7 @@ const {
   selectionPopup,
   waitFor,
   waitForAsync,
+  waitForHydrationReady,
 } = await import("./support/editor-shell-harness")
 const { act } = await import("react")
 
@@ -153,12 +154,13 @@ describe("ODE-562 — STATE-07: la selección de un documento se restaura al vol
     await waitFor(() => tabFor(WRITING_B), { label: "pestaña de B" })
 
     // Vuelta a A por el gesto real, y selección sobre el documento ya
-    // hidratado (fijarla antes la pisaría el propio restore de A).
+    // hidratado (fijarla antes la pisaría el propio restore de A, y desde
+    // ODE-624 la salida durante "loading" tampoco guardaría la vista).
     await clickTab(WRITING_A)
     await waitFor(() => mounted!.editor().getText().includes("Documento A"), {
       label: "A activo con su contenido",
     })
-    await flush(3)
+    await waitForHydrationReady("fase de hidratación de A en ready")
     mounted.editor().commands.setTextSelection(SELECTION_A)
     expect(currentSelection()).toEqual(SELECTION_A)
 

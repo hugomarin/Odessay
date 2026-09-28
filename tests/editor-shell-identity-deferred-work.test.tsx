@@ -71,6 +71,7 @@ const {
   resetEditorShellWorld,
   typeInEditor,
   waitFor,
+  waitForHydrationReady,
 } = await import("./support/editor-shell-harness")
 
 const WRITING_A = "11111111-1111-4111-8111-111111111111"
@@ -187,8 +188,10 @@ describe("ODE-556 — trabajo diferido de hidratación y cambio de identidad", (
     // El scroll se fija DESPUÉS de que el restore de A haya asentado: si se
     // asigna antes, el propio restore (con el scroll guardado de A, 0) lo
     // pisa. Es el orden real — el usuario scrollea sobre un documento ya
-    // restaurado, no a mitad de la restauración.
-    await flush(2)
+    // restaurado, no a mitad de la restauración. La fase "ready" es la señal
+    // de que asentó (y, desde ODE-624, la salida durante "loading" ya no
+    // guarda la vista, así que esperarla también es la precondición del paso 4).
+    await waitForHydrationReady("fase de hidratación de A en ready")
     viewport!.scrollTop = A_SCROLL_TOP
 
     // 4. Salir a B hace que el shell persista el view_state de A. Lo
