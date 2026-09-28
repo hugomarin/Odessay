@@ -24,7 +24,7 @@ Si el MCP no está disponible en la sesión, usar la API GraphQL como fallback:
 - Mover estado: `mutation { issueUpdate(id: "...", input: { stateId: "..." }) { success } }`
 - Comentar: `mutation { commentCreate(input: { issueId: "...", body: "..." }) { success } }`
 
-El repo trae un CLI sobre esa misma API, `scripts/linear-cli.mjs` (`node scripts/linear-cli.mjs --help` lista los comandos):
+El repo trae un CLI sobre esa misma API, `scripts/linear-cli.mjs`:
 - `node scripts/linear-cli.mjs get ODE-42` — leer el issue.
 - `node scripts/linear-cli.mjs comment ODE-42 "texto"` — comentar.
 - `node scripts/linear-cli.mjs move ODE-42 "In Review"` — cambiar estado.
