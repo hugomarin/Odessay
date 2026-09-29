@@ -12,10 +12,12 @@
  *      A. Con el efecto espejo la copia todavía vale A en esa ventana: el
  *      cierre no activa nada y la ruta sigue proyectando el documento cerrado.
  *   2. La sesión persistida que carga después del montaje
- *      (`initializeEditorSessionStore`) actualiza la copia sin render. Además,
- *      el cambio que cae entre el render de montaje y el efecto de suscripción
- *      lo cubre la re-lectura al suscribirse: el test suelta la lectura
- *      retenida desde la ventana de commit del montaje, antes de ese efecto.
+ *      (`initializeEditorSessionStore`) actualiza la copia sin render. El test
+ *      suelta la lectura retenida desde la ventana de commit del montaje,
+ *      antes del efecto de suscripción; ese cambio de la re-lectura queda
+ *      enmascarado en la shell (el efecto de `publishTabState`, declarado
+ *      después, vuelve a emitir en el mismo flush), así que la re-lectura se
+ *      prueba a nivel de hook: `tests/hooks/useActiveEditorTabIdRef.test.tsx`.
  *
  * Técnica (integration-harness-catalog §Trampas): `world.onShellCommit` corre
  * en fase de layout de cada commit del shell, antes de sus efectos pasivos. La
@@ -31,8 +33,11 @@
  * Mutation test (ODE-609):
  *   - volver al efecto espejo (`useEffect(() => { activeEditorTabIdRef.current
  *     = editorSession.active_tab_id }, [...])`) → rojos 1 y 2;
- *   - saltarse la re-lectura al suscribirse (`sync()` tras `subscribe`) → rojo 2;
- *   - quitar la suscripción → rojos 1 y 2.
+ *   - quitar la suscripción → rojos 1 y 2;
+ *   - saltarse la re-lectura al suscribirse (`sync()` tras `subscribe`) queda
+ *     **verde en esta shell** (la ventana queda enmascarada por el efecto de
+ *     `publishTabState`): su fase roja vive en el test de hook
+ *     `tests/hooks/useActiveEditorTabIdRef.test.tsx`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -233,8 +238,12 @@ describe("ODE-609 — activeEditorTabIdRef se lee entre el cambio del store y el
       mounted = await mountEditorShell()
 
       // Fase 1: en la ventana de commit del montaje —antes del efecto de
-      // suscripción del hook— se suelta la lectura. El cambio del store cae
-      // entre el render y la suscripción, que es lo que cubre la re-lectura.
+      // suscripción del hook— se suelta la lectura. Ese cambio cae entre el
+      // render y la suscripción, pero la shell lo enmascara: el efecto de
+      // `publishTabState`, declarado después, vuelve a emitir en el mismo
+      // flush. Lo que este caso fija es que la carga de la sesión persistida
+      // actualiza la copia sin render; la re-lectura al suscribirse se prueba
+      // en `tests/hooks/useActiveEditorTabIdRef.test.tsx`.
       // Fase 2: en la ventana de commit con A activa tras la carga, se cierra A.
       const probe = { released: false, fired: false }
       world.onShellCommit = () => {
