@@ -32,6 +32,12 @@ import {
 import { type EditorCursorSnapshot, useFindReplace } from "@/hooks/useFindReplace"
 import { type FocusModeRestoration, useFocusMode } from "@/hooks/useFocusMode"
 import { useSessionRestore } from "@/hooks/useSessionRestore"
+import {
+  markdownSelectionOwnerId,
+  readMarkdownSelectionForActiveDocument,
+  useSelectionRestore,
+  type OwnedMarkdownSelectionSnapshot,
+} from "@/hooks/useSelectionRestore"
 import { useTableOfContents } from "@/hooks/useTableOfContents"
 import { useWorkspaceTabOpening } from "@/hooks/useWorkspaceTabOpening"
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs"
@@ -112,7 +118,6 @@ import {
   createRouteHydrationSessionState,
   resolveExternalWritingLoad,
 } from "@/lib/editor/hydration-session"
-import { EDITOR_DRAFT_TAB_ID } from "@/lib/local-db/editor-sessions"
 import { getExportFileBaseName } from "@/lib/export/writing-export"
 import {
   buildEditorSpellcheckConfig,
@@ -167,7 +172,6 @@ import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import { createHydrationGenerationOwner } from "@/lib/editor/hydration-generation"
 import {
-  getEditorSessionState,
   initializeEditorSessionStore,
   openWritingTab,
   publishTabState,
@@ -191,44 +195,6 @@ type SelectionSnapshot = {
   from: number
   to: number
   text: string
-}
-
-type OwnedMarkdownSelectionSnapshot = MarkdownSelectionSnapshot & {
-  writingId: string
-}
-
-type MarkdownSelectionRead = {
-  selection: MarkdownSelectionSnapshot | null
-  belongsToOtherDocument: boolean
-}
-
-const markdownSelectionOwnerId = (writingId: string | null) => writingId ?? EDITOR_DRAFT_TAB_ID
-
-function readMarkdownSelectionForActiveDocument(
-  cached: OwnedMarkdownSelectionSnapshot | null,
-  activeWritingId: string | null,
-  source?: string,
-): MarkdownSelectionRead {
-  const ownerId = markdownSelectionOwnerId(activeWritingId)
-  if (!cached || cached.writingId === ownerId) {
-    return { selection: cached, belongsToOtherDocument: false }
-  }
-
-  // A cached selection belongs to a different document. Use the active tab's
-  // own saved selection while its deferred restore is pending; never fall back
-  // to the shared textarea's selection, which can still hold the prior tab's
-  // range.
-  const viewState = getEditorSessionState().session.tabs.find((tab) => tab.id === ownerId)?.view_state
-  const start = viewState?.markdownSelectionStart
-  const end = viewState?.markdownSelectionEnd
-  if (typeof start === "number" && typeof end === "number") {
-    return {
-      selection: { start, end, text: source?.slice(start, end) ?? "" },
-      belongsToOtherDocument: true,
-    }
-  }
-
-  return { selection: null, belongsToOtherDocument: true }
 }
 
 type EditorPanel = "notes" | "properties" | "grammar" | "share" | null
@@ -919,175 +885,17 @@ export function EditorShell({
     setRichFootnoteRevision((revision) => revision + 1)
   }, [])
 
-  const queueMarkdownSelectionRestore = useCallback(
-    (
-      start: number,
-      end: number,
-      options?: {
-        scrollTop?: number
-        scrollLeft?: number
-        editorScrollTop?: number
-        editorScrollLeft?: number
-        shellScrollTop?: number
-        shellScrollLeft?: number
-        windowScrollX?: number
-        windowScrollY?: number
-        isStillValid?: () => boolean
-        onSettled?: () => void
-      },
-    ) => {
-      const writingId = markdownSelectionOwnerId(currentWritingIdRef.current)
-      const requestedIsStillValid = options?.isStillValid
-      const isStillValid = () =>
-        markdownSelectionOwnerId(currentWritingIdRef.current) === writingId &&
-        (!requestedIsStillValid || requestedIsStillValid())
-
-      // The latest selection wins, but a pending completion callback is never
-      // dropped with the request it came with: hydration finishes through
-      // this queue (`onSettled: finishHydration`), and a plain restore
-      // coalescing over it used to leave the phase on "loading" (ODE-582).
-      // Only callbacks carry over; each request keeps its own validity check.
-      const supersededOnSettled = pendingMarkdownSelectionRef.current?.onSettled
-      const onSettled =
-        supersededOnSettled && options?.onSettled
-          ? () => {
-              supersededOnSettled()
-              options.onSettled?.()
-            }
-          : supersededOnSettled ?? options?.onSettled
-      pendingMarkdownSelectionRef.current = { start, end, ...options, writingId, isStillValid, onSettled }
-
-      if (markdownSelectionRafRef.current !== null) {
-        return
-      }
-
-      markdownSelectionRafRef.current = window.requestAnimationFrame(() => {
-        markdownSelectionRafRef.current = null
-
-        const pendingSelection = pendingMarkdownSelectionRef.current
-        pendingMarkdownSelectionRef.current = null
-
-        if (!pendingSelection) {
-          return
-        }
-
-        // Checked at fire time, not schedule time: the document this
-        // restore was queued for may no longer be current by the time this
-        // frame actually runs (see the ref's own comment above).
-        if (pendingSelection.isStillValid && !pendingSelection.isStillValid()) {
-          pendingSelection.onSettled?.()
-          return
-        }
-
-        const nextTextarea = markdownTextareaRef.current
-
-        if (!nextTextarea) {
-          pendingSelection.onSettled?.()
-          return
-        }
-
-        if (document.activeElement !== nextTextarea) {
-          nextTextarea.focus()
-        }
-
-        if (nextTextarea.selectionStart !== pendingSelection.start || nextTextarea.selectionEnd !== pendingSelection.end) {
-          nextTextarea.setSelectionRange(pendingSelection.start, pendingSelection.end)
-        }
-
-        if (typeof pendingSelection.scrollTop === "number") {
-          nextTextarea.scrollTop = pendingSelection.scrollTop
-        }
-
-        if (typeof pendingSelection.scrollLeft === "number") {
-          nextTextarea.scrollLeft = pendingSelection.scrollLeft
-        }
-
-        // Each scroll target re-applies itself a second frame later (layout
-        // can still settle after the first write) — that second write is
-        // the true "last write wins" moment, so it needs the same validity
-        // re-check (time has passed since the outer frame ran) and is what
-        // onSettled must actually wait for, not the outer frame itself.
-        let pendingNestedFrames = 0
-        const scheduleNestedApply = (apply: () => void) => {
-          pendingNestedFrames += 1
-          window.requestAnimationFrame(() => {
-            if (!pendingSelection.isStillValid || pendingSelection.isStillValid()) {
-              apply()
-            }
-            pendingNestedFrames -= 1
-            if (pendingNestedFrames === 0) {
-              pendingSelection.onSettled?.()
-            }
-          })
-        }
-
-        const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-
-        if (
-          editorViewport &&
-          (typeof pendingSelection.editorScrollTop === "number" || typeof pendingSelection.editorScrollLeft === "number")
-        ) {
-          const applyViewportScroll = () => {
-            if (typeof pendingSelection.editorScrollTop === "number") {
-              editorViewport.scrollTop = pendingSelection.editorScrollTop
-            }
-
-            if (typeof pendingSelection.editorScrollLeft === "number") {
-              editorViewport.scrollLeft = pendingSelection.editorScrollLeft
-            }
-          }
-
-          applyViewportScroll()
-          scheduleNestedApply(applyViewportScroll)
-        }
-
-        const shellViewport = document.querySelector<HTMLElement>("main")
-        if (
-          shellViewport &&
-          (typeof pendingSelection.shellScrollTop === "number" || typeof pendingSelection.shellScrollLeft === "number")
-        ) {
-          const applyShellScroll = () => {
-            if (typeof pendingSelection.shellScrollTop === "number") {
-              shellViewport.scrollTop = pendingSelection.shellScrollTop
-            }
-
-            if (typeof pendingSelection.shellScrollLeft === "number") {
-              shellViewport.scrollLeft = pendingSelection.shellScrollLeft
-            }
-          }
-
-          applyShellScroll()
-          scheduleNestedApply(applyShellScroll)
-        }
-
-        if (typeof pendingSelection.windowScrollX === "number" || typeof pendingSelection.windowScrollY === "number") {
-          const applyWindowScroll = () => {
-            window.scrollTo(
-              typeof pendingSelection.windowScrollX === "number" ? pendingSelection.windowScrollX : window.scrollX,
-              typeof pendingSelection.windowScrollY === "number" ? pendingSelection.windowScrollY : window.scrollY,
-            )
-          }
-
-          applyWindowScroll()
-          scheduleNestedApply(applyWindowScroll)
-        }
-
-        markdownSelectionRef.current = {
-          start: pendingSelection.start,
-          end: pendingSelection.end,
-          text: nextTextarea.value.slice(pendingSelection.start, pendingSelection.end),
-          writingId: pendingSelection.writingId,
-        }
-
-        // No scroll target was scheduled (a plain selection-only restore) —
-        // this frame's write was the last one, so settle now.
-        if (pendingNestedFrames === 0) {
-          pendingSelection.onSettled?.()
-        }
-      })
-    },
-    [],
-  )
+  // ODE-607 — corte 6, paso 1: la restauración de selección markdown vive en
+  // su hook (mudanza mecánica; el estado y los refs siguen siendo de la
+  // shell). Se llama aquí, donde estaba el `useCallback` de la cola, así que
+  // el orden de efectos no cambia y los consumidores de más abajo no se mueven.
+  const { queueMarkdownSelectionRestore } = useSelectionRestore({
+    currentWritingIdRef,
+    markdownSelectionRafRef,
+    markdownSelectionRef,
+    markdownTextareaRef,
+    pendingMarkdownSelectionRef,
+  })
 
   const editor = useEditor(
     {
