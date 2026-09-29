@@ -13,6 +13,8 @@
 import { useLayoutEffect } from "react"
 import { vi } from "vitest"
 
+import type { CorrectionLifecycleInput } from "@/hooks/useCorrectionLifecycle"
+
 import type { LearnWordInput, LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 
 /* ------------------------------------------------------------------ *
@@ -86,6 +88,7 @@ export type HarnessWorld = {
    * cambiar su comportamiento—. Deja que un test lea el ref desde
    * `world.onShellCommit`, la ventana entre el commit y sus efectos pasivos.
    */
+  shellCorrectionLifecycleInput: CorrectionLifecycleInput | null
   shellEditorInstanceRef: { current: EditorHandle | null } | null
   /**
    * Errores no manejados durante el test (excepciones y promesas rechazadas).
@@ -174,6 +177,7 @@ export const world: HarnessWorld = {
   networkCalls: [],
   network: defaultNetwork(),
   editor: null,
+  shellCorrectionLifecycleInput: null,
   shellEditorInstanceRef: null,
   unhandledErrors: [],
   aiReview: async () => ({ error: null, data: { corrections: [] } }),
@@ -233,6 +237,18 @@ export function createCorrectionBlocksCaptureModule(actual: Record<string, unkno
     useCorrectionBlocks: (input: { editorInstanceRef: { current: EditorHandle | null } }) => {
       world.shellEditorInstanceRef = input.editorInstanceRef
       return realUseCorrectionBlocks(input)
+    },
+  }
+}
+
+/** Captures live inputs while every correction collaborator remains real. */
+export function createCorrectionLifecycleCaptureModule(actual: Record<string, unknown>) {
+  const realHook = actual.useCorrectionLifecycle as (input: CorrectionLifecycleInput) => unknown
+  return {
+    ...actual,
+    useCorrectionLifecycle: (input: CorrectionLifecycleInput) => {
+      world.shellCorrectionLifecycleInput = input
+      return realHook(input)
     },
   }
 }
