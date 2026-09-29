@@ -569,12 +569,12 @@ Comando que los encuentra (efectos cuya primera sentencia asigna un ref; mismo p
 | `editorInstanceRef` (722) | **dueño único:** se escribe en el render que adopta la instancia devuelta por `useEditor`, `editorInstanceRef.current = editor ?? null` (949), el mismo patrón que `routerRef` (397); efecto espejo borrado (PR 3 de ODE-609). El render cubre la creación (`null` → instancia) y una eventual recreación (vieja → nueva) antes de cualquier efecto | dueño único | `useCorrectionBlocks.ts:99`, `:168`; `useExternalDocumentChanges.ts:241`; `useManualCorrections.ts:183`, `:385` (llega como `editorRef` desde `useCorrectionLifecycle.ts:196`). `useEditor` (922–939) refresca la instancia cuando cambian `editorExtensions` o `handleEditorUpdate`; no usa `onCreate`/`onDestroy` |
 | `modeRef` (514) | **dueño único:** `applyEditorMode` (584–587) escribe el ref y el estado en el mismo paso; las 4 llamadas son `handleToggleMode` 1451 (→ markdown) y 1481 (→ rich), y `useDocumentHydration.ts:618` y `:650`. Efecto espejo borrado (PR 1 de ODE-609); ya no hay `setMode` fuera del dueño | dueño único | 36 lecturas: shell 17, `useDocumentExit` 5, `useFindReplace` 4, `useSelectionPopup` 2, `useCorrectionActions` 2, `useCorrectionLifecycle` 2, `useEditorCommands` 2, `useFootnotes` 1, `useEditorPersistence` 1. **Transición a propósito:** en `handleToggleMode` → rich, `applyEditorMode` escribe el ref en `"rich"` en 1481, **antes** de `setContent` (1486–1492) y con `setMode` en el mismo paso; el orden ref-primero es un contrato del pack sin lector observable hoy: el único lector síncrono es `handleEditorUpdate` (`useEditorPersistence.ts:546`), que sale antes por `isApplyingContentRef`, y `persistEditorSnapshot` no lee `modeRef`. El ref se inicializa con el valor inicial del estado (`useRef(mode)`, 514) |
 | `activeEditorTabIdRef` (594) | **dueño único:** `useActiveEditorTabIdRef` (`hooks/useActiveEditorTabIdRef.ts:31`) escribe el ref desde el listener síncrono del store (`subscribeToEditorSessionStore`, `lib/stores/editor-session-store.ts:117`); efecto espejo y 4 escrituras manuales borrados (PR 2 de ODE-609, opción B de ODE-608) | dueño único | ver la tabla de lecturas de abajo |
-| `currentDocumentMarkdownRef` (725) | efecto 2238–2240 | espejo de un **memo derivado** (`currentDocumentMarkdown`, 2211–2226: depende de `mode`, `markdownValue`, `editor` y `version`) | `useCorrectionActions.ts:161`, `useCorrectionLifecycle.ts:159` |
+| `currentDocumentMarkdownRef` (shell) | **dueño único:** render que adopta `currentDocumentMarkdown`, shell:1812 (PR 4 de ODE-609) | memo derivado, con las mismas dependencias; sin efecto espejo | `useCorrectionActions.ts:161`, `useCorrectionLifecycle.ts:159` |
 | `reconcileActiveSaveStateRef` (663) | efecto `useSaveStateSync.ts:118–120` | latest-callback (se mantiene, ODE-609) | shell 1362 (en el `input` de `useDocumentHydration`), `useSaveStateSync.ts:150` |
-| `tableOfContentsItemsRef` (708) | efecto `useTableOfContents.ts:51–53` | espejo | `useTableOfContents.ts:70` |
-| `activeTableOfContentsItemIdRef` (709) | efecto `useTableOfContents.ts:55–57` **y** escritura manual `:99` | espejo + manual | `useTableOfContents.ts:98` |
-| `automaticCorrectionSuggestionsRef` (726) | efecto `useCorrectionLifecycle.ts:101–103` | espejo | `useCorrectionLifecycle.ts` 128, 134, 348, 365, 385; `useCorrectionActions.ts` 195–425 (17 lecturas) |
-| `learnedWordsRef` (727) | efecto `useCorrectionLifecycle.ts:105–107` | espejo | `useCorrectionActions.ts:312`, `:344`, `:372`; `useCorrectionLifecycle.ts:123`; `useCorrectionBlocks.ts:114`; `useManualCorrections.ts:334` |
+| `tableOfContentsItemsRef` (708) | `useTableOfContentsState` → `setTableOfContentsItems`, `hooks/useTableOfContents.ts:15–19` (PR 5 de ODE-609) | dueño único | `useTableOfContents.ts:70` |
+| `activeTableOfContentsItemIdRef` (709) | `useTableOfContentsState` → `setSelectedTableOfContentsItemId`, `hooks/useTableOfContents.ts:20–24` (PR 5 de ODE-609) | dueño único | `useTableOfContents.ts:98` |
+| `automaticCorrectionSuggestionsRef` (726) | `useCorrectionSuggestionsState`, `hooks/useCorrectionBlocks.ts:38–42` (PR 6 de ODE-609) | dueño único | `useCorrectionLifecycle.ts` 128, 134, 348, 365, 385; `useCorrectionActions.ts` 195–425 (17 lecturas) |
+| `learnedWordsRef` (727) | `useLearnedWordsState`, `hooks/useCorrectionLifecycle.ts:43–47` (PR 6 de ODE-609) | dueño único | `useCorrectionActions.ts:312`, `:344`, `:372`; `useCorrectionLifecycle.ts:123`; `useCorrectionBlocks.ts:114`; `useManualCorrections.ts:334` |
 | `flushPendingEditOnUnmountRef` (747) | efecto `useEditorPersistence.ts:522–527` | latest-callback | `useEditorPersistence.ts:384` (cleanup de desmontaje). **No está en la tabla de ODE-609**, pero el patrón del ratchet lo va a marcar: necesita fila en la allowlist |
 | `onBeforeCloseRef`, `onRunActionRef` | `useTauriCloseGuard.ts:20`, `useTauriEditorMenuEvents.ts:42` | latest-callback permitidos (ODE-609) | internos |
 | `mountedRef` | `useVoiceRecorder.ts:335` | falso positivo del patrón (asigna `true` al montar), fuera de la shell | — |
@@ -720,6 +720,31 @@ Se borran los dos espejos del lifecycle. La sonda
 `tests/editor-shell-correction-ref-owner.test.tsx` observa en layout la carga de
 palabras y un análisis real desde el panel: dos casos rojos con los espejos,
 verdes con los escritores. No cambia admisión, identidad ni persistencia.
+
+**PR 7 — ratchet y estado final.**
+`tests/architecture/editor-shell-mirrors-ratchet.test.ts` recorre todos los
+TS/TSX de `components/editor/**` y `hooks/**` con el AST de TypeScript. Detecta
+cuerpos de efecto que solo asignan `.current`, incluidos formato compacto,
+comentarios, genéricos y aliases; un lifecycle con cleanup no es ese patrón.
+Los scanners existentes (`boundaries.yml` y test-scaffolding) solo cuentan
+patrones de texto/dobles y no representan esta regla sin forzarlos.
+`architecture/editor-shell-mirrors.baseline.json` fija excepciones por archivo,
+ref y número exacto: nueve latest-callbacks (incluidos los cinco de
+`useTauriMenuEvents`), un reset de `lastSavePathRef` por cambio de documento y
+una deuda preexistente del panel de colecciones, `selectedIdsRef` (ODE-643).
+El ratchet exige razón, impide nuevas copias del mismo ref y falla si una
+excepción deja de existir. La mutación BUILD añadió el espejo de markdown a
+la shell: falló por ese ref en L1813; se restauró el archivo sin diff.
+
+**Medición de esta entrega acumulada:** 3.048 líneas de shell; los cinco
+espejos que recibieron los PRs 4–6 ya no existen. Los ocho espejos del inventario
+original de §7.2 tienen un writer único tras los PRs 1–6. En la shell y sus
+clusters quedan cero espejos de estado por efecto. El scan completo detecta
+once efectos de asignación: nueve callbacks, un reset y el espejo del panel
+ajeno al corte, registrado en ODE-643. `useVoiceRecorder` no entra porque su
+efecto también devuelve cleanup, a diferencia del patrón preliminar de §7.3.
+La medición comparativa final y el recuento del capability map siguen siendo
+el alcance de ODE-610 después de mergear estos PRs.
 
 ## Plan
 
