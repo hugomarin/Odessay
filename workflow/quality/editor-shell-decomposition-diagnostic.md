@@ -396,6 +396,28 @@ Validar con:   git diff a76f658d..origin/main -- components/editor/editor-shell.
 
 Si el diff toca estos rangos, re-verificar solo los afectados y reportar la diferencia como `Recon correction`; el planner la aplica aquí.
 
+### Estado tras el corte 5 (ODE-605) — verificado en main@ba13217e (2026-09-28)
+
+El cluster ya salió de la shell a tres hooks (PRs #543–#545). Las tablas de abajo ("La cadena" y el orden de efectos) son la foto **de antes del corte** (`a76f658d`) y se quedan como referencia; las líneas vigentes son estas:
+
+| Hook | Archivo (líneas) | Llamada en la shell | Qué contiene (líneas en el hook) | Efectos, en orden de declaración |
+|---|---|---|---|---|
+| `useEditorPersistence` | `hooks/useEditorPersistence.ts:108–580` | `editor-shell.tsx:759` (el destructuring empieza en 753) | `scheduleMarkdownSave` 148–157, `flushPendingMarkdownSave` 160–169, `persistenceCoordinator` 171–371, `persistEditorSnapshot` 390–493, `runRichModeUpdateSideEffects` 495–501, `flushQueuedRichModeUpdate` 503–520, `scheduleQueuedRichModeUpdate` 529–542, `handleEditorUpdate` 544–571 (es el `onUpdate` de `useEditor`, shell:1106) | 373 activar el coordinador → 377 volcado + `dispose` al desmontar → 522 asignar `flushPendingEditOnUnmountRef` |
+| `useSaveStateSync` | `hooks/useSaveStateSync.ts:57–252` | `editor-shell.tsx:1390` | `reconcileActiveSaveState` 78–115 | 118 espejo `reconcileActiveSaveStateRef` → 129–250 suscripción única a sync (ODE-542/ODE-590) |
+| `useDocumentExit` | `hooks/useDocumentExit.ts:91–259` | `editor-shell.tsx:1406` | `snapshotOutgoingDraftContent` 115–123, `persistCurrentWorkspaceViewState` 125–186, `prepareDocumentExit` 198–213 | 215–256 cleanup de desmontaje: cancela las colas rich/markdown/selección y el toast, y guarda la vista |
+
+Se quedan en la shell: todo el estado y sus refs (colas en 608, 611, 705–707 y 747), `applyHydrationPhase` (466–470) con `hydrationPhaseRef` (456) y `applySyncStatus` (484–487, único escritor de `syncStatus`/`syncStatusRef`).
+
+**Orden de efectos: se conserva.** Comparado con el orden de declaración de `a76f658d` (`git show a76f658d:components/editor/editor-shell.tsx | grep -n 'useEffect('`):
+
+```text
+Antes:  1044 activar → 1054 volcado+dispose → 1172 handoff desktop → 1310 asignar el volcado → … → 1912 suscripción → 2027 cleanup
+Ahora:  759 [373 activar → 377 volcado+dispose → 522 asignar el volcado] → 903 handoff desktop → … → 1390 [118 espejo → 129 suscripción] → 1406 [215 cleanup]
+```
+
+- Lo que exige ODE-573 se cumple: el volcado + `dispose` (dentro de 759) está declarado antes del cleanup que cancela las colas (1406), y la suscripción sigue siendo una sola, entre los dos.
+- Hay dos desplazamientos relativos sin efecto observable. (a) La asignación del volcado (hook:522) pasa por delante del efecto del handoff desktop (shell:903), que no lee ese ref. (b) El espejo `reconcileActiveSaveStateRef` pasa de estar antes de la hidratación (L750 en `a76f658d`) a estar después (`useSaveStateSync`, 1390, tras `useDocumentHydration`, 1341). Su lector en la hidratación (`useDocumentHydration.ts:595`, `"post-hydration"`) corre después de los `await` de `hydrateEditor` (374–538), no en el cuerpo síncrono del efecto; el otro lector (`useSaveStateSync.ts:150`) es el callback de un evento. En ambos casos el ref ya tiene la versión real cuando se lee.
+
 ### La cadena
 
 | Tramo | Símbolo | Líneas | Qué hace |
@@ -434,7 +456,203 @@ Si el diff toca estos rangos, re-verificar solo los afectados y reportar la dife
 
 ### Espejos del área (inventario para el corte 7, ODE-609)
 
-`syncStatusRef` (escritor único, `applySyncStatus`), `reconcileActiveSaveStateRef` (espejo por efecto, 750–753), `hydrationPhaseRef` (escritor único, `applyHydrationPhase`), `currentDocumentMarkdownRef` (828; se escribe en 2874) y `activeEditorTabIdRef` (espejo por efecto en 1770; ODE-608).
+`syncStatusRef` (escritor único, `applySyncStatus`), `reconcileActiveSaveStateRef` (espejo por efecto, 750–753), `hydrationPhaseRef` (escritor único, `applyHydrationPhase`), `currentDocumentMarkdownRef` (828; se escribe en 2874) y `activeEditorTabIdRef` (espejo por efecto en 1770; ODE-608). Líneas de `a76f658d`; el inventario vigente, con lectores y escritores, está en §7.2.
+
+## 7. Mapa de Recon — resto de la shell (cortes 6 y 7 y cierre: ODE-607, ODE-608, ODE-609, ODE-610)
+
+```text
+Verificado en: main@ba13217e (2026-09-28), después de ODE-605
+Archivo:       components/editor/editor-shell.tsx — 3.466 líneas
+Validar con:   git diff ba13217e..origin/main -- components/editor/editor-shell.tsx hooks/ lib/stores/editor-session-store.ts
+```
+
+Mismo contrato que §6: BUILD valida estas líneas en vez de buscarlas; si el diff las movió, re-verifica solo lo afectado y lo reporta como `Recon correction`. Lo que no se exploró se dice en cada apartado.
+
+### 7.1 Anotaciones y selección (ODE-607)
+
+**Símbolos** (todos en `editor-shell.tsx` salvo que se diga otra cosa):
+
+| Símbolo | Líneas | Qué es / qué lee |
+|---|---|---|
+| tipos `SelectionSnapshot`, `OwnedMarkdownSelectionSnapshot`, `MarkdownSelectionRead` | 190–203 | nivel de módulo |
+| `markdownSelectionOwnerId` | 205 | helper puro: `writingId ?? EDITOR_DRAFT_TAB_ID` |
+| `readMarkdownSelectionForActiveDocument` | 207–232 | helper puro (ODE-625): la selección cacheada solo vale si es del documento activo; si no, usa el `view_state` de la pestaña activa leído de `getEditorSessionState()`, nunca el textarea compartido |
+| estado | 477 `markdownSelectionState`, 489 `richFootnoteRevision`, 548 `pendingAnnotation`, 549 `pendingRichSelection` | |
+| refs | 699 `selectionRef`, 700 `markdownSelectionRef`, 701 `markdownTextareaRef`, 712 `markdownSelectionRafRef`, 723 `pendingMarkdownSelectionRef`, 724 `suppressNextSelectionPopupRef` | |
+| `refreshRichFootnotes` | 918–920 | sube `richFootnoteRevision`; lo reciben `useExternalDocumentChanges` (1295), `useDocumentHydration` (1369) y `useWorkspaceTabOpening` (2495) |
+| `queueMarkdownSelectionRestore` | 922–1090 | `useCallback` con deps `[]`; lee `currentWritingIdRef`, `pendingMarkdownSelectionRef`, `markdownSelectionRafRef`, `markdownTextareaRef`, `markdownSelectionRef`. Cola de ODE-582: 946–958 (el `onSettled` reemplazado se encadena, no se pierde). Validez en el momento del rAF: 977–980 |
+| `getRichSelectionOverlayPositions` | 1503–1525 | posiciones del popup y del bubble desde `editor.view.coordsAtPos` |
+| `captureRichSelectionSnapshot` | 1527–1552 | `null` fuera de Rich (lee `modeRef`) o con selección vacía |
+| *(no es del cluster)* `useEditorCommands` | 1555–1591 | está **en medio** del cluster: recibe `captureRichSelectionSnapshot`, `setPendingRichSelection`, `setPendingAnnotation`, `queueMarkdownSelectionRestore`, `selectionRef` y `markdownSelectionRef` |
+| `dismissSelectionPopup` | 1593–1596 | |
+| `handleMarkSelection` | 1598–1616 | tipo `personal`: `setHighlight()` sobre el rango del popup y `persistEditorSnapshot` |
+| `convertStandaloneHighlight` | 1618–1652 | solo lo llama el sidebar (3218, 3239), no el popup |
+| `handleAnnotateSelection` | 1654–1668 | abre el bubble (`setPendingAnnotation`) |
+| `handleFootnoteSelection` | 1670–1688 | en Markdown abre el modal; en Rich guarda `selectionRef` y abre el modal |
+| `handleEditorSelectType` | 1690–1703 | enruta `personal` / `footnote` / `ai` |
+| `handleConfirmAnnotation` | 1705–1740 | aplica la marca sobre el rango de `pendingAnnotation` y `persistEditorSnapshot` |
+| efecto `selectionUpdate` del editor | 1742–1777 | abre o cierra el popup (antes 3059) |
+| efecto de reposicionar el overlay | 1779–1831 | `resize` y `scroll` en captura (ODE-409) (antes 3096) |
+| efecto `FOOTNOTE_REF_EVENT` | 2019–2029 | clic en una referencia → panel `notes` |
+| `handleInsertFootnote` | 2171–2192 | Markdown: `appendMarkdownFootnote`; Rich: `addFootnote` + `richFootnoteRevision` + `persistEditorSnapshot` |
+| memo `footnotes` | 2195–2204 | depende de `version || richFootnoteRevision` (fix de ODE-625, bug 1) |
+| JSX | 3021–3030 `onMarkdownSelectionChange`; 3091–3270 `NotesPanel` con 7 manejadores inline (`onNavigate` 3093, … `onDeleteHighlight` 3246); 3407 `InsertFootnoteModal`; 3451 `SelectionPopup`; 3457 `AnnotationBubble` | los manejadores inline del `NotesPanel` no se exploraron línea a línea |
+
+**`captureEditorCursorSnapshot` y `restoreEditorCursorSnapshot` ya no están en la shell:** salieron con find/replace en ODE-602 (`hooks/useFindReplace.ts:198` y `:234`; el ref `editorCursorSnapshotRef` sigue en la shell, 704). No son parte del corte 6.
+
+**Flujo.** Rich: TipTap emite `selectionUpdate` → el efecto 1742 llama a `captureRichSelectionSnapshot` → `pendingRichSelection` → `<SelectionPopup>` (3451) → `handleEditorSelectType` → marca directa (`handleMarkSelection`), modal de footnote o bubble (`handleAnnotateSelection` → `pendingAnnotation` → `<AnnotationBubble>` → `handleConfirmAnnotation`). Cada acción que cambia el documento pone `suppressNextSelectionPopupRef` para que el `selectionUpdate` de su propio `setTextSelection` no reabra el popup, y persiste con `persistEditorSnapshot`. Markdown: no hay popup; la selección llega por `onMarkdownSelectionChange` (3021, con guarda de dueño) a `markdownSelectionRef` y `markdownSelectionState`, y la restauran `queueMarkdownSelectionRestore` y su rAF.
+
+**Orden de efectos que no puede cambiar.** 1742 (suscripción a `selectionUpdate`) va antes de 1779 (overlay), y ambos van después de `useDocumentExit` (1406), cuyo cleanup cancela `markdownSelectionRafRef` y vacía `pendingMarkdownSelectionRef`. Si el hook del popup se llama en 1593, donde empieza su código, el orden no cambia. `queueMarkdownSelectionRestore` no tiene efectos, pero tiene que estar declarado antes que sus consumidores: `useDocumentHydration` (1341), `useEditorCommands` (1555) y `useFindReplace` (2321).
+
+**Cómo toca a los hooks ya extraídos.**
+- `useEditorPersistence`: el cluster solo llama a `persistEditorSnapshot(editor)` (1615, 1738, 2189); no lee su estado interno.
+- `useFindReplace`: recibe `queueMarkdownSelectionRestore`, `markdownSelectionOwnerId`, `markdownSelectionRef` (2332–2339) y es dueño del cursor snapshot.
+- `useEditorCommands`: recibe el snapshot, los setters del popup y del bubble y la cola (1555–1591). Los tipos `PendingRichSelectionSnapshot` y `PendingAnnotationSnapshot` viven en `hooks/useEditorCommands.ts:42–58`.
+- `useDocumentHydration`: termina la hidratación Markdown a través de la cola (`onSettled: finishHydration`, `useDocumentHydration.ts:624–640`).
+- `useDocumentExit`: lee `markdownSelectionRef` con `readMarkdownSelectionForActiveDocument` para guardar la vista y cancela la cola al desmontar.
+
+**Tests que deben pasar idénticos:** `tests/editor-shell-selection-restore.test.tsx` (STATE-06/07, ODE-625 bug 2), `editor-shell-markdown-hydration-coalesce.test.tsx` (ODE-582), `editor-shell-selection-popup-actions.test.tsx`, `editor-shell-annotation-roundtrip.test.tsx` y `-desktop`, `editor-shell-document-state-isolation.test.tsx` (ODE-625), `editor-shell-commands.test.tsx` (footnote y anotación por comando), `editor-shell-chrome-find-replace.test.tsx` (cursor snapshot), `tests/annotation-bubble-session.test.tsx` y `tests/footnote-extension.test.ts`. En `main` ya no queda ningún `it.fails` de ODE-625: sus casos son `it`.
+
+**Trampas ya pagadas.**
+- **ODE-625:** la selección Markdown se guarda con dueño (`writingId`) y se lee con `readMarkdownSelectionForActiveDocument`, y el memo `footnotes` depende de `version || richFootnoteRevision`. Si se mueve alguno sin su guarda, vuelven los dos bugs (los tests los fijan).
+- **ODE-582:** la cola coalesce solicitudes, pero encadena los `onSettled`. Moverla tal cual, con deps `[]`.
+- **`waitForHydrationReady`, no `flush()`,** para fijar selección o scroll en los tests (`tests/support/editor-shell-harness.tsx:605`). La selección se hace por el DOM con `selectEditorText`; `setTextSelection` se salta el `DOMObserver` (catálogo del harness).
+- **Nombres:** `hooks/useEditorSelection.ts` (métricas, llamado en 2206) y `hooks/useWritingSelection.ts` (selección de filas del Desk) ya existen. No usar ninguno de los dos nombres.
+- **`editorInstanceRef`:** ninguna línea del cluster lo lee. El popup, los manejadores y los footnotes usan `editor` (el valor de `useEditor`) por closure. Sus lectores son de correcciones y cambios externos (§7.2).
+
+**División propuesta (un PR por paso):**
+1. `useSelectionRestore`: `queueMarkdownSelectionRestore` (922–1090) tal cual, llamado en 922. Los helpers puros (205–232) se quedan como están o pasan por `input`, como en ODE-603. El cursor snapshot no entra, porque ya es de `useFindReplace`.
+2. `useSelectionPopup`: 1503–1552 y 1593–1831, llamado en 1593. `getRichSelectionOverlayPositions` y `captureRichSelectionSnapshot` tienen que seguir declarados **antes** de `useEditorCommands` (1555), que los recibe. Hay dos salidas: dejarlos en la shell y mover solo 1593–1831, o partir el hook en dos llamadas. Decide BUILD, con el orden de efectos intacto.
+3. `useFootnotes`: `handleInsertFootnote` y el memo `footnotes` (2171–2204), más el efecto `FOOTNOTE_REF_EVENT` (2019–2029), si cabe sin reordenar. Ese efecto está entre `handleInsertLink` y `handleInsertTable`, así que moverlo a 2171 lo pasaría por detrás de esos manejadores, que no tienen efectos. BUILD confirma el orden.
+
+### 7.2 Inventario de espejos (ODE-608, ODE-609)
+
+Comando que los encuentra (efectos cuya primera sentencia asigna un ref; mismo patrón que el ratchet que pide ODE-609). Está en §7.3.
+
+| Ref (declaración) | Escritor | Tipo | Lecturas |
+|---|---|---|---|
+| `editorInstanceRef` (737) | efecto 1113–1115 (`editor ?? null`) | espejo | `useCorrectionBlocks.ts:99`, `:168`; `useExternalDocumentChanges.ts:241`; `useManualCorrections.ts:183`, `:385` (llega como `editorRef` desde `useCorrectionLifecycle.ts:196`). `useEditor` (1092–1109) recrea el editor cuando cambian `editorExtensions` o `handleEditorUpdate`, y hoy no usa `onCreate`/`onDestroy` |
+| `modeRef` (551) | efecto 1180–1182, **más** 4 escrituras manuales junto a `setMode`: `handleToggleMode` 1845/1846 (→ markdown) y 1871 … 1886 (→ rich), `useDocumentHydration.ts:618/619` y `:651/652` | espejo + escritores manuales | 36 lecturas: shell 23, `useDocumentExit` 5, `useFindReplace` 4, `useCorrectionActions` 2, `useCorrectionLifecycle` 2, `useDocumentHydration` 2, `useEditorCommands` 2, `useEditorPersistence` 1. **Transición a propósito:** en `handleToggleMode` → rich, `modeRef` pasa a `"rich"` en 1871, **antes** de `setContent` (1873–1882) y de `setMode("rich")` (1886); `persistEditorSnapshot` (1888) lee el ref ya en `rich` mientras el estado sigue en `markdown`. Solo hay 4 `setMode`: el efecto espejo solo cubre el valor inicial |
+| `activeEditorTabIdRef` (614) | efecto 1248–1250 + 4 escrituras manuales (ver abajo) | espejo (excepción del ADR, D3/D4) | ver la tabla de lecturas de abajo |
+| `currentDocumentMarkdownRef` (725) | efecto 2238–2240 | espejo de un **memo derivado** (`currentDocumentMarkdown`, 2211–2226: depende de `mode`, `markdownValue`, `editor` y `version`) | `useCorrectionActions.ts:161`, `useCorrectionLifecycle.ts:159` |
+| `reconcileActiveSaveStateRef` (663) | efecto `useSaveStateSync.ts:118–120` | latest-callback (se mantiene, ODE-609) | shell 1362 (en el `input` de `useDocumentHydration`), `useSaveStateSync.ts:150` |
+| `tableOfContentsItemsRef` (708) | efecto `useTableOfContents.ts:51–53` | espejo | `useTableOfContents.ts:70` |
+| `activeTableOfContentsItemIdRef` (709) | efecto `useTableOfContents.ts:55–57` **y** escritura manual `:99` | espejo + manual | `useTableOfContents.ts:98` |
+| `automaticCorrectionSuggestionsRef` (726) | efecto `useCorrectionLifecycle.ts:101–103` | espejo | `useCorrectionLifecycle.ts` 128, 134, 348, 365, 385; `useCorrectionActions.ts` 195–425 (17 lecturas) |
+| `learnedWordsRef` (727) | efecto `useCorrectionLifecycle.ts:105–107` | espejo | `useCorrectionActions.ts:312`, `:344`, `:372`; `useCorrectionLifecycle.ts:123`; `useCorrectionBlocks.ts:114`; `useManualCorrections.ts:334` |
+| `flushPendingEditOnUnmountRef` (747) | efecto `useEditorPersistence.ts:522–527` | latest-callback | `useEditorPersistence.ts:384` (cleanup de desmontaje). **No está en la tabla de ODE-609**, pero el patrón del ratchet lo va a marcar: necesita fila en la allowlist |
+| `onBeforeCloseRef`, `onRunActionRef` | `useTauriCloseGuard.ts:20`, `useTauriEditorMenuEvents.ts:42` | latest-callback permitidos (ODE-609) | internos |
+| `mountedRef` | `useVoiceRecorder.ts:335` | falso positivo del patrón (asigna `true` al montar), fuera de la shell | — |
+
+**Escritor único (no son espejos; el ratchet no debe marcarlos):** `hydrationPhaseRef` (`applyHydrationPhase` 466–470), `syncStatusRef` (`applySyncStatus` 484–487), los metadatos (`applyDocumentMetadata` 571), `currentWritingIdRef` (`setActiveWritingId` 626) y `externalContentConflictRef` (4 escrituras junto a su estado en `useExternalDocumentChanges`). `routerRef` y `routeWritingIdRef` (432–435) se asignan **en el render**, no en un efecto: el ratchet por efecto no los ve y siguen al valor sin retraso.
+
+**`activeEditorTabIdRef`: escritores.**
+
+| Escritor | Sitio | Orden respecto al store |
+|---|---|---|
+| efecto espejo | `editor-shell.tsx:1248–1250` | un render por detrás |
+| manual | `useWorkspaceTabs.ts:91` | **antes** de `focusTab` (92), después de `prepareDocumentExit` (89) |
+| manual | `useWorkspaceTabs.ts:168` | después de `closeTab` (162), solo si se cerró la activa |
+| manual | `useWorkspaceTabOpening.ts:117`, `:149` | después de `openDraftTab` (116, 148), releyendo el store |
+
+**Caminos que cambian `active_tab_id` en el store** (`lib/stores/editor-session-store.ts`; todos pasan por `setSessionState` 121–157, que emite en el acto a los listeners de `subscribe` 108–113, privado):
+
+| Mutador | Líneas | Llamadores | ¿Escritura manual del ref? |
+|---|---|---|---|
+| `initializeEditorSessionStore` (carga + replay de `changesBeforeLoad`, ODE-577) | 188–240 | shell 1147, `useCatalogEditorSessionSync.ts:27`, `useRecentWritings.ts:28` | no |
+| `openDraftTab` | 244–294 | `useWorkspaceTabOpening.ts:116`, `:148`; `useSessionRestore.ts:123` | sí en las dos de `useWorkspaceTabOpening`; **no** en `useSessionRestore` |
+| `openWritingTab` | 296–370 | shell 2536, 2595 (`handleMenuOpenFile`); `useWorkspaceTabOpening.ts:192`; `useSessionRestore.ts:60` | no |
+| `reconcileMaterializedDraftTab` | 380–457 | `useEditorPersistence.ts:284` | no |
+| `focusTab` | 459–482 | `useWorkspaceTabs.ts:92` | sí (91) |
+| **`publishTabState`** | 484–550 | efecto de la shell 2281–2317 | no. Escribe `active_tab_id: writingId ?? EDITOR_DRAFT_TAB_ID` (545) cada vez que cambian el título, `syncStatus`, la fase o la ruta, y puede añadir una pestaña (`unshift`). **No está en la lista del análisis de la opción B de ODE-608** |
+| `closeTab` | 591–626 | `useWorkspaceTabs.ts:162` | sí (168) |
+| `reconcileUnavailableWritingTab` | 628–667 | `useDocumentHydration.ts:395` | no |
+| `reorderTab`, `updateTabSaveState`, `saveTabViewState`, `syncWritingTitlesFromCatalog` | 669, 552, 574, 695 | — | no tocan `active_tab_id` (verificado solo en las líneas del grep; sin leer cada cuerpo entero) |
+
+**`activeEditorTabIdRef`: lecturas**, y si leer `getEditorSessionState().session.active_tab_id` daría lo mismo (requisito 2 de ODE-608). La "ventana" es el intervalo entre un cambio del store sin escritura manual (tabla de arriba) y el siguiente render de la shell:
+
+| Lectura | Contexto | ¿Mismo valor que el store? |
+|---|---|---|
+| `useEditorPersistence.ts:181` | `applyCommittedTabState` (callback asíncrono del coordinador) | fuera de la ventana, sí; dentro, no. El `|| currentWritingIdRef.current === record.id` lo compensa, y `activateDocument` va antes que `openWritingTab` en los caminos de apertura |
+| `:229` | `onStateChange` | igual que 181 (tiene el mismo `||`) |
+| `:272` | `onMaterialized`, `isSourceDraftActive` | fuera de la ventana, sí. Se calcula antes de `reconcileMaterializedDraftTab` (284), así que el renombre síncrono no lo cambia |
+| `:348` | `onError` | fuera de la ventana, sí; dentro, **no**, y **no tiene `||`**: un error de la pestaña vieja pinta hoy la barra de estado del documento nuevo (riesgo 2 del análisis) |
+| `:425` | `persistEditorSnapshot` → `sourceTabId` | síncrono desde manejadores. En las transiciones del editor se vuelca con `prepareDocumentExit` antes del cambio del store (`useWorkspaceTabs.ts:89`, shell 2507), así que coincide. Un guardado armado dentro de la ventana (p. ej. el rAF de `onUpdate` tras `openWritingTab`) tomaría la pestaña vieja |
+| `useWorkspaceTabs.ts:126` | `handleCloseTab`, `isClosingActiveTab`, antes del primer `await` | sí en la práctica: es un manejador de clic, y React vacía los efectos pasivos de los updates discretos antes del siguiente evento. No verificado en runtime para un cambio no discreto del store (p. ej. `initializeEditorSessionStore`) seguido de un clic antes del efecto |
+
+Lecturas **a mitad de transición a propósito** (ref ≠ estado por diseño): `modeRef` en `handleToggleMode` (1871–1888). En `activeEditorTabIdRef` no hay ninguna lectura que dependa de que el ref vaya por detrás. El retraso solo se tolera (`||` en 181/229, comentario en 177).
+
+No explorado: las lecturas de `modeRef` una por una. Solo se contaron por archivo; BUILD de ODE-609 las lista con `grep -rn 'modeRef\.current' components/editor/editor-shell.tsx hooks/`.
+
+### 7.3 Línea base para el cierre (ODE-610)
+
+Se mide con este script. Se corre con `bash` desde la raíz del repo; en `zsh` el `for` sobre la lista no parte las palabras.
+
+```bash
+F=components/editor/editor-shell.tsx
+echo "líneas: $(wc -l < $F | tr -d ' ')"
+for p in useState useRef useEffect useCallback useMemo; do
+  printf "%-12s %3s  (con genérico: %s)\n" "$p" "$(grep -c "$p(" $F)" "$(grep -cE "\b$p(<|\()" $F)"
+done
+echo "lecturas .current: $(grep -o '[A-Za-z]*Ref\.current' $F | wc -l | tr -d ' ')"
+echo "-- efectos cuya primera sentencia asigna un ref (candidatos a espejo):"
+for f in $F hooks/*.ts; do
+  awk -v f="$f" '/useEffect\(/ {s=NR; n=1; next} n==1 {n=0; if ($0 ~ /^[ \t]*[A-Za-z]+Ref\.current = /) {sub(/^[ \t]+/, ""); print f":"s"  "$0}}' "$f"
+done
+echo "-- hooks de los cortes (línea de llamada en la shell, líneas del hook):"
+for h in useFocusMode useEditorPersistence useCorrectionBlocks useTableOfContents useSessionRestore useExternalDocumentChanges useDocumentHydration useSaveStateSync useDocumentExit useCorrectionActions useEditorCommands useCorrectionLifecycle useFindReplace useWorkspaceTabs useWorkspaceTabOpening; do
+  printf "L%-5s %-28s %4s\n" "$(grep -n "\b$h({" $F | head -1 | cut -d: -f1)" "$h" "$(wc -l < hooks/$h.ts | tr -d ' ')"
+done
+echo "-- tests editor-shell-*: $(ls tests/editor-shell-*.test.tsx | wc -l | tr -d ' ') archivos"
+```
+
+Salida en `main@ba13217e`:
+
+```text
+líneas: 3466
+useState      26  (con genérico: 54)
+useRef        18  (con genérico: 63)
+useEffect     26  (con genérico: 26)
+useCallback   43  (con genérico: 43)
+useMemo       10  (con genérico: 10)
+lecturas .current: 153
+-- efectos cuya primera sentencia asigna un ref (candidatos a espejo):
+components/editor/editor-shell.tsx:1113  editorInstanceRef.current = editor ?? null
+components/editor/editor-shell.tsx:1180  modeRef.current = mode
+components/editor/editor-shell.tsx:1248  activeEditorTabIdRef.current = editorSession.active_tab_id
+components/editor/editor-shell.tsx:2238  currentDocumentMarkdownRef.current = currentDocumentMarkdown
+hooks/useCorrectionLifecycle.ts:101  automaticCorrectionSuggestionsRef.current = automaticCorrectionSuggestions
+hooks/useCorrectionLifecycle.ts:105  learnedWordsRef.current = learnedWords
+hooks/useEditorPersistence.ts:522  flushPendingEditOnUnmountRef.current = () => {
+hooks/useSaveStateSync.ts:118  reconcileActiveSaveStateRef.current = reconcileActiveSaveState
+hooks/useTableOfContents.ts:51  tableOfContentsItemsRef.current = tableOfContentsItems
+hooks/useTableOfContents.ts:55  activeTableOfContentsItemIdRef.current = selectedTableOfContentsItemId
+hooks/useTauriCloseGuard.ts:20  onBeforeCloseRef.current = onBeforeClose
+hooks/useTauriEditorMenuEvents.ts:42  onRunActionRef.current = onRunAction
+hooks/useVoiceRecorder.ts:335  mountedRef.current = true
+-- hooks de los cortes (línea de llamada en la shell, líneas del hook):
+L672   useFocusMode                   84
+L759   useEditorPersistence          580
+L896   useCorrectionBlocks           331
+L1136  useTableOfContents            168
+L1258  useSessionRestore             139
+L1281  useExternalDocumentChanges    369
+L1341  useDocumentHydration          756
+L1390  useSaveStateSync              252
+L1406  useDocumentExit               259
+L1478  useCorrectionActions          447
+L1555  useEditorCommands             728
+L2250  useCorrectionLifecycle        413
+L2321  useFindReplace                523
+L2376  useWorkspaceTabs              405
+L2479  useWorkspaceTabOpening        224
+-- tests editor-shell-*: 49 archivos
+```
+
+Notas para comparar con las cifras anteriores del documento:
+- **La serie histórica mezcla dos patrones.** Re-medido sobre el punto de partida (`e8889942`): `useRef` da 30 con `useRef(` (lo que dice §1) y 75 con genérico; `useState` da 25 sin genérico y 54 con genérico, y §1 dice "~60", más cerca del segundo. Desde ODE-598 ("26 useState, 20 useRef") la serie coincide con `useX(` sin genérico, así que `useRef<T>(` y `useState<T>(` no entran. Para comparar con la serie reciente, usar la primera columna; la cifra real de llamadas es la columna "con genérico". ODE-610 tiene que decir cuál reporta, y usar la misma en el punto de partida y en el cierre.
+- Espejos: 13 candidatos del patrón = 8 espejos por efecto (4 en la shell, 2 en correcciones, 2 en la TOC) + 4 latest-callback (`reconcileActiveSaveStateRef`, `flushPendingEditOnUnmountRef` y los 2 de Tauri) + 1 falso positivo (`useVoiceRecorder`).
+- Casos de test: el número fiable es el que da vitest, no un grep (hay `it.each` y `it.fails` compuestos). `npx vitest run tests/editor-shell-` en `ba13217e`: **49 archivos, 218 passed | 6 expected fail (224)**, 144 s. Los 6 `it.fails` son los de ODE-632 en `editor-shell-commands`.
 
 ## Plan
 
