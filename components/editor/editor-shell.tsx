@@ -30,6 +30,7 @@ import {
 } from "@/hooks/useExternalDocumentChanges"
 import { type EditorCursorSnapshot, useFindReplace } from "@/hooks/useFindReplace"
 import { type FocusModeRestoration, useFocusMode } from "@/hooks/useFocusMode"
+import { useFootnotes } from "@/hooks/useFootnotes"
 import { useSessionRestore } from "@/hooks/useSessionRestore"
 import {
   markdownSelectionOwnerId,
@@ -64,10 +65,7 @@ import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import {
   annotateMarkdownStandaloneHighlight,
-  appendMarkdownFootnote,
   changeMarkdownAnnotationType,
-  extractRichEditorAnnotations,
-  getMarkdownFootnotes,
   removeMarkdownAnnotation,
   removeMarkdownStandaloneHighlight,
   updateMarkdownAnnotation,
@@ -78,7 +76,7 @@ import {
   materializeMarkdownForRichParser,
   normalizeMarkdownForRoundTrip,
 } from "@/lib/editor/markdown-format"
-import { FOOTNOTE_REF_EVENT, getEditorFootnotes, getMarkdownWithFootnoteDefinitions, type AnnotationType } from "@/lib/editor/footnote-node"
+import { getEditorFootnotes, getMarkdownWithFootnoteDefinitions, type AnnotationType } from "@/lib/editor/footnote-node"
 import {
   deleteStandaloneHighlight,
   resolveStandaloneHighlightRange,
@@ -880,6 +878,9 @@ export function EditorShell({
     }
   }, [])
 
+  // ODE-607 — corte 6, paso 3: se queda en la shell (no cabe en `useFootnotes`:
+  // sus consumidores, `useExternalDocumentChanges` y `useDocumentHydration`,
+  // están declarados antes del punto de llamada del hook).
   const refreshRichFootnotes = useCallback(() => {
     setRichFootnoteRevision((revision) => revision + 1)
   }, [])
@@ -1609,18 +1610,6 @@ export function EditorShell({
     [applySyncStatus, editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, scheduleMarkdownSave],
   )
 
-  useEffect(() => {
-    const onFootnoteClick = () => {
-      setActivePanel("notes")
-    }
-
-    window.addEventListener(FOOTNOTE_REF_EVENT, onFootnoteClick)
-
-    return () => {
-      window.removeEventListener(FOOTNOTE_REF_EVENT, onFootnoteClick)
-    }
-  }, [])
-
   const handleInsertTable = useCallback(
     (rows: number, cols: number) => {
       if (mode === "rich") {
@@ -1761,40 +1750,25 @@ export function EditorShell({
     }
   }, [editor, localImageBackup, persistEditorSnapshot])
 
-  const handleInsertFootnote = useCallback(
-    (note: string) => {
-      if (modeRef.current === "markdown") {
-        const nextMarkdown = appendMarkdownFootnote(markdownValue, note)
-        applyMarkdownFromPanel(nextMarkdown)
-        setActivePanel("notes")
-        return
-      }
-
-      if (!editor) {
-        return
-      }
-
-      editor.commands.addFootnote(note)
-      setRichFootnoteRevision((r) => r + 1)
-      updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
-      setActivePanel("notes")
-    },
-    [applyMarkdownFromPanel, editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState],
-  )
-
-  // In Rich mode, derive footnotes from editor nodes only when content version changes.
-  // In Markdown mode, parse from the raw markdown value.
-  const footnotes = useMemo(() => {
-    if (mode === "rich") {
-      const contentRevision = version || richFootnoteRevision
-      void contentRevision
-      if (!editor) return []
-      return extractRichEditorAnnotations(editor)
-    }
-
-    return getMarkdownFootnotes(markdownValue)
-  }, [editor, markdownValue, mode, richFootnoteRevision, version])
+  // ODE-607 — corte 6, paso 3: el alta de footnotes, el memo del panel y el
+  // efecto de FOOTNOTE_REF_EVENT viven en su hook (mudanza mecánica; el estado
+  // y los refs siguen siendo de la shell). Se llama donde estaba
+  // `handleInsertFootnote`, así que el orden de efectos no cambia: el efecto
+  // solo pasa por detrás de manejadores sin efectos. `refreshRichFootnotes` se
+  // queda en la shell porque sus consumidores están declarados antes.
+  const { footnotes, handleInsertFootnote } = useFootnotes({
+    applyMarkdownFromPanel,
+    editor,
+    markdownValue,
+    mode,
+    modeRef,
+    persistEditorSnapshot,
+    richFootnoteRevision,
+    setActivePanel,
+    setRichFootnoteRevision,
+    updateDerivedEditorState,
+    version,
+  })
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const selectionMetrics = useEditorSelection(editor, mode, markdownSelectionState)
   const displayTitle = useMemo(
