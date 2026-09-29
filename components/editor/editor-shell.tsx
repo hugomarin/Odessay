@@ -13,8 +13,8 @@ import {
   type HydrationPhase,
 } from "@/hooks/useDocumentHydration"
 import { useCorrectionActions, type CorrectionToastState } from "@/hooks/useCorrectionActions"
-import { useCorrectionBlocks } from "@/hooks/useCorrectionBlocks"
-import { useCorrectionLifecycle } from "@/hooks/useCorrectionLifecycle"
+import { useCorrectionBlocks, useCorrectionSuggestionsState } from "@/hooks/useCorrectionBlocks"
+import { useCorrectionLifecycle, useLearnedWordsState } from "@/hooks/useCorrectionLifecycle"
 import {
   useEditorCommands,
   type PendingAnnotationSnapshot,
@@ -145,7 +145,6 @@ import type {
   WritingVisibility,
 } from "@/lib/local-db/schema"
 import { getAssetService } from "@/lib/services/asset-service-factory"
-import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 import {
   createDesktopDraft as createProductionDesktopDraft,
   getDocumentService,
@@ -467,7 +466,7 @@ export function EditorShell({
     setSelectedTableOfContentsItemId, tableOfContentsItemsRef, activeTableOfContentsItemIdRef } = useTableOfContentsState()
   const [spellcheckScope, setSpellcheckScope] = useState(() => getLocalDBScope())
   const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
-  const [automaticCorrectionSuggestions, setAutomaticCorrectionSuggestions] = useState<PublicationSuggestion[]>([])
+  const { automaticCorrectionSuggestions, automaticCorrectionSuggestionsRef, setAutomaticCorrectionSuggestions } = useCorrectionSuggestionsState()
   const [correctionToast, setCorrectionToast] = useState<CorrectionToastState | null>(null)
   const [externalFileNotice, setExternalFileNotice] = useState<ExternalFileNotice | null>(null)
   const [externalContentConflict, setExternalContentConflict] = useState<ExternalContentConflict | null>(null)
@@ -485,7 +484,7 @@ export function EditorShell({
    */
   const hasUnconfirmedLocalEditRef = useRef(false)
   const [showCorrections, setShowCorrections] = useState(true)
-  const [learnedWords, setLearnedWords] = useState<LearnedWordEntry[]>([])
+  const { learnedWords, learnedWordsRef, setLearnedWords } = useLearnedWordsState()
   const [learnedWordsLoading, setLearnedWordsLoading] = useState(false)
 
   const [renameModalOpen, setRenameModalOpen] = useState(false)
@@ -706,8 +705,6 @@ export function EditorShell({
   const pendingMarkdownSelectionRef = useRef<PendingMarkdownSelection | null>(null)
   const suppressNextSelectionPopupRef = useRef(false)
   const currentDocumentMarkdownRef = useRef("")
-  const automaticCorrectionSuggestionsRef = useRef<PublicationSuggestion[]>([])
-  const learnedWordsRef = useRef<LearnedWordEntry[]>([])
   const learnedWordsLoadedRef = useRef(false)
   const persistedCorrectionBlocksRef = useRef(new Map<string, LocalCorrectionBlock>())
   const correctionToastDismissRef = useRef<number | null>(null)
@@ -864,7 +861,7 @@ export function EditorShell({
     [spellcheckPreference],
   )
   // ODE-586: estado de sugerencias, admisión y caché de bloques de corrección.
-  // Mudanza mecánica; el estado y los refs siguen siendo de la shell.
+  // ODE-609: el estado y su ref vivo pertenecen a useCorrectionSuggestionsState.
   const {
     correctionSuggestionBatcher,
     applyCorrectionSuggestionUpdate,
