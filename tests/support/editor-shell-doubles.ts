@@ -81,6 +81,13 @@ export type HarnessWorld = {
   /** El editor real de TipTap, capturado (no sustituido). */
   editor: EditorHandle | null
   /**
+   * `editorInstanceRef` real de la shell (ODE-609), capturado por
+   * `createCorrectionBlocksCaptureModule` —envuelve su primer consumidor sin
+   * cambiar su comportamiento—. Deja que un test lea el ref desde
+   * `world.onShellCommit`, la ventana entre el commit y sus efectos pasivos.
+   */
+  shellEditorInstanceRef: { current: EditorHandle | null } | null
+  /**
    * Errores no manejados durante el test (excepciones y promesas rechazadas).
    *
    * Existe porque un `catch {}` de producción o una promesa rechazada en un
@@ -167,6 +174,7 @@ export const world: HarnessWorld = {
   networkCalls: [],
   network: defaultNetwork(),
   editor: null,
+  shellEditorInstanceRef: null,
   unhandledErrors: [],
   aiReview: async () => ({ error: null, data: { corrections: [] } }),
   aiReviewCalls: [],
@@ -205,6 +213,26 @@ export function createTiptapCaptureModule(actual: Record<string, unknown>) {
         world.onShellCommit?.()
       })
       return editor
+    },
+  }
+}
+
+/**
+ * Envuelve `useCorrectionBlocks` REAL (ODE-609) para quedarnos con el
+ * `editorInstanceRef` que la shell le pasa —es su primer consumidor—. No
+ * sustituye nada: delega en el hook real, así que la captura no cambia el
+ * comportamiento. Es el equivalente, para el ref, de lo que
+ * `createTiptapCaptureModule` hace con la instancia del editor.
+ */
+export function createCorrectionBlocksCaptureModule(actual: Record<string, unknown>) {
+  const realUseCorrectionBlocks = actual.useCorrectionBlocks as (input: {
+    editorInstanceRef: { current: EditorHandle | null }
+  }) => unknown
+  return {
+    ...actual,
+    useCorrectionBlocks: (input: { editorInstanceRef: { current: EditorHandle | null } }) => {
+      world.shellEditorInstanceRef = input.editorInstanceRef
+      return realUseCorrectionBlocks(input)
     },
   }
 }

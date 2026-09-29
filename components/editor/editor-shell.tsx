@@ -938,11 +938,15 @@ export function EditorShell({
     [editorExtensions, handleEditorUpdate],
   )
 
-  // Keep an imperative handle to the latest TipTap instance so persistence remaps
-  // can read the current block graph even when callbacks outlive a render.
-  useEffect(() => {
-    editorInstanceRef.current = editor ?? null
-  }, [editor])
+  // ODE-609 — corte 7: `editorInstanceRef` tiene un solo escritor, aquí, en el
+  // render que adopta la instancia devuelta por `useEditor` (el mismo patrón
+  // que `routerRef`), no en un efecto espejo. El efecto pasivo dejaba el ref un
+  // render por detrás: entre el commit que adopta el editor y el efecto, una
+  // creación lo dejaba en `null` y una recreación lo dejaba apuntando al
+  // editor viejo —ya destruido por `useEditor`— mientras los lectores de
+  // correcciones y cambios externos seguían corriendo. El render cubre los dos
+  // casos (null → instancia, vieja → nueva) antes de cualquier efecto.
+  editorInstanceRef.current = editor ?? null
 
   // Uploading an image needs a real writingId to attach the asset to
   // (server-side storage path + RLS), so a still-blank draft must
