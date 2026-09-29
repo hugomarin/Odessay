@@ -36,9 +36,11 @@ vi.mock("@/lib/services/ai-service-factory", async () =>
   (await import("./support/editor-shell-doubles")).aiServiceDouble(),
 )
 
-const { mountEditorShell, resetEditorShellWorld, waitFor, world } = await import(
+const { mountEditorShell, resetEditorShellWorld, waitFor, waitForHydrationReady, world } = await import(
   "./support/editor-shell-harness"
 )
+
+const { act } = await import("react")
 
 const TEST_TIMEOUT_MS = 40_000
 const TEXT = "Texto del documento con un editor propio."
@@ -81,15 +83,25 @@ afterEach(async () => {
 describe("ODE-609 — markdown derivado disponible antes del efecto pasivo", () => {
   it.fails("el lector de correcciones recibe el markdown del commit que acaba de adoptar", async () => {
     const readings: Array<{ live: string; adopted: string }> = []
+    mounted = await mountEditorShell({ writingId })
+    await waitFor(() => mounted!.editor().getText().includes(TEXT), { label: "documento hidratado" })
+    await waitForHydrationReady()
+    const toggle = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.trim() === "Markdown")!
+    await act(async () => toggle.click())
+    const textarea = await waitFor(() => mounted!.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]'), { label: "Markdown visible" })
+    const marker = "ODE609-MARKDOWN-NUEVO"
     world.onShellCommit = () => {
       const input = world.shellCorrectionLifecycleInput
-      const adopted = world.editor?.getText() ?? ""
-      if (input && adopted.includes(TEXT)) {
+      const adopted = textarea.value
+      if (input && adopted.includes(marker)) {
         readings.push({ live: input.currentDocumentMarkdownRef.current, adopted })
       }
     }
-    mounted = await mountEditorShell({ writingId })
-    await waitFor(() => mounted!.editor().getText().includes(TEXT), { label: "documento hidratado" })
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, `${textarea.value} ${marker}`)
+      textarea.dispatchEvent(new Event("input", { bubbles: true }))
+    })
     world.onShellCommit = null
     expect(readings.length, "control positivo: commits con el documento adoptado").toBeGreaterThan(0)
     expect(readings.filter(({ live, adopted }) => !live.includes(adopted)), "ninguna lectura del markdown anterior").toEqual([])
