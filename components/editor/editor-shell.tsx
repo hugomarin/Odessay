@@ -20,6 +20,7 @@ import {
   type PendingAnnotationSnapshot,
   type PendingRichSelectionSnapshot,
 } from "@/hooks/useEditorCommands"
+import { useActiveEditorTabIdRef } from "@/hooks/useActiveEditorTabIdRef"
 import { useEditorPersistence } from "@/hooks/useEditorPersistence"
 import { useDocumentExit, type PendingMarkdownSelection } from "@/hooks/useDocumentExit"
 import { useSaveStateSync } from "@/hooks/useSaveStateSync"
@@ -591,7 +592,9 @@ export function EditorShell({
   const pendingMarkdownSaveRef = useRef<(() => void) | null>(null)
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
-  const activeEditorTabIdRef = useRef<string | null>(editorSession.active_tab_id)
+  // Único escritor: la suscripción síncrona al store (ODE-609, opción B de
+  // ODE-608). Antes era un espejo por efecto más cuatro escrituras manuales.
+  const activeEditorTabIdRef = useActiveEditorTabIdRef()
   /**
    * Único dueño de la identidad del documento activo (ODE-564).
    *
@@ -1065,10 +1068,6 @@ export function EditorShell({
     )
     navigatedToDraftRef.current = false
   }, [activateDocument, routeWritingId])
-
-  useEffect(() => {
-    activeEditorTabIdRef.current = editorSession.active_tab_id
-  }, [editorSession.active_tab_id])
 
   useEffect(() => {
     setImageViewerSource(null)
@@ -2062,7 +2061,6 @@ export function EditorShell({
     handleOpenWorkspaceDocument,
   } = useWorkspaceTabOpening({
     activateDocument,
-    activeEditorTabIdRef,
     createWorkspaceTabRef,
     currentWritingIdRef,
     editor,

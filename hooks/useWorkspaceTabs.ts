@@ -95,7 +95,8 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
       // sure that content lands on the document it was actually typed into,
       // not on whatever tab we're about to switch to (ODE-478 case 2).
       prepareDocumentExit({ flushPendingEdit: true, snapshotDraft: true, saveViewState: true })
-      activeEditorTabIdRef.current = tabId
+      // La copia de la pestaña activa la actualiza el listener del store al
+      // cambiar `active_tab_id` dentro de `focusTab` (ODE-609, opción B).
       focusTab(tabId)
       navigatedToDraftRef.current = false
 
@@ -172,7 +173,8 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
         return
       }
 
-      activeEditorTabIdRef.current = nextActiveTabId
+      // La copia ya vale `nextActiveTabId`: el listener del store la actualizó
+      // dentro de `closeTab` (ODE-609, opción B).
       // Read fresh rather than the closed-over `editorSession.tabs`, which can
       // be stale after the same await (ODE-478 follow-up).
       const nextTab = getEditorSessionState().session.tabs.find((tab) => tab.id === nextActiveTabId)

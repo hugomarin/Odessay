@@ -105,7 +105,16 @@ const emitChange = () => {
   listeners.forEach((listener) => listener());
 };
 
-const subscribe = (listener: EditorSessionListener) => {
+/**
+ * Suscripción pública a los cambios del store de sesión (ODE-609).
+ *
+ * `setSessionState` emite en el acto, así que un listener ve cada cambio de
+ * `active_tab_id` en la misma instrucción —incluidos los que viven dentro del
+ * store y una función de la shell no vería (`initializeEditorSessionStore` con
+ * el replay de `changesBeforeLoad`, `reconcileMaterializedDraftTab`). Es la
+ * vía con la que `useActiveEditorTabIdRef` mantiene su copia.
+ */
+export const subscribeToEditorSessionStore = (listener: EditorSessionListener) => {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -182,7 +191,7 @@ const getFallbackActiveTabId = (tabs: LocalEditorSessionTab[], preferredId?: str
 };
 
 export function useEditorSessionStore() {
-  return useSyncExternalStore(subscribe, getSnapshot, () => DEFAULT_STATE);
+  return useSyncExternalStore(subscribeToEditorSessionStore, getSnapshot, () => DEFAULT_STATE);
 }
 
 export function initializeEditorSessionStore() {
