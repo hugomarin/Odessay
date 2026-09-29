@@ -1814,6 +1814,9 @@ export function EditorShell({
     )
   }, [editor, markdownValue, mode, version])
 
+  // ODE-609: adopt the derived memo in its render, before commit consumers.
+  currentDocumentMarkdownRef.current = currentDocumentMarkdown
+
   // The Grammar tab's badge counts exactly what its panel would list, so it
   // filters through the same helper rather than the raw suggestion array.
   const visibleCorrectionCount = useMemo(
@@ -1824,9 +1827,6 @@ export function EditorShell({
   )
 
 
-  useEffect(() => {
-    currentDocumentMarkdownRef.current = currentDocumentMarkdown
-  }, [currentDocumentMarkdown])
 
   // ODE-586: ciclo de vida de las correcciones (mudanza mecánica; mismos
   // efectos, en el mismo orden y en esta posición).

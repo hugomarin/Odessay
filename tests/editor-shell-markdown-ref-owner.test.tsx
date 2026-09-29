@@ -81,7 +81,7 @@ afterEach(async () => {
 })
 
 describe("ODE-609 — markdown derivado disponible antes del efecto pasivo", () => {
-  it.fails("el lector de correcciones recibe el markdown del commit que acaba de adoptar", async () => {
+  it("el lector de correcciones recibe el markdown del commit que acaba de adoptar", async () => {
     const readings: Array<{ live: string; adopted: string }> = []
     mounted = await mountEditorShell({ writingId })
     await waitFor(() => mounted!.editor().getText().includes(TEXT), { label: "documento hidratado" })

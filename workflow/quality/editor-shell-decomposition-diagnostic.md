@@ -688,6 +688,18 @@ Notas para comparar con las cifras anteriores del documento:
 - Espejos: 13 candidatos del patrón = 8 espejos por efecto (4 en la shell, 2 en correcciones, 2 en la TOC) + 4 latest-callback (`reconcileActiveSaveStateRef`, `flushPendingEditOnUnmountRef` y los 2 de Tauri) + 1 falso positivo (`useVoiceRecorder`).
 - Casos de test: el número fiable es el que da vitest, no un grep (hay `it.each` y `it.fails` compuestos). `npx vitest run tests/editor-shell-` en `ba13217e`: **49 archivos, 218 passed | 6 expected fail (224)**, 144 s. Los 6 `it.fails` son los de ODE-632 en `editor-shell-commands`.
 
+### 7.4 Continuación de ODE-609 (2026-09-29)
+
+**PR 4 — markdown derivado.** `currentDocumentMarkdownRef` tiene un solo
+escritor: el render que adopta `currentDocumentMarkdown`, inmediatamente después
+de calcular el memo y antes de montar el ciclo de correcciones. El memo conserva
+sus dependencias y la normalización; no se crea otro cálculo ni otro estado.
+El efecto espejo desaparece. La prueba
+`tests/editor-shell-markdown-ref-owner.test.tsx` monta la shell real y lee el ref
+por el input del consumidor real de correcciones en la fase de layout. Contra
+el espejo detecta el markdown anterior en el commit de una edición en el textarea (`it.fails`);
+con el escritor del render pasa como `it`, sin cambiar el cuerpo.
+
 ## Plan
 
 ### Fase 0 — Banco de pruebas (harness)
