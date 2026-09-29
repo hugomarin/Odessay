@@ -650,7 +650,7 @@ L2479  useWorkspaceTabOpening        224
 ```
 
 Notas para comparar con las cifras anteriores del documento:
-- **La serie histórica cuenta `useX(` sin genérico.** Las cifras de §1 (por ejemplo, "26 useState, 20 useRef" en ODE-598) salen de ese patrón, y `useRef<T>(` y `useState<T>(` no entran. Para comparar con la serie, usar la primera columna. La cifra real de llamadas es la columna "con genérico". ODE-610 tiene que decir cuál reporta.
+- **La serie histórica mezcla dos patrones.** Re-medido sobre el punto de partida (`e8889942`): `useRef` da 30 con `useRef(` (lo que dice §1) y 75 con genérico; `useState` da 25 sin genérico y 54 con genérico, y §1 dice "~60", más cerca del segundo. Desde ODE-598 ("26 useState, 20 useRef") la serie coincide con `useX(` sin genérico, así que `useRef<T>(` y `useState<T>(` no entran. Para comparar con la serie reciente, usar la primera columna; la cifra real de llamadas es la columna "con genérico". ODE-610 tiene que decir cuál reporta, y usar la misma en el punto de partida y en el cierre.
 - Espejos: 13 candidatos del patrón = 8 espejos por efecto (4 en la shell, 2 en correcciones, 2 en la TOC) + 4 latest-callback (`reconcileActiveSaveStateRef`, `flushPendingEditOnUnmountRef` y los 2 de Tauri) + 1 falso positivo (`useVoiceRecorder`).
 - Casos de test: el número fiable es el que da vitest, no un grep (hay `it.each` y `it.fails` compuestos). `npx vitest run tests/editor-shell-` en `ba13217e`: **49 archivos, 218 passed | 6 expected fail (224)**, 144 s. Los 6 `it.fails` son los de ODE-632 en `editor-shell-commands`.
 
