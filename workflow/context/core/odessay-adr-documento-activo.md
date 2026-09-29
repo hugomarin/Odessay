@@ -1,6 +1,6 @@
 # ADR — Fuente única del documento activo en el editor
 
-- **Estado:** Aceptado (2026-09-24), **enmendado** el mismo día en ODE-568 (ver §Enmienda: fuente por alcance)
+- **Estado:** Aceptado (2026-09-24), **enmendado** el mismo día en ODE-568 (ver §Enmienda: fuente por alcance) y el 2026-09-28 en ODE-608 (ver §Enmienda: dueño único de `activeEditorTabIdRef`)
 - **Fecha:** 2026-09-24
 - **Decide:** Hugo. Aprobó la propuesta de forma explícita en ODE-566 y eligió la opción A de la enmienda en ODE-568.
 - **Estado del corpus vs. código:** Fases 1 (ODE-567), 3 (ODE-569) y 4 (ODE-570) implementadas; Fase 2 (ODE-568) cancelada por la enmienda; Fase 5 (ODE-571) resuelta por la regla de la enmienda: la identidad del borrador se queda como identidad de instancia. El plan del ADR está completo. `odessay-sync.md` y `skill-frontend` distinguen, en cada punto, el destino del estado actual.
@@ -111,7 +111,7 @@ Precedencia aplicada: este ADR prevalece sobre ambas secciones, que se reconcili
 - La **ruta** es proyección: un único efecto store → URL. Una entrada por URL es una llamada a `activateDocument(id, "open")`.
 - El coordinador de persistencia se suscribe al store en vez de recibir `activateDocument` desde un efecto de la shell.
 - `hydrationWritingId` deja de ser identidad: pasa a ser la fase explícita de la transición (`idle → switching → loading → ready`), el `hydrationPhase` que `odessay-sync.md` ya describía.
-- La publicación shell → store (`publishTabState`) queda solo para **metadatos** de la pestaña activa (título, estado de guardado). Nunca crea, activa ni reemplaza pestañas.
+- La publicación shell → store (`publishTabState`) queda solo para **metadatos** de la pestaña activa (título, estado de guardado, fase, ruta). **Corregido en ODE-608:** el código vigente **también escribe `active_tab_id`** y puede añadir la pestaña (`unshift`); el guard de ODE-561 impide que resucite una cerrada. Ver §Enmienda: dueño único de `activeEditorTabIdRef`.
 
 **D4 — Invariantes.** Los de ODE-562/563/564 siguen vigentes durante la migración. Además: ninguna transición escribe más de un portador de identidad; ningún efecto copia identidad de un portador a otro; una pestaña cerrada solo vuelve por `activateDocument` (se conserva el guard de ODE-561 en el store).
 
@@ -130,15 +130,48 @@ Precedencia aplicada: este ADR prevalece sobre ambas secciones, que se reconcili
 - **D1 queda así:** la pestaña activa del store de sesión es la fuente del documento activo **entre entradas y fuera de la shell** (persistencia, restauración de sesión, Studio, Recientes, catálogo). **Dentro de una instancia montada** de `EditorShell`, la identidad de instancia (`currentWritingId` / `currentWritingIdRef`, dueño `setActiveWritingId`) es la que leen la hidratación, el guardado, las correcciones y las limpiezas de esa instancia. No es una fuente independiente: **solo `activateDocument` la escribe**, en la misma transición que escribe el store.
 - **D2 sin cambios**, con el ajuste de la Fase 1: `activateDocument` es el único escritor de la identidad de la shell, de la hidratación y de la proyección de la URL. La escritura del store (`focusTab`, `openWritingTab`, `closeTab`, `openDraftTab`…) sigue en la misma transición, junto a esa llamada; juntarla dentro de `activateDocument` es posible pero no necesario.
 - **D3 queda así:**
-  - `currentWritingIdRef` y `setActiveWritingId` **se quedan** como identidad de instancia. `activeEditorTabIdRef` también, hasta que se decida aparte.
+  - `currentWritingIdRef` y `setActiveWritingId` **se quedan** como identidad de instancia. `activeEditorTabIdRef` también; **decidido en ODE-608** (ver §Enmienda: dueño único de `activeEditorTabIdRef`).
   - La **ruta**: toda proyección pasa por `activateDocument({ href })` y toda navegación a un documento por `navigateToWriting` (Fase 3, ODE-569). Las entradas por URL **siguen remontando** la shell: una instancia por entrada es justo lo que hace segura la opción A.
   - El coordinador de persistencia **sigue** activándose desde la identidad de la instancia. Suscribirlo al store tendría el mismo problema de remontaje.
   - `hydrationWritingId` → fase explícita de la transición: sigue en pie (Fase 4).
-  - `publishTabState` solo para metadatos: sigue en pie como destino. El guard de ODE-561 ya impide que resucite una pestaña cerrada.
+  - `publishTabState` solo para metadatos: sigue en pie como destino. El guard de ODE-561 ya impide que resucite una pestaña cerrada. **Alcance real corregido en ODE-608:** hoy también escribe `active_tab_id`; ver la enmienda del dueño único de `activeEditorTabIdRef`.
 - **D4 queda así:** toda transición pasa por `activateDocument`. Ningún efecto copia identidad de un portador a otro, salvo el espejo store → `activeEditorTabIdRef`, declarado. Se conservan los invariantes de ODE-561/562/563/564.
-  - **ODE-577 (2026-09-24):** el espejo se queda. El borrador que la shell no adoptaba no venía de un espejo rancio sino del store: la lectura de la sesión persistida llegaba después de que el autor abriera el borrador y **sustituía** el estado, así que la pestaña desaparecía y el espejo copiaba un `null` verdadero. Desde ODE-577, `loaded` significa "la sesión persistida ya llegó", y los cambios anteriores se reaplican sobre ella en vez de perderse (`changesBeforeLoad` en `lib/stores/editor-session-store.ts`).
+  - **ODE-577 (2026-09-24):** el espejo se queda. El borrador que la shell no adoptaba no venía de un espejo rancio sino del store: la lectura de la sesión persistida llegaba después de que el autor abriera el borrador y **sustituía** el estado, así que la pestaña desaparecía y el espejo copiaba un `null` verdadero. Desde ODE-577, `loaded` significa "la sesión persistida ya llegó", y los cambios anteriores se reaplican sobre ella en vez de perderse (`changesBeforeLoad` en `lib/stores/editor-session-store.ts`). **ODE-608 (2026-09-28):** el espejo se sustituye por un listener único (ver §Enmienda: dueño único de `activeEditorTabIdRef`).
 
 **Regla para lo que viene.** Antes de mover a un store compartido cualquier dato que lean las limpiezas de la shell, hay que comprobar el remontaje: una prueba que entre por URL de A a B y verifique que las limpiezas de A siguen viendo A.
+
+## Enmienda: dueño único de `activeEditorTabIdRef` (ODE-608)
+
+**Decisión (Hugo, 2026-09-28): opción B.** `activeEditorTabIdRef` se queda como latest-value, con **un único escritor**: un listener síncrono del store de sesión (`subscribeToEditorSessionStore`). La copia y el cambio del store caen en la misma instrucción. Desaparecen los cinco escritores de hoy: el efecto espejo (`editor-shell.tsx:1056–1058` en main@5a4083b9) y las cuatro escrituras manuales (`useWorkspaceTabs.ts:91`, antes de `focusTab`; `:168`, después de `closeTab`; `useWorkspaceTabOpening.ts:117` y `:149`, después de `openDraftTab`). Los `||` sobre `currentWritingIdRef` de `useEditorPersistence.ts:181` y `:229` **se quedan**. Es el mismo patrón que `applyHydrationPhase` y `applySyncStatus`: un escritor único, sin efecto de por medio.
+
+**Razón.** "mantenerlo simple; el problema son los cinco escritores". B resuelve el problema real sin cambiar el timing de las transiciones, así que no reabre ODE-561 ni ODE-572.
+
+**Evidencia (fase 2a, main@5a4083b9).** Comentario "Verificación opción B (fase 2a, main@5a4083b9)" en ODE-608 (id 4a0a35a0). El inventario verifica la condición de la decisión:
+
+- Los ocho mutadores que cambian `active_tab_id` emiten en el acto (`lib/stores/editor-session-store.ts:104–106`): `initializeEditorSessionStore` (188–242), `openDraftTab` (244–294), `openWritingTab` (296–370), `reconcileMaterializedDraftTab` (380–457), `focusTab` (459–482), `publishTabState` (484–550), `closeTab` (591–626) y `reconcileUnavailableWritingTab` (628–667). El listener los cubre todos, incluidos los que viven dentro del store y una función de la shell no vería: `initializeEditorSessionStore` con el replay de `changesBeforeLoad` (ODE-577) y `reconcileMaterializedDraftTab`.
+- Entre cada escritura manual y su cambio del store no corre nada que lea el ref (`useWorkspaceTabs.ts:91→92` y `:162→168`; `useWorkspaceTabOpening.ts:116→117` y `:148→149`). El listener da el mismo valor en el mismo momento.
+- `isSourceDraftActive` (`useEditorPersistence.ts:272`) se calcula **antes** de `reconcileMaterializedDraftTab` (`:284`): el renombre síncrono no lo cambia. Sin regresión de ODE-577.
+- **`publishTabState` escribe `active_tab_id`** (`lib/stores/editor-session-store.ts:545`, `writingId ?? EDITOR_DRAFT_TAB_ID`) y puede añadir la pestaña (`unshift`, `:540`). No estaba en la lista del análisis B. No cambia la conclusión: el listener también lo sigue en el acto. Corrige la línea de D3 que decía que "nunca crea, activa ni reemplaza pestañas".
+
+**Cambios de comportamiento aceptados.**
+
+1. **`onError`** (riesgo 2; `useEditorPersistence.ts:348`, sin `||`): un error de guardado de la pestaña vieja que llega en la ventana entre el cambio del store y el render ya no pinta `error` en la barra de estado global; el badge de la pestaña vieja sí. Es el comportamiento más correcto y se fija con un test.
+2. **`focusTab` con un render viejo** (`useWorkspaceTabs.ts:81` y `:91–92`): si la pestaña ya no está en el store, `focusTab` no hace nada; con B el ref queda igual al store y deja de apuntar a un id inexistente. Es una desincronización menos. Aceptado el 2026-09-28.
+
+**Qué cambia de D3–D4.**
+
+- **D3:** el alcance de `publishTabState` queda como en el código: metadatos **y** `active_tab_id`; su escritura la cubre el listener. El resto de D3 no cambia.
+- **D4:** `activeEditorTabIdRef` deja de ser la excepción con espejo por efecto. Es una copia con un único escritor (el listener), declarado y verificado con un ratchet. Ningún efecto copia identidad de un portador a otro. Se conservan los invariantes de ODE-561/562/563/564. La explicación de ODE-577 sigue vigente: el problema venía del estado del store, no del espejo, y el replay de `changesBeforeLoad` llega igual.
+
+**Implementación (ODE-609).** Se exporta `subscribeToEditorSessionStore` (hoy `subscribe` es privado, `lib/stores/editor-session-store.ts:108–113`). Un hook crea el ref con `getEditorSessionState().session.active_tab_id`, se suscribe releyendo el estado para no perder un cambio entre el render y la suscripción, y se desuscribe al desmontar. Con los 5 tests del análisis B:
+
+1. leído entre el cambio del store y el render, tras `openWritingTab` por apertura de archivo;
+2. la carga de la sesión después de montar (`initializeEditorSessionStore`) actualiza la copia sin render;
+3. materializar un borrador: la copia pasa al id real en el acto y el borrador activo se sigue adoptando;
+4. `onError` en la ventana de cambio de pestaña: fija el comportamiento nuevo;
+5. ratchet: `activeEditorTabIdRef.current =` solo aparece en el hook del listener.
+
+Más el test del efecto `publishTabState`. Los tests del área pasan idénticos.
 
 ## Consecuencias
 
@@ -192,3 +225,4 @@ Cada fase es un issue propio, con la red de pruebas como precondición y la regl
 - `components/editor/AGENTS.md` — rol de la shell
 - ODE-555, ODE-561, ODE-562, ODE-563, ODE-564 — la serie que llevó hasta aquí
 - ODE-568 — la medición del remontaje y la elección de la opción A (comentario del issue)
+- ODE-608 — el inventario de lecturas y escrituras de `activeEditorTabIdRef` y la elección de la opción B (comentarios del issue)
