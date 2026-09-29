@@ -113,7 +113,6 @@ describe("immutable Traceability range", () => {
   })
 })
 
-
 function runStrictDrift(
   fixture: ReturnType<typeof createRepository>,
   entries: Record<string, unknown>[],
@@ -127,7 +126,11 @@ function runStrictDrift(
   }
   const result = spawnSync(process.execPath, [join(repoRoot, "scripts/check-status-drift.mjs"), "--strict"], {
     cwd: fixture.root,
-    env: { ...traceabilityEnv(fixture), TRACEABILITY_BASE_SHA: options.includeFeature ? fixture.merge : fixture.base, TRACEABILITY_MERGE_BASE_SHA: options.includeFeature ? fixture.merge : fixture.base },
+    env: {
+      ...traceabilityEnv(fixture),
+      TRACEABILITY_BASE_SHA: options.includeFeature ? fixture.merge : fixture.base,
+      TRACEABILITY_MERGE_BASE_SHA: options.includeFeature ? fixture.merge : fixture.base,
+    },
     encoding: "utf8",
   })
   return { status: result.status, output: result.stdout + result.stderr }
@@ -156,6 +159,20 @@ describe("built ledger delivery identity", () => {
     const first = { issue: "ODE-466", commit: fixture.prHead, date: "2026-08-26" }
     runStrictDrift(fixture, [first], { archive: true })
     expect(runStrictDrift(fixture, [{ ...first, notes: "repeated" }]).status).toBe(1)
+  })
+
+  it("accepts distinct historical commits when PR URLs are absent", () => {
+    const fixture = createRepository()
+    const first = { issue: "ODE-466", commit: fixture.prHead, date: "2026-08-26" }
+    expect(runStrictDrift(fixture, [first, { ...first, commit: fixture.merge }]).status).toBe(0)
+  })
+
+  it("rejects repeated issues without any delivery identifier", () => {
+    const fixture = createRepository()
+    const first = { issue: "ODE-466", date: "2026-08-26" }
+    const result = runStrictDrift(fixture, [first, { ...first, notes: "partial" }])
+    expect(result.status).toBe(1)
+    expect(result.output).toContain("Duplicated deliveries")
   })
 
   it.each([
