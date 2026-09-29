@@ -568,6 +568,23 @@ export function EditorShell({
       setLifecycle(patch.lifecycle)
     }
   }, [])
+  /**
+   * Único dueño de `mode` (estado) y `modeRef` (lo que leen los callbacks de
+   * larga vida y los manejadores): se escriben en el mismo paso, así el ref
+   * nunca devuelve el modo anterior entre el render y un efecto (ODE-609).
+   * Antes, un efecto espejo copiaba el estado al ref tras el commit, además
+   * de las escrituras manuales de cada transición.
+   *
+   * El ref se escribe primero: `handleToggleMode` → rich lo necesita en
+   * "rich" antes de `setContent`, porque el trabajo que dispara ese
+   * `setContent` (y el volcado inmediato) ya lee el modo nuevo mientras el
+   * estado sigue en markdown. El ref se inicializa con el valor inicial del
+   * estado (`useRef(mode)`); ya no hay efecto espejo que lo cubra.
+   */
+  const applyEditorMode = useCallback((next: "rich" | "markdown") => {
+    modeRef.current = next
+    setMode(next)
+  }, [])
   const markdownSaveTimeoutRef = useRef<number | null>(null)
   // El guardado de markdown pendiente (ODE-573): se guarda junto al timer para
   // poder ejecutarlo al desmontar en vez de perderlo.
@@ -985,10 +1002,6 @@ export function EditorShell({
     })
   }, [editor, spellcheckConfig])
 
-  useEffect(() => {
-    modeRef.current = mode
-  }, [mode])
-
   useEffect(() => () => correctionSuggestionBatcher.clear(), [correctionSuggestionBatcher])
 
   useEffect(() => {
@@ -1153,7 +1166,6 @@ export function EditorShell({
     activationSeq,
     routeWritingId,
     editorSession,
-    modeRef,
     isApplyingContentRef,
     hydrationGenerationOwnerRef,
     currentCanonicalPathRef,
@@ -1162,7 +1174,7 @@ export function EditorShell({
     draftContentSnapshotRef,
     suppressCorrectionAnalysisUntilRef,
     setHydrationPhase: applyHydrationPhase,
-    setMode,
+    applyEditorMode,
     setMarkdownValue,
     setBodyText,
     setSyncStatus: applySyncStatus,
@@ -1436,8 +1448,7 @@ export function EditorShell({
       }
 
       if (nextMode === "markdown") {
-        modeRef.current = "markdown"
-        setMode("markdown")
+        applyEditorMode("markdown")
         let bodyMarkdown: string
         if (isDesktopRuntime()) {
           const result = desktopDocumentEngine.richToSource(editor)
@@ -1462,7 +1473,14 @@ export function EditorShell({
       const normalizedMarkdown = isDesktopRuntime()
         ? markdownValue
         : normalizeMarkdownForRoundTrip(markdownValue)
-      modeRef.current = "rich"
+      // El dueño va aquí, antes de `setContent`: el orden ref-primero es un
+      // contrato del pack (el ref vale "rich" mientras el estado sigue en
+      // "markdown"), sin lector observable hoy. El único lector síncrono es
+      // `handleEditorUpdate` (`useEditorPersistence.ts:546`), que sale antes
+      // por `isApplyingContentRef`; `persistEditorSnapshot` no lee `modeRef`.
+      // `setMode` cae dentro del mismo bloque síncrono, así que React lo
+      // agrupa con el resto del handler.
+      applyEditorMode("rich")
       isApplyingContentRef.current = true
       if (isDesktopRuntime()) {
         const result = desktopDocumentEngine.sourceToRich(normalizedMarkdown)
@@ -1477,11 +1495,10 @@ export function EditorShell({
       }
       isApplyingContentRef.current = false
       setMarkdownValue(normalizedMarkdown)
-      setMode("rich")
       updateDerivedEditorState(editor)
       void persistEditorSnapshot(editor)
     },
-    [editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState],
+    [editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState, applyEditorMode],
   )
 
   const handleMarkdownChange = useCallback(
