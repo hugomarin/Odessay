@@ -700,6 +700,16 @@ por el input del consumidor real de correcciones en la fase de layout. Contra
 el espejo detecta el markdown anterior en el commit de una edición en el textarea (`it.fails`);
 con el escritor del render pasa como `it`, sin cambiar el cuerpo.
 
+**PR 5 — TOC (dos refs).** `useTableOfContentsState`, en el módulo existente
+`hooks/useTableOfContents.ts`, posee items, item seleccionado y sus refs. Cada
+setter resuelve actualizaciones funcionales contra el ref vigente y escribe
+ref y estado juntos. Se monta antes de crear las extensiones, sin efectos:
+el debounce y el reset al hidratar reutilizan su setter estable. Se borran los
+dos espejos y la escritura manual del scroll. Navegación, scroll y descarte del
+item ausente usan el mismo dueño. `tests/editor-shell-toc-ref-owner.test.tsx`
+lee los inputs del hook real en layout tras recibir encabezados y pulsar el
+segundo item; ambos casos son rojos con los espejos y verdes con el dueño.
+
 ## Plan
 
 ### Fase 0 — Banco de pruebas (harness)

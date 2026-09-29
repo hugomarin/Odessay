@@ -81,7 +81,7 @@ afterEach(async () => {
 })
 
 describe("ODE-609 — TOC refs before passive effects", () => {
-  it.fails.each(["items", "active"] as const)("%s pertenece al estado del commit actual", async (kind) => {
+  it.each(["items", "active"] as const)("%s pertenece al estado del commit actual", async (kind) => {
     const stale: string[] = []
     let observed = 0
     world.onShellCommit = () => {
