@@ -144,7 +144,7 @@ Precedencia aplicada: este ADR prevalece sobre ambas secciones, que se reconcili
 
 **Decisión (Hugo, 2026-09-28): opción B.** `activeEditorTabIdRef` se queda como latest-value, con **un único escritor**: un listener síncrono del store de sesión (`subscribeToEditorSessionStore`). La copia y el cambio del store caen en la misma instrucción. Desaparecen los cinco escritores de hoy: el efecto espejo (`editor-shell.tsx:1056–1058` en main@5a4083b9) y las cuatro escrituras manuales (`useWorkspaceTabs.ts:91`, antes de `focusTab`; `:168`, después de `closeTab`; `useWorkspaceTabOpening.ts:117` y `:149`, después de `openDraftTab`). Los `||` sobre `currentWritingIdRef` de `useEditorPersistence.ts:181` y `:229` **se quedan**. Es el mismo patrón que `applyHydrationPhase` y `applySyncStatus`: un escritor único, sin efecto de por medio.
 
-**Razón.** "mantenerlo simple; el problema son los cinco escritores". B resuelve el problema real sin cambiar el orden de las transiciones (la copia deja de ir un render por detrás; el único cambio de comportamiento observable es el de `onError`, arriba), así que no reabre ODE-561 ni ODE-572.
+**Razón.** "mantenerlo simple; el problema son los cinco escritores". B resuelve el problema real sin cambiar el orden de las transiciones (la copia deja de ir un render por detrás; el único cambio de comportamiento observable es el de `onError`, abajo), así que no reabre ODE-561 ni ODE-572.
 
 **Evidencia (fase 2a, main@5a4083b9).** Comentario "Verificación opción B (fase 2a, main@5a4083b9)" en ODE-608 (id 4a0a35a0). El inventario verifica la condición de la decisión:
 

@@ -568,7 +568,7 @@ Comando que los encuentra (efectos cuya primera sentencia asigna un ref; mismo p
 |---|---|---|---|
 | `editorInstanceRef` (737) | efecto 1113–1115 (`editor ?? null`) | espejo | `useCorrectionBlocks.ts:99`, `:168`; `useExternalDocumentChanges.ts:241`; `useManualCorrections.ts:183`, `:385` (llega como `editorRef` desde `useCorrectionLifecycle.ts:196`). `useEditor` (1092–1109) recrea el editor cuando cambian `editorExtensions` o `handleEditorUpdate`, y hoy no usa `onCreate`/`onDestroy` |
 | `modeRef` (514) | **dueño único:** `applyEditorMode` (584–587) escribe el ref y el estado en el mismo paso; las 4 llamadas son `handleToggleMode` 1451 (→ markdown) y 1481 (→ rich), y `useDocumentHydration.ts:618` y `:650`. Efecto espejo borrado (PR 1 de ODE-609); ya no hay `setMode` fuera del dueño | dueño único | 36 lecturas: shell 17, `useDocumentExit` 5, `useFindReplace` 4, `useSelectionPopup` 2, `useCorrectionActions` 2, `useCorrectionLifecycle` 2, `useEditorCommands` 2, `useFootnotes` 1, `useEditorPersistence` 1. **Transición a propósito:** en `handleToggleMode` → rich, `applyEditorMode` escribe el ref en `"rich"` en 1481, **antes** de `setContent` (1486–1492) y con `setMode` en el mismo paso; el orden ref-primero es un contrato del pack sin lector observable hoy: el único lector síncrono es `handleEditorUpdate` (`useEditorPersistence.ts:546`), que sale antes por `isApplyingContentRef`, y `persistEditorSnapshot` no lee `modeRef`. El ref se inicializa con el valor inicial del estado (`useRef(mode)`, 514) |
-| `activeEditorTabIdRef` (594) | **dueño único:** `useActiveEditorTabIdRef` (`hooks/useActiveEditorTabIdRef.ts:31`) escribe el ref desde el listener síncrono del store (`subscribeToEditorSessionStore`, `lib/stores/editor-session-store.ts:114`); efecto espejo y 4 escrituras manuales borrados (PR 2 de ODE-609, opción B de ODE-608) | dueño único | ver la tabla de lecturas de abajo |
+| `activeEditorTabIdRef` (594) | **dueño único:** `useActiveEditorTabIdRef` (`hooks/useActiveEditorTabIdRef.ts:31`) escribe el ref desde el listener síncrono del store (`subscribeToEditorSessionStore`, `lib/stores/editor-session-store.ts:117`); efecto espejo y 4 escrituras manuales borrados (PR 2 de ODE-609, opción B de ODE-608) | dueño único | ver la tabla de lecturas de abajo |
 | `currentDocumentMarkdownRef` (725) | efecto 2238–2240 | espejo de un **memo derivado** (`currentDocumentMarkdown`, 2211–2226: depende de `mode`, `markdownValue`, `editor` y `version`) | `useCorrectionActions.ts:161`, `useCorrectionLifecycle.ts:159` |
 | `reconcileActiveSaveStateRef` (663) | efecto `useSaveStateSync.ts:118–120` | latest-callback (se mantiene, ODE-609) | shell 1362 (en el `input` de `useDocumentHydration`), `useSaveStateSync.ts:150` |
 | `tableOfContentsItemsRef` (708) | efecto `useTableOfContents.ts:51–53` | espejo | `useTableOfContents.ts:70` |
@@ -589,19 +589,19 @@ Comando que los encuentra (efectos cuya primera sentencia asigna un ref; mismo p
 | ~~efecto espejo~~ | ~~`editor-shell.tsx:1069–1071`~~ | borrado en el PR 2 de ODE-609 |
 | ~~manual~~ | ~~`useWorkspaceTabs.ts:91`, `:168`; `useWorkspaceTabOpening.ts:117`, `:149`~~ | borradas en el PR 2 de ODE-609 |
 
-**Caminos que cambian `active_tab_id` en el store** (`lib/stores/editor-session-store.ts`; todos pasan por `setSessionState` 121–157, que emite en el acto a los listeners de `subscribeToEditorSessionStore` 114–119, público desde el PR 2 de ODE-609):
+**Caminos que cambian `active_tab_id` en el store** (`lib/stores/editor-session-store.ts`; todos pasan por `setSessionState` 131–168, que emite en el acto a los listeners de `subscribeToEditorSessionStore` 117–122, público desde el PR 2 de ODE-609):
 
 | Mutador | Líneas | Llamadores | ¿Escritura manual del ref? |
 |---|---|---|---|
-| `initializeEditorSessionStore` (carga + replay de `changesBeforeLoad`, ODE-577) | 188–240 | shell 977, `useCatalogEditorSessionSync.ts:27`, `useRecentWritings.ts:28` | no |
-| `openDraftTab` | 244–294 | `useWorkspaceTabOpening.ts:116`, `:148`; `useSessionRestore.ts:123` | no; el listener cubre las dos que antes escribían a mano (PR 2 de ODE-609) |
-| `openWritingTab` | 296–370 | shell 2120, 2179 (`handleMenuOpenFile`); `useWorkspaceTabOpening.ts:192`; `useSessionRestore.ts:60` | no |
-| `reconcileMaterializedDraftTab` | 380–457 | `useEditorPersistence.ts:284` | no |
-| `focusTab` | 459–482 | `useWorkspaceTabs.ts:92` | no; el listener cubre la escritura manual que estaba en 91 (PR 2 de ODE-609) |
-| **`publishTabState`** | 484–550 | efecto de la shell (llamada 1894) | no. Escribe `active_tab_id: writingId ?? EDITOR_DRAFT_TAB_ID` (545) cada vez que cambian el título, `syncStatus`, la fase o la ruta, y puede añadir una pestaña (`unshift`). **No está en la lista del análisis de la opción B de ODE-608** |
-| `closeTab` | 591–626 | `useWorkspaceTabs.ts:162` | sí (168) |
-| `reconcileUnavailableWritingTab` | 628–667 | `useDocumentHydration.ts:395` | no |
-| `reorderTab`, `updateTabSaveState`, `saveTabViewState`, `syncWritingTitlesFromCatalog` | 669, 552, 574, 695 | — | no tocan `active_tab_id` (verificado solo en las líneas del grep; sin leer cada cuerpo entero) |
+| `initializeEditorSessionStore` (carga + replay de `changesBeforeLoad`, ODE-577) | 197–251 | shell 977, `useCatalogEditorSessionSync.ts:27`, `useRecentWritings.ts:28` | no |
+| `openDraftTab` | 253–303 | `useWorkspaceTabOpening.ts:116`, `:148`; `useSessionRestore.ts:123` | no; el listener cubre las dos que antes escribían a mano (PR 2 de ODE-609) |
+| `openWritingTab` | 305–378 | shell 2120, 2179 (`handleMenuOpenFile`); `useWorkspaceTabOpening.ts:192`; `useSessionRestore.ts:60` | no |
+| `reconcileMaterializedDraftTab` | 389–466 | `useEditorPersistence.ts:284` | no |
+| `focusTab` | 468–491 | `useWorkspaceTabs.ts:92` | no; el listener cubre la escritura manual que estaba en 91 (PR 2 de ODE-609) |
+| **`publishTabState`** | 493–559 | efecto de la shell (llamada 1894) | no. Escribe `active_tab_id: writingId ?? EDITOR_DRAFT_TAB_ID` (554) cada vez que cambian el título, `syncStatus`, la fase o la ruta, y puede añadir una pestaña (`unshift`). **No está en la lista del análisis de la opción B de ODE-608** |
+| `closeTab` | 600–629 | `useWorkspaceTabs.ts:162` | no; el listener cubre la escritura manual que estaba en 168 (PR 2 de ODE-609) |
+| `reconcileUnavailableWritingTab` | 637–676 | `useDocumentHydration.ts:395` | no |
+| `reorderTab`, `updateTabSaveState`, `saveTabViewState`, `syncWritingTitlesFromCatalog` | 678, 561, 583, 704 | — | no tocan `active_tab_id` (verificado solo en las líneas del grep; sin leer cada cuerpo entero) |
 
 **`activeEditorTabIdRef`: lecturas**, y si leer `getEditorSessionState().session.active_tab_id` daría lo mismo (requisito 2 de ODE-608). Con el PR 2 de ODE-609 la copia vale el store en todo momento (el listener emite en el acto), así que **hoy ninguna lectura ve un valor viejo**; esta tabla conserva el análisis de ODE-608 (qué lectura habría cambiado si la copia fuera por detrás) y los `||` de 181/229 se quedan como fallback (No tocar). La "ventana" era el intervalo entre un cambio del store sin escritura manual y el siguiente render de la shell:
 
