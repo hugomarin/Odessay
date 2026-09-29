@@ -40,7 +40,7 @@ import {
   type OwnedMarkdownSelectionSnapshot,
 } from "@/hooks/useSelectionRestore"
 import { useSelectionPopup } from "@/hooks/useSelectionPopup"
-import { useTableOfContents } from "@/hooks/useTableOfContents"
+import { useTableOfContents, useTableOfContentsState } from "@/hooks/useTableOfContents"
 import { useWorkspaceTabOpening } from "@/hooks/useWorkspaceTabOpening"
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs"
 import type { EditorSaveState } from "@/components/editor/save-state"
@@ -463,8 +463,8 @@ export function EditorShell({
   // Studio opens with both side panels closed: the ghost rail at the sheet's
   // left edge is the way in (docs/design/views/studio.md).
   const [navigationMode, setNavigationMode] = useState<EditorNavigationMode>(null)
-  const [tableOfContentsItems, setTableOfContentsItems] = useState<TableOfContentDataItem[]>([])
-  const [selectedTableOfContentsItemId, setSelectedTableOfContentsItemId] = useState<string | null>(null)
+  const { tableOfContentsItems, setTableOfContentsItems, selectedTableOfContentsItemId,
+    setSelectedTableOfContentsItemId, tableOfContentsItemsRef, activeTableOfContentsItemIdRef } = useTableOfContentsState()
   const [spellcheckScope, setSpellcheckScope] = useState(() => getLocalDBScope())
   const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
   const [automaticCorrectionSuggestions, setAutomaticCorrectionSuggestions] = useState<PublicationSuggestion[]>([])
@@ -690,8 +690,6 @@ export function EditorShell({
   const richUpdateRafRef = useRef<number | null>(null)
   const richUpdateDebounceRef = useRef<number | null>(null)
   const richUpdateEditorRef = useRef<Editor | null>(null)
-  const tableOfContentsItemsRef = useRef<TableOfContentDataItem[]>([])
-  const activeTableOfContentsItemIdRef = useRef<string | null>(null)
   const tableOfContentsScrollRafRef = useRef<number | null>(null)
   const tableOfContentsDebounceRef = useRef<number | null>(null)
   const markdownSelectionRafRef = useRef<number | null>(null)
@@ -848,7 +846,7 @@ export function EditorShell({
       tableOfContentsDebounceRef.current = null
       setTableOfContentsItems(snapshot)
     }, TABLE_OF_CONTENTS_DEBOUNCE_MS)
-  }, [])
+  }, [setTableOfContentsItems])
 
   const editorExtensions = useMemo(
     () =>
@@ -965,8 +963,7 @@ export function EditorShell({
     setImageModalOpen(true)
   }, [editor, persistEditorSnapshot])
 
-  // ODE-602: tabla de contenidos (mudanza mecánica; mismos efectos, en el
-  // mismo orden y en esta posición).
+  // ODE-602/609: TOC wiring; state and live refs belong to its state hook.
   const { navigateToTableOfContentsItem } = useTableOfContents({
     activeTableOfContentsItemIdRef,
     editor,
@@ -1152,7 +1149,7 @@ export function EditorShell({
     }
 
     setTableOfContentsItems([])
-  }, [currentWritingId])
+  }, [currentWritingId, setTableOfContentsItems])
 
   // Studio opens with the rail collapsed to 52px (docs/design/views/studio.md
    // anatomy). It is a default, not a lock: expanding it afterwards sticks.

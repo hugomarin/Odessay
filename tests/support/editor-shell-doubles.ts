@@ -13,6 +13,7 @@
 import { useLayoutEffect } from "react"
 import { vi } from "vitest"
 
+import type { TableOfContentsInput } from "@/hooks/useTableOfContents"
 import type { CorrectionLifecycleInput } from "@/hooks/useCorrectionLifecycle"
 
 import type { LearnWordInput, LearnedWordEntry } from "@/lib/services/contracts/ai-service"
@@ -88,6 +89,7 @@ export type HarnessWorld = {
    * cambiar su comportamiento—. Deja que un test lea el ref desde
    * `world.onShellCommit`, la ventana entre el commit y sus efectos pasivos.
    */
+  shellTableOfContentsInput: TableOfContentsInput | null
   shellCorrectionLifecycleInput: CorrectionLifecycleInput | null
   shellEditorInstanceRef: { current: EditorHandle | null } | null
   /**
@@ -177,6 +179,7 @@ export const world: HarnessWorld = {
   networkCalls: [],
   network: defaultNetwork(),
   editor: null,
+  shellTableOfContentsInput: null,
   shellCorrectionLifecycleInput: null,
   shellEditorInstanceRef: null,
   unhandledErrors: [],
@@ -248,6 +251,18 @@ export function createCorrectionLifecycleCaptureModule(actual: Record<string, un
     ...actual,
     useCorrectionLifecycle: (input: CorrectionLifecycleInput) => {
       world.shellCorrectionLifecycleInput = input
+      return realHook(input)
+    },
+  }
+}
+
+/** Observes the real TOC owner without replacing its logic. */
+export function createTableOfContentsCaptureModule(actual: Record<string, unknown>) {
+  const realHook = actual.useTableOfContents as (input: TableOfContentsInput) => unknown
+  return {
+    ...actual,
+    useTableOfContents: (input: TableOfContentsInput) => {
+      world.shellTableOfContentsInput = input
       return realHook(input)
     },
   }
