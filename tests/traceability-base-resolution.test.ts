@@ -134,7 +134,7 @@ function runStrictDrift(
 }
 
 describe("built ledger delivery identity", () => {
-  it.fails("accepts partial and final deliveries of the same issue across active and archived ledgers", () => {
+  it("accepts partial and final deliveries of the same issue across active and archived ledgers", () => {
     const fixture = createRepository()
     const first = { issue: "ODE-466", pr_url: "https://github.com/hugomarin/Odessay/pull/1", commit: fixture.prHead, date: "2026-08-26" }
     runStrictDrift(fixture, [first], { archive: true })
@@ -148,7 +148,7 @@ describe("built ledger delivery identity", () => {
     const first = { issue: "ODE-466", pr_url: "https://github.com/hugomarin/Odessay/pull/1", commit: fixture.prHead, date: "2026-08-26" }
     const result = runStrictDrift(fixture, [first, { ...first, commit: fixture.merge, notes: "final", date: "2026-08-25" }])
     expect(result.status).toBe(1)
-    expect(result.output).toMatch(/Duplicated (issues|deliveries)/)
+    expect(result.output).toContain("Duplicated deliveries")
   })
 
   it("rejects duplicate historical deliveries identified only by commit", () => {
