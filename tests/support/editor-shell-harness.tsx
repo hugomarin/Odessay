@@ -67,6 +67,7 @@ import { readWorkspaceMarkdown } from "./editor-shell-desktop-doubles"
 
 export {
   aiServiceDouble,
+  createCorrectionBlocksCaptureModule,
   createTiptapCaptureModule,
   nextNavigationDouble,
   runtimeDetectionDouble,
@@ -180,6 +181,7 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
   world.networkCalls = []
   world.network = defaultNetwork()
   world.editor = null
+  world.shellEditorInstanceRef = null
   world.aiReview = async () => ({ error: null, data: { corrections: [] } })
   world.aiReviewCalls = []
   world.suggestTitleCalls = []
