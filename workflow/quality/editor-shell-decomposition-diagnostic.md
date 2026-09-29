@@ -502,7 +502,7 @@ Mismo contrato que §6: BUILD valida estas líneas en vez de buscarlas; si el di
 
 | Qué | Antes (main@ba13217e, `editor-shell.tsx`) | Ahora |
 |---|---|---|
-| `queueMarkdownSelectionRestore` | 922–1090 | `hooks/useSelectionRestore.ts:89–257`; la shell la recibe en 892–899 |
+| `queueMarkdownSelectionRestore` | 922–1090 | `hooks/useSelectionRestore.ts:89–257`; la shell la recibe en 892–898 |
 | `markdownSelectionOwnerId` | 205 | `hooks/useSelectionRestore.ts:43` (la shell lo importa en 36) |
 | `readMarkdownSelectionForActiveDocument` | 207–232 | `hooks/useSelectionRestore.ts:45–70` (la shell lo importa en 37) |
 | tipos `OwnedMarkdownSelectionSnapshot`, `MarkdownSelectionRead` | 196–203 | `hooks/useSelectionRestore.ts:34–41`; `SelectionSnapshot` se queda en la shell (194–198) |
@@ -510,6 +510,18 @@ Mismo contrato que §6: BUILD valida estas líneas en vez de buscarlas; si el di
 La shell pasó de 3.466 a 3.274 líneas; el resto de la tabla de arriba son las líneas de `ba13217e` y se quedan como referencia. Las líneas vigentes del paso: estado `markdownSelectionState` 443; refs `markdownSelectionRef` 666, `markdownSelectionRafRef` 678, `pendingMarkdownSelectionRef` 689. El hook se llama donde estaba el `useCallback` (892), antes de sus consumidores: `useDocumentHydration` 1149, `useDocumentExit` 1214, `useEditorCommands` 1363 y `useFindReplace` 2129, así que el orden de efectos no cambia. Los helpers los sigue usando la shell fuera de la cola (link, imagen, comandos, find/replace y panel de notas), por eso viven aquí exportados y no duplicados.
 
 **`captureEditorCursorSnapshot` y `restoreEditorCursorSnapshot` ya no están en la shell:** salieron con find/replace en ODE-602 (`hooks/useFindReplace.ts:198` y `:234`; el ref `editorCursorSnapshotRef` sigue en la shell, 704). No son parte del corte 6.
+
+**Estado tras ODE-607, paso 2 (`useSelectionPopup`, este PR; rama `hugomarin/ode-607-step2` sobre `main@50acb364`):** los 7 manejadores del popup y sus dos efectos salieron a `hooks/useSelectionPopup.ts`. Mudanza mecánica: las 237 líneas movidas son token-idénticas a las de `main` (extracción por bloques + `diff`), con las mismas dependencias; el estado y los refs siguen en la shell y llegan por `input` (identidades estables, la memoización no cambia).
+
+| Qué | Antes (main@ba13217e, `editor-shell.tsx`) | Ahora |
+|---|---|---|
+| manejadores del popup | 1593–1740 | `hooks/useSelectionPopup.ts:81–228` (`dismissSelectionPopup` 81, `handleMarkSelection` 86, `convertStandaloneHighlight` 106, `handleAnnotateSelection` 142, `handleFootnoteSelection` 158, `handleEditorSelectType` 178, `handleConfirmAnnotation` 193) |
+| efecto `selectionUpdate` del editor | 1742–1777 | `hooks/useSelectionPopup.ts:230–265` |
+| efecto de reposicionar el overlay | 1779–1831 | `hooks/useSelectionPopup.ts:267–319` |
+
+La shell pasó de 3.274 a 3.059 líneas. El hook se llama en 1404–1417, donde empezaba `dismissSelectionPopup`, después de `useEditorCommands` (1362–1398) y de `useDocumentExit` (1213), y el orden de efectos se conserva: `selectionUpdate` (230) antes que la reposición del overlay (267), y los dos después de `useDocumentExit`. Los consumidores no cambiaron de contrato: `convertStandaloneHighlight` (2811, 2832), `handleEditorSelectType` (3046), `dismissSelectionPopup` (3047) y `handleConfirmAnnotation` (3054). `handleMarkSelection`, `handleAnnotateSelection` y `handleFootnoteSelection` quedan internos del hook (no los consume nadie más). Estado y refs que no se mueven: `pendingAnnotation` 513, `pendingRichSelection` 514, `selectionRef` 664, `suppressNextSelectionPopupRef` 689; `modeRef` (516), `persistEditorSnapshot`, `updateDerivedEditorState`, `setActivePanel` y `setFootnoteModalOpen` también llegan por `input`.
+
+**La trampa del orden, resuelta como preveía el pack:** `getRichSelectionOverlayPositions` (1310–1332) y `captureRichSelectionSnapshot` (1334–1358) se quedan en la shell porque `useEditorCommands` (1362) los recibe antes; el hook del popup los recibe por `input`. No se reordenó `useEditorCommands`.
 
 **Flujo.** Rich: TipTap emite `selectionUpdate` → el efecto 1742 llama a `captureRichSelectionSnapshot` → `pendingRichSelection` → `<SelectionPopup>` (3451) → `handleEditorSelectType` → marca directa (`handleMarkSelection`), modal de footnote o bubble (`handleAnnotateSelection` → `pendingAnnotation` → `<AnnotationBubble>` → `handleConfirmAnnotation`). Cada acción que cambia el documento pone `suppressNextSelectionPopupRef` para que el `selectionUpdate` de su propio `setTextSelection` no reabra el popup, y persiste con `persistEditorSnapshot`. Markdown: no hay popup; la selección llega por `onMarkdownSelectionChange` (3021, con guarda de dueño) a `markdownSelectionRef` y `markdownSelectionState`, y la restauran `queueMarkdownSelectionRestore` y su rAF.
 
