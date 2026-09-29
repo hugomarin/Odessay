@@ -1473,11 +1473,13 @@ export function EditorShell({
       const normalizedMarkdown = isDesktopRuntime()
         ? markdownValue
         : normalizeMarkdownForRoundTrip(markdownValue)
-      // El dueño va aquí, antes de `setContent`: el ref tiene que estar en
-      // "rich" cuando el editor aplique el contenido (el volcado que eso
-      // dispara y el `persistEditorSnapshot` de abajo ya lo leen), aunque el
-      // estado todavía no haya re-renderizado. `setMode` cae dentro del mismo
-      // bloque síncrono, así que React lo agrupa con el resto del handler.
+      // El dueño va aquí, antes de `setContent`: el orden ref-primero es un
+      // contrato del pack (el ref vale "rich" mientras el estado sigue en
+      // "markdown"), sin lector observable hoy. El único lector síncrono es
+      // `handleEditorUpdate` (`useEditorPersistence.ts:546`), que sale antes
+      // por `isApplyingContentRef`; `persistEditorSnapshot` no lee `modeRef`.
+      // `setMode` cae dentro del mismo bloque síncrono, así que React lo
+      // agrupa con el resto del handler.
       applyEditorMode("rich")
       isApplyingContentRef.current = true
       if (isDesktopRuntime()) {
