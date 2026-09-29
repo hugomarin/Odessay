@@ -4,23 +4,30 @@
  * ODE-609 — `modeRef` tiene un solo dueño (`applyEditorMode`): estado y ref se
  * escriben en el mismo paso, sin efecto espejo.
  *
- * Property: un cambio de modo pedido dentro de la ventana entre el render que
- * aplica el modo nuevo y sus efectos pasivos se evalúa contra el modo nuevo,
- * no contra el viejo. `handleToggleMode` lee `modeRef.current` en su guarda
- * (`nextMode === modeRef.current`); con el espejo, esa lectura devolvía el modo
- * anterior y el gesto se descartaba en silencio.
+ * Property (el caso real "leído entre render y efecto"): con el espejo, el
+ * efecto pasivo del commit que aplica Markdown pisa el ref —que un gesto a
+ * Rich dentro de esa misma ventana ya había dejado en "rich"— y lo deja en
+ * "markdown" durante la ventana del commit de Rich. Un gesto a Markdown
+ * dentro de esa ventana vuelve a coincidir con la guarda
+ * `nextMode === modeRef.current` de `handleToggleMode` y se descarta en
+ * silencio. Con el dueño, el ref vale "rich" en esa ventana y el gesto se
+ * aplica.
  *
  * Técnica (integration-harness-catalog §Trampas): `world.onShellCommit` corre
  * en fase de layout de cada commit del shell, antes de sus efectos pasivos.
- * La sonda pulsa el botón real "Rich" dentro de la ventana del commit que
- * aplica "Markdown".
+ * La sonda encadena tres gestos reales sobre los botones de la status bar:
+ * Markdown; Rich en la ventana de ese commit; Markdown en la ventana del
+ * commit de Rich.
  *
  * Camino de producción: documento real en fake-indexeddb → botones reales
  * "Markdown"/"Rich" de la status bar. Nada simulado salvo el mundo del harness.
  *
- * Mutation test (ODE-609): devolver el efecto espejo (`modeRef.current = mode`
- * tras el commit) y quitar la escritura del dueño deja la guarda leyendo
- * "rich" dentro de la ventana; el gesto a Rich se descarta → rojo.
+ * Mutation test (ODE-609): devolver el efecto espejo
+ * (`useEffect(() => { modeRef.current = mode }, [mode])`) junto al dueño deja
+ * el ref en "markdown" durante la ventana del commit de Rich; el tercer gesto
+ * se descarta y el test agota el waitFor "termina en Markdown" → rojo. El
+ * código de `main` (espejo + escrituras manuales de cada transición) cae por
+ * el mismo tercer gesto, no por quitar la escritura del dueño.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -108,22 +115,39 @@ function markdownSource() {
 
 describe("ODE-609 — modeRef se lee entre el render y el efecto", () => {
   it(
-    "un cambio a Rich pedido en la ventana del commit a Markdown no se descarta",
+    "los gestos pedidos en las ventanas de commit de Markdown y de Rich terminan en Markdown",
     async () => {
       mounted = await mountEditorShell({ writingId })
       await waitFor(() => mounted!.editor().getText().includes(TEXT), { label: "documento hidratado" })
       await waitForHydrationReady()
 
-      // La sonda: en la ventana de commit que aplica Markdown (la fase de
-      // layout del shell, antes de sus efectos pasivos), gesto real y síncrono
-      // a Rich. Con el espejo, `modeRef` todavía vale "rich" y la guarda de
-      // `handleToggleMode` descarta el gesto; con el dueño, vale "markdown" y
-      // la transición se aplica.
-      const probe = { fired: false }
+      const probe = { markdownToRich: false, richToMarkdown: false }
       world.onShellCommit = () => {
-        if (probe.fired || !markdownSource()) return
-        probe.fired = true
-        statusBarButton("Rich").click()
+        // Ventana del commit que aplica Markdown: el textarea ya está en el
+        // DOM y los efectos pasivos de este commit todavía no corrieron. Gesto
+        // real y síncrono a Rich: con el espejo la guarda lee el ref, que la
+        // escritura manual de la transición ya dejó en "markdown", así que
+        // pasa; el retraso aparece en el commit siguiente.
+        if (!probe.markdownToRich && markdownSource()) {
+          probe.markdownToRich = true
+          statusBarButton("Rich").click()
+          return
+        }
+        // Ventana del commit que aplica Rich: el textarea ya no está y el
+        // ProseMirror sí. Con el espejo, el efecto pasivo del commit anterior
+        // acaba de pisar el ref con "markdown"; con el dueño, vale "rich".
+        // Gesto real y síncrono a Markdown: con el espejo la guarda
+        // `nextMode === modeRef.current` lo descarta y el modo se queda en
+        // Rich; con el dueño, se aplica.
+        if (
+          probe.markdownToRich &&
+          !probe.richToMarkdown &&
+          !markdownSource() &&
+          mounted!.prosemirror()
+        ) {
+          probe.richToMarkdown = true
+          statusBarButton("Markdown").click()
+        }
       }
 
       await act(async () => {
@@ -131,12 +155,16 @@ describe("ODE-609 — modeRef se lee entre el render y el efecto", () => {
       })
       world.onShellCommit = null
 
-      expect(probe.fired, "la sonda corrió en la ventana del commit a Markdown").toBe(true)
-      await waitFor(() => !markdownSource() && mounted!.prosemirror(), {
-        label: "de vuelta en Rich",
-        timeoutMs: 5_000,
-      })
-      expect(mounted!.editor().getText(), "el texto sobrevivió al doble cambio").toContain(TEXT)
+      expect(
+        probe.markdownToRich,
+        "la sonda pulsó Rich en la ventana del commit a Markdown",
+      ).toBe(true)
+      expect(
+        probe.richToMarkdown,
+        "la sonda pulsó Markdown en la ventana del commit a Rich",
+      ).toBe(true)
+      await waitFor(() => markdownSource(), { label: "termina en Markdown", timeoutMs: 5_000 })
+      expect(markdownSource()?.value, "el texto sobrevivió a los tres gestos").toContain(TEXT)
     },
     TEST_TIMEOUT_MS,
   )
