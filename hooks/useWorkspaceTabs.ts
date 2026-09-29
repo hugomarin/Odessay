@@ -78,7 +78,14 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
 
   const handleSelectWorkspaceTab = useCallback(
     (tabId: string) => {
-      const nextTab = editorSession.tabs.find((tab) => tab.id === tabId)
+      // Read fresh rather than the closed-over `editorSession.tabs` (same
+      // reasoning as handleCloseWorkspaceTab): a tab can be closed, or
+      // materialized under a new id, between this component's last render and
+      // the call, and the stale list would let the click through to
+      // `activateDocument` for a tab the store no longer has — the editor
+      // would show a closed document while the active tab is another one
+      // (ODE-609, precondition of option B).
+      const nextTab = getEditorSessionState().session.tabs.find((tab) => tab.id === tabId)
       if (!nextTab) {
         return
       }
@@ -88,7 +95,8 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
       // sure that content lands on the document it was actually typed into,
       // not on whatever tab we're about to switch to (ODE-478 case 2).
       prepareDocumentExit({ flushPendingEdit: true, snapshotDraft: true, saveViewState: true })
-      activeEditorTabIdRef.current = tabId
+      // La copia de la pestaña activa la actualiza el listener del store al
+      // cambiar `active_tab_id` dentro de `focusTab` (ODE-609, opción B).
       focusTab(tabId)
       navigatedToDraftRef.current = false
 
@@ -105,7 +113,7 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
 
       activateDocument({ writingId: null, href: "/write" }, "select")
     },
-    [activateDocument, editorSession.tabs, prepareDocumentExit, activeEditorTabIdRef, navigatedToDraftRef],
+    [activateDocument, prepareDocumentExit, activeEditorTabIdRef, navigatedToDraftRef],
   )
 
   const handleCloseWorkspaceTab = useCallback(
@@ -165,7 +173,8 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
         return
       }
 
-      activeEditorTabIdRef.current = nextActiveTabId
+      // La copia ya vale `nextActiveTabId`: el listener del store la actualizó
+      // dentro de `closeTab` (ODE-609, opción B).
       // Read fresh rather than the closed-over `editorSession.tabs`, which can
       // be stale after the same await (ODE-478 follow-up).
       const nextTab = getEditorSessionState().session.tabs.find((tab) => tab.id === nextActiveTabId)

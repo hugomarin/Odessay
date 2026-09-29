@@ -568,7 +568,7 @@ Comando que los encuentra (efectos cuya primera sentencia asigna un ref; mismo p
 |---|---|---|---|
 | `editorInstanceRef` (737) | efecto 1113–1115 (`editor ?? null`) | espejo | `useCorrectionBlocks.ts:99`, `:168`; `useExternalDocumentChanges.ts:241`; `useManualCorrections.ts:183`, `:385` (llega como `editorRef` desde `useCorrectionLifecycle.ts:196`). `useEditor` (1092–1109) recrea el editor cuando cambian `editorExtensions` o `handleEditorUpdate`, y hoy no usa `onCreate`/`onDestroy` |
 | `modeRef` (514) | **dueño único:** `applyEditorMode` (584–587) escribe el ref y el estado en el mismo paso; las 4 llamadas son `handleToggleMode` 1451 (→ markdown) y 1481 (→ rich), y `useDocumentHydration.ts:618` y `:650`. Efecto espejo borrado (PR 1 de ODE-609); ya no hay `setMode` fuera del dueño | dueño único | 36 lecturas: shell 17, `useDocumentExit` 5, `useFindReplace` 4, `useSelectionPopup` 2, `useCorrectionActions` 2, `useCorrectionLifecycle` 2, `useEditorCommands` 2, `useFootnotes` 1, `useEditorPersistence` 1. **Transición a propósito:** en `handleToggleMode` → rich, `applyEditorMode` escribe el ref en `"rich"` en 1481, **antes** de `setContent` (1486–1492) y con `setMode` en el mismo paso; el orden ref-primero es un contrato del pack sin lector observable hoy: el único lector síncrono es `handleEditorUpdate` (`useEditorPersistence.ts:546`), que sale antes por `isApplyingContentRef`, y `persistEditorSnapshot` no lee `modeRef`. El ref se inicializa con el valor inicial del estado (`useRef(mode)`, 514) |
-| `activeEditorTabIdRef` (614) | efecto 1248–1250 + 4 escrituras manuales (ver abajo) | espejo (excepción del ADR, D3/D4) | ver la tabla de lecturas de abajo |
+| `activeEditorTabIdRef` (594) | **dueño único:** `useActiveEditorTabIdRef` (`hooks/useActiveEditorTabIdRef.ts:31`) escribe el ref desde el listener síncrono del store (`subscribeToEditorSessionStore`, `lib/stores/editor-session-store.ts:117`); efecto espejo y 4 escrituras manuales borrados (PR 2 de ODE-609, opción B de ODE-608) | dueño único | ver la tabla de lecturas de abajo |
 | `currentDocumentMarkdownRef` (725) | efecto 2238–2240 | espejo de un **memo derivado** (`currentDocumentMarkdown`, 2211–2226: depende de `mode`, `markdownValue`, `editor` y `version`) | `useCorrectionActions.ts:161`, `useCorrectionLifecycle.ts:159` |
 | `reconcileActiveSaveStateRef` (663) | efecto `useSaveStateSync.ts:118–120` | latest-callback (se mantiene, ODE-609) | shell 1362 (en el `input` de `useDocumentHydration`), `useSaveStateSync.ts:150` |
 | `tableOfContentsItemsRef` (708) | efecto `useTableOfContents.ts:51–53` | espejo | `useTableOfContents.ts:70` |
@@ -579,43 +579,42 @@ Comando que los encuentra (efectos cuya primera sentencia asigna un ref; mismo p
 | `onBeforeCloseRef`, `onRunActionRef` | `useTauriCloseGuard.ts:20`, `useTauriEditorMenuEvents.ts:42` | latest-callback permitidos (ODE-609) | internos |
 | `mountedRef` | `useVoiceRecorder.ts:335` | falso positivo del patrón (asigna `true` al montar), fuera de la shell | — |
 
-**Escritor único (no son espejos; el ratchet no debe marcarlos):** `modeRef` (`applyEditorMode` 584–587; PR 1 de ODE-609), `hydrationPhaseRef` (`applyHydrationPhase` 466–470), `syncStatusRef` (`applySyncStatus` 484–487), los metadatos (`applyDocumentMetadata` 571), `currentWritingIdRef` (`setActiveWritingId` 626) y `externalContentConflictRef` (4 escrituras junto a su estado en `useExternalDocumentChanges`). `routerRef` y `routeWritingIdRef` (432–435) se asignan **en el render**, no en un efecto: el ratchet por efecto no los ve y siguen al valor sin retraso.
+**Escritor único (no son espejos; el ratchet no debe marcarlos):** `modeRef` (`applyEditorMode` 584–587; PR 1 de ODE-609), `activeEditorTabIdRef` (`useActiveEditorTabIdRef`; PR 2 de ODE-609, el listener del store), `hydrationPhaseRef` (`applyHydrationPhase` 466–470), `syncStatusRef` (`applySyncStatus` 484–487), los metadatos (`applyDocumentMetadata` 571), `currentWritingIdRef` (`setActiveWritingId` 626) y `externalContentConflictRef` (4 escrituras junto a su estado en `useExternalDocumentChanges`). `routerRef` y `routeWritingIdRef` (432–435) se asignan **en el render**, no en un efecto: el ratchet por efecto no los ve y siguen al valor sin retraso.
 
 **`activeEditorTabIdRef`: escritores.**
 
 | Escritor | Sitio | Orden respecto al store |
 |---|---|---|
-| efecto espejo | `editor-shell.tsx:1248–1250` | un render por detrás |
-| manual | `useWorkspaceTabs.ts:91` | **antes** de `focusTab` (92), después de `prepareDocumentExit` (89) |
-| manual | `useWorkspaceTabs.ts:168` | después de `closeTab` (162), solo si se cerró la activa |
-| manual | `useWorkspaceTabOpening.ts:117`, `:149` | después de `openDraftTab` (116, 148), releyendo el store |
+| listener del store (único) | `hooks/useActiveEditorTabIdRef.ts:31` | en el acto: `setSessionState` emite tras asignar, y el listener re-lee `getEditorSessionState().session.active_tab_id` |
+| ~~efecto espejo~~ | ~~`editor-shell.tsx:1069–1071`~~ | borrado en el PR 2 de ODE-609 |
+| ~~manual~~ | ~~`useWorkspaceTabs.ts:91`, `:168`; `useWorkspaceTabOpening.ts:117`, `:149`~~ | borradas en el PR 2 de ODE-609 |
 
-**Caminos que cambian `active_tab_id` en el store** (`lib/stores/editor-session-store.ts`; todos pasan por `setSessionState` 121–157, que emite en el acto a los listeners de `subscribe` 108–113, privado):
+**Caminos que cambian `active_tab_id` en el store** (`lib/stores/editor-session-store.ts`; todos pasan por `setSessionState` 131–168, que emite en el acto a los listeners de `subscribeToEditorSessionStore` 117–122, público desde el PR 2 de ODE-609):
 
 | Mutador | Líneas | Llamadores | ¿Escritura manual del ref? |
 |---|---|---|---|
-| `initializeEditorSessionStore` (carga + replay de `changesBeforeLoad`, ODE-577) | 188–240 | shell 1147, `useCatalogEditorSessionSync.ts:27`, `useRecentWritings.ts:28` | no |
-| `openDraftTab` | 244–294 | `useWorkspaceTabOpening.ts:116`, `:148`; `useSessionRestore.ts:123` | sí en las dos de `useWorkspaceTabOpening`; **no** en `useSessionRestore` |
-| `openWritingTab` | 296–370 | shell 2536, 2595 (`handleMenuOpenFile`); `useWorkspaceTabOpening.ts:192`; `useSessionRestore.ts:60` | no |
-| `reconcileMaterializedDraftTab` | 380–457 | `useEditorPersistence.ts:284` | no |
-| `focusTab` | 459–482 | `useWorkspaceTabs.ts:92` | sí (91) |
-| **`publishTabState`** | 484–550 | efecto de la shell 2281–2317 | no. Escribe `active_tab_id: writingId ?? EDITOR_DRAFT_TAB_ID` (545) cada vez que cambian el título, `syncStatus`, la fase o la ruta, y puede añadir una pestaña (`unshift`). **No está en la lista del análisis de la opción B de ODE-608** |
-| `closeTab` | 591–626 | `useWorkspaceTabs.ts:162` | sí (168) |
-| `reconcileUnavailableWritingTab` | 628–667 | `useDocumentHydration.ts:395` | no |
-| `reorderTab`, `updateTabSaveState`, `saveTabViewState`, `syncWritingTitlesFromCatalog` | 669, 552, 574, 695 | — | no tocan `active_tab_id` (verificado solo en las líneas del grep; sin leer cada cuerpo entero) |
+| `initializeEditorSessionStore` (carga + replay de `changesBeforeLoad`, ODE-577) | 197–251 | shell 977, `useCatalogEditorSessionSync.ts:27`, `useRecentWritings.ts:28` | no |
+| `openDraftTab` | 253–303 | `useWorkspaceTabOpening.ts:116`, `:148`; `useSessionRestore.ts:123` | no; el listener cubre las dos que antes escribían a mano (PR 2 de ODE-609) |
+| `openWritingTab` | 305–378 | shell 2120, 2179 (`handleMenuOpenFile`); `useWorkspaceTabOpening.ts:192`; `useSessionRestore.ts:60` | no |
+| `reconcileMaterializedDraftTab` | 389–466 | `useEditorPersistence.ts:284` | no |
+| `focusTab` | 468–491 | `useWorkspaceTabs.ts:92` | no; el listener cubre la escritura manual que estaba en 91 (PR 2 de ODE-609) |
+| **`publishTabState`** | 493–559 | efecto de la shell (llamada 1894) | no. Escribe `active_tab_id: writingId ?? EDITOR_DRAFT_TAB_ID` (554) cada vez que cambian el título, `syncStatus`, la fase o la ruta, y puede añadir una pestaña (`unshift`). **No está en la lista del análisis de la opción B de ODE-608** |
+| `closeTab` | 600–629 | `useWorkspaceTabs.ts:162` | no; el listener cubre la escritura manual que estaba en 168 (PR 2 de ODE-609) |
+| `reconcileUnavailableWritingTab` | 637–676 | `useDocumentHydration.ts:395` | no |
+| `reorderTab`, `updateTabSaveState`, `saveTabViewState`, `syncWritingTitlesFromCatalog` | 678, 561, 583, 704 | — | no tocan `active_tab_id` (verificado solo en las líneas del grep; sin leer cada cuerpo entero) |
 
-**`activeEditorTabIdRef`: lecturas**, y si leer `getEditorSessionState().session.active_tab_id` daría lo mismo (requisito 2 de ODE-608). La "ventana" es el intervalo entre un cambio del store sin escritura manual (tabla de arriba) y el siguiente render de la shell:
+**`activeEditorTabIdRef`: lecturas**, y si leer `getEditorSessionState().session.active_tab_id` daría lo mismo (requisito 2 de ODE-608). Con el PR 2 de ODE-609 la copia vale el store en todo momento (el listener emite en el acto), así que **hoy ninguna lectura ve un valor viejo**; esta tabla conserva el análisis de ODE-608 (qué lectura habría cambiado si la copia fuera por detrás) y los `||` de 181/229 se quedan como fallback (No tocar). La "ventana" era el intervalo entre un cambio del store sin escritura manual y el siguiente render de la shell:
 
 | Lectura | Contexto | ¿Mismo valor que el store? |
 |---|---|---|
 | `useEditorPersistence.ts:181` | `applyCommittedTabState` (callback asíncrono del coordinador) | fuera de la ventana, sí; dentro, no. El `|| currentWritingIdRef.current === record.id` lo compensa, y `activateDocument` va antes que `openWritingTab` en los caminos de apertura |
 | `:229` | `onStateChange` | igual que 181 (tiene el mismo `||`) |
 | `:272` | `onMaterialized`, `isSourceDraftActive` | fuera de la ventana, sí. Se calcula antes de `reconcileMaterializedDraftTab` (284), así que el renombre síncrono no lo cambia |
-| `:348` | `onError` | fuera de la ventana, sí; dentro, **no**, y **no tiene `||`**: un error de la pestaña vieja pinta hoy la barra de estado del documento nuevo (riesgo 2 del análisis) |
-| `:425` | `persistEditorSnapshot` → `sourceTabId` | síncrono desde manejadores. En las transiciones del editor se vuelca con `prepareDocumentExit` antes del cambio del store (`useWorkspaceTabs.ts:89`, shell 2507), así que coincide. Un guardado armado dentro de la ventana (p. ej. el rAF de `onUpdate` tras `openWritingTab`) tomaría la pestaña vieja |
-| `useWorkspaceTabs.ts:126` | `handleCloseTab`, `isClosingActiveTab`, antes del primer `await` | sí en la práctica: es un manejador de clic, y React vacía los efectos pasivos de los updates discretos antes del siguiente evento. No verificado en runtime para un cambio no discreto del store (p. ej. `initializeEditorSessionStore`) seguido de un clic antes del efecto |
+| `:348` | `onError` | fuera de la ventana, sí; dentro, **no**, y **no tiene `||`**: un error de la pestaña vieja pintaba la barra de estado del documento nuevo (riesgo 2 del análisis). Es el único cambio de comportamiento aceptado de la opción B: con el listener la copia ya vale la pestaña nueva, así que la barra no pinta el error ajeno (badge de la pestaña vieja sí; test de ODE-609) |
+| `:425` | `persistEditorSnapshot` → `sourceTabId` | síncrono desde manejadores. En las transiciones del editor se vuelca con `prepareDocumentExit` antes del cambio del store (`useWorkspaceTabs.ts:97`, shell 2091), así que coincide. Un guardado armado dentro de la ventana (p. ej. el rAF de `onUpdate` tras `openWritingTab`) tomaría la pestaña vieja |
+| `useWorkspaceTabs.ts:134` | `handleCloseWorkspaceTab`, `isClosingActiveTab`, antes del primer `await` | sí en la práctica: es un manejador de clic, y React vacía los efectos pasivos de los updates discretos antes del siguiente evento. Con el listener, además, la copia ya vale el store en el acto en cualquier camino |
 
-Lecturas **a mitad de transición a propósito** (ref ≠ estado por diseño): `modeRef` en `handleToggleMode` (1481–1497). En `activeEditorTabIdRef` no hay ninguna lectura que dependa de que el ref vaya por detrás. El retraso solo se tolera (`||` en 181/229, comentario en 177).
+Lecturas **a mitad de transición a propósito** (ref ≠ estado por diseño): `modeRef` en `handleToggleMode` (1481–1497). En `activeEditorTabIdRef` no hay ninguna lectura que dependa de que el ref vaya por detrás; con el PR 2 de ODE-609 ya no va por detrás (`||` en 181/229 se quedan como fallback).
 
 Las 36 lecturas de `modeRef` quedaron contadas por archivo en su fila de arriba (PR 1 de ODE-609, `grep -rn 'modeRef\.current' components/editor/editor-shell.tsx hooks/`), pero no se revisó cada una línea a línea.
 

@@ -20,7 +20,7 @@ import { createBlankDraftIdentity } from "@/lib/editor/hydration-session"
 import { EDITOR_DRAFT_TAB_ID } from "@/lib/local-db/editor-sessions"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { describeOpenOutcome, openDocumentById } from "@/lib/services/open-document-factory"
-import { getEditorSessionState, openDraftTab, openWritingTab } from "@/lib/stores/editor-session-store"
+import { openDraftTab, openWritingTab } from "@/lib/stores/editor-session-store"
 import { type Editor } from "@tiptap/react"
 import type { DocumentHydrationInput } from "@/hooks/useDocumentHydration"
 import type { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs"
@@ -31,7 +31,6 @@ type WorkspaceTabs = ReturnType<typeof useWorkspaceTabs>
 
 export type WorkspaceTabOpeningInput = {
   activateDocument: DocumentHydrationInput["activateDocument"]
-  activeEditorTabIdRef: React.RefObject<string | null>
   createWorkspaceTabRef: React.RefObject<((options?: { skipConfirm?: boolean }) => Promise<void>) | null>
   currentWritingIdRef: React.RefObject<string | null>
   editor: Editor | null
@@ -55,7 +54,6 @@ export type WorkspaceTabOpeningInput = {
 export function useWorkspaceTabOpening(input: WorkspaceTabOpeningInput) {
   const {
     activateDocument,
-    activeEditorTabIdRef,
     createWorkspaceTabRef,
     currentWritingIdRef,
     editor,
@@ -113,8 +111,9 @@ export function useWorkspaceTabOpening(input: WorkspaceTabOpeningInput) {
         updateDerivedEditorState(editor)
       }
 
+      // La copia de la pestaña activa la actualiza el listener del store dentro
+      // de `openDraftTab` (ODE-609, opción B).
       openDraftTab(ephemeralDraftWritingIdRef.current)
-      activeEditorTabIdRef.current = getEditorSessionState().session.active_tab_id ?? EDITOR_DRAFT_TAB_ID
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
           const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
@@ -146,7 +145,6 @@ export function useWorkspaceTabOpening(input: WorkspaceTabOpeningInput) {
     }
 
     openDraftTab(ephemeralDraftWritingIdRef.current)
-    activeEditorTabIdRef.current = getEditorSessionState().session.active_tab_id ?? EDITOR_DRAFT_TAB_ID
     window.requestAnimationFrame(() => {
       isCreatingWorkspaceTabRef.current = false
       window.requestAnimationFrame(() => {
@@ -162,7 +160,6 @@ export function useWorkspaceTabOpening(input: WorkspaceTabOpeningInput) {
     prepareDocumentExit,
     refreshRichFootnotes,
     updateDerivedEditorState,
-    activeEditorTabIdRef,
     ephemeralDraftWritingIdRef,
     isApplyingContentRef,
     isCreatingWorkspaceTabRef,
