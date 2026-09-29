@@ -181,6 +181,7 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
   world.networkCalls = []
   world.network = defaultNetwork()
   world.editor = null
+  world.shellCorrectionLifecycleInput = null
   world.shellEditorInstanceRef = null
   world.aiReview = async () => ({ error: null, data: { corrections: [] } })
   world.aiReviewCalls = []
