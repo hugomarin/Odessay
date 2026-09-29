@@ -33,7 +33,6 @@ vi.mock("@/lib/services/ai-service-factory", async () =>
   (await import("./support/editor-shell-doubles")).aiServiceDouble(),
 )
 
-const { act } = await import("react")
 const { advance, flush, mountEditorShell, resetEditorShellWorld, waitFor, world } = await import(
   "./support/editor-shell-harness"
 )
@@ -42,7 +41,6 @@ type LocalWriting = import("@/lib/local-db/schema").LocalWriting
 
 const TEST_TIMEOUT_MS = 40_000
 const PARAGRAPH = "Este parrafo tiene un herror de ortografia evidente."
-const CORRECTED = "Este parrafo tiene un error de ortografia evidente."
 
 let writingId = ""
 let mounted: Awaited<ReturnType<typeof mountEditorShell>> | null = null
@@ -135,7 +133,7 @@ async function analyzedDocument() {
 }
 
 describe("ODE-609 — correction refs before passive effects", () => {
-  it.fails.each(["suggestions", "learned"] as const)("%s se lee como el estado del commit actual", async (kind) => {
+  it.each(["suggestions", "learned"] as const)("%s se lee como el estado del commit actual", async (kind) => {
     const stale: string[] = []
     let observed = 0
     world.onShellCommit = () => {

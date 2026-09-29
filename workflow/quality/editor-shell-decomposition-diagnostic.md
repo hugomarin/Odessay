@@ -710,6 +710,17 @@ item ausente usan el mismo dueño. `tests/editor-shell-toc-ref-owner.test.tsx`
 lee los inputs del hook real en layout tras recibir encabezados y pulsar el
 segundo item; ambos casos son rojos con los espejos y verdes con el dueño.
 
+**PR 6 — correcciones (dos refs).** `useCorrectionSuggestionsState` en
+`useCorrectionBlocks.ts` y `useLearnedWordsState` en `useCorrectionLifecycle.ts`
+son los escritores síncronos del estado y su ref. La shell los monta sin efectos
+y pasa sus setters estables a los consumidores existentes. El batcher sigue
+siendo el mismo; sus actualizaciones funcionales se resuelven una vez contra el
+valor vivo, también en acciones inmediatas, aprendizaje optimista y rollback.
+Se borran los dos espejos del lifecycle. La sonda
+`tests/editor-shell-correction-ref-owner.test.tsx` observa en layout la carga de
+palabras y un análisis real desde el panel: dos casos rojos con los espejos,
+verdes con los escritores. No cambia admisión, identidad ni persistencia.
+
 ## Plan
 
 ### Fase 0 — Banco de pruebas (harness)
