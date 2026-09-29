@@ -1,7 +1,6 @@
 "use client"
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react"
-import { getMarkRange } from "@tiptap/core"
 import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents"
 import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
@@ -38,6 +37,7 @@ import {
   useSelectionRestore,
   type OwnedMarkdownSelectionSnapshot,
 } from "@/hooks/useSelectionRestore"
+import { useSelectionPopup } from "@/hooks/useSelectionPopup"
 import { useTableOfContents } from "@/hooks/useTableOfContents"
 import { useWorkspaceTabOpening } from "@/hooks/useWorkspaceTabOpening"
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs"
@@ -54,7 +54,7 @@ import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { EditorRightPanel } from "@/components/editor/editor-right-panel"
 import { EditorRightPanelTabs } from "@/components/editor/panels/editor-right-panel-tabs"
 import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
-import { AnnotationBubble, nextAnnotationSessionId } from "@/components/reading/margins/annotation-bubble"
+import { AnnotationBubble } from "@/components/reading/margins/annotation-bubble"
 import { SelectionPopup } from "@/components/reading/margins/selection-popup"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { BackupImageModal } from "@/components/editor/modals/backup-image-modal"
@@ -83,7 +83,6 @@ import {
   deleteStandaloneHighlight,
   resolveStandaloneHighlightRange,
 } from "@/lib/editor/annotation-highlight"
-import { areFloatingOverlayAnchorsEqual } from "@/lib/reading/floating-overlay-position"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
 import {
@@ -1398,245 +1397,31 @@ export function EditorShell({
     toggleFocusMode,
   })
 
-  const dismissSelectionPopup = useCallback(() => {
-    suppressNextSelectionPopupRef.current = true
-    setPendingRichSelection(null)
-  }, [])
-
-  const handleMarkSelection = useCallback(() => {
-    if (!editor || !pendingRichSelection) {
-      return
-    }
-
-    suppressNextSelectionPopupRef.current = true
-    editor
-      .chain()
-      .focus()
-      .setTextSelection({ from: pendingRichSelection.from, to: pendingRichSelection.to })
-      .setHighlight()
-      .addAnnotation("highlight", "")
-      .setTextSelection(pendingRichSelection.to)
-      .run()
-
-    setPendingRichSelection(null)
-    updateDerivedEditorState(editor)
-    void persistEditorSnapshot(editor)
-  }, [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState])
-
-  const convertStandaloneHighlight = useCallback(
-    (anchorText: string, type: AnnotationType, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => {
-      if (!editor || !anchorText) return false
-      const highlightMark = editor.schema.marks.highlight
-      if (!highlightMark) return false
-
-      let converted = false
-
-      editor.state.doc.descendants((node, pos) => {
-        if (node.type.name !== "text") return
-        if (!node.marks.some((m) => m.type.name === "highlight")) return
-        const $pos = editor.state.doc.resolve(pos)
-        const range = getMarkRange($pos, highlightMark)
-        if (!range) return
-        const highlightedText = editor.state.doc.textBetween(range.from, range.to)
-        if (highlightedText === anchorText) {
-          if (anchorStart !== undefined && anchorEnd !== undefined) {
-            if (range.from !== anchorStart || range.to !== anchorEnd) return
-          }
-          converted = editor
-            .chain()
-            .focus()
-            .setTextSelection({ from: range.from, to: range.to })
-            .unsetHighlight()
-            .setHighlight()
-            .addAnnotation(type, text, id)
-            .setTextSelection(range.to)
-            .run()
-          return false
-        }
-      })
-      return converted
-    },
-    [editor],
-  )
-
-  const handleAnnotateSelection = useCallback(
-    (annotationType: "personal" | "ai" | "footnote" = "footnote") => {
-      if (!pendingRichSelection) return
-      setPendingAnnotation({
-        from: pendingRichSelection.from,
-        to: pendingRichSelection.to,
-        text: pendingRichSelection.text,
-        position: pendingRichSelection.bubblePosition,
-        sessionId: nextAnnotationSessionId(),
-        annotationType,
-      })
-      setPendingRichSelection(null)
-    },
-    [pendingRichSelection],
-  )
-
-  const handleFootnoteSelection = useCallback(() => {
-    if (!pendingRichSelection) {
-      return
-    }
-
-    if (modeRef.current === "markdown") {
-      setPendingRichSelection(null)
-      setFootnoteModalOpen(true)
-      return
-    }
-
-    selectionRef.current = {
-      from: pendingRichSelection.from,
-      to: pendingRichSelection.to,
-      text: pendingRichSelection.text,
-    }
-    setPendingRichSelection(null)
-    setFootnoteModalOpen(true)
-  }, [pendingRichSelection])
-
-  const handleEditorSelectType = useCallback(
-    (type: "personal" | "ai" | "footnote") => {
-      if (type === "personal") {
-        handleMarkSelection()
-        return
-      }
-      if (type === "footnote") {
-        handleFootnoteSelection()
-        return
-      }
-      handleAnnotateSelection(type)
-    },
-    [handleAnnotateSelection, handleFootnoteSelection, handleMarkSelection],
-  )
-
-  const handleConfirmAnnotation = useCallback(
-    (note: string) => {
-      if (!editor || !pendingAnnotation) return
-      const trimmedNote = note.trim()
-      if (!trimmedNote) return
-
-      const annotationType = pendingAnnotation.annotationType ?? "footnote"
-      suppressNextSelectionPopupRef.current = true
-
-      if (annotationType === "footnote" || annotationType === "personal") {
-        editor
-          .chain()
-          .focus()
-          .setTextSelection({ from: pendingAnnotation.from, to: pendingAnnotation.to })
-          .setHighlight()
-          .addFootnote(trimmedNote)
-          .setTextSelection(pendingAnnotation.to)
-          .run()
-        setActivePanel("notes")
-      } else {
-        editor
-          .chain()
-          .focus()
-          .setTextSelection({ from: pendingAnnotation.from, to: pendingAnnotation.to })
-          .setHighlight()
-          .addAnnotation(annotationType, trimmedNote)
-          .setTextSelection(pendingAnnotation.to)
-          .run()
-      }
-
-      setPendingAnnotation(null)
-      updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
-    },
-    [editor, pendingAnnotation, persistEditorSnapshot, updateDerivedEditorState],
-  )
-
-  useEffect(() => {
-    if (!editor) {
-      return
-    }
-
-    const handleSelectionUpdate = () => {
-      if (suppressNextSelectionPopupRef.current) {
-        suppressNextSelectionPopupRef.current = false
-        setPendingRichSelection(null)
-        return
-      }
-
-      if (modeRef.current !== "rich" || pendingAnnotation) {
-        return
-      }
-
-      const snapshot = captureRichSelectionSnapshot()
-      if (!snapshot) {
-        setPendingRichSelection(null)
-        return
-      }
-
-      setPendingRichSelection((current) => {
-        if (current && current.from === snapshot.from && current.to === snapshot.to) {
-          return current
-        }
-        return snapshot
-      })
-    }
-
-    editor.on("selectionUpdate", handleSelectionUpdate)
-
-    return () => {
-      editor.off("selectionUpdate", handleSelectionUpdate)
-    }
-  }, [captureRichSelectionSnapshot, editor, pendingAnnotation])
-
-  useEffect(() => {
-    if (!editor || (!pendingRichSelection && !pendingAnnotation)) return
-
-    const syncOpenOverlayPosition = (event?: Event) => {
-      // ODE-409: `scroll` is listened to in the capture phase, so scrolling the
-      // bubble's own textarea reaches this handler. The document geometry has
-      // not moved in that case — recomputing it is pure churn.
-      const eventTarget = event?.target
-      if (
-        eventTarget instanceof Element &&
-        eventTarget.closest(".AnnotationBubble, .SelectionPopup")
-      ) {
-        return
-      }
-
-      if (pendingRichSelection) {
-        const positions = getRichSelectionOverlayPositions(pendingRichSelection.from, pendingRichSelection.to)
-        if (positions) {
-          setPendingRichSelection((current) => {
-            if (!current) return current
-            if (
-              areFloatingOverlayAnchorsEqual(current.popupPosition, positions.popupPosition) &&
-              areFloatingOverlayAnchorsEqual(current.bubblePosition, positions.bubblePosition)
-            ) {
-              return current
-            }
-            return { ...current, ...positions }
-          })
-        }
-      }
-
-      if (pendingAnnotation) {
-        const positions = getRichSelectionOverlayPositions(pendingAnnotation.from, pendingAnnotation.to)
-        if (positions) {
-          setPendingAnnotation((current) => {
-            if (!current) return current
-            if (areFloatingOverlayAnchorsEqual(current.position, positions.bubblePosition)) {
-              return current
-            }
-            return { ...current, position: positions.bubblePosition }
-          })
-        }
-      }
-    }
-
-    window.addEventListener("resize", syncOpenOverlayPosition)
-    window.addEventListener("scroll", syncOpenOverlayPosition, { capture: true, passive: true })
-
-    return () => {
-      window.removeEventListener("resize", syncOpenOverlayPosition)
-      window.removeEventListener("scroll", syncOpenOverlayPosition, { capture: true })
-    }
-  }, [editor, getRichSelectionOverlayPositions, pendingAnnotation, pendingRichSelection])
+  // ODE-607 — corte 6, paso 2: el popup de selección, sus manejadores y sus
+  // dos efectos viven en su hook (mudanza mecánica; el estado y los refs siguen
+  // siendo de la shell). Se llama donde estaba `dismissSelectionPopup`, así que
+  // el orden de efectos no cambia.
+  const {
+    convertStandaloneHighlight,
+    dismissSelectionPopup,
+    handleConfirmAnnotation,
+    handleEditorSelectType,
+  } = useSelectionPopup({
+    captureRichSelectionSnapshot,
+    editor,
+    getRichSelectionOverlayPositions,
+    modeRef,
+    pendingAnnotation,
+    pendingRichSelection,
+    persistEditorSnapshot,
+    selectionRef,
+    setActivePanel,
+    setFootnoteModalOpen,
+    setPendingAnnotation,
+    setPendingRichSelection,
+    suppressNextSelectionPopupRef,
+    updateDerivedEditorState,
+  })
 
   const handleToggleMode = useCallback(
     (nextMode: "rich" | "markdown") => {

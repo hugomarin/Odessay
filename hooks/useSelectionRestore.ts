@@ -16,8 +16,8 @@
  *
  * Los helpers puros (`markdownSelectionOwnerId` y
  * `readMarkdownSelectionForActiveDocument`) viven aquí y la shell los importa:
- * los sigue usando fuera de la cola (hidratación, comandos, find/replace,
- * link, imagen y el panel de notas), así que no se duplican.
+ * los sigue usando fuera de la cola (comandos, find/replace, la salida de
+ * documento, link, imagen y el panel de notas), así que no se duplican.
  *
  * Red: `tests/editor-shell-selection-restore.test.tsx` (STATE-06/07, ODE-625)
  * y `tests/editor-shell-markdown-hydration-coalesce.test.tsx` (ODE-582; la
