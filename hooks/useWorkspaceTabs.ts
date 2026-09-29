@@ -78,7 +78,14 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
 
   const handleSelectWorkspaceTab = useCallback(
     (tabId: string) => {
-      const nextTab = editorSession.tabs.find((tab) => tab.id === tabId)
+      // Read fresh rather than the closed-over `editorSession.tabs` (same
+      // reasoning as handleCloseWorkspaceTab): a tab can be closed, or
+      // materialized under a new id, between this component's last render and
+      // the call, and the stale list would let the click through to
+      // `activateDocument` for a tab the store no longer has — the editor
+      // would show a closed document while the active tab is another one
+      // (ODE-609, precondition of option B).
+      const nextTab = getEditorSessionState().session.tabs.find((tab) => tab.id === tabId)
       if (!nextTab) {
         return
       }
@@ -105,7 +112,7 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
 
       activateDocument({ writingId: null, href: "/write" }, "select")
     },
-    [activateDocument, editorSession.tabs, prepareDocumentExit, activeEditorTabIdRef, navigatedToDraftRef],
+    [activateDocument, prepareDocumentExit, activeEditorTabIdRef, navigatedToDraftRef],
   )
 
   const handleCloseWorkspaceTab = useCallback(
