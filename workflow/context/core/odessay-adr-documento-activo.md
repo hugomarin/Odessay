@@ -153,23 +153,23 @@ Precedencia aplicada: este ADR prevalece sobre ambas secciones, que se reconcili
 - `isSourceDraftActive` (`useEditorPersistence.ts:272`) se calcula **antes** de `reconcileMaterializedDraftTab` (`:284`): el renombre síncrono no lo cambia. Sin regresión de ODE-577.
 - **`publishTabState` escribe `active_tab_id`** (`lib/stores/editor-session-store.ts:545`, `writingId ?? EDITOR_DRAFT_TAB_ID`) y puede añadir la pestaña (`unshift`, `:540`). No estaba en la lista del análisis B. No cambia la conclusión: el listener también lo sigue en el acto. Corrige la línea de D3 que decía que "nunca crea, activa ni reemplaza pestañas".
 
-**Cambios de comportamiento aceptados.**
+**Precondición de B (guard).** El origen es anterior a B: `handleSelectWorkspaceTab` busca la pestaña en el render (`useWorkspaceTabs.ts:81`). Si ya no está en el store, `focusTab` no hace nada, pero `activateDocument` sí cambia el documento en pantalla; con B el badge de la pestaña activa mostraría el guardado de otro documento. ODE-609 lo arregla como **primer commit**, antes de quitar las escrituras manuales: resolver la pestaña desde `getEditorSessionState().session.tabs`, igual que `handleCloseWorkspaceTab`, y retornar si no existe (test 6).
 
-1. **`onError`** (riesgo 2; `useEditorPersistence.ts:348`, sin `||`): un error de guardado de la pestaña vieja que llega en la ventana entre el cambio del store y el render ya no pinta `error` en la barra de estado global; el badge de la pestaña vieja sí. Es el comportamiento más correcto y se fija con un test.
-2. **`focusTab` con un render viejo** (`useWorkspaceTabs.ts:81` y `:91–92`): si la pestaña ya no está en el store, `focusTab` no hace nada; con B el ref queda igual al store y deja de apuntar a un id inexistente. Es una desincronización menos. Aceptado el 2026-09-28.
+**Cambio de comportamiento aceptado.** **`onError`** (riesgo 2; `useEditorPersistence.ts:348`, sin `||`): un error de guardado de la pestaña vieja que llega en la ventana entre el cambio del store y el render ya no pinta `error` en la barra de estado global; el badge de la pestaña vieja sí. Es el comportamiento más correcto y se fija con un test.
 
 **Qué cambia de D3–D4.**
 
 - **D3:** el alcance de `publishTabState` queda como en el código: metadatos **y** `active_tab_id`; su escritura la cubre el listener. El resto de D3 no cambia.
 - **D4:** `activeEditorTabIdRef` deja de ser la excepción con espejo por efecto. Es una copia con un único escritor (el listener), declarado y verificado con un ratchet. Ningún efecto copia identidad de un portador a otro. Se conservan los invariantes de ODE-561/562/563/564. La explicación de ODE-577 sigue vigente: el problema venía del estado del store, no del espejo, y el replay de `changesBeforeLoad` llega igual.
 
-**Implementación (ODE-609).** Se exporta `subscribeToEditorSessionStore` (hoy `subscribe` es privado, `lib/stores/editor-session-store.ts:108–113`). Un hook crea el ref con `getEditorSessionState().session.active_tab_id`, se suscribe releyendo el estado para no perder un cambio entre el render y la suscripción, y se desuscribe al desmontar. Con los 5 tests del análisis B:
+**Implementación (ODE-609).** Se exporta `subscribeToEditorSessionStore` (hoy `subscribe` es privado, `lib/stores/editor-session-store.ts:108–113`). Un hook crea el ref con `getEditorSessionState().session.active_tab_id`, se suscribe releyendo el estado para no perder un cambio entre el render y la suscripción, y se desuscribe al desmontar. Con los 5 tests del análisis B más el del guard:
 
 1. leído entre el cambio del store y el render, tras `openWritingTab` por apertura de archivo;
 2. la carga de la sesión después de montar (`initializeEditorSessionStore`) actualiza la copia sin render;
 3. materializar un borrador: la copia pasa al id real en el acto y el borrador activo se sigue adoptando;
 4. `onError` en la ventana de cambio de pestaña: fija el comportamiento nuevo;
-5. ratchet: `activeEditorTabIdRef.current =` solo aparece en el hook del listener.
+5. ratchet: `activeEditorTabIdRef.current =` solo aparece en el hook del listener;
+6. un clic en una pestaña cerrada después del último render no cambia el documento, ni el store, ni la copia (mutación: volver a leer de `editorSession.tabs` → rojo).
 
 Más el test del efecto `publishTabState`. Los tests del área pasan idénticos.
 
