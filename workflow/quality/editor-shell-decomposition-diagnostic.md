@@ -498,6 +498,17 @@ Mismo contrato que §6: BUILD valida estas líneas en vez de buscarlas; si el di
 | memo `footnotes` | 2195–2204 | depende de `version || richFootnoteRevision` (fix de ODE-625, bug 1) |
 | JSX | 3021–3030 `onMarkdownSelectionChange`; 3091–3270 `NotesPanel` con 7 manejadores inline (`onNavigate` 3093, … `onDeleteHighlight` 3246); 3407 `InsertFootnoteModal`; 3451 `SelectionPopup`; 3457 `AnnotationBubble` | los manejadores inline del `NotesPanel` no se exploraron línea a línea |
 
+**Estado tras ODE-607, paso 1 (`useSelectionRestore`, este PR; rama `hugomarin/ode-607-step1` sobre `main@789179f8`):** la cola y sus helpers salieron a `hooks/useSelectionRestore.ts`. Mudanza mecánica: el bloque de la cola es byte a byte el de la shell (deps `[]`), y los helpers solo ganaron `export`.
+
+| Qué | Antes (main@ba13217e, `editor-shell.tsx`) | Ahora |
+|---|---|---|
+| `queueMarkdownSelectionRestore` | 922–1090 | `hooks/useSelectionRestore.ts:89–257`; la shell la recibe en 892–899 |
+| `markdownSelectionOwnerId` | 205 | `hooks/useSelectionRestore.ts:43` (la shell lo importa en 36) |
+| `readMarkdownSelectionForActiveDocument` | 207–232 | `hooks/useSelectionRestore.ts:45–70` (la shell lo importa en 37) |
+| tipos `OwnedMarkdownSelectionSnapshot`, `MarkdownSelectionRead` | 196–203 | `hooks/useSelectionRestore.ts:34–41`; `SelectionSnapshot` se queda en la shell (194–198) |
+
+La shell pasó de 3.466 a 3.274 líneas; el resto de la tabla de arriba son las líneas de `ba13217e` y se quedan como referencia. Las líneas vigentes del paso: estado `markdownSelectionState` 443; refs `markdownSelectionRef` 666, `markdownSelectionRafRef` 678, `pendingMarkdownSelectionRef` 689. El hook se llama donde estaba el `useCallback` (892), antes de sus consumidores: `useDocumentHydration` 1149, `useDocumentExit` 1214, `useEditorCommands` 1363 y `useFindReplace` 2129, así que el orden de efectos no cambia. Los helpers los sigue usando la shell fuera de la cola (link, imagen, comandos, find/replace y panel de notas), por eso viven aquí exportados y no duplicados.
+
 **`captureEditorCursorSnapshot` y `restoreEditorCursorSnapshot` ya no están en la shell:** salieron con find/replace en ODE-602 (`hooks/useFindReplace.ts:198` y `:234`; el ref `editorCursorSnapshotRef` sigue en la shell, 704). No son parte del corte 6.
 
 **Flujo.** Rich: TipTap emite `selectionUpdate` → el efecto 1742 llama a `captureRichSelectionSnapshot` → `pendingRichSelection` → `<SelectionPopup>` (3451) → `handleEditorSelectType` → marca directa (`handleMarkSelection`), modal de footnote o bubble (`handleAnnotateSelection` → `pendingAnnotation` → `<AnnotationBubble>` → `handleConfirmAnnotation`). Cada acción que cambia el documento pone `suppressNextSelectionPopupRef` para que el `selectionUpdate` de su propio `setTextSelection` no reabra el popup, y persiste con `persistEditorSnapshot`. Markdown: no hay popup; la selección llega por `onMarkdownSelectionChange` (3021, con guarda de dueño) a `markdownSelectionRef` y `markdownSelectionState`, y la restauran `queueMarkdownSelectionRestore` y su rAF.
