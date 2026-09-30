@@ -142,3 +142,220 @@ Clasificación por lectura del archivo, no por conteo de dobles.
 **Resultado: ninguna corrección barata pendiente.** Se revisó si alguna fila del mapa reclamaba `INTEGRATION` apoyada en un test que dobla un seam interno — la sobredeclaración que esta auditoría buscaba — y no la hay. La única divergencia real está concentrada en los tres tests legacy del shell, que ya tienen dueño.
 
 Eso valida la regla principal: de los ocho archivos que el conteo señalaba, **cinco resultaron legítimos al leerlos**. Un ratchet basado solo en el número habría producido cinco falsos positivos.
+
+---
+
+## Mapa de Recon — milestone 4 (ODE-611…614)
+
+**Verificado en: main@6e803d21 (2026-09-30).** Solo lectura del código en ese commit. No se ejecutó ningún test ni `cargo test`. Todas las rutas son relativas a la raíz del repo. Si una parte no se exploró, se dice. Cuando BUILD encuentre algo distinto, corrige este mapa en su PR.
+
+### Sync (ODE-611, ODE-612)
+
+**Montajes existentes: qué es real y qué está fakeado**
+
+| Archivo | Real | Fakeado (archivo:línea) |
+|---|---|---|
+| `tests/integration/sync/web-writing-save-atomic.test.ts` | `webDocumentService`, `localDB` sobre `fake-indexeddb` (:24), `SyncWorker` | `sync-service-factory`, para que `scheduleFlush` no haga nada (:27-29); spies que envuelven `localDB.writings.get/update` y abren la ventana de carrera (:88-96); transporte retenido (:100-121); `window` (:133-140). Reset: `setLocalDBScope(uuid)` (:141) |
+| `tests/integration/sync/sync-lifecycle-transition-atomic.test.ts` | `SyncWorker` y `localDB` (:21-26), sin `vi.mock` de módulos | transporte (:104-111, :178-203), `window` (:114-119) |
+| `tests/integration/sync/sync-worker-failure-preserves-local-content.test.ts` | `SyncWorker`, `localDB`, `MAX_ACTIVE_RETRIES` (:37-42) | transporte que falla (:82-88), `window` (:111-117). `makeMutationImmediatelyDue` (:98-109) reencola con `next_retry_at: 0` en lugar de usar fake timers |
+| `tests/sync-worker.test.ts` | solo la clase `SyncWorker` | todo `LocalDB` son `vi.fn` (:74-125), `vi.useFakeTimers` (:180). **Es unit y no sirve como montaje de integración** |
+| `tests/desktop-catalog-sync-service.test.ts` | solo el módulo del servicio; el caso SYNC-03 usa un `.md` real (:711-718) | `@tauri-apps/api/path` (:24-27), cliente supabase (:28-33), `SqliteDocumentCatalog` sustituido por una clase con `getById`/`applyCloudSnapshots` mock (:34-40), todos los comandos de catálogo y `tauriOpenFile` (:41-50), cadena de tabla supabase (:81-92). `vi.resetModules()` en cada test (:96) |
+| `tests/integration/documents/support/real-desktop-doubles.ts` | fs temporal real (:286-460), manifiesto e inode (:484-614), almacén de filas del catálogo en memoria con las reglas de Rust (:618-862), settings (:871-898) | SQLite y el transporte Tauri. **No hay cola de sync:** `applyDualWrite` (:618-633) descarta `input.mutation`, y faltan dobles de `enqueue`, `list pending`, `update status` y supabase |
+
+**Dueños del comportamiento**
+
+- `lib/sync/worker.ts`, `SyncWorker` (149-426):
+  - `schedule`: debounce de 1500 ms (210-230).
+  - `flush` (232-277): si ya hay un flush en curso, retorna sin hacer nada (239-242).
+  - `processMutation` (283-425), en este orden:
+    1. descarta la mutación si fue reemplazada (`getCurrentForEntity`, 284-291);
+    2. pasa el lifecycle a `syncing` (311-318);
+    3. llama a `upsertWriting(entity_id, mutation.payload)` (324-327);
+    4. aplica el eco del servidor, protegido por `local_updated_at` (335-344);
+    5. llama a `markSynced` (357).
+    - En fallo: rollback del lifecycle (404-410); terminal, `markFailed(MAX_SAFE_INTEGER)` (412-414); reintentable, `markFailed(nextRetryAt)` + `schedule()` (417-423).
+- `lib/sync/queue.ts`:
+  - `toRemotePayload`: snapshot completo de la fila (23-43).
+  - `enqueueMutation`: id nuevo por guardado (45-66).
+  - `enqueueWritingUpdate`: actualiza en una transacción y encola la fila escrita (106-119).
+  - **La deduplicación vive en `lib/local-db/index.ts:1074-1095`**: borra la mutación anterior de la misma `entity_key` y guarda la nueva, así que gana la última. `markMutationSynced` (1186-1246) no hace nada si el id ya no existe (1193) y solo confirma la fila si no queda otra mutación de la entidad (1213-1240).
+- `lib/sync/desktop-catalog-sync-service.ts`, `desktopCatalogSyncService` (objeto, 456-669):
+  - `processMutation` (212-390): **el cuerpo se relee del `.md` en el momento del flush** (`tauriOpenFile(record.binding.canonicalPath)`, 349-356); la metadata sale del JSON de la mutación.
+  - `flushPending` (531-629): un flush disparado por un guardado excluye los `failed` (538); en éxito, `tauriCatalogUpdateMutationStatus(…,"synced")` (574); en fallo, `"failed"` + `retryFailure` (583-587).
+  - `retryFailure` (73-85): `MAX_SYNC_ATTEMPTS = 10` devuelve `retryAt: null` (terminal).
+  - **En desktop no existe el estado `syncing`**: la mutación está `pending`, `failed` o `synced`, y Rust proyecta `documents.sync_status` en `catalog_update_mutation_status` (`src-tauri/src/commands/index.rs:1409-1443`).
+- Supersede en Rust:
+  - dual-write: `index.rs:700-716`;
+  - enqueue: `index.rs:1446-1478`;
+  - listado de pendientes: `index.rs:1482-1500`;
+  - test: `latest_document_snapshot_supersedes_older_actionable_mutations` (`index.rs:3295`).
+
+**Entradas de producción**
+
+- **Web:** `webDocumentService.saveWriting` / `updateWritingMetadata` (`lib/services/web-document-service.ts:169-213`) → `enqueueWritingUpdate` → `getSyncService().scheduleFlush()` (`queue.ts:65`) → `getSyncWorker().schedule(0)` (`lib/services/web-sync-service.ts:231-233`).
+- **Desktop:**
+  - `saveWriting` (`lib/services/document-service-factory.ts:391-397`) → `persist`: la mutación va sin cuerpo (289-303), luego dual-write y `runtime.scheduleSyncFlush()` (305-310).
+  - `lib/sync/sync-service-factory.ts:8-10` elige `desktopCatalogSyncService` bajo Tauri.
+  - Otros disparadores: el retry ticker de 60 s (431-445) y el wakeup posterior a un flush (623-627).
+
+**Evento de completitud (regla 4)**
+
+- **Web, "lo que llega a la nube es la versión N":** el argumento `payload` de `upsertWriting` en `worker.ts:324-327`. Es un snapshot tomado al encolar (`queue.ts:117`), no una relectura; como la cola se queda con la última mutación, contiene el cuerpo y la metadata de N juntos.
+- **Web, "la fila no queda en `syncing`":** el rollback de `worker.ts:404-410` y la confirmación de `local-db/index.ts:1234-1239`.
+- **Web, guardado durante un flush en vuelo:** v4 reemplaza el id de la mutación en vuelo, así que `markSynced(oldId)` no hace nada y v4 sigue en cola. El worker solo mueve el lifecycle a `server-confirmed` (`worker.ts:340-342`).
+- **Desktop, versión N:** el `row` que se pasa a `.update()`/`.insert()` de supabase (375-379). El cuerpo de ese row sale del disco en el momento del flush.
+- **Desktop, estado de la fila:** `documents.sync_status` que escribe `catalog_update_mutation_status`.
+
+**Riesgo sin verificar (hipótesis para ODE-611 req 2 en desktop):** `catalog_update_mutation_status` no protege el estado de la mutación (`index.rs:1422-1424`). Si llega un guardado durante el flush, el dual-write marca la mutación vieja como `synced` por supersede, y luego:
+- si el flush falla, la vuelve a poner en `failed` y la deja accionable de nuevo;
+- si tiene éxito, pone la fila del documento en `synced` aunque v4 siga `pending` (1425-1437).
+
+No se ejecutó; es exactamente el escenario que ODE-611 debe falsar en desktop.
+
+**Tamaño del PR de ODE-611:** partir por runtime.
+- La mitad web reutiliza el montaje de `web-writing-save-atomic` casi tal cual.
+- La mitad desktop necesita un doble nuevo de `sync_mutations` que replique el supersede, el listado y la proyección de estado de Rust, más un fake de supabase, añadidos a `real-desktop-doubles.ts` (su canonical owner). Ese doble es la misma infraestructura que ODE-612, y construirlo una sola vez es la decisión de secuencia que queda para el orquestador.
+
+**Trampas del área**
+
+1. Un fallo reintentable en web llama a `schedule()` con un `setTimeout` real de 1500 ms. Inyectar `scheduleTimeout` no-op.
+2. Los fake timers se cuelgan con `fake-indexeddb` (comentario en `sync-worker-failure-preserves-local-content.test.ts:98-102`). Usar `next_retry_at: 0`.
+3. `getPending` filtra por `next_retry_at <= now` (`local-db/index.ts:1103`).
+4. `setLocalDBScope` necesita un scope único por test.
+5. Guardar en web dispara el `SyncWorker` singleton por el transporte `fetch` por defecto. Mockear `sync-service-factory`.
+6. El servicio desktop guarda estado de módulo: `catalogPromise`, tickers, `flushRunning`, `nextFlushTrigger` (36, 63-71). Hace falta `vi.resetModules()` o `stop()`.
+7. Para que un flush vea los `failed`, tiene que ser explícito o `retry_tick`.
+8. En desktop, la ruta de solo metadata falla si la fila no existe en la nube (306-308).
+
+### Catálogo e IPC (ODE-613)
+
+**Secuencia de `SqliteDocumentCatalog`** (`lib/services/desktop/sqlite-document-catalog.ts`). Cada método llama a un solo wrapper, y cada wrapper hace un `invoke` (`lib/services/desktop/tauri-commands.ts`):
+
+| Método | Comandos, en orden |
+|---|---|
+| `getById` :81 | `catalog_get_by_id` (wrapper :323) |
+| `resolvePath` :82 | `catalog_resolve_path` (:327) |
+| `list` :83-105 | `catalog_list` (:331); después, `catalog_hydrate_excerpts` (:348), fire-and-forget, una vez por `dbPath` |
+| `registerBinding` :124-130 | `catalog_dual_write` (:264) → `catalog_get_by_id` |
+| `commitDualWrite` :159 / `commitBulkDualWrite` :169 | `catalog_dual_write` / `catalog_bulk_dual_write` (:269) |
+| `listByBindingRoot` :180 / `countByBindingRoot` :176 | `catalog_list_binding_root_documents` (:277) / `catalog_count_binding_root_documents` (:273) |
+| `applyReconcileTransaction` :255-297 | `catalog_apply_reconcile` (:373) |
+| `detachLocalFile` :131 / `applyCloudSnapshot(s)` :132-157 | `catalog_detach_local_file` (:344) / `catalog_apply_cloud_snapshots` (:308) |
+| `listRetiredBindingRoots` / `activate…` / `reactivate…` / `applyWorkspaceRemoval` (184-213) | `catalog_list_retired_binding_roots` / `catalog_activate_binding_root` / `catalog_reactivate_binding_root` / `catalog_apply_workspace_removal` |
+
+- **El catálogo no tiene método de mover, renombrar ni borrar.**
+  - Un move o un rename entra como dual-write o como un upsert de reconcile con el mismo id y una ruta nueva.
+  - `tauriCatalogPurgeDocument` (:391) existe, pero la clase no la usa.
+- El reconciliador desktop (`lib/services/desktop/desktop-workspace-reconciler.ts`) llama a `listRetiredBindingRoots` (:62) → `tauriWorkspaceSync` (:226) → `listByBindingRoot` (:258) → `applyReconcileTransaction` (:272).
+- `workspace-reconciler.ts` es lógica pura (`reconcileRoot` :156, `createWorkspaceReconciler` :419-543). Sus tests pasan `scan` y `commit` como fakes inline.
+
+**Lado Rust**
+
+- Los comandos de catálogo están en `src-tauri/src/commands/index.rs`. Son `pub fn(db_path: String, …) -> Result<_, String>` sin `AppHandle` ni `State`. `open_db` (:9-32) abre una conexión nueva en cada llamada, así que cada llamada ya es un reinicio del catálogo.
+- Los argumentos usan `serde(rename_all = "camelCase")`, de modo que el JSON capturado en TS deserializa directo.
+- El crate es `rlib` y `lib.rs` declara `pub mod commands`, así que un `src-tauri/tests/*.rs` puede llamar a `odessay_lib::commands::index::*`. Ese directorio no existe hoy.
+- **No existe un módulo `src-tauri/src/catalog/`.**
+- Tests en `mod catalog_tests` (:1764; `temp_db()` es un archivo SQLite temporal real, :1769-1774):
+  - `uuid_and_path_collisions_do_not_overwrite_another_document` (:1912-1940). Cubre misma ruta con otro UUID; **no** cubre "mismo nombre en dos raíces".
+  - `dual_write_reuses_existing_binding_root_for_the_same_path` (:1943-1988).
+  - `reconcile_reuses_existing_binding_root_for_the_same_path` (:1991-2047).
+  - `transaction_failure_rolls_back_document_binding_and_queue_together` (:2050).
+  - `catalog_apply_reconcile_backfills_missing_filename_title_for_local_document` (:2202-2278). Hace de facto un rename por reconcile: el mismo id resuelve la ruta nueva.
+  - `catalog_apply_reconcile_preserves_cloud_metadata_and_detaches_without_cloud_delete` (:2281-2346).
+  - `workspace_removal_fence_survives_restart_and_is_idempotent` (:2757-2797).
+  - `reconcile_only_reports_documents_that_actually_changed` (:2902-2937).
+  - `latest_document_snapshot_supersedes_older_actionable_mutations` (:3295).
+- Ningún test cubre mover, reabrir la DB y resolver el mismo UUID, ni dos raíces con un archivo homónimo.
+- **No existe ningún mecanismo que registre o derive la secuencia de `invoke` desde TS**: ni ts-rs, specta, `mockIPC` ni fixtures compartidos. Los tests TS mockean `tauri-commands` entero (`tests/contracts/document-catalog.test.ts:15-25`).
+
+**CI.** Ningún workflow corre `cargo test`: `quality.yml` corre typecheck, lint, `npm test` y build. Rust solo aparece en `release-desktop.yml`, por tag `app-v*` y sin tests.
+
+**Qué haría falta en cada vía**
+
+- **(a) Replay Rust de una secuencia derivada del wrapper:**
+  - Un test Vitest mockea `@tauri-apps/api/core` con un grabador de `{cmd, args}` y respuestas guionizadas. Conduce el `SqliteDocumentCatalog` y el reconciliador reales por los escenarios de SYS-01/SYS-05 y escribe `tests/fixtures/catalog-seam/*.json`.
+  - Un test Rust (`src-tauri/tests/catalog_seam.rs`) lee el fixture, despacha cada `cmd` a las `pub fn` sobre una DB y una raíz temporales (reescribiendo `dbPath`) y hace las aserciones sobre las filas.
+  - La secuencia se escribe una vez, en TS. Un test Vitest regenera el fixture en memoria y lo compara con el commiteado (drift), lo que cubre el lado TS en `npm test`.
+  - Para el lado Rust hace falta un job nuevo: `cargo test --manifest-path src-tauri/Cargo.toml --test catalog_seam`. En Linux necesita las libs de webkit2gtk porque compila `tauri`; la alternativa es macOS, que ya se usa en release.
+- **(b) Contrato TS contra los comandos Rust reales:** un binario o `examples/` nuevo que exponga los comandos por stdio o HTTP, más un shim de `invoke` en Vitest. Tiene el mismo costo de toolchain en CI que (a), más un arnés de proceso. Prueba algo más (la deserialización en vivo), pero es infraestructura nueva.
+- **(c) Carril RUNTIME (ODE-622):** es la única vía que prueba el transporte IPC real de Tauri. Es manual o sobre el artefacto empaquetado, así que no bloquea PRs y las filas no cambian hasta que exista el carril.
+
+**Recomendación: (a) + job de CI `cargo test` acotado al test del seam.** Reutiliza las `pub fn` ya testeables sin `AppHandle`, y el fixture grabado ata la secuencia al wrapper sin escribirla dos veces. Sin ese job, el lado Rust no queda gateado, y en ese caso SYS-01/SYS-05 no pueden subir de `PARTIAL_INTEGRATION`. Queda fuera en cualquier caso: el transporte IPC de Tauri (serialización real de `invoke`), que sigue siendo RUNTIME.
+
+### Dos Workspaces (ODE-614)
+
+**Montaje de `tests/integration/documents/cross-workspace-move.test.ts`** (270 líneas)
+
+- Helpers definidos en el propio archivo, candidatos a extraer a `tests/integration/documents/support/`:
+  - `registerTwoWorkspaces()` (:141-170);
+  - `catalogRow(id)` (:172-175): la ruta de la DB se repite en :173, :209 y :253;
+  - `bodyJson` (:121);
+  - `unimplemented` (:62-66);
+  - el ciclo del directorio temporal (:123-139);
+  - sobre todo, la tabla de 30 entradas del `vi.mock` de `tauri-commands` (:74-104), que pide una fábrica `tauriCommandsModuleDouble(overrides)`.
+- `support/` solo contiene `real-desktop-doubles.ts`.
+- Mockeados: `@tauri-apps/api/path` (68), `plugin-dialog` (70), `tauri-commands` (74), `runtime-detection` (106), `sync-service-factory` (113).
+- El docblock (:12) dice que `SqliteDocumentCatalog` es "real (unmocked)". La clase sí es real, pero su almacén es el Map en memoria de `real-desktop-doubles.ts:38`, no SQLite.
+
+**Navegación real entre vistas: hay dos rutas y solo una remonta la vista**
+
+- **Desktop:**
+  - el rail hace un `<Link href="/workspace?slug=…">` (`components/navigation/sidebar.tsx:732`);
+  - `workspace-index.tsx:111` usa `router.push(buildWorkspaceHref)`, y `buildWorkspaceHref` (`lib/workspace/workspace-route.ts:11-16`) elige `?slug=` en desktop;
+  - `components/workspace/desktop-workspace-entry.tsx` lee `useSearchParams().get("slug")` (:10) y renderiza `<WorkspaceDetail key={workspaceSlug} …>` (:21). **Remonta la vista en cada slug.**
+- **Web:** `app/(app)/workspace/[slug]/page.tsx` renderiza `<WorkspaceDetail workspaceSlug={slug} />` **sin `key`**. En esa instancia, si sobrevive al cambio de slug, se conservan `hasLoadedWorkspaceRef` (237), `selectedFolderPath` (219), la selección (246) y los filtros (278), y no hay ningún efecto que los resetee al cambiar el slug.
+- `hooks/useRailWorkspaces.ts` **no navega**: solo lista `getWorkspaceAssignmentService().listWorkspaces()` en un efecto con deps `[]` (22-48).
+- Carga de la vista: `loadWorkspace` (`workspace-detail.tsx:280-320`, deps `[workspaceSlug]`):
+  1. `getDesktopWorkspaceService().getWorkspace(slug)` (`lib/services/desktop/workspace-service.ts:317-334`, que hace `tauriWorkspaceSync(rootPath)`);
+  2. `loadWorkspaceDocumentJoin(rootPath)` (293).
+  - Se recarga al recibir foco (326-330) y ante cambios del catálogo, con un debounce de 100 ms (332-349).
+
+**Estado de vista que puede filtrarse**
+
+- `workspace-detail.tsx` usa `hooks/useDeskFilters.ts` (`useState`, 25-35) y `hooks/useWritingSelection.ts` (`useState<Set>`, :6). Los dos son estado por instancia, sin persistencia.
+- **`useWorkspaceTableFilters` no lo usa la vista real**: solo aparece en `workspace-prototype-shell.tsx:1020`.
+- La selección solo se limpia tras un borrado masivo (696) o cuando el usuario deselecciona (1502). El aislamiento depende enteramente del `key`.
+- ODE-643 (`selectedIds`/`selectedIdsRef`) está en `components/editor/panels/writing-collections-section.tsx`, el panel de colecciones del editor. No es estado de la vista de Workspace.
+
+**Fuente de las raíces y del filtrado**
+
+- `getWorkspaceAssignmentService()` (`lib/services/workspace-service.ts:139-149`) devuelve el singleton desktop bajo Tauri y `Unavailable…` en otro caso. `listWorkspaces` → `listAssignableWorkspaces()` (`desktop/workspace-service.ts:809-816`).
+- **El catálogo no filtra por raíz en la consulta** (`DocumentCatalogQuery`, `lib/services/contracts/document-catalog.ts:38-43`). `lib/queries/workspace-catalog-source.ts:47-67` trae todo (`limit 10_000`) y filtra en JS **por prefijo de ruta** (`isWithinRoot`, 36-39), no por `bindingRootId`.
+  - Dos raíces hermanas quedan separadas, porque el prefijo exige un `/`.
+  - Una raíz anidada dentro de otra filtraría filas a la exterior.
+- Búsqueda:
+  - dentro de la vista: `matchesFileQuery` (154-161) sobre `workspace.files` (358-363). Está acotada a la raíz por construcción;
+  - global: `search-modal.tsx`, sin alcance de Workspace.
+
+**Harness y trampas**
+
+- Ningún test renderiza `WorkspaceDetail` ni `DesktopWorkspaceEntry`.
+- `tests/desk-workspace-catalog-integration.test.tsx` renderiza el prototipo, con todo mockeado (es un contract test).
+- Para URLs mutables hay que reutilizar `nextNavigationDouble()` (`tests/support/editor-shell-doubles.ts:271-291`).
+- Trampas:
+  1. Hay dos detectores de runtime: `isTauriRuntime` (`lib/runtime/detect.ts`, lo usan la entrada y el assignment service) e `isDesktopRuntime` (lo usan `buildWorkspaceHref` y `loadCatalogRecords`). Hay que fijar los dos.
+  2. `getDesktopWorkspaceService()` es una promesa memoizada sobre `appConfigDir()` (`desktop/workspace-service.ts:1129-1137`). Debe apuntar al `configDir` del montaje y resetearse entre tests.
+  3. En desktop, `loadCatalogRecords` importa dinámicamente `desktop-auth-service` (`lib/queries/document-catalog.ts:116`).
+  4. El debounce de 100 ms y el listener de `focus` obligan a esperar por condición.
+  5. `useSearchParams` exige un Suspense en la página real; con el hook doblado no hace falta.
+  6. Abrir un archivo va por `openWorkspaceFileInEditor(file, router)` (741). Con el router doblado se afirma el href y el `file.path`/id del join; el contenido se lee con el doble de `open_file`.
+
+### Transversal
+
+**Flakes conocidos que tocan estas redes (en Backlog)**
+
+- **ODE-623:** `tests/desk-workspace-catalog-integration.test.tsx:551`, 5 recargas donde se esperaba 1 bajo carga. Relevante para ODE-614 si se toca Desk o el catálogo de Workspace.
+- **ODE-639 y ODE-641:** `waitFor` de 2000 ms y timeout de 5 s en el harness de la shell (`editor-shell-commands`, `editor-shell-blank-draft-web`). Solo afectan si un escenario monta `EditorShell`. Ninguno de los cuatro issues lo necesita a nivel servicio o vista.
+
+**Recuento del capability map, parseando la columna Status:**
+
+```sh
+awk -F'|' '/^# Audit Summary/{exit} /^\| *[A-Z]+-[0-9]+ *\|/{s=$6; gsub(/[ *`]/,"",s); c[s]++; n++} END{for(k in c) printf "%s=%d\n",k,c[k]; print "total="n}' workflow/quality/capability-integration-map.md | sort
+```
+
+En main@6e803d21 devuelve `CONTRACT=8, INTEGRATION=31, NONE=6, PARTIAL_INTEGRATION=49, RELEASE=1, UNIT_ONLY=12, total=107`, igual que la tabla "Coverage breakdown".
+
+**No explorado en este Recon:**
+- los tests Rust de `commands/workspace.rs` (`workspace_sync`);
+- el camino web de `/workspace/[slug]` en ejecución (si en web llega a montarse con datos);
+- `restoreWriting` y `registerBinding` web (read-then-write, citados en la fila SYNC-03).
