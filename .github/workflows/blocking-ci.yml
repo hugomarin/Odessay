@@ -112,12 +112,14 @@ jobs:
 
   # cargo test del crate de src-tauri, incluido el replay del seam TS→Rust
   # (ODE-613). Solo se ejecuta cuando el crate o la secuencia grabada cambian,
-  # para no pagar un runner macOS en cada PR de frontend.
+  # para no pagar un runner macOS en cada PR de frontend. Sin `secrets: inherit`:
+  # desktop-rust.yml no referencia ningún secreto y este job compila y ejecuta
+  # código del PR, así que no debe recibir ninguno (mínimo privilegio; review
+  # P3-2 de ODE-613).
   desktop-rust:
     needs: [detect-changes, process-checks]
     if: needs.detect-changes.outputs.rust_changed == 'true' && needs.process-checks.result == 'success'
     uses: ./.github/workflows/desktop-rust.yml
-    secrets: inherit
 
   # scoped-ci.yml (Playwright E2E) ya no es parte de la composición blocking:
   # ver el comentario de costo arriba. Sigue existiendo como workflow reusable
