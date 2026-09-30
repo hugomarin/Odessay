@@ -12,12 +12,17 @@
  *       applyReconcileTransaction)
  *     → mocked `@tauri-apps/api/core` invoke that RECORDS {cmd, args} and
  *       answers with the per-command semantics of the Rust layer
- *     → tests/fixtures/catalog-seam/catalog-seam-v1.json
+ *     → tests/fixtures/catalog-seam/catalog-seam-v2.json
  *
  * Only the IPC boundary is doubled (external boundary, capability-proof
- * contract rule 3). The responses the double returns only need to keep the TS
- * side moving; the canonical outcome (SQLite rows vs. files on disk) is
- * asserted by the Rust replay over the real commands.
+ * contract rule 3). The double's responses are NOT throwaway: they decide what
+ * the TS side does next (which ids it re-sends, which upserts it commits). So
+ * every recorded invoke also stores a projection of the response — the fields
+ * that determine identity and presence — and the Rust replay asserts the REAL
+ * command's response matches that projection step by step, on top of the
+ * canonical outcome (SQLite rows vs. files on disk). See
+ * `projectInvokeResponse` for the exact fields and the one documented
+ * exclusion (`folderCount`, which no consumer of this sequence reads).
  *
  * Paths are placeholders ($DB, $ROOT_A, $ROOT_B) so the fixture is machine
  * independent; the Rust runner rewrites them to its own temp dirs.
@@ -33,10 +38,25 @@ import {
   type WorkspaceReconciler,
 } from "@/lib/services/desktop/workspace-reconciler"
 
-export const CATALOG_SEAM_FIXTURE_VERSION = 1 as const
+export const CATALOG_SEAM_FIXTURE_VERSION = 2 as const
 export const FIXTURE_DB_PATH = "$DB"
 export const FIXTURE_ROOT_PATHS = { rootA: "$ROOT_A", rootB: "$ROOT_B" } as const
 export type FixtureRootKey = keyof typeof FIXTURE_ROOT_PATHS
+
+/** The read fields that determine identity/presence for SYS-01/SYS-05. */
+export type CatalogSeamRowProjection = {
+  id: string
+  relativePath: string | null
+  localPresent: boolean
+  bindingRootId: string | null
+}
+
+export type CatalogSeamInvokeResponse =
+  | { files: { relativePath: string; id: string }[]; unboundPaths: string[] }
+  | { applied: boolean; changed: string[] }
+  | CatalogSeamRowProjection
+  | CatalogSeamRowProjection[]
+  | null
 
 export type CatalogSeamFixtureStep =
   | { kind: "fs"; op: "seed-manifest"; root: FixtureRootKey; bindingRootId: string }
@@ -51,7 +71,12 @@ export type CatalogSeamFixtureStep =
     }
   | { kind: "fs"; op: "rename"; root: FixtureRootKey; relativePath: string; newRelativePath: string }
   | { kind: "fs"; op: "delete"; root: FixtureRootKey; relativePath: string }
-  | { kind: "invoke"; cmd: string; args: Record<string, unknown> }
+  | {
+      kind: "invoke"
+      cmd: string
+      args: Record<string, unknown>
+      response: CatalogSeamInvokeResponse
+    }
 
 export type CatalogSeamScenario = {
   name: string
@@ -126,6 +151,59 @@ function normalizeFixtureJson(value: unknown): unknown {
     )
   }
   return value
+}
+
+function byRelativePath<T extends { relativePath: string }>(left: T, right: T): number {
+  return left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0
+}
+
+function projectCatalogRow(row: DesktopCatalogRow): CatalogSeamRowProjection {
+  return {
+    id: row.id,
+    relativePath: row.relativePath,
+    localPresent: row.localPresent,
+    bindingRootId: row.bindingRootId,
+  }
+}
+
+function projectCatalogRowOrNull(row: DesktopCatalogRow | null): CatalogSeamRowProjection | null {
+  return row ? projectCatalogRow(row) : null
+}
+
+/**
+ * The response projection the Rust replay must reproduce exactly. It keeps only
+ * the fields that determine identity and presence along the recorded sequence
+ * (P2-1, ODE-613 review): the id/path mapping and unboundPaths of
+ * `workspace_sync` decide which document ids the TS wrapper re-sends and which
+ * it mints; `changed` and the read rows are what the subscribers consume.
+ *
+ * `folderCount` is deliberately excluded. No consumer of this sequence reads
+ * it, and the double counts the folders of the bound manifest while Rust counts
+ * the scanned scope — they diverge exactly on passes that still have unbound
+ * paths, with no SYS-01/SYS-05 signal. Including it would only encode
+ * double-only semantics into the recording.
+ */
+export function projectInvokeResponse(cmd: string, response: unknown): CatalogSeamInvokeResponse {
+  switch (cmd) {
+    case "workspace_sync": {
+      const snapshot = response as { files: { relativePath: string; id: string }[]; unboundPaths: string[] }
+      return {
+        files: snapshot.files
+          .map((file) => ({ relativePath: file.relativePath, id: file.id }))
+          .sort(byRelativePath),
+        unboundPaths: [...snapshot.unboundPaths].sort(),
+      }
+    }
+    case "catalog_apply_reconcile": {
+      const result = response as { applied: boolean; changed: string[] }
+      return { applied: result.applied, changed: [...result.changed] }
+    }
+    case "catalog_list_binding_root_documents":
+      return (response as DesktopCatalogRow[]).map(projectCatalogRow)
+    default:
+      // The remaining commands are reads: catalog_get_by_id / catalog_resolve_path.
+      return projectCatalogRowOrNull(response as DesktopCatalogRow | null)
+  }
 }
 
 /**
@@ -260,7 +338,17 @@ export class CatalogSeamSession {
   // ── command semantics (the doubled IPC boundary) ──────────────────────────
 
   async invoke(cmd: string, args: Record<string, unknown>): Promise<unknown> {
-    this.steps.push({ kind: "invoke", cmd, args: normalizeFixtureJson(args) as Record<string, unknown> })
+    const response = this.dispatch(cmd, args)
+    this.steps.push({
+      kind: "invoke",
+      cmd,
+      args: normalizeFixtureJson(args) as Record<string, unknown>,
+      response: projectInvokeResponse(cmd, response),
+    })
+    return response
+  }
+
+  private dispatch(cmd: string, args: Record<string, unknown>): unknown {
     switch (cmd) {
       case "workspace_sync":
         return this.workspaceSync(args)
