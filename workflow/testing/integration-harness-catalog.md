@@ -158,6 +158,7 @@ Eso valida la regla principal: de los ocho archivos que el conteo señalaba, **c
 | `tests/integration/sync/web-writing-save-atomic.test.ts` | `webDocumentService`, `localDB` sobre `fake-indexeddb` (:24), `SyncWorker` | `sync-service-factory`, para que `scheduleFlush` no haga nada (:27-29); spies que envuelven `localDB.writings.get/update` y abren la ventana de carrera (:88-96); transporte retenido (:100-121); `window` (:133-140). Reset: `setLocalDBScope(uuid)` (:141) |
 | `tests/integration/sync/sync-lifecycle-transition-atomic.test.ts` | `SyncWorker` y `localDB` (:21-26), sin `vi.mock` de módulos | transporte (:104-111, :178-203), `window` (:114-119) |
 | `tests/integration/sync/sync-worker-failure-preserves-local-content.test.ts` | `SyncWorker`, `localDB`, `MAX_ACTIVE_RETRIES` (:37-42) | transporte que falla (:82-88), `window` (:111-117). `makeMutationImmediatelyDue` (:98-109) reencola con `next_retry_at: 0` en lugar de usar fake timers |
+| `tests/integration/sync/sync-multiple-saves-before-flush.test.ts` (ODE-611) | `webDocumentService`, `localDB` sobre `fake-indexeddb`, `SyncWorker`, y un servidor fake en memoria que registra cada payload recibido y devuelve el eco del registro de la API (última escritura gana) | `sync-service-factory` para que `scheduleFlush` no agende nada (mismo mock que `web-writing-save-atomic`); solo el transporte de red (`upsertWriting`, con una variante que retiene la primera respuesta para el flush en vuelo); `window`. Reset: `setLocalDBScope(uuid)` |
 | `tests/sync-worker.test.ts` | solo la clase `SyncWorker` | todo `LocalDB` son `vi.fn` (:74-125), `vi.useFakeTimers` (:180). **Es unit y no sirve como montaje de integración** |
 | `tests/desktop-catalog-sync-service.test.ts` | solo el módulo del servicio; el caso SYNC-03 usa un `.md` real (:711-718) | `@tauri-apps/api/path` (:24-27), cliente supabase (:28-33), `SqliteDocumentCatalog` sustituido por una clase con `getById`/`applyCloudSnapshots` mock (:34-40), todos los comandos de catálogo y `tauriOpenFile` (:41-50), cadena de tabla supabase (:81-92). `vi.resetModules()` en cada test (:96) |
 | `tests/integration/documents/support/real-desktop-doubles.ts` | fs temporal real (:286-460), manifiesto e inode (:484-614), almacén de filas del catálogo en memoria con las reglas de Rust (:618-862), settings (:871-898) | SQLite y el transporte Tauri. **No hay cola de sync:** `applyDualWrite` (:618-633) descarta `input.mutation`, y faltan dobles de `enqueue`, `list pending`, `update status` y supabase |
@@ -212,9 +213,9 @@ Eso valida la regla principal: de los ocho archivos que el conteo señalaba, **c
 
 No se ejecutó; es exactamente el escenario que ODE-611 debe falsar en desktop.
 
-**Tamaño del PR de ODE-611:** partir por runtime.
-- La mitad web reutiliza el montaje de `web-writing-save-atomic` casi tal cual.
-- La mitad desktop necesita un doble nuevo de `sync_mutations` que replique el supersede, el listado y la proyección de estado de Rust, más un fake de supabase, añadidos a `real-desktop-doubles.ts` (su canonical owner). Ese doble es la misma infraestructura que ODE-612, y construirlo una sola vez es la decisión de secuencia que queda para el orquestador.
+**Tamaño del PR de ODE-611:** partir por runtime (decisión del humano del 2026-09-30: PR 1 web, PR 2 desktop).
+- La mitad web reutiliza el montaje de `web-writing-save-atomic` casi tal cual: `tests/integration/sync/sync-multiple-saves-before-flush.test.ts`, **entregado en ODE-611 PR 1**. Añade solo un servidor fake en memoria (última escritura gana) sobre el montaje existente; no crea uno nuevo.
+- La mitad desktop necesita un doble nuevo de `sync_mutations` que replique el supersede, el listado y la proyección de estado de Rust, más un fake de supabase, añadidos a `real-desktop-doubles.ts` (su canonical owner). Ese doble es la misma infraestructura que ODE-612, y construirlo una sola vez es la decisión de secuencia que queda para el orquestador. Queda para ODE-611 PR 2.
 
 **Trampas del área**
 
