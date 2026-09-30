@@ -318,16 +318,16 @@ Eso valida la regla principal: de los ocho archivos que el conteo señalaba, **c
 
 ### Dos Workspaces (ODE-614)
 
-**Montaje de `tests/integration/documents/cross-workspace-move.test.ts`** (270 líneas)
+**Montaje de dos Workspaces (extraído en ODE-614 a `tests/integration/documents/support/two-workspace-montage.ts`)**
 
-- Helpers definidos en el propio archivo, candidatos a extraer a `tests/integration/documents/support/`:
-  - `registerTwoWorkspaces()` (:141-170);
-  - `catalogRow(id)` (:172-175): la ruta de la DB se repite en :173, :209 y :253;
-  - `bodyJson` (:121);
-  - `unimplemented` (:62-66);
-  - el ciclo del directorio temporal (:123-139);
-  - sobre todo, la tabla de 30 entradas del `vi.mock` de `tauri-commands` (:74-104), que pide una fábrica `tauriCommandsModuleDouble(overrides)`.
-- `support/` solo contiene `real-desktop-doubles.ts`.
+- `cross-workspace-move.test.ts` (DOC-08/WS-02/SYS-04) y `workspace-switch-isolation.test.ts` (WS-06) consumen el mismo módulo; WATCH-04 lo reutilizará. La extracción fue movimiento puro (los dos tests de ODE-554 siguen intactos y verdes).
+- El módulo expone:
+  - `configureTwoWorkspaceBase(prefix)` — directorio temporal real + `configureRealDesktopDoubles` (:96), devuelve `{ baseDir, configDir, dispose }`; reemplaza el ciclo local :123-139;
+  - `registerTwoWorkspaces(baseDir, configDir)` — las dos raíces reales (WorkspaceRecord + BindingRoot cada una); antes :141-170;
+  - `catalogRow(configDir, id)` — fila del catálogo en memoria (antes :172-175, con la ruta de la DB repetida en :173, :209 y :253);
+  - `bodyJson(text)` y `unimplemented(name)`;
+  - `tauriCommandsModuleDouble(overrides)` — la tabla del `vi.mock` de `tauri-commands`. Tiene **29 entradas base** (la nota de review del Recon lo confirmó: no son 30) y `overrides` reemplaza/añade comandos; ODE-614 añadió por esa vía `tauriCatalogListCollectionSnapshot`, `tauriCatalogSaveCollection` y `tauriCatalogReplaceWritingCollections`, que en `real-desktop-doubles.ts` ahora tienen un store real en memoria (`collections` + `writing_collections`, espejo del SQL de `index.rs:1520-1730`; con cero colecciones creadas el snapshot sigue siendo el vacío genuino de antes).
+- `support/` contiene `real-desktop-doubles.ts`, `fake-supabase-server.ts` (ODE-611/612) y `two-workspace-montage.ts` (ODE-614).
 - Mockeados: `@tauri-apps/api/path` (68), `plugin-dialog` (70), `tauri-commands` (74), `runtime-detection` (106), `sync-service-factory` (113).
 - El docblock (:12) dice que `SqliteDocumentCatalog` es "real (unmocked)". La clase sí es real, pero su almacén es el Map en memoria de `real-desktop-doubles.ts:38`, no SQLite.
 
@@ -363,16 +363,18 @@ Eso valida la regla principal: de los ocho archivos que el conteo señalaba, **c
 
 **Harness y trampas**
 
-- Ningún test renderiza `WorkspaceDetail` ni `DesktopWorkspaceEntry`.
+- ODE-614 agregó `tests/integration/documents/workspace-switch-isolation.test.ts`: el primer test que renderiza `WorkspaceDetail` y `DesktopWorkspaceEntry` reales. Corre la prueba en las dos entradas (desktop `?slug=` con `DesktopWorkspaceEntry`, web `/workspace/[slug]` renderizando `WorkspaceDetail` sin `key`), espera por condición (header + filas) y afirma el DOM (filas, labels de los triggers del filtro, chips de colección, barra de selección). Monta React con `createRoot` + `act`; necesita los parches de happy-dom que el harness de la shell ya conoce (`ResizeObserver`, `IntersectionObserver`, `matchMedia`).
 - `tests/desk-workspace-catalog-integration.test.tsx` renderiza el prototipo, con todo mockeado (es un contract test).
-- Para URLs mutables hay que reutilizar `nextNavigationDouble()` (`tests/support/editor-shell-doubles.ts:271-291`).
+- Para URLs mutables hay que reutilizar `nextNavigationDouble()` (`tests/support/editor-shell-doubles.ts:271-291`) y fijar `world.searchParams`.
 - Trampas:
-  1. Hay dos detectores de runtime: `isTauriRuntime` (`lib/runtime/detect.ts`, lo usan la entrada y el assignment service) e `isDesktopRuntime` (lo usan `buildWorkspaceHref` y `loadCatalogRecords`). Hay que fijar los dos.
+  1. Hay dos detectores de runtime: `isTauriRuntime` (`lib/runtime/detect.ts`, lo usan la entrada y el assignment service) e `isDesktopRuntime` (lo usan `buildWorkspaceHref` y `loadCatalogRecords`), aunque en el código vigente `lib/services/desktop/runtime-detection.ts` solo re-exporta `isTauriRuntime`. El montaje de ODE-614 dobla ambos módulos (`tauriRuntimeDetectDouble` + `runtimeDetectionDouble`) para que no diverjan.
   2. `getDesktopWorkspaceService()` es una promesa memoizada sobre `appConfigDir()` (`desktop/workspace-service.ts:1129-1137`). Debe apuntar al `configDir` del montaje y resetearse entre tests.
-  3. En desktop, `loadCatalogRecords` importa dinámicamente `desktop-auth-service` (`lib/queries/document-catalog.ts:116`).
+  3. En desktop, `loadCatalogRecords` importa dinámicamente `desktop-auth-service` (`lib/queries/document-catalog.ts:116`), que crea el cliente Supabase; sin sesión el error se traga y el scope queda `null` (no rompe el render).
   4. El debounce de 100 ms y el listener de `focus` obligan a esperar por condición.
   5. `useSearchParams` exige un Suspense en la página real; con el hook doblado no hace falta.
   6. Abrir un archivo va por `openWorkspaceFileInEditor(file, router)` (741). Con el router doblado se afirma el href y el `file.path`/id del join; el contenido se lee con el doble de `open_file`.
+  7. `WritingPreviewModal` (importado por la vista aunque esté cerrado) llama a `createSharingService()` en un `useMemo` de montaje: hay que doblar `@/lib/services/sharing-service-factory` o el montaje revienta con `supabaseUrl is required`.
+  8. El toolbar usa Popovers de Radix: abrirlos con `pointerdown` + `click` sintéticos (mismo patrón que `tests/settings-vocabulary.test.tsx`).
 
 ### Transversal
 
@@ -389,7 +391,11 @@ awk -F'|' '/^# Audit Summary/{exit} /^\| *[A-Z]+-[0-9]+ *\|/{s=$6; gsub(/[ *`]/,
 
 En main@6e803d21 devuelve `CONTRACT=8, INTEGRATION=31, NONE=6, PARTIAL_INTEGRATION=49, RELEASE=1, UNIT_ONLY=12, total=107`, igual que la tabla "Coverage breakdown".
 
+**Corrección ODE-614 (BUILD, 2026-09-30):** aquel recuento quedó viejo en dos pasos. En `main@5e58443e` (base de ODE-614) el mismo comando devuelve `INTEGRATION=33, PARTIAL_INTEGRATION=47, NONE=6, total=107` (ODE-613 movió SYS-01/SYS-05). Tras WS-06 en este PR: `NONE=5, PARTIAL_INTEGRATION=48, INTEGRATION=33, total=107` — la fila WS-06 pasa de `NONE` a `PARTIAL_INTEGRATION` porque el desktop queda probado de punta a punta y la entrada web prueba una fuga real (ODE-646), la cadena más débil de los dos runtimes.
+
+**Estado de WS-06 tras ODE-614:** `PARTIAL_INTEGRATION`. Evidencia: `tests/integration/documents/workspace-switch-isolation.test.ts` (tres pruebas por runtime: control positivo del estado de vista, aislamiento —`it.fails` en web—, y alcance de documentos/colecciones). El montaje de dos raíces se comparte con WATCH-04.
+
 **No explorado en este Recon:**
 - los tests Rust de `commands/workspace.rs` (`workspace_sync`);
-- el camino web de `/workspace/[slug]` en ejecución (si en web llega a montarse con datos);
+- ~~el camino web de `/workspace/[slug]` en ejecución~~ — explorado por ODE-614: con datos, la instancia sin `key` sobrevive al cambio de slug y arrastra el estado de vista (fuga real, ODE-646). Queda sin cubrir la apertura del homónimo por el opener unificado (click de fila → `/write?id=`) y la escritura en B (requirement 4 del brief, fuera del alcance entregado);
 - `restoreWriting` y `registerBinding` web (read-then-write, citados en la fila SYNC-03).
