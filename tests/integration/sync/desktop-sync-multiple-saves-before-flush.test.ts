@@ -2,7 +2,8 @@
 /**
  * SYNC-05 desktop — varios guardados locales antes de sincronizar: lo que llega
  * a la nube es la última versión completa, no una intermedia ni una mezcla; y
- * un guardado durante un flush en vuelo no se pierde.
+ * un guardado durante un flush en vuelo no se pierde en la cola (si el write en
+ * vuelo falla, su metadata sí puede perderse en la nube: ODE-644, casos 4-5).
  *
  * Cadena real: `DesktopDocumentService.saveWriting` / `updateWritingMetadata`
  * (el camino de producción; `createDesktopDraft` materializa el documento, no
@@ -38,6 +39,14 @@
  *    la costura TS→Rust de ODE-613.
  * 4. (it.fails, ODE-644) El mismo hueco en la rama de fallo: la mutación
  *    superada revive como `failed` accionable.
+ * 5. (it.fails, ODE-644) El estado final de la nube en esa secuencia: la v3
+ *    falla en vuelo, la v4 se guarda (status review) y sube bien, y el
+ *    reintento de la v3 tras el backoff llega DESPUÉS y pisa la nube — la
+ *    metadata de la v4 se pierde y la versión retrocede, en silencio. El caso
+ *    afirma el estado correcto: la nube conserva la v4.
+ * 6. Cobertura del orden del listado (`created_at ASC`, `index.rs:1516`): con
+ *    la v3 revivida y la v4 accionables en el mismo flush, la vieja se procesa
+ *    primero y la nueva la pisa; el orden inverso dejaría la nube en la vieja.
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { readFile } from "node:fs/promises"
@@ -399,5 +408,88 @@ describe("SYNC-05 desktop — varios guardados antes del flush: la última versi
       (await catalog.getById(writingId))?.syncStatus,
       "la fila sigue pendiente por la v4, no failed por la vieja",
     ).toBe("pending")
+  })
+
+  // ODE-644, el estado final de la nube en la secuencia completa: la v3 falla
+  // en vuelo, la v4 (status review) se guarda y sube bien, y el reintento de la
+  // v3 revivida, al vencer su backoff, llega DESPUÉS del flush de la v4. El
+  // cuerpo del reintento sale del `.md` (v4), pero la metadata sale del payload
+  // de la v3: la nube acaba en `{version: 3, status: "draft"}` — la metadata de
+  // la v4 (el status del usuario) se pierde en la nube y la versión retrocede,
+  // en silencio (la fila local queda `synced`). El caso afirma el estado
+  // correcto: la nube conserva la v4.
+  it.fails("el reintento de la v3 superada no pisa la nube tras el backoff (ODE-644)", async () => {
+    const { writingId } = await createMaterializedDraft("Versión 1.")
+    await saveFromEditor(writingId, "Versión 3.", 3, "draft")
+
+    fakeSupabase.failNextWrite({ message: "network down", code: "503" })
+    const hold = fakeSupabase.holdNextWrite()
+    const flushing = desktopCatalogSyncService.flushPending()
+    await hold.started
+
+    await saveFromEditor(writingId, "Versión 4.", 4, "review")
+    hold.release()
+    await flushing // v3 -> failed con reintento a +2 s; la v4 sigue accionable
+
+    const v4Queued = actionableMutations(writingId).filter(
+      (mutation) => JSON.parse(mutation.payloadJson).version === 4,
+    )
+    expect(v4Queued, "la v4 sobrevive al fallo en vuelo de la v3").toHaveLength(1)
+
+    const second = await desktopCatalogSyncService.flushPending()
+    expect(second.error).toBeNull()
+    expect(second.data?.failedMutations).toEqual([])
+    expect(fakeSupabase.row("writings", writingId), "la v4 ya subió bien").toMatchObject({
+      version: 4,
+      status: "review",
+      body_text: "Versión 4.",
+    })
+
+    // Vence el backoff de la v3 revivida: el siguiente flush la reintenta.
+    const realNow = Date.now.bind(Date)
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => realNow() + 10 * 60_000)
+    try {
+      await desktopCatalogSyncService.flushPending()
+    } finally {
+      spy.mockRestore()
+    }
+
+    const cloud = fakeSupabase.row("writings", writingId)
+    expect(cloud?.version, "la nube conserva la versión 4, no retrocede a la 3").toBe(4)
+    expect(cloud?.status, "y el status review de la v4, no el draft de la v3 superada").toBe("review")
+    expect(cloud?.body_text).toBe("Versión 4.")
+    expect(actionableMutations(writingId), "y la cola queda quieta").toHaveLength(0)
+  })
+
+  // Cobertura del orden del listado (`ORDER BY created_at ASC`, `index.rs:1516`),
+  // que la mutación M4 de la Guía ya puede observar: si el backoff de la v3
+  // vence antes del siguiente flush, la v3 revivida y la v4 son accionables en
+  // el mismo listado. Procesar la vieja primero deja que la nueva la pise
+  // (estado correcto); con el orden invertido la nube acabaría en la vieja.
+  it("con la v3 revivida y la v4 accionables en el mismo flush, la nube acaba en la v4", async () => {
+    const { writingId } = await createMaterializedDraft("Versión 1.")
+    await saveFromEditor(writingId, "Versión 3.", 3, "draft")
+
+    fakeSupabase.failNextWrite({ message: "network down", code: "503" })
+    const hold = fakeSupabase.holdNextWrite()
+    const flushing = desktopCatalogSyncService.flushPending()
+    await hold.started
+
+    await saveFromEditor(writingId, "Versión 4.", 4, "review")
+    hold.release()
+    await flushing // v3 -> failed con reintento a +2 s; la v4 pending
+
+    const realNow = Date.now.bind(Date)
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => realNow() + 10 * 60_000)
+    try {
+      const result = await desktopCatalogSyncService.flushPending()
+      expect(result.error).toBeNull()
+    } finally {
+      spy.mockRestore()
+    }
+
+    expect(fakeSupabase.row("writings", writingId)?.version, "la más nueva se procesa después y gana").toBe(4)
+    expect(fakeSupabase.row("writings", writingId)?.status).toBe("review")
+    expect(fakeSupabase.row("writings", writingId)?.body_text).toBe("Versión 4.")
   })
 })

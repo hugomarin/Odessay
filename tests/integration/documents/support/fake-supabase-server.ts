@@ -163,10 +163,10 @@ export class FakeSupabaseServer {
   }
 
   /**
-   * Retiene la respuesta del próximo write hasta `release()`: el payload ya
-   * llegó al servidor (`received` lo registra), pero el llamador no recibe
-   * respuesta — la ventana exacta de "sync en vuelo" que SYNC-05 necesita.
-   * `started` resuelve cuando el write retenido llegó.
+   * Retiene la respuesta del próximo write hasta `release()`: el write ya
+   * llegó (por eso `started` resuelve), pero todavía no se aplicó ni quedó en
+   * `received` — se registra y se aplica al soltar — y el llamador no recibe
+   * respuesta. Es la ventana exacta de "sync en vuelo" que SYNC-05 necesita.
    */
   holdNextWrite(): { started: Promise<void>; release: () => void } {
     let release!: () => void
