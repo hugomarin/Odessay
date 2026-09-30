@@ -6,6 +6,9 @@ Este documento es el diagnóstico previo: qué hay realmente ahí dentro, qué c
 
 **No** es el plan de extracción detallado. Ese se escribe cuando la red exista, y su contenido depende de lo que la red revele.
 
+El estado final de los cortes está en [§7.5](#75-cierre-medido--ode-610-2026-09-29).
+El diagnóstico y sus actualizaciones anteriores se conservan como evidencia histórica.
+
 **Snapshot de la medición**
 ```text
 Fecha:   2026-09-22
@@ -745,6 +748,179 @@ ajeno al corte, registrado en ODE-643. `useVoiceRecorder` no entra porque su
 efecto también devuelve cleanup, a diferencia del patrón preliminar de §7.3.
 La medición comparativa final y el recuento del capability map siguen siendo
 el alcance de ODE-610 después de mergear estos PRs.
+
+### 7.5 Cierre medido — ODE-610 (2026-09-29)
+
+Se reutiliza el Recon Pack de §7.3 (`ba13217e`) y su corrección aprobada sobre
+los conteos con genéricos. Los cortes restantes ya están mergeados: la medición
+final corresponde a `main@fadd4d4d`, después de la cadena de ODE-609
+(PRs #554, #556, #555 y #557). ODE-599, ODE-600, ODE-601 y ODE-609 están Done.
+Este cierre documenta los cortes planeados; la auditoría y los gaps del mapa
+siguen teniendo sus propios issues.
+
+#### Comparación con un método consistente
+
+Cada columna cuenta líneas que contienen llamadas `useX(` o `useX<`, incluyendo
+los genéricos en los tres snapshots. El segundo cuadro conserva el patrón
+histórico sin genéricos para permitir contrastar las entregas anteriores.
+
+| Métrica | Inicio `e8889942` | Recon `ba13217e` | Final `fadd4d4d` |
+|---|---:|---:|---:|
+| Líneas de shell | 7.324 | 3.466 | 3.048 |
+| `useState`, con genéricos | 54 | 54 | 50 |
+| `useRef`, con genéricos | 75 | 63 | 59 |
+| `useEffect` | 63 | 26 | 19 |
+| `useCallback` | 92 | 43 | 35 |
+| `useMemo` | 17 | 10 | 9 |
+| Archivos `tests/editor-shell-*.test.tsx` | 1 | 49 | 57 |
+| Clusters extraídos de la lista de cortes | 0 | 15 | 18 |
+
+| Patrón histórico sin genéricos | Inicio | Recon | Final |
+|---|---:|---:|---:|
+| `useState(` | 25 | 26 | 26 |
+| `useRef(` | 30 | 18 | 19 |
+
+La reducción de líneas es **4.276 (58,4%)** respecto al inicio y 418 (12,1%)
+respecto al Recon. Reducir líneas no prueba corrección ni performance: esas
+propiedades se contrastan con los tests y el caso de costo siguientes.
+
+**Espejos:** los ocho espejos de estado del inventario §7.2 tienen un escritor
+síncrono y único; quedan **cero** en la shell y sus clusters. El ratchet AST de
+ODE-609 recorre `components/editor/**` y `hooks/**` y admite exactamente once
+asignaciones por efecto: nueve latest-callbacks, un reset por documento y una
+deuda preexistente del panel de colecciones (`selectedIdsRef`, ODE-643).
+Los 19 espejos del diagnóstico inicial, los 13 candidatos del scan preliminar
+del Recon y las once excepciones AST son inventarios de distinto alcance;
+no se presentan como una serie numérica homogénea. El ratchet exige retirar
+una excepción cuando desaparece, y rechaza copias nuevas.
+
+#### Hooks y superficie que permanece
+
+Los 18 clusters suman 6367 líneas en sus módulos actuales. Esta cifra incluye
+tipos y helpers de cada módulo, no solo el cuerpo de su hook; cuenta cada módulo
+una vez, aunque exporte también un pequeño owner de estado.
+
+| Cluster | Líneas del módulo |
+|---|---:|
+| `useFocusMode` | 84 |
+| `useEditorPersistence` | 580 |
+| `useCorrectionBlocks` | 329 |
+| `useTableOfContents` | 158 |
+| `useSessionRestore` | 139 |
+| `useExternalDocumentChanges` | 369 |
+| `useDocumentHydration` | 754 |
+| `useSaveStateSync` | 252 |
+| `useDocumentExit` | 259 |
+| `useCorrectionActions` | 447 |
+| `useEditorCommands` | 728 |
+| `useCorrectionLifecycle` | 416 |
+| `useFindReplace` | 523 |
+| `useWorkspaceTabs` | 414 |
+| `useWorkspaceTabOpening` | 221 |
+| `useSelectionRestore` | 260 |
+| `useSelectionPopup` | 322 |
+| `useFootnotes` | 112 |
+
+Además están los tres owners síncronos `useTableOfContentsState`,
+`useCorrectionSuggestionsState` y `useLearnedWordsState` dentro de esos módulos,
+y el puente del store `useActiveEditorTabIdRef` (41 líneas, módulo separado).
+No se suman estos cuatro como clusters extraídos ni se duplican líneas.
+
+Permanece en la shell el render, la composición de chrome/paneles/modales,
+el montaje de TipTap y sus extensiones, los inputs y resultados de los hooks,
+y el cableado de acciones de UI y adapters existentes. También conserva estado
+de presentación y refs compartidos por esos inputs: 50 llamadas `useState` y
+59 `useRef` no equivalen a una shell sin estado. Las decisiones de identidad,
+persistencia y lifecycle tienen los owners que documentan los cortes; este
+cierre no mueve nuevas responsabilidades ni propone otra extracción por tamaño.
+
+Trabajo fuera del cierre:
+
+- **ODE-643:** retirar el espejo `selectedIdsRef` del panel de colecciones y su
+  excepción del ratchet.
+- **ODE-632:** seis expected failures de la red de comandos, pendientes de resolver.
+- **ODE-576:** auditoría de los cambios mergeados y de sus límites; el cierre no
+  sustituye esa revisión.
+- El resto de gaps de producto siguen en sus filas del capability map. El
+  recuento no cambia estados ni afirma que la cobertura `RUNTIME` esté cerrada.
+
+#### Costo por evento — ODE-579
+
+El snapshot inicial `e8889942` no contiene aún la prueba de ODE-579. Para una
+comparación ejecutable se usa su entrega original, `3ba8696a` (shell de 6.516
+líneas, antes de los cortes posteriores), y el estado final `fadd4d4d`.
+Se ejecutó en ambos `vitest run tests/editor-shell-durable-save-state.test.tsx
+-t 'coste por evento'`, con las mismas dependencias locales. Ambos pasan.
+La versión final amplía también la prueba de fondo con la corrección ODE-590;
+no se equiparan cuerpos de test que cambiaron.
+
+| Propiedad | ODE-579 original | Final |
+|---|---|---|
+| Evento terminal del documento activo | 1 `getById`, 0 `list` | 1 `getById`, 0 `list` |
+| Actualización con confirmación durable | 1 update de su tab | 1 update de su tab |
+| Repetición terminal sin cambio durable | 0 updates | 0 updates |
+| Listeners al abrir más tabs | sin incremento | sin incremento |
+| `syncing` de fondo | 0 lecturas, 0 escaneos | 0 lecturas, 0 escaneos |
+| Burst terminal de fondo | no medido por la prueba original | N eventos → N lecturas puntuales, 0 `list` |
+
+Los tiempos de ejecución (15,05 s original y 35,04 s final) incluyen montaje,
+harness y escenarios distintos; no son latencia por evento ni un benchmark de
+producto. La evidencia seleccionada es el presupuesto de lecturas, updates y
+listeners, que no crece con un escaneo del catálogo o un listener por tab.
+
+#### Validación y mapa
+
+Suite completa: **326 archivos, 2.351 passed | 7 expected fail | 3 skipped
+(2.361 casos)**, 169,11 s. Dentro de ella, los `editor-shell-*` son **57 archivos,
+237 casos: 231 passed + 6 expected fail de ODE-632**, frente a 49 archivos y
+224 casos del Recon (218 + 6). El reporter JSON contabiliza también los
+expected failures como casos passed; se explicita aquí esa distinción.
+
+El ratchet de mirrors pasa dentro de la suite. `typecheck`, `lint`, `env:check`
+y delivery gate pasan; lint conserva warnings preexistentes. El validador tiene
+10 casos verdes, incluidos los dos de la línea base inmutable ya existentes.
+
+El parser del mapa devuelve **107 escenarios**: `NONE=6`, `UNIT_ONLY=12`,
+`CONTRACT=8`, `PARTIAL_INTEGRATION=49`, `INTEGRATION=31`, `RUNTIME=0`, `RELEASE=1`.
+El summary ya tenía esos conteos; se corrige su frase desfasada de 50/107 a
+49/107 y se registra esta comprobación. No se promueve ninguna fila.
+
+`ops:status:drift:strict` pasa conservando las entregas parciales de ODE-609.
+El owner `scripts/check-status-drift.mjs` comprueba la identidad de entrega
+(issue + PR; si falta PR, issue + commit; si faltan ambos, issue), usando el
+lector existente para ledgers activos y archivados. Repetir una entrega sigue
+fallando aunque cambien fecha, notes o commit del mismo PR. Se mantienen los
+controles de issue ausente, referencia de commit inválida y status desactualizado.
+No se editan los ledgers ni `workflow/status.json` en BUILD; REVIEW registra
+la entrega final después del merge.
+
+#### Reproducción del recuento
+
+Desde la raíz del repo, ejecutar este script con Node (por ejemplo, copiarlo a
+un archivo `.mjs`). Lee los snapshots con `git show` y deriva los estados de la
+columna Status, sin contar manualmente:
+
+```js
+import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs';
+const file = 'components/editor/editor-shell.tsx';
+const clusters = ['useFocusMode','useEditorPersistence','useCorrectionBlocks','useTableOfContents','useSessionRestore','useExternalDocumentChanges','useDocumentHydration','useSaveStateSync','useDocumentExit','useCorrectionActions','useEditorCommands','useCorrectionLifecycle','useFindReplace','useWorkspaceTabs','useWorkspaceTabOpening','useSelectionRestore','useSelectionPopup','useFootnotes'];
+for (const ref of ['e8889942','ba13217e','HEAD']) {
+ const source = execFileSync('git',['show',`${ref}:${file}`],{encoding:'utf8'});
+ const lines = source.split('\n').slice(0,-1);
+ const metrics = Object.fromEntries(['useState','useRef','useEffect','useCallback','useMemo'].map(h=>[h,{historical:lines.filter(l=>l.includes(`${h}(`)).length,includingGenerics:lines.filter(l=>new RegExp(`\\b${h}(?:<|\\()`).test(l)).length}]));
+ console.log(JSON.stringify({ref,lines:lines.length,clusters:clusters.filter(h=>new RegExp(`\\b${h}\\(`).test(source)).length,...metrics,refReads:[...source.matchAll(/[A-Za-z]*Ref\.current/g)].length,shellTestFiles:execFileSync('git',['ls-tree','--name-only',ref,'tests/'],{encoding:'utf8'}).split('\n').filter(p=>/^tests\/editor-shell-.*\.test\.tsx$/.test(p)).length}));
+}
+for (const h of clusters) console.log(`${h} ${readFileSync(`hooks/${h}.ts`,'utf8').split('\n').length-1}`);
+const map = readFileSync('workflow/quality/capability-integration-map.md','utf8').split('# Audit Summary')[0];
+const counts = Object.fromEntries(['NONE','UNIT_ONLY','CONTRACT','PARTIAL_INTEGRATION','INTEGRATION','RUNTIME','RELEASE'].map(s=>[s,0]));
+for (const line of map.split('\n').filter(l=>/^\| [A-Z]+-\d+ \|/.test(l))) {
+ const status = line.split(/(?<!\\)\|/)[5].trim();
+ if (!(status in counts)) throw Error(`Unknown status: ${status}`);
+ counts[status]++;
+}
+console.log(JSON.stringify({scenarios:Object.values(counts).reduce((a,b)=>a+b,0),counts}));
+```
 
 ## Plan
 
