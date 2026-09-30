@@ -4,6 +4,8 @@ import { dirname, join } from "node:path"
 import type {
   DesktopCatalogCollectionSnapshot,
   DesktopCatalogDualWriteInput,
+  DesktopCatalogMetadataMutation,
+  DesktopCatalogMutationRow,
   DesktopCatalogReconcileInput,
   DesktopCatalogReconcileResult,
   DesktopCatalogRow,
@@ -55,6 +57,41 @@ const manifestInodesByRoot = new Map<string, Map<string, number>>()
 // (`workspace.rs` `uses_persisted_selection`). Empty means the whole root.
 const selectedPathsByRoot = new Map<string, string[]>()
 
+/**
+ * Cola durable de sync (`sync_mutations`), en memoria. Espeja las tres reglas
+ * de Rust que `desktopCatalogSyncService` usa por IPC:
+ *
+ * - supersede al escribir un snapshot nuevo (`index.rs:700-716` en dual-write,
+ *   `:1455-1462` en enqueue): las mutaciones `pending`/`failed` anteriores del
+ *   mismo documento pasan a `synced` con `last_error` "superseded…", y solo
+ *   queda accionable la última;
+ * - listado de pendientes (`:1482-1518`): `pending` siempre, `failed` solo con
+ *   `include_failed` y `attempt_count < MAX_SYNC_ATTEMPTS`, filtrado por
+ *   `next_retry_at <= now` y ordenado por `created_at ASC`;
+ * - proyección de estado del documento (`:1409-1443`), reproducida tal cual
+ *   —incluida la ausencia de guarda de estado previo de `:1422-1424`— porque
+ *   es el comportamiento bajo prueba en ODE-611/614.
+ *
+ * No es SQLite real: el transporte Tauri se dobla, como en el resto del
+ * archivo. La fidelidad con Rust sale de leer el SQL citado.
+ */
+type SyncMutationRow = {
+  id: string
+  documentId: string
+  operation: "upsert" | "delete"
+  payloadJson: string
+  status: "pending" | "processing" | "synced" | "failed"
+  attemptCount: number
+  nextRetryAt: number | null
+  createdAt: number
+  lastError: string | null
+}
+
+/** Igual que `MAX_SYNC_ATTEMPTS` en `src-tauri/src/commands/index.rs:7`. */
+const MAX_SYNC_ATTEMPTS = 10
+
+const mutationsByDb = new Map<string, Map<string, SyncMutationRow>>()
+
 /** Point the `@tauri-apps/api/path` double at a real temp directory. Call once per test file, before the first production call that resolves desktop runtime services. */
 export function configureRealDesktopDoubles(baseDir: string): void {
   configDir = join(baseDir, "config")
@@ -68,6 +105,7 @@ export function resetCatalogDoubles(): void {
   manifestsByRoot.clear()
   manifestInodesByRoot.clear()
   selectedPathsByRoot.clear()
+  mutationsByDb.clear()
   for (const gate of [...catalogReadGates]) gate.release()
 }
 
@@ -124,6 +162,38 @@ function rowsFor(dbPath: string): Map<string, DesktopCatalogRow> {
     catalogsByDb.set(dbPath, rows)
   }
   return rows
+}
+
+function mutationsFor(dbPath: string): Map<string, SyncMutationRow> {
+  let mutations = mutationsByDb.get(dbPath)
+  if (!mutations) {
+    mutations = new Map()
+    mutationsByDb.set(dbPath, mutations)
+  }
+  return mutations
+}
+
+/**
+ * Espejo del `UPDATE sync_mutations … WHERE document_id=?1 AND id<>?2 AND
+ * status IN ('pending','failed')` de `apply_dual_write` (`index.rs:704-711`).
+ */
+function supersedeOlderMutations(
+  mutations: Map<string, SyncMutationRow>,
+  documentId: string,
+  exceptId: string,
+  lastError: string,
+): void {
+  for (const mutation of mutations.values()) {
+    if (
+      mutation.documentId === documentId &&
+      mutation.id !== exceptId &&
+      (mutation.status === "pending" || mutation.status === "failed")
+    ) {
+      mutation.status = "synced"
+      mutation.nextRetryAt = null
+      mutation.lastError = lastError
+    }
+  }
 }
 
 function bindingRootFor(rootPath: string): string {
@@ -615,7 +685,11 @@ async function listUnmanifestedMarkdown(
 
 // ─── catalog tauri-commands doubles (real in-memory row store) ────────────
 
-function applyDualWrite(rows: Map<string, DesktopCatalogRow>, input: DesktopCatalogDualWriteInput): void {
+function applyDualWrite(
+  rows: Map<string, DesktopCatalogRow>,
+  mutations: Map<string, SyncMutationRow>,
+  input: DesktopCatalogDualWriteInput,
+): void {
   const prior = rows.get(input.document.id)
   const row: DesktopCatalogRow = {
     ...input.document,
@@ -630,10 +704,34 @@ function applyDualWrite(rows: Map<string, DesktopCatalogRow>, input: DesktopCata
     excerptContentHash: prior?.excerptContentHash ?? null,
   }
   rows.set(row.id, row)
+  if (input.mutation) {
+    const mutation = input.mutation
+    supersedeOlderMutations(mutations, input.document.id, mutation.id, "superseded by later snapshot mutation")
+    const existing = mutations.get(mutation.id)
+    if (existing) {
+      // ON CONFLICT(id) DO UPDATE SET status,attempt_count,next_retry_at,last_error
+      existing.status = mutation.status as SyncMutationRow["status"]
+      existing.attemptCount = mutation.attemptCount
+      existing.nextRetryAt = mutation.nextRetryAt
+      existing.lastError = mutation.lastError
+    } else {
+      mutations.set(mutation.id, {
+        id: mutation.id,
+        documentId: input.document.id,
+        operation: mutation.operation as SyncMutationRow["operation"],
+        payloadJson: mutation.payloadJson,
+        status: mutation.status as SyncMutationRow["status"],
+        attemptCount: mutation.attemptCount,
+        nextRetryAt: mutation.nextRetryAt,
+        createdAt: mutation.createdAt,
+        lastError: mutation.lastError,
+      })
+    }
+  }
 }
 
 export async function tauriCatalogDualWriteDouble(dbPath: string, input: DesktopCatalogDualWriteInput): Promise<void> {
-  applyDualWrite(rowsFor(dbPath), input)
+  applyDualWrite(rowsFor(dbPath), mutationsFor(dbPath), input)
 }
 
 /** Set to make the next tauriCatalogBulkDualWrite reject before applying any row — a real bulk write is one transaction, so a failure must not partially land. Auto-clears after firing once. */
@@ -649,7 +747,8 @@ export async function tauriCatalogBulkDualWriteDouble(dbPath: string, inputs: De
     fail()
   }
   const rows = rowsFor(dbPath)
-  for (const input of inputs) applyDualWrite(rows, input)
+  const mutations = mutationsFor(dbPath)
+  for (const input of inputs) applyDualWrite(rows, mutations, input)
   return inputs.map((input) => input.document.id)
 }
 
@@ -859,6 +958,177 @@ export async function tauriCatalogDetachLocalFileDouble(dbPath: string, id: stri
   const row = rows.get(id)
   if (!row) return
   rows.set(id, { ...row, bindingRootId: null, relativePath: null, canonicalPath: null, inode: null, contentHash: null, size: null, lastSeenAt: null })
+}
+
+// ─── sync queue tauri-commands doubles (in-memory `sync_mutations`) ────────
+// Espejos de comportamiento (no spies) de los comandos que usa
+// `desktopCatalogSyncService`: leen el SQL real de `index.rs` y reproducen su
+// semántica, incluidos los efectos sobre `documents.sync_status`. Comparten
+// los mismos row stores del catálogo que el resto del archivo, así que una
+// prueba puede montar el servicio real, el catálogo real y solo el transporte
+// IPC doblado.
+
+/**
+ * Espejo de `catalog_enqueue_mutation` (`index.rs:1445-1479`): supersede las
+ * mutaciones anteriores del documento, inserta la nueva con
+ * `ON CONFLICT(id) DO NOTHING` y marca el documento `pending`.
+ */
+export async function tauriCatalogEnqueueMutationDouble(
+  dbPath: string,
+  documentId: string,
+  mutation: NonNullable<DesktopCatalogDualWriteInput["mutation"]>,
+): Promise<void> {
+  const mutations = mutationsFor(dbPath)
+  supersedeOlderMutations(mutations, documentId, mutation.id, "superseded by later snapshot mutation")
+  if (!mutations.has(mutation.id)) {
+    mutations.set(mutation.id, {
+      id: mutation.id,
+      documentId,
+      operation: mutation.operation as SyncMutationRow["operation"],
+      payloadJson: mutation.payloadJson,
+      status: mutation.status as SyncMutationRow["status"],
+      attemptCount: mutation.attemptCount,
+      nextRetryAt: mutation.nextRetryAt,
+      createdAt: mutation.createdAt,
+      lastError: mutation.lastError,
+    })
+  }
+  const rows = rowsFor(dbPath)
+  const row = rows.get(documentId)
+  if (row) rows.set(documentId, { ...row, syncStatus: "pending" })
+}
+
+/**
+ * Espejo de `catalog_list_pending_mutations` (`index.rs:1481-1518`):
+ * `WHERE (status='pending' OR (?3=1 AND status='failed' AND attempt_count<?4))
+ * AND (next_retry_at IS NULL OR next_retry_at<=?1) ORDER BY created_at ASC
+ * LIMIT ?2`.
+ */
+export async function tauriCatalogListPendingMutationsDouble(
+  dbPath: string,
+  now = Date.now(),
+  limit = 200,
+  includeFailed = true,
+): Promise<DesktopCatalogMutationRow[]> {
+  return [...mutationsFor(dbPath).values()]
+    .filter(
+      (mutation) =>
+        (mutation.status === "pending" ||
+          (includeFailed && mutation.status === "failed" && mutation.attemptCount < MAX_SYNC_ATTEMPTS)) &&
+        (mutation.nextRetryAt === null || mutation.nextRetryAt <= now),
+    )
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .slice(0, limit)
+    .map((mutation) => ({
+      id: mutation.id,
+      documentId: mutation.documentId,
+      operation: mutation.operation,
+      payloadJson: mutation.payloadJson,
+      status: mutation.status as DesktopCatalogMutationRow["status"],
+      attemptCount: mutation.attemptCount,
+      nextRetryAt: mutation.nextRetryAt,
+      createdAt: mutation.createdAt,
+      lastError: mutation.lastError,
+    }))
+}
+
+/**
+ * Espejo exacto de `catalog_update_mutation_status` (`index.rs:1409-1443`),
+ * incluida su proyección de `documents.sync_status`/`cloud_present`. El CASO
+ * no consulta si otra mutación del documento sigue `pending`: reproduce el
+ * comportamiento de producción tal cual, que es lo que la prueba de SYNC-05
+ * caracteriza (no lo corrige).
+ */
+export async function tauriCatalogUpdateMutationStatusDouble(
+  dbPath: string,
+  mutationId: string,
+  status: "pending" | "synced" | "failed",
+  attemptCount: number,
+  nextRetryAt: number | null,
+  lastError: string | null,
+): Promise<void> {
+  const mutations = mutationsFor(dbPath)
+  const mutation = mutations.get(mutationId)
+  if (mutation) {
+    mutation.status = status
+    mutation.attemptCount = attemptCount
+    mutation.nextRetryAt = nextRetryAt
+    mutation.lastError = lastError
+  }
+  // `WHERE id=(SELECT document_id FROM sync_mutations WHERE id=?1)`: sin fila
+  // de mutación no hay documento que actualizar.
+  if (!mutation) return
+  const rows = rowsFor(dbPath)
+  const document = rows.get(mutation.documentId)
+  if (!document) return
+  const deleteOperation = mutation.operation === "delete"
+  const syncStatus =
+    status === "failed"
+      ? "failed"
+      : status === "pending"
+        ? "pending"
+        : deleteOperation && document.localPresent
+          ? "local-only"
+          : deleteOperation
+            ? "deleted"
+            : "synced"
+  const cloudPresent =
+    status === "synced" ? (deleteOperation ? false : true) : document.cloudPresent
+  rows.set(document.id, { ...document, syncStatus, cloudPresent })
+}
+
+/**
+ * No hay ninguna prueba que encole en `metadata_sync_mutations` (las ediciones
+ * de metadata de un writing viajan por `sync_mutations`), así que la cola real
+ * está vacía: una cola vacía es la forma real de "nada que hacer", no un atajo.
+ */
+export async function tauriCatalogListPendingMetadataMutationsDouble(
+  _dbPath: string,
+  _now = Date.now(),
+  _limit = 200,
+  _includeFailed = true,
+): Promise<DesktopCatalogMetadataMutation[]> {
+  return []
+}
+
+/** Con la cola de metadata siempre vacía, este UPDATE no encuentra fila y no afecta nada. */
+export async function tauriCatalogUpdateMetadataMutationStatusDouble(
+  _dbPath: string,
+  _mutationId: string,
+  _status: "pending" | "synced" | "failed",
+  _attemptCount: number,
+  _nextRetryAt: number | null,
+  _lastError: string | null,
+): Promise<void> {}
+
+/** Espejo de `catalog_prune_synced_mutations` (`index.rs:1394-1407`): borra las filas `synced` de las dos colas. */
+export async function tauriCatalogPruneSyncedMutationsDouble(dbPath: string): Promise<number> {
+  const mutations = mutationsFor(dbPath)
+  let removed = 0
+  for (const [id, mutation] of [...mutations.entries()]) {
+    if (mutation.status === "synced") {
+      mutations.delete(id)
+      removed += 1
+    }
+  }
+  return removed
+}
+
+/** Espejo de `catalog_purge_document` (`index.rs:1372-1387`): `ON DELETE CASCADE` se lleva bindings y mutaciones. */
+export async function tauriCatalogPurgeDocumentDouble(dbPath: string, id: string): Promise<void> {
+  rowsFor(dbPath).delete(id)
+  const mutations = mutationsFor(dbPath)
+  for (const [mutationId, mutation] of [...mutations.entries()]) {
+    if (mutation.documentId === id) mutations.delete(mutationId)
+  }
+}
+
+/**
+ * Lectura de la cola durable para las aserciones de las pruebas. Devuelve una
+ * copia de las filas (mutación de un test jamás altera el estado del doble).
+ */
+export function catalogMutationsDouble(dbPath: string): ReadonlyArray<SyncMutationRow> {
+  return [...mutationsFor(dbPath).values()].map((mutation) => ({ ...mutation }))
 }
 
 // ─── settings tauri-commands doubles (real in-memory key/value store) ─────
