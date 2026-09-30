@@ -1,0 +1,38 @@
+name: Desktop Rust Tests
+
+# cargo test for the src-tauri crate (ODE-613). Rust only ever compiles in
+# release-desktop.yml (tag-driven, and it runs no tests), so the TS → invoke()
+# → Rust → SQLite seam had no PR gate; without one, SYS-01/SYS-05 cannot leave
+# PARTIAL_INTEGRATION. This job runs the crate's test suite, including
+# src-tauri/tests/catalog_seam.rs — the replay of the TS-recorded invoke
+# sequence in tests/fixtures/catalog-seam/ against the real commands and real
+# SQLite.
+#
+# Runner: macOS mirrors release-desktop.yml (today the only workflow that
+# compiles Rust); it needs no extra system libraries for the tauri build. Each
+# job is an isolated runner, so this job declares its own setup and env and
+# inherits nothing from the other CI jobs.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-test:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: cargo test (src-tauri)
+        run: cargo test --manifest-path src-tauri/Cargo.toml
