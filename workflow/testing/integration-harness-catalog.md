@@ -56,6 +56,35 @@ editor-shell-desktop-doubles.ts  camino desktop; delega en real-desktop-doubles
 
 **Dónde se extiende.** Aquí mismo: es el canonical owner de los dobles de desktop. Añadir un comando nuevo significa revisar también sus consumidores actuales, porque lo comparten los tests de integración y el banco del editor.
 
+### 3) Seam TS → `invoke()` → Rust/SQLite: fixture grabado + `cargo test` (ODE-613, vía a)
+
+**Qué resuelve.** La costura que ningún doble puede cerrar: la secuencia de comandos que el wrapper TS real emite, reproducida sobre los comandos Rust reales contra SQLite y filesystem reales, sin AppHandle. No hay que escribirla dos veces: se **graba** desde el código TS.
+
+```text
+tests/support/catalog-seam-recorder.ts   grabador: modelo de fs/manifiesto/catálogo + escenarios
+tests/fixtures/catalog-seam/catalog-seam-v1.json   fixture versionado (generado, no a mano)
+tests/catalog-seam-fixture.test.ts       gate de drift TS (npm test)
+src-tauri/tests/catalog_seam.rs          replay Rust sobre las pub fn reales + SQLite real
+.github/workflows/desktop-rust.yml       job cargo-test (gate en CI required, solo con cambios de Rust/seam)
+```
+
+**Qué deja real.** En la grabación: `SqliteDocumentCatalog` y `createWorkspaceReconciler` (cableado como `desktop-workspace-reconciler.ts`: `workspace_sync` → `listByBindingRoot` → `applyReconcileTransaction`). En el replay: los `pub fn` de `commands::index` y `commands::workspace`, SQLite real, fs real de un tempdir, y una conexión nueva para leer las filas canónicas.
+
+**Qué dobla.** Solo el decode IPC de Tauri (`@tauri-apps/api/core`), que en la grabación responde con la semántica de cada comando para que el TS avance. El transporte real de `invoke` sigue fuera y es RUNTIME (ODE-622). Los escenarios usan raíces `$ROOT_A`/`$ROOT_B` y DB `$DB` como placeholders; el test Rust los reescribe a directorios temporales.
+
+**Cómo se regenera (nunca a mano).**
+
+```sh
+UPDATE_CATALOG_SEAM_FIXTURE=1 npx vitest run tests/catalog-seam-fixture.test.ts
+cargo test --manifest-path src-tauri/Cargo.toml --test catalog_seam
+```
+
+`npm test` corre el gate de drift: regenera la secuencia en memoria desde el wrapper y falla si el fixture commiteado difiere — así el replay nunca prueba una secuencia vieja. El grabador lanza error si el wrapper emite un comando que el doble no conoce.
+
+**Cuándo NO es el adecuado.** Propiedades de UI o de orquestación multi-servicio; aquí solo entran cadenas cuyo contrato de comandos se puede grabar desde TS y reproducir sin runtime de Tauri. Los comandos de sync/mutación no están en la secuencia (el wrapper no los ejecuta en el flujo del reconciliador); agregarlos es extender los escenarios y el dispatch del test Rust.
+
+**Dónde se extiende.** Escenarios nuevos en `catalog-seam-recorder.ts` (helpers `fsWrite`/`fsRename`/`fsDelete` + reconciler real); comandos nuevos en el `switch` del doble y en el dispatch de `catalog_seam.rs`. Si cambia la forma de un comando, el gate de drift lo detecta en `npm test`.
+
 ---
 
 ## Cómo elegir el nivel
@@ -284,6 +313,8 @@ Eso valida la regla principal: de los ocho archivos que el conteo señalaba, **c
 - **(c) Carril RUNTIME (ODE-622):** es la única vía que prueba el transporte IPC real de Tauri. Es manual o sobre el artefacto empaquetado, así que no bloquea PRs y las filas no cambian hasta que exista el carril.
 
 **Recomendación: (a) + job de CI `cargo test` acotado al test del seam.** Reutiliza las `pub fn` ya testeables sin `AppHandle`, y el fixture grabado ata la secuencia al wrapper sin escribirla dos veces. Sin ese job, el lado Rust no queda gateado, y en ese caso SYS-01/SYS-05 no pueden subir de `PARTIAL_INTEGRATION`. Queda fuera en cualquier caso: el transporte IPC de Tauri (serialización real de `invoke`), que sigue siendo RUNTIME.
+
+**Entregado en ODE-613 (vía a, 2026-09-30).** La vía (a) quedó construida y SYS-01/SYS-05 subieron a `INTEGRATION` (el harness se documenta en §Inventario de andamiajes 3). Correcciones al snapshot del Recon, verificadas al construir: `src-tauri/tests/` ahora existe con `catalog_seam.rs`; el fixture es **un** archivo versionado con tres escenarios (`sys01-homonyms-distinct-roots`, `sys01-register-move-reopen`, `sys05-reconcile-tracks-disk`), no un JSON por prueba; el grabador vive en `tests/support/catalog-seam-recorder.ts` y la grabación se regenera con `UPDATE_CATALOG_SEAM_FIXTURE=1 npx vitest run tests/catalog-seam-fixture.test.ts`; el job de CI es `desktop-rust.yml` (`cargo test` del crate completo) y corre dentro de `CI required` solo cuando el diff toca `src-tauri/` o el propio seam grabado (blocking-ci.yml `rust_changed`) — no en cada PR. La secuencia del reconciliador resultó ser `workspace_sync` → `catalog_list_binding_root_documents` → `catalog_apply_reconcile`, más lecturas `catalog_get_by_id`/`catalog_resolve_path`; el rename externo se resolvió por inodo tanto en `workspace_sync` (manifiesto) como en el reconciler (known bindings). Quedan fuera, como decía el Recon: el transporte IPC real (RUNTIME, ODE-622) y los comandos de sync/mutación (ODE-644 sigue abierto).
 
 ### Dos Workspaces (ODE-614)
 
