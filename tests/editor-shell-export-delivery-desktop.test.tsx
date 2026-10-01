@@ -102,6 +102,7 @@ const { createDesktopWorkspace, destroyDesktopWorkspace, resetDesktopWorkspace }
   "./support/editor-shell-desktop-doubles"
 )
 const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
+const { getDocumentService } = await import("@/lib/services/document-service-factory")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 const { act } = await import("react")
 
@@ -458,6 +459,19 @@ describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
     async () => {
       const text = "ODE601-PDF-BODY"
       const writingId = await createAndOpenDocument(text)
+      const catalogRecord = await (await getDocumentCatalog()).getById(writingId)
+      const canonicalPath = catalogRecord?.binding?.canonicalPath
+      expect(canonicalPath, "the catalog resolves the UUID to a file path").toBeTruthy()
+      expect(canonicalPath).not.toBe(writingId)
+      if (!canonicalPath) throw new Error("Expected the catalog to resolve a canonical file path")
+      expect((await readFile(canonicalPath)).toString("utf8")).toContain(text)
+
+      const downloaded = await (await getDocumentService()).downloadWriting({ writingId })
+      expect(downloaded.error).toBeNull()
+      if (!downloaded.data) throw new Error("Expected the desktop document download to return data")
+      expect(downloaded.data.writingId).toBe(canonicalPath)
+      expect(new TextDecoder().decode(downloaded.data.bytes)).toContain(text)
+
       await confirmInCloud(writingId, text)
 
       await assertExportChain("pdf", "letter.pdf", (bytes) => {
