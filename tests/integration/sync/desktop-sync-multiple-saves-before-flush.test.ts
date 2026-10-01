@@ -31,22 +31,22 @@
  *    intermedio sí encoló su mutación antes de ser reemplazado.
  * 2. Un guardado durante un flush en vuelo (respuesta de Supabase retenida)
  *    sobrevive en la cola y el siguiente flush lo envía.
- * 3. (it.fails, ODE-644) El riesgo del Recon: `catalog_update_mutation_status`
- *    no protege el estado previo de la mutación (`index.rs:1422-1424`). Con un
- *    guardado durante el flush, el éxito deja `documents.sync_status='synced'`
- *    aunque la v4 siga `pending`. El caso afirma el comportamiento correcto; el
- *    doble reproduce el SQL real, y la confirmación contra Rust/SQLite real es
- *    la costura TS→Rust de ODE-613.
- * 4. (it.fails, ODE-644) El mismo hueco en la rama de fallo: la mutación
- *    superada revive como `failed` accionable.
- * 5. (it.fails, ODE-644) El estado final de la nube en esa secuencia: la v3
- *    falla en vuelo, la v4 se guarda (status review) y sube bien, y el
- *    reintento de la v3 tras el backoff llega DESPUÉS y pisa la nube — la
- *    metadata de la v4 se pierde y la versión retrocede, en silencio. El caso
- *    afirma el estado correcto: la nube conserva la v4.
- * 6. Cobertura del orden del listado (`created_at ASC`, `index.rs:1516`): con
- *    la v3 revivida y la v4 accionables en el mismo flush, la vieja se procesa
- *    primero y la nueva la pisa; el orden inverso dejaría la nube en la vieja.
+ * 3. (ODE-644) El riesgo del Recon: `catalog_update_mutation_status` no
+ *    protegía el estado previo de la mutación (`index.rs:1422-1424`). Los tres
+ *    casos siguientes nacieron como `it.fails` en ODE-611; el fix de ODE-644
+ *    PR1 los puso verdes sin tocar sus cuerpos. Con un guardado durante el
+ *    flush, el éxito no puede dejar `documents.sync_status='synced'` con la v4
+ *    todavía `pending`. El doble reproduce el SQL real.
+ * 4. (ODE-644) El mismo hueco en la rama de fallo: la mutación superada no
+ *    puede revivir como `failed` accionable.
+ * 5. (ODE-644) El estado final de la nube en esa secuencia: la v3 falla en
+ *    vuelo, la v4 se guarda (status review) y sube bien, y el reintento de la
+ *    v3 superada no puede llegar después a pisar la nube — la metadata de la
+ *    v4 se perdería y la versión retrocedería, en silencio. El caso afirma el
+ *    estado correcto: la nube conserva la v4.
+ * 6. El segundo flush tras el fallo en vuelo aplica una sola escritura, la de
+ *    la v4. El orden del listado (`created_at ASC`, `index.rs:1516`) se cubre
+ *    en Rust (`catalog_tests`), con dos accionables sembradas por SQL.
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { readFile } from "node:fs/promises"
@@ -461,12 +461,11 @@ describe("SYNC-05 desktop — varios guardados antes del flush: la última versi
     expect(actionableMutations(writingId), "y la cola queda quieta").toHaveLength(0)
   })
 
-  // Cobertura del orden del listado (`ORDER BY created_at ASC`, `index.rs:1516`),
-  // que la mutación M4 de la Guía ya puede observar: si el backoff de la v3
-  // vence antes del siguiente flush, la v3 revivida y la v4 son accionables en
-  // el mismo listado. Procesar la vieja primero deja que la nueva la pise
-  // (estado correcto); con el orden invertido la nube acabaría en la vieja.
-  it("con la v3 revivida y la v4 accionables en el mismo flush, la nube acaba en la v4", async () => {
+  // El orden del listado (`ORDER BY created_at ASC`, `index.rs:1516`) se cubre
+  // en Rust (`catalog_tests`), con dos accionables sembradas por SQL. Aquí, con
+  // el fallo en vuelo ya resuelto, el segundo flush encuentra una sola
+  // accionable — la v4 — y aplica exactamente una escritura.
+  it("el segundo flush tras el fallo en vuelo aplica una sola escritura, la de la v4", async () => {
     const { writingId } = await createMaterializedDraft("Versión 1.")
     await saveFromEditor(writingId, "Versión 3.", 3, "draft")
 
@@ -477,19 +476,22 @@ describe("SYNC-05 desktop — varios guardados antes del flush: la última versi
 
     await saveFromEditor(writingId, "Versión 4.", 4, "review")
     hold.release()
-    await flushing // v3 -> failed con reintento a +2 s; la v4 pending
+    await flushing
 
-    const realNow = Date.now.bind(Date)
-    const spy = vi.spyOn(Date, "now").mockImplementation(() => realNow() + 10 * 60_000)
-    try {
-      const result = await desktopCatalogSyncService.flushPending()
-      expect(result.error).toBeNull()
-    } finally {
-      spy.mockRestore()
-    }
+    const queued = actionableMutations(writingId)
+    expect(queued, "tras el fallo en vuelo solo queda accionable la v4").toHaveLength(1)
+    expect(JSON.parse(queued[0].payloadJson).version, "y es la v4").toBe(4)
 
-    expect(fakeSupabase.row("writings", writingId)?.version, "la más nueva se procesa después y gana").toBe(4)
+    const writesBefore = appliedCloudWrites("writings").length
+    const result = await desktopCatalogSyncService.flushPending()
+    expect(result.error).toBeNull()
+    expect(
+      appliedCloudWrites("writings").length - writesBefore,
+      "el segundo flush aplica una sola escritura",
+    ).toBe(1)
+    expect(fakeSupabase.row("writings", writingId)?.version).toBe(4)
     expect(fakeSupabase.row("writings", writingId)?.status).toBe("review")
     expect(fakeSupabase.row("writings", writingId)?.body_text).toBe("Versión 4.")
+    expect(actionableMutations(writingId), "y la cola queda quieta").toHaveLength(0)
   })
 })
