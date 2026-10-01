@@ -537,7 +537,7 @@ describe("EXP-05 — callers reales de Desk y Collections (ODE-636)", () => {
 })
 
 describe("Desk desktop Markdown body (ODE-636)", () => {
-  it.fails(
+  it(
     "exports the body from the materialized document",
     async () => {
       const text = "ODE636-DESK-MARKDOWN-BODY"

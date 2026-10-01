@@ -791,13 +791,22 @@ export default function DeskPage() {
     [loadDeskActivity, loadRecipientPreviewsAsync],
   )
 
-  const getWritingMarkdownPayload = useCallback((writingId: string) => {
+  const getWritingMarkdownPayload = useCallback(async (writingId: string) => {
     const writing = writingById.get(writingId)
     if (!writing || writing.sync_status === "deleted") {
       return null
     }
 
-    const markdown = serializeWritingToMarkdown(writing.body_json).trimEnd()
+    let bodyJson: Record<string, unknown> = writing.body_json
+    if (isTauriRuntime()) {
+      const result = await (await getDocumentService()).openWriting(writingId)
+      if (result.error || !result.data) {
+        throw new Error("Failed to export Markdown.")
+      }
+      bodyJson = result.data.content.richText
+    }
+
+    const markdown = serializeWritingToMarkdown(bodyJson).trimEnd()
     return {
       markdown: `${markdown}\n`,
       filename: buildMarkdownDownloadName({
@@ -809,7 +818,7 @@ export default function DeskPage() {
   }, [writingById])
 
   const copyWritingMarkdown = useCallback(async (writingId: string) => {
-    const payload = getWritingMarkdownPayload(writingId)
+    const payload = await getWritingMarkdownPayload(writingId)
 
     if (!payload) {
       return
@@ -819,7 +828,7 @@ export default function DeskPage() {
   }, [getWritingMarkdownPayload])
 
   const downloadWritingMarkdown = useCallback(async (writingId: string) => {
-    const payload = getWritingMarkdownPayload(writingId)
+    const payload = await getWritingMarkdownPayload(writingId)
 
     if (!payload) {
       return false
