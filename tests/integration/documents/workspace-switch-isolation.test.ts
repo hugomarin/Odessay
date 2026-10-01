@@ -14,13 +14,27 @@
  *     key={workspaceSlug}>`. Driven by changing `world.searchParams`, exactly
  *     the URL the product navigates to.
  *   - web: `app/(app)/workspace/[slug]/page.tsx`, which is a server component
- *     whose only job is to render `<WorkspaceDetail workspaceSlug={slug} />`
- *     WITHOUT a key. A server component cannot be rendered by `createRoot`, so
- *     the test renders the same element that page renders and changes its prop
- *     across renders — React preserves the instance, which is exactly what
- *     "sin remontar" means. What is lost by not entering through the Next.js
- *     router itself is only the RSC plumbing; the client component, its
- *     effects and its state lifetime are the ones under test.
+ *     whose only job is to render `<WorkspaceDetail workspaceSlug={slug} />`.
+ *     A server component cannot be rendered by `createRoot`, so the test
+ *     renders the same element the page renders — **with the React `key` the
+ *     App Router puts on that segment**. That key is what makes a real
+ *     `/workspace/a → /workspace/b` navigation remount the page (human
+ *     decision of 2026-09-30, after the ciclo-1 review corrected the earlier
+ *     "sin key → la instancia sobrevive" premise): the router renders each
+ *     segment with `key={stateKey}`
+ *     (`node_modules/next/dist/client/components/layout-router.js:510`),
+ *     where `stateKey = createRouterCacheKey(activeSegment, true)`
+ *     (`layout-router.js:402-410`); for the dynamic segment `[slug]` that
+ *     value is `"slug|<value>|d"` (`node_modules/next/dist/client/components/
+ *     router-reducer/create-router-cache-key.js:12-20`).
+ *     The router's own comment (`layout-router.js:398-400`): "Whenever the
+ *     state key changes, the tree is recreated and the state is reset." What
+ *     is lost by not entering through the Next.js router itself is the RSC
+ *     plumbing; the client component's lifetime, its effects and its state
+ *     are the ones under test. The control mutation for this half removes the
+ *     key and the isolation assertions go red (`expected [] to deeply equal
+ *     [ 'notes.md', 'beta-b.md' ]`), proving the test would detect a leak if
+ *     the product did not remount.
  *
  * - **Transition sequence (rule 2).** Two real, distinct temp directories are
  *   registered as the real production shape (a `WorkspaceRecord` + a
@@ -28,27 +42,33 @@
  *   path (`createDesktopDraft` → `DesktopWorkspaceService.assignToWorkspace`)
  *   and collections through `createAndAssignCollection` — the same function
  *   the view's own "create collection" action calls. Both roots hold a
- *   document with the same filename (`notes.md`, different UUIDs).
+ *   document with the same filename (`notes.md`, different UUIDs), and each
+ *   homonym carries its own collection (`Notes A` / `Notes B`) so a
+ *   relative-path identity confusion is visible in the rendered DOM.
  *
  * - **Real seams (rule 3).** `WorkspaceDetail`, `DesktopWorkspaceEntry`, the
  *   real services, the real in-memory catalog/manifest/collection doubles of
  *   `support/real-desktop-doubles.ts` — only the Tauri IPC transport (and the
- *   Supabase flush, a genuinely external boundary) are doubled.
+ *   Supabase flush, a genuinely external boundary) are doubled. Opening the
+ *   homonym row runs the real unified opener (`openWorkspaceFileInEditor` →
+ *   `openDocumentByPath`) and asserts the navigation id it resolves.
  *
  * - **Completion event (rule 4).** `loadWorkspace` resolving for the new slug:
  *   the assertions wait for the header and the rows of B, never for the
- *   navigation click.
+ *   navigation click. The Req. 4 proof waits for the persistence coordinator's
+ *   `settle()` — the save's own durability event — before reading disk/catalog.
  *
  * - **Canonical outcome (rule 6).** Rendered DOM: visible rows, filter/group/
- *   sort trigger labels, collection chips, selection bar.
+ *   sort trigger labels, collection chips, selection bar. For Req. 4: the real
+ *   temporary filesystem and the catalog rows themselves.
  *
  * - **Positive control first (rule 8).** A sibling test proves each piece of
  *   view state visibly changes A; the isolation tests assert an absence only
- *   after that control. On web the absence is expected to fail — the same
- *   instance survives the slug change and nothing resets it — so that test is
- *   `it.fails` and the real leak is tracked as ODE-646 (linked to ODE-614).
- *   Desktop's remount-by-key behavior is proven, not assumed.
+ *   after that control, and the homonym chips are asserted for each root
+ *   before their cross-root absence.
  */
+import { readFile, readdir } from "node:fs/promises"
+import { join } from "node:path"
 import { act, createElement, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
@@ -56,6 +76,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import {
   resetCatalogDoubles,
   resetSettingsStoreDouble,
+  tauriCatalogListDouble,
   tauriPathModuleDouble,
 } from "./support/real-desktop-doubles"
 import {
@@ -79,6 +100,10 @@ vi.mock("@/lib/services/desktop/tauri-commands", async () => {
     tauriCatalogListCollectionSnapshot: doubles.tauriCatalogListCollectionSnapshotDouble,
     tauriCatalogSaveCollection: doubles.tauriCatalogSaveCollectionDouble,
     tauriCatalogReplaceWritingCollections: doubles.tauriCatalogReplaceWritingCollectionsDouble,
+    // Extensión para el modo de fallo stale-listener (F6): el cambio de
+    // metadatos real (`changeWritingStatus`) escribe el catálogo con la forma
+    // bulk, que el montaje base deja como stub ruidoso.
+    tauriCatalogBulkDualWrite: doubles.tauriCatalogBulkDualWriteDouble,
   })
 })
 
@@ -106,8 +131,9 @@ vi.mock("@/lib/services/sharing-service-factory", () => ({
   }),
 }))
 
-const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
-const { createAndAssignCollection } = await import("@/lib/queries/writing-mutations")
+const { createDesktopDraft, getDocumentService } = await import("@/lib/services/document-service-factory")
+const { createAndAssignCollection, changeWritingStatus } = await import("@/lib/queries/writing-mutations")
+const { createPersistenceCoordinator } = await import("@/lib/editor/persistence-coordinator")
 const { WorkspaceDetail } = await import("@/components/workspace/workspace-detail")
 const { DesktopWorkspaceEntry } = await import("@/components/workspace/desktop-workspace-entry")
 const { world } = await import("../../support/editor-shell-doubles")
@@ -173,6 +199,8 @@ afterEach(async () => {
  * Montaje: fixtures reales de dos raíces
  * ------------------------------------------------------------------ */
 
+type DraftRecord = NonNullable<Awaited<ReturnType<typeof createDesktopDraft>>["data"]>
+
 type Fixtures = {
   rootA: string
   rootB: string
@@ -180,6 +208,8 @@ type Fixtures = {
   idNotesA: string
   idBetaB: string
   idNotesB: string
+  /** Record completo del homónimo de B, para el save real del Req. 4. */
+  recordNotesB: DraftRecord
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -189,7 +219,9 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
  * recibe dos documentos por la ruta de producción (crear borrador gestionado
  * → `assignToWorkspace`), incluido un homónimo `notes.md` en ambas. Las
  * colecciones se crean y asignan con `createAndAssignCollection` (la misma
- * función del flujo real de la vista).
+ * función del flujo real de la vista); los homónimos llevan cada uno su
+ * propia colección para que una confusión de identidad por ruta relativa sea
+ * visible en el DOM (chip de la otra raíz) y no solo en el id.
  */
 async function seedTwoWorkspaces(): Promise<Fixtures> {
   const { rootA, rootB, workspaceService } = await registerTwoWorkspaces(montage.baseDir, montage.configDir)
@@ -201,31 +233,41 @@ async function seedTwoWorkspaces(): Promise<Fixtures> {
       initialBodyText: text,
     })
     expect(result.error).toBeNull()
-    return result.data!.id
+    return result.data!
   }
 
   // Interleaved create→move so each draft lands in its root before the next
   // "notes" is created in the managed root (otherwise the second one would
   // materialize as "notes 2.md" instead of the homonym this proof needs).
-  const idAlphaA = await draft("alpha-a", "Alpha content in root A.")
-  await workspaceService.assignToWorkspace(idAlphaA, "workspace-a")
+  const recordAlphaA = await draft("alpha-a", "Alpha content in root A.")
+  await workspaceService.assignToWorkspace(recordAlphaA.id, "workspace-a")
   await wait(30)
 
-  const idNotesA = await draft("notes", "Notes content in root A.")
-  await workspaceService.assignToWorkspace(idNotesA, "workspace-a")
+  const recordNotesA = await draft("notes", "Notes content in root A.")
+  await workspaceService.assignToWorkspace(recordNotesA.id, "workspace-a")
   await wait(30)
 
-  const idBetaB = await draft("beta-b", "Beta content in root B.")
-  await workspaceService.assignToWorkspace(idBetaB, "workspace-b")
+  const recordBetaB = await draft("beta-b", "Beta content in root B.")
+  await workspaceService.assignToWorkspace(recordBetaB.id, "workspace-b")
   await wait(30)
 
-  const idNotesB = await draft("notes", "Notes content in root B.")
-  await workspaceService.assignToWorkspace(idNotesB, "workspace-b")
+  const recordNotesB = await draft("notes", "Notes content in root B.")
+  await workspaceService.assignToWorkspace(recordNotesB.id, "workspace-b")
 
-  await createAndAssignCollection(idAlphaA, "Letters A", null, [])
-  await createAndAssignCollection(idBetaB, "Drafts B", null, [])
+  await createAndAssignCollection(recordAlphaA.id, "Letters A", null, [])
+  await createAndAssignCollection(recordBetaB.id, "Drafts B", null, [])
+  await createAndAssignCollection(recordNotesA.id, "Notes A", null, [])
+  await createAndAssignCollection(recordNotesB.id, "Notes B", null, [])
 
-  return { rootA, rootB, idAlphaA, idNotesA, idBetaB, idNotesB }
+  return {
+    rootA,
+    rootB,
+    idAlphaA: recordAlphaA.id,
+    idNotesA: recordNotesA.id,
+    idBetaB: recordBetaB.id,
+    idNotesB: recordNotesB.id,
+    recordNotesB,
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -270,7 +312,11 @@ async function flush(times = 2) {
   }
 }
 
-async function waitFor<T>(predicate: () => T | null | undefined | false, label: string, timeoutMs = 8000): Promise<T> {
+/**
+ * Por debajo del timeout de vitest (5000 ms) para que un rojo por condición
+ * nombre la condición, no `Test timed out` (hallazgo F5 del review de ciclo 1).
+ */
+async function waitFor<T>(predicate: () => T | null | undefined | false, label: string, timeoutMs = 4000): Promise<T> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
     const value = predicate()
@@ -280,13 +326,27 @@ async function waitFor<T>(predicate: () => T | null | undefined | false, label: 
   }
 }
 
+/**
+ * La `key` que el App Router de Next pone al subárbol del segmento dinámico
+ * `[slug]`: `layout-router.js:510` renderiza cada segmento con `key={stateKey}`
+ * y `stateKey = createRouterCacheKey(activeSegment, true)`
+ * (`layout-router.js:402-410`). Para un segmento dinámico
+ * (`["slug", "<valor>", "d"]`) `createRouterCacheKey` devuelve
+ * `"slug|<valor>|d"` (`router-reducer/create-router-cache-key.js:12-20`).
+ * El comentario del propio router (`layout-router.js:398-400`): "Whenever the
+ * state key changes, the tree is recreated and the state is reset." Reproducir
+ * esa key es lo que hace que la entrada web remonte al cambiar de slug, como
+ * el producto real (decisión del humano 2026-09-30).
+ */
+const webSegmentStateKey = (slug: string) => `slug|${slug}|d`
+
 /** Entrada real de cada runtime, con el slug como el producto lo navega. */
 async function renderSlug(view: MountedView, runtime: Runtime, slug: string) {
   if (runtime === "desktop") {
     world.searchParams = new URLSearchParams(`slug=${slug}`)
     await view.render(createElement(DesktopWorkspaceEntry))
   } else {
-    await view.render(createElement(WorkspaceDetail, { workspaceSlug: slug }))
+    await view.render(createElement(WorkspaceDetail, { key: webSegmentStateKey(slug), workspaceSlug: slug }))
   }
 }
 
@@ -295,7 +355,7 @@ async function mountAt(runtime: Runtime, slug: string): Promise<MountedView> {
     world.searchParams = new URLSearchParams(`slug=${slug}`)
     return mount(createElement(DesktopWorkspaceEntry))
   }
-  return mount(createElement(WorkspaceDetail, { workspaceSlug: slug }))
+  return mount(createElement(WorkspaceDetail, { key: webSegmentStateKey(slug), workspaceSlug: slug }))
 }
 
 /* ------------------------------------------------------------------ *
@@ -349,6 +409,27 @@ async function click(element: HTMLElement) {
     element.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }))
   })
   await flush(2)
+}
+
+/**
+ * Abre una fila por el opener unificado real (`openWorkspaceFileInEditor` →
+ * `openDocumentByPath`) y devuelve el UUID al que navegó, leído de
+ * `world.navigations`. Es el evento de apertura canónico del producto:
+ * `router.push("/write?id=<uuid>")`.
+ */
+async function openRowAndResolveId(name: string): Promise<string> {
+  const row = rowByFile(name)
+  if (!row) throw new Error(`No existe la fila abrible ${name}`)
+  const before = world.navigations.length
+  await click(row)
+  const nav = await waitFor(
+    () =>
+      world.navigations
+        .slice(before)
+        .find((entry) => entry.kind === "push" && entry.href.startsWith("/write?id=")) ?? null,
+    `navegación /write?id= al abrir ${name}`,
+  )
+  return decodeURIComponent(nav.href.slice("/write?id=".length))
 }
 
 /**
@@ -452,13 +533,14 @@ for (const runtime of ["desktop", "web"] as const) {
       expect(selectedToggleLabel("alpha-a.md")).toBe(true)
     })
 
-    // El aislamiento se prueba en los dos runtimes; en web la instancia de la
-    // página sobrevive al cambio de slug y el estado de A se cuela en B — un
-    // leak real (ODE-646). Esa mitad va `it.fails`: falla por esa razón y
-    // quedará roja el día que se arregle, pidiendo invertirla.
-    const isolationTest = runtime === "desktop" ? it : it.fails
-    isolationTest("A view state does not appear in B, and returning to A matches the runtime contract", async () => {
-      await seedTwoWorkspaces()
+    // El aislamiento se prueba en los dos runtimes con la misma exigencia: la
+    // entrada web reproduce el remontaje real del App Router con la state key
+    // del segmento `[slug]` (ver `webSegmentStateKey`), y la mitad desktop
+    // remonta por `key={workspaceSlug}`. Con la mutación de control (quitar
+    // esa key en la entrada web) esta prueba se pone roja, así que detecta una
+    // fuga si el producto dejara de remontar.
+    it("A view state does not appear in B, and returning to A matches the runtime contract", async () => {
+      const fixtures = await seedTwoWorkspaces()
       const view = await mountAt(runtime, "workspace-a")
       mounted = view
 
@@ -494,21 +576,35 @@ for (const runtime of ["desktop", "web"] as const) {
       expect(selectedToggleLabel("alpha-a.md")).toBe(false)
       expect(hasText("Letters A")).toBe(false)
 
-      // Volver a A. Contrato por runtime (leído del código):
-      // - desktop remonta por `key={workspaceSlug}` (desktop-workspace-entry.tsx:21),
-      //   así que el estado de vista es nuevo y los datos de A siguen intactos.
-      // - web conserva la instancia (la página no usa `key`); por eso las
-      //   aserciones de aislamiento de arriba son `it.fails` en web (ODE-646).
+      // Modo de fallo del brief: un listener de la raíz A que siga activo
+      // después del cambio no debe recargar ni pisar B. Se disparan las dos
+      // señales que la vista escucha — focus (workspace-detail.tsx:326-330) y
+      // cambios del catálogo con debounce de 100 ms (:332-349) — y B sigue
+      // siendo B. Control positivo del listener de catálogo: el cambio de
+      // metadatos real de B sí llega a la vista recargada (status "Done").
+      window.dispatchEvent(new Event("focus"))
+      await changeWritingStatus(fixtures.idBetaB, "done")
+      await waitFor(
+        () => rowByFile("beta-b.md")?.textContent?.includes("Done") ?? false,
+        "B recarga tras el cambio de catálogo",
+      )
+      expect(headerTitle()).toBe("Workspace B")
+      expect(rowNames()).toEqual(["notes.md", "beta-b.md"])
+      expect(triggerText("desk-filter-trigger")).toBe("Filter")
+      expect(emptyStateVisible()).toBe(false)
+
+      // Volver a A. Contrato único de los dos runtimes: la entrada remonta
+      // (desktop por `key={workspaceSlug}`, desktop-workspace-entry.tsx:21;
+      // web por la state key del segmento `[slug]` del App Router), así que el
+      // estado de vista arranca limpio y los datos de A siguen intactos.
       await renderSlug(view, runtime, "workspace-a")
       await waitFor(() => headerTitle() === "Workspace A", "Workspace A de vuelta")
       expect(rowNames()).toEqual(["notes.md", "alpha-a.md"])
-      if (runtime === "desktop") {
-        expect(triggerText("desk-filter-trigger")).toBe("Filter")
-        expect(selectionBarVisible()).toBe(false)
-      }
+      expect(triggerText("desk-filter-trigger")).toBe("Filter")
+      expect(selectionBarVisible()).toBe(false)
     })
 
-    it("documents and collections of each root stay only in their own view", async () => {
+    it("documents and collections of each root stay only in their own view, and the homonym opens its own document", async () => {
       const fixtures = await seedTwoWorkspaces()
       const view = await mountAt(runtime, "workspace-a")
       mounted = view
@@ -517,11 +613,23 @@ for (const runtime of ["desktop", "web"] as const) {
         () => headerTitle() === "Workspace A" && rowNames().length === 2,
         "Workspace A cargado",
       )
-      // La vista de A lista solo los documentos de A, con su colección.
+      // La vista de A lista solo los documentos de A, con su colección; el
+      // homónimo lleva la suya ("Notes A") y no la de B (control positivo
+      // por documento: el chip correcto aparece antes de afirmar el ausente).
       expect(rowNames()).toEqual(["notes.md", "alpha-a.md"])
       expect(rowByFile("alpha-a.md")?.textContent).toContain("Letters A")
-      expect(rowByFile("notes.md")?.textContent).not.toContain("Letters A")
+      expect(rowByFile("notes.md")?.textContent).toContain("Notes A")
+      expect(rowByFile("notes.md")?.textContent).not.toContain("Notes B")
       expect(hasText("Drafts B")).toBe(false)
+
+      // El homónimo de A abre SU documento por el opener unificado real, y
+      // ese UUID reabre su propio contenido (mismo nombre de archivo, otra
+      // raíz, otro documento).
+      const service = await getDocumentService()
+      const openedIdA = await openRowAndResolveId("notes.md")
+      expect(openedIdA).toBe(fixtures.idNotesA)
+      const openedA = await service.openWriting(fixtures.idNotesA)
+      expect(openedA.data!.content.plainText).toContain("Notes content in root A.")
 
       // Búsqueda en A: su homónimo y lo suyo; nunca lo de B. Control positivo
       // (alpha aparece) antes de la ausencia (beta no aparece).
@@ -538,11 +646,19 @@ for (const runtime of ["desktop", "web"] as const) {
         "Workspace B cargado",
       )
       // La vista de B lista solo los documentos de B: el homónimo es su propio
-      // documento (su propio UUID) y no aparecen ni alpha-a ni su colección.
+      // documento (su propio UUID y su propia colección) y no aparecen ni
+      // alpha-a ni su colección.
       expect(rowNames()).toEqual(["notes.md", "beta-b.md"])
       expect(rowByFile("beta-b.md")?.textContent).toContain("Drafts B")
-      expect(rowByFile("notes.md")?.textContent).not.toContain("Drafts B")
+      expect(rowByFile("notes.md")?.textContent).toContain("Notes B")
+      expect(rowByFile("notes.md")?.textContent).not.toContain("Notes A")
       expect(hasText("Letters A")).toBe(false)
+
+      // El homónimo de B abre SU documento, no el de A.
+      const openedIdB = await openRowAndResolveId("notes.md")
+      expect(openedIdB).toBe(fixtures.idNotesB)
+      const openedB = await service.openWriting(fixtures.idNotesB)
+      expect(openedB.data!.content.plainText).toContain("Notes content in root B.")
 
       await setSearch("beta")
       expect(rowNames()).toEqual(["beta-b.md"])
@@ -559,11 +675,101 @@ for (const runtime of ["desktop", "web"] as const) {
       )
       expect(rowNames()).toEqual(["notes.md", "alpha-a.md"])
       expect(rowByFile("alpha-a.md")?.textContent).toContain("Letters A")
+      expect(rowByFile("notes.md")?.textContent).toContain("Notes A")
+      expect(rowByFile("notes.md")?.textContent).not.toContain("Notes B")
       expect(hasText("Drafts B")).toBe(false)
-
-      // Los UUID del homónimo son distintos por raíz (mismo nombre, otro
-      // documento): cada vista muestra el que le corresponde.
-      expect(fixtures.idNotesA).not.toBe(fixtures.idNotesB)
     })
   })
 }
+
+/* ------------------------------------------------------------------ *
+ * Requirement 4 — escribir en B no toca archivos ni filas de A
+ * ------------------------------------------------------------------ */
+
+/** Snapshot de guardado con la forma que consume `PersistenceCoordinator`. */
+function snapshotFor(record: DraftRecord, text: string) {
+  return {
+    writingId: record.id,
+    createdAt: record.createdAt,
+    version: record.version,
+    title: record.title ?? "Untitled",
+    bodyJson: bodyJson(text),
+    bodyText: text,
+    status: record.status,
+    artifactType: record.artifactType,
+    visibility: record.visibility,
+    lifecycle: "local-only" as const,
+  }
+}
+
+/**
+ * WS-06 · Req. 4 — un guardado real en B (la ruta de producción de DOC-03:
+ * `PersistenceCoordinator.persist` → `DesktopDocumentService.saveWriting` →
+ * `.md` + manifiesto + catálogo) no toca ni los archivos ni las filas de A.
+ * El evento de completitud es `settle()`, no `persist()` (regla 4): recién ahí
+ * el guardado es durable. Antes/después se leen el fs temporal real, el
+ * listado del directorio de A y las filas del catálogo de cada documento de A
+ * (id, ruta canónica, ruta relativa, binding y content hash).
+ */
+describe("WS-06 — writing in B leaves A's files and catalog rows untouched", () => {
+  it("a real save in B updates B's document and leaves A byte-identical", async () => {
+    const fixtures = await seedTwoWorkspaces()
+    const dbPath = join(montage.configDir, "desktop-index.sqlite3")
+
+    const rootARows = async () =>
+      (await tauriCatalogListDouble(dbPath))
+        .filter((row) => row.canonicalPath?.startsWith(`${fixtures.rootA}/`))
+        .map((row) => ({
+          id: row.id,
+          bindingRootId: row.bindingRootId,
+          relativePath: row.relativePath,
+          canonicalPath: row.canonicalPath,
+          contentHash: row.contentHash,
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id))
+    const rowFor = async (id: string) => {
+      const row = (await tauriCatalogListDouble(dbPath)).find((candidate) => candidate.id === id)
+      if (!row) throw new Error(`No existe la fila ${id} en el catálogo`)
+      return row
+    }
+
+    // Estado canónico de A antes del guardado: filas, archivos y listado real.
+    const beforeARows = await rootARows()
+    expect(beforeARows.map((row) => row.id).sort()).toEqual([fixtures.idAlphaA, fixtures.idNotesA].sort())
+    const beforeAFiles = new Map<string, string>()
+    for (const row of beforeARows) {
+      beforeAFiles.set(row.id, await readFile(row.canonicalPath!, "utf8"))
+    }
+    expect(beforeAFiles.get(fixtures.idNotesA)).toContain("Notes content in root A.")
+    const beforeADir = (await readdir(fixtures.rootA)).sort()
+    const beforeNotesBRow = await rowFor(fixtures.idNotesB)
+    const beforeNotesBHash = beforeNotesBRow.contentHash
+
+    // Guardado real en B por la ruta de producción (DOC-03).
+    const service = await getDocumentService()
+    const coordinator = createPersistenceCoordinator({
+      runtime: "desktop",
+      persistenceDebounceMs: 0,
+      documentService: service,
+      createWritingId: () => crypto.randomUUID(),
+      now: () => new Date().toISOString(),
+    })
+    coordinator.persist(snapshotFor(fixtures.recordNotesB, "Edited while working in workspace B."))
+    await coordinator.settle({ writingId: fixtures.idNotesB })
+
+    // B sí cambió: su archivo y su fila reflejan el guardado (control
+    // positivo de que el write ocurrió de verdad).
+    const afterNotesBRow = await rowFor(fixtures.idNotesB)
+    const notesBOnDisk = await readFile(afterNotesBRow.canonicalPath!, "utf8")
+    expect(notesBOnDisk).toContain("Edited while working in workspace B.")
+    expect(afterNotesBRow.contentHash).not.toBe(beforeNotesBHash)
+
+    // A no se tocó: ni filas de catálogo (id, rutas, binding, hash), ni
+    // archivos (contenido byte a byte), ni el listado del directorio.
+    expect(await rootARows()).toEqual(beforeARows)
+    for (const row of beforeARows) {
+      expect(await readFile(row.canonicalPath!, "utf8")).toBe(beforeAFiles.get(row.id))
+    }
+    expect((await readdir(fixtures.rootA)).sort()).toEqual(beforeADir)
+  })
+})
