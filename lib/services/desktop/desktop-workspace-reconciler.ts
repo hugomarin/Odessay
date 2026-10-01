@@ -24,13 +24,17 @@ import {
   watchFsPaths,
   type UnwatchFn,
 } from "@/lib/services/desktop/tauri-fs-watch"
-import { tauriWorkspaceSync } from "@/lib/services/desktop/tauri-commands"
+import {
+  tauriWorkspaceSync,
+  type DesktopWorkspaceSnapshot,
+} from "@/lib/services/desktop/tauri-commands"
 import { seedStarterDocuments } from "@/lib/services/desktop/starter-documents"
 import {
   createWorkspaceReconciler,
   type KnownBinding,
   type ObservedFile,
   type ReconcilerRoot,
+  type UnboundFile,
   type WorkspaceReconciler,
 } from "@/lib/services/desktop/workspace-reconciler"
 
@@ -174,6 +178,19 @@ async function startRuntime(runtime: Runtime): Promise<void> {
   }
 }
 
+/** One mapper for the scan and the bind snapshot: same wire shape, same seam. */
+function observedFilesFromSnapshot(snapshot: DesktopWorkspaceSnapshot): ObservedFile[] {
+  return snapshot.files.map((file) => ({
+    relativePath: file.relativePath,
+    canonicalPath: file.path,
+    inode: file.inode || null,
+    contentHash: file.contentHash || null,
+    size: file.size,
+    modifiedAt: file.modifiedAt,
+    manifestId: file.id || null,
+  }))
+}
+
 function toReconcilerRoot(record: {
   id: string
   rootPath: string
@@ -219,11 +236,19 @@ async function buildRuntime(): Promise<Runtime | null> {
     loadRoots,
     async scanRoot(root) {
       let observed: ObservedFile[] | null
+      let unbound: UnboundFile[] = []
       try {
         // The manifest is the durable scope ledger. Omitting selectedPaths lets a
         // rename-correlated manifest update take effect instead of overwriting it
         // with a stale Settings path.
-        const snapshot = await tauriWorkspaceSync(root.rootPath)
+        //
+        // `mintUnbound: false`: this scan must not mint identity. The pass
+        // correlates unbound files across roots first and binds them in a
+        // single later call, so the manifest never records an id the
+        // correlation would have reused (ODE-657).
+        const snapshot = await tauriWorkspaceSync(root.rootPath, undefined, undefined, {
+          mintUnbound: false,
+        })
         if (
           snapshot.selectedPaths.length !== root.selectedPaths.length ||
           snapshot.selectedPaths.some((path, index) => path !== root.selectedPaths[index])
@@ -234,19 +259,19 @@ async function buildRuntime(): Promise<Runtime | null> {
             await settings.upsertBindingRoot({ ...current, selectedPaths: snapshot.selectedPaths })
           }
         }
-        observed = snapshot.files.map((file) => ({
+        observed = observedFilesFromSnapshot(snapshot)
+        unbound = (snapshot.unboundFiles ?? []).map((file) => ({
           relativePath: file.relativePath,
-          canonicalPath: file.path,
           inode: file.inode || null,
           contentHash: file.contentHash || null,
           size: file.size,
           modifiedAt: file.modifiedAt,
-          manifestId: file.id || null,
         }))
       } catch {
         // Permission loss / unmounted volume: temporarily unobservable, never a
         // delete. reconcileRoot treats `null` as "leave the catalog as-is".
         observed = null
+        unbound = []
       }
 
       // Prior catalog bindings for this root are what SQLite currently believes;
@@ -266,7 +291,15 @@ async function buildRuntime(): Promise<Runtime | null> {
           contentHash: row.binding!.contentHash,
         }))
 
-      return { observed, knownBindings }
+      return { observed, unbound, knownBindings }
+    },
+    async bindUnbound(root, ids) {
+      // One manifest write for every id the pass decided (correlated or
+      // minted), replacing the wrapper's own mint-and-retry second call. The
+      // returned snapshot is the refreshed observed list the orchestrator
+      // re-resolves before committing SQLite.
+      const snapshot = await tauriWorkspaceSync(root.rootPath, undefined, ids)
+      return observedFilesFromSnapshot(snapshot)
     },
     async commit(commit) {
       await catalog.applyReconcileTransaction(commit)

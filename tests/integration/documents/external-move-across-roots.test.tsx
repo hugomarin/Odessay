@@ -233,7 +233,7 @@ async function waitForCatalogBindingAt(path: string) {
 }
 
 describe("ODE-657 — movimiento externo entre dos raíces vigiladas (WATCH-04)", () => {
-  it.fails(
+  it(
     "conserva el UUID de A en B cuando el watcher notifica A primero",
     async () => {
       const rootA = makeRoot("Raiz A")
@@ -280,7 +280,7 @@ describe("ODE-657 — movimiento externo entre dos raíces vigiladas (WATCH-04)"
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "conserva el UUID de A en B cuando el watcher notifica B primero",
     async () => {
       const rootA = makeRoot("Raiz A")

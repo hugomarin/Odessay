@@ -30,12 +30,17 @@
 
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
 import { computeMarkdownContentHash } from "@/lib/content-hash"
-import { tauriWorkspaceSync, type DesktopCatalogRow } from "@/lib/services/desktop/tauri-commands"
+import {
+  tauriWorkspaceSync,
+  type DesktopCatalogRow,
+  type DesktopWorkspaceSnapshot,
+} from "@/lib/services/desktop/tauri-commands"
 import {
   createWorkspaceReconciler,
   type KnownBinding,
   type ObservedFile,
   type ReconcilerRoot,
+  type UnboundFile,
   type WorkspaceReconciler,
 } from "@/lib/services/desktop/workspace-reconciler"
 
@@ -153,6 +158,19 @@ function normalizeFixtureJson(value: unknown): unknown {
 
 function byRelativePath<T extends { relativePath: string }>(left: T, right: T): number {
   return left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0
+}
+
+/** Mirrors the adapter's mapping from a `workspace_sync` snapshot to observed files. */
+function observedFilesFromSnapshot(snapshot: DesktopWorkspaceSnapshot): ObservedFile[] {
+  return snapshot.files.map((file) => ({
+    relativePath: file.relativePath,
+    canonicalPath: file.path,
+    inode: file.inode || null,
+    contentHash: file.contentHash || null,
+    size: file.size,
+    modifiedAt: file.modifiedAt,
+    manifestId: file.id || null,
+  }))
 }
 
 function projectCatalogRow(row: DesktopCatalogRow): CatalogSeamRowProjection {
@@ -312,15 +330,16 @@ export class CatalogSeamSession {
         selectedPaths: [],
       })),
       scanRoot: async (root) => {
-        const snapshot = await tauriWorkspaceSync(root.rootPath)
-        const observed: ObservedFile[] = snapshot.files.map((file) => ({
+        const snapshot = await tauriWorkspaceSync(root.rootPath, undefined, undefined, {
+          mintUnbound: false,
+        })
+        const observed = observedFilesFromSnapshot(snapshot)
+        const unbound: UnboundFile[] = (snapshot.unboundFiles ?? []).map((file) => ({
           relativePath: file.relativePath,
-          canonicalPath: file.path,
           inode: file.inode || null,
           contentHash: file.contentHash || null,
           size: file.size,
           modifiedAt: file.modifiedAt,
-          manifestId: file.id || null,
         }))
         const rows = await catalog.listByBindingRoot(root.id)
         const knownBindings: KnownBinding[] = rows
@@ -332,7 +351,11 @@ export class CatalogSeamSession {
             inode: row.binding!.inode,
             contentHash: row.binding!.contentHash,
           }))
-        return { observed, knownBindings }
+        return { observed, unbound, knownBindings }
+      },
+      bindUnbound: async (root, ids) => {
+        const snapshot = await tauriWorkspaceSync(root.rootPath, undefined, ids)
+        return observedFilesFromSnapshot(snapshot)
       },
       commit: async (commit) => {
         await catalog.applyReconcileTransaction(commit)
@@ -347,6 +370,15 @@ export class CatalogSeamSession {
       if (binding.canonicalPath === canonicalPath) return binding.documentId
     }
     throw new Error(`catalog-seam recorder: no document bound at ${canonicalPath}`)
+  }
+
+  /** True when the model still holds a binding at that canonical path. */
+  hasBindingAtPath(rootKey: FixtureRootKey, relativePath: string): boolean {
+    const canonicalPath = `${FIXTURE_ROOT_PATHS[rootKey]}/${relativePath}`
+    for (const binding of this.bindings.values()) {
+      if (binding.canonicalPath === canonicalPath) return true
+    }
+    return false
   }
 
   toScenario(): CatalogSeamScenario {
@@ -760,6 +792,46 @@ async function buildWatch07ExternalEditSamePath(session: CatalogSeamSession): Pr
   reconciler.dispose()
 }
 
+async function buildWatch04ExternalMoveAcrossRoots(session: CatalogSeamSession): Promise<void> {
+  session.defineRoot("rootA", "fixture-root-a")
+  session.defineRoot("rootB", "fixture-root-b")
+  session.fsWrite("rootA", "notes/letter.md", LETTER_V1, {
+    inode: 601,
+    modifiedAt: 1_700_000_008_000,
+  })
+
+  const catalog = session.createCatalog()
+  const reconciler = session.createReconciler(catalog)
+  await reconciler.start()
+  const documentId = session.documentIdForPath("rootA", "notes/letter.md")
+
+  // Moved outside the app from root A to root B: the origin disappears in the
+  // same pass the destination appears unbound. Identity must survive through
+  // inode + content_hash correlation across roots, not a fresh UUID.
+  session.fsDelete("rootA", "notes/letter.md")
+  session.fsWrite("rootB", "notes/letter.md", LETTER_V1, {
+    inode: 601,
+    modifiedAt: 1_700_000_009_000,
+  })
+  await reconciler.rescanAll()
+  reconciler.dispose()
+
+  const movedId = session.documentIdForPath("rootB", "notes/letter.md")
+  if (movedId !== documentId) {
+    throw new Error(
+      `catalog-seam recorder: cross-root move minted ${movedId} instead of ${documentId}`,
+    )
+  }
+  if (session.hasBindingAtPath("rootA", "notes/letter.md")) {
+    throw new Error("catalog-seam recorder: the moved document kept a stale binding in root A")
+  }
+  const row = await catalog.getById(documentId)
+  if (row?.binding?.bindingRootId !== "fixture-root-b" || row.localPresent !== true) {
+    throw new Error("catalog-seam recorder: the moved document is not bound to root B")
+  }
+  await catalog.resolvePath(`${FIXTURE_ROOT_PATHS.rootB}/notes/letter.md`)
+}
+
 export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
   const scenarios = [
     await recordScenario(
@@ -787,6 +859,13 @@ export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
       "WATCH-07: an external edit changes markdown at the same path and inode; after rescan, getById " +
         "returns the updated BLAKE3 content hash for the same document identity.",
       buildWatch07ExternalEditSamePath,
+    ),
+    await recordScenario(
+      "watch04-external-move-across-roots",
+      "WATCH-04: a file moved outside the app from root A to root B keeps its UUID — the " +
+        "destination scan reports it unbound with inode + content hash, the pass correlates it " +
+        "against A's confirmed detach, and the binding moves to B with no detach in A.",
+      buildWatch04ExternalMoveAcrossRoots,
     ),
   ]
   return {

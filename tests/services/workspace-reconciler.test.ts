@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import {
+  correlateAcrossRoots,
   createWorkspaceReconciler,
   matchesSelectedPaths,
   reconcileRoot,
@@ -8,6 +9,7 @@ import {
   type ObservedFile,
   type ReconcileCommit,
   type ReconcilerRoot,
+  type UnboundFile,
 } from "@/lib/services/desktop/workspace-reconciler"
 
 function root(overrides: Partial<ReconcilerRoot> = {}): ReconcilerRoot {
@@ -191,6 +193,161 @@ describe("matchesSelectedPaths", () => {
   })
 })
 
+function unboundFile(overrides: Partial<UnboundFile> = {}): UnboundFile {
+  return {
+    relativePath: "letter.md",
+    inode: 100,
+    contentHash: "blake3:aaa",
+    size: 10,
+    modifiedAt: 1000,
+    ...overrides,
+  }
+}
+
+describe("correlateAcrossRoots — cross-root move evidence", () => {
+  it("correlates an unbound file with the unique detached binding of another root", () => {
+    const result = correlateAcrossRoots({
+      roots: [
+        {
+          rootId: "root-a",
+          observable: true,
+          unbound: [],
+          detached: [known({ bindingRootId: "root-a" })],
+        },
+        {
+          rootId: "root-b",
+          observable: true,
+          unbound: [unboundFile({ relativePath: "moved.md" })],
+          detached: [],
+        },
+      ],
+      mintId,
+    })
+    expect(result.idsByRoot.get("root-b")?.get("moved.md")).toBe("doc-a")
+    expect([...result.correlatedIds]).toEqual(["doc-a"])
+  })
+
+  it("does not correlate when the hash differs, even with the same inode (inode reuse)", () => {
+    const result = correlateAcrossRoots({
+      roots: [
+        {
+          rootId: "root-a",
+          observable: true,
+          unbound: [],
+          detached: [known({ bindingRootId: "root-a" })],
+        },
+        {
+          rootId: "root-b",
+          observable: true,
+          unbound: [unboundFile({ relativePath: "other.md", contentHash: "blake3:other" })],
+          detached: [],
+        },
+      ],
+      mintId,
+    })
+    expect(result.idsByRoot.get("root-b")?.get("other.md")).toMatch(/^minted-/)
+    expect(result.correlatedIds.size).toBe(0)
+  })
+
+  it("does not correlate when the origin binding is still present (hard link)", () => {
+    // The origin path was observed, so `reconcileRoot` consumed its binding and
+    // it never reaches `detached`.
+    const result = correlateAcrossRoots({
+      roots: [
+        { rootId: "root-a", observable: true, unbound: [], detached: [] },
+        {
+          rootId: "root-b",
+          observable: true,
+          unbound: [unboundFile({ relativePath: "copy.md" })],
+          detached: [],
+        },
+      ],
+      mintId,
+    })
+    expect(result.idsByRoot.get("root-b")?.get("copy.md")).toMatch(/^minted-/)
+    expect(result.correlatedIds.size).toBe(0)
+  })
+
+  it("does not correlate with two detached candidates for one file", () => {
+    const result = correlateAcrossRoots({
+      roots: [
+        {
+          rootId: "root-a",
+          observable: true,
+          unbound: [],
+          detached: [known({ bindingRootId: "root-a" })],
+        },
+        {
+          rootId: "root-c",
+          observable: true,
+          unbound: [],
+          detached: [known({ documentId: "doc-c", bindingRootId: "root-c" })],
+        },
+        {
+          rootId: "root-b",
+          observable: true,
+          unbound: [unboundFile({ relativePath: "moved.md" })],
+          detached: [],
+        },
+      ],
+      mintId,
+    })
+    expect(result.idsByRoot.get("root-b")?.get("moved.md")).toMatch(/^minted-/)
+    expect(result.correlatedIds.size).toBe(0)
+  })
+
+  it("does not correlate when two unbound files share one detached candidate", () => {
+    const result = correlateAcrossRoots({
+      roots: [
+        {
+          rootId: "root-a",
+          observable: true,
+          unbound: [],
+          detached: [known({ bindingRootId: "root-a" })],
+        },
+        {
+          rootId: "root-b",
+          observable: true,
+          unbound: [unboundFile({ relativePath: "one.md" })],
+          detached: [],
+        },
+        {
+          rootId: "root-c",
+          observable: true,
+          unbound: [unboundFile({ relativePath: "two.md" })],
+          detached: [],
+        },
+      ],
+      mintId,
+    })
+    expect(result.idsByRoot.get("root-b")?.get("one.md")).toMatch(/^minted-/)
+    expect(result.idsByRoot.get("root-c")?.get("two.md")).toMatch(/^minted-/)
+    expect(result.correlatedIds.size).toBe(0)
+  })
+
+  it("does not correlate when the origin root is unobservable", () => {
+    const result = correlateAcrossRoots({
+      roots: [
+        {
+          rootId: "root-a",
+          observable: false,
+          unbound: [],
+          detached: [known({ bindingRootId: "root-a" })],
+        },
+        {
+          rootId: "root-b",
+          observable: true,
+          unbound: [unboundFile({ relativePath: "moved.md" })],
+          detached: [],
+        },
+      ],
+      mintId,
+    })
+    expect(result.idsByRoot.get("root-b")?.get("moved.md")).toMatch(/^minted-/)
+    expect(result.correlatedIds.size).toBe(0)
+  })
+})
+
 describe("createWorkspaceReconciler — orchestrator", () => {
   it("projects roots on start and reaches ready", async () => {
     const commits: ReconcileCommit[] = []
@@ -312,5 +469,135 @@ describe("createWorkspaceReconciler — orchestrator", () => {
     reconciler.notifyRootChanged("root-1")
     // After dispose, no further work is scheduled.
     expect(cleared).not.toHaveBeenCalled()
+  })
+})
+
+describe("createWorkspaceReconciler — cross-root correlation (ODE-657)", () => {
+  function twoRoots() {
+    return [
+      root({ id: "root-a", rootPath: "/Users/h/A" }),
+      root({ id: "root-b", rootPath: "/Users/h/B" }),
+    ]
+  }
+
+  it("correlates a move across roots in one pass and never detaches the origin", async () => {
+    const commits: ReconcileCommit[] = []
+    const bindCalls: Array<{ rootId: string; ids: Record<string, string> }> = []
+    const reconciler = createWorkspaceReconciler({
+      loadRoots: async () => twoRoots(),
+      scanRoot: async (candidate) => {
+        if (candidate.id === "root-a") {
+          return {
+            observed: [],
+            unbound: [],
+            knownBindings: [
+              known({
+                documentId: "doc-a",
+                bindingRootId: "root-a",
+                relativePath: "letter.md",
+                inode: 100,
+                contentHash: "blake3:aaa",
+              }),
+            ],
+          }
+        }
+        return {
+          observed: [],
+          unbound: [unboundFile({ relativePath: "letter.md" })],
+          knownBindings: [],
+        }
+      },
+      bindUnbound: async (candidate, ids) => {
+        bindCalls.push({ rootId: candidate.id, ids })
+        return [
+          observed({
+            relativePath: "letter.md",
+            canonicalPath: "/Users/h/B/letter.md",
+            inode: 100,
+            contentHash: "blake3:aaa",
+            manifestId: ids["letter.md"],
+          }),
+        ]
+      },
+      commit: async (commit) => {
+        commits.push(commit)
+      },
+    })
+
+    await reconciler.start()
+
+    expect(reconciler.getReadiness()).toBe("ready")
+    expect(bindCalls).toEqual([{ rootId: "root-b", ids: { "letter.md": "doc-a" } }])
+    const commitA = commits.find((commit) => commit.bindingRootId === "root-a")
+    expect(commitA?.detached, "el id correlacionado no se desliga de A").toEqual([])
+    const commitB = commits.find((commit) => commit.bindingRootId === "root-b")
+    expect(commitB?.upserts.map((upsert) => upsert.documentId)).toEqual(["doc-a"])
+    expect(commitB?.upserts[0].bindingRootId).toBe("root-b")
+  })
+
+  it("does not bind (no extra workspace_sync) when no root has unbound files", async () => {
+    const bindUnbound = vi.fn()
+    const reconciler = createWorkspaceReconciler({
+      loadRoots: async () => twoRoots(),
+      scanRoot: async (candidate) => ({
+        observed: [
+          observed({
+            relativePath: "letter.md",
+            canonicalPath: `${candidate.rootPath}/letter.md`,
+            manifestId: `doc-${candidate.id}`,
+          }),
+        ],
+        unbound: [],
+        knownBindings: [],
+      }),
+      bindUnbound,
+      commit: async () => {},
+    })
+
+    await reconciler.start()
+    expect(bindUnbound).not.toHaveBeenCalled()
+  })
+
+  it("keeps the correlated id out of the detach when bindUnbound fails, and marks failed", async () => {
+    const commits: ReconcileCommit[] = []
+    const reconciler = createWorkspaceReconciler({
+      loadRoots: async () => twoRoots(),
+      scanRoot: async (candidate) => {
+        if (candidate.id === "root-a") {
+          return {
+            observed: [],
+            unbound: [],
+            knownBindings: [
+              known({
+                documentId: "doc-a",
+                bindingRootId: "root-a",
+                relativePath: "letter.md",
+                inode: 100,
+                contentHash: "blake3:aaa",
+              }),
+            ],
+          }
+        }
+        return {
+          observed: [],
+          unbound: [unboundFile({ relativePath: "letter.md" })],
+          knownBindings: [],
+        }
+      },
+      bindUnbound: async () => {
+        throw new Error("manifest write failed")
+      },
+      commit: async (commit) => {
+        commits.push(commit)
+      },
+    })
+
+    await reconciler.start()
+
+    expect(reconciler.getReadiness()).toBe("failed")
+    const commitA = commits.find((commit) => commit.bindingRootId === "root-a")
+    expect(commitA?.detached, "el binding stale se conserva para la próxima pasada").toEqual([])
+    const commitB = commits.find((commit) => commit.bindingRootId === "root-b")
+    expect(commitB?.upserts).toEqual([])
   })
 })
