@@ -19,6 +19,10 @@ Something.
 * **Invariants:** no silent overwrite.
 * **Required docs:** capability-proof-contract.md.
 
+## Reference docs
+
+- workflow/quality/capability-proof-contract.md
+
 ## Validation
 
 Tests.`
@@ -29,7 +33,7 @@ describe("ops:brief:lint", () => {
   })
 
   it("accepts plain and dash bullet field styles", () => {
-    const plain = "## Architecture Contract\n\n- Layer: x\n- Runtime scope: y\n- Owner: z\nContracts touched: a\n* Invariants: b\n* Required docs: c\n"
+    const plain = "## Architecture Contract\n\n- Layer: x\n- Runtime scope: y\n- Owner: z\nContracts touched: a\n* Invariants: b\n* Required docs: c\n* Reference docs: d\n"
     expect(lintIssueBrief(plain)).toEqual([])
   })
 
@@ -38,7 +42,7 @@ describe("ops:brief:lint", () => {
   })
 
   it("rejects a brief without the section (ODE-593 before the fix)", () => {
-    expect(lintIssueBrief("## Context\n\nNo contract here.")).toEqual([
+    expect(lintIssueBrief("## Context\n\nNo contract here.\n\n## Reference docs\n\n- a.md")).toEqual([
       'Missing "Architecture Contract" section (a heading such as "## Architecture Contract").',
     ])
   })
@@ -52,9 +56,32 @@ describe("ops:brief:lint", () => {
   })
 
   it("does not read fields from outside the section", () => {
-    const outside = "## Architecture Contract\n\n* Layer: x\n\n## Notes\n\n* Runtime scope: y\n* Owner: z\n* Contracts touched: a\n* Invariants: b\n* Required docs: c\n"
+    const outside = "## Architecture Contract\n\n* Layer: x\n\n## Notes\n\n* Runtime scope: y\n* Owner: z\n* Contracts touched: a\n* Invariants: b\n* Required docs: c\n* Reference docs: d\n"
     expect(architectureContractSection(outside)).not.toContain("Runtime scope")
     expect(lintIssueBrief(outside)).toHaveLength(5)
+  })
+
+  it("rejects a field that is present but empty", () => {
+    expect(lintIssueBrief(COMPLETE.replace("* **Owner:** unchanged.", "* **Owner:**"))).toEqual([
+      'Architecture Contract field "Owner:" is empty.',
+    ])
+  })
+
+  it("accepts a field whose value is a nested list", () => {
+    const nested = COMPLETE.replace(
+      "* **Required docs:** capability-proof-contract.md.",
+      "* **Required docs:**\n  * capability-proof-contract.md\n  * odessay-adr-identidad.md",
+    )
+    expect(lintIssueBrief(nested)).toEqual([])
+  })
+
+  it("requires Reference docs as a non-empty section or field", () => {
+    const withoutReferences = COMPLETE.replace("## Reference docs\n\n- workflow/quality/capability-proof-contract.md\n\n", "")
+    expect(lintIssueBrief(withoutReferences)).toEqual([
+      'Missing "Reference docs" (a non-empty "## Reference docs" section or "Reference docs:" field).',
+    ])
+    const emptySection = COMPLETE.replace("- workflow/quality/capability-proof-contract.md\n", "")
+    expect(lintIssueBrief(emptySection)).toHaveLength(1)
   })
 
   it("requires the Recon Pack comment only when asked", () => {
