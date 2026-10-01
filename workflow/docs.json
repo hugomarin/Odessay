@@ -445,6 +445,16 @@
       "description": "Instrumento de auditoría de red/runtime: requests, bytes, duplicados y listener churn evaluados con scripts/check-network-budget.mjs cuando el contrato identifica ese riesgo."
     },
     {
+      "path": "scripts/check-proof-precheck.mjs",
+      "type": "ops",
+      "description": "ops:proof:precheck (ODE-656): gate mecánico sobre los commits de la rama y las filas tocadas del capability map — commit test(...) sin producción, it.fails que entra antes que su fix, fix que solo convierte it.fails → it, filas tocadas del capability map con tantas celdas como su cabecera. Corre en /wf-build paso 7 y en process-checks. Reglas en scripts/lib/proof-precheck.mjs."
+    },
+    {
+      "path": "scripts/check-issue-brief.mjs",
+      "type": "ops",
+      "description": "ops:brief:lint (ODE-656): comprueba en Linear que un issue es despachable a BUILD — Architecture Contract con Layer, Runtime scope, Owner, Contracts touched, Invariants y Required docs; con --require-recon, también el comentario de Recon Pack. Se usa en /wf-define y en el paso 1 de /wf-build. Reglas en scripts/lib/issue-brief-lint.mjs."
+    },
+    {
       "path": "scripts/check-network-budget.mjs",
       "type": "ops",
       "description": "CLI de gate de red/runtime: evalua un HAR contra workflow/perf-budgets-network.json, escribe metrics/report JSON y falla ante duplicados de arranque, exceso de requests/bytes o churn de listeners Tauri."

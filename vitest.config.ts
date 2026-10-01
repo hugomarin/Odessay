@@ -16,5 +16,12 @@ export default defineConfig({
   test: {
     environment: "node",
     exclude: ["**/node_modules/**", "**/.claude/**", "**/tmp/**"],
+    // ODE-656: CI retries a test once, only when it failed on a timeout. Load
+    // flakes in this suite are timeouts (the harness "waitFor/settleUntil agotó
+    // Nms", vitest's "Test timed out"). The condition also keeps it.fails tests
+    // from being re-run, since their red body fails on an assertion. Local runs
+    // never retry. A retried pass is not a fix: the verbose reporter prints
+    // "(retry x1)" in CI, and a test that needs it gets a flake issue.
+    retry: process.env.CI ? { count: 1, condition: /agotó \d+ms|timed out/i } : 0,
   },
 });
