@@ -280,7 +280,11 @@ async function mountWebShellForTitleSuggestion(writingId: string, title: string,
   resetEditorShellWorld()
   // Keep the existing AI-01 URL router as the one network seam: its app URL
   // branch invokes the real route and its provider branch fakes only Fireworks.
-  world.network = (url, init) => fetchRouter(url, init)
+  const defaultHarnessNetwork = world.network
+  world.network = (url, init) =>
+    url === "/api/ai/title-suggestions" || url === PROVIDER_CHAT_COMPLETIONS_URL
+      ? fetchRouter(url, init)
+      : defaultHarnessNetwork(url, init)
 
   await localDB.writings.save({
     ...makeLocalWriting(writingId, "server-confirmed"),
@@ -426,6 +430,102 @@ describe("ODE-620 — a stale A suggestion never enters Desk's reused modal for 
         await unmount()
       }
     },
+  )
+})
+
+describe("ODE-620 — web shell surfaces provider failures and can retry", () => {
+  it.each(["timeout", "provider 5xx", "provider network error"] as const)(
+    "shows the settled %s error, preserves the writing, and retries through the real route",
+    async (failureMode) => {
+      const writingId = `writing-error-${crypto.randomUUID()}`
+      const title = "Title stays until accepted"
+      const bodyText = `Web shell body for ${failureMode}; ${BODY_TEXT}`
+      await mountWebShellForTitleSuggestion(writingId, title, bodyText)
+      const before = await localDB.writings.get(writingId)
+      expect(before).toBeTruthy()
+
+      let observedAbortSignal: AbortSignal | null = null
+      if (failureMode === "timeout") {
+        providerBehaviors.push(
+          (init) =>
+            new Promise<Response>((_resolve, reject) => {
+              observedAbortSignal = init?.signal ?? null
+              const signal = init?.signal
+              if (!signal) {
+                reject(new Error("The real route omitted its provider AbortSignal"))
+                return
+              }
+              const abort = () => {
+                const error = new Error("provider aborted after route timeout")
+                error.name = "AbortError"
+                reject(error)
+              }
+              if (signal.aborted) abort()
+              else signal.addEventListener("abort", abort, { once: true })
+            }),
+        )
+        // The route's 45s deadline is the only timer under test.
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+      } else if (failureMode === "provider 5xx") {
+        providerBehaviors.push(async () => new Response("temporary provider outage", { status: 503 }))
+      } else {
+        providerBehaviors.push(async () => {
+          throw new TypeError("provider network disconnected")
+        })
+      }
+
+      await clickButton("Suggest")
+      if (failureMode === "timeout") {
+        await settleMicrotasks()
+        expect(providerCallCount).toBe(1)
+        expect(observedAbortSignal).toBeTruthy()
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(45_000)
+          for (let index = 0; index < 40; index += 1) await Promise.resolve()
+        })
+        vi.useRealTimers()
+      } else {
+        await waitFor(() => (providerCallCount === 1 ? providerCallCount : null), {
+          label: `la llamada real al proveedor con ${failureMode}`,
+        })
+        await waitFor(() => (visibleSuggestionError() && buttonWithText("Suggest") ? true : null), {
+          label: `el DOM asentó el error ${failureMode} y limpió loading`,
+        })
+      }
+
+      await waitFor(() => (visibleSuggestionError() && buttonWithText("Suggest") ? true : null), {
+        label: `error visible ${failureMode} después del evento de respuesta de la ruta`,
+      })
+      expect(routeCallCount, "la petición atravesó el POST real de AI-01").toBe(1)
+      expect(providerCallCount, "el proveedor fakeado recibió la petición real de la ruta").toBe(1)
+      expect(visibleSuggestionError()?.textContent?.trim()).toBeTruthy()
+      expect(buttonWithText("Suggest")?.disabled).toBe(false)
+      expect(document.querySelector<HTMLInputElement>('input[aria-label="Artifact name"]')?.value).toBe(title)
+      expect(mountedShell?.editor().getText()).toBe(bodyText)
+
+      const afterFailure = await localDB.writings.get(writingId)
+      expect(afterFailure?.title).toBe(before?.title)
+      expect(afterFailure?.body_text).toBe(before?.body_text)
+      expect(afterFailure?.body_json).toEqual(before?.body_json)
+
+      providerResponseTitle = "Suggestion after retry"
+      await clickButton("Suggest")
+      await waitFor(() =>
+        document.body.textContent?.includes("Suggestion after retry") ? document.body.textContent : null,
+      {
+        label: "la sugerencia aparece en el modal tras reintentar con el proveedor sano",
+      })
+      expect(routeCallCount).toBe(2)
+      expect(providerCallCount).toBe(2)
+      expect(visibleSuggestionError()).toBeFalsy()
+      expect(document.querySelector<HTMLInputElement>('input[aria-label="Artifact name"]')?.value).toBe(title)
+      const afterRetry = await localDB.writings.get(writingId)
+      expect(afterRetry?.title).toBe(before?.title)
+      expect(afterRetry?.body_text).toBe(before?.body_text)
+      expect(afterRetry?.body_json).toEqual(before?.body_json)
+      expect(mountedShell?.editor().getText()).toBe(bodyText)
+    },
+    30_000,
   )
 })
 
