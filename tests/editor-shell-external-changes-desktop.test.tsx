@@ -296,6 +296,7 @@ async function clickButton(label: string) {
 async function beginKeptVersionDoubleRace(input: {
   fileTitle: string
   conflictId: string
+  secondExternalContent: string
   keepBesideFails?: boolean
 }) {
   const path = writeMarkdownFile(input.fileTitle, "ODE593 base.")
@@ -306,6 +307,7 @@ async function beginKeptVersionDoubleRace(input: {
 
   const race = doubleRaceNextWriteFile((candidate) => candidate === path, {
     conflictId: input.conflictId,
+    secondExternalContent: input.secondExternalContent,
     keepBesideFails: input.keepBesideFails,
   })
   await typeInEditor(" ODE593-LOCAL")
@@ -313,7 +315,7 @@ async function beginKeptVersionDoubleRace(input: {
 
   // The double has verified the baseline hash and is held in Rust's atomic
   // commit window; deliver the competing filesystem edit before releasing it.
-  writeFileSync(path, "ODE593 external.\n")
+  writeFileSync(path, "ODE593 external 1.\n")
   await emitFsWatchEvent([path])
   await waitForShell(() => bannerText().includes(CONFLICT_BANNER), "banner WATCH-07 durante la carrera")
   race.release()
@@ -469,15 +471,18 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
       const { path, keptPath } = await beginKeptVersionDoubleRace({
         fileTitle: "Letter; draft",
         conflictId: "5930cafe",
+        secondExternalContent: "ODE593 external 2.\n",
       })
       const keptName = "Letter; draft.md.conflict-5930cafe"
 
-      expect(await readDisk(path), "el destino conserva el contenido que intentó guardar el editor").toContain(
-        "ODE593-LOCAL",
+      expect(editorText(), "la edición del usuario permanece en el editor hasta que la elige").toContain("ODE593-LOCAL")
+      expect(await readDisk(path), "el destino conserva la primera versión externa, sin la edición del usuario").toBe(
+        "ODE593 external 1.\n",
       )
-      expect(await readDisk(keptPath), "el archivo conservado contiene la edición externa que llegó durante el commit").toBe(
-        "ODE593 external.\n",
+      expect(await readDisk(keptPath), "el archivo conservado contiene la segunda edición externa").toBe(
+        "ODE593 external 2.\n",
       )
+      expect(await readDisk(path)).not.toContain("ODE593-LOCAL")
       expect(bannerText()).toContain(CONFLICT_BANNER)
       expect(bannerText()).toContain(
         `This file was changed outside Artifact Studio. The other version was kept as ${keptName}.`,
@@ -505,6 +510,8 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
       await clickButton("Keep my version")
       await waitForShell(() => !bannerText().includes(CONFLICT_BANNER), "banner y línea retirados al conservar mi versión")
       expect(bannerText()).not.toContain(keptName)
+      await waitForShellDisk(path, "ODE593-LOCAL")
+      expect(await readDisk(path), "la edición del usuario solo llega al disco después de elegirla").toContain("ODE593-LOCAL")
       assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
@@ -516,15 +523,18 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
       const { path, tmpPath } = await beginKeptVersionDoubleRace({
         fileTitle: "Carta fallo de conservación",
         conflictId: "5930bad0",
+        secondExternalContent: "ODE593 external 2.\n",
         keepBesideFails: true,
       })
 
-      expect(await readDisk(path), "el destino conserva el contenido que intentó guardar el editor").toContain(
-        "ODE593-LOCAL",
+      expect(editorText(), "la edición del usuario permanece en el editor tras el rechazo").toContain("ODE593-LOCAL")
+      expect(await readDisk(path), "el destino conserva la primera versión externa tras el fallo").toBe(
+        "ODE593 external 1.\n",
       )
-      expect(await readDisk(tmpPath), "la versión desplazada permanece en el temporal tras el fallo de keep_beside").toBe(
-        "ODE593 external.\n",
+      expect(await readDisk(tmpPath), "la segunda versión externa permanece en el temporal tras el fallo de keep_beside").toBe(
+        "ODE593 external 2.\n",
       )
+      expect(await readDisk(path)).not.toContain("ODE593-LOCAL")
       expect(bannerText()).toContain(
         "This file was changed outside Artifact Studio. The other version couldn't be saved.",
       )

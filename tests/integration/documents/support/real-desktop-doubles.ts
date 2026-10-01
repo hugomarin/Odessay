@@ -274,6 +274,7 @@ let writeFileFailureFactory: (() => never) | null = null
 type DoubleWriteRace = {
   matches: (path: string) => boolean
   conflictId: string
+  secondExternalContent: string
   keepBesideFails: boolean
   gate: Promise<void>
   arrived: () => void
@@ -299,14 +300,16 @@ export function resetWriteFileFailureState(): void {
 
 /**
  * Holds a guarded write just after its initial disk-hash check. The test can
- * make a second external edit and deliver the watcher event before releasing
- * the commit window. The double then writes the app's content to the target,
- * preserves the displaced external bytes beside it (or leaves them at `.tmp`
- * when `keep_beside` fails), and rejects with Rust's literal CONFLICT message.
+ * make the first external edit and deliver the watcher event before releasing
+ * the commit window. The double then simulates a second external save during
+ * Rust's restore exchange: the target returns to external version 1 and
+ * external version 2 is kept beside it (or left at `.tmp` when `keep_beside`
+ * fails). The app's content is never written to disk, and Rust's literal
+ * CONFLICT message is rejected.
  */
 export function doubleRaceNextWriteFile(
   matches: (path: string) => boolean,
-  options: { conflictId?: string; keepBesideFails?: boolean } = {},
+  options: { conflictId?: string; secondExternalContent: string; keepBesideFails?: boolean },
 ): { release: () => void; started: Promise<void> } {
   const conflictId = options.conflictId ?? "5930cafe"
   if (!/^[0-9a-f]{8}$/.test(conflictId)) {
@@ -324,6 +327,7 @@ export function doubleRaceNextWriteFile(
   doubleWriteRace = {
     matches,
     conflictId,
+    secondExternalContent: options.secondExternalContent,
     keepBesideFails: options.keepBesideFails ?? false,
     gate,
     arrived,
@@ -472,19 +476,22 @@ export async function tauriWriteFileDouble(
       race.arrived()
       await race.gate
 
-      const displacedContent = await fs.readFile(path, "utf8")
-      await fs.writeFile(path, content, "utf8")
+      const firstExternalContent = await fs.readFile(path, "utf8")
+      // Rust's second exchange restores the displaced first external version
+      // and leaves the second external save in the temporary path.
+      await fs.writeFile(path, race.secondExternalContent, "utf8")
+      await fs.writeFile(path, firstExternalContent, "utf8")
 
       if (race.keepBesideFails) {
         const tmpPath = `${path}.tmp`
-        await fs.writeFile(tmpPath, displacedContent, "utf8")
+        await fs.writeFile(tmpPath, race.secondExternalContent, "utf8")
         throw new WriteFileConflictError(
           `CONFLICT: ${path} changed on disk while the save was being written, and the version found there could not be kept (Permission denied); it remains at ${tmpPath}`,
         )
       }
 
       const keptPath = `${path}.conflict-${race.conflictId}`
-      await fs.writeFile(keptPath, displacedContent, "utf8")
+      await fs.writeFile(keptPath, race.secondExternalContent, "utf8")
       throw new WriteFileConflictError(
         `CONFLICT: ${path} changed on disk while the save was being written; another version was kept at ${keptPath}`,
       )
