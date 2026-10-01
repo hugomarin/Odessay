@@ -38,7 +38,10 @@ jobs:
           node-version-file: package.json
           cache: npm
       - run: npm ci
-      - run: npm test
+      # ODE-656: CI retries a failing test once (vitest.config.ts). The verbose
+      # reporter prints "(retry x1)" next to a test that only passed on retry,
+      # so a flake stays visible instead of being silently absorbed.
+      - run: npm test -- --reporter=verbose
 
   build:
     runs-on: ubuntu-latest
