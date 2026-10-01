@@ -39,8 +39,12 @@ function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
 }
 
-function err<T>(code: ServiceError["code"], message: string): ServiceResponse<T> {
-  return { data: null, error: { code, message, retryable: false } }
+function err<T>(
+  code: ServiceError["code"],
+  message: string,
+  details?: ServiceError["details"],
+): ServiceResponse<T> {
+  return { data: null, error: { code, message, retryable: false, ...(details ? { details } : {}) } }
 }
 
 function isoNow(): string {
@@ -334,7 +338,12 @@ export class FilesystemDocumentService implements DocumentService {
       return ok(savedRecord)
     } catch (e) {
       if (e instanceof WriteFileConflictError) {
-        return err("CONFLICT", e.message)
+        const details = e.preservationFailed
+          ? { preservationFailed: true }
+          : e.keptPath
+            ? { keptPath: e.keptPath }
+            : undefined
+        return err("CONFLICT", e.message, details)
       }
       return err("STORAGE_ERROR", e instanceof Error ? e.message : "Failed to save writing")
     }

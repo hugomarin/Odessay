@@ -255,6 +255,7 @@ export const tauriPathModuleDouble = {
   appConfigDir: async () => configDir,
   appDataDir: async () => dataDir,
   join: async (...parts: string[]) => join(...parts),
+  dirname: async (path: string) => dirname(path),
 }
 
 // ─── filesystem tauri-commands doubles (real fs) ───────────────────────────
@@ -270,6 +271,16 @@ export const tauriPathModuleDouble = {
 let writeFileCallCount = 0
 let failingWriteFileCallNumber: number | null = null
 let writeFileFailureFactory: (() => never) | null = null
+type DoubleWriteRace = {
+  matches: (path: string) => boolean
+  conflictId: string
+  secondExternalContent: string
+  keepBesideFails: boolean
+  gate: Promise<void>
+  arrived: () => void
+}
+let doubleWriteRace: DoubleWriteRace | null = null
+
 export function failWriteFileOnCall(callNumber: number, makeError: () => never): void {
   failingWriteFileCallNumber = callNumber
   writeFileFailureFactory = makeError
@@ -282,8 +293,46 @@ export function resetWriteFileFailureState(): void {
   heldWriteFile = null
   heldOpenFile = null
   failingWriteFileMatching = null
+  doubleWriteRace = null
   writeFileLog.length = 0
   failingCatalogGetById.clear()
+}
+
+/**
+ * Holds a guarded write just after its initial disk-hash check. The test can
+ * make the first external edit and deliver the watcher event before releasing
+ * the commit window. The double then simulates a second external save during
+ * Rust's restore exchange: the target returns to external version 1 and
+ * external version 2 is kept beside it (or left at `.tmp` when `keep_beside`
+ * fails). The app's content is never written to disk, and Rust's literal
+ * CONFLICT message is rejected.
+ */
+export function doubleRaceNextWriteFile(
+  matches: (path: string) => boolean,
+  options: { conflictId?: string; secondExternalContent: string; keepBesideFails?: boolean },
+): { release: () => void; started: Promise<void> } {
+  const conflictId = options.conflictId ?? "5930cafe"
+  if (!/^[0-9a-f]{8}$/.test(conflictId)) {
+    throw new Error("doubleRaceNextWriteFile requires an 8-character lowercase hex conflictId")
+  }
+
+  let release!: () => void
+  let arrived!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  doubleWriteRace = {
+    matches,
+    conflictId,
+    secondExternalContent: options.secondExternalContent,
+    keepBesideFails: options.keepBesideFails ?? false,
+    gate,
+    arrived,
+  }
+  return { release, started }
 }
 
 /**
@@ -379,7 +428,8 @@ export async function tauriCreateFileDouble(dir: string, filename: string): Prom
  * baselines, so this double agrees with production code on what "changed"
  * means) must match it, or the write is refused exactly like the real
  * command refuses it — same error shape (`WriteFileConflictError`), same
- * "disk stays untouched" guarantee.
+ * "disk stays untouched" guarantee. `doubleRaceNextWriteFile` separately
+ * models the much narrower atomic-commit race after this initial check.
  */
 export async function tauriWriteFileDouble(
   path: string,
@@ -417,6 +467,33 @@ export async function tauriWriteFileDouble(
     if (actual !== expectedContentHash) {
       throw new WriteFileConflictError(
         `CONFLICT: ${path} changed on disk since it was last read (expected ${expectedContentHash}, found ${actual})`,
+      )
+    }
+
+    if (doubleWriteRace?.matches(path)) {
+      const race = doubleWriteRace
+      doubleWriteRace = null
+      race.arrived()
+      await race.gate
+
+      const firstExternalContent = await fs.readFile(path, "utf8")
+      // Rust's second exchange restores the displaced first external version
+      // and leaves the second external save in the temporary path.
+      await fs.writeFile(path, race.secondExternalContent, "utf8")
+      await fs.writeFile(path, firstExternalContent, "utf8")
+
+      if (race.keepBesideFails) {
+        const tmpPath = `${path}.tmp`
+        await fs.writeFile(tmpPath, race.secondExternalContent, "utf8")
+        throw new WriteFileConflictError(
+          `CONFLICT: ${path} changed on disk while the save was being written, and the version found there could not be kept (Permission denied); it remains at ${tmpPath}`,
+        )
+      }
+
+      const keptPath = `${path}.conflict-${race.conflictId}`
+      await fs.writeFile(keptPath, race.secondExternalContent, "utf8")
+      throw new WriteFileConflictError(
+        `CONFLICT: ${path} changed on disk while the save was being written; another version was kept at ${keptPath}`,
       )
     }
   }

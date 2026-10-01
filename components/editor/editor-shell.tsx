@@ -4,6 +4,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type
 import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents"
 import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
+import { dirname } from "@tauri-apps/api/path"
 import { useRouter } from "next/navigation"
 import {
   activationHydrates,
@@ -21,7 +22,7 @@ import {
   type PendingRichSelectionSnapshot,
 } from "@/hooks/useEditorCommands"
 import { useActiveEditorTabIdRef } from "@/hooks/useActiveEditorTabIdRef"
-import { useEditorPersistence } from "@/hooks/useEditorPersistence"
+import { useEditorPersistence, type KeptVersionConflictNotice } from "@/hooks/useEditorPersistence"
 import { useDocumentExit, type PendingMarkdownSelection } from "@/hooks/useDocumentExit"
 import { useSaveStateSync } from "@/hooks/useSaveStateSync"
 import {
@@ -45,6 +46,7 @@ import { useWorkspaceTabOpening } from "@/hooks/useWorkspaceTabOpening"
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs"
 import type { EditorSaveState } from "@/components/editor/save-state"
 import { Button } from "@/components/ui/button"
+import { revealWorkspacePath } from "@/lib/workspace/reveal-path"
 import { WritingEditorContent } from "@/components/editor/editor-content"
 import { ImagePresentationViewer } from "@/components/editor/image-presentation-viewer"
 import { EditorEmptyState } from "@/components/editor/editor-empty-state"
@@ -471,6 +473,7 @@ export function EditorShell({
   const [externalFileNotice, setExternalFileNotice] = useState<ExternalFileNotice | null>(null)
   const [externalContentConflict, setExternalContentConflict] = useState<ExternalContentConflict | null>(null)
   const externalContentConflictRef = useRef<ExternalContentConflict | null>(null)
+  const [keptVersionConflictNotice, setKeptVersionConflictNotice] = useState<KeptVersionConflictNotice | null>(null)
   /** WATCH-07 — has this document's durable-content-hash baseline been seeded into the coordinator yet, for the currently watched writingId? */
   const hasSeededBaselineRef = useRef(false)
   /**
@@ -747,6 +750,7 @@ export function EditorShell({
     routeWritingIdRef,
     routerRef,
     externalContentConflictRef,
+    onKeptVersionConflict: setKeptVersionConflictNotice,
     hasUnconfirmedLocalEditRef,
     isApplyingContentRef,
     modeRef,
@@ -774,6 +778,10 @@ export function EditorShell({
     navigateToWriting,
     untitledWritingTitle: UNTITLED_WRITING_TITLE,
   })
+
+  useEffect(() => {
+    setKeptVersionConflictNotice(null)
+  }, [currentWritingId])
 
   /**
    * Al cambiar de documento se descarta el trabajo de correcciones pendiente
@@ -1119,6 +1127,24 @@ export function EditorShell({
     syncStatusRef,
     updateDerivedEditorState,
   })
+
+  const resolveConflictByKeepingMyVersion = useCallback(() => {
+    setKeptVersionConflictNotice(null)
+    keepMyVersion()
+  }, [keepMyVersion])
+
+  const resolveConflictByReloadingExternal = useCallback(() => {
+    setKeptVersionConflictNotice(null)
+    reloadExternalVersion()
+  }, [reloadExternalVersion])
+
+  const showKeptVersionFolder = useCallback(async (keptPath: string) => {
+    try {
+      await revealWorkspacePath(await dirname(keptPath))
+    } catch (error) {
+      console.error("[editor:conflict] failed to open kept version folder", error)
+    }
+  }, [])
 
   useEffect(() => {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
@@ -2477,28 +2503,63 @@ export function EditorShell({
         ) : null}
 
         {!isFocusMode && externalContentConflict ? (
-          <div className="flex items-center justify-between gap-4 border-b-[0.5px] border-border bg-amber-50 px-6 py-3 text-sm text-ink dark:bg-amber-950/30">
-            <span>
-              This file changed outside Artifact Studio while you had unsaved edits here. Choose which version to
-              keep — saving is paused until you do.
-            </span>
-            <div className="flex shrink-0 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={reloadExternalVersion}
-              >
-                Reload external
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={keepMyVersion}
-              >
-                Keep my version
-              </Button>
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex flex-col gap-3 border-b-[0.5px] border-border bg-amber-50 px-6 py-3 text-sm text-ink dark:bg-amber-950/30"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <span>
+                This file changed outside Artifact Studio while you had unsaved edits here. Choose which version to
+                keep — saving is paused until you do.
+              </span>
+              <div className="flex shrink-0 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={resolveConflictByReloadingExternal}
+                >
+                  Reload external
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={resolveConflictByKeepingMyVersion}
+                >
+                  Keep my version
+                </Button>
+              </div>
             </div>
+            {keptVersionConflictNotice?.writingId === currentWritingId ? (
+              <div role="status" aria-live="polite" className="flex flex-wrap items-center gap-2">
+                <span>
+                  {keptVersionConflictNotice.preservationFailed ? (
+                    "This file was changed outside Artifact Studio. The other version couldn't be saved."
+                  ) : keptVersionConflictNotice.keptPath ? (
+                    <>
+                      This file was changed outside Artifact Studio. The other version was kept as{" "}
+                      <span
+                        className="font-medium"
+                        title={keptVersionConflictNotice.keptPath}
+                      >
+                        {keptVersionConflictNotice.keptPath.split(/[\\/]/).pop()}
+                      </span>.
+                    </>
+                  ) : null}
+                </span>
+                {keptVersionConflictNotice.keptPath ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void showKeptVersionFolder(keptVersionConflictNotice.keptPath!)}
+                  >
+                    Show in Finder
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

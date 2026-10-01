@@ -62,6 +62,12 @@ export const DESKTOP_PERSISTENCE_DEBOUNCE_MS = 4_000
 
 const DESKTOP_UNTITLED_WRITING_TITLE = UNTITLED_DOCUMENT_NAME
 
+export type KeptVersionConflictNotice = {
+  writingId: string
+  keptPath: string | null
+  preservationFailed: boolean
+}
+
 export type EditorPersistenceInput = {
   currentWritingId: string | null
   currentWritingIdRef: RefObject<string | null>
@@ -90,6 +96,7 @@ export type EditorPersistenceInput = {
   markdownSaveTimeoutRef: RefObject<number | null>
   pendingMarkdownSaveRef: RefObject<(() => void) | null>
   flushPendingEditOnUnmountRef: RefObject<(() => void) | null>
+  onKeptVersionConflict: (notice: KeptVersionConflictNotice) => void
   applySyncStatus: (next: EditorSaveState) => void
   activateDocument: (target: { writingId: string | null; href?: string }, reason: ActivationReason) => void
   applyDocumentMetadata: (patch: DocumentMetadataPatch) => void
@@ -134,6 +141,7 @@ export function useEditorPersistence(input: EditorPersistenceInput) {
     markdownSaveTimeoutRef,
     pendingMarkdownSaveRef,
     flushPendingEditOnUnmountRef,
+    onKeptVersionConflict,
     applySyncStatus,
     activateDocument,
     applyDocumentMetadata,
@@ -349,6 +357,22 @@ export function useEditorPersistence(input: EditorPersistenceInput) {
               : event.writingId === currentWritingIdRef.current
             if (isSourceTabActive) {
               applySyncStatus("error")
+
+              const details = event.error?.details
+              const keptPath = typeof details?.keptPath === "string" ? details.keptPath : null
+              const preservationFailed = details?.preservationFailed === true
+              if (
+                event.operation === "save" &&
+                event.error?.code === "CONFLICT" &&
+                event.writingId &&
+                (keptPath || preservationFailed)
+              ) {
+                onKeptVersionConflict({
+                  writingId: event.writingId,
+                  keptPath,
+                  preservationFailed,
+                })
+              }
             }
           }
 
@@ -367,7 +391,14 @@ export function useEditorPersistence(input: EditorPersistenceInput) {
         },
       )
     },
-    [applySyncStatus, activateDocument, applyDocumentMetadata, createDesktopDraftFn, createWritingId],
+    [
+      applySyncStatus,
+      activateDocument,
+      applyDocumentMetadata,
+      createDesktopDraftFn,
+      createWritingId,
+      onKeptVersionConflict,
+    ],
   )
 
   useEffect(() => {
