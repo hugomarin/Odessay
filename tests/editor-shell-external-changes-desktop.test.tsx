@@ -518,6 +518,45 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
   )
 
   it(
+    "ODE-593: retira el aviso del documento anterior cuando otro documento entra en conflicto",
+    async () => {
+      const { keptPath } = await beginKeptVersionDoubleRace({
+        fileTitle: "Carta A con copia",
+        conflictId: "5930abca",
+        secondExternalContent: "ODE593 A external 2.\n",
+      })
+      const keptName = keptPath.split(/[\\/]/).pop()!
+
+      expect(bannerText(), "control positivo: A muestra su aviso conservado").toContain(keptName)
+
+      const pathB = writeMarkdownFile("Carta B con conflicto propio", "ODE593 B base.")
+      const writingIdB = await openFromNativeMenu(pathB, "ODE593 B base.")
+      await waitForWatcherOnDocuments()
+      expect(activeTab()?.writing_id).toBe(writingIdB)
+
+      const held = holdWriteFile((candidate) => candidate === pathB)
+      await typeInEditor(" ODE593-B-LOCAL")
+      await held.started
+      writeFileSync(pathB, "ODE593 B external.\n")
+      await emitFsWatchEvent([pathB])
+      await waitForShell(() => bannerText().includes(CONFLICT_BANNER), "conflicto propio del documento B")
+
+      held.release()
+      await advance(800)
+      expect(await readDisk(pathB), "el conflicto de B conserva su versión externa").toBe("ODE593 B external.\n")
+      expect(editorText()).toContain("ODE593-B-LOCAL")
+      expect(bannerText()).toContain(CONFLICT_BANNER)
+      expect(bannerText(), "el aviso conservado de A no aparece dentro del conflicto de B").not.toContain(keptName)
+
+      await clickButton("Reload external")
+      await waitForShell(() => !bannerText().includes(CONFLICT_BANNER), "conflicto de B retirado")
+      expect(bannerText()).not.toContain(keptName)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
     "ODE-593: informa si keep_beside no conserva la otra versión y no ofrece Finder",
     async () => {
       const { path, tmpPath } = await beginKeptVersionDoubleRace({
