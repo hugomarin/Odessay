@@ -355,7 +355,7 @@ describe("AI-01 — suggestTitle reaches the real route and provider regardless 
 })
 
 describe("ODE-620 — a stale A suggestion never enters Desk's reused modal for B", () => {
-  it.fails.each(["success", "error"] as const)(
+  it.each(["success", "error"] as const)(
     "discards A's late %s response after Desk closes A and opens B",
     async (lateResult) => {
       const writingA = { id: `writing-a-${crypto.randomUUID()}`, title: "Title A", bodyText: BODY_TEXT }
