@@ -1419,9 +1419,23 @@ pub fn catalog_update_mutation_status(
     let tx = conn
         .transaction()
         .map_err(|e| format!("catalog mutation status begin: {e}"))?;
-    tx.execute("UPDATE sync_mutations SET status=?2,attempt_count=?3,next_retry_at=?4,last_error=?5 WHERE id=?1",
-      params![mutation_id,status,attempt_count,next_retry_at,last_error])
-      .map_err(|e| format!("catalog_update_mutation_status: {e}"))?;
+    // ODE-644: la respuesta de una mutación ya resuelta (superada por un
+    // guardado más nuevo, o confirmada antes) no revive la fila. Solo una
+    // mutación accionable puede cambiar de estado.
+    let updated = tx
+        .execute(
+            "UPDATE sync_mutations SET status=?2,attempt_count=?3,next_retry_at=?4,last_error=?5
+             WHERE id=?1 AND status IN ('pending','failed')",
+            params![mutation_id, status, attempt_count, next_retry_at, last_error],
+        )
+        .map_err(|e| format!("catalog_update_mutation_status: {e}"))?;
+    if updated == 0 {
+        tx.commit()
+            .map_err(|e| format!("catalog mutation status commit: {e}"))?;
+        return Ok(());
+    }
+    // ODE-644: la proyección solo representa al documento cuando esta era la
+    // única mutación accionable; si queda otra más nueva, manda ella.
     tx.execute(
         "UPDATE documents SET
           sync_status = CASE
@@ -1434,7 +1448,12 @@ pub fn catalog_update_mutation_status(
             WHEN ?2='synced' AND (SELECT operation FROM sync_mutations WHERE id=?1)='delete' THEN 0
             WHEN ?2='synced' THEN 1
             ELSE cloud_present END
-         WHERE id=(SELECT document_id FROM sync_mutations WHERE id=?1)",
+         WHERE id=(SELECT document_id FROM sync_mutations WHERE id=?1)
+           AND NOT EXISTS (
+             SELECT 1 FROM sync_mutations
+             WHERE document_id=(SELECT document_id FROM sync_mutations WHERE id=?1)
+               AND id<>?1 AND status IN ('pending','failed')
+           )",
         params![mutation_id, status],
     )
     .map_err(|e| format!("catalog_update_document_status: {e}"))?;
@@ -1752,9 +1771,14 @@ pub fn catalog_update_metadata_mutation_status(
     last_error: Option<String>,
 ) -> Result<(), String> {
     let conn = open_db(&db_path)?;
-    conn.execute("UPDATE metadata_sync_mutations SET status=?2,attempt_count=?3,next_retry_at=?4,last_error=?5 WHERE id=?1",
-        params![mutation_id, status, attempt_count, next_retry_at, last_error])
-      .map_err(|e| format!("catalog update metadata mutation: {e}"))?;
+    // ODE-644: mismo guard que la cola de contenido. La UI de colecciones llega
+    // aquí; una fila ya resuelta (superada por un enqueue más nuevo) no revive.
+    conn.execute(
+        "UPDATE metadata_sync_mutations SET status=?2,attempt_count=?3,next_retry_at=?4,last_error=?5
+         WHERE id=?1 AND status IN ('pending','failed')",
+        params![mutation_id, status, attempt_count, next_retry_at, last_error],
+    )
+    .map_err(|e| format!("catalog update metadata mutation: {e}"))?;
     Ok(())
 }
 

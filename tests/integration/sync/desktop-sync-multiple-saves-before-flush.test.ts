@@ -364,7 +364,7 @@ describe("SYNC-05 desktop — varios guardados antes del flush: la última versi
   // v4 no se ha subido) y falla contra la semántica real, que proyecta
   // `synced` desde la mutación vieja aunque exista una más nueva pendiente.
   // Se cierra con la costura TS→Rust/SQLite de ODE-613.
-  it.fails("un guardado en vuelo no deja la fila en synced con su versión todavía pendiente (ODE-644)", async () => {
+  it("un guardado en vuelo no deja la fila en synced con su versión todavía pendiente (ODE-644)", async () => {
     const { writingId } = await createMaterializedDraft("Versión 1.")
 
     await saveFromEditor(writingId, "Versión 3.", 3)
@@ -387,7 +387,7 @@ describe("SYNC-05 desktop — varios guardados antes del flush: la última versi
   // de que la v4 lo superó, producción revive la mutación vieja como `failed`
   // accionable (`index.rs:1422-1424`) y marca el documento `failed`. El caso
   // afirma que una mutación superada no vuelve a la cola accionable.
-  it.fails("un fallo en vuelo no revive una mutación ya superada (ODE-644)", async () => {
+  it("un fallo en vuelo no revive una mutación ya superada (ODE-644)", async () => {
     const { writingId } = await createMaterializedDraft("Versión 1.")
 
     await saveFromEditor(writingId, "Versión 3.", 3)
@@ -418,7 +418,7 @@ describe("SYNC-05 desktop — varios guardados antes del flush: la última versi
   // la v4 (el status del usuario) se pierde en la nube y la versión retrocede,
   // en silencio (la fila local queda `synced`). El caso afirma el estado
   // correcto: la nube conserva la v4.
-  it.fails("el reintento de la v3 superada no pisa la nube tras el backoff (ODE-644)", async () => {
+  it("el reintento de la v3 superada no pisa la nube tras el backoff (ODE-644)", async () => {
     const { writingId } = await createMaterializedDraft("Versión 1.")
     await saveFromEditor(writingId, "Versión 3.", 3, "draft")
 
