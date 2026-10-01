@@ -948,6 +948,8 @@ Las tres van sobre el harness, con el editor real, y las tres se validan rompié
 
 Los cuatro del §4, en este orden: STATE-07 (cero cobertura hoy), STATE-05 (seam store→shell), WATCH-07 (siembra del baseline al abrir), EXP-05 (caller real de export). Al cerrarlos, cuatro filas del capability map suben de estado **y** quedan cubiertos los bordes por donde va a pasar el corte.
 
+**Resultado (2026-10-01):** el plan de arriba se conserva como histórico. Estado de las cuatro filas en `capability-integration-map.md`: STATE-07 (`:95`) y STATE-05 (`:93`) en `INTEGRATION`; WATCH-07 (`:239`) en `INTEGRATION` —la red de ODE-599 prueba la siembra y ODE-637 cerró la auto-escritura y el replay—, con solo el puente IPC real abierto (ODE-622); y EXP-05 (`:83`) en `PARTIAL_INTEGRATION` (carrera entre export y cambio de pestaña, `exportBinary`, `editor-shell.tsx:2283-2301` @210bc0e6).
+
 ### Fase 3 — Extracción, siempre en dos tiempos
 
 Orden propuesto:
