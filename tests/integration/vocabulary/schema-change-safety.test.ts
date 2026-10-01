@@ -48,11 +48,11 @@ afterEach(() => {
   resetSettingsStoreDouble()
 })
 
-async function seedCatalogRow(id: string, status: string) {
+async function seedCatalogRow(id: string, overrides: { status?: string; artifactType?: string } = {}) {
   await tauriCatalogDualWriteDouble(await dbPath(), {
     document: {
       id, localPresent: true, cloudPresent: false, cloudAccountId: null, syncStatus: "local-only",
-      title: `Doc ${id}`, slug: null, status, artifactType: "general", visibility: "private",
+      title: `Doc ${id}`, slug: null, status: overrides.status ?? "draft", artifactType: overrides.artifactType ?? "general", visibility: "private",
       version: 1, deletedAt: null, createdAt: Date.now(), modifiedAt: Date.now(),
     },
     binding: null,
@@ -97,9 +97,9 @@ describe("CONFIG-07 — existing documents survive a status deletion (desktop)",
     expect(created.error).toBeNull()
     const item = created.data!
 
-    await seedCatalogRow("doc-a", item.key)
-    await seedCatalogRow("doc-b", item.key)
-    await seedCatalogRow("doc-c", "exploring")
+    await seedCatalogRow("doc-a", { status: item.key })
+    await seedCatalogRow("doc-b", { status: item.key })
+    await seedCatalogRow("doc-c", { status: "exploring" })
 
     const result = await settings.deleteVocabularyItem(item.id)
 
@@ -128,7 +128,7 @@ describe("CONFIG-07 — existing documents survive a status deletion (desktop)",
     })
     const item = created.data!
 
-    await seedCatalogRow("doc-x", item.key)
+    await seedCatalogRow("doc-x", { status: item.key })
 
     failNextBulkDualWrite(() => {
       throw new Error("simulated SQLite transaction failure")
@@ -154,6 +154,103 @@ describe("CONFIG-07 — existing documents survive a status deletion (desktop)",
       kind: "status",
       name: "Unused",
       icon: "eye",
+      color: "#8E837B",
+    })
+    const item = created.data!
+
+    const result = await settings.deleteVocabularyItem(item.id)
+
+    expect(result.error).toBeNull()
+    expect(result.data!.rewrittenCount).toBe(0)
+    const remaining = await settings.listVocabulary()
+    expect(remaining.data!.some((i) => i.id === item.id)).toBe(false)
+  })
+})
+
+/**
+ * CONFIG-07 (desktop half, `kind = "type"`) — Existing documents survive
+ * schema change.
+ *
+ * The type branch shares `DesktopSettingsService.deleteVocabularyItem` and
+ * `rewriteCatalogToBaseValue` with the status branch above, but rewrites
+ * `artifactType` to `general` instead of `status` to `draft`. Mirrors the
+ * three status cases so the type branch carries its own proof, including that
+ * the status branch of the row is not touched.
+ */
+describe("CONFIG-07 — existing documents survive a type deletion (desktop)", () => {
+  it("rewrites every matching catalog row to the base type and leaves others untouched", async () => {
+    const settings = new DesktopSettingsService(configDir)
+
+    const created = await settings.createVocabularyItem({
+      kind: "type",
+      name: "Field note",
+      icon: "quote",
+      color: "#96532C",
+    })
+    expect(created.error).toBeNull()
+    const item = created.data!
+
+    await seedCatalogRow("doc-a", { artifactType: item.key })
+    await seedCatalogRow("doc-b", { artifactType: item.key })
+    await seedCatalogRow("doc-c", { artifactType: "field_sketch" })
+
+    const result = await settings.deleteVocabularyItem(item.id)
+
+    expect(result.error).toBeNull()
+    expect(result.data!.rewrittenCount).toBe(2)
+
+    const rowA = await tauriCatalogGetByIdDouble(await dbPath(), "doc-a")
+    const rowB = await tauriCatalogGetByIdDouble(await dbPath(), "doc-b")
+    const rowC = await tauriCatalogGetByIdDouble(await dbPath(), "doc-c")
+    expect(rowA?.artifactType).toBe("general")
+    expect(rowB?.artifactType).toBe("general")
+    expect(rowC?.artifactType).toBe("field_sketch")
+    // The type rewrite must not touch the status branch of the same rows.
+    expect(rowA?.status).toBe("draft")
+    expect(rowB?.status).toBe("draft")
+
+    const remaining = await settings.listVocabulary()
+    expect(remaining.data!.some((i) => i.id === item.id)).toBe(false)
+  })
+
+  it("FAILURE — a failed rewrite leaves the item defined and the catalog at its prior values, not a partial mix", async () => {
+    const settings = new DesktopSettingsService(configDir)
+
+    const created = await settings.createVocabularyItem({
+      kind: "type",
+      name: "Field note",
+      icon: "quote",
+      color: "#96532C",
+    })
+    const item = created.data!
+
+    await seedCatalogRow("doc-x", { artifactType: item.key })
+
+    failNextBulkDualWrite(() => {
+      throw new Error("simulated SQLite transaction failure")
+    })
+
+    const result = await settings.deleteVocabularyItem(item.id)
+
+    expect(result.error).not.toBeNull()
+
+    // Catalog untouched — the rewrite never committed.
+    const row = await tauriCatalogGetByIdDouble(await dbPath(), "doc-x")
+    expect(row?.artifactType).toBe(item.key)
+    expect(row?.status).toBe("draft")
+
+    // Item definition still exists — deleteVocabularyItem only removes it
+    // from the store after the rewrite succeeds.
+    const remaining = await settings.listVocabulary()
+    expect(remaining.data!.some((i) => i.id === item.id)).toBe(true)
+  })
+
+  it("deleting a type nobody uses rewrites nothing and still removes the item", async () => {
+    const settings = new DesktopSettingsService(configDir)
+    const created = await settings.createVocabularyItem({
+      kind: "type",
+      name: "Unused shape",
+      icon: "quote",
       color: "#8E837B",
     })
     const item = created.data!
