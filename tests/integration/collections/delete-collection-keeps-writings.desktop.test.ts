@@ -148,7 +148,7 @@ const {
   loadDeskCatalogData,
   setLocalWritingCollections,
 } = await import("@/lib/queries/desk-catalog-source")
-const { buildCollectionSummaries } = await import("@/lib/collections/collections")
+const { buildCollectionSummaries, getUncategorizedWritings } = await import("@/lib/collections/collections")
 
 const docBody = (text: string) => ({
   type: "doc",
@@ -293,6 +293,27 @@ describe("COL-06 desktop — borrar una colección no toca sus documentos", () =
 
     const { collections } = await loadCollectionState()
     expect(collections.map((collection) => collection.id)).not.toContain(principal.id)
+  })
+
+  // follow-up pendiente (ODE-618): F6 — el comando real deja las filas de
+  // `writing_collections` de la colección borrada y el snapshot devuelve todas
+  // las relaciones, así que `getUncategorizedWritings` sigue viendo asignado un
+  // documento cuya única colección ya no existe y desaparece de la vista
+  // Collections. Lo arregla ODE-618 PR1b (DELETE en la misma transacción +
+  // filtro de relaciones vivas en el snapshot); entonces este `it.fails` pasa a
+  // `it` sin tocar su cuerpo.
+  it.fails("(F6) un documento cuya única colección se borró vuelve a estar sin clasificar", async () => {
+    const { second, principal } = await setupCollectionScenario()
+
+    await deleteLocalCollection(principal)
+
+    const { collections, writingCollections } = await loadCollectionState()
+    const { writings } = await loadDeskCatalogData()
+    expect(collections.map((collection) => collection.id)).not.toContain(principal.id)
+    expect(
+      getUncategorizedWritings(writings, writingCollections).map((writing) => writing.id),
+      "el documento sin colección viva debe aparecer en el banner de sin clasificar",
+    ).toContain(second.writingId)
   })
 
   it("el comando de catálogo deja la colección soft-deleted y su metadata encolada", async () => {
