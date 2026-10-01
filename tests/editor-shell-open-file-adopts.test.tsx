@@ -303,7 +303,7 @@ describe("ODE-619 — Open File adopta el archivo en su sitio", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "avisa cuando open_file rechaza un archivo que no es UTF-8 y no abre otra pestaña",
     async () => {
       const controlPath = writeMarkdownFile("UTF-8 Control.md", "# Control\n\nODE619 UTF-8 positive control\n")
