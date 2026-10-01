@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs"
 import { randomUUID } from "node:crypto"
 import { dirname, join } from "node:path"
 import type {
+  DesktopCatalogCollection,
   DesktopCatalogCollectionSnapshot,
   DesktopCatalogDualWriteInput,
   DesktopCatalogMetadataMutation,
@@ -9,6 +10,7 @@ import type {
   DesktopCatalogReconcileInput,
   DesktopCatalogReconcileResult,
   DesktopCatalogRow,
+  DesktopCatalogWritingCollection,
   DesktopCloudSnapshotInput,
   DesktopFileMetadata,
   DesktopRetiredBindingRoot,
@@ -38,6 +40,14 @@ let configDir = ""
 let dataDir = ""
 
 const catalogsByDb = new Map<string, Map<string, DesktopCatalogRow>>()
+// Collection state (`collections` + `writing_collections`), real enough for a
+// proof that drives production's own collection create/assign calls and then
+// reads the view's join back. Mirrors the SQL of `upsert_collection`,
+// `catalog_replace_writing_collections` and `catalog_list_collection_snapshot`
+// (`index.rs:1520-1730`), read by hand; the TS → real SQLite seam is the same
+// deliberately-open native gap as the rest of this file.
+const collectionsByDb = new Map<string, Map<string, DesktopCatalogCollection>>()
+const writingCollectionsByDb = new Map<string, Map<string, DesktopCatalogWritingCollection>>()
 const bindingRootIdsByRoot = new Map<string, string>()
 // Per-root durable manifest state (relativePath -> document id), real enough
 // to prove Workspace-manifest convergence (WS-02): an explicit-IDs call binds
@@ -101,6 +111,8 @@ export function configureRealDesktopDoubles(baseDir: string): void {
 /** Clears all in-memory catalog state. Does not touch the real filesystem. */
 export function resetCatalogDoubles(): void {
   catalogsByDb.clear()
+  collectionsByDb.clear()
+  writingCollectionsByDb.clear()
   bindingRootIdsByRoot.clear()
   manifestsByRoot.clear()
   manifestInodesByRoot.clear()
@@ -943,14 +955,69 @@ export async function tauriCatalogReactivateBindingRootDouble(): Promise<Desktop
 }
 
 /**
- * Same premise, for collections: no test using this double creates a
- * collection (there is no double for `catalog_save_collection`), so the
- * catalog's collection snapshot is really empty. The editor's Properties panel
- * reads it on open (`WritingCollectionsSection` → `loadDesktopCollections`),
- * which is on the path to Export (EXP-05, ODE-601).
+ * Stateful collection snapshot: real in-memory `collections` +
+ * `writing_collections` stores seeded through production's own
+ * `catalog_save_collection` / `catalog_replace_writing_collections` doubles.
+ * With no collection created (every proof before ODE-614) it returns the same
+ * genuinely-empty snapshot as before — an empty store is the real shape of
+ * "nothing created", not a shortcut. The editor's Properties panel reads it on
+ * open (`WritingCollectionsSection` → `loadDesktopCollections`), which is on
+ * the path to Export (EXP-05, ODE-601); ODE-614's workspace-isolation proof
+ * reads it to assert per-root collection chips.
  */
-export async function tauriCatalogListCollectionSnapshotDouble(_dbPath: string): Promise<DesktopCatalogCollectionSnapshot> {
-  return { collections: [], writingCollections: [] }
+export async function tauriCatalogListCollectionSnapshotDouble(dbPath: string): Promise<DesktopCatalogCollectionSnapshot> {
+  const collections = [...(collectionsByDb.get(dbPath)?.values() ?? [])]
+    .filter((collection) => collection.deletedAt === null)
+    .sort((left, right) => right.localUpdatedAt - left.localUpdatedAt)
+  const writingCollections = [...(writingCollectionsByDb.get(dbPath)?.values() ?? [])]
+    .sort(
+      (left, right) =>
+        left.writingId.localeCompare(right.writingId) ||
+        left.collectionId.localeCompare(right.collectionId),
+    )
+  return { collections, writingCollections }
+}
+
+/** Mirror of `catalog_save_collection` → `upsert_collection` (`index.rs:1639,1520`). */
+export async function tauriCatalogSaveCollectionDouble(
+  dbPath: string,
+  collection: DesktopCatalogCollection,
+  _mutation: DesktopCatalogMetadataMutation | null,
+): Promise<void> {
+  let store = collectionsByDb.get(dbPath)
+  if (!store) {
+    store = new Map()
+    collectionsByDb.set(dbPath, store)
+  }
+  // ON CONFLICT(id) DO UPDATE SET <every column> — the mutation queue the real
+  // command also writes is out of scope here (no proof reads it).
+  store.set(collection.id, { ...collection })
+}
+
+/**
+ * Mirror of `catalog_replace_writing_collections` (`index.rs:1677`): clears
+ * the writing's rows, then inserts one per collection id (`added_at` /
+ * `local_updated_at` stamped on every row).
+ */
+export async function tauriCatalogReplaceWritingCollectionsDouble(
+  dbPath: string,
+  writingId: string,
+  collectionIds: string[],
+  addedAt: string,
+  localUpdatedAt: number,
+  _mutation: DesktopCatalogMetadataMutation | null,
+): Promise<void> {
+  let store = writingCollectionsByDb.get(dbPath)
+  if (!store) {
+    store = new Map()
+    writingCollectionsByDb.set(dbPath, store)
+  }
+  for (const [key, row] of [...store.entries()]) {
+    if (row.writingId === writingId) store.delete(key)
+  }
+  for (const collectionId of new Set(collectionIds)) {
+    store.set(`${writingId}:${collectionId}`, { writingId, collectionId, addedAt, localUpdatedAt })
+  }
 }
 
 export async function tauriCatalogDetachLocalFileDouble(dbPath: string, id: string): Promise<void> {
