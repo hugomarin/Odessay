@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import { SelectionBarFrame } from "@/components/shared/selection-bar-frame"
 
 /**
  * Selection bar — one component, two surfaces.
@@ -191,7 +192,7 @@ export function SelectionBar({
   const busy = pendingAction !== null
 
   return (
-    <div
+    <SelectionBarFrame
       ref={barRef}
       id={id}
       role="toolbar"
@@ -199,13 +200,8 @@ export function SelectionBar({
       aria-busy={busy || undefined}
       data-testid={testId}
       data-selection-bar="true"
-      data-placement={placement}
-      className={cn(
-        "pointer-events-none inset-x-0 bottom-[26px] z-40 flex h-14 items-center justify-center",
-        placement === "fixed" ? "fixed" : "absolute",
-      )}
+      placement={placement}
     >
-      <div className="pointer-events-auto flex h-14 origin-center animate-bar-in items-center gap-2.5 whitespace-nowrap rounded-bar bg-ink pl-[22px] pr-3.5 shadow-selection-bar">
         <span className="text-[14px] font-medium text-bg">{countLabel(selectedCount)}</span>
 
         {onSelectAll && canSelectAll ? (
@@ -254,7 +250,6 @@ export function SelectionBar({
             </React.Fragment>
           )
         })}
-      </div>
-    </div>
+    </SelectionBarFrame>
   )
 }
