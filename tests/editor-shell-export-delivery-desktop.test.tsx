@@ -484,7 +484,7 @@ describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
 })
 
 describe("EXP-05 — callers reales de Desk y Collections (ODE-636)", () => {
-  it.fails(
+  it(
     "Desk preview: el Markdown que reporta éxito llega al fs por el diálogo de desktop",
     async () => {
       const text = "ODE636-DESK-MARKDOWN-BODY"
@@ -509,7 +509,7 @@ describe("EXP-05 — callers reales de Desk y Collections (ODE-636)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "Collections preview: el Markdown que reporta éxito llega al fs por el diálogo de desktop",
     async () => {
       const text = "ODE636-COLLECTIONS-MARKDOWN-BODY"

@@ -74,7 +74,7 @@ import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
 import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
 import { copyTextWithFallback } from "@/lib/utils/clipboard"
-import { downloadBlob, saveBinaryArtifact } from "@/lib/utils/download"
+import { saveBinaryArtifact } from "@/lib/utils/download"
 import { buildWebWritingActionUrl, openExternalUrl, type WebWritingAction } from "@/lib/runtime/external-link"
 
 
@@ -818,16 +818,18 @@ export default function DeskPage() {
     await copyTextWithFallback(payload.markdown)
   }, [getWritingMarkdownPayload])
 
-  const downloadWritingMarkdown = useCallback((writingId: string) => {
+  const downloadWritingMarkdown = useCallback(async (writingId: string) => {
     const payload = getWritingMarkdownPayload(writingId)
 
     if (!payload) {
       return false
     }
 
-    const blob = new Blob([payload.markdown], { type: "text/markdown;charset=utf-8" })
-    downloadBlob(blob, payload.filename)
-    return true
+    return saveBinaryArtifact({
+      bytes: new TextEncoder().encode(payload.markdown),
+      fileName: payload.filename,
+      mimeType: "text/markdown;charset=utf-8",
+    })
   }, [getWritingMarkdownPayload])
 
   const exportWritingDocument = useCallback(async (writingId: string, format: "pdf" | "docx") => {
