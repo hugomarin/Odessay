@@ -271,10 +271,10 @@ describe("ODE-657 — movimiento externo entre dos raíces vigiladas (WATCH-04)"
       expect((await catalog.resolvePath(pathA)).kind, "la ruta vieja ya no resuelve").toBe("unbound")
       const byId = await catalog.getById(writingId)
       expect(byId?.binding?.canonicalPath).toBe(pathB)
-      const boundToB = (await catalog.listByBindingRoot(record.binding!.bindingRootId!)).filter(
+      const boundToPath = (await catalog.list()).filter(
         (row) => row.binding?.canonicalPath === pathB,
       )
-      expect(boundToB.map((row) => row.id), "sin fila duplicada en B").toEqual([writingId])
+      expect(boundToPath.map((row) => row.id), "sin fila duplicada en B").toEqual([writingId])
       assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
