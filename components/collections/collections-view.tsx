@@ -8,6 +8,10 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { CollectionCreateDialog } from "@/components/collections/collection-create-dialog"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
 import { BulkActionBar } from "@/components/desk/bulk-action-bar"
+import {
+  MarkdownExportNotice,
+  useMarkdownExportNotice,
+} from "@/components/shared/markdown-export-notice"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { WritingPreviewModal } from "@/components/desk/writing-preview-modal"
 import { useWritingSelection } from "@/hooks/useWritingSelection"
@@ -493,9 +497,9 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     if (isDesktopRuntime()) {
       const result = await (await getDocumentService()).openWriting(writingId)
       if (result.error || !result.data) {
-        throw new Error(result.error?.message ?? "Failed to export Markdown.")
+        throw new Error("Failed to export Markdown.")
       }
-      bodyJson = result.data.content.richText
+      bodyJson = (result.data.content.richText as Record<string, unknown> | null) ?? {}
     }
     const markdown = serializeWritingToMarkdown((bodyJson as Record<string, unknown>) ?? {}).trimEnd()
     return saveBinaryArtifact({
@@ -504,6 +508,11 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       mimeType: "text/markdown;charset=utf-8",
     })
   }, [])
+
+  const {
+    notice: markdownExportNotice,
+    runExport: downloadWritingMarkdownFromRow,
+  } = useMarkdownExportNotice(downloadWritingMarkdown)
 
   const openRenameWriting = useCallback(async (writingId: string) => {
     const writing = await getWritingForEdit(writingId)
@@ -714,6 +723,11 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                   onCreateCollection={bulkCreateCollectionAndAdd}
                 />
               )}
+              <MarkdownExportNotice
+                notice={markdownExportNotice}
+                placement="fixed"
+                raised={hasSelection}
+              />
               <div className="border-t-[0.5px] border-border">
               <DeskActivityTable
                 groups={detailGroups}
@@ -737,7 +751,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                 onRenameWriting={openRenameWriting}
                 onPreviewWriting={openWritingPreview}
                 onCopyMarkdown={copyWritingMarkdown}
-                onDownloadMarkdown={downloadWritingMarkdown}
+                onDownloadMarkdown={downloadWritingMarkdownFromRow}
                 onDeleteRequest={deleteWriting}
                 selectedIds={selectedIds}
                 onToggleSelection={toggleSelection}

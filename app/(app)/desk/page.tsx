@@ -26,6 +26,10 @@ import { useDeskFilters } from "@/hooks/useDeskFilters"
 import { useVocabulary } from "@/hooks/useVocabulary"
 import { useWritingSelection } from "@/hooks/useWritingSelection"
 import { BulkActionBar } from "@/components/desk/bulk-action-bar"
+import {
+  MarkdownExportNotice,
+  useMarkdownExportNotice,
+} from "@/components/shared/markdown-export-notice"
 import { buildCollectionOptions } from "@/lib/collections/collections"
 import { debounce } from "@/lib/utils/debounce"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
@@ -803,7 +807,7 @@ export default function DeskPage() {
       if (result.error || !result.data) {
         throw new Error("Failed to export Markdown.")
       }
-      bodyJson = result.data.content.richText
+      bodyJson = (result.data.content.richText as Record<string, unknown> | null) ?? {}
     }
 
     const markdown = serializeWritingToMarkdown(bodyJson).trimEnd()
@@ -818,13 +822,19 @@ export default function DeskPage() {
   }, [writingById])
 
   const copyWritingMarkdown = useCallback(async (writingId: string) => {
-    const payload = await getWritingMarkdownPayload(writingId)
+    try {
+      const payload = await getWritingMarkdownPayload(writingId)
 
-    if (!payload) {
+      if (!payload) {
+        return
+      }
+
+      await copyTextWithFallback(payload.markdown)
+    } catch {
+      // Row menu callers are intentionally fire-and-forget; keep a failed read
+      // or clipboard write from becoming an unhandled rejection.
       return
     }
-
-    await copyTextWithFallback(payload.markdown)
   }, [getWritingMarkdownPayload])
 
   const downloadWritingMarkdown = useCallback(async (writingId: string) => {
@@ -840,6 +850,11 @@ export default function DeskPage() {
       mimeType: "text/markdown;charset=utf-8",
     })
   }, [getWritingMarkdownPayload])
+
+  const {
+    notice: markdownExportNotice,
+    runExport: downloadWritingMarkdownFromRow,
+  } = useMarkdownExportNotice(downloadWritingMarkdown)
 
   const exportWritingDocument = useCallback(async (writingId: string, format: "pdf" | "docx") => {
     const service = await getDocumentService()
@@ -980,7 +995,7 @@ export default function DeskPage() {
                 onRenameWriting={openRenameWriting}
                 onPreviewWriting={openWritingPreview}
                 onCopyMarkdown={copyWritingMarkdown}
-                onDownloadMarkdown={downloadWritingMarkdown}
+                onDownloadMarkdown={downloadWritingMarkdownFromRow}
                 onDeleteRequest={async (id) => {
                   await deleteWriting(id)
                   await loadDeskActivity()
@@ -1020,6 +1035,11 @@ export default function DeskPage() {
                 }}
               />
             )}
+            <MarkdownExportNotice
+              notice={markdownExportNotice}
+              placement="absolute"
+              raised={hasSelection}
+            />
           </div>
 
           <DeleteWritingDialog
