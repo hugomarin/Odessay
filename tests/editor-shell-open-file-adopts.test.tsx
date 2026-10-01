@@ -7,9 +7,10 @@
  * - Property: `menu:open-file` opens the selected path with a UUID identity,
  *   filename-derived title, unchanged source bytes (front matter included), and
  *   a catalog binding to that same path. Reopening after another document is
- *   active keeps the UUID. Empty files remain valid empty documents. If the
- *   first catalog write rejects after the manifest records an id, retry uses
- *   that id.
+ *   active keeps the UUID. Empty files remain valid empty documents. An
+ *   invalid-UTF-8 `open_file` rejection is visible without opening another tab.
+ *   If the first catalog write rejects after the manifest records an id, retry
+ *   uses that id.
  * - Real collaborators: native menu event bus/picker callback, EditorShell,
  *   openDocumentByPath, openDesktopDocument, createOpenDocumentUseCase,
  *   DesktopSettingsService, SqliteDocumentCatalog class, real temporary files,
@@ -117,6 +118,8 @@ const { getEditorSessionState } = await import("@/lib/stores/editor-session-stor
 const TEST_TIMEOUT_MS = 60_000
 const FRONT_MATTER_BODY = "ODE619 content after front matter"
 const RETRY_BODY = "ODE619 catalog retry recovered the document"
+const NON_UTF8_OPEN_MESSAGE = "This file can't be opened because it isn't UTF-8 text."
+const NON_UTF8_OPEN_ERROR = "open_file: stream did not contain valid UTF-8"
 
 let mounted: Awaited<ReturnType<typeof mountEditorShell>> | null = null
 const originalConfirm = window.confirm
@@ -300,6 +303,50 @@ describe("ODE-619 — Open File adopta el archivo en su sitio", () => {
     TEST_TIMEOUT_MS,
   )
 
+  it.fails(
+    "avisa cuando open_file rechaza un archivo que no es UTF-8 y no abre otra pestaña",
+    async () => {
+      const controlPath = writeMarkdownFile("UTF-8 Control.md", "# Control\n\nODE619 UTF-8 positive control\n")
+      const invalidPath = join(dirname(controlPath), "Not UTF-8.md")
+      const invalidBytes = Buffer.from([0xff, 0xfe, 0x80])
+      writeFileSync(invalidPath, invalidBytes)
+      installAcceptingConfirm()
+      const alerts: string[] = []
+      window.alert = vi.fn((message?: string) => {
+        alerts.push(String(message))
+      })
+
+      await mountDesktopEditor()
+      const controlId = await openFileAndWaitForText(
+        controlPath,
+        "ODE619 UTF-8 positive control",
+        "control positivo abierto",
+      )
+      await expectCatalogPath(controlPath, controlId)
+      const tabCountBeforeFailure = getEditorSessionState().session.tabs.length
+
+      world.tauriInvoke = async (command, args) => {
+        if (command === "open_file" && args?.path === invalidPath) throw NON_UTF8_OPEN_ERROR
+        if (command === "open_file") return tauriOpenFileDouble(String(args?.path))
+        throw new Error(`Comando nativo no previsto en esta prueba: ${command}`)
+      }
+
+      await selectFileFromNativeMenu(invalidPath)
+      await waitFor(() => alerts.some((message) => message === NON_UTF8_OPEN_MESSAGE), {
+        label: "aviso de archivo no UTF-8 visible",
+        timeoutMs: 1_000,
+      })
+
+      expect(alerts).toEqual([NON_UTF8_OPEN_MESSAGE])
+      expect(getEditorSessionState().session.tabs).toHaveLength(tabCountBeforeFailure)
+      expect(activeTab()?.writing_id).toBe(controlId)
+      expect(readFileSync(invalidPath)).toEqual(invalidBytes)
+      const rows = await (await getDocumentCatalog()).list({ limit: 5000 })
+      expect(rows.filter((row) => row.binding?.canonicalPath === invalidPath)).toHaveLength(0)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
   it(
     "recupera el UUID del manifest cuando falla el primer write del catálogo",
     async () => {
@@ -316,6 +363,7 @@ describe("ODE-619 — Open File adopta el archivo en su sitio", () => {
       const controlId = await openFileAndWaitForText(controlPath, "ODE619 catalog positive control", "control positivo abierto")
       expectUuid(controlId)
       await expectCatalogPath(controlPath, controlId)
+      const tabCountBeforeFailure = getEditorSessionState().session.tabs.length
 
       const catalog = await getDocumentCatalog()
       const positiveSnapshot = await tauriWorkspaceSyncDouble(dirname(controlPath), undefined)
@@ -327,6 +375,8 @@ describe("ODE-619 — Open File adopta el archivo en su sitio", () => {
       await selectFileFromNativeMenu(retryPath)
       await waitFor(() => alerts.length > 0, { label: "rechazo del catálogo visible", timeoutMs: 15_000 })
       expect(catalogWriteFailure.canonicalPath).toBeNull()
+      expect(alerts).toEqual(["ODE-619 injected catalog rejection"])
+      expect(getEditorSessionState().session.tabs).toHaveLength(tabCountBeforeFailure)
       expect(activeTab()?.writing_id).toBe(controlId)
 
       const rowsAfterFailure = await catalog.list({ limit: 5000 })
