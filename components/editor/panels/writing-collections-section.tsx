@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react"
 import { Tags } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { buildCollectionOptions } from "@/lib/collections/collections"
@@ -18,10 +18,21 @@ type WritingCollectionsSectionProps = {
   writingId: string
 }
 
-export function WritingCollectionsSection({ writingId }: WritingCollectionsSectionProps) {
-  const [collections, setCollections] = useState<LocalCollection[]>([])
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
+/** Sole synchronous writer for the collection selection and its live ref (ODE-643). */
+function useSelectedCollectionIdsState() {
+  const [selectedIds, commitSelectedIds] = useState<string[]>([])
   const selectedIdsRef = useRef<string[]>([])
+  const setSelectedIds = useCallback((next: SetStateAction<string[]>) => {
+    const resolved = typeof next === "function" ? next(selectedIdsRef.current) : next
+    selectedIdsRef.current = resolved
+    commitSelectedIds(resolved)
+  }, [])
+  return { selectedIds, selectedIdsRef, setSelectedIds }
+}
+
+export function WritingCollectionsSection({ writingId }: WritingCollectionsSectionProps) {
+  const { selectedIds, selectedIdsRef, setSelectedIds } = useSelectedCollectionIdsState()
+  const [collections, setCollections] = useState<LocalCollection[]>([])
 
   const loadLocalState = async (currentWritingId: string, cancelled?: () => boolean) => {
     const { collections: nextCollections, writingCollections: assignments } =
@@ -32,14 +43,9 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     }
 
     const nextSelectedIds = assignments.map((assignment) => assignment.collection_id)
-    selectedIdsRef.current = nextSelectedIds
     setCollections(nextCollections)
     setSelectedIds(nextSelectedIds)
   }
-
-  useEffect(() => {
-    selectedIdsRef.current = selectedIds
-  }, [selectedIds])
 
   useEffect(() => {
     let cancelled = false
@@ -75,7 +81,6 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
       ? currentIds.filter((id) => id !== collectionId)
       : [...currentIds, collectionId]
 
-    selectedIdsRef.current = nextIds
     setSelectedIds(nextIds)
     await setLocalWritingCollections(writingId, nextIds)
     void getSyncService().scheduleFlush()
@@ -89,7 +94,6 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     })
     const nextIds = [...selectedIdsRef.current, collection.id]
 
-    selectedIdsRef.current = nextIds
     setSelectedIds(nextIds)
     await setLocalWritingCollections(writingId, nextIds)
     setCollections((current) => [collection, ...current])
