@@ -19,7 +19,9 @@ const TEST_PATH_PATTERNS = [
 // production code, so they never break the "test commit" boundary.
 const DOC_PATH_PATTERNS = [/\.md$/, /^workflow\//, /^docs\//]
 
-const FAILS_CALL = /\b(it|test)\.fails\(/
+// A real call starts its line; a mention inside a string or comment does not,
+// so test fixtures that quote "it.fails(" never trip the rule.
+const FAILS_CALL = /^(\s*)(it|test)\.fails\(/
 
 export function isTestPath(path) {
   return TEST_PATH_PATTERNS.some((pattern) => pattern.test(path))
@@ -90,7 +92,7 @@ export function checkCommit(commit) {
     }
 
     if (flipsFails) {
-      const flipped = removed.map((line) => line.replace(FAILS_CALL, "$1("))
+      const flipped = removed.map((line) => line.replace(FAILS_CALL, "$1$2("))
       const sameLength = flipped.length === added.length
       const onlyFlip = sameLength && flipped.every((line, index) => line === added[index])
       if (!onlyFlip) {

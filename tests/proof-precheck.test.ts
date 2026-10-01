@@ -91,6 +91,17 @@ describe("commit rules", () => {
     expect(violations.map((violation) => violation.rule)).toEqual(["it-fails-flip-edits-test"])
   })
 
+  it("ignores it.fails mentioned inside strings or comments", () => {
+    expect(
+      checkCommit({
+        sha: "bbbb00000000",
+        subject: "feat(ops): add a gate [ODE-656]",
+        files: ["tests/a.test.ts", "scripts/gate.mjs"],
+        testPatches: { "tests/a.test.ts": '+    patch: "+it.fails(\\"quoted\\")",\n+  // it.fails( in a comment' },
+      }),
+    ).toEqual([])
+  })
+
   it("accepts a fix that only flips it.fails → it", () => {
     expect(
       checkCommit({
