@@ -1793,6 +1793,57 @@ mod tests {
         cleanup(&root);
     }
 
+    /// ODE-657 REVIEW ronda 1 (P1): un inode solo es único dentro de un
+    /// volumen. `workspace_sync` debe reportar el dispositivo (`st_dev`) junto
+    /// al inode en cada archivo y en cada evidencia no ligada, para que la
+    /// correlación entre raíces del lado TS exija un volumen compartido antes
+    /// de emparejar. Cuesta cero I/O extra: el walk ya tiene el metadata.
+    #[cfg(unix)]
+    #[test]
+    fn workspace_sync_reports_device_on_files_and_unbound_evidence() {
+        use std::os::unix::fs::MetadataExt;
+
+        let root = temp_workspace_root("device-evidence");
+        let bound_path = root.join("bound.md");
+        let unbound_path = root.join("unbound.md");
+        fs::write(&bound_path, "Bound\n").expect("write bound");
+        fs::write(&unbound_path, "Unbound\n").expect("write unbound");
+
+        let bound_ids = HashMap::from([("bound.md".to_string(), "doc-bound".to_string())]);
+        super::workspace_sync(root.to_string_lossy().to_string(), None, Some(bound_ids))
+            .expect("bind bound file");
+        let snapshot = super::workspace_sync(root.to_string_lossy().to_string(), None, None)
+            .expect("scan bound and unbound files");
+
+        let value = serde_json::to_value(&snapshot).expect("serialize snapshot");
+        let files = value["files"].as_array().expect("files is an array");
+        let unbound = value["unboundFiles"]
+            .as_array()
+            .expect("unboundFiles is an array");
+        assert_eq!(files.len(), 1);
+        assert_eq!(unbound.len(), 1);
+
+        let bound_device = fs::metadata(&bound_path).expect("stat bound").dev();
+        let unbound_device = fs::metadata(&unbound_path).expect("stat unbound").dev();
+        assert_eq!(
+            bound_device, unbound_device,
+            "both files live in the same temp volume"
+        );
+
+        assert_eq!(
+            files[0]["device"].as_u64(),
+            Some(bound_device),
+            "bound files must carry the volume the move correlation checks"
+        );
+        assert_eq!(
+            unbound[0]["device"].as_u64(),
+            Some(unbound_device),
+            "unbound evidence must carry the volume the move correlation checks"
+        );
+
+        cleanup(&root);
+    }
+
     #[test]
     fn workspace_inspect_lists_every_markdown_without_rewriting_selected_scope() {
         let root = temp_workspace_root("inspect-all-without-mutation");
