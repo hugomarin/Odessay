@@ -291,6 +291,7 @@ export function resetWriteFileFailureState(): void {
   failingWriteFileCallNumber = null
   writeFileFailureFactory = null
   heldWriteFile = null
+  heldWriteFileAfterDiskWrite = null
   heldOpenFile = null
   failingWriteFileMatching = null
   doubleWriteRace = null
@@ -376,6 +377,23 @@ export function holdWriteFile(matches: (path: string) => boolean): { release: ()
     arrived = resolve
   })
   heldWriteFile = { matches, gate, arrived }
+  return { release, started }
+}
+
+/** Retains a file write after the real `.md` is on disk but before `invoke` resolves. */
+let heldWriteFileAfterDiskWrite: { matches: (path: string) => boolean; gate: Promise<void>; arrived: () => void } | null = null
+export function holdWriteFileAfterDiskWrite(
+  matches: (path: string) => boolean,
+): { release: () => void; started: Promise<void> } {
+  let release!: () => void
+  let arrived!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  heldWriteFileAfterDiskWrite = { matches, gate, arrived }
   return { release, started }
 }
 
@@ -500,6 +518,12 @@ export async function tauriWriteFileDouble(
 
   await fs.mkdir(dirname(path), { recursive: true })
   await fs.writeFile(path, content, "utf8")
+  if (heldWriteFileAfterDiskWrite?.matches(path)) {
+    const held = heldWriteFileAfterDiskWrite
+    heldWriteFileAfterDiskWrite = null
+    held.arrived()
+    await held.gate
+  }
 }
 
 /**
@@ -654,6 +678,24 @@ export async function tauriWorkspaceSyncDouble(
   selectedPaths: string[] | undefined,
   documentIds?: Record<string, string>,
 ): Promise<DesktopWorkspaceSnapshot> {
+  return tauriWorkspaceSyncDoubleWithMode(rootPath, selectedPaths, documentIds, "api")
+}
+
+/** Raw `workspace_sync` response for the real `tauri-commands` wrapper to adapt. */
+export async function tauriWorkspaceSyncInvokeDouble(
+  rootPath: string,
+  selectedPaths: string[] | undefined,
+  documentIds?: Record<string, string>,
+): Promise<DesktopWorkspaceSnapshot> {
+  return tauriWorkspaceSyncDoubleWithMode(rootPath, selectedPaths, documentIds, "invoke")
+}
+
+async function tauriWorkspaceSyncDoubleWithMode(
+  rootPath: string,
+  selectedPaths: string[] | undefined,
+  documentIds: Record<string, string> | undefined,
+  mode: "api" | "invoke",
+): Promise<DesktopWorkspaceSnapshot> {
   const manifest = manifestFor(rootPath)
   if (selectedPaths) selectedPathsByRoot.set(rootPath, [...new Set(selectedPaths)])
   const effectiveSelectedPaths = selectedPathsByRoot.get(rootPath) ?? []
@@ -665,13 +707,15 @@ export async function tauriWorkspaceSyncDouble(
   // every BindingRoot is opened (`openDocumentByPath`, ODE-581). Only exact
   // file paths are adopted; unselected files stay out of the manifest, so
   // callers that never select anything see the same snapshot as before.
-  for (const relativePath of selectedPaths ?? []) {
-    if (!relativePath.endsWith(".md") || manifest.has(relativePath)) continue
-    const isFile = await fs
-      .stat(join(rootPath, relativePath))
-      .then((stat) => stat.isFile())
-      .catch(() => false)
-    if (isFile) manifest.set(relativePath, randomUUID())
+  if (mode === "api") {
+    for (const relativePath of selectedPaths ?? []) {
+      if (!relativePath.endsWith(".md") || manifest.has(relativePath)) continue
+      const isFile = await fs
+        .stat(join(rootPath, relativePath))
+        .then((stat) => stat.isFile())
+        .catch(() => false)
+      if (isFile) manifest.set(relativePath, randomUUID())
+    }
   }
 
   // Explicit-IDs form (the destination bind: relocateDesktopWriting passes
@@ -727,6 +771,18 @@ export async function tauriWorkspaceSyncDouble(
   const files = await Promise.all(
     [...manifest.entries()].map(([relativePath, id]) => statAsWorkspaceFile(rootPath, relativePath, id)),
   )
+  const unboundPaths =
+    mode === "invoke"
+      ? (await listUnmanifestedMarkdown(rootPath, manifest))
+          .filter(({ relativePath }) => {
+            if (effectiveSelectedPaths.length === 0) return true
+            return effectiveSelectedPaths.some((selectedPath) => {
+              const normalized = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "")
+              return relativePath === normalized || relativePath.startsWith(`${normalized}/`)
+            })
+          })
+          .map(({ relativePath }) => relativePath)
+      : []
   const inodes = new Map<string, number>()
   for (const file of files) inodes.set(file.relativePath, file.inode)
   manifestInodesByRoot.set(rootPath, inodes)
@@ -740,7 +796,7 @@ export async function tauriWorkspaceSyncDouble(
     updatedAt: Date.now(),
     selectedPaths: effectiveSelectedPaths,
     files,
-    unboundPaths: [],
+    unboundPaths,
   }
 }
 

@@ -338,6 +338,50 @@ export function tauriCoreDouble(actual: Record<string, unknown>) {
 }
 
 /**
+ * Adapts production `invoke(command, args)` calls to the desktop command
+ * doubles. The production wrappers pass object literals in their public
+ * argument order; only the two native serialization forms need translation:
+ * settings JSON and `write_file`'s string-valued `CONFLICT:` rejection.
+ */
+export function tauriInvokeRouterDouble(commandDoubles: object) {
+  return async (command: string, args?: Record<string, unknown>) => {
+    const doubleName = `tauri${command
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join("")}`
+    const commandDouble = Reflect.get(commandDoubles, doubleName)
+    if (typeof commandDouble !== "function") {
+      throw new Error(`Comando Tauri sin doble registrado: ${command}`)
+    }
+
+    const callArgs = Object.values(args ?? {})
+    if (command === "settings_write") {
+      const valueJson = args?.valueJson
+      if (typeof valueJson !== "string") {
+        throw new Error("settings_write requiere valueJson como string")
+      }
+      const valueIndex = Object.keys(args ?? {}).indexOf("valueJson")
+      callArgs[valueIndex] = JSON.parse(valueJson)
+    }
+
+    try {
+      const result = await Reflect.apply(commandDouble, undefined, callArgs)
+      if (command === "settings_read") {
+        const serialized = JSON.stringify(result)
+        if (serialized === undefined) throw new Error("settings_read double devolvió un valor no serializable")
+        return serialized
+      }
+      return result
+    } catch (error) {
+      if (command === "write_file" && error instanceof Error && error.message.startsWith("CONFLICT:")) {
+        throw error.message
+      }
+      throw error
+    }
+  }
+}
+
+/**
  * `@tauri-apps/api/window`: la ventana nativa. Guarda el oyente de
  * `onCloseRequested` para que el harness pida el cierre como lo haría el
  * sistema operativo (`requestWindowClose`).
@@ -467,4 +511,3 @@ export function aiServiceDouble() {
     }),
   }
 }
-
