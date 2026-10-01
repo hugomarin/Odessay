@@ -154,7 +154,9 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
    - un commit `test(...)` no toca producción;
    - un `it.fails` no entra en el mismo commit que su fix;
    - el commit que convierte `it.fails` → `it` no cambia nada más del test;
-   - cada fila tocada del capability map tiene tantas celdas como su cabecera, y una fila en `INTEGRATION` no conserva frases que digan que sigue en `PARTIAL` (salvo las marcadas históricas).
+   - cada fila tocada del capability map tiene tantas celdas como su cabecera.
+
+   La coherencia entre el Status de la fila y su Note no la juzga el precheck: es texto libre y la revisa REVIEW.
 
    CI lo vuelve a correr en `process-checks`. Si falla, se corrige la historia de la rama (un rebase no interactivo y `git push --force-with-lease`, solo en la rama del issue) antes de abrir el PR.
 
@@ -256,7 +258,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 
 **Secuencia — si aprobado:**
 1. Verificar los checks mecánicos (esto, combinado con el `TechnicalVerdict` que produce el Review Agent en los pasos 2-4, determina el `GateResult` final del paso 5 — un solo owner por pieza: este paso decide lo mecánico, el Review Agent decide el juicio técnico, ninguno recalcula al otro):
-   - `npm run ops:delivery:gate` y `npm run ops:proof:precheck` deben terminar en verde (el delivery gate con `OPS_PERF_TRACE_PATH` solo cuando el contrato seleccionó el gate del editor). El precheck también corre en CI (`process-checks`); no hace falta re-verificar a mano lo que cubre: orden de commits, `it.fails` → `it` y formato y coherencia de las filas del mapa.
+   - `npm run ops:delivery:gate` y `npm run ops:proof:precheck` deben terminar en verde (el delivery gate con `OPS_PERF_TRACE_PATH` solo cuando el contrato seleccionó el gate del editor). El precheck también corre en CI (`process-checks`); no hace falta re-verificar a mano lo que cubre: orden de commits, `it.fails` → `it` y número de celdas de las filas del mapa. La coherencia Status/Note de la fila sí la juzga el reviewer.
    - CI `CI required` (`blocking-ci.yml`) en SUCCESS — agrega `quality`, `process-checks` y `repo-checks`. Playwright E2E y performance capture no son parte de este gate (ver `workflow/testing/critical-capabilities-testing.md`); `scoped-ci.yml` sigue existiendo como workflow reusable/manual, no referenciado desde `blocking-ci.yml`.
    - Preview deploy (Vercel) en SUCCESS — un PR que toca código y no compila en preview no puede mergearse aunque el delivery gate local pase.
    - **Excepción perf:** si el cambio no activó `skill-performance`, no se exige evidencia de performance. Si lo activó, los resultados se interpretan según el contrato y el instrumento seleccionado; un budget no seleccionado no bloquea el PR.

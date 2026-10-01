@@ -447,7 +447,7 @@
     {
       "path": "scripts/check-proof-precheck.mjs",
       "type": "ops",
-      "description": "ops:proof:precheck (ODE-656): gate mecánico sobre los commits de la rama y las filas tocadas del capability map — commit test(...) sin producción, it.fails que entra antes que su fix, fix que solo convierte it.fails → it, filas con tantas celdas como su cabecera e INTEGRATION sin Note que diga que sigue PARTIAL. Corre en /wf-build paso 7 y en process-checks. Reglas en scripts/lib/proof-precheck.mjs."
+      "description": "ops:proof:precheck (ODE-656): gate mecánico sobre los commits de la rama y las filas tocadas del capability map — commit test(...) sin producción, it.fails que entra antes que su fix, fix que solo convierte it.fails → it, filas tocadas del capability map con tantas celdas como su cabecera. Corre en /wf-build paso 7 y en process-checks. Reglas en scripts/lib/proof-precheck.mjs."
     },
     {
       "path": "scripts/check-issue-brief.mjs",
