@@ -12,7 +12,7 @@
  *       applyReconcileTransaction)
  *     → mocked `@tauri-apps/api/core` invoke that RECORDS {cmd, args} and
  *       answers with the per-command semantics of the Rust layer
- *     → tests/fixtures/catalog-seam/catalog-seam-v2.json
+ *     → tests/fixtures/catalog-seam/catalog-seam-v3.json
  *
  * Only the IPC boundary is doubled (external boundary, capability-proof
  * contract rule 3). The double's responses are NOT throwaway: they decide what
@@ -29,6 +29,7 @@
  */
 
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
+import { computeMarkdownContentHash } from "@/lib/content-hash"
 import { tauriWorkspaceSync, type DesktopCatalogRow } from "@/lib/services/desktop/tauri-commands"
 import {
   createWorkspaceReconciler,
@@ -38,21 +39,22 @@ import {
   type WorkspaceReconciler,
 } from "@/lib/services/desktop/workspace-reconciler"
 
-export const CATALOG_SEAM_FIXTURE_VERSION = 2 as const
+export const CATALOG_SEAM_FIXTURE_VERSION = 3 as const
 export const FIXTURE_DB_PATH = "$DB"
 export const FIXTURE_ROOT_PATHS = { rootA: "$ROOT_A", rootB: "$ROOT_B" } as const
 export type FixtureRootKey = keyof typeof FIXTURE_ROOT_PATHS
 
-/** The read fields that determine identity/presence for SYS-01/SYS-05. */
+/** The read fields that determine identity/presence/content for SYS-01/SYS-05/WATCH-07. */
 export type CatalogSeamRowProjection = {
   id: string
   relativePath: string | null
   localPresent: boolean
   bindingRootId: string | null
+  contentHash: string | null
 }
 
 export type CatalogSeamInvokeResponse =
-  | { files: { relativePath: string; id: string }[]; unboundPaths: string[] }
+  | { files: { relativePath: string; id: string; contentHash: string }[]; unboundPaths: string[] }
   | { applied: boolean; changed: string[] }
   | CatalogSeamRowProjection
   | CatalogSeamRowProjection[]
@@ -134,14 +136,6 @@ type ReconcileUpsert = {
   modifiedAt: number | null
 }
 
-function fixtureHash(content: string): string {
-  let hash = 0
-  for (const character of content) {
-    hash = (hash * 31 + character.charCodeAt(0)) >>> 0
-  }
-  return `blake3:fixture-${hash.toString(16).padStart(8, "0")}`
-}
-
 function normalizeFixtureJson(value: unknown): unknown {
   if (value === undefined) return null
   if (Array.isArray(value)) return value.map(normalizeFixtureJson)
@@ -163,6 +157,7 @@ function projectCatalogRow(row: DesktopCatalogRow): CatalogSeamRowProjection {
     relativePath: row.relativePath,
     localPresent: row.localPresent,
     bindingRootId: row.bindingRootId,
+    contentHash: row.contentHash,
   }
 }
 
@@ -172,24 +167,32 @@ function projectCatalogRowOrNull(row: DesktopCatalogRow | null): CatalogSeamRowP
 
 /**
  * The response projection the Rust replay must reproduce exactly. It keeps only
- * the fields that determine identity and presence along the recorded sequence
- * (P2-1, ODE-613 review): the id/path mapping and unboundPaths of
- * `workspace_sync` decide which document ids the TS wrapper re-sends and which
- * it mints; `changed` and the read rows are what the subscribers consume.
+ * the fields that determine identity, presence, and content along the recorded
+ * sequence (P2-1, ODE-613 review; ODE-637): the id/path mapping and
+ * unboundPaths of `workspace_sync` decide which document ids the TS wrapper
+ * re-sends and which it mints; contentHash proves edits flow through the hash
+ * projections; `changed` and read rows are what subscribers consume.
  *
  * `folderCount` is deliberately excluded. No consumer of this sequence reads
  * it, and the double counts the folders of the bound manifest while Rust counts
  * the scanned scope — they diverge exactly on passes that still have unbound
- * paths, with no SYS-01/SYS-05 signal. Including it would only encode
+ * paths, with no SYS-01/SYS-05/WATCH-07 signal. Including it would only encode
  * double-only semantics into the recording.
  */
 export function projectInvokeResponse(cmd: string, response: unknown): CatalogSeamInvokeResponse {
   switch (cmd) {
     case "workspace_sync": {
-      const snapshot = response as { files: { relativePath: string; id: string }[]; unboundPaths: string[] }
+      const snapshot = response as {
+        files: { relativePath: string; id: string; contentHash: string }[]
+        unboundPaths: string[]
+      }
       return {
         files: snapshot.files
-          .map((file) => ({ relativePath: file.relativePath, id: file.id }))
+          .map((file) => ({
+            relativePath: file.relativePath,
+            id: file.id,
+            contentHash: file.contentHash,
+          }))
           .sort(byRelativePath),
         unboundPaths: [...snapshot.unboundPaths].sort(),
       }
@@ -338,7 +341,7 @@ export class CatalogSeamSession {
   // ── command semantics (the doubled IPC boundary) ──────────────────────────
 
   async invoke(cmd: string, args: Record<string, unknown>): Promise<unknown> {
-    const response = this.dispatch(cmd, args)
+    const response = await this.dispatch(cmd, args)
     this.steps.push({
       kind: "invoke",
       cmd,
@@ -348,7 +351,7 @@ export class CatalogSeamSession {
     return response
   }
 
-  private dispatch(cmd: string, args: Record<string, unknown>): unknown {
+  private async dispatch(cmd: string, args: Record<string, unknown>): Promise<unknown> {
     switch (cmd) {
       case "workspace_sync":
         return this.workspaceSync(args)
@@ -368,7 +371,7 @@ export class CatalogSeamSession {
     }
   }
 
-  private workspaceSync(args: Record<string, unknown>): unknown {
+  private async workspaceSync(args: Record<string, unknown>): Promise<unknown> {
     const rootPath = String(args.rootPath)
     const root = [...this.roots.values()].find((entry) => entry.rootPath === rootPath)
     if (!root) throw new Error(`catalog-seam recorder: workspace_sync for unknown root ${rootPath}`)
@@ -404,7 +407,7 @@ export class CatalogSeamSession {
     const observedPaths = [...root.files.keys()].sort((left, right) => left.localeCompare(right))
     for (const relativePath of observedPaths) {
       const file = root.files.get(relativePath)!
-      const contentHash = fixtureHash(file.content)
+      const contentHash = await computeMarkdownContentHash(file.content)
       const existing =
         root.manifest.get(relativePath) ??
         entryByInode.get(file.inode) ??
@@ -616,6 +619,8 @@ async function recordScenario(
 const LETTER_V1 = "# Letter\n\nversion one\n"
 const LETTER_V2 = "# Letter\n\nversion two — renamed on disk\n"
 const NEIGHBOUR = "# Neighbour\n\ncreated outside the app\n"
+const WATCH07_EXTERNAL_V1 = "# External edit\n\noriginal content\n"
+const WATCH07_EXTERNAL_V2 = "# External edit\n\nchanged outside the app\n"
 
 async function buildSys01RegisterMoveReopen(session: CatalogSeamSession): Promise<void> {
   session.defineRoot("rootA", "fixture-root-a")
@@ -694,6 +699,37 @@ async function buildSys05ReconcileTracksDisk(session: CatalogSeamSession): Promi
   await catalog.resolvePath(`${FIXTURE_ROOT_PATHS.rootA}/notes/a-moved.md`)
 }
 
+async function buildWatch07ExternalEditSamePath(session: CatalogSeamSession): Promise<void> {
+  session.defineRoot("rootA", "fixture-root-a")
+  session.fsWrite("rootA", "notes/watched.md", WATCH07_EXTERNAL_V1, {
+    inode: 501,
+    modifiedAt: 1_700_000_006_000,
+  })
+
+  const catalog = session.createCatalog()
+  const reconciler = session.createReconciler(catalog)
+  await reconciler.start()
+
+  const documentId = session.documentIdForPath("rootA", "notes/watched.md")
+  const beforeEdit = await catalog.getById(documentId)
+  if (beforeEdit?.binding?.contentHash !== await computeMarkdownContentHash(WATCH07_EXTERNAL_V1)) {
+    throw new Error("catalog-seam recorder: initial WATCH-07 hash does not match the file")
+  }
+
+  // An external editor changes bytes in place: the path and inode stay stable.
+  session.fsWrite("rootA", "notes/watched.md", WATCH07_EXTERNAL_V2, {
+    inode: 501,
+    modifiedAt: 1_700_000_007_000,
+  })
+  await reconciler.rescanAll()
+
+  const afterEdit = await catalog.getById(documentId)
+  if (afterEdit?.binding?.contentHash !== await computeMarkdownContentHash(WATCH07_EXTERNAL_V2)) {
+    throw new Error("catalog-seam recorder: reconciled WATCH-07 hash does not match the external edit")
+  }
+  reconciler.dispose()
+}
+
 export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
   const scenarios = [
     await recordScenario(
@@ -715,6 +751,12 @@ export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
         "matches the durable disk state: the moved file keeps its UUID at the new path, the created " +
         "file got its own row and the deleted file is detached (local_present=false, no binding).",
       buildSys05ReconcileTracksDisk,
+    ),
+    await recordScenario(
+      "watch07-external-edit-same-path",
+      "WATCH-07: an external edit changes markdown at the same path and inode; after rescan, getById " +
+        "returns the updated BLAKE3 content hash for the same document identity.",
+      buildWatch07ExternalEditSamePath,
     ),
   ]
   return {
