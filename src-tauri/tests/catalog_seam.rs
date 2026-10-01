@@ -1,6 +1,6 @@
 //! ODE-613 — the TS → invoke() → Rust → SQLite seam, replayed.
 //!
-//! `tests/fixtures/catalog-seam/catalog-seam-v2.json` is recorded by
+//! `tests/fixtures/catalog-seam/catalog-seam-v3.json` is recorded by
 //! `tests/support/catalog-seam-recorder.ts` (driven from
 //! `tests/catalog-seam-fixture.test.ts`) executing the REAL TS production code —
 //! `SqliteDocumentCatalog` and the `WorkspaceReconciler` wired like
@@ -14,9 +14,9 @@
 //! projection of the double's response, and this test projects the real
 //! command's response the same way and asserts equality step by step. The
 //! recorded arguments are only trustworthy while Rust returns the same
-//! identity/presence fields the double returned — the ids per path and
-//! `unboundPaths` of `workspace_sync`, `changed` of `catalog_apply_reconcile`,
-//! and the read rows. `folderCount` is excluded on purpose; see
+//! identity/presence/content fields the double returned — the ids and hashes
+//! per path and `unboundPaths` of `workspace_sync`, `changed` of
+//! `catalog_apply_reconcile`, and the read rows. `folderCount` is excluded on purpose; see
 //! `project_workspace_sync`.
 //!
 //! The only thing still outside this proof is the Tauri IPC transport itself
@@ -31,7 +31,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const FIXTURE: &str = include_str!("../../tests/fixtures/catalog-seam/catalog-seam-v2.json");
+const FIXTURE: &str = include_str!("../../tests/fixtures/catalog-seam/catalog-seam-v3.json");
 
 #[derive(Deserialize)]
 struct Fixture {
@@ -131,7 +131,7 @@ fn string_arg(args: &Value, key: &str) -> String {
     .unwrap_or_else(|error| panic!("catalog_seam: invoke args {key} is not a string: {error}"))
 }
 
-/// The read fields that determine identity/presence for SYS-01/SYS-05. Mirrors
+/// The read fields that determine identity/presence/content for SYS-01/SYS-05/WATCH-07. Mirrors
 /// `projectCatalogRow` in `tests/support/catalog-seam-recorder.ts`.
 fn project_row(row: &catalog::CatalogRow) -> Value {
     json!({
@@ -139,6 +139,7 @@ fn project_row(row: &catalog::CatalogRow) -> Value {
         "relativePath": row.relative_path,
         "localPresent": row.local_present,
         "bindingRootId": row.binding_root_id,
+        "contentHash": row.content_hash,
     })
 }
 
@@ -150,20 +151,20 @@ fn project_row_option(row: Option<&catalog::CatalogRow>) -> Value {
 }
 
 /// Mirrors `projectWorkspaceSync` in the recorder: the `relativePath` → `id`
-/// map and `unboundPaths`, sorted by path on both sides (the identities are the
-/// signal, not the order).
+/// map, content hashes, and `unboundPaths`, sorted by path on both sides (the
+/// identities and hashes are the signal, not the order).
 ///
 /// `folderCount` is deliberately NOT compared, exactly as in the recorder: no
 /// consumer of the recorded sequence reads it, and the two sides count
 /// different things — the double counts folders of the bound manifest, Rust
 /// counts the scanned scope — so they diverge only on passes that still have
-/// unbound paths, with no SYS-01/SYS-05 signal. Comparing it would encode
+/// unbound paths, with no SYS-01/SYS-05/WATCH-07 signal. Comparing it would encode
 /// double-only semantics into the recording.
 fn project_workspace_sync(snapshot: &workspace::WorkspaceSnapshot) -> Value {
-    let mut files: Vec<(String, String)> = snapshot
+    let mut files: Vec<(String, String, String)> = snapshot
         .files
         .iter()
-        .map(|file| (file.relative_path.clone(), file.id.clone()))
+        .map(|file| (file.relative_path.clone(), file.id.clone(), file.content_hash.clone()))
         .collect();
     files.sort();
     let mut unbound_paths = snapshot.unbound_paths.clone();
@@ -171,7 +172,9 @@ fn project_workspace_sync(snapshot: &workspace::WorkspaceSnapshot) -> Value {
     json!({
         "files": files
             .into_iter()
-            .map(|(relative_path, id)| json!({ "relativePath": relative_path, "id": id }))
+            .map(|(relative_path, id, content_hash)| {
+                json!({ "relativePath": relative_path, "id": id, "contentHash": content_hash })
+            })
             .collect::<Vec<Value>>(),
         "unboundPaths": unbound_paths,
     })
@@ -185,7 +188,7 @@ fn project_reconcile_result(result: &catalog::CatalogReconcileResult) -> Value {
 /// Dispatch one recorded `invoke` to the real command and project its response
 /// with the same shape the recorder recorded. The caller asserts the projected
 /// response equals the recording: the recorded args are only valid while the
-/// real command still returns the identity/presence fields the TS double
+/// real command still returns the identity/presence/content fields the TS double
 /// returned (P2-1, ODE-613 review).
 fn dispatch(cmd: &str, args: &Value) -> Result<Value, String> {
     match cmd {
@@ -539,18 +542,18 @@ fn assert_scenario(scenario: &Scenario, paths: &PlaceholderPaths) {
     let connection = Connection::open(&paths.db).expect("catalog_seam: open catalog for reading");
     let mut statement = connection
         .prepare(
-            "SELECT d.id, d.local_present, b.canonical_path
+            "SELECT d.id, d.local_present, b.canonical_path, b.content_hash
              FROM documents d LEFT JOIN document_bindings b ON b.document_id = d.id",
         )
         .expect("catalog_seam: prepare join");
-    let rows: Vec<(String, bool, Option<String>)> = statement
+    let rows: Vec<(String, bool, Option<String>, Option<String>)> = statement
         .query_map([], |row| {
-            Ok((row.get(0)?, row.get::<_, i64>(1)? != 0, row.get(2)?))
+            Ok((row.get(0)?, row.get::<_, i64>(1)? != 0, row.get(2)?, row.get(3)?))
         })
         .expect("catalog_seam: query join")
         .collect::<Result<_, _>>()
         .expect("catalog_seam: collect join");
-    for (id, local_present, canonical_path) in &rows {
+    for (id, local_present, canonical_path, content_hash) in &rows {
         let expected_row = expected.get(id).unwrap_or_else(|| {
             panic!("scenario {}: SQLite has an unexpected document {id}", scenario.name)
         });
@@ -566,10 +569,24 @@ fn assert_scenario(scenario: &Scenario, paths: &PlaceholderPaths) {
             "scenario {}: binding disagrees for {id}",
             scenario.name
         );
+        let disk_hash = canonical_path.as_ref().map(|file_path| {
+            let markdown = fs::read_to_string(file_path).unwrap_or_else(|error| {
+                panic!("scenario {}: read {file_path} for content hash: {error}", scenario.name)
+            });
+            workspace::workspace_compute_content_hash(markdown).unwrap_or_else(|error| {
+                panic!("scenario {}: hash {file_path}: {error}", scenario.name)
+            })
+        });
+        assert_eq!(
+            content_hash.as_deref(),
+            disk_hash.as_deref(),
+            "scenario {}: fresh SQLite content_hash disagrees with disk for {id}",
+            scenario.name
+        );
     }
     for id in expected.keys() {
         assert!(
-            rows.iter().any(|(row_id, _, _)| row_id == id),
+            rows.iter().any(|(row_id, _, _, _)| row_id == id),
             "scenario {}: SQLite is missing document {id}",
             scenario.name
         );
@@ -579,7 +596,7 @@ fn assert_scenario(scenario: &Scenario, paths: &PlaceholderPaths) {
 #[test]
 fn catalog_seam_replays_the_recorded_ts_sequence_over_real_sqlite() {
     let fixture: Fixture = serde_json::from_str(FIXTURE).expect("catalog_seam: parse fixture");
-    assert_eq!(fixture.version, 2, "catalog_seam: unexpected fixture version");
+    assert_eq!(fixture.version, 3, "catalog_seam: unexpected fixture version");
     assert!(!fixture.scenarios.is_empty());
 
     let base = std::env::temp_dir().join(format!("odessay-catalog-seam-{}", uuid::Uuid::new_v4()));
@@ -610,7 +627,7 @@ fn catalog_seam_replays_the_recorded_ts_sequence_over_real_sqlite() {
                     assert_eq!(
                         actual, expected,
                         "scenario {}: step {index}: {} response diverged from the recording — the \
-                         real command no longer returns the identity/presence fields the TS \
+                         real command no longer returns the identity/presence/content fields the TS \
                          wrapper recorded. If the change is intentional, regenerate the fixture \
                          (UPDATE_CATALOG_SEAM_FIXTURE=1 npx vitest run tests/catalog-seam-fixture.test.ts) \
                          and review the TS consumers of the changed shape.",
