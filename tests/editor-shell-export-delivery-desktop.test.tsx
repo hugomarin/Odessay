@@ -535,3 +535,29 @@ describe("EXP-05 — callers reales de Desk y Collections (ODE-636)", () => {
     TEST_TIMEOUT_MS,
   )
 })
+
+describe("Desk desktop Markdown body (ODE-636)", () => {
+  it.fails(
+    "exports the body from the materialized document",
+    async () => {
+      const text = "ODE636-DESK-MARKDOWN-BODY"
+      const writingId = await createAndOpenDocument(text)
+      const successDir = freshDir("desk-materialized-body")
+      const target = join(successDir, "desk-body.md")
+      const dialogCallsBefore = world.saveDialogCalls.length
+      world.saveDialogResult = target
+
+      await openProductionPreview("desk", writingId)
+      await clickPreviewExport("markdown")
+
+      await waitFor(() => world.saveDialogCalls.length === dialogCallsBefore + 1, {
+        label: "diálogo de export de Desk invocado para el cuerpo materializado",
+      })
+      await waitFor(() => pageText().includes("Markdown exported."), {
+        label: "éxito del export de Desk con cuerpo materializado",
+      })
+      expect((await readFile(target)).toString("utf8")).toContain(text)
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
