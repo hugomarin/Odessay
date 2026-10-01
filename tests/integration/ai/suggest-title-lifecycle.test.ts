@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+
 /**
  * AI-01 — Suggest title reaches the real route and provider regardless of
  * sync lifecycle.
@@ -26,11 +28,42 @@
  */
 import "fake-indexeddb/auto"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { act, createElement, useState } from "react"
+import { createRoot } from "react-dom/client"
+import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import { webAIService } from "@/lib/services/web-ai-service"
 import { POST as titleSuggestionsRoute } from "@/app/api/ai/title-suggestions/route"
 import { localDB, setLocalDBScope } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import type { WritingLifecycle } from "@/lib/services/contracts/document-service"
+
+vi.mock("@tiptap/react", async (importOriginal) => {
+  const { createTiptapCaptureModule } = await import("../../support/editor-shell-doubles")
+  return createTiptapCaptureModule(await importOriginal<Record<string, unknown>>())
+})
+vi.mock("next/navigation", async () =>
+  (await import("../../support/editor-shell-doubles")).nextNavigationDouble(),
+)
+vi.mock("@tauri-apps/api/core", async (importOriginal) =>
+  (await import("../../support/editor-shell-doubles")).tauriCoreDouble(
+    await importOriginal<Record<string, unknown>>(),
+  ),
+)
+vi.mock("@tauri-apps/api/event", async () =>
+  (await import("../../support/editor-shell-doubles")).tauriEventDouble(),
+)
+vi.mock("@tauri-apps/plugin-dialog", async () =>
+  (await import("../../support/editor-shell-doubles")).tauriDialogDouble(),
+)
+vi.mock("@/lib/services/desktop/runtime-detection", async () =>
+  (await import("../../support/editor-shell-doubles")).runtimeDetectionDouble(),
+)
+
+const { mountEditorShell, resetEditorShellWorld, waitFor, world } = await import(
+  "../../support/editor-shell-harness"
+)
+const { writeEditorSession } = await import("@/lib/editor/session-persistence")
+const { createEditorSessionTab, createEmptyEditorSession } = await import("@/lib/local-db/editor-sessions")
 
 const BODY_TEXT = "A short body with more than enough words to satisfy the minimum content check."
 const PROVIDER_CHAT_COMPLETIONS_URL = "https://api.fireworks.ai/inference/v1/chat/completions"
@@ -81,6 +114,10 @@ const makeProviderResponse = (title: string) =>
     { status: 200, headers: { "content-type": "application/json" } },
   )
 
+type ProviderBehavior = (init?: RequestInit) => Promise<Response>
+
+const providerBehaviors: ProviderBehavior[] = []
+
 let routeCallCount = 0
 let providerCallCount = 0
 let providerResponseTitle = "Untitled"
@@ -104,7 +141,8 @@ const fetchRouter = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =
 
   if (url === PROVIDER_CHAT_COMPLETIONS_URL) {
     providerCallCount += 1
-    return makeProviderResponse(providerResponseTitle)
+    const behavior = providerBehaviors.shift()
+    return behavior ? behavior(init) : makeProviderResponse(providerResponseTitle)
   }
 
   throw new Error(`Unexpected fetch to ${url} in the AI-01 proof`)
@@ -121,6 +159,7 @@ beforeEach(() => {
   routeCallCount = 0
   providerCallCount = 0
   providerResponseTitle = "Untitled"
+  providerBehaviors.length = 0
 
   supabaseMock.getUser.mockReset()
   supabaseMock.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } })
@@ -130,10 +169,150 @@ beforeEach(() => {
   admissionMock.logAiAdmissionEvent.mockReset()
 })
 
-afterEach(() => {
+let mountedShell: Awaited<ReturnType<typeof mountEditorShell>> | null = null
+
+afterEach(async () => {
+  if (vi.isFakeTimers()) vi.useRealTimers()
+  await mountedShell?.unmount()
+  mountedShell = null
   delete process.env.FIREWORKS_API_KEY
   delete process.env.FIREWORKS_MODEL
 })
+
+function buttonWithText(text: string, root: ParentNode = document) {
+  return Array.from(root.querySelectorAll<HTMLButtonElement>("button")).find(
+    (button) => (button.textContent ?? "").trim() === text && !button.classList.contains("sr-only"),
+  )
+}
+
+async function clickButton(text: string, root: ParentNode = document) {
+  const button = buttonWithText(text, root)
+  expect(button, `button "${text}"`).toBeTruthy()
+  await act(async () => {
+    button!.click()
+  })
+}
+
+async function settleMicrotasks(turns = 40) {
+  await act(async () => {
+    for (let index = 0; index < turns; index += 1) {
+      await Promise.resolve()
+    }
+  })
+}
+
+function deferred<T>() {
+  let resolvePromise!: (value: T | PromiseLike<T>) => void
+  let rejectPromise!: (reason?: unknown) => void
+  let settled = false
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve
+    rejectPromise = reject
+  })
+  return {
+    promise,
+    get settled() {
+      return settled
+    },
+    resolve(value: T) {
+      if (settled) return
+      settled = true
+      resolvePromise(value)
+    },
+    reject(reason: unknown) {
+      if (settled) return
+      settled = true
+      rejectPromise(reason)
+    },
+  }
+}
+
+type RenameTarget = { id: string; title: string; bodyText: string }
+
+/**
+ * This host keeps RenameWritingModal mounted while `open` and `writingId`
+ * follow Desk's `renameTarget !== null` contract. Its two controls model the
+ * real sequence: rename A, cancel, then rename B; the Suggest button itself
+ * is the production modal action under test.
+ */
+function DeskRenameModalHarness({ writingA, writingB }: { writingA: RenameTarget; writingB: RenameTarget }) {
+  const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
+  return createElement(
+    "div",
+    null,
+    createElement("button", { type: "button", onClick: () => setRenameTarget(writingA) }, "Rename A"),
+    createElement("button", { type: "button", onClick: () => setRenameTarget(writingB) }, "Rename B"),
+    createElement(RenameWritingModal, {
+      open: renameTarget !== null,
+      title: renameTarget?.title ?? "Untitled artifact",
+      bodyText: renameTarget?.bodyText ?? "",
+      writingId: renameTarget?.id,
+      onOpenChange: (open) => {
+        if (!open) setRenameTarget(null)
+      },
+      onConfirm: async () => true,
+    }),
+  )
+}
+
+async function mountDeskRenameModal(writingA: RenameTarget, writingB: RenameTarget) {
+  ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  await act(async () => {
+    root.render(createElement(DeskRenameModalHarness, { writingA, writingB }))
+  })
+  return async () => {
+    await act(async () => root.unmount())
+    container.remove()
+  }
+}
+
+function makeRichText(bodyText: string): Record<string, unknown> {
+  return {
+    type: "doc",
+    content: [{ type: "paragraph", content: [{ type: "text", text: bodyText }] }],
+  }
+}
+
+async function mountWebShellForTitleSuggestion(writingId: string, title: string, bodyText: string) {
+  resetEditorShellWorld()
+  // Keep the existing AI-01 URL router as the one network seam: its app URL
+  // branch invokes the real route and its provider branch fakes only Fireworks.
+  world.network = (url, init) => fetchRouter(url, init)
+
+  await localDB.writings.save({
+    ...makeLocalWriting(writingId, "server-confirmed"),
+    title,
+    body_json: makeRichText(bodyText),
+    body_text: bodyText,
+  })
+  await writeEditorSession({
+    ...createEmptyEditorSession(),
+    active_tab_id: writingId,
+    tabs: [createEditorSessionTab({ id: writingId, writingId, title })],
+  })
+
+  mountedShell = await mountEditorShell({ writingId })
+  await waitFor(() => (world.editor?.getText() === bodyText ? world.editor : null), {
+    label: "el cuerpo real hidratado en la shell web",
+    timeoutMs: 10_000,
+  })
+  const renameButton = await waitFor(
+    () => document.querySelector<HTMLButtonElement>('button[aria-label="Rename artifact"]'),
+    { label: "la acción real de renombrar de la shell" },
+  )
+  await act(async () => renameButton.click())
+  await waitFor(() => buttonWithText("Suggest"), { label: "el botón real Suggest del modal" })
+}
+
+function visibleSuggestionError() {
+  const dialog = document.querySelector('[role="dialog"]') ?? document
+  return Array.from(dialog.querySelectorAll("p.text-destructive")).find((paragraph) =>
+    (paragraph.textContent ?? "").trim(),
+  )
+}
 
 describe("AI-01 — suggestTitle reaches the real route and provider regardless of lifecycle", () => {
   it.each<WritingLifecycle>(["local-only", "syncing", "server-confirmed"])(
@@ -173,6 +352,81 @@ describe("AI-01 — suggestTitle reaches the real route and provider regardless 
     expect(result.error).toBeNull()
     expect(result.data?.title).toBe("Title for brand-new draft")
   })
+})
+
+describe("ODE-620 — a stale A suggestion never enters Desk's reused modal for B", () => {
+  it.fails.each(["success", "error"] as const)(
+    "discards A's late %s response after Desk closes A and opens B",
+    async (lateResult) => {
+      const writingA = { id: `writing-a-${crypto.randomUUID()}`, title: "Title A", bodyText: BODY_TEXT }
+      const writingB = { id: `writing-b-${crypto.randomUUID()}`, title: "Title B", bodyText: `${BODY_TEXT} B.` }
+      await localDB.writings.save(makeLocalWriting(writingA.id, "server-confirmed"))
+      await localDB.writings.save(makeLocalWriting(writingB.id, "server-confirmed"))
+
+      const unmount = await mountDeskRenameModal(writingA, writingB)
+      const lateA = deferred<Response>()
+      const responseB = deferred<Response>()
+
+      try {
+        providerResponseTitle = "Positive control — A suggestion"
+        await clickButton("Rename A")
+        await clickButton("Suggest")
+        await waitFor(() => (providerCallCount === 1 ? providerCallCount : null), {
+          label: "la petición real de A llegó al proveedor fakeado",
+        })
+        await waitFor(() => document.body.textContent?.includes("Positive control — A suggestion"), {
+          label: "control positivo: la sugerencia sí aparece para A",
+        })
+        expect(document.body.textContent).toContain("Positive control — A suggestion")
+        await clickButton("Dismiss")
+
+        providerBehaviors.push(() => lateA.promise, () => responseB.promise)
+        await clickButton("Suggest")
+        await waitFor(() => (providerCallCount === 2 ? providerCallCount : null), {
+          label: "la segunda petición de A quedó en vuelo",
+        })
+        await clickButton("Cancel")
+        await waitFor(() => (buttonWithText("Suggest") ? null : true), {
+          label: "Desk cerró el modal sin desmontar su instancia",
+        })
+
+        await clickButton("Rename B")
+        await waitFor(() => buttonWithText("Suggest"), { label: "el mismo modal reabrió para B" })
+        await clickButton("Suggest")
+        await waitFor(() => (providerCallCount === 3 ? providerCallCount : null), {
+          label: "la petición de B quedó en vuelo",
+        })
+        expect(buttonWithText("Suggesting"), "B conserva su estado de carga").toBeTruthy()
+
+        await act(async () => {
+          if (lateResult === "success") {
+            lateA.resolve(makeProviderResponse("Stale result from A"))
+          } else {
+            lateA.reject(new Error("late provider network failure from A"))
+          }
+          for (let index = 0; index < 40; index += 1) await Promise.resolve()
+        })
+
+        expect(buttonWithText("Suggesting"), "la respuesta de A no debe limpiar el loading de B").toBeTruthy()
+        expect(document.body.textContent).not.toContain("Stale result from A")
+        expect(visibleSuggestionError(), "el error de A no debe aparecer en B").toBeFalsy()
+
+        await act(async () => {
+          responseB.resolve(makeProviderResponse("Suggestion belongs to B"))
+          for (let index = 0; index < 40; index += 1) await Promise.resolve()
+        })
+        await waitFor(() => document.body.textContent?.includes("Suggestion belongs to B"), {
+          label: "B recibe su propia sugerencia después de asentarse su respuesta",
+        })
+        expect(document.body.textContent).toContain("Suggestion belongs to B")
+      } finally {
+        if (!lateA.settled) lateA.resolve(makeProviderResponse("Cleanup A"))
+        if (!responseB.settled) responseB.resolve(makeProviderResponse("Cleanup B"))
+        await settleMicrotasks()
+        await unmount()
+      }
+    },
+  )
 })
 
 describe("AI-01 — hydrateCorrectionBlocks keeps its legitimate lifecycle guard", () => {
