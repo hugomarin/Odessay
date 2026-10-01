@@ -168,7 +168,7 @@ function parseIntervals(log: string): Interval[] {
 }
 
 describe("lock de Supabase local entre worktrees", () => {
-  it.fails(
+  it(
     "serializa a dos procesos que reclaman el mismo lock huérfano",
     async () => {
       const { repoDir } = createOrphanRepo()
