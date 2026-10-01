@@ -12,9 +12,9 @@
  *   If the first catalog write rejects after the manifest records an id, retry
  *   uses that id.
  * - Real collaborators: native menu event bus/picker callback, EditorShell,
- *   openDocumentByPath, openDesktopDocument, createOpenDocumentUseCase,
- *   DesktopSettingsService, SqliteDocumentCatalog class, real temporary files,
- *   editor session and hydration.
+ *   useGlobalOpenFileMenu, openDocumentByPath, openDesktopDocument,
+ *   createOpenDocumentUseCase, DesktopSettingsService, SqliteDocumentCatalog
+ *   class, real temporary files, editor session and hydration.
  * - Allowed fakes: Tauri command/IPC boundary and OS dialogs; the existing
  *   desktop doubles use real filesystem reads and model manifest/catalog state
  *   in memory. Cloud auth/hash lookup returns no session. Rust/SQLite command
@@ -27,11 +27,15 @@
  * - Completion: after the menu action settles, observe the active editor and
  *   query the catalog/path; read the original file bytes. Recovery completes
  *   when the retry opens with the exact id retained in the manifest model.
+ *   Outside Write, the positive control confirms pending-file handoff and route
+ *   navigation; invalid UTF-8 confirms the alert without either transition.
  * - Mutation: changing the production opener to use the canonical filesystem
  *   path as the document id must fail the UUID assertion.
  */
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -101,6 +105,8 @@ const {
   waitFor,
   waitForHydrationReady,
 } = await import("./support/editor-shell-harness")
+const { useGlobalOpenFileMenu } = await import("@/hooks/useGlobalOpenFileMenu")
+const { consumePendingOpenFile } = await import("@/lib/editor/pending-open-file")
 const { world } = await import("./support/editor-shell-doubles")
 const {
   createDesktopWorkspace,
@@ -122,8 +128,15 @@ const NON_UTF8_OPEN_MESSAGE = "This file can't be opened because it isn't UTF-8 
 const NON_UTF8_OPEN_ERROR = "open_file: stream did not contain valid UTF-8"
 
 let mounted: Awaited<ReturnType<typeof mountEditorShell>> | null = null
+let globalMenuRoot: Root | null = null
+let globalMenuContainer: HTMLDivElement | null = null
 const originalConfirm = window.confirm
 const originalAlert = window.alert
+
+function GlobalOpenFileMenuHarness() {
+  useGlobalOpenFileMenu()
+  return null
+}
 
 beforeAll(() => {
   createDesktopWorkspace("odessay-open-file-adopts-")
@@ -146,6 +159,12 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
+  if (globalMenuRoot) {
+    await act(async () => globalMenuRoot?.unmount())
+    globalMenuRoot = null
+  }
+  globalMenuContainer?.remove()
+  globalMenuContainer = null
   await mounted?.unmount()
   mounted = null
   vi.restoreAllMocks()
@@ -177,6 +196,16 @@ function writeMarkdownFile(filename: string, source: string) {
 async function mountDesktopEditor() {
   mounted = await mountEditorShell()
   await waitFor(() => getEditorSessionState().loaded, { label: "sesión cargada" })
+}
+
+async function mountGlobalOpenFileMenu() {
+  ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  world.pathname = "/desk"
+  globalMenuContainer = document.createElement("div")
+  document.body.appendChild(globalMenuContainer)
+  globalMenuRoot = createRoot(globalMenuContainer)
+  await act(async () => globalMenuRoot?.render(<GlobalOpenFileMenuHarness />))
+  await flush()
 }
 
 async function selectFileFromNativeMenu(path: string) {
@@ -229,6 +258,45 @@ function expectUuid(id: string) {
 }
 
 describe("ODE-619 — Open File adopta el archivo en su sitio", () => {
+  it("avisa del UTF-8 inválido desde una ruta fuera de Write y no navega ni guarda un archivo pendiente", async () => {
+    const controlPath = writeMarkdownFile("Global UTF-8 Control.md", "# Control\n\nODE619 global positive control\n")
+    const invalidPath = join(dirname(controlPath), "Global Not UTF-8.md")
+    const invalidBytes = Buffer.from([0xff, 0xfe, 0x80])
+    writeFileSync(invalidPath, invalidBytes)
+    const alerts: string[] = []
+    window.alert = vi.fn((message?: string) => {
+      alerts.push(String(message))
+    })
+
+    await mountGlobalOpenFileMenu()
+
+    world.openDialogResult = controlPath
+    await emitTauriEvent("menu:open-file")
+    await waitFor(() => world.navigations.length === 1, { label: "control positivo navega a Write" })
+    expect(world.navigations).toEqual([{ kind: "push", href: "/write" }])
+    expect(consumePendingOpenFile()).toEqual({
+      path: controlPath,
+      content: "# Control\n\nODE619 global positive control\n",
+    })
+
+    world.tauriInvoke = async (command, args) => {
+      if (command === "open_file" && args?.path === invalidPath) throw NON_UTF8_OPEN_ERROR
+      if (command === "open_file") return tauriOpenFileDouble(String(args?.path))
+      throw new Error(`Comando nativo no previsto en esta prueba: ${command}`)
+    }
+    world.openDialogResult = invalidPath
+    await emitTauriEvent("menu:open-file")
+    await waitFor(() => alerts.includes(NON_UTF8_OPEN_MESSAGE), {
+      label: "aviso no UTF-8 visible fuera de Write",
+      timeoutMs: 1_000,
+    })
+
+    expect(alerts).toEqual([NON_UTF8_OPEN_MESSAGE])
+    expect(world.navigations).toHaveLength(1)
+    expect(consumePendingOpenFile()).toBeNull()
+    expect(readFileSync(invalidPath)).toEqual(invalidBytes)
+  })
+
   it(
     "conserva el front matter como contenido, usa el título del filename y reabre con el mismo UUID",
     async () => {
