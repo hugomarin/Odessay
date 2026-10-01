@@ -5,6 +5,7 @@ import {
   matchesSelectedPaths,
   reconcileRoot,
   type CloudHashLookup,
+  type CrossRootCorrelationRoot,
   type KnownBinding,
   type ObservedFile,
   type ReconcileCommit,
@@ -204,6 +205,27 @@ function unboundFile(overrides: Partial<UnboundFile> = {}): UnboundFile {
   }
 }
 
+// Los casos rojos de ODE-657 (review ronda 1, P1) se escribieron antes de que
+// `device` existiera en los tipos públicos de evidencia. Estos constructores
+// locales aportan el volumen que introduce el fix, para que el commit rojo
+// compile contra el contrato previo (regla 8: el fix solo voltea `it.fails`).
+function observedWithDevice(overrides: Partial<ObservedFile> & { device?: number | null } = {}) {
+  return { ...observed(), device: 1, ...overrides }
+}
+
+function unboundFileWithDevice(
+  overrides: Partial<UnboundFile> & { device?: number | null } = {},
+) {
+  return { ...unboundFile(), device: 1, ...overrides }
+}
+
+function correlationRoot(
+  device: number | null,
+  overrides: Partial<CrossRootCorrelationRoot> = {},
+) {
+  return { rootId: "root-1", observable: true, unbound: [], detached: [], ...overrides, device }
+}
+
 describe("correlateAcrossRoots — cross-root move evidence", () => {
   it("correlates an unbound file with the unique detached binding of another root", () => {
     const result = correlateAcrossRoots({
@@ -248,6 +270,26 @@ describe("correlateAcrossRoots — cross-root move evidence", () => {
     expect(result.idsByRoot.get("root-b")?.get("other.md")).toMatch(/^minted-/)
     expect(result.correlatedIds.size).toBe(0)
   })
+
+  it.fails(
+    "no correlaciona el mismo inode y hash entre volúmenes distintos (inode reutilizado)",
+    () => {
+      // Un inode solo es único dentro de un volumen: aunque inode y hash
+      // coincidan, una raíz en otro dispositivo no es el mismo archivo movido.
+      const result = correlateAcrossRoots({
+        roots: [
+          correlationRoot(1, { rootId: "root-a", detached: [known({ bindingRootId: "root-a" })] }),
+          correlationRoot(2, {
+            rootId: "root-b",
+            unbound: [unboundFileWithDevice({ relativePath: "moved.md", device: 2 })],
+          }),
+        ],
+        mintId,
+      })
+      expect(result.idsByRoot.get("root-b")?.get("moved.md")).toMatch(/^minted-/)
+      expect(result.correlatedIds.size).toBe(0)
+    },
+  )
 
   it("does not correlate when the origin binding is still present (hard link)", () => {
     // The origin path was observed, so `reconcileRoot` consumed its binding and
@@ -534,6 +576,80 @@ describe("createWorkspaceReconciler — cross-root correlation (ODE-657)", () =>
     expect(commitB?.upserts.map((upsert) => upsert.documentId)).toEqual(["doc-a"])
     expect(commitB?.upserts[0].bindingRootId).toBe("root-b")
   })
+
+  it.fails(
+    "no adopta una identidad de otro volumen aunque inode y hash coincidan",
+    async () => {
+      // Las dos raíces están en volúmenes distintos, evidenciado por el otro
+      // archivo residente de cada una. El inode reutilizado en B no es un
+      // movimiento de A: B acuña identidad y A desliga su binding.
+      const commits: ReconcileCommit[] = []
+      const reconciler = createWorkspaceReconciler({
+        loadRoots: async () => twoRoots(),
+        mintId,
+        scanRoot: async (candidate) => {
+          if (candidate.id === "root-a") {
+            return {
+              observed: [
+                observedWithDevice({
+                  relativePath: "residente-a.md",
+                  manifestId: "doc-residente-a",
+                  device: 1,
+                }),
+              ],
+              unbound: [],
+              knownBindings: [
+                known({
+                  documentId: "doc-a",
+                  bindingRootId: "root-a",
+                  relativePath: "letter.md",
+                  inode: 100,
+                  contentHash: "blake3:aaa",
+                }),
+              ],
+            }
+          }
+          return {
+            observed: [
+              observedWithDevice({
+                relativePath: "residente-b.md",
+                manifestId: "doc-residente-b",
+                device: 2,
+              }),
+            ],
+            unbound: [unboundFileWithDevice({ relativePath: "letter.md", device: 2 })],
+            knownBindings: [],
+          }
+        },
+        bindUnbound: async (candidate, ids) => [
+          observedWithDevice({
+            relativePath: "letter.md",
+            canonicalPath: `${candidate.rootPath}/letter.md`,
+            inode: 100,
+            contentHash: "blake3:aaa",
+            manifestId: ids["letter.md"],
+            device: 2,
+          }),
+        ],
+        commit: async (commit) => {
+          commits.push(commit)
+        },
+      })
+
+      await reconciler.start()
+
+      const commitB = commits.find((commit) => commit.bindingRootId === "root-b")
+      expect(
+        commitB?.upserts[0].documentId,
+        "B no adopta la identidad de un inode de otro volumen",
+      ).toMatch(/^minted-/)
+      expect(commitB?.upserts.map((upsert) => upsert.documentId)).not.toContain("doc-a")
+      const commitA = commits.find((commit) => commit.bindingRootId === "root-a")
+      expect(commitA?.detached, "A desliga su binding: no hay correlación entre volúmenes").toEqual([
+        "doc-a",
+      ])
+    },
+  )
 
   it("does not bind (no extra workspace_sync) when no root has unbound files", async () => {
     const bindUnbound = vi.fn()
