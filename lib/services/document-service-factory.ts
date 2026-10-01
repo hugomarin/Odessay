@@ -1039,13 +1039,3 @@ export async function markDesktopWritingDeletedByCanonicalPath(canonicalPath: st
   const resolved = await runtime.catalog.resolvePath(canonicalPath)
   if (resolved.kind === "resolved") await runtime.catalog.detachLocalFile(resolved.record.id)
 }
-
-export async function importDesktopWritingFile(path: string, content: string) {
-  const parsed = desktopDocumentEngine.parseSourceDocument(content)
-  if (!parsed.success) return err<WritingRecord>("INVALID_INPUT", parsed.error)
-  return createDesktopDraft({
-    writingId: createWritingId(), title: filenameToTitle(path), preferredPath: path,
-    initialBodyJson: parsed.document.snapshot.bodyJson as Record<string, unknown>,
-    initialBodyText: parsed.document.snapshot.bodyText,
-  })
-}

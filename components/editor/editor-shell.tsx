@@ -150,7 +150,6 @@ import { getAssetService } from "@/lib/services/asset-service-factory"
 import {
   createDesktopDraft as createProductionDesktopDraft,
   getDocumentService,
-  importDesktopWritingFile,
 } from "@/lib/services/document-service-factory"
 import {
   filenameToTitle,
@@ -168,7 +167,6 @@ import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
 import { useTauriCloseGuard } from "@/hooks/useTauriCloseGuard"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
-import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import { createHydrationGenerationOwner } from "@/lib/editor/hydration-generation"
 import {
   initializeEditorSessionStore,
@@ -2108,7 +2106,7 @@ export function EditorShell({
   })
 
   const handleMenuOpenFile = useCallback(
-    async (_path: string, content: string) => {
+    async (_path: string) => {
       // Same reasoning as the other document-switching handlers: the OS
       // "Open File" menu also detaches from whatever is currently active
       // (ODE-478 follow-up).
@@ -2149,66 +2147,8 @@ export function EditorShell({
         })
         return
       }
-
-      const nowIso = new Date().toISOString()
-      const nextWritingId = createWritingId()
-      const parseResult = desktopDocumentEngine.sourceToRich(content)
-      const bodyJson = parseResult.success ? parseResult.snapshot.bodyJson : EMPTY_EDITOR_JSON
-      const bodyText = parseResult.success ? parseResult.snapshot.bodyText : ""
-      const nextTitle = isDesktopRuntime()
-        ? filenameToTitle(_path) || DESKTOP_UNTITLED_WRITING_TITLE
-        : deriveAutoTitle(bodyText, nowIso)
-
-      const record: WritingRecord = {
-        id: nextWritingId,
-        authorId: null,
-        title: nextTitle,
-        content: {
-          richText: bodyJson as Record<string, unknown>,
-          markdown: null,
-          plainText: bodyText,
-          canonicalSource: "rich-text",
-        },
-        slug: null,
-        status: "draft",
-        artifactType: "general",
-        visibility: "private",
-        parentId: null,
-        correspondenceId: null,
-        version: 1,
-        deletedAt: null,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        contentUpdatedAt: nowIso,
-        metadataUpdatedAt: nowIso,
-      }
-
-      try {
-        if (isDesktopRuntime()) {
-          const result = await importDesktopWritingFile(_path, content)
-          if (result.error || !result.data) {
-            throw new Error(result.error?.message ?? "Failed to import desktop file")
-          }
-          activateDocument({ writingId: result.data.id }, "open")
-          applyDocumentMetadata({ title: result.data.title ?? nextTitle })
-        } else {
-          await (await getDocumentService()).saveWriting({ writing: record })
-        }
-      } catch {
-        return
-      }
-
-      const openedWritingId = currentWritingIdRef.current ?? nextWritingId
-      activateDocument({ writingId: openedWritingId }, "open")
-      openWritingTab({
-        writingId: openedWritingId,
-        title: isDesktopRuntime() ? titleRef.current || nextTitle : nextTitle,
-        saveState: "saved-local",
-        hasPendingSync: false,
-      })
-      navigateToWriting(router, `/write/${nextWritingId}`, { mode: "push", skipOnDesktop: true })
     },
-    [activateDocument, applyDocumentMetadata, prepareDocumentExit, router],
+    [activateDocument, applyDocumentMetadata, prepareDocumentExit],
   )
 
   const handleMenuNewFile = useCallback(() => {
@@ -2323,7 +2263,7 @@ export function EditorShell({
     if (!sessionLoaded || !isDesktopRuntime()) return
     const pending = consumePendingOpenFile()
     if (!pending) return
-    void handleMenuOpenFile(pending.path, pending.content)
+    void handleMenuOpenFile(pending.path)
   }, [sessionLoaded, handleMenuOpenFile])
 
   const exportMarkdown = useCallback(async () => {

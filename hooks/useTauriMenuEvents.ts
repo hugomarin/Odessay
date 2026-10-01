@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { subscribeMenuAction } from "@/lib/services/desktop/menu-event-bus"
 import { drainPendingOsOpenPaths } from "@/lib/services/desktop/pending-os-open"
+import { describeOpenFileReadFailure } from "@/lib/services/open-document-factory"
 import type { EditorShortcutAction } from "@/lib/editor/shortcuts"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 
@@ -95,7 +96,15 @@ export function useTauriMenuEvents({
         if (!selected) return
         const path = typeof selected === "string" ? selected : selected[0]
         const { invoke } = await import("@tauri-apps/api/core")
-        const content = await invoke<string>("open_file", { path })
+        let content: string
+        try {
+          content = await invoke<string>("open_file", { path })
+        } catch (error) {
+          const message = describeOpenFileReadFailure(error)
+          if (!message) throw error
+          if (typeof window !== "undefined") window.alert(message)
+          return
+        }
         onOpenFileRef.current(path, content)
       }),
     )
@@ -105,7 +114,15 @@ export function useTauriMenuEvents({
     // dialog to show (see src-tauri/src/lib.rs RunEvent::Opened).
     const openFromOsPath = async (path: string) => {
       const { invoke } = await import("@tauri-apps/api/core")
-      const content = await invoke<string>("open_file", { path })
+      let content: string
+      try {
+        content = await invoke<string>("open_file", { path })
+      } catch (error) {
+        const message = describeOpenFileReadFailure(error)
+        if (!message) throw error
+        if (typeof window !== "undefined") window.alert(message)
+        return
+      }
       onOpenFileRef.current(path, content)
     }
     unsubscribers.push(

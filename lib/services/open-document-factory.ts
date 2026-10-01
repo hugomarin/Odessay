@@ -108,3 +108,9 @@ export function describeOpenOutcome(result: OpenDocumentResult): string {
       return "This document could not be opened."
   }
 }
+
+/** User-facing message for the native text reader's unsupported-encoding error. */
+export function describeOpenFileReadFailure(error: unknown): string | null {
+  if (!/(?:invalid|not valid|did not contain valid)\s+utf-?8/i.test(String(error))) return null
+  return "This file can't be opened because it isn't UTF-8 text."
+}
