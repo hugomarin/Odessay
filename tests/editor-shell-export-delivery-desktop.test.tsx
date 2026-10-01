@@ -44,11 +44,19 @@
  * (bug 1 de EXP-05) no es alcanzable por la UI — el ítem está deshabilitado
  * sin documento confirmado —, y el export de Desk (`WritingPreviewModal`) es
  * otro caller con su propio gap (ver la fila EXP-05).
+ *
+ * @contract EXP-05 (ODE-636) — the production Desk and Collections Markdown callers
+ * reach the same artifact writer, and a reported success follows a real file write.
+ * The mounted-page proof covers preview and row-menu flows; D1 failure/cancel outcomes
+ * and D3 Desk body content are asserted in separate tests so each it.fails commit
+ * names one failure mode without coupling the fixes.
  */
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, unlinkSync } from "node:fs"
 import { readdir, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import type { ReactNode } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@tiptap/react", async (importOriginal) => {
@@ -66,6 +74,9 @@ vi.mock("@tauri-apps/plugin-dialog", async () =>
 )
 vi.mock("@/lib/services/desktop/runtime-detection", async () =>
   (await import("./support/editor-shell-doubles")).runtimeDetectionDouble(),
+)
+vi.mock("@/lib/runtime/detect", async () =>
+  (await import("./support/editor-shell-doubles")).tauriRuntimeDetectDouble(),
 )
 vi.mock("@/lib/services/ai-service-factory", async () =>
   (await import("./support/editor-shell-doubles")).aiServiceDouble(),
@@ -85,7 +96,9 @@ const {
   assertNoUnhandledErrors,
   clickNewArtifact,
   flush,
+  installNetworkDouble,
   mountEditorShell,
+  pointerClick,
   resetEditorShellWorld,
   typeInEditor,
   waitFor,
@@ -96,15 +109,20 @@ const { createDesktopWorkspace, destroyDesktopWorkspace, resetDesktopWorkspace }
   "./support/editor-shell-desktop-doubles"
 )
 const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
+const { getDocumentService } = await import("@/lib/services/document-service-factory")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 const { act } = await import("react")
 
 const TEST_TIMEOUT_MS = 90_000
 
 let mounted: Awaited<ReturnType<typeof mountEditorShell>> | null = null
+let pageRoot: Root | null = null
+let pageContainer: HTMLDivElement | null = null
 let exportsRoot: string
 
 beforeAll(() => {
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://ode636-test.supabase.co")
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY", "ode636-public-test-key")
   createDesktopWorkspace("odessay-export-delivery-shell-")
   // Fuera del workspace: un `.md` exportado no debe mezclarse con los
   // documentos que lee `readWorkspaceMarkdown`.
@@ -114,6 +132,7 @@ beforeAll(() => {
 afterAll(() => {
   destroyDesktopWorkspace()
   rmSync(exportsRoot, { recursive: true, force: true })
+  vi.unstubAllEnvs()
 })
 
 beforeEach(() => {
@@ -122,6 +141,12 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
+  if (pageRoot) {
+    await act(async () => pageRoot?.unmount())
+    pageRoot = null
+  }
+  pageContainer?.remove()
+  pageContainer = null
   await mounted?.unmount()
   mounted = null
 })
@@ -152,6 +177,22 @@ const SUCCESS_MESSAGES = Object.values(SUCCESS_MESSAGE)
 
 function pageText() {
   return document.body.textContent ?? ""
+}
+
+async function mountProductionPage(node: ReactNode) {
+  pageContainer = document.createElement("div")
+  document.body.appendChild(pageContainer)
+  pageRoot = createRoot(pageContainer)
+  await act(async () => {
+    pageRoot!.render(node)
+  })
+  await flush(3)
+}
+
+async function unmountEditorBeforeDeskSurface() {
+  await mounted?.unmount()
+  mounted = null
+  await flush(2)
 }
 
 /** Monta la shell y espera a que cargue la sesión (ver ODE-574, carrera de arranque). */
@@ -221,6 +262,125 @@ async function confirmInCloud(writingId: string, text: string) {
 
 function findButton(root: ParentNode, predicate: (button: HTMLButtonElement) => boolean) {
   return Array.from(root.querySelectorAll("button")).find(predicate) ?? null
+}
+
+async function openProductionPreview(surface: "desk" | "collections", writingId: string) {
+  const record = await (await getDocumentCatalog()).getById(writingId)
+  if (!record) throw new Error(`Sin fila de catálogo para ${writingId}`)
+
+  await mountProductionSurface(surface)
+
+  const preview = await waitFor(
+    () =>
+      findButton(
+        pageContainer!,
+        (button) => button.getAttribute("aria-label") === `Preview ${record.title}`,
+      ),
+    { label: `${surface} row for ${record.title}` },
+  )
+  await act(async () => preview.click())
+  await flush(3)
+
+  const exportTrigger = await waitFor(
+    () => findButton(document.body, (button) => button.textContent?.includes("Export as…") ?? false),
+    { label: `${surface} preview export trigger` },
+  )
+  await act(async () => exportTrigger.click())
+  await flush(2)
+
+  return record
+}
+
+async function mountProductionSurface(surface: "desk" | "collections") {
+  installNetworkDouble()
+  await unmountEditorBeforeDeskSurface()
+  if (surface === "desk") {
+    world.pathname = "/desk"
+    const { default: DeskPage } = await import("@/app/(app)/desk/page")
+    await mountProductionPage(<DeskPage />)
+  } else {
+    const { CollectionsView } = await import("@/components/collections/collections-view")
+    const { UNCATEGORIZED_COLLECTION_ID } = await import("@/lib/collections/collections")
+    await mountProductionPage(
+      <CollectionsView initialExpandedCollectionId={UNCATEGORIZED_COLLECTION_ID} />,
+    )
+  }
+}
+
+async function selectProductionRow(title: string) {
+  const checkbox = await waitFor(
+    () =>
+      findButton(pageContainer!, (button) => button.getAttribute("aria-label") === `Select ${title}`),
+    { label: `checkbox para seleccionar ${title}` },
+  )
+  await act(async () => checkbox.click())
+  await waitFor(() => document.querySelector('[data-selection-bar="true"]'), {
+    label: "SelectionBar visible",
+  })
+}
+
+async function clickProductionRowMenuItem(title: string, label: string) {
+  const trigger = await waitFor(
+    () => findButton(pageContainer!, (button) => button.getAttribute("aria-label") === `Actions for ${title}`),
+    { label: `menú de acciones para ${title}` },
+  )
+  await pointerClick(trigger)
+  const item = await waitFor(
+    () =>
+      Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+        (menuItem) => menuItem.textContent?.trim() === label,
+      ) ?? null,
+    { label: `ítem de menú ${label}` },
+  )
+  await act(async () => item.click())
+  await flush(2)
+}
+
+async function clickProductionRowDownload(title: string) {
+  await clickProductionRowMenuItem(title, "Download markdown")
+}
+
+async function getCatalogRecord(writingId: string) {
+  const record = await (await getDocumentCatalog()).getById(writingId)
+  if (!record) throw new Error(`Sin fila de catálogo para ${writingId}`)
+  return record
+}
+
+async function waitForSaveDialogCall(previousCount: number, label: string) {
+  await waitFor(() => world.saveDialogCalls.length === previousCount + 1, {
+    label,
+    timeoutMs: 10_000,
+  })
+}
+
+async function waitForExportNotice(kind: "success" | "error") {
+  return waitFor(
+    () => {
+      const notice = document.querySelector<HTMLElement>('[data-testid="markdown-export-notice"]')
+      return notice?.getAttribute("data-notice") === kind ? notice : null
+    },
+    { label: `aviso Markdown ${kind}` },
+  )
+}
+
+async function clickPreviewExport(format: Format) {
+  const itemIsOpen = () =>
+    findButton(document.body, (button) => button.textContent?.trim() === ITEM_LABEL[format])
+  if (!itemIsOpen()) {
+    const trigger = await waitFor(
+      () => findButton(document.body, (button) => button.textContent?.includes("Export as…") ?? false),
+      { label: "trigger Export as… del preview" },
+    )
+    await act(async () => trigger.click())
+    await flush(2)
+  }
+  const item = await waitFor(
+    itemIsOpen,
+    { label: `preview menu item ${ITEM_LABEL[format]}` },
+  )
+  expect(item.disabled, `preview menu item ${ITEM_LABEL[format]} is enabled`).toBe(false)
+  await act(async () => item.click())
+  await flush(4)
 }
 
 /**
@@ -298,6 +458,93 @@ async function waitForExportSettled() {
   await flush(3)
 }
 
+async function assertProductionPreviewExportChain(
+  format: Exclude<Format, "markdown">,
+  fileName: string,
+  verifyBytes: (bytes: Buffer) => void,
+) {
+  const successDir = freshDir(`desk-preview-${format}-success`)
+  const target = join(successDir, fileName)
+  const successMessage = `${format.toUpperCase()} exported.`
+  const failureMessage = `Failed to export ${format.toUpperCase()}.`
+  world.saveDialogResult = target
+  const successDialogCount = world.saveDialogCalls.length
+  await clickPreviewExport(format)
+  await waitForSaveDialogCall(successDialogCount, `diálogo de Desk para ${format}`)
+  await waitFor(() => pageText().includes(successMessage), {
+    label: `éxito ${successMessage} en el preview de Desk`,
+    timeoutMs: 20_000,
+  })
+  expect(String(world.saveDialogCalls.at(-1)?.defaultPath ?? "")).toMatch(new RegExp(`\\.${format}$`))
+  verifyBytes(await readFile(target))
+  expect(await listExports(successDir)).toEqual([fileName])
+  expect(pageText()).not.toContain(failureMessage)
+
+  const cancelDir = freshDir(`desk-preview-${format}-cancel`)
+  world.saveDialogResult = null
+  const cancelDialogCount = world.saveDialogCalls.length
+  await clickPreviewExport(format)
+  await waitForSaveDialogCall(cancelDialogCount, `diálogo de Desk cancelado para ${format}`)
+  await waitForExportSettled()
+  expect(await listExports(cancelDir)).toEqual([])
+  expect(pageText()).not.toContain(successMessage)
+  expect(pageText()).not.toContain(failureMessage)
+
+  const failureDir = freshDir(`desk-preview-${format}-failure`)
+  const blocker = join(failureDir, "not-a-directory")
+  await writeFile(blocker, "occupied")
+  world.saveDialogResult = join(blocker, fileName)
+  const failureDialogCount = world.saveDialogCalls.length
+  await clickPreviewExport(format)
+  await waitForSaveDialogCall(failureDialogCount, `diálogo de Desk con fallo al escribir ${format}`)
+  await waitFor(() => pageText().includes(failureMessage), {
+    label: `fallo ${failureMessage} en el preview de Desk`,
+    timeoutMs: 20_000,
+  })
+  expect(await listExports(failureDir)).toEqual(["not-a-directory"])
+  expect(pageText()).not.toContain(successMessage)
+  assertNoUnhandledErrors()
+}
+
+async function assertProductionPreviewMarkdownChain(surface: "desk" | "collections", text: string) {
+  const successDir = freshDir(`${surface}-preview-markdown-success`)
+  const fileName = `${surface}-letter.md`
+  const target = join(successDir, fileName)
+  world.saveDialogResult = target
+  const successDialogCount = world.saveDialogCalls.length
+  await clickPreviewExport("markdown")
+  await waitFor(() => pageText().includes("Markdown exported."), {
+    label: `${surface} Markdown preview success`,
+  })
+  expect(world.saveDialogCalls).toHaveLength(successDialogCount + 1)
+  expect(await listExports(successDir)).toEqual([fileName])
+  expect((await readFile(target)).toString("utf8")).toContain(text)
+
+  const cancelDir = freshDir(`${surface}-preview-markdown-cancel`)
+  world.saveDialogResult = null
+  const cancelDialogCount = world.saveDialogCalls.length
+  await clickPreviewExport("markdown")
+  await waitForSaveDialogCall(cancelDialogCount, `${surface} canceled Markdown dialog`)
+  await waitForExportSettled()
+  expect(await listExports(cancelDir)).toEqual([])
+  expect(pageText()).not.toContain("Markdown exported.")
+  expect(pageText()).not.toContain("Failed to export Markdown.")
+
+  const failureDir = freshDir(`${surface}-preview-markdown-failure`)
+  const blocker = join(failureDir, "not-a-directory")
+  await writeFile(blocker, "occupied")
+  world.saveDialogResult = join(blocker, fileName)
+  const failureDialogCount = world.saveDialogCalls.length
+  await clickPreviewExport("markdown")
+  await waitForSaveDialogCall(failureDialogCount, `${surface} Markdown write-failure dialog`)
+  await waitFor(() => pageText().includes("Failed to export Markdown."), {
+    label: `${surface} Markdown preview write error`,
+  })
+  expect(await listExports(failureDir)).toEqual(["not-a-directory"])
+  expect(pageText()).not.toContain("Markdown exported.")
+  assertNoUnhandledErrors()
+}
+
 async function listExports(dir: string) {
   return readdir(dir).catch(() => [] as string[])
 }
@@ -372,6 +619,19 @@ describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
     async () => {
       const text = "ODE601-PDF-BODY"
       const writingId = await createAndOpenDocument(text)
+      const catalogRecord = await (await getDocumentCatalog()).getById(writingId)
+      const canonicalPath = catalogRecord?.binding?.canonicalPath
+      expect(canonicalPath, "the catalog resolves the UUID to a file path").toBeTruthy()
+      expect(canonicalPath).not.toBe(writingId)
+      if (!canonicalPath) throw new Error("Expected the catalog to resolve a canonical file path")
+      expect((await readFile(canonicalPath)).toString("utf8")).toContain(text)
+
+      const downloaded = await (await getDocumentService()).downloadWriting({ writingId })
+      expect(downloaded.error).toBeNull()
+      if (!downloaded.data) throw new Error("Expected the desktop document download to return data")
+      expect(downloaded.data.writingId).toBe(canonicalPath)
+      expect(new TextDecoder().decode(downloaded.data.bytes)).toContain(text)
+
       await confirmInCloud(writingId, text)
 
       await assertExportChain("pdf", "letter.pdf", (bytes) => {
@@ -392,6 +652,259 @@ describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
         // Un .docx es un zip: firma local-file-header "PK\x03\x04".
         expect([...bytes.subarray(0, 4)], "firma zip del .docx").toEqual([0x50, 0x4b, 0x03, 0x04])
       })
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+describe("EXP-05 — callers reales de Desk y Collections (ODE-636)", () => {
+  it(
+    "Desk preview: el Markdown que reporta éxito llega al fs por el diálogo de desktop",
+    async () => {
+      const text = "ODE636-DESK-MARKDOWN-BODY"
+      const writingId = await createAndOpenDocument(text)
+      const successDir = freshDir("desk-page-markdown-success")
+      const target = join(successDir, "desk-letter.md")
+      const dialogCallsBefore = world.saveDialogCalls.length
+      world.saveDialogResult = target
+
+      await openProductionPreview("desk", writingId)
+      await clickPreviewExport("markdown")
+
+      await waitFor(() => world.saveDialogCalls.length === dialogCallsBefore + 1, {
+        label: "diálogo de export de Desk invocado",
+      })
+      await waitFor(() => pageText().includes("Markdown exported."), {
+        label: "éxito del export Markdown de Desk",
+      })
+      expect(world.saveDialogCalls).toHaveLength(dialogCallsBefore + 1)
+      expect(await listExports(successDir)).toEqual(["desk-letter.md"])
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "Collections preview: el Markdown que reporta éxito llega al fs por el diálogo de desktop",
+    async () => {
+      const text = "ODE636-COLLECTIONS-MARKDOWN-BODY"
+      const writingId = await createAndOpenDocument(text)
+      const successDir = freshDir("collections-page-markdown-success")
+      const target = join(successDir, "collection-letter.md")
+      const dialogCallsBefore = world.saveDialogCalls.length
+      world.saveDialogResult = target
+
+      await openProductionPreview("collections", writingId)
+      await clickPreviewExport("markdown")
+
+      await waitFor(() => world.saveDialogCalls.length === dialogCallsBefore + 1, {
+        label: "diálogo de export de Collections invocado",
+      })
+      await waitFor(() => pageText().includes("Markdown exported."), {
+        label: "éxito del export Markdown de Collections",
+      })
+      expect(world.saveDialogCalls).toHaveLength(dialogCallsBefore + 1)
+      expect(await listExports(successDir)).toEqual(["collection-letter.md"])
+      expect((await readFile(target)).toString("utf8")).toContain(text)
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+describe("Desk desktop Markdown body (ODE-636)", () => {
+  it(
+    "exports the body from the materialized document",
+    async () => {
+      const text = "ODE636-DESK-MARKDOWN-BODY"
+      const writingId = await createAndOpenDocument(text)
+      const successDir = freshDir("desk-materialized-body")
+      const target = join(successDir, "desk-body.md")
+      const dialogCallsBefore = world.saveDialogCalls.length
+      world.saveDialogResult = target
+
+      await openProductionPreview("desk", writingId)
+      await clickPreviewExport("markdown")
+
+      await waitFor(() => world.saveDialogCalls.length === dialogCallsBefore + 1, {
+        label: "diálogo de export de Desk invocado para el cuerpo materializado",
+      })
+      await waitFor(() => pageText().includes("Markdown exported."), {
+        label: "éxito del export de Desk con cuerpo materializado",
+      })
+      expect((await readFile(target)).toString("utf8")).toContain(text)
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+describe("EXP-05 — cancelación y fallo de escritura en preview Markdown (ODE-636)", () => {
+  for (const surface of ["desk", "collections"] as const) {
+    it(
+      `${surface}: cancela en silencio y muestra el error de escritura`,
+      async () => {
+        const text = `ODE636-${surface.toUpperCase()}-PREVIEW-MARKDOWN-BODY`
+        const writingId = await createAndOpenDocument(text)
+        await openProductionPreview(surface, writingId)
+        await assertProductionPreviewMarkdownChain(surface, text)
+      },
+      TEST_TIMEOUT_MS,
+    )
+  }
+})
+
+describe("EXP-05 — export real desde el preview de Desk (ODE-636)", () => {
+  for (const format of ["pdf", "docx"] as const) {
+    it(
+      `${format}: éxito escribe el artefacto; cancelar y fallo no muestran éxito`,
+      async () => {
+        const text = `ODE636-DESK-${format.toUpperCase()}-BODY`
+        const writingId = await createAndOpenDocument(text)
+        await confirmInCloud(writingId, text)
+        await openProductionPreview("desk", writingId)
+
+        await assertProductionPreviewExportChain(
+          format,
+          `desk-letter.${format}`,
+          (bytes) => {
+            if (format === "pdf") {
+              expect(bytes.subarray(0, 5).toString("latin1"), "cabecera PDF").toBe("%PDF-")
+              return
+            }
+            expect([...bytes.subarray(0, 4)], "firma zip del .docx").toEqual([0x50, 0x4b, 0x03, 0x04])
+          },
+        )
+      },
+      TEST_TIMEOUT_MS,
+    )
+  }
+})
+
+describe("EXP-05 — aviso de export Markdown desde los menús de fila (ODE-636)", () => {
+  for (const surface of ["desk", "collections"] as const) {
+    it(
+      `${surface}: el menú confirma, cancela en silencio y muestra el fallo de escritura`,
+      async () => {
+        const text = `ODE636-${surface.toUpperCase()}-ROW-MARKDOWN-BODY`
+        const writingId = await createAndOpenDocument(text)
+        const record = await getCatalogRecord(writingId)
+        if (!record.title) throw new Error(`Expected a title for ${writingId}`)
+        const title = record.title
+        await mountProductionSurface(surface)
+        const liveRegion = document.querySelector<HTMLElement>(
+          '[data-testid="markdown-export-live-region"]',
+        )
+        expect(liveRegion).not.toBeNull()
+        expect(liveRegion?.textContent).toBe("")
+
+        const unselectedSuccessDir = freshDir(`${surface}-row-markdown-unselected-success`)
+        const unselectedTarget = join(unselectedSuccessDir, `${surface}-unselected.md`)
+        world.saveDialogResult = unselectedTarget
+        const unselectedDialogCount = world.saveDialogCalls.length
+        await clickProductionRowDownload(title)
+        await waitForSaveDialogCall(unselectedDialogCount, `${surface} export without selection`)
+        const unselectedNotice = await waitForExportNotice("success")
+        expect(unselectedNotice.getAttribute("data-placement")).toBe(surface === "desk" ? "absolute" : "fixed")
+        expect(document.querySelector('[data-selection-bar="true"]')).toBeNull()
+        expect((await readFile(unselectedTarget)).toString("utf8")).toContain(text)
+        await advance(3100)
+        expect(document.querySelector('[data-testid="markdown-export-notice"]')).toBeNull()
+
+        await selectProductionRow(title)
+
+        const successDir = freshDir(`${surface}-row-markdown-success`)
+        const target = join(successDir, `${surface}-row.md`)
+        world.saveDialogResult = target
+        const successDialogCount = world.saveDialogCalls.length
+        await clickProductionRowDownload(title)
+        await waitForSaveDialogCall(successDialogCount, `${surface} abrió el diálogo de export`)
+
+        const successNotice = await waitForExportNotice("success")
+        expect(successNotice.textContent?.trim()).toBe("Markdown exported")
+        expect(document.querySelector('[data-testid="markdown-export-live-region"]')).toBe(liveRegion)
+        expect(liveRegion?.getAttribute("role")).toBe("status")
+        expect(liveRegion?.getAttribute("aria-live")).toBe("polite")
+        expect(successNotice.className).toContain("bottom-[96px]")
+        expect(successNotice.getAttribute("data-placement")).toBe(surface === "desk" ? "absolute" : "fixed")
+        expect(document.querySelector('[data-selection-bar="true"]')).not.toBeNull()
+        expect((await readFile(target)).toString("utf8")).toContain(text)
+
+        await advance(3100)
+        expect(document.querySelector('[data-testid="markdown-export-notice"]')).toBeNull()
+        expect(liveRegion?.textContent).toBe("")
+
+        world.saveDialogResult = null
+        const cancelDialogCount = world.saveDialogCalls.length
+        await clickProductionRowDownload(title)
+        await waitForSaveDialogCall(cancelDialogCount, `${surface} abrió el diálogo cancelado`)
+        await flush(2)
+        expect(document.querySelector('[data-testid="markdown-export-notice"]')).toBeNull()
+        expect(pageText()).not.toContain("Markdown exported")
+        expect(pageText()).not.toContain("Failed to export Markdown.")
+
+        const failureDir = freshDir(`${surface}-row-markdown-failure`)
+        const blocker = join(failureDir, "not-a-directory")
+        await writeFile(blocker, "occupied")
+        world.saveDialogResult = join(blocker, `${surface}-row.md`)
+        const failureDialogCount = world.saveDialogCalls.length
+        await clickProductionRowDownload(title)
+        await waitForSaveDialogCall(failureDialogCount, `${surface} abrió el diálogo que falla al escribir`)
+
+        const failureNotice = await waitForExportNotice("error")
+        expect(failureNotice.textContent?.trim()).toBe("Failed to export Markdown.")
+        expect(document.querySelector('[data-testid="markdown-export-live-region"]')).toBe(liveRegion)
+        expect(liveRegion?.getAttribute("role")).toBe("status")
+        expect(liveRegion?.getAttribute("aria-live")).toBe("polite")
+        expect(pageText()).not.toContain("Markdown exported")
+        assertNoUnhandledErrors()
+      },
+      TEST_TIMEOUT_MS,
+    )
+  }
+})
+
+describe("Desk row Markdown copy errors (ODE-636)", () => {
+  it(
+    "handles a rejected materialized-file read from the fire-and-forget row action",
+    async () => {
+      const text = "ODE636-DESK-COPY-MISSING-FILE"
+      const writingId = await createAndOpenDocument(text)
+      const record = await getCatalogRecord(writingId)
+      const canonicalPath = record.binding?.canonicalPath
+      if (!canonicalPath) throw new Error(`Expected a canonical path for ${writingId}`)
+      if (!record.title) throw new Error(`Expected a title for ${writingId}`)
+
+      await mountProductionSurface("desk")
+      unlinkSync(canonicalPath)
+      await clickProductionRowMenuItem(record.title, "Copy markdown")
+      await flush(3)
+
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+describe("Collections preview Markdown read errors (ODE-636)", () => {
+  it(
+    "uses the fixed export error copy when the materialized source cannot be read",
+    async () => {
+      const text = "ODE636-COLLECTIONS-MARKDOWN-MISSING-FILE"
+      const writingId = await createAndOpenDocument(text)
+      const record = await getCatalogRecord(writingId)
+      const canonicalPath = record.binding?.canonicalPath
+      if (!canonicalPath) throw new Error(`Expected a canonical path for ${writingId}`)
+
+      await openProductionPreview("collections", writingId)
+      unlinkSync(canonicalPath)
+      const readResult = await (await getDocumentService()).openWriting(writingId)
+      const rawReadError = readResult.error?.message
+      if (!rawReadError) throw new Error("Expected the materialized-file read to fail")
+      await clickPreviewExport("markdown")
+
+      await waitFor(() => pageText().includes("Failed to export Markdown."), {
+        label: "fixed Collections Markdown source-read error",
+      })
+      expect(pageText()).not.toContain(rawReadError)
+      assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
   )

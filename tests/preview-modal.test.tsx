@@ -21,15 +21,17 @@ vi.mock("@/components/ui/popover", () => ({
   PopoverTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
 }))
 
+const previewCacheDoubles = vi.hoisted(() => ({
+  fetchPreview: vi.fn().mockResolvedValue(null),
+  getCachedPreview: vi.fn().mockReturnValue(null),
+  prefetchPreview: vi.fn(),
+  retainOnly: vi.fn(),
+  clear: vi.fn(),
+  updatePreviewTitle: vi.fn(),
+}))
+
 vi.mock("@/hooks/useWritingPreviewCache", () => ({
-  useWritingPreviewCache: () => ({
-    fetchPreview: vi.fn().mockResolvedValue(null),
-    getCachedPreview: vi.fn().mockReturnValue(null),
-    prefetchPreview: vi.fn(),
-    retainOnly: vi.fn(),
-    clear: vi.fn(),
-    updatePreviewTitle: vi.fn(),
-  }),
+  useWritingPreviewCache: () => previewCacheDoubles,
 }))
 
 vi.mock("@/components/settings/user-settings-provider", () => ({

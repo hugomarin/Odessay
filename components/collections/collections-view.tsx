@@ -8,6 +8,10 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { CollectionCreateDialog } from "@/components/collections/collection-create-dialog"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
 import { BulkActionBar } from "@/components/desk/bulk-action-bar"
+import {
+  MarkdownExportNotice,
+  useMarkdownExportNotice,
+} from "@/components/shared/markdown-export-notice"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { WritingPreviewModal } from "@/components/desk/writing-preview-modal"
 import { useWritingSelection } from "@/hooks/useWritingSelection"
@@ -46,7 +50,7 @@ import type { ArtifactType } from "@/lib/writings/artifact-type"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
 import { copyTextWithFallback } from "@/lib/utils/clipboard"
-import { downloadBlob } from "@/lib/utils/download"
+import { saveBinaryArtifact } from "@/lib/utils/download"
 import { getWorkspaceAssignmentService } from "@/lib/services/workspace-service"
 import { getDocumentService } from "@/lib/services/document-service-factory"
 import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer"
@@ -489,17 +493,26 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     if (!writing || writing.sync_status === "deleted") {
       return false
     }
-    const bodyJson = isDesktopRuntime()
-      ? (await (await getDocumentService()).openWriting(writingId)).data?.content.richText
-      : writing.body_json
+    let bodyJson: Record<string, unknown> = writing.body_json
+    if (isDesktopRuntime()) {
+      const result = await (await getDocumentService()).openWriting(writingId)
+      if (result.error || !result.data) {
+        throw new Error("Failed to export Markdown.")
+      }
+      bodyJson = (result.data.content.richText as Record<string, unknown> | null) ?? {}
+    }
     const markdown = serializeWritingToMarkdown((bodyJson as Record<string, unknown>) ?? {}).trimEnd()
-    const blob = new Blob([`${markdown}\n`], { type: "text/markdown;charset=utf-8" })
-    downloadBlob(
-      blob,
-      buildMarkdownDownloadName({ title: writing.title, bodyText: writing.body_text, writingId: writing.id }),
-    )
-    return true
+    return saveBinaryArtifact({
+      bytes: new TextEncoder().encode(`${markdown}\n`),
+      fileName: buildMarkdownDownloadName({ title: writing.title, bodyText: writing.body_text, writingId: writing.id }),
+      mimeType: "text/markdown;charset=utf-8",
+    })
   }, [])
+
+  const {
+    notice: markdownExportNotice,
+    runExport: downloadWritingMarkdownFromRow,
+  } = useMarkdownExportNotice(downloadWritingMarkdown)
 
   const openRenameWriting = useCallback(async (writingId: string) => {
     const writing = await getWritingForEdit(writingId)
@@ -710,6 +723,11 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                   onCreateCollection={bulkCreateCollectionAndAdd}
                 />
               )}
+              <MarkdownExportNotice
+                notice={markdownExportNotice}
+                placement="fixed"
+                raised={hasSelection}
+              />
               <div className="border-t-[0.5px] border-border">
               <DeskActivityTable
                 groups={detailGroups}
@@ -733,7 +751,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                 onRenameWriting={openRenameWriting}
                 onPreviewWriting={openWritingPreview}
                 onCopyMarkdown={copyWritingMarkdown}
-                onDownloadMarkdown={downloadWritingMarkdown}
+                onDownloadMarkdown={downloadWritingMarkdownFromRow}
                 onDeleteRequest={deleteWriting}
                 selectedIds={selectedIds}
                 onToggleSelection={toggleSelection}
