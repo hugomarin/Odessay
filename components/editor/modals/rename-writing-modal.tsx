@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FormModal } from "@/components/ui/dialog"
@@ -31,9 +31,13 @@ export function RenameWritingModal({
   const [isSuggesting, setIsSuggesting] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const suggestionRequestGenerationRef = useRef(0)
   const canSuggestTitle = hasEnoughTitleSuggestionContent(bodyText)
 
   useEffect(() => {
+    // A closed Desk/Collections/Workspace modal stays mounted. Invalidate any
+    // request from its previous opening or document before resetting UI state.
+    suggestionRequestGenerationRef.current += 1
     if (open) {
       setNextTitle(title)
       setSuggestedTitle(null)
@@ -42,12 +46,26 @@ export function RenameWritingModal({
       setIsSubmitting(false)
       setSubmitError(null)
     }
-  }, [open, title])
+  }, [open, title, writingId])
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      // Invalidate synchronously on Cancel/close; a response can settle before
+      // the passive effect for `open=false` runs.
+      suggestionRequestGenerationRef.current += 1
+    }
+    onOpenChange(nextOpen)
+  }
 
   const requestSuggestion = async () => {
     if (!canSuggestTitle || isSuggesting) {
       return
     }
+
+    const requestGeneration = ++suggestionRequestGenerationRef.current
+    const requestWritingId = writingId
+    const stillOwnsModal = () =>
+      suggestionRequestGenerationRef.current === requestGeneration && open && writingId === requestWritingId
 
     setIsSuggesting(true)
     setSuggestionError(null)
@@ -63,11 +81,15 @@ export function RenameWritingModal({
         throw new Error(result.error?.message ?? "Could not suggest a name.")
       }
 
+      if (!stillOwnsModal()) return
       setSuggestedTitle(result.data.title)
     } catch (error) {
+      if (!stillOwnsModal()) return
       setSuggestionError(error instanceof Error ? error.message : "Could not suggest a name.")
     } finally {
-      setIsSuggesting(false)
+      if (stillOwnsModal()) {
+        setIsSuggesting(false)
+      }
     }
   }
 
@@ -83,7 +105,7 @@ export function RenameWritingModal({
         setSubmitError("Could not save this name. Try again.")
         return
       }
-      onOpenChange(false)
+      handleOpenChange(false)
     } catch (error) {
       // A rejection (not just a resolved `false`) must not strand the modal
       // showing "Saving…" forever with no way out but Cancel (ODE-478 follow-up).
@@ -96,7 +118,7 @@ export function RenameWritingModal({
   return (
     <FormModal
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title="Rename artifact"
       overline="Artifact name"
       width={440}
@@ -104,7 +126,7 @@ export function RenameWritingModal({
       discardMessage="This artifact has a new name that has not been saved. Discard it?"
       footer={
         <>
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
           <Button type="button" onClick={submit} disabled={isSubmitting}>
