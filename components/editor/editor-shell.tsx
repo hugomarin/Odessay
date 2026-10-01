@@ -2263,7 +2263,7 @@ export function EditorShell({
     if (!sessionLoaded || !isDesktopRuntime()) return
     const pending = consumePendingOpenFile()
     if (!pending) return
-    void handleMenuOpenFile(pending.path, pending.content)
+    void handleMenuOpenFile(pending.path)
   }, [sessionLoaded, handleMenuOpenFile])
 
   const exportMarkdown = useCallback(async () => {
