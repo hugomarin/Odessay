@@ -21,19 +21,32 @@ pub struct WorkspaceFileSnapshot {
     pub modified_at: u64,
     pub size: u64,
     pub inode: u64,
+    /// Volume the file lives on (`st_dev`), additive and optional. An inode
+    /// number is only unique within one volume, so the TS cross-root
+    /// correlation only matches when both sides report the same device
+    /// (ODE-657 review P1). Absent on non-unix or when the stat cannot
+    /// provide it; the walk already holds the metadata, so this is free.
+    #[serde(rename = "device", default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<u64>,
     #[serde(rename = "contentHash")]
     pub content_hash: String,
 }
 
 /// Evidence for one file a scan could not bind. Additive to `unboundPaths`
 /// (ODE-657): the TS orchestrator correlates an external cross-root move by
-/// inode + content_hash before minting a UUID, and the scan already computed
-/// both while deciding whether the file was bound — zero extra I/O.
+/// device + inode + content_hash before minting a UUID, and the scan already
+/// computed all three while deciding whether the file was bound — zero extra
+/// I/O. Device and inode are only comparable within one volume, so both sides
+/// of a correlation must agree on the device (ODE-657 review P1).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WorkspaceUnboundFile {
     #[serde(rename = "relativePath")]
     pub relative_path: String,
     pub inode: u64,
+    /// Volume the file lives on (`st_dev`), same additive/optional contract as
+    /// `WorkspaceFileSnapshot::device` (ODE-657 review P1).
+    #[serde(rename = "device", default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<u64>,
     #[serde(rename = "contentHash")]
     pub content_hash: String,
     pub size: u64,
@@ -715,6 +728,7 @@ pub fn workspace_touch_file(
             modified_at,
             size: metadata.len(),
             inode,
+            device: device_for_metadata(&metadata),
             content_hash,
         },
     })
@@ -896,6 +910,7 @@ pub fn workspace_sync(
             unbound_files.push(WorkspaceUnboundFile {
                 relative_path: file.relative_path.clone(),
                 inode: file.inode,
+                device: file.device,
                 content_hash,
                 size: file.size,
                 modified_at: file.modified_at,
@@ -1067,6 +1082,7 @@ fn snapshot_workspace_file(
         modified_at,
         size: metadata.len(),
         inode: inode_for_path(&path.to_path_buf()),
+        device: device_for_metadata(metadata),
         content_hash: String::new(),
     })
 }
@@ -1170,6 +1186,21 @@ fn inode_for_path(path: &PathBuf) -> u64 {
 #[cfg(not(unix))]
 fn inode_for_path(_path: &PathBuf) -> u64 {
     0
+}
+
+/// Volume identity (`st_dev`) for a file the walk already stat'ed. `None` when
+/// the platform cannot report it: inode is the only identity then, and the TS
+/// correlation must refuse to cross roots (ODE-657 review P1).
+#[cfg(unix)]
+fn device_for_metadata(metadata: &fs::Metadata) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+
+    Some(metadata.dev())
+}
+
+#[cfg(not(unix))]
+fn device_for_metadata(_metadata: &fs::Metadata) -> Option<u64> {
+    None
 }
 
 #[cfg(test)]
@@ -1315,6 +1346,7 @@ mod tests {
                 modified_at: 3,
                 size: 9,
                 inode: 77,
+                device: None,
                 content_hash: "blake3:b".to_string(),
             },
         };

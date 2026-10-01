@@ -239,6 +239,11 @@ describe("ODE-657 — movimiento externo entre dos raíces vigiladas (WATCH-04)"
       const rootA = makeRoot("Raiz A")
       const rootB = makeRoot("Raiz B")
       const pathA = writeMarkdownIn(rootA, "Carta cruzada", "ODE657 cuerpo cruzado.")
+      // Un vecino residente mantiene conocido el volumen de A tras el
+      // movimiento: la correlación exige el mismo dispositivo en ambos lados,
+      // y una raíz sin evidencia de archivos queda "volumen desconocido"
+      // (review ronda 1, P1).
+      writeMarkdownIn(rootA, "Vecino de A", "ODÉ657 residente de la raíz A.")
       await registerWorkspace(rootA)
       await registerWorkspace(rootB)
       await startReconciler()
@@ -286,6 +291,7 @@ describe("ODE-657 — movimiento externo entre dos raíces vigiladas (WATCH-04)"
       const rootA = makeRoot("Raiz A")
       const rootB = makeRoot("Raiz B")
       const pathA = writeMarkdownIn(rootA, "Carta cruzada", "ODE657 cuerpo cruzado inverso.")
+      writeMarkdownIn(rootA, "Vecino de A", "ODÉ657 residente de la raíz A.")
       await registerWorkspace(rootA)
       await registerWorkspace(rootB)
       await startReconciler()

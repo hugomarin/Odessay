@@ -246,6 +246,7 @@ async function statAsWorkspaceFile(rootPath: string, relativePath: string, docum
     modifiedAt: stat.mtimeMs,
     size: stat.size,
     inode: stat.ino,
+    device: stat.dev,
     contentHash,
   }
 }
@@ -792,6 +793,7 @@ async function tauriWorkspaceSyncDoubleWithMode(
       return {
         relativePath,
         inode,
+        device: stat.dev,
         contentHash: await hashFile(fullPath),
         size: stat.size,
         modifiedAt: stat.mtimeMs,

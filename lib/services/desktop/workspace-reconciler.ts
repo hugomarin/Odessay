@@ -42,6 +42,13 @@ export type ObservedFile = {
   relativePath: string
   canonicalPath: string
   inode: number | null
+  /**
+   * Volume the file lives on (`st_dev`, mirrored from the Rust scan). An inode
+   * is only unique within one volume, so cross-root correlation requires the
+   * origin and the destination to share it (ODE-657 review P1). `null` when a
+   * recording/mock predates the field or the platform cannot report it.
+   */
+  device: number | null
   contentHash: string | null
   size: number | null
   modifiedAt: number | null
@@ -72,6 +79,8 @@ export type KnownBinding = {
 export type UnboundFile = {
   relativePath: string
   inode: number | null
+  /** Volume the file lives on (`st_dev`), same contract as `ObservedFile`. */
+  device: number | null
   contentHash: string | null
   size: number | null
   modifiedAt: number | null
@@ -378,6 +387,13 @@ export type CrossRootCorrelationRoot = {
   rootId: string
   /** false when the scan failed: the root neither detaches nor offers candidates. */
   observable: boolean
+  /**
+   * The single volume every file this pass observed in the root lives on, or
+   * `null` when the root offered no file evidence or spanned several volumes.
+   * A detached binding is only a candidate when its origin root's volume is
+   * known to match the unbound file's volume (ODE-657 review P1).
+   */
+  device: number | null
   unbound: UnboundFile[]
   detached: KnownBinding[]
 }
@@ -395,14 +411,16 @@ export type CrossRootCorrelation = {
  * A file moved outside the app from root A to root B is reported by B's scan as
  * unbound while A's scan confirms its old binding absent. Before any UUID is
  * minted, this pass matches each unbound file against the detached bindings of
- * *other* roots in the same pass, requiring same inode (and > 0) **and** same
- * non-null content_hash. Only a strict 1↔1 relation correlates: one unbound
- * file, one detached binding. Anything else keeps the current behavior — the
- * unbound file gets a fresh id here, and the origin stays detached.
+ * *other* roots in the same pass, requiring same device **and** same inode
+ * (both > 0) **and** same non-null content_hash. An inode is only unique within
+ * one volume: a detached binding is compared against its origin root's known
+ * volume, an unbound file against its own. If either side's volume is unknown
+ * or they differ, they never share a key — the unbound file gets a fresh id
+ * here and the origin stays detached (ODE-657 review P1). Only a strict 1↔1
+ * relation correlates: one unbound file, one detached binding.
  *
  * Every unbound file gets an id in `idsByRoot` (correlated or minted), so the
- * caller can bind the whole set in one manifest write. The inode is not
- * comparable across volumes; cross-volume moves are out of scope by contract.
+ * caller can bind the whole set in one manifest write.
  */
 export function correlateAcrossRoots(input: {
   roots: CrossRootCorrelationRoot[]
@@ -417,9 +435,17 @@ export function correlateAcrossRoots(input: {
   const unboundByKey = new Map<string, UnboundEntry[]>()
   const detachedByKey = new Map<string, DetachedEntry[]>()
 
-  const keyFor = (inode: number | null, contentHash: string | null): string | null =>
-    typeof inode === "number" && inode > 0 && contentHash
-      ? `${inode}\u0000${contentHash}`
+  const keyFor = (
+    device: number | null,
+    inode: number | null,
+    contentHash: string | null,
+  ): string | null =>
+    typeof device === "number" &&
+    device > 0 &&
+    typeof inode === "number" &&
+    inode > 0 &&
+    contentHash
+      ? `${device}\u0000${inode}\u0000${contentHash}`
       : null
 
   for (const root of input.roots) {
@@ -428,14 +454,14 @@ export function correlateAcrossRoots(input: {
     if (!root.observable) continue
     for (const file of root.unbound) {
       ids.set(file.relativePath, mintId())
-      const key = keyFor(file.inode, file.contentHash)
+      const key = keyFor(file.device, file.inode, file.contentHash)
       if (!key) continue
       const bucket = unboundByKey.get(key)
       if (bucket) bucket.push({ rootId: root.rootId, file })
       else unboundByKey.set(key, [{ rootId: root.rootId, file }])
     }
     for (const binding of root.detached) {
-      const key = keyFor(binding.inode, binding.contentHash)
+      const key = keyFor(root.device, binding.inode, binding.contentHash)
       if (!key) continue
       const bucket = detachedByKey.get(key)
       if (bucket) bucket.push({ rootId: root.rootId, binding })
@@ -459,6 +485,23 @@ export function correlateAcrossRoots(input: {
   }
 
   return { idsByRoot, correlatedIds }
+}
+
+/**
+ * The one volume every file this pass saw in a root lives on, or `null` when
+ * the root offered no file evidence or its files span several volumes.
+ * Cross-root correlation must never infer a shared volume from an inode alone,
+ * so an unknown root volume simply produces no candidates (ODE-657 review P1).
+ */
+function rootDeviceFor(
+  observed: ObservedFile[] | null,
+  unbound: UnboundFile[],
+): number | null {
+  const devices = new Set<number>()
+  for (const file of [...(observed ?? []), ...unbound]) {
+    if (typeof file.device === "number" && file.device > 0) devices.add(file.device)
+  }
+  return devices.size === 1 ? [...devices][0] : null
 }
 
 // ─── Orchestrator ──────────────────────────────────────────────────────────────
@@ -565,13 +608,16 @@ export function createWorkspaceReconciler(
     unbound: UnboundFile[]
     knownBindings: KnownBinding[]
     result: ReconcileRootResult
+    /** Volume shared by every file this pass saw in the root, else null. */
+    device: number | null
   }
 
   /**
    * One pass over the affected roots, in four phases (ODE-657):
    *
    *   1. scan every root and resolve its bound files (isolated failures);
-   *   2. correlate unbound files against other roots' confirmed detaches;
+   *   2. correlate unbound files against other roots' confirmed detaches on the
+   *      same volume;
    *   3. bind each root's decided ids — manifest before SQLite — and re-resolve;
    *   4. commit once per root, subtracting from every detach the ids claimed
    *      anywhere in the pass.
@@ -603,7 +649,14 @@ export function createWorkspaceReconciler(
           transactionId: mintId(),
         })
         if (result.unobservable) anyUnobservable = true
-        scanned.push({ root, unbound: unbound ?? [], knownBindings, result })
+        const unboundFiles = unbound ?? []
+        scanned.push({
+          root,
+          unbound: unboundFiles,
+          knownBindings,
+          result,
+          device: rootDeviceFor(observed, unboundFiles),
+        })
       } catch {
         // Isolate failures by root. One unavailable/legacy root must not prevent
         // newly adopted roots from reaching the shared catalog. The failed root
@@ -617,6 +670,7 @@ export function createWorkspaceReconciler(
       roots: scanned.map((entry) => ({
         rootId: entry.root.id,
         observable: !entry.result.unobservable,
+        device: entry.result.unobservable ? null : entry.device,
         unbound: entry.unbound,
         detached: entry.result.unobservable
           ? []

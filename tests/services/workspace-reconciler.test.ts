@@ -29,6 +29,7 @@ function observed(overrides: Partial<ObservedFile> = {}): ObservedFile {
     relativePath: "a.md",
     canonicalPath: "/Users/h/Docs/a.md",
     inode: 100,
+    device: 1,
     contentHash: "blake3:aaa",
     size: 10,
     modifiedAt: 1000,
@@ -198,6 +199,7 @@ function unboundFile(overrides: Partial<UnboundFile> = {}): UnboundFile {
   return {
     relativePath: "letter.md",
     inode: 100,
+    device: 1,
     contentHash: "blake3:aaa",
     size: 10,
     modifiedAt: 1000,
@@ -233,12 +235,14 @@ describe("correlateAcrossRoots — cross-root move evidence", () => {
         {
           rootId: "root-a",
           observable: true,
+          device: 1,
           unbound: [],
           detached: [known({ bindingRootId: "root-a" })],
         },
         {
           rootId: "root-b",
           observable: true,
+          device: 1,
           unbound: [unboundFile({ relativePath: "moved.md" })],
           detached: [],
         },
@@ -255,12 +259,14 @@ describe("correlateAcrossRoots — cross-root move evidence", () => {
         {
           rootId: "root-a",
           observable: true,
+          device: 1,
           unbound: [],
           detached: [known({ bindingRootId: "root-a" })],
         },
         {
           rootId: "root-b",
           observable: true,
+          device: 1,
           unbound: [unboundFile({ relativePath: "other.md", contentHash: "blake3:other" })],
           detached: [],
         },
@@ -291,15 +297,66 @@ describe("correlateAcrossRoots — cross-root move evidence", () => {
     },
   )
 
+  it("does not correlate when the origin root's volume is unknown", () => {
+    // Sin evidencia de archivos no se puede afirmar que ambas raíces compartan
+    // volumen: se conserva el comportamiento seguro (UUID nuevo + detach).
+    const result = correlateAcrossRoots({
+      roots: [
+        {
+          rootId: "root-a",
+          observable: true,
+          device: null,
+          unbound: [],
+          detached: [known({ bindingRootId: "root-a" })],
+        },
+        {
+          rootId: "root-b",
+          observable: true,
+          device: 1,
+          unbound: [unboundFile({ relativePath: "moved.md", device: 1 })],
+          detached: [],
+        },
+      ],
+      mintId,
+    })
+    expect(result.idsByRoot.get("root-b")?.get("moved.md")).toMatch(/^minted-/)
+    expect(result.correlatedIds.size).toBe(0)
+  })
+
+  it("does not correlate when the unbound file's volume is unknown", () => {
+    const result = correlateAcrossRoots({
+      roots: [
+        {
+          rootId: "root-a",
+          observable: true,
+          device: 1,
+          unbound: [],
+          detached: [known({ bindingRootId: "root-a" })],
+        },
+        {
+          rootId: "root-b",
+          observable: true,
+          device: null,
+          unbound: [unboundFile({ relativePath: "moved.md", device: null })],
+          detached: [],
+        },
+      ],
+      mintId,
+    })
+    expect(result.idsByRoot.get("root-b")?.get("moved.md")).toMatch(/^minted-/)
+    expect(result.correlatedIds.size).toBe(0)
+  })
+
   it("does not correlate when the origin binding is still present (hard link)", () => {
     // The origin path was observed, so `reconcileRoot` consumed its binding and
     // it never reaches `detached`.
     const result = correlateAcrossRoots({
       roots: [
-        { rootId: "root-a", observable: true, unbound: [], detached: [] },
+        { rootId: "root-a", observable: true, device: 1, unbound: [], detached: [] },
         {
           rootId: "root-b",
           observable: true,
+          device: 1,
           unbound: [unboundFile({ relativePath: "copy.md" })],
           detached: [],
         },
@@ -316,18 +373,21 @@ describe("correlateAcrossRoots — cross-root move evidence", () => {
         {
           rootId: "root-a",
           observable: true,
+          device: 1,
           unbound: [],
           detached: [known({ bindingRootId: "root-a" })],
         },
         {
           rootId: "root-c",
           observable: true,
+          device: 1,
           unbound: [],
           detached: [known({ documentId: "doc-c", bindingRootId: "root-c" })],
         },
         {
           rootId: "root-b",
           observable: true,
+          device: 1,
           unbound: [unboundFile({ relativePath: "moved.md" })],
           detached: [],
         },
@@ -344,18 +404,21 @@ describe("correlateAcrossRoots — cross-root move evidence", () => {
         {
           rootId: "root-a",
           observable: true,
+          device: 1,
           unbound: [],
           detached: [known({ bindingRootId: "root-a" })],
         },
         {
           rootId: "root-b",
           observable: true,
+          device: 1,
           unbound: [unboundFile({ relativePath: "one.md" })],
           detached: [],
         },
         {
           rootId: "root-c",
           observable: true,
+          device: 1,
           unbound: [unboundFile({ relativePath: "two.md" })],
           detached: [],
         },
@@ -373,12 +436,14 @@ describe("correlateAcrossRoots — cross-root move evidence", () => {
         {
           rootId: "root-a",
           observable: false,
+          device: 1,
           unbound: [],
           detached: [known({ bindingRootId: "root-a" })],
         },
         {
           rootId: "root-b",
           observable: true,
+          device: 1,
           unbound: [unboundFile({ relativePath: "moved.md" })],
           detached: [],
         },
@@ -530,7 +595,12 @@ describe("createWorkspaceReconciler — cross-root correlation (ODE-657)", () =>
       scanRoot: async (candidate) => {
         if (candidate.id === "root-a") {
           return {
-            observed: [],
+            // The resident sibling keeps root A's volume knowable after the
+            // move; without file evidence the volume is unknown and the
+            // correlation refuses to match (ODE-657 review P1).
+            observed: [
+              observed({ relativePath: "resident.md", manifestId: "doc-resident" }),
+            ],
             unbound: [],
             knownBindings: [
               known({
@@ -681,7 +751,12 @@ describe("createWorkspaceReconciler — cross-root correlation (ODE-657)", () =>
       scanRoot: async (candidate) => {
         if (candidate.id === "root-a") {
           return {
-            observed: [],
+            // The resident sibling keeps root A's volume knowable after the
+            // move; without file evidence the volume is unknown and the
+            // correlation refuses to match (ODE-657 review P1).
+            observed: [
+              observed({ relativePath: "resident.md", manifestId: "doc-resident" }),
+            ],
             unbound: [],
             knownBindings: [
               known({

@@ -300,6 +300,9 @@ export function createOpenDocumentUseCase(ports: OpenDocumentPorts) {
         relativePath: match.relativePath,
         canonicalPath: evidence.canonicalPath,
         inode: evidence.inode,
+        // Single-file resolution inside one BindingRoot: it never correlates
+        // across roots, so the volume is not part of the opener's evidence.
+        device: null,
         contentHash: evidence.contentHash,
         size: evidence.size,
         modifiedAt: evidence.modifiedAt,

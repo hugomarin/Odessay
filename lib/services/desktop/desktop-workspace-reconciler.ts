@@ -184,6 +184,7 @@ function observedFilesFromSnapshot(snapshot: DesktopWorkspaceSnapshot): Observed
     relativePath: file.relativePath,
     canonicalPath: file.path,
     inode: file.inode || null,
+    device: file.device ?? null,
     contentHash: file.contentHash || null,
     size: file.size,
     modifiedAt: file.modifiedAt,
@@ -263,6 +264,7 @@ async function buildRuntime(): Promise<Runtime | null> {
         unbound = (snapshot.unboundFiles ?? []).map((file) => ({
           relativePath: file.relativePath,
           inode: file.inode || null,
+          device: file.device ?? null,
           contentHash: file.contentHash || null,
           size: file.size,
           modifiedAt: file.modifiedAt,

@@ -47,6 +47,10 @@ import {
 export const CATALOG_SEAM_FIXTURE_VERSION = 3 as const
 export const FIXTURE_DB_PATH = "$DB"
 export const FIXTURE_ROOT_PATHS = { rootA: "$ROOT_A", rootB: "$ROOT_B" } as const
+// Synthetic volume for every fixture file, like the synthetic inode: the
+// double cannot know the replay machine's `st_dev`, so the projection excludes
+// it and the recording only needs one shared volume (ODE-657 review P1).
+const FIXTURE_DEVICE = 1
 export type FixtureRootKey = keyof typeof FIXTURE_ROOT_PATHS
 
 /** The read fields that determine identity/presence/content for SYS-01/SYS-05/WATCH-07. */
@@ -166,6 +170,7 @@ function observedFilesFromSnapshot(snapshot: DesktopWorkspaceSnapshot): Observed
     relativePath: file.relativePath,
     canonicalPath: file.path,
     inode: file.inode || null,
+    device: file.device ?? null,
     contentHash: file.contentHash || null,
     size: file.size,
     modifiedAt: file.modifiedAt,
@@ -337,6 +342,7 @@ export class CatalogSeamSession {
         const unbound: UnboundFile[] = (snapshot.unboundFiles ?? []).map((file) => ({
           relativePath: file.relativePath,
           inode: file.inode || null,
+          device: file.device ?? null,
           contentHash: file.contentHash || null,
           size: file.size,
           modifiedAt: file.modifiedAt,
@@ -446,12 +452,14 @@ export class CatalogSeamSession {
       modifiedAt: number
       size: number
       inode: number
+      device: number
       contentHash: string
     }[] = []
     const unboundPaths: string[] = []
     const unboundFiles: {
       relativePath: string
       inode: number
+      device: number
       contentHash: string
       size: number
       modifiedAt: number
@@ -472,6 +480,7 @@ export class CatalogSeamSession {
         unboundFiles.push({
           relativePath,
           inode: file.inode,
+          device: FIXTURE_DEVICE,
           contentHash,
           size: Buffer.byteLength(file.content),
           modifiedAt: file.modifiedAt,
@@ -494,6 +503,7 @@ export class CatalogSeamSession {
         modifiedAt: file.modifiedAt,
         size: entry.size,
         inode: file.inode,
+        device: FIXTURE_DEVICE,
         contentHash,
       })
     }
@@ -683,6 +693,7 @@ const LETTER_V2 = "# Letter\n\nversion two — renamed on disk\n"
 const NEIGHBOUR = "# Neighbour\n\ncreated outside the app\n"
 const WATCH07_EXTERNAL_V1 = "# External edit\n\noriginal content\n"
 const WATCH07_EXTERNAL_V2 = "# External edit\n\nchanged outside the app\n"
+const WATCH04_KEEPER = "# Keeper\n\nresident in root A\n"
 
 async function buildSys01RegisterMoveReopen(session: CatalogSeamSession): Promise<void> {
   session.defineRoot("rootA", "fixture-root-a")
@@ -799,15 +810,24 @@ async function buildWatch04ExternalMoveAcrossRoots(session: CatalogSeamSession):
     inode: 601,
     modifiedAt: 1_700_000_008_000,
   })
+  // A resident sibling keeps root A's volume knowable after the move: the
+  // correlation only trusts an inode match when both roots report the same
+  // device, and a root with no file evidence is "volume unknown" (ODE-657
+  // review P1). It also proves the move does not disturb the files it leaves.
+  session.fsWrite("rootA", "notes/keeper.md", WATCH04_KEEPER, {
+    inode: 602,
+    modifiedAt: 1_700_000_007_500,
+  })
 
   const catalog = session.createCatalog()
   const reconciler = session.createReconciler(catalog)
   await reconciler.start()
   const documentId = session.documentIdForPath("rootA", "notes/letter.md")
+  const keeperId = session.documentIdForPath("rootA", "notes/keeper.md")
 
   // Moved outside the app from root A to root B: the origin disappears in the
   // same pass the destination appears unbound. Identity must survive through
-  // inode + content_hash correlation across roots, not a fresh UUID.
+  // device + inode + content_hash correlation across roots, not a fresh UUID.
   session.fsDelete("rootA", "notes/letter.md")
   session.fsWrite("rootB", "notes/letter.md", LETTER_V1, {
     inode: 601,
@@ -824,6 +844,9 @@ async function buildWatch04ExternalMoveAcrossRoots(session: CatalogSeamSession):
   }
   if (session.hasBindingAtPath("rootA", "notes/letter.md")) {
     throw new Error("catalog-seam recorder: the moved document kept a stale binding in root A")
+  }
+  if (session.documentIdForPath("rootA", "notes/keeper.md") !== keeperId) {
+    throw new Error("catalog-seam recorder: the resident sibling lost its identity in the move")
   }
   const row = await catalog.getById(documentId)
   if (row?.binding?.bindingRootId !== "fixture-root-b" || row.localPresent !== true) {

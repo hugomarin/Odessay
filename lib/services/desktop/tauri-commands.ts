@@ -19,12 +19,20 @@ export type DesktopWorkspaceFile = {
   modifiedAt: number
   size: number
   inode: number
+  /** Volume (`st_dev`) the file lives on. Optional/additive: older recordings
+   *  and mocks omit it; inode numbers are only unique within one volume, so
+   *  cross-root correlation treats a missing device as "volume unknown"
+   *  (ODE-657 review P1). */
+  device?: number
   contentHash: string
 }
 
 export type DesktopWorkspaceUnboundFile = {
   relativePath: string
   inode: number
+  /** Volume (`st_dev`) the file lives on, same additive contract as
+   *  `DesktopWorkspaceFile.device`. */
+  device?: number
   contentHash: string
   size: number
   modifiedAt: number
@@ -44,8 +52,8 @@ export type DesktopWorkspaceSnapshot = {
    *  for these and calls again; a caller invoking `workspace_sync` directly
    *  gets a snapshot missing exactly these paths. */
   unboundPaths: string[]
-  /** Inode/hash/size evidence for each path in `unboundPaths`, in the same
-   *  order — what the cross-root correlation pass needs before minting any
+  /** Inode/hash/size/device evidence for each path in `unboundPaths`, in the
+   *  same order — what the cross-root correlation pass needs before minting any
    *  identity (ODE-657). Optional: older mocks/recordings omit it. */
   unboundFiles?: DesktopWorkspaceUnboundFile[]
 }
