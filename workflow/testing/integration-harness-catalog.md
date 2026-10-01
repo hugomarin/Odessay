@@ -455,3 +455,85 @@ En main@6e803d21 devuelve `CONTRACT=8, INTEGRATION=31, NONE=6, PARTIAL_INTEGRATI
 El comando de la sección anterior, en main@5e58443e: `CONTRACT=8, INTEGRATION=33, NONE=6, PARTIAL_INTEGRATION=47, RELEASE=1, UNIT_ONLY=12, total=107`. Filas de esta tanda: WATCH-07 y EXP-05 `PARTIAL_INTEGRATION`; EXP-04, SYS-02 y SYNC-08 `CONTRACT`; DOC-09 y AI-03 `NONE`.
 
 **No explorado en esta tanda:** el comportamiento de `<a download>` en WKWebView (solo en el DMG), el transporte IPC real, y la carrera simple de ODE-593 contra la ventana de 2 s (sospecha: un evento externo dentro de la ventana marcada antes del `invoke` podría suprimirse; queda para ODE-637).
+
+## Mapa de Recon — milestone 4, tanda 3 (ODE-615, 616, 617, 618, 547, 631, 643, 644, 657, 658, 659, 660)
+
+**Verificado en: main@210bc0e6 (2026-10-01).** Recon y auditoría en solo lectura: no se ejecutó ningún test, ni `cargo test`, ni Supabase. Cada issue lleva:
+
+- en la descripción, las secciones "Recon y decisiones — tanda 3", "Auditoría (2026-10-01, ronda 2)" (que manda) y `## Architecture Contract`;
+- un comentario `## Recon Pack (verificado en main@210bc0e6)`;
+- un comentario `## Decisiones (Hugo, 2026-10-01)`.
+
+`ops:brief:lint --require-recon` pasa en las 12. Si BUILD encuentra algo distinto, corrige este mapa en su PR.
+
+### Hallazgos que cambian el alcance de los briefs
+
+| Issue | Hallazgo | Evidencia |
+|---|---|---|
+| ODE-657 (nuevo) | Un archivo movido fuera de la app entre dos raíces vigiladas recibe un UUID nuevo, y el original se desliga. B acuña el UUID en el wrapper y lo adopta por la regla 0 del manifest; A desliga con un DELETE sin filtro de raíz. La correlación por inode no cruza raíces en ninguna capa. El spec ya lo exige. ODE-657 bloquea a ODE-615 (decisión de Hugo: primero el fix, después la prueba). | `tauri-commands.ts:223-233`, `workspace-reconciler.ts:305-307` y `:208-220`, `index.rs:1334-1337`, `workspace.rs:809-858`; spec `:383` |
+| ODE-616 | F1: `/shared/[id]`, import, `listIncomingShares` y la RPC `list_incoming_shared_writings` aceptan una fila de share sin mirar la visibilidad, mientras que `can_read_writing` exige `shared`. Desktop puede crear "privado con share" (`desktop-catalog-sync-service.ts:320`). F1c: la secuencia anterior/siguiente muestra el slug de esos documentos. F2: `generateMetadata` obtiene el título con el cliente admin sin auth. | `page.tsx:64-71`, `:88-101`, `:117-150`; `import/route.ts:102-117`; `web-sharing-service.ts:483-517`; `initial_schema.sql:482-509` |
+| ODE-616 | `listSharedWritingsForUser` no tiene callers (NON_PRODUCTION_PATH). El listado productivo es `/api/shared/writings` → `listIncomingShares`. `tests/shared-page.test.tsx` prueba `app/(app)/shared/page`, no `/shared/[id]`. | `lib/sharing/shared-writings.ts:30-71` |
+| ODE-618 | F6: `catalog_delete_collection` no borra `writing_collections`, y el snapshot devuelve todas las relaciones. Un documento cuya única colección se borró desaparece de la vista Collections. Desktop no reescribe front matter. | `index.rs:1657-1674`, `:1596`, `:1618`; `collections.ts:57-67` |
+| ODE-644 | El bug también existe en `catalog_update_metadata_mutation_status`, y la UI de colecciones lo alcanza. Los `it.fails` de ODE-611 corren contra un doble TS que copia el SQL: arreglar solo Rust no los pone verdes. | `index.rs:1409-1443`, `:1745-1759`; `real-desktop-doubles.ts:1236-1278` |
+| ODE-659 | El slug sale del título y es único por autor. La página redirige id → slug y la lista enlaza por slug, así que dos documentos compartidos llamados "Notes" dan 500. Decisión: el id es la URL canónica. Se fusiona en ODE-616 PR2. | `page.tsx:40-62`, `:103-105`; `shared-with-me-list.tsx:63-65` |
+| ODE-660 | Responder 404 rompería la cola web: crear una colección y borrarla offline produce un DELETE de una fila que nunca existió, con 10 reintentos. Decisión: 200 con `{ deleted: boolean }`. | `lib/local-db/index.ts:1074-1094`; `worker.ts:42-65`, `:366-423` |
+| ODE-631 | WATCH-07 ya está en INTEGRATION (ODE-637). El cambio se reduce a `diagnostic.md:949`; el mapa no se toca. | mapa `:239` |
+
+### Grafo de conflictos (solo código, tests, dobles y fixtures)
+
+No cuentan como conflicto `capability-integration-map.md`, este catálogo, `built.jsonl` ni `review-history.jsonl`. Cada PR edita solo su fila o su sección, y la sección "Recuento del capability map" no se toca.
+
+| Recurso compartido | Issues / PRs | Orden |
+|---|---|---|
+| `tests/integration/documents/support/real-desktop-doubles.ts` | 644-PR1 (`:1236-1278`), 618-PR1 (doble nuevo de delete + comentario `:1280`), 657 (`:693-801`), 618-PR1b, 617-B (doble de cloud snapshot, si hay fix) | 644-PR1 → 618-PR1; 657 independiente en región, pero se mergea en serie |
+| `src-tauri/src/commands/index.rs` | 644-PR1, 618-PR1b, 617-B (solo si se reproduce el bug de hidratación) | 644-PR1 → 618-PR1b; 644-PR1 → 617-B |
+| Seam ODE-613 (`catalog-seam-recorder.ts`, `catalog-seam-v3.json`, `catalog_seam.rs`) | 657, 644-PR2 | 657 → 644-PR2 (el segundo regenera, nunca se fusiona a mano) |
+| Tests de 657 (`external-move-across-roots.test.tsx`) | 657, 615 | 657 → 615 |
+| `vitest.config.ts`, `package.json`, `supabase/config.toml`, harness Supabase | 616-PR1 (crea), 658 | 616-PR1 → todo lo que use Supabase local |
+| `app/(reading)/shared/[id]/page.tsx` y la lista de compartidos | 616-PR2 + 659 (mismo PR) | — |
+| `app/api/collections/[id]/route.ts` (tests) | 618-PR2, 660 | 618-PR2 → 660 |
+| Regla de acceso de 616-PR2 (F1) | 617-B (Requirement 2 en `/shared`) | 616-PR2 → 617-B |
+
+Sin conflicto con nadie: 631, 643 (sin la nota opcional del diagnóstico), 547-PR1 (archivo Rust nuevo), 547-PR2 (otro archivo pgTAP), 617-A y 658 (después de 616-PR1).
+
+### Olas (máximo 3 builders a la vez)
+
+- **Ola 1, sin Docker:** 644-PR1 (Urgent) · 657 (L) · 643 · 631 · 547-PR1 · 617-A · 618-PR1 (cuando 644-PR1 esté mergeado).
+- **Ola 2, con Docker:**
+  - primero 616-PR1 (harness: `[auth.rate_limit]`, reinicio del stack y lock);
+  - luego 616-PR2 (+659) · 618-PR2 · 547-PR2 · 658;
+  - después 660 (tras 618-PR2) y 617-B (tras 616-PR2 y 644-PR1).
+- **Ola 3:**
+  - 618-PR1b (tras 644-PR1 y 618-PR1);
+  - 615 (tras 657);
+  - 644-PR2 (necesita brief propio por wf-define y va tras 657).
+
+### Trampas transversales
+
+- **Instancia Supabase local compartida.** Una sola (`project_id "odessay"`). Todo pasa por el lock de 616-PR1 (`npm run test:supabase` y `npm run supabase:locked -- …`).
+  - Prohibido: `supabase stop`, `db reset`, `migration up`/`repair`, `--linked`, `db push`, `config push`.
+  - No copiar `supabase/.temp` a los worktrees: el checkout principal está linkeado a producción.
+  - Cada archivo usa su propio `runId` y nunca trunca tablas.
+- **`.env.local` en los worktrees.** Es un symlink al del checkout principal y contiene la service role key de **producción**. Fuera del harness, que la descarta y exige localhost, ningún script usa `SUPABASE_SERVICE_ROLE_KEY`.
+- **`vitest.config.ts` no excluye `.cache/**`** hasta 616-PR1. `npm test` en el checkout principal recoge los worktrees que haya en `.cache/`.
+- **Rust sin `it.fails`.** Primero un commit con el cargo test en rojo (con la salida pegada), después el verde sin editar el test.
+- **Cargo.** Un worktree nuevo recompila el crate entero. Clonar el target con `cp -cR <main>/src-tauri/target <wt>/src-tauri/` (APFS).
+- **Follow-ups.** No se crean issues durante la orquestación. Se usa un `it.fails` con "follow-up pendiente (ODE-<propio>)" y se reporta en el Context Report.
+
+### Recuento del capability map (tanda 3)
+
+El comando de la sección "Recuento del capability map", en main@210bc0e6, da `CONTRACT=7, INTEGRATION=37, NONE=3, PARTIAL_INTEGRATION=47, RELEASE=1, UNIT_ONLY=12, total=107`. Filas de esta tanda:
+
+| Fila | Status |
+|---|---|
+| WATCH-04 | `UNIT_ONLY` |
+| SHARE-04 | `PARTIAL_INTEGRATION` |
+| SHARE-05 | `NONE` |
+| COL-06 | `NONE` |
+| CONFIG-07 | `INTEGRATION` |
+| SYNC-05 | `PARTIAL_INTEGRATION` |
+
+**No explorado en esta tanda:**
+- si el título de F2 llega al HTML en Next 15.5 (BUILD lo confirma con curl, como evidencia informativa);
+- la caché de "Shared with me" de desktop (sin caché persistente según el código);
+- el transporte IPC real.
