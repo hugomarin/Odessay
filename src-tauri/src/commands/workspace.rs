@@ -1707,6 +1707,60 @@ mod tests {
         cleanup(&root);
     }
 
+    /// ODE-657 — the scan already computes inode/hash/size for every file it
+    /// leaves unbound; the additive `unboundFiles` field reports them so the TS
+    /// orchestrator can correlate a cross-root move BEFORE minting identity.
+    #[test]
+    fn workspace_sync_reports_unbound_files_with_inode_hash_and_size() {
+        let root = temp_workspace_root("unbound-files-evidence");
+        let known_path = root.join("known.md");
+        let new_path = root.join("new.md");
+        fs::write(&known_path, "Known\n").expect("write known");
+        fs::write(&new_path, "New content\n").expect("write unbound");
+
+        let bound_ids = HashMap::from([("known.md".to_string(), "doc-known".to_string())]);
+        let initial =
+            super::workspace_sync(root.to_string_lossy().to_string(), None, Some(bound_ids))
+                .expect("bind known file");
+        assert_eq!(initial.files.len(), 1);
+        assert_eq!(initial.unbound_paths, vec!["new.md".to_string()]);
+
+        let snapshot = super::workspace_sync(root.to_string_lossy().to_string(), None, None)
+            .expect("scan with an unbound file");
+
+        // Invariante del contrato: la evidencia espeja `unboundPaths`, en orden.
+        let relative_paths: Vec<String> = snapshot
+            .unbound_files
+            .iter()
+            .map(|file| file.relative_path.clone())
+            .collect();
+        assert_eq!(relative_paths, snapshot.unbound_paths);
+
+        let value = serde_json::to_value(&snapshot).expect("serialize snapshot");
+        let unbound = value
+            .get("unboundFiles")
+            .expect("workspace_sync must report unboundFiles (ODE-657)")
+            .as_array()
+            .expect("unboundFiles is an array");
+        assert_eq!(unbound.len(), 1);
+        assert_eq!(unbound[0]["relativePath"], "new.md");
+        assert_eq!(
+            unbound[0]["inode"].as_u64(),
+            Some(inode_for_path(&new_path)),
+            "the unbound file carries the inode the move correlation needs"
+        );
+        assert_eq!(
+            unbound[0]["contentHash"],
+            format!(
+                "{CONTENT_HASH_PREFIX}:{}",
+                blake3::hash(b"New content\n").to_hex()
+            )
+        );
+        assert_eq!(unbound[0]["size"].as_u64(), Some(12));
+
+        cleanup(&root);
+    }
+
     #[test]
     fn workspace_inspect_lists_every_markdown_without_rewriting_selected_scope() {
         let root = temp_workspace_root("inspect-all-without-mutation");
