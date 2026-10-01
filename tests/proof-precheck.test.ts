@@ -74,6 +74,28 @@ describe("commit rules", () => {
     expect(violations.map((violation) => violation.rule)).toEqual(["it-fails-with-production"])
   })
 
+  it("accepts an it.fails that lands alone in a test commit (positive control)", () => {
+    expect(
+      checkCommit({
+        sha: "b98be6c90000",
+        subject: "test(ai): reproduce stale title responses [ODE-620]",
+        files: ["tests/a.test.tsx"],
+        testPatches: { "tests/a.test.tsx": "+it.fails(\"A lands in B\", async () => {\n+  expect(1).toBe(1)\n+})" },
+      }),
+    ).toEqual([])
+  })
+
+  it("only treats it.fails as the red test the contract names", () => {
+    expect(
+      checkCommit({
+        sha: "cccc00000000",
+        subject: "fix(x): change [ODE-1]",
+        files: ["tests/a.test.ts", "lib/x.ts"],
+        testPatches: { "tests/a.test.ts": "-  test.fails(\"x\", () => {\n+  test(\"x\", () => {\n+  // extra" },
+      }),
+    ).toEqual([])
+  })
+
   it("rejects a fix that edits the body of the test it flips (ODE-636 r1)", () => {
     const violations = checkCommit({
       sha: "3da8ae850000",
@@ -122,6 +144,11 @@ describe("capability map rules", () => {
     expect(tableCells("| a | `x|y` | c |")).toHaveLength(4)
   })
 
+  it("treats a pipe after an escaped backslash as a delimiter (GFM backslash parity)", () => {
+    expect(tableCells("| a \\\\| b | c |")).toEqual([" a \\\\", " b ", " c "])
+    expect(tableCells("| a \\| b | c |")).toEqual([" a \\| b ", " c "])
+  })
+
   it("rejects a touched row with an extra cell (ODE-593 r1)", () => {
     const broken = row("PARTIAL_INTEGRATION", "note | stray cell")
     const violations = checkCapabilityMap(map(broken), new Set([broken]))
@@ -145,6 +172,12 @@ describe("capability map rules", () => {
       "Both parts proven. At the time of ODE-593, the row still reported `PARTIAL_INTEGRATION`. Scope note (historical, pre-ODE-599): it stays PARTIAL.",
     )
     expect(checkCapabilityMap(map(historical), new Set([historical]))).toEqual([])
+  })
+
+  it("still reports a live contradiction that shares a sentence with a historical clause", () => {
+    const mixed = row("INTEGRATION", "At the time of ODE-593 the note was outdated, but the current status remains PARTIAL.")
+    const violations = checkCapabilityMap(map(mixed), new Set([mixed]))
+    expect(violations.map((violation) => violation.rule)).toEqual(["map-status-note-contradiction"])
   })
 
   it("does not judge PARTIAL rows by their Note", () => {

@@ -19,9 +19,10 @@ const TEST_PATH_PATTERNS = [
 // production code, so they never break the "test commit" boundary.
 const DOC_PATH_PATTERNS = [/\.md$/, /^workflow\//, /^docs\//]
 
-// A real call starts its line; a mention inside a string or comment does not,
-// so test fixtures that quote "it.fails(" never trip the rule.
-const FAILS_CALL = /^(\s*)(it|test)\.fails\(/
+// The contract (capability-proof-contract.md rule 8) is it.fails → it, so only
+// that call counts. A real call starts its line; a mention inside a string or
+// comment does not, so test fixtures that quote "it.fails(" never trip the rule.
+const FAILS_CALL = /^(\s*)it\.fails\(/
 
 export function isTestPath(path) {
   return TEST_PATH_PATTERNS.some((pattern) => pattern.test(path))
@@ -92,7 +93,7 @@ export function checkCommit(commit) {
     }
 
     if (flipsFails) {
-      const flipped = removed.map((line) => line.replace(FAILS_CALL, "$1$2("))
+      const flipped = removed.map((line) => line.replace(FAILS_CALL, "$1it("))
       const sameLength = flipped.length === added.length
       const onlyFlip = sameLength && flipped.every((line, index) => line === added[index])
       if (!onlyFlip) {
@@ -108,15 +109,39 @@ export function checkCommit(commit) {
   return violations
 }
 
-/** Split a Markdown table row on unescaped pipes, like GitHub does. */
+/**
+ * Split a Markdown table row on unescaped pipes, like GitHub does. A pipe is
+ * escaped only when an odd number of backslashes precedes it: in `\\|` the
+ * backslash is itself escaped, so the pipe still delimits a cell (GFM §2.4).
+ */
 export function tableCells(line) {
-  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split(/(?<!\\)\|/)
+  const cells = []
+  let current = ""
+  let backslashes = 0
+  for (const character of line.trim()) {
+    if (character === "|" && backslashes % 2 === 0) {
+      cells.push(current)
+      current = ""
+    } else {
+      current += character
+    }
+    backslashes = character === "\\" ? backslashes + 1 : 0
+  }
+  cells.push(current)
+  // Drop the empty edges produced by the leading and trailing pipe.
+  if (cells.length > 0 && cells[0].trim() === "") cells.shift()
+  if (cells.length > 0 && cells[cells.length - 1].trim() === "") cells.pop()
+  return cells
 }
 
 const SEPARATOR_ROW = /^\|\s*:?-{3,}/
 const SCENARIO_ROW = /^\|\s*([A-Z]+-\d+)\s*\|/
 const STILL_PARTIAL = /\b(remains|stays|still|sigue|queda|permanece)\b[^.|]{0,40}\bPARTIAL/i
-const HISTORICAL = /histor|hist[oó]ric|\bat the time of\b|\ben su momento\b|\b(before|until|antes de|hasta) ODE-|\b(was|were|reported|estaba|quedaba|seguía)\b/i
+const HISTORICAL = /histor|hist[oó]ric|\bat the time of\b|\ben su momento\b|\b(before|until|antes de|hasta) ODE-|\b(reported|estaba|quedaba|seguía)\b/i
+// A sentence can carry a historical clause and a live one ("The prior note was
+// outdated, but the row remains PARTIAL"). The exemption applies per clause, so
+// the live contradiction is still reported.
+const CLAUSE_BREAK = /,\s+(?:but|pero|while|mientras|and now|y ahora)\s+|;\s+/i
 
 /**
  * Check the capability map rows whose exact text appears in `changedLines`
@@ -159,9 +184,9 @@ export function checkCapabilityMap(text, changedLines) {
     if (headerCells === 8 && SCENARIO_ROW.test(line)) {
       const status = cells[4].replace(/[\s*`]/g, "")
       if (status !== "INTEGRATION") continue
-      const sentences = cells[7].split(/(?<=[.;])\s+/)
-      const contradiction = sentences.find(
-        (sentence) => STILL_PARTIAL.test(sentence) && !HISTORICAL.test(sentence),
+      const clauses = cells[7].split(/(?<=[.;])\s+/).flatMap((sentence) => sentence.split(CLAUSE_BREAK))
+      const contradiction = clauses.find(
+        (clause) => STILL_PARTIAL.test(clause) && !HISTORICAL.test(clause),
       )
       if (contradiction) {
         violations.push({
