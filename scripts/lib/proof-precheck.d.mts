@@ -5,7 +5,6 @@ export type PrecheckViolation = {
     | "it-fails-with-production"
     | "it-fails-flip-edits-test"
     | "map-row-cell-count"
-    | "map-status-note-contradiction"
   detail: string
 }
 

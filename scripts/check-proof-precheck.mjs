@@ -65,5 +65,5 @@ if (violations.length > 0) {
 }
 
 console.log(
-  `[ops:proof:precheck] OK - ${shas.length} commit(s) in ${base}..${head}; commit order and capability map rows are consistent.`,
+  `[ops:proof:precheck] OK - ${shas.length} commit(s) in ${base}..${head}; commit order and capability map row format are consistent.`,
 )

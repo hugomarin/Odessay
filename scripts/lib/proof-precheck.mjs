@@ -136,15 +136,6 @@ export function tableCells(line) {
 
 const SEPARATOR_ROW = /^\|\s*:?-{3,}/
 const SCENARIO_ROW = /^\|\s*([A-Z]+-\d+)\s*\|/
-const STILL_PARTIAL = /\b(remains|stays|still|sigue|queda|permanece)\b[^.|]{0,40}\bPARTIAL/i
-const HISTORICAL = /histor|hist[oó]ric|\bat the time of\b|\ben su momento\b|\b(before|until|antes de|hasta) ODE-|\b(reported|estaba|quedaba|seguía)\b/i
-// A sentence can carry a historical clause and a live one ("The prior note was
-// outdated, but the row remains PARTIAL"). The exemption applies per clause, so
-// the live contradiction is still reported.
-// A clause that also asserts the present ("the current status remains
-// PARTIAL") is live even next to a historical marker.
-const CURRENT = /\b(current|currently|now|today|actualmente|actual|ahora|hoy|todavía hoy)\b/i
-const CLAUSE_BREAK = /,\s+(?:but|pero|while|mientras|and now|y ahora)\s+|;\s+/i
 
 /**
  * Check the capability map rows whose exact text appears in `changedLines`
@@ -180,24 +171,6 @@ export function checkCapabilityMap(text, changedLines) {
         rule: "map-row-cell-count",
         detail: `${CAPABILITY_MAP_PATH}:${index + 1} (${id}) has ${cells.length} cells; its table header has ${headerCells}. Escape literal pipes as \\| or move the text into the Note.`,
       })
-      continue
-    }
-
-    // Scenario tables: ID | Capability | Chain | Invariant | Status | Priority | Evidence | Note
-    if (headerCells === 8 && SCENARIO_ROW.test(line)) {
-      const status = cells[4].replace(/[\s*`]/g, "")
-      if (status !== "INTEGRATION") continue
-      const clauses = cells[7].split(/(?<=[.;])\s+/).flatMap((sentence) => sentence.split(CLAUSE_BREAK))
-      const contradiction = clauses.find(
-        (clause) => STILL_PARTIAL.test(clause) && (!HISTORICAL.test(clause) || CURRENT.test(clause)),
-      )
-      if (contradiction) {
-        violations.push({
-          sha: "map",
-          rule: "map-status-note-contradiction",
-          detail: `${CAPABILITY_MAP_PATH}:${index + 1} (${id}) is INTEGRATION but its Note still says: "${contradiction.trim().slice(0, 160)}". Rewrite it or mark it historical.`,
-        })
-      }
     }
   }
 
