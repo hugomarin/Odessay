@@ -277,7 +277,7 @@ describe("correlateAcrossRoots — cross-root move evidence", () => {
     expect(result.correlatedIds.size).toBe(0)
   })
 
-  it.fails(
+  it(
     "no correlaciona el mismo inode y hash entre volúmenes distintos (inode reutilizado)",
     () => {
       // Un inode solo es único dentro de un volumen: aunque inode y hash
@@ -647,7 +647,7 @@ describe("createWorkspaceReconciler — cross-root correlation (ODE-657)", () =>
     expect(commitB?.upserts[0].bindingRootId).toBe("root-b")
   })
 
-  it.fails(
+  it(
     "no adopta una identidad de otro volumen aunque inode y hash coincidan",
     async () => {
       // Las dos raíces están en volúmenes distintos, evidenciado por el otro
