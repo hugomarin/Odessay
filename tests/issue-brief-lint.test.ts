@@ -42,9 +42,13 @@ describe("ops:brief:lint", () => {
   })
 
   it("rejects a brief without the section (ODE-593 before the fix)", () => {
-    expect(lintIssueBrief("## Context\n\nNo contract here.\n\n## Reference docs\n\n- a.md")).toEqual([
-      'Missing "Architecture Contract" section (a heading such as "## Architecture Contract").',
-    ])
+    expect(
+      lintIssueBrief("## Context\n\nNo contract here.\n\n## Reference docs\n\n- a.md", [], { requireContract: true }),
+    ).toEqual(['Missing "Architecture Contract" section (a heading such as "## Architecture Contract").'])
+  })
+
+  it("accepts a non-architectural brief without a contract when it is not required", () => {
+    expect(lintIssueBrief("## Context\n\nCopy change.\n\n## Reference docs\n\n- a.md")).toEqual([])
   })
 
   it("names each missing field", () => {

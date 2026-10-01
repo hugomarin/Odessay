@@ -73,15 +73,20 @@ function sectionBody(description, headingPattern) {
 /**
  * @param {string} description issue description (the brief)
  * @param {string[]} comments comment bodies
- * @param {{ requireRecon?: boolean }} options
+ * @param {{ requireRecon?: boolean, requireContract?: boolean }} options
+ *   requireContract: the issue activates Architecture (every Capability Proof
+ *   does), so the Architecture Contract must exist. Without it, a brief that
+ *   has no contract passes; a contract that is present must still be complete.
  * @returns {string[]} problems; empty when the brief is dispatchable
  */
-export function lintIssueBrief(description, comments = [], { requireRecon = false } = {}) {
+export function lintIssueBrief(description, comments = [], { requireRecon = false, requireContract = false } = {}) {
   const problems = []
   const section = architectureContractSection(description ?? "")
 
   if (section === null) {
-    problems.push("Missing \"Architecture Contract\" section (a heading such as \"## Architecture Contract\").")
+    if (requireContract) {
+      problems.push("Missing \"Architecture Contract\" section (a heading such as \"## Architecture Contract\").")
+    }
   } else {
     for (const field of ARCHITECTURE_CONTRACT_FIELDS) {
       const value = fieldValue(section, field)
