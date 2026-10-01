@@ -180,6 +180,12 @@ describe("capability map rules", () => {
     expect(violations.map((violation) => violation.rule)).toEqual(["map-status-note-contradiction"])
   })
 
+  it("keeps a clause that asserts the current status, even with a historical marker", () => {
+    const current = row("INTEGRATION", "Historical context: the current status remains PARTIAL.")
+    const violations = checkCapabilityMap(map(current), new Set([current]))
+    expect(violations.map((violation) => violation.rule)).toEqual(["map-status-note-contradiction"])
+  })
+
   it("does not judge PARTIAL rows by their Note", () => {
     const partial = row("PARTIAL_INTEGRATION", "The row remains PARTIAL until ODE-622.")
     expect(checkCapabilityMap(map(partial), new Set([partial]))).toEqual([])

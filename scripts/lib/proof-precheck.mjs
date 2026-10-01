@@ -141,6 +141,9 @@ const HISTORICAL = /histor|hist[oó]ric|\bat the time of\b|\ben su momento\b|\b(
 // A sentence can carry a historical clause and a live one ("The prior note was
 // outdated, but the row remains PARTIAL"). The exemption applies per clause, so
 // the live contradiction is still reported.
+// A clause that also asserts the present ("the current status remains
+// PARTIAL") is live even next to a historical marker.
+const CURRENT = /\b(current|currently|now|today|actualmente|actual|ahora|hoy|todavía hoy)\b/i
 const CLAUSE_BREAK = /,\s+(?:but|pero|while|mientras|and now|y ahora)\s+|;\s+/i
 
 /**
@@ -186,7 +189,7 @@ export function checkCapabilityMap(text, changedLines) {
       if (status !== "INTEGRATION") continue
       const clauses = cells[7].split(/(?<=[.;])\s+/).flatMap((sentence) => sentence.split(CLAUSE_BREAK))
       const contradiction = clauses.find(
-        (clause) => STILL_PARTIAL.test(clause) && !HISTORICAL.test(clause),
+        (clause) => STILL_PARTIAL.test(clause) && (!HISTORICAL.test(clause) || CURRENT.test(clause)),
       )
       if (contradiction) {
         violations.push({
