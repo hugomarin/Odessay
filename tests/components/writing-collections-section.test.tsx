@@ -323,7 +323,7 @@ describe("WritingCollectionsSection — un solo escritor de selectedIds (ODE-643
     await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "recarga por suscripción")
   }, 15_000)
 
-  it.fails("conserva el toggle encolado en la ventana commit → efectos pasivos", async () => {
+  it("conserva el toggle encolado en la ventana commit → efectos pasivos", async () => {
     const writingId = uniqueId("writing")
     const alpha = await seedCollection("Alpha")
     const beta = await seedCollection("Beta")
