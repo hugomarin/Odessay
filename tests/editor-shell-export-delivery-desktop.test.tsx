@@ -49,6 +49,8 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { readdir, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import type { ReactNode } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@tiptap/react", async (importOriginal) => {
@@ -66,6 +68,9 @@ vi.mock("@tauri-apps/plugin-dialog", async () =>
 )
 vi.mock("@/lib/services/desktop/runtime-detection", async () =>
   (await import("./support/editor-shell-doubles")).runtimeDetectionDouble(),
+)
+vi.mock("@/lib/runtime/detect", async () =>
+  (await import("./support/editor-shell-doubles")).tauriRuntimeDetectDouble(),
 )
 vi.mock("@/lib/services/ai-service-factory", async () =>
   (await import("./support/editor-shell-doubles")).aiServiceDouble(),
@@ -85,6 +90,7 @@ const {
   assertNoUnhandledErrors,
   clickNewArtifact,
   flush,
+  installNetworkDouble,
   mountEditorShell,
   resetEditorShellWorld,
   typeInEditor,
@@ -102,9 +108,13 @@ const { act } = await import("react")
 const TEST_TIMEOUT_MS = 90_000
 
 let mounted: Awaited<ReturnType<typeof mountEditorShell>> | null = null
+let pageRoot: Root | null = null
+let pageContainer: HTMLDivElement | null = null
 let exportsRoot: string
 
 beforeAll(() => {
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://ode636-test.supabase.co")
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY", "ode636-public-test-key")
   createDesktopWorkspace("odessay-export-delivery-shell-")
   // Fuera del workspace: un `.md` exportado no debe mezclarse con los
   // documentos que lee `readWorkspaceMarkdown`.
@@ -114,6 +124,7 @@ beforeAll(() => {
 afterAll(() => {
   destroyDesktopWorkspace()
   rmSync(exportsRoot, { recursive: true, force: true })
+  vi.unstubAllEnvs()
 })
 
 beforeEach(() => {
@@ -122,6 +133,12 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
+  if (pageRoot) {
+    await act(async () => pageRoot?.unmount())
+    pageRoot = null
+  }
+  pageContainer?.remove()
+  pageContainer = null
   await mounted?.unmount()
   mounted = null
 })
@@ -152,6 +169,22 @@ const SUCCESS_MESSAGES = Object.values(SUCCESS_MESSAGE)
 
 function pageText() {
   return document.body.textContent ?? ""
+}
+
+async function mountProductionPage(node: ReactNode) {
+  pageContainer = document.createElement("div")
+  document.body.appendChild(pageContainer)
+  pageRoot = createRoot(pageContainer)
+  await act(async () => {
+    pageRoot!.render(node)
+  })
+  await flush(3)
+}
+
+async function unmountEditorBeforeDeskSurface() {
+  await mounted?.unmount()
+  mounted = null
+  await flush(2)
 }
 
 /** Monta la shell y espera a que cargue la sesión (ver ODE-574, carrera de arranque). */
@@ -221,6 +254,59 @@ async function confirmInCloud(writingId: string, text: string) {
 
 function findButton(root: ParentNode, predicate: (button: HTMLButtonElement) => boolean) {
   return Array.from(root.querySelectorAll("button")).find(predicate) ?? null
+}
+
+async function openProductionPreview(surface: "desk" | "collections", writingId: string) {
+  const record = await (await getDocumentCatalog()).getById(writingId)
+  if (!record) throw new Error(`Sin fila de catálogo para ${writingId}`)
+
+  installNetworkDouble()
+  await unmountEditorBeforeDeskSurface()
+  if (surface === "desk") {
+    world.pathname = "/desk"
+    const { default: DeskPage } = await import("@/app/(app)/desk/page")
+    await mountProductionPage(<DeskPage />)
+  } else {
+    const { CollectionsView } = await import("@/components/collections/collections-view")
+    const { UNCATEGORIZED_COLLECTION_ID } = await import("@/lib/collections/collections")
+    await mountProductionPage(
+      <CollectionsView initialExpandedCollectionId={UNCATEGORIZED_COLLECTION_ID} />,
+    )
+  }
+
+  const preview = await waitFor(
+    () =>
+      findButton(
+        pageContainer!,
+        (button) => button.getAttribute("aria-label") === `Preview ${record.title}`,
+      ),
+    { label: `${surface} row for ${record.title}` },
+  )
+  await act(async () => preview.click())
+  await flush(3)
+
+  const exportTrigger = await waitFor(
+    () => findButton(document.body, (button) => button.textContent?.includes("Export as…") ?? false),
+    { label: `${surface} preview export trigger` },
+  )
+  await act(async () => exportTrigger.click())
+  await flush(2)
+
+  return record
+}
+
+async function clickPreviewExport(format: Format) {
+  const item = await waitFor(
+    () =>
+      findButton(
+        document.body,
+        (button) => button.textContent?.trim() === ITEM_LABEL[format],
+      ),
+    { label: `preview menu item ${ITEM_LABEL[format]}` },
+  )
+  expect(item.disabled, `preview menu item ${ITEM_LABEL[format]} is enabled`).toBe(false)
+  await act(async () => item.click())
+  await flush(4)
 }
 
 /**
@@ -392,6 +478,59 @@ describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
         // Un .docx es un zip: firma local-file-header "PK\x03\x04".
         expect([...bytes.subarray(0, 4)], "firma zip del .docx").toEqual([0x50, 0x4b, 0x03, 0x04])
       })
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+describe("EXP-05 — callers reales de Desk y Collections (ODE-636)", () => {
+  it.fails(
+    "Desk preview: el Markdown que reporta éxito llega al fs por el diálogo de desktop",
+    async () => {
+      const text = "ODE636-DESK-MARKDOWN-BODY"
+      const writingId = await createAndOpenDocument(text)
+      const successDir = freshDir("desk-page-markdown-success")
+      const target = join(successDir, "desk-letter.md")
+      const dialogCallsBefore = world.saveDialogCalls.length
+      world.saveDialogResult = target
+
+      await openProductionPreview("desk", writingId)
+      await clickPreviewExport("markdown")
+
+      await waitFor(() => world.saveDialogCalls.length === dialogCallsBefore + 1, {
+        label: "diálogo de export de Desk invocado",
+      })
+      await waitFor(() => pageText().includes("Markdown exported."), {
+        label: "éxito del export Markdown de Desk",
+      })
+      expect(world.saveDialogCalls).toHaveLength(dialogCallsBefore + 1)
+      expect(await listExports(successDir)).toEqual(["desk-letter.md"])
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "Collections preview: el Markdown que reporta éxito llega al fs por el diálogo de desktop",
+    async () => {
+      const text = "ODE636-COLLECTIONS-MARKDOWN-BODY"
+      const writingId = await createAndOpenDocument(text)
+      const successDir = freshDir("collections-page-markdown-success")
+      const target = join(successDir, "collection-letter.md")
+      const dialogCallsBefore = world.saveDialogCalls.length
+      world.saveDialogResult = target
+
+      await openProductionPreview("collections", writingId)
+      await clickPreviewExport("markdown")
+
+      await waitFor(() => world.saveDialogCalls.length === dialogCallsBefore + 1, {
+        label: "diálogo de export de Collections invocado",
+      })
+      await waitFor(() => pageText().includes("Markdown exported."), {
+        label: "éxito del export Markdown de Collections",
+      })
+      expect(world.saveDialogCalls).toHaveLength(dialogCallsBefore + 1)
+      expect(await listExports(successDir)).toEqual(["collection-letter.md"])
+      expect((await readFile(target)).toString("utf8")).toContain(text)
     },
     TEST_TIMEOUT_MS,
   )

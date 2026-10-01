@@ -114,6 +114,10 @@ export function tauriCommandsDouble({ withReconciler = false }: { withReconciler
     tauriSettingsRead: tauriSettingsReadDouble,
     tauriSettingsWrite: tauriSettingsWriteDouble,
     tauriSettingsDelete: tauriSettingsDeleteDouble,
+    // Auth storage is an external OS-keychain boundary in desktop tests.
+    tauriKeychainRead: vi.fn(async () => null),
+    tauriKeychainWrite: vi.fn(async () => undefined),
+    tauriKeychainDelete: vi.fn(async () => undefined),
     tauriRenameFile: tauriRenameFileDouble,
     tauriWorkspaceSync: tauriWorkspaceSyncDouble,
     tauriWorkspaceTouchFile: tauriWorkspaceTouchFileDouble,
@@ -151,6 +155,7 @@ export function syncServiceDouble() {
   return {
     getSyncService: () => ({
       scheduleFlush: async () => ({ data: undefined, error: null }),
+      hydrateWritings: async () => ({ data: null, error: null }),
       hydrateWriting: async () => ({ data: undefined, error: null }),
       // El panel de propiedades la llama al abrirse (camino a Export, ODE-601):
       // lee colecciones de Supabase, así que es red, igual que las demás.
