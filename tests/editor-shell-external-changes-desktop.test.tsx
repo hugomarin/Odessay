@@ -85,6 +85,7 @@ vi.mock("@tauri-apps/plugin-dialog", async () =>
 vi.mock("@/lib/services/desktop/runtime-detection", async () =>
   (await import("./support/editor-shell-doubles")).runtimeDetectionDouble(),
 )
+vi.mock("@tauri-apps/plugin-shell", () => ({ open: vi.fn(async () => {}) }))
 vi.mock("@/lib/services/ai-service-factory", async () =>
   (await import("./support/editor-shell-doubles")).aiServiceDouble(),
 )
@@ -114,9 +115,14 @@ const {
 const { world } = await import("./support/editor-shell-doubles")
 const { createDesktopWorkspace, desktopWorkspaceRoot, destroyDesktopWorkspace, resetDesktopWorkspace } =
   await import("./support/editor-shell-desktop-doubles")
-const { holdCatalogReads, holdWriteFile, tauriOpenFileDouble, writeFileCalls } = await import(
-  "./integration/documents/support/real-desktop-doubles"
-)
+const {
+  doubleRaceNextWriteFile,
+  holdCatalogReads,
+  holdWriteFile,
+  tauriOpenFileDouble,
+  writeFileCalls,
+} = await import("./integration/documents/support/real-desktop-doubles")
+const { open: tauriShellOpen } = await import("@tauri-apps/plugin-shell")
 const { disposeWorkspaceReconciler, ensureWorkspaceReconciler } = await import(
   "@/lib/services/desktop/desktop-workspace-reconciler"
 )
@@ -144,6 +150,7 @@ afterAll(() => {
 beforeEach(() => {
   resetDesktopWorkspace()
   resetEditorShellWorld({ isDesktop: true })
+  vi.mocked(tauriShellOpen).mockClear()
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://127.0.0.1:1")
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "harness-anon-key")
   world.tauriInvoke = async (command, args) => {
@@ -286,6 +293,40 @@ async function clickButton(label: string) {
   await flush(3)
 }
 
+async function beginKeptVersionDoubleRace(input: {
+  fileTitle: string
+  conflictId: string
+  keepBesideFails?: boolean
+}) {
+  const path = writeMarkdownFile(input.fileTitle, "ODE593 base.")
+  await startReconciler()
+  await mountLoaded()
+  await openFromNativeMenu(path, "ODE593 base.")
+  await waitForWatcherOnDocuments()
+
+  const race = doubleRaceNextWriteFile((candidate) => candidate === path, {
+    conflictId: input.conflictId,
+    keepBesideFails: input.keepBesideFails,
+  })
+  await typeInEditor(" ODE593-LOCAL")
+  await race.started
+
+  // The double has verified the baseline hash and is held in Rust's atomic
+  // commit window; deliver the competing filesystem edit before releasing it.
+  writeFileSync(path, "ODE593 external.\n")
+  await emitFsWatchEvent([path])
+  await waitForShell(() => bannerText().includes(CONFLICT_BANNER), "banner WATCH-07 durante la carrera")
+  race.release()
+
+  const noticeText = input.keepBesideFails ? "The other version couldn't be saved." : `.conflict-${input.conflictId}`
+  await waitForShell(() => bannerText().includes(noticeText), "aviso ODE-593 en el banner")
+  return {
+    path,
+    keptPath: `${path}.conflict-${input.conflictId}`,
+    tmpPath: `${path}.tmp`,
+  }
+}
+
 /** Cuenta los commits de la shell en que el aviso pasa de ausente a presente. */
 function countNoticeAppearances(text: string) {
   let visible = bannerText().includes(text)
@@ -417,6 +458,81 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
       expect(saved).not.toContain("ODE599 externa sucia.")
       expect(bannerText()).not.toContain(CONFLICT_BANNER)
       expect(activeTab()?.writing_id).toBe(writingId)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "ODE-593: conserva y muestra la segunda versión externa, y Finder abre su carpeta",
+    async () => {
+      const { path, keptPath } = await beginKeptVersionDoubleRace({
+        fileTitle: "Letter; draft",
+        conflictId: "5930cafe",
+      })
+      const keptName = "Letter; draft.md.conflict-5930cafe"
+
+      expect(await readDisk(path), "el destino conserva el contenido que intentó guardar el editor").toContain(
+        "ODE593-LOCAL",
+      )
+      expect(await readDisk(keptPath), "el archivo conservado contiene la edición externa que llegó durante el commit").toBe(
+        "ODE593 external.\n",
+      )
+      expect(bannerText()).toContain(CONFLICT_BANNER)
+      expect(bannerText()).toContain(
+        `This file was changed outside Artifact Studio. The other version was kept as ${keptName}.`,
+      )
+
+      const statusElements = Array.from(mounted!.container.querySelectorAll<HTMLElement>('[role="status"]'))
+      const conflictBanner = statusElements.find((element) => element.textContent?.includes(CONFLICT_BANNER))
+      const statusLine = statusElements.find((element) =>
+        element.textContent?.startsWith("This file was changed outside Artifact Studio."),
+      )
+      expect(conflictBanner?.getAttribute("aria-live"), "el banner actual anuncia el cambio").toBe("polite")
+      expect(statusLine?.getAttribute("aria-live"), "la línea nueva anuncia el archivo conservado").toBe("polite")
+      expect(findButton("Show in Finder"), "control positivo: la ruta conservada tiene acción Finder").toBeTruthy()
+
+      const name = Array.from(mounted!.container.querySelectorAll<HTMLElement>("[title]")).find(
+        (element) => element.textContent === keptName && element.title === keptPath,
+      )
+      expect(name?.classList.contains("font-medium")).toBe(true)
+      expect(name?.title, "la ruta completa queda en title").toBe(keptPath)
+
+      await clickButton("Show in Finder")
+      expect(vi.mocked(tauriShellOpen)).toHaveBeenCalledWith(documentsFolder())
+      expect(bannerText(), "revelar la carpeta no resuelve el conflicto").toContain(keptName)
+
+      await clickButton("Keep my version")
+      await waitForShell(() => !bannerText().includes(CONFLICT_BANNER), "banner y línea retirados al conservar mi versión")
+      expect(bannerText()).not.toContain(keptName)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "ODE-593: informa si keep_beside no conserva la otra versión y no ofrece Finder",
+    async () => {
+      const { path, tmpPath } = await beginKeptVersionDoubleRace({
+        fileTitle: "Carta fallo de conservación",
+        conflictId: "5930bad0",
+        keepBesideFails: true,
+      })
+
+      expect(await readDisk(path), "el destino conserva el contenido que intentó guardar el editor").toContain(
+        "ODE593-LOCAL",
+      )
+      expect(await readDisk(tmpPath), "la versión desplazada permanece en el temporal tras el fallo de keep_beside").toBe(
+        "ODE593 external.\n",
+      )
+      expect(bannerText()).toContain(
+        "This file was changed outside Artifact Studio. The other version couldn't be saved.",
+      )
+      expect(findButton("Show in Finder"), "el fallo no proporciona una ruta conservada junto al destino").toBeFalsy()
+
+      await clickButton("Reload external")
+      await waitForShell(() => !bannerText().includes(CONFLICT_BANNER), "banner y línea retirados al recargar")
+      expect(bannerText()).not.toContain("The other version couldn't be saved.")
       assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,

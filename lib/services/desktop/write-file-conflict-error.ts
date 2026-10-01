@@ -10,8 +10,20 @@
  * `instanceof` check works identically against either one.
  */
 export class WriteFileConflictError extends Error {
+  readonly keptPath: string | null
+  readonly preservationFailed: boolean
+
   constructor(message: string) {
     super(message)
     this.name = "WriteFileConflictError"
+
+    const keptPathMarker = "another version was kept at "
+    const keptPathMarkerIndex = message.lastIndexOf(keptPathMarker)
+    const keptPath =
+      keptPathMarkerIndex === -1
+        ? ""
+        : message.slice(keptPathMarkerIndex + keptPathMarker.length)
+    this.keptPath = keptPath || null
+    this.preservationFailed = message.includes("the version found there could not be kept (")
   }
 }

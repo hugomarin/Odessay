@@ -255,6 +255,7 @@ export const tauriPathModuleDouble = {
   appConfigDir: async () => configDir,
   appDataDir: async () => dataDir,
   join: async (...parts: string[]) => join(...parts),
+  dirname: async (path: string) => dirname(path),
 }
 
 // ─── filesystem tauri-commands doubles (real fs) ───────────────────────────
@@ -270,6 +271,15 @@ export const tauriPathModuleDouble = {
 let writeFileCallCount = 0
 let failingWriteFileCallNumber: number | null = null
 let writeFileFailureFactory: (() => never) | null = null
+type DoubleWriteRace = {
+  matches: (path: string) => boolean
+  conflictId: string
+  keepBesideFails: boolean
+  gate: Promise<void>
+  arrived: () => void
+}
+let doubleWriteRace: DoubleWriteRace | null = null
+
 export function failWriteFileOnCall(callNumber: number, makeError: () => never): void {
   failingWriteFileCallNumber = callNumber
   writeFileFailureFactory = makeError
@@ -282,8 +292,43 @@ export function resetWriteFileFailureState(): void {
   heldWriteFile = null
   heldOpenFile = null
   failingWriteFileMatching = null
+  doubleWriteRace = null
   writeFileLog.length = 0
   failingCatalogGetById.clear()
+}
+
+/**
+ * Holds a guarded write just after its initial disk-hash check. The test can
+ * make a second external edit and deliver the watcher event before releasing
+ * the commit window. The double then writes the app's content to the target,
+ * preserves the displaced external bytes beside it (or leaves them at `.tmp`
+ * when `keep_beside` fails), and rejects with Rust's literal CONFLICT message.
+ */
+export function doubleRaceNextWriteFile(
+  matches: (path: string) => boolean,
+  options: { conflictId?: string; keepBesideFails?: boolean } = {},
+): { release: () => void; started: Promise<void> } {
+  const conflictId = options.conflictId ?? "5930cafe"
+  if (!/^[0-9a-f]{8}$/.test(conflictId)) {
+    throw new Error("doubleRaceNextWriteFile requires an 8-character lowercase hex conflictId")
+  }
+
+  let release!: () => void
+  let arrived!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  doubleWriteRace = {
+    matches,
+    conflictId,
+    keepBesideFails: options.keepBesideFails ?? false,
+    gate,
+    arrived,
+  }
+  return { release, started }
 }
 
 /**
@@ -379,7 +424,8 @@ export async function tauriCreateFileDouble(dir: string, filename: string): Prom
  * baselines, so this double agrees with production code on what "changed"
  * means) must match it, or the write is refused exactly like the real
  * command refuses it — same error shape (`WriteFileConflictError`), same
- * "disk stays untouched" guarantee.
+ * "disk stays untouched" guarantee. `doubleRaceNextWriteFile` separately
+ * models the much narrower atomic-commit race after this initial check.
  */
 export async function tauriWriteFileDouble(
   path: string,
@@ -417,6 +463,30 @@ export async function tauriWriteFileDouble(
     if (actual !== expectedContentHash) {
       throw new WriteFileConflictError(
         `CONFLICT: ${path} changed on disk since it was last read (expected ${expectedContentHash}, found ${actual})`,
+      )
+    }
+
+    if (doubleWriteRace?.matches(path)) {
+      const race = doubleWriteRace
+      doubleWriteRace = null
+      race.arrived()
+      await race.gate
+
+      const displacedContent = await fs.readFile(path, "utf8")
+      await fs.writeFile(path, content, "utf8")
+
+      if (race.keepBesideFails) {
+        const tmpPath = `${path}.tmp`
+        await fs.writeFile(tmpPath, displacedContent, "utf8")
+        throw new WriteFileConflictError(
+          `CONFLICT: ${path} changed on disk while the save was being written, and the version found there could not be kept (Permission denied); it remains at ${tmpPath}`,
+        )
+      }
+
+      const keptPath = `${path}.conflict-${race.conflictId}`
+      await fs.writeFile(keptPath, displacedContent, "utf8")
+      throw new WriteFileConflictError(
+        `CONFLICT: ${path} changed on disk while the save was being written; another version was kept at ${keptPath}`,
       )
     }
   }

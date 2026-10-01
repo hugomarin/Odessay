@@ -160,6 +160,43 @@ describe("FilesystemDocumentService", () => {
     vi.useFakeTimers()
   })
 
+  it("saveWriting carries the kept conflict path in ServiceError.details (ODE-593)", async () => {
+    vi.useRealTimers()
+    const writing = makeWritingRecord()
+    const keptPath = "/tmp/Letter.md.conflict-1a2b3c4d"
+    vi.mocked(tauriCommandsMod.tauriWriteFile).mockRejectedValueOnce(
+      new WriteFileConflictError(
+        `CONFLICT: /tmp/Letter.md changed on disk while the save was being written; another version was kept at ${keptPath}`,
+      ),
+    )
+
+    const result = await service.saveWriting({ writing, expectedContentHash: "blake3:stale" })
+
+    expect(result.error).toMatchObject({
+      code: "CONFLICT",
+      details: { keptPath },
+    })
+    vi.useFakeTimers()
+  })
+
+  it("saveWriting carries a keep_beside failure marker in ServiceError.details (ODE-593)", async () => {
+    vi.useRealTimers()
+    const writing = makeWritingRecord()
+    vi.mocked(tauriCommandsMod.tauriWriteFile).mockRejectedValueOnce(
+      new WriteFileConflictError(
+        "CONFLICT: /tmp/Letter.md changed on disk while the save was being written, and the version found there could not be kept (Permission denied); it remains at /tmp/Letter.md.tmp",
+      ),
+    )
+
+    const result = await service.saveWriting({ writing, expectedContentHash: "blake3:stale" })
+
+    expect(result.error).toMatchObject({
+      code: "CONFLICT",
+      details: { preservationFailed: true },
+    })
+    vi.useFakeTimers()
+  })
+
   // ── createDraft ────────────────────────────────────────────────────────────
 
   it("createDraft creates a .md file and returns a WritingRecord with the path as id", async () => {
