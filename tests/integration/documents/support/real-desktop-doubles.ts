@@ -1233,11 +1233,11 @@ export async function tauriCatalogListPendingMutationsDouble(
 }
 
 /**
- * Espejo exacto de `catalog_update_mutation_status` (`index.rs:1409-1443`),
- * incluida su proyección de `documents.sync_status`/`cloud_present`. El CASO
- * no consulta si otra mutación del documento sigue `pending`: reproduce el
- * comportamiento de producción tal cual, que es lo que la prueba de SYNC-05
- * caracteriza (no lo corrige).
+ * Espejo de `catalog_update_mutation_status` (`index.rs`): el UPDATE solo toca
+ * filas accionables (`WHERE id=?1 AND status IN ('pending','failed')`) y la
+ * proyección de `documents.sync_status`/`cloud_present` solo se aplica cuando
+ * no queda otra mutación accionable del documento (`NOT EXISTS … id<>?1`).
+ * Una respuesta tardía de una mutación superada o ya resuelta no toca nada.
  */
 export async function tauriCatalogUpdateMutationStatusDouble(
   dbPath: string,
@@ -1249,15 +1249,20 @@ export async function tauriCatalogUpdateMutationStatusDouble(
 ): Promise<void> {
   const mutations = mutationsFor(dbPath)
   const mutation = mutations.get(mutationId)
-  if (mutation) {
-    mutation.status = status
-    mutation.attemptCount = attemptCount
-    mutation.nextRetryAt = nextRetryAt
-    mutation.lastError = lastError
-  }
-  // `WHERE id=(SELECT document_id FROM sync_mutations WHERE id=?1)`: sin fila
-  // de mutación no hay documento que actualizar.
-  if (!mutation) return
+  // Guard del UPDATE: la fila debe seguir accionable.
+  if (!mutation || (mutation.status !== "pending" && mutation.status !== "failed")) return
+  mutation.status = status
+  mutation.attemptCount = attemptCount
+  mutation.nextRetryAt = nextRetryAt
+  mutation.lastError = lastError
+  // `NOT EXISTS`: con otra accionable del documento, la proyección no corre.
+  const hasOtherActionable = [...mutations.values()].some(
+    (other) =>
+      other.documentId === mutation.documentId &&
+      other.id !== mutation.id &&
+      (other.status === "pending" || other.status === "failed"),
+  )
+  if (hasOtherActionable) return
   const rows = rowsFor(dbPath)
   const document = rows.get(mutation.documentId)
   if (!document) return
