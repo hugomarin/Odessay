@@ -3,8 +3,9 @@
  *
  * ODE-637 P1 — exercises self-write suppression through the real
  * `tauri-commands` wrappers, watcher filter, reconciler, catalog doubles and
- * mounted editor shell. Only the native invoke transport, watcher event source,
- * filesystem/catalog boundary, network and native dialogs are doubled.
+ * mounted editor shell. The native invoke transport, watcher event source,
+ * catalog adapter, network and native dialogs are doubled; filesystem-backed
+ * command doubles operate on a real temporary filesystem.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { readFile } from "node:fs/promises"
