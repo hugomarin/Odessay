@@ -288,6 +288,8 @@ Regla:
   - `Invariants`
   - `Required docs`
 - Si falta cualquiera de esos campos, el issue no está listo para DEFINE ni para BUILD.
+- Todo Capability Proof (el entregable mueve una fila de `workflow/quality/capability-integration-map.md`) activa este bloque: cruza adapters, servicios y la shell, y su prueba depende de quién es owner de cada costura. Cuando hay `Recon Pack`, el Recon llena el contrato con lo que comprobó en el código.
+- El bloque va bajo un encabezado `## Architecture Contract`, con un campo por línea (`* **Layer:** …`). Ese es el formato que verifica `npm run ops:brief:lint -- ODE-<n>` (`scripts/check-issue-brief.mjs`); un brief que no pasa el lint no se despacha.
 
 **External references — obligatorias cuando el issue depende de un servicio o protocolo externo:**
 
