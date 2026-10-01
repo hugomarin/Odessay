@@ -393,3 +393,53 @@ En main@6e803d21 devuelve `CONTRACT=8, INTEGRATION=31, NONE=6, PARTIAL_INTEGRATI
 - los tests Rust de `commands/workspace.rs` (`workspace_sync`);
 - el camino web de `/workspace/[slug]` en ejecución (si en web llega a montarse con datos);
 - `restoreWriting` y `registerBinding` web (read-then-write, citados en la fila SYNC-03).
+
+## Mapa de Recon — milestone 4, tanda 2 (ODE-593, 619, 620, 621, 636, 637)
+
+**Verificado en: main@5e58443e (2026-09-30).** Solo lectura del código en ese commit; no se ejecutó ningún test ni `cargo test`. Los hallazgos que cambian alcance se re-verificaron a mano (los marcados ✔). Cada issue lleva su Recon Pack completo como comentario en Linear (`## Recon Pack (verificado en main@5e58443e)`); este mapa resume lo que comparten y lo que un BUILD no debe redescubrir. Cuando BUILD encuentre algo distinto, corrige este mapa en su PR.
+
+### Hallazgos que cambian el alcance de los briefs
+
+| Issue | Hallazgo | Evidencia |
+|---|---|---|
+| ODE-637 | ✔ El filtro de auto-escritura que alimenta la shell es `configureRootWatcher` (`lib/services/desktop/desktop-workspace-reconciler.ts:110`, `isOdessaySelfWriteEvent` en `:142`). `shouldIgnoreWorkspaceWatchEvent` (`workspace-service.ts:1108`) solo lo usan `watchWorkspace`/`watchWorkspaces` (`:949`, `:1012`), sin llamadores: código muerto. | brief ya corregido |
+| ODE-637 | Con `holdWriteFile` (retiene ANTES de escribir) el escudo de hash de la shell (`hooks/useExternalDocumentChanges.ts:199-212` contra `getDurableContentHash`) ya evita el banner: la mutación "quitar `markOdessaySelfWritePath`" quedaría verde. Discrimina solo reteniendo la cola del guardado DESPUÉS de escribir al disco (`workspace_touch_file`/`catalog_dual_write` en vuelo). | `persistence-coordinator.ts:707`; `document-service-factory.ts:181-306` |
+| ODE-637 | Parte 2: el grabador usa un hash falso (`tests/support/catalog-seam-recorder.ts:145-151`) y ninguna proyección lleva `contentHash` (`:160-207`). Un escenario de edición externa pasaría sin que Rust detecte nada. Requiere blake3 real (`computeMarkdownContentHash`) + `contentHash` en las proyecciones → fixture v3 (regenera los 3 escenarios) y `src-tauri/tests/catalog_seam.rs`. Sin Rust de producción. | |
+| ODE-636 | ✔ El Markdown de Desk (`app/(app)/desk/page.tsx:821-831`) y de Collections (`components/collections/collections-view.tsx:487-503`) va por `downloadBlob` y devuelve `true` sin condición; nunca pasa por `saveBinaryArtifact`. Callers no listados en el brief: menú de fila "Download markdown" (`desk-artifact-row.tsx:282-286`, `desk-activity-table.tsx:398-401`). Posible cuerpo vacío en Desk desktop (`getWritingMarkdownPayload` usa `body_json`; las filas del catálogo traen `{}`, `lib/queries/desk-catalog-source.ts:92-98`) — sin ejecutar. | |
+| ODE-636 | El cuelgue de `act()` del modal es casi seguro el doble: `tests/preview-modal.test.tsx:24-33` devuelve `vi.fn()` nuevos en cada render y el efecto de `writing-preview-modal.tsx:412-476` depende de ellos. | hipótesis fuerte, sin ejecutar |
+| ODE-619 | ✔ `importDesktopWritingFile` (`lib/services/document-service-factory.ts:1043`) no corre en producción: `isUnifiedOpenEnabled()` = `isDesktopRuntime()` (`lib/services/open-document-factory.ts:8-10`), así que `handleMenuOpenFile` siempre toma el opener unificado (`editor-shell.tsx:2096`) y la rama de `:2162` es muerta. Un proof sobre esa función es `NON_PRODUCTION_PATH`. En desktop "importar" = Open File, que adopta en su sitio. El requisito "metadata del front matter en la fila" contradice ADR D4. | |
+| ODE-620 | ✔ La respuesta de sugerencia no está atada al documento que la pidió (`components/editor/modals/rename-writing-modal.tsx:47-72`). En Desk (`desk/page.tsx:1026`), Collections y Workspace el modal queda montado con `open=false`; una respuesta tardía de A aparece en el modal de B. En la shell no (se desmonta, `editor-shell.tsx:2971`). Bug real alcanzable → `it.fails` primero. | |
+| ODE-593 | ✔ Rust ya devuelve la ruta conservada (`src-tauri/src/commands/document.rs:200-205`), pero `WriteFileConflictError` no tiene campos (`lib/services/desktop/write-file-conflict-error.ts:12-17`), el `err` de `FilesystemDocumentService` no admite `details` y la ruta muere en `console.error` (`hooks/useEditorPersistence.ts:340-365`). La ruta llega por `onError`, no por `useExternalDocumentChanges`. | |
+| ODE-621 | El test de ODE-601 (`tests/editor-shell-export-delivery-desktop.test.tsx`) ya recorre la cadena de EXP-04 contra fs real y no está citado en la fila. SYNC-08 depende de un payload escrito a mano (`mutationRow`); candidato sin verificar: el dual-write supersede un guardado pendiente por una mutación de solo metadata (`index.rs:704-711`). | |
+
+### Andamiajes que reutiliza cada issue
+
+| Issue | Montaje | Qué es real / qué falta |
+|---|---|---|
+| ODE-637 P1 | `tests/editor-shell-external-changes-desktop.test.tsx` (helpers `startReconciler`, `openFromNativeMenu`, `waitForWatcherOnDocuments`, `emitFsWatchEvent`) | Falta: un router `invoke`→dobles (no existe; solo hay dispatch propio en `catalog-seam-recorder.ts:327-345`) para dejar `tauri-commands` real. Traduce formas, no lógica: `settings_read` devuelve string JSON, `write_file` rechaza con el string `CONFLICT:…`, desestructura args. Unos 25 comandos (`editor-shell-desktop-doubles.ts:103-142`); comando desconocido = throw. |
+| ODE-637 P2 | `catalog-seam-recorder.ts` + `catalog-seam-fixture.test.ts` + `src-tauri/tests/catalog_seam.rs` | Ver hallazgo: fixture v3 con hash real. |
+| ODE-636 | Dobles de `tests/editor-shell-export-delivery-desktop.test.tsx` (`world.saveDialogResult`, `tauriWriteBinaryFileDouble`) | Montaje nuevo de `DeskPage`/`CollectionsView` sobre servicios reales: hoy `desk-workspace-catalog-integration.test.tsx` mockea `document-service-factory` (`:174`) y no sirve tal cual. Los callbacks son closures sin export. |
+| ODE-619 | `tests/editor-shell-menu-open-title.test.tsx` (ODE-581, entra por `menu:open-file`) | Plantilla directa. Doblar `cloudHashLookup` (`createDesktopClient`). |
+| ODE-620 | `tests/integration/ai/suggest-title-lifecycle.test.ts` (router por URL `:96-111`) + `tests/support/editor-shell-harness.tsx` (`installNetworkDouble`) | `aiServiceDouble.suggestTitle` devuelve `{error:null,data:null}` (`editor-shell-doubles.ts:445-447`): usarlo es MOCKED_SEAM. Desktop usa URL absoluta (`desktop-ai-service.ts:86`); el router solo reconoce la relativa. |
+| ODE-593 | `tests/editor-shell-external-changes-desktop.test.tsx` + modo nuevo de doble carrera en `tauriWriteFileDouble` (`real-desktop-doubles.ts:372-411`) que escriba destino y `.conflict-xxxxxxxx` y lance el mensaje Rust literal | El parse va en `write-file-conflict-error.ts` (no se mockea), no en `tauriWriteFile` (doblado entero). |
+
+### Trampas transversales
+
+- **Relojes reales en el harness de la shell:** `advance` usa `setTimeout` real (`editor-shell-harness.tsx:344-349`). La ventana de 2 s de auto-escritura y el timeout de 45 s de la ruta de títulos piden `advance(≥2100)` o fake timers acotados a `setTimeout`/`clearTimeout`; vigilar el timeout de 60 s por test.
+- **Estado global de módulo:** el mapa de marcas de auto-escritura (`clearOdessaySelfWritePathsForTests`, `tauri-fs-watch.ts:160`) y el singleton del reconciliador (`disposeWorkspaceReconciler`) se limpian en cada test.
+- **Ratchet de espejos:** `tests/architecture/editor-shell-mirrors-ratchet.test.ts` prohíbe un `useEffect` que solo asigne un ref (ODE-593 añade estado en la shell).
+- **Ausencias con control positivo** (regla 8): ODE-637 (banner falso), ODE-620 (sugerencia filtrada), ODE-636 (archivo no escrito).
+- `scripts/linear-cli.mjs` no crea issues: los issues nuevos (ODE-621) van por GraphQL directo.
+
+### Archivos compartidos y orden
+
+- `workflow/quality/capability-integration-map.md`: lo tocan los seis (filas WATCH-07, EXP-05, EXP-04, SYS-02, SYNC-08, DOC-09, AI-03 y el log). Conflictos de texto, no de código: merges en serie.
+- `tests/integration/documents/support/real-desktop-doubles.ts`: ODE-593 (modo doble carrera), ODE-637 (router), ODE-636/619 (lectura). ODE-593 antes de ODE-637: el parse en la clase sobrevive al cambio de harness.
+- `tests/support/catalog-seam-recorder.ts` y el fixture: ODE-637 P2 y ODE-644 (fuera de esta tanda). El segundo rebasea y regenera.
+- `components/editor/editor-shell.tsx`: ODE-593 (banner) y ODE-619 (borrar la rama muerta, si se aprueba).
+
+### Recuento del capability map
+
+El comando de la sección anterior, en main@5e58443e: `CONTRACT=8, INTEGRATION=33, NONE=6, PARTIAL_INTEGRATION=47, RELEASE=1, UNIT_ONLY=12, total=107`. Filas de esta tanda: WATCH-07 y EXP-05 `PARTIAL_INTEGRATION`; EXP-04, SYS-02 y SYNC-08 `CONTRACT`; DOC-09 y AI-03 `NONE`.
+
+**No explorado en esta tanda:** el comportamiento de `<a download>` en WKWebView (solo en el DMG), el transporte IPC real, y la carrera simple de ODE-593 contra la ventana de 2 s (sospecha: un evento externo dentro de la ventana marcada antes del `invoke` podría suprimirse; queda para ODE-637).
