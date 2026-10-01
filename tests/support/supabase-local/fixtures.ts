@@ -3,7 +3,10 @@
 // una tabla, porque la instancia local se comparte entre worktrees.
 //
 // `seedUsers` lee el username real de `profiles` porque
-// `ensure_unique_username` normaliza el valor y agrega sufijos.
+// `ensure_unique_username` normaliza el valor y agrega sufijos. Registra el id
+// apenas `createUser` responde y, si falla la lectura del profile o el signIn,
+// borra las cuentas creadas antes de propagar el error: el caller que recibe
+// la excepción no ve la lista parcial y no podría limpiarlas.
 
 import { randomUUID } from "node:crypto"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
@@ -32,58 +35,84 @@ function seedUsernameBase(role: string, tag: string): string {
     .slice(0, 30)
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+async function deleteUsersBestEffort(admin: SupabaseClient, ids: readonly string[]): Promise<string[]> {
+  const failures: string[] = []
+  for (const id of ids) {
+    try {
+      const { error } = await admin.auth.admin.deleteUser(id)
+      if (error) failures.push(`${id}: ${error.message}`)
+    } catch (error) {
+      failures.push(`${id}: ${errorMessage(error)}`)
+    }
+  }
+  return failures
+}
+
 export async function seedUsers(tag: string, roles: readonly string[]): Promise<SeedUser[]> {
   const admin = createLocalAdminClient()
   const env = localSupabaseEnv()
   const users: SeedUser[] = []
+  const createdIds: string[] = []
 
-  for (const role of roles) {
-    const username = seedUsernameBase(role, tag)
-    const email = `${username}@example.test`
-    const { data, error } = await admin.auth.admin.createUser({
-      email,
-      password: SEED_PASSWORD,
-      email_confirm: true,
-      user_metadata: { username },
-    })
-    if (error || !data.user) {
-      throw new Error(`[supabase-local] createUser(${email}) falló: ${error?.message ?? "sin usuario"}`)
+  try {
+    for (const role of roles) {
+      const username = seedUsernameBase(role, tag)
+      const email = `${username}@example.test`
+      const { data, error } = await admin.auth.admin.createUser({
+        email,
+        password: SEED_PASSWORD,
+        email_confirm: true,
+        user_metadata: { username },
+      })
+      if (error || !data.user) {
+        throw new Error(`[supabase-local] createUser(${email}) falló: ${error?.message ?? "sin usuario"}`)
+      }
+      createdIds.push(data.user.id)
+
+      const profile = await admin.from("profiles").select("username").eq("id", data.user.id).single()
+      if (profile.error || !profile.data) {
+        throw new Error(`[supabase-local] el trigger no creó el profile de ${email}: ${profile.error?.message ?? "sin fila"}`)
+      }
+
+      const anon = createClient(env.url, env.publishableKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      })
+      const signIn = await anon.auth.signInWithPassword({ email, password: SEED_PASSWORD })
+      if (signIn.error || !signIn.data.session) {
+        throw new Error(`[supabase-local] signInWithPassword(${email}) falló: ${signIn.error?.message ?? "sin sesión"}`)
+      }
+
+      users.push({
+        id: data.user.id,
+        email,
+        password: SEED_PASSWORD,
+        username: profile.data.username,
+        accessToken: signIn.data.session.access_token,
+        refreshToken: signIn.data.session.refresh_token,
+      })
     }
 
-    const profile = await admin.from("profiles").select("username").eq("id", data.user.id).single()
-    if (profile.error || !profile.data) {
-      throw new Error(`[supabase-local] el trigger no creó el profile de ${email}: ${profile.error?.message ?? "sin fila"}`)
-    }
-
-    const anon = createClient(env.url, env.publishableKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
-    const signIn = await anon.auth.signInWithPassword({ email, password: SEED_PASSWORD })
-    if (signIn.error || !signIn.data.session) {
-      throw new Error(`[supabase-local] signInWithPassword(${email}) falló: ${signIn.error?.message ?? "sin sesión"}`)
-    }
-
-    users.push({
-      id: data.user.id,
-      email,
-      password: SEED_PASSWORD,
-      username: profile.data.username,
-      accessToken: signIn.data.session.access_token,
-      refreshToken: signIn.data.session.refresh_token,
-    })
+    return users
+  } catch (error) {
+    const cleanupFailures = await deleteUsersBestEffort(admin, createdIds)
+    if (cleanupFailures.length === 0) throw error
+    throw new Error(
+      `${errorMessage(error)}; además falló la limpieza de las cuentas parciales: ${cleanupFailures.join("; ")}`,
+    )
   }
-
-  return users
 }
 
 export async function cleanupUsers(users: readonly Pick<SeedUser, "id">[]): Promise<void> {
   if (users.length === 0) return
   const admin = createLocalAdminClient()
-  const failures: string[] = []
-  for (const user of users) {
-    const { error } = await admin.auth.admin.deleteUser(user.id)
-    if (error) failures.push(`${user.id}: ${error.message}`)
-  }
+  const failures = await deleteUsersBestEffort(
+    admin,
+    users.map((user) => user.id),
+  )
   if (failures.length > 0) {
     throw new Error(`[supabase-local] cleanupUsers falló: ${failures.join("; ")}`)
   }

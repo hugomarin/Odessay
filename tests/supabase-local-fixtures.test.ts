@@ -84,7 +84,7 @@ beforeEach(() => {
 })
 
 describe("seedUsers limpia las cuentas parciales", () => {
-  it.fails("borra la cuenta si falla la lectura del profile", async () => {
+  it("borra la cuenta si falla la lectura del profile", async () => {
     state.profileFails = true
 
     await expect(seedUsers("pr1owner", ["owner"])).rejects.toThrow(/profile/)
@@ -93,7 +93,7 @@ describe("seedUsers limpia las cuentas parciales", () => {
     expect(state.deletedIds).toEqual(["user-1"])
   })
 
-  it.fails("borra la cuenta completa y la parcial si falla el signIn de la segunda", async () => {
+  it("borra la cuenta completa y la parcial si falla el signIn de la segunda", async () => {
     state.failSignInAt = 2
 
     await expect(seedUsers("pr1owner", ["owner", "grantee"])).rejects.toThrow(/signInWithPassword/)
