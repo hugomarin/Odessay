@@ -33,6 +33,9 @@ Antes de buscar findings:
 3. El owner, siblings relevantes y call sites cuando la corrección del cambio dependa de ellos.
 4. El estado de CI del head que se revisa. BUILD entrega sin esperar a CI, así que confirmarlo es parte del review. Si el Context Report declara fallos intermitentes por carga, comprobar que CI pasó esos archivos; un fallo que se reproduce aislado no es intermitente y cuenta como finding.
 5. Las mutaciones que lista la Guía de review. BUILD ya no las corre todas, así que ejecutarlas es parte de la evidencia de testing del review: cada una debe poner rojo el test declarado por la razón declarada.
+6. El resultado de `npm run ops:proof:precheck` (también corre en CI, en `process-checks`). Cubre lo mecánico: que un commit `test(...)` no toque producción, que el `it.fails` entre antes que su fix y que el fix solo lo convierta en `it`, y que las filas tocadas del capability map tengan tantas celdas como su cabecera. Con el precheck en verde, eso no se re-verifica a mano. Siguen siendo del review comprobar que el `it.fails` está rojo **por la razón declarada** y juzgar si el Status de la fila y su Note dicen lo mismo: eso es texto libre y ningún script lo decide.
+
+**Re-review tras un ciclo de fix.** Si el diff desde el head revisado en la ronda anterior solo toca docs o tests y fixtures, la re-review es ligera: verificar cada hallazgo anterior más los checks mecánicos (CI, precheck, recuento del mapa) y que no se amplió el alcance, sin repetir las mutaciones ya verificadas. Si toca producción, la re-review es completa. El veredicto dice cuál de las dos se hizo (`workflow/workflow.md` § `/wf-review`).
 
 No es necesario releer toda la documentación de producto — solo lo que el `Architecture Contract` o `Performance Architecture Contract` del brief ya citó como `Required docs`.
 
