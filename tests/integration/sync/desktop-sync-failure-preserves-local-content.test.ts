@@ -52,12 +52,12 @@
  *    posterior se sube.
  *
  * El hueco de ODE-644 (un fallo en vuelo revive la mutación superada por un
- * guardado más nuevo y deja el estado de la fila inconsistente) es el caso
- * "guardado durante el flush" y ya está caracterizado con `it.fails` en
+ * guardado más nuevo y deja el estado de la fila inconsistente) está
+ * caracterizado en
  * `tests/integration/sync/desktop-sync-multiple-saves-before-flush.test.ts`;
- * su arreglo va en Rust y queda fuera de este encargo. Este archivo no lo
- * redescubre: aquí no hay guardado concurrente, una sola mutación por
- * documento.
+ * su arreglo (guard de fila accionable + `NOT EXISTS`, en Rust y en el doble)
+ * llegó en ODE-644 PR1. Este archivo no lo redescubre: aquí no hay guardado
+ * concurrente, una sola mutación por documento.
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { readFile } from "node:fs/promises"

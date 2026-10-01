@@ -479,6 +479,11 @@ lotes acotados y hasta el máximo definido por el contrato de sync. Un documento
 local-only sin ownership cloud puede actualizar metadata local sin fabricar una
 mutación remota ni cambiar su estado a `pending`.
 
+La respuesta de una mutación ya resuelta (superada por un snapshot más nuevo, o
+confirmada antes) no revive la fila ni proyecta `documents.sync_status`: el
+command solo actualiza filas accionables (`pending`/`failed`) y la proyección
+espera a que no quede otra mutación accionable del mismo documento.
+
 ## Desk y Workspace como vistas
 
 | Superficie | Query sobre `DocumentCatalog` | Diferencia permitida |

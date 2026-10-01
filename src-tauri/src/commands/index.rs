@@ -1419,9 +1419,23 @@ pub fn catalog_update_mutation_status(
     let tx = conn
         .transaction()
         .map_err(|e| format!("catalog mutation status begin: {e}"))?;
-    tx.execute("UPDATE sync_mutations SET status=?2,attempt_count=?3,next_retry_at=?4,last_error=?5 WHERE id=?1",
-      params![mutation_id,status,attempt_count,next_retry_at,last_error])
-      .map_err(|e| format!("catalog_update_mutation_status: {e}"))?;
+    // ODE-644: la respuesta de una mutación ya resuelta (superada por un
+    // guardado más nuevo, o confirmada antes) no revive la fila. Solo una
+    // mutación accionable puede cambiar de estado.
+    let updated = tx
+        .execute(
+            "UPDATE sync_mutations SET status=?2,attempt_count=?3,next_retry_at=?4,last_error=?5
+             WHERE id=?1 AND status IN ('pending','failed')",
+            params![mutation_id, status, attempt_count, next_retry_at, last_error],
+        )
+        .map_err(|e| format!("catalog_update_mutation_status: {e}"))?;
+    if updated == 0 {
+        tx.commit()
+            .map_err(|e| format!("catalog mutation status commit: {e}"))?;
+        return Ok(());
+    }
+    // ODE-644: la proyección solo representa al documento cuando esta era la
+    // única mutación accionable; si queda otra más nueva, manda ella.
     tx.execute(
         "UPDATE documents SET
           sync_status = CASE
@@ -1434,7 +1448,12 @@ pub fn catalog_update_mutation_status(
             WHEN ?2='synced' AND (SELECT operation FROM sync_mutations WHERE id=?1)='delete' THEN 0
             WHEN ?2='synced' THEN 1
             ELSE cloud_present END
-         WHERE id=(SELECT document_id FROM sync_mutations WHERE id=?1)",
+         WHERE id=(SELECT document_id FROM sync_mutations WHERE id=?1)
+           AND NOT EXISTS (
+             SELECT 1 FROM sync_mutations
+             WHERE document_id=(SELECT document_id FROM sync_mutations WHERE id=?1)
+               AND id<>?1 AND status IN ('pending','failed')
+           )",
         params![mutation_id, status],
     )
     .map_err(|e| format!("catalog_update_document_status: {e}"))?;
@@ -1752,9 +1771,14 @@ pub fn catalog_update_metadata_mutation_status(
     last_error: Option<String>,
 ) -> Result<(), String> {
     let conn = open_db(&db_path)?;
-    conn.execute("UPDATE metadata_sync_mutations SET status=?2,attempt_count=?3,next_retry_at=?4,last_error=?5 WHERE id=?1",
-        params![mutation_id, status, attempt_count, next_retry_at, last_error])
-      .map_err(|e| format!("catalog update metadata mutation: {e}"))?;
+    // ODE-644: mismo guard que la cola de contenido. La UI de colecciones llega
+    // aquí; una fila ya resuelta (superada por un enqueue más nuevo) no revive.
+    conn.execute(
+        "UPDATE metadata_sync_mutations SET status=?2,attempt_count=?3,next_retry_at=?4,last_error=?5
+         WHERE id=?1 AND status IN ('pending','failed')",
+        params![mutation_id, status, attempt_count, next_retry_at, last_error],
+    )
+    .map_err(|e| format!("catalog update metadata mutation: {e}"))?;
     Ok(())
 }
 
@@ -3423,6 +3447,348 @@ mod catalog_tests {
         assert_eq!(remaining_content_id, "mutation-prune-2");
         assert_eq!(remaining_metadata_id, "meta-pending");
 
+        remove_sqlite_files(&path);
+    }
+
+    // ODE-644: la respuesta de una mutación superada no la revive. Secuencia
+    // real de producción: dual-write v3 → dual-write v4 (la supersede) →
+    // llega la respuesta OK de la v3. El guard exige que la fila siga
+    // accionable (`status IN ('pending','failed')`); la proyección usa
+    // `NOT EXISTS` para no pisar a la v4, que sigue `pending`.
+    #[test]
+    fn superseded_mutation_success_response_keeps_the_document_pending_for_the_newer_mutation() {
+        let path = temp_db();
+        catalog_dual_write(
+            path.clone(),
+            input("doc-superseded-ok", "/tmp/root/superseded-ok.md", "mutation-v3"),
+        )
+        .unwrap();
+        let mut newer = input("doc-superseded-ok", "/tmp/root/superseded-ok.md", "mutation-v4");
+        newer.mutation.as_mut().unwrap().created_at = 3;
+        catalog_dual_write(path.clone(), newer).unwrap();
+
+        catalog_update_mutation_status(
+            path.clone(),
+            "mutation-v3".into(),
+            "synced".into(),
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let conn = open_db(&path).unwrap();
+        let (v3_status, v3_error): (String, Option<String>) = conn
+            .query_row(
+                "SELECT status,last_error FROM sync_mutations WHERE id='mutation-v3'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        let v4_status: String = conn
+            .query_row(
+                "SELECT status FROM sync_mutations WHERE id='mutation-v4'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let document_status: String = conn
+            .query_row(
+                "SELECT sync_status FROM documents WHERE id='doc-superseded-ok'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(v3_status, "synced");
+        assert_eq!(
+            v3_error.as_deref(),
+            Some("superseded by later snapshot mutation")
+        );
+        assert_eq!(v4_status, "pending");
+        assert_eq!(
+            document_status, "pending",
+            "the newer actionable mutation still owns the projection"
+        );
+        drop(conn);
+
+        let pending = catalog_list_pending_mutations(path.clone(), i64::MAX, 10, true).unwrap();
+        assert_eq!(
+            pending.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            vec!["mutation-v4"],
+            "only the newer mutation stays actionable"
+        );
+        remove_sqlite_files(&path);
+    }
+
+    // ODE-644, rama de fallo: la respuesta de error de la v3 superada no la
+    // revive como `failed`, no toca su intento ni su backoff y no marca el
+    // documento `failed` mientras la v4 sigue pendiente.
+    #[test]
+    fn superseded_mutation_failure_response_does_not_revive_it() {
+        let path = temp_db();
+        catalog_dual_write(
+            path.clone(),
+            input("doc-superseded-ko", "/tmp/root/superseded-ko.md", "mutation-v3"),
+        )
+        .unwrap();
+        let mut newer = input("doc-superseded-ko", "/tmp/root/superseded-ko.md", "mutation-v4");
+        newer.mutation.as_mut().unwrap().created_at = 3;
+        catalog_dual_write(path.clone(), newer).unwrap();
+
+        catalog_update_mutation_status(
+            path.clone(),
+            "mutation-v3".into(),
+            "failed".into(),
+            1,
+            Some(2_000),
+            Some("offline".into()),
+        )
+        .unwrap();
+
+        let conn = open_db(&path).unwrap();
+        let (v3_status, v3_attempts, v3_retry, v3_error): (
+            String,
+            i64,
+            Option<i64>,
+            Option<String>,
+        ) = conn
+            .query_row(
+                "SELECT status,attempt_count,next_retry_at,last_error FROM sync_mutations WHERE id='mutation-v3'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        let document_status: String = conn
+            .query_row(
+                "SELECT sync_status FROM documents WHERE id='doc-superseded-ko'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(v3_status, "synced", "a superseded row never comes back");
+        assert_eq!(v3_attempts, 0, "the stale failure does not count an attempt");
+        assert_eq!(v3_retry, None, "and schedules no retry");
+        assert_eq!(
+            v3_error.as_deref(),
+            Some("superseded by later snapshot mutation")
+        );
+        assert_eq!(document_status, "pending");
+        drop(conn);
+
+        let pending = catalog_list_pending_mutations(path.clone(), i64::MAX, 10, true).unwrap();
+        assert_eq!(
+            pending.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            vec!["mutation-v4"],
+            "the superseded mutation is never retried"
+        );
+        remove_sqlite_files(&path);
+    }
+
+    // ODE-644: una respuesta duplicada o tardía de una mutación ya confirmada
+    // tampoco mueve la fila ni el documento.
+    #[test]
+    fn confirmed_mutation_does_not_move_again_after_a_late_response() {
+        let path = temp_db();
+        catalog_dual_write(
+            path.clone(),
+            input("doc-late", "/tmp/root/late.md", "mutation-late"),
+        )
+        .unwrap();
+        catalog_update_mutation_status(
+            path.clone(),
+            "mutation-late".into(),
+            "synced".into(),
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+
+        catalog_update_mutation_status(
+            path.clone(),
+            "mutation-late".into(),
+            "failed".into(),
+            1,
+            Some(2_000),
+            Some("offline".into()),
+        )
+        .unwrap();
+
+        let conn = open_db(&path).unwrap();
+        let (status, attempts, retry, error): (String, i64, Option<i64>, Option<String>) = conn
+            .query_row(
+                "SELECT status,attempt_count,next_retry_at,last_error FROM sync_mutations WHERE id='mutation-late'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        let document_status: String = conn
+            .query_row(
+                "SELECT sync_status FROM documents WHERE id='doc-late'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "synced");
+        assert_eq!(attempts, 0);
+        assert_eq!(retry, None);
+        assert_eq!(error, None);
+        assert_eq!(document_status, "synced");
+        drop(conn);
+        remove_sqlite_files(&path);
+    }
+
+    // ODE-644, `NOT EXISTS`: con dos mutaciones accionables, la confirmación de
+    // la vieja no proyecta `synced` sobre el documento; cuando la nueva es la
+    // única accionable, su confirmación sí proyecta. La secuencia real que deja
+    // dos accionables es la carrera del flush; aquí se siembran por SQL, como
+    // manda el Recon para cubrir el orden.
+    #[test]
+    fn mutation_status_projects_the_document_only_without_another_actionable_mutation() {
+        let path = temp_db();
+        catalog_dual_write(
+            path.clone(),
+            input("doc-pair", "/tmp/root/pair.md", "mutation-pair-old"),
+        )
+        .unwrap();
+        let conn = open_db(&path).unwrap();
+        conn.execute(
+            "INSERT INTO sync_mutations(id,document_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
+             VALUES('mutation-pair-new','doc-pair','upsert','{}','pending',0,NULL,3,NULL)",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        catalog_update_mutation_status(
+            path.clone(),
+            "mutation-pair-old".into(),
+            "synced".into(),
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+        let record = catalog_get_by_id(path.clone(), "doc-pair".into())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            record.sync_status, "pending",
+            "the newer actionable mutation still owns the projection"
+        );
+
+        catalog_update_mutation_status(
+            path.clone(),
+            "mutation-pair-new".into(),
+            "synced".into(),
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+        let record = catalog_get_by_id(path.clone(), "doc-pair".into())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            record.sync_status, "synced",
+            "with no actionable mutation left, the projection lands"
+        );
+        remove_sqlite_files(&path);
+    }
+
+    // ODE-644: la cola de metadata lleva el mismo guard. Una fila ya `synced`
+    // (superada) no revive con una respuesta tardía; una `pending` sí se
+    // actualiza.
+    #[test]
+    fn metadata_mutation_status_guard_leaves_a_superseded_row_alone() {
+        let path = temp_db();
+        let conn = open_db(&path).unwrap();
+        conn.execute(
+            "INSERT INTO metadata_sync_mutations(id,entity_kind,entity_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
+             VALUES('meta-superseded','collection','col-1','upsert','{}','synced',0,NULL,1,'superseded by later snapshot mutation')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO metadata_sync_mutations(id,entity_kind,entity_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
+             VALUES('meta-pending','collection','col-2','upsert','{}','pending',0,NULL,2,NULL)",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        catalog_update_metadata_mutation_status(
+            path.clone(),
+            "meta-superseded".into(),
+            "failed".into(),
+            1,
+            Some(2_000),
+            Some("offline".into()),
+        )
+        .unwrap();
+        catalog_update_metadata_mutation_status(
+            path.clone(),
+            "meta-pending".into(),
+            "synced".into(),
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let conn = open_db(&path).unwrap();
+        let (status, attempts, retry, error): (String, i64, Option<i64>, Option<String>) = conn
+            .query_row(
+                "SELECT status,attempt_count,next_retry_at,last_error FROM metadata_sync_mutations WHERE id='meta-superseded'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(status, "synced");
+        assert_eq!(attempts, 0);
+        assert_eq!(retry, None);
+        assert_eq!(
+            error.as_deref(),
+            Some("superseded by later snapshot mutation")
+        );
+        let pending_status: String = conn
+            .query_row(
+                "SELECT status FROM metadata_sync_mutations WHERE id='meta-pending'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending_status, "synced");
+        drop(conn);
+        remove_sqlite_files(&path);
+    }
+
+    // ODE-644: el orden `created_at ASC` del listado (M4 de la Guía de
+    // review), con dos accionables sembradas por SQL: la vieja se procesa
+    // primero, así que la nueva la pisa.
+    #[test]
+    fn pending_mutations_list_orders_by_created_at_ascending() {
+        let path = temp_db();
+        catalog_dual_write(
+            path.clone(),
+            input("doc-order", "/tmp/root/order.md", "mutation-order-old"),
+        )
+        .unwrap();
+        let conn = open_db(&path).unwrap();
+        conn.execute(
+            "INSERT INTO sync_mutations(id,document_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
+             VALUES('mutation-order-new','doc-order','upsert','{}','pending',0,NULL,3,NULL)",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        let pending = catalog_list_pending_mutations(path.clone(), i64::MAX, 10, true).unwrap();
+        assert_eq!(
+            pending.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            vec!["mutation-order-old", "mutation-order-new"],
+            "the oldest actionable mutation is listed first"
+        );
         remove_sqlite_files(&path);
     }
 }
