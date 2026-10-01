@@ -551,11 +551,14 @@ El comando de la sección "Recuento del capability map", en main@210bc0e6, da `C
 - `scripts/supabase-locked.mjs` — `npm run supabase:locked -- <cmd>` (pgTAP, `psql`, DDL y migraciones).
 - `scripts/lib/supabase-local-env.mjs`, `scripts/lib/supabase-lock.mjs`, `scripts/lib/supabase-local-db.mjs`.
 - `tests/support/supabase-local/` — `guard.ts`, `local-supabase.ts`, `fixtures.ts`, `session.ts`, `route-fetch.ts`. Sin imports de la app.
+- `tests/supabase-lock.test.ts`, `tests/supabase-local-fixtures.test.ts` — tests unitarios de la propia infraestructura (los corre `npm test`; no necesitan el stack).
 - `vitest.config.ts` — excluye `**/*.supabase.test.*` y `**/.cache/**`; `package.json` — los dos scripts.
 
 **Contrato del runner.**
 
-- Toma el lock `$(git rev-parse --git-common-dir)/odessay-supabase-local.lock` (mkdir atómico con pid, worktree y hora; huérfano si el pid ya no existe; sin owner legible caduca a los 15 min). `supabase:locked` toma el mismo lock.
+- Toma el lock `$(git rev-parse --git-common-dir)/odessay-supabase-local.lock` (mkdir atómico con pid, worktree, hora y token; huérfano si el pid ya no existe; sin owner legible caduca a los 15 min). `supabase:locked` toma el mismo lock.
+  - El reclamo de un huérfano pasa por `mkdir <lock>.reclaim`: solo un waiter gana la reclamación y borra el lock; el resto espera. Si el ganador muere, el claim con pid muerto se mueve con rename a un tombstone único antes de reintentar. `release()` verifica el token del owner: no borra un lock ajeno.
+  - `tests/supabase-lock.test.ts` cubre la carrera con dos procesos reales y un repo git temporal (sin tocar la instancia compartida).
 - Exige `supabase status -o json`; si el stack no está arriba, aborta con salida clara.
 - Borra **toda** variable heredada que contenga `SUPABASE` (case-insensitive) y las `TAURI_*`, y exporta SOLO `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` y `SUPABASE_SERVICE_ROLE_KEY` locales. El `.env.local` de cada worktree es un symlink al del checkout principal y trae la service role de **producción**: ninguna corrida del harness puede verla.
 - Preflight: si quedan funciones o triggers `zz_mutation_%` en `public` (una mutación anterior quedó a medias), aborta y muestra el comando de limpieza.
@@ -573,7 +576,7 @@ npm run supabase:locked -- psql "<DB_URL>" -f supabase/migrations/<nueva>.sql
 
 **Helpers** (detalle en `tests/support/supabase-local/`).
 
-- `seedUsers(tag, roles)` → `{id, email, password, username, accessToken, refreshToken}`. Crea con `auth.admin.createUser` (`email_confirm`, `user_metadata.username`; el trigger crea el profile), **lee el username real de `profiles`** (porque `ensure_unique_username` normaliza y agrega sufijos) y hace **un** `signInWithPassword` por usuario. `cleanupUsers` borra por `deleteUser` → cascada.
+- `seedUsers(tag, roles)` → `{id, email, password, username, accessToken, refreshToken}`. Crea con `auth.admin.createUser` (`email_confirm`, `user_metadata.username`; el trigger crea el profile), **lee el username real de `profiles`** (porque `ensure_unique_username` normaliza y agrega sufijos) y hace **un** `signInWithPassword` por usuario. Si falla la lectura del profile o el signIn, borra las cuentas ya creadas antes de propagar el error (el caller no ve la lista parcial). `cleanupUsers` borra por `deleteUser` → cascada. `tests/supabase-local-fixtures.test.ts` cubre el camino de error doblando solo el cliente de Supabase.
 - `createLocalAdminClient()` (service role, PostgREST real) y `createUserClient(user)` (anon + `setSession` = RLS real).
 - `seedWriting(admin, {...})` privilegiado; `seedShare` / `seedCollection` / `seedMembership` por RLS **como dueño**; `readRow`/`readRows` por admin.
 - `session.ts` — `bearerRequest`, `serverClientAs`/`serverClientMockFactory` (sustituye `@/lib/supabase/server#createClient` por un cliente real, solo se fakea el transporte de cookies), `mockEmptyCookies`, `expectNotFound`/`expectRedirect` (digest `NEXT_HTTP_ERROR_FALLBACK;404` / `NEXT_REDIRECT`).
