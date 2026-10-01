@@ -96,10 +96,6 @@
       {
         "issue": "ODE-632",
         "reason": "Real production bug (Medium) found by the ODE-603 command net and tracked separately: six document commands have no Markdown branch. PR #535 pins them as it.fails but does not deliver the ODE-632 fix; ODE-632 appears in ODE-603 commit subjects. Ignored for status drift until delivered."
-      },
-      {
-        "issue": "ODE-644",
-        "reason": "Real desktop sync bug (Urgent) found by the ODE-611 SYNC-05 desktop proof and tracked separately: catalog_update_mutation_status (index.rs:1422-1424) leaves the row synced with a newer mutation pending, revives a superseded mutation as failed, and its retry overwrites the cloud with stale metadata. PR #561 pins it with three it.fails but does not deliver the Rust fix; ODE-644 appears in ODE-611 commit a175a208's subject. Ignored for status drift until delivered."
       }
     ]
   },
