@@ -54,7 +54,11 @@ export type CatalogSeamRowProjection = {
 }
 
 export type CatalogSeamInvokeResponse =
-  | { files: { relativePath: string; id: string; contentHash: string }[]; unboundPaths: string[] }
+  | {
+      files: { relativePath: string; id: string; contentHash: string }[]
+      unboundPaths: string[]
+      unboundFiles: { relativePath: string; contentHash: string; size: number }[]
+    }
   | { applied: boolean; changed: string[] }
   | CatalogSeamRowProjection
   | CatalogSeamRowProjection[]
@@ -185,6 +189,7 @@ export function projectInvokeResponse(cmd: string, response: unknown): CatalogSe
       const snapshot = response as {
         files: { relativePath: string; id: string; contentHash: string }[]
         unboundPaths: string[]
+        unboundFiles?: { relativePath: string; contentHash: string; size: number }[]
       }
       return {
         files: snapshot.files
@@ -195,6 +200,16 @@ export function projectInvokeResponse(cmd: string, response: unknown): CatalogSe
           }))
           .sort(byRelativePath),
         unboundPaths: [...snapshot.unboundPaths].sort(),
+        // Inode is deliberately excluded: it is synthetic in the double and
+        // real in the replay, so it can never be compared across the seam. The
+        // identity signal the wrapper reads is path + hash + size (ODE-657).
+        unboundFiles: [...(snapshot.unboundFiles ?? [])]
+          .map((file) => ({
+            relativePath: file.relativePath,
+            contentHash: file.contentHash,
+            size: file.size,
+          }))
+          .sort(byRelativePath),
       }
     }
     case "catalog_apply_reconcile": {
@@ -402,6 +417,13 @@ export class CatalogSeamSession {
       contentHash: string
     }[] = []
     const unboundPaths: string[] = []
+    const unboundFiles: {
+      relativePath: string
+      inode: number
+      contentHash: string
+      size: number
+      modifiedAt: number
+    }[] = []
     const nextManifest = new Map<string, ModelEntry>()
 
     const observedPaths = [...root.files.keys()].sort((left, right) => left.localeCompare(right))
@@ -415,6 +437,13 @@ export class CatalogSeamSession {
       const id = existing?.id ?? documentIds?.[relativePath]
       if (!id) {
         unboundPaths.push(relativePath)
+        unboundFiles.push({
+          relativePath,
+          inode: file.inode,
+          contentHash,
+          size: Buffer.byteLength(file.content),
+          modifiedAt: file.modifiedAt,
+        })
         continue
       }
       const entry: ModelEntry = {
@@ -452,6 +481,7 @@ export class CatalogSeamSession {
       selectedPaths: [],
       files,
       unboundPaths,
+      unboundFiles,
     }
   }
 

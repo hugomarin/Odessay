@@ -48,6 +48,13 @@
             "files": [],
             "unboundPaths": [
               "letter.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "letter.md",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                "size": 22
+              }
             ]
           }
         },
@@ -69,7 +76,8 @@
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -127,6 +135,13 @@
             "files": [],
             "unboundPaths": [
               "letter.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "letter.md",
+                "contentHash": "blake3:cf85183dc2224aaa5880b0927bceef4cf192e27db726539d723f003c4b07ae8d",
+                "size": 42
+              }
             ]
           }
         },
@@ -148,7 +163,8 @@
                 "contentHash": "blake3:cf85183dc2224aaa5880b0927bceef4cf192e27db726539d723f003c4b07ae8d"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -270,7 +286,8 @@
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -338,7 +355,8 @@
                 "contentHash": "blake3:cf85183dc2224aaa5880b0927bceef4cf192e27db726539d723f003c4b07ae8d"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -423,6 +441,13 @@
             "files": [],
             "unboundPaths": [
               "notes/letter.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "notes/letter.md",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                "size": 22
+              }
             ]
           }
         },
@@ -444,7 +469,8 @@
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -543,7 +569,8 @@
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -643,7 +670,8 @@
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -767,6 +795,13 @@
             "files": [],
             "unboundPaths": [
               "notes/a.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "notes/a.md",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                "size": 22
+              }
             ]
           }
         },
@@ -788,7 +823,8 @@
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -861,6 +897,13 @@
             ],
             "unboundPaths": [
               "notes/b.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "notes/b.md",
+                "contentHash": "blake3:334ab566830e125402ed851d95d01e83e91f6ec85b28a100916e196206d83158",
+                "size": 37
+              }
             ]
           }
         },
@@ -887,7 +930,8 @@
                 "contentHash": "blake3:334ab566830e125402ed851d95d01e83e91f6ec85b28a100916e196206d83158"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -985,7 +1029,8 @@
                 "contentHash": "blake3:334ab566830e125402ed851d95d01e83e91f6ec85b28a100916e196206d83158"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -1084,7 +1129,8 @@
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -1210,6 +1256,13 @@
             "files": [],
             "unboundPaths": [
               "notes/watched.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "notes/watched.md",
+                "contentHash": "blake3:c378d710f75b8ee9c516944dd07f0022b49bf14f74fb7a505dfad0e682c2aecb",
+                "size": 34
+              }
             ]
           }
         },
@@ -1231,7 +1284,8 @@
                 "contentHash": "blake3:c378d710f75b8ee9c516944dd07f0022b49bf14f74fb7a505dfad0e682c2aecb"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -1317,7 +1371,8 @@
                 "contentHash": "blake3:deaafcaa417ec2f772efb8f67e0c27053b44babefbd8ea8630f29ef08aabc822"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {

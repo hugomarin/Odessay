@@ -22,6 +22,14 @@ export type DesktopWorkspaceFile = {
   contentHash: string
 }
 
+export type DesktopWorkspaceUnboundFile = {
+  relativePath: string
+  inode: number
+  contentHash: string
+  size: number
+  modifiedAt: number
+}
+
 export type DesktopWorkspaceSnapshot = {
   rootPath: string
   bindingRootId: string
@@ -36,6 +44,10 @@ export type DesktopWorkspaceSnapshot = {
    *  for these and calls again; a caller invoking `workspace_sync` directly
    *  gets a snapshot missing exactly these paths. */
   unboundPaths: string[]
+  /** Inode/hash/size evidence for each path in `unboundPaths`, in the same
+   *  order — what the cross-root correlation pass needs before minting any
+   *  identity (ODE-657). Optional: older mocks/recordings omit it. */
+  unboundFiles?: DesktopWorkspaceUnboundFile[]
 }
 
 export type DesktopWorkspaceTouchResult =
@@ -202,10 +214,22 @@ export async function tauriWorkspaceRepairManifestBindings(
   })
 }
 
+export type DesktopWorkspaceSyncOptions = {
+  /**
+   * When false, exactly one `workspace_sync` call is made and its snapshot
+   * (including `unboundFiles`) is returned as-is: no id is minted and no
+   * second call is issued. The cross-root correlation pass uses this to scan
+   * first and decide identity after comparing evidence across roots (ODE-657);
+   * every other caller keeps the default mint-and-retry behavior.
+   */
+  mintUnbound?: boolean
+}
+
 export async function tauriWorkspaceSync(
   rootPath: string,
   selectedPaths?: string[],
   documentIds?: Record<string, string>,
+  options?: DesktopWorkspaceSyncOptions,
 ): Promise<DesktopWorkspaceSnapshot> {
   // `workspace_sync` scans the durable selected scope; only a root with an
   // empty selection means a recursive whole-root walk. It used to always run
@@ -220,6 +244,7 @@ export async function tauriWorkspaceSync(
     selectedPaths,
     documentIds: documentIds && Object.keys(documentIds).length > 0 ? documentIds : undefined,
   })
+  if (options?.mintUnbound === false) return snapshot
   if (snapshot.unboundPaths.length === 0) return snapshot
 
   const clientIds = { ...documentIds }

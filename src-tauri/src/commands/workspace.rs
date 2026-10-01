@@ -25,6 +25,22 @@ pub struct WorkspaceFileSnapshot {
     pub content_hash: String,
 }
 
+/// Evidence for one file a scan could not bind. Additive to `unboundPaths`
+/// (ODE-657): the TS orchestrator correlates an external cross-root move by
+/// inode + content_hash before minting a UUID, and the scan already computed
+/// both while deciding whether the file was bound — zero extra I/O.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WorkspaceUnboundFile {
+    #[serde(rename = "relativePath")]
+    pub relative_path: String,
+    pub inode: u64,
+    #[serde(rename = "contentHash")]
+    pub content_hash: String,
+    pub size: u64,
+    #[serde(rename = "modifiedAt")]
+    pub modified_at: u64,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkspaceSnapshot {
     #[serde(rename = "rootPath")]
@@ -51,6 +67,10 @@ pub struct WorkspaceSnapshot {
     // `workspace_sync` pairing always paid.
     #[serde(rename = "unboundPaths")]
     pub unbound_paths: Vec<String>,
+    // Same order as `unbound_paths` (invariant). The inode is only comparable
+    // within one machine, so the TS seam recording projects it out.
+    #[serde(rename = "unboundFiles", default)]
+    pub unbound_files: Vec<WorkspaceUnboundFile>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -445,6 +465,9 @@ pub fn workspace_inspect(root_path: String) -> Result<WorkspaceSnapshot, String>
         updated_at,
         selected_paths: normalize_selected_paths(existing_index.selected_paths)?,
         files,
+        // `workspace_inspect` is a read-only listing with no caller-supplied
+        // ids; it never mints identity, so it reports no unbound evidence.
+        unbound_files: vec![],
         unbound_paths,
     })
 }
@@ -825,6 +848,7 @@ pub fn workspace_sync(
     }
 
     let mut unbound_paths = Vec::new();
+    let mut unbound_files = Vec::new();
     for mut file in files {
         let existing_at_path = existing_index.files.get(&file.relative_path).cloned();
         let can_reuse_hash = existing_at_path.as_ref().is_some_and(|entry| {
@@ -869,6 +893,13 @@ pub fn workspace_sync(
                 .and_then(|ids| ids.get(&file.relative_path).cloned())
         }) else {
             unbound_paths.push(file.relative_path.clone());
+            unbound_files.push(WorkspaceUnboundFile {
+                relative_path: file.relative_path.clone(),
+                inode: file.inode,
+                content_hash,
+                size: file.size,
+                modified_at: file.modified_at,
+            });
             continue;
         };
 
@@ -907,6 +938,7 @@ pub fn workspace_sync(
         selected_paths: effective_selected_paths,
         files: files_with_ids,
         unbound_paths,
+        unbound_files,
     })
 }
 

@@ -17,6 +17,7 @@ import type {
   DesktopWorkspaceFile,
   DesktopWorkspaceSnapshot,
   DesktopWorkspaceTouchResult,
+  DesktopWorkspaceUnboundFile,
 } from "@/lib/services/desktop/tauri-commands"
 import { WriteFileConflictError } from "@/lib/services/desktop/write-file-conflict-error"
 import { computeMarkdownContentHash } from "@/lib/content-hash"
@@ -771,18 +772,32 @@ async function tauriWorkspaceSyncDoubleWithMode(
   const files = await Promise.all(
     [...manifest.entries()].map(([relativePath, id]) => statAsWorkspaceFile(rootPath, relativePath, id)),
   )
-  const unboundPaths =
+  const unboundEntries =
     mode === "invoke"
-      ? (await listUnmanifestedMarkdown(rootPath, manifest))
-          .filter(({ relativePath }) => {
-            if (effectiveSelectedPaths.length === 0) return true
-            return effectiveSelectedPaths.some((selectedPath) => {
-              const normalized = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "")
-              return relativePath === normalized || relativePath.startsWith(`${normalized}/`)
-            })
+      ? (await listUnmanifestedMarkdown(rootPath, manifest)).filter(({ relativePath }) => {
+          if (effectiveSelectedPaths.length === 0) return true
+          return effectiveSelectedPaths.some((selectedPath) => {
+            const normalized = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "")
+            return relativePath === normalized || relativePath.startsWith(`${normalized}/`)
           })
-          .map(({ relativePath }) => relativePath)
+        })
       : []
+  const unboundPaths = unboundEntries.map(({ relativePath }) => relativePath)
+  // Additive evidence (ODE-657), same order as `unboundPaths`: the real scan
+  // already computed inode/hash/size while deciding the file was unbound.
+  const unboundFiles: DesktopWorkspaceUnboundFile[] = await Promise.all(
+    unboundEntries.map(async ({ relativePath, inode }) => {
+      const fullPath = join(rootPath, relativePath)
+      const stat = await fs.stat(fullPath)
+      return {
+        relativePath,
+        inode,
+        contentHash: await hashFile(fullPath),
+        size: stat.size,
+        modifiedAt: stat.mtimeMs,
+      }
+    }),
+  )
   const inodes = new Map<string, number>()
   for (const file of files) inodes.set(file.relativePath, file.inode)
   manifestInodesByRoot.set(rootPath, inodes)
@@ -797,6 +812,7 @@ async function tauriWorkspaceSyncDoubleWithMode(
     selectedPaths: effectiveSelectedPaths,
     files,
     unboundPaths,
+    unboundFiles,
   }
 }
 
