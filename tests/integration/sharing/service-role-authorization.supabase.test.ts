@@ -282,7 +282,7 @@ describe("F1c — secuencia anterior/siguiente", () => {
     }
   })
 
-  it.fails("la secuencia excluye el escrito propio con fila de self-share (D-1 autor)", async () => {
+  it("la secuencia excluye el escrito propio con fila de self-share (D-1 autor)", async () => {
     // `writing_shares_insert_author` deja que una persona cree una fila hacia
     // sí misma sobre un escrito propio. No es una fuga entre usuarios, pero si
     // esa fila entra en la secuencia incumple D-1 (`author_id <> viewer`).

@@ -184,6 +184,7 @@ export default async function SharedReadingPage({ params }: PageProps) {
         .select("id, slug, updated_at")
         .in("id", sharedWritingIds)
         .in("visibility", ["shared", "public"])
+        .neq("author_id", user.id)
         .is("deleted_at", null)
         .order("updated_at", { ascending: false })
 
