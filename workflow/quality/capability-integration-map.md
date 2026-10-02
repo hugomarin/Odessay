@@ -250,10 +250,10 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 
 | Status | Count | % |
 |---|---|---|
-| NONE | 2 | 2% |
+| NONE | 1 | 1% |
 | UNIT_ONLY | 12 | 11% |
 | CONTRACT | 7 | 7% |
-| PARTIAL_INTEGRATION | 47 | 44% |
+| PARTIAL_INTEGRATION | 48 | 45% |
 | INTEGRATION | 38 | 36% |
 | RUNTIME | 0 | 0% |
 | RELEASE | 1 | 1% |
