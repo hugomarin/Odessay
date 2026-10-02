@@ -49,9 +49,11 @@ const catalogsByDb = new Map<string, Map<string, DesktopCatalogRow>>()
 const collectionsByDb = new Map<string, Map<string, DesktopCatalogCollection>>()
 const writingCollectionsByDb = new Map<string, Map<string, DesktopCatalogWritingCollection>>()
 // Cola durable de metadata (`metadata_sync_mutations`), en memoria. La alimenta
-// `tauriCatalogDeleteCollectionDouble`, espejo del SQL actual de
-// `catalog_delete_collection`; los dobles de save/replace de colecciones siguen
-// ignorando su `mutation` porque ninguna prueba lee la cola después de ellos.
+// `tauriCatalogDeleteCollectionDouble`, espejo del SQL de
+// `catalog_delete_collection` post ODE-618 PR1b (soft-delete + DELETE de las
+// relaciones en la misma transacción); los dobles de save/replace de colecciones
+// siguen ignorando su `mutation` porque ninguna prueba lee la cola después de
+// ellos.
 type MetadataMutationRow = {
   id: string
   entityKind: DesktopCatalogMetadataMutation["entityKind"]
@@ -1126,12 +1128,18 @@ export async function tauriCatalogReactivateBindingRootDouble(): Promise<Desktop
  * open (`WritingCollectionsSection` → `loadDesktopCollections`), which is on
  * the path to Export (EXP-05, ODE-601); ODE-614's workspace-isolation proof
  * reads it to assert per-root collection chips.
+ *
+ * Espeja el snapshot real post ODE-618 PR1b: las colecciones soft-deleted no
+ * entran (ya lo hacía) y las relaciones solo entran si su colección sigue
+ * viva, así que los huérfanos que dejó el build anterior no vuelven.
  */
 export async function tauriCatalogListCollectionSnapshotDouble(dbPath: string): Promise<DesktopCatalogCollectionSnapshot> {
   const collections = [...(collectionsByDb.get(dbPath)?.values() ?? [])]
     .filter((collection) => collection.deletedAt === null)
     .sort((left, right) => right.localUpdatedAt - left.localUpdatedAt)
+  const liveCollectionIds = new Set(collections.map((collection) => collection.id))
   const writingCollections = [...(writingCollectionsByDb.get(dbPath)?.values() ?? [])]
+    .filter((row) => liveCollectionIds.has(row.collectionId))
     .sort(
       (left, right) =>
         left.writingId.localeCompare(right.writingId) ||
@@ -1183,15 +1191,15 @@ export async function tauriCatalogReplaceWritingCollectionsDouble(
 }
 
 /**
- * Espejo del SQL **actual** de `catalog_delete_collection` (`index.rs`): marca
- * la colección como borrada (`deleted_at`, `sync_status='deleted'`,
- * `local_updated_at`) y encola la mutación de metadata (`supersede` de las
- * accionables anteriores de la entidad + `INSERT … ON CONFLICT DO NOTHING`),
- * **sin** borrar las filas de `writing_collections` de esa colección. Eso
- * reproduce F6 (ODE-618): un documento cuya única colección se borró queda
- * "asignado" y desaparece de la vista Collections. La prueba Rust
- * `collection_delete_keeps_documents.rs` da la verdad de SQLite; este doble es
- * el comportamiento vigente contra el que se caracteriza F6 como `it.fails`.
+ * Espejo del SQL de `catalog_delete_collection` (`index.rs`) desde ODE-618
+ * PR1b: marca la colección como borrada (`deleted_at`, `sync_status='deleted'`,
+ * `local_updated_at`), borra en la misma transacción las filas de
+ * `writing_collections` de esa colección y encola la mutación de metadata
+ * (`supersede` de las accionables anteriores de la entidad +
+ * `INSERT … ON CONFLICT DO NOTHING`). Es la paridad con web que cierra F6: un
+ * documento cuya única colección se borró vuelve a estar sin clasificar. La
+ * verdad de SQLite la da `collection_delete_keeps_documents.rs`; este doble
+ * espeja el comportamiento vigente para el caso TS.
  */
 export async function tauriCatalogDeleteCollectionDouble(
   dbPath: string,
@@ -1211,6 +1219,14 @@ export async function tauriCatalogDeleteCollectionDouble(
       syncStatus: "deleted",
       localUpdatedAt,
     })
+  }
+  const writingCollections = writingCollectionsByDb.get(dbPath)
+  if (writingCollections) {
+    // DELETE FROM writing_collections WHERE collection_id=?1, en la misma
+    // transacción del UPDATE de arriba.
+    for (const [key, row] of [...writingCollections.entries()]) {
+      if (row.collectionId === collectionId) writingCollections.delete(key)
+    }
   }
   enqueueMetadataMutationDouble(dbPath, mutation)
 }
