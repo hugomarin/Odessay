@@ -25,7 +25,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(16);
+select plan(17);
 
 insert into auth.users (id, email, raw_user_meta_data)
 values
@@ -41,6 +41,13 @@ values
   ('54041000-0000-4000-8000-000000000001', '54040000-0000-4000-8000-000000000001', 'Private', 'private', 'draft', 1),
   ('54041000-0000-4000-8000-000000000002', '54040000-0000-4000-8000-000000000001', 'Shared', 'shared', 'draft', 1),
   ('54041000-0000-4000-8000-000000000003', '54040000-0000-4000-8000-000000000001', 'Public', 'public', 'draft', 1);
+
+-- F1 (ODE-616): a `private` writing with a stale share row (the state the
+-- desktop sync creates with a direct UPDATE) must not appear in the RPC
+-- either. Fixture setup only; the assertion below under the grantee's role
+-- is the property under test.
+insert into public.writing_shares (id, writing_id, shared_with_id)
+values ('54042000-0000-4000-8000-000000000002', '54041000-0000-4000-8000-000000000001', '54040000-0000-4000-8000-000000000002');
 
 -- ─── As the owner: creates the share grant through real RLS, not privileged setup ───
 set local role authenticated;
@@ -77,6 +84,14 @@ select results_eq(
   $$ select id from public.list_incoming_shared_writings() $$,
   array['54041000-0000-4000-8000-000000000002'::uuid],
   'the RPC desktop uses for "shared with me" returns exactly the writing shared with the caller'
+);
+
+-- F1 (ODE-616): the stale share row on the private writing must not leak it
+-- into the list, even though the share row exists.
+select results_eq(
+  $$ select count(*)::int from public.list_incoming_shared_writings() where id = '54041000-0000-4000-8000-000000000001' $$,
+  array[0],
+  'the "shared with me" RPC excludes a private writing with a stale share row'
 );
 
 -- A shared-with user cannot grant herself (or a third party) access to a
