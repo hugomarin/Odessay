@@ -106,7 +106,7 @@ Consumers / pruebas a revisar: [consumidores y pruebas canónicas conocidos]
 
 No presentar como hecho una exploración de código que aún no se realizó: marcar la API como desconocida y hacer que BUILD la confirme con Architecture Recon. `Reuse Check` no sustituye `Architecture Contract`; cuando el issue cambia ownership, contratos, fuente de verdad, runtime o boundaries, ambos campos aplican.
 
-## Recon Pack *(piloto desde ODE-605; required cuando el planner ya hizo el Recon del área)*
+## Recon Pack *(required cuando el planner ya hizo el Recon del área)*
 
 Cuando el planner exploró el código del área, el brief lleva lo comprobado para que BUILD lo valide en vez de volver a buscarlo. Extiende el `Reuse Check`; no lo repite:
 
@@ -122,7 +122,7 @@ No tocar: <lo que queda fuera de alcance aunque esté al lado>
 
 - Citar solo lo comprobado en ese commit. Si una parte no se exploró, decirlo; BUILD la resuelve con Recon normal.
 - El pack no sustituye `Architecture Contract`: dice **dónde** está el código hoy, no **qué** debe cumplir.
-- Piloto: si el Recon de BUILD con pack no baja a ≤10 min en ODE-605, el formato se ajusta antes de generalizarlo.
+- Cómo se produce (método, lista de huecos, qué deja y reporte al humano): `area-recon.md`. Resultado del piloto en ODE-605: el Recon de BUILD con pack bajó a 8–13 min (antes 7–26 min).
 
 ## Handoff *(solo si el issue requiere acción humana)*
 

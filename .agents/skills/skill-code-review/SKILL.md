@@ -77,7 +77,17 @@ Buscar defectos sistémicos antes que defectos locales:
 
 Un finding sistémico cambia cómo se debe corregir el PR entero, no solo una línea — vale más que varios findings locales y debe aparecer primero en el reporte.
 
-Si el brief trae `Recon Pack` (piloto desde ODE-605), contrastar el diff con su `No tocar` y con los símbolos que declara. Un cambio fuera del pack sin `Recon correction` que lo explique es un finding de alcance; una `Recon correction` reportada no lo es.
+Si el brief trae `Recon Pack`, contrastar el diff con su `No tocar` y con los símbolos que declara. Un cambio fuera del pack sin `Recon correction` que lo explique es un finding de alcance; una `Recon correction` reportada no lo es.
+
+### Review de un Recon (fase 0R)
+
+El PR del mapa que deja un Recon de área (`skill-planning/specialties/area-recon.md`) se revisa por **hechos**, no por redacción. Lo revisa un agente distinto del que hizo el Recon.
+
+- Por cada issue, elegir **al menos 4 rangos al azar** de su Recon Pack y confirmar el símbolo en el commit declarado: `git show <sha>:<archivo> | sed -n '<a>,<b>p'`.
+- Confirmar contra el código los hallazgos que **cambian el alcance**: correcciones al brief, seguridad, contratos externos.
+- Repetir el recuento con el comando que trae el mapa, si lo trae.
+- Confirmar que el diff solo toca docs y que ningún asunto de commit menciona un `ODE-###`.
+- **PASS:** mergear el PR del mapa y comentar en cada issue "Mapa de Recon en main @ <SHA>". **FAIL:** hallazgos con línea, en el PR y en el issue afectado. Nada se despacha antes del PASS.
 
 ---
 

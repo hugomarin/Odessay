@@ -62,7 +62,7 @@ Architecture Recon
 
 El Recon completo es contexto de trabajo de la tarea. Su persistencia y la promoción de hallazgos recurrentes siguen el protocolo del proyecto.
 
-### Modo validación (piloto desde ODE-605)
+### Modo validación
 
 Si el brief trae un `Recon Pack` (ver `issue-brief-schema.md`), no repetir la exploración: validarlo, en ≤10 minutos.
 

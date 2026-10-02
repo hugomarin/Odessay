@@ -500,6 +500,11 @@
       "description": "Fuentes, verificación de definición, revisión por skills de dominio, secuenciación y criterios de calidad de issues en Odessay."
     },
     {
+      "path": ".agents/skills/skill-planning/specialties/area-recon.md",
+      "type": "skill-reference",
+      "description": "Recon de área de Planning: workers en paralelo y en solo lectura, lista de huecos que pueden frenar la orquestación, definición de hecho (Recon Pack, Auditoría, PR del mapa abierto, lint) y plantilla del reporte al humano con decisiones por defecto."
+    },
+    {
       "path": ".agents/skills/skill-planning/specialties/linear-conventions.md",
       "type": "skill-reference",
       "description": "Convenciones de publicación en Linear para Planning: proyectos por fase, milestones, labels, jerarquía y asignación de issues."
