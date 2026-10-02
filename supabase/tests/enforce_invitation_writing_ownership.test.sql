@@ -68,28 +68,33 @@ select lives_ok(
 
 -- Requirement 1: UPDATE must protect the new relationship too — B tries to
 -- retarget their own (legitimately created) invitation at A''s writing.
-select throws_ok(
+-- La guarda que dispara primero es el trigger BEFORE UPDATE
+-- `invitations_enforce_status_update` (solo permite cambiar `status`), no el
+-- WITH CHECK de la policy; se afirma el comportamiento real.
+select throws_like(
   $$ update public.invitations
      set writing_id = '52010000-0000-4000-8000-000000000001'
      where token = 'attacker-b-own-token-0001' $$,
-  '42501'::char(5),
-  NULL,
+  'Only status updates are allowed on invitations',
   'attacker B cannot retarget their own invitation at owner A''s writing'
 );
 
 -- Requirement 1, the old relationship: a row whose writing_id no longer
--- resolves to its inviter (a forged historical row, simulated here via
--- service_role the way an old pre-fix row would look) must not be a
--- candidate for update at all. USING filters candidate rows against the OLD
+-- resolves to its inviter (a forged historical row, simulated here directly
+-- as the migration owner, the way an old pre-fix row would look) must not be
+-- a candidate for update at all. USING filters candidate rows against the OLD
 -- row, so this is not an exception — the row is simply invisible to B, and
--- the UPDATE silently affects nothing, unlike a WITH CHECK violation on a
--- row B still owns (which does throw, as tests 2 and 4 show).
+-- the UPDATE silently affects nothing, unlike the WITH CHECK violation on
+-- insert (test 2) or the BEFORE trigger on a retarget of a row B still owns
+-- (test 4). El retarget de este setup necesita desactivar el trigger
+-- `invitations_enforce_status_update` (que lo prohibiría para cualquier
+-- rol): es exactamente la fila histórica anterior a la policy.
 reset role;
-set local role service_role;
+alter table public.invitations disable trigger invitations_enforce_status_update;
 update public.invitations
 set writing_id = '52010000-0000-4000-8000-000000000001'
 where token = 'attacker-b-own-token-0001';
-reset role;
+alter table public.invitations enable trigger invitations_enforce_status_update;
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"52000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
