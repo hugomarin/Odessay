@@ -40,7 +40,7 @@ Origen: los prompts `/orchestration` v2 → v7 de P-ODE-43 (Odessay, 2026-09-27 
 | B1 | Suite completa corrida 3–4 veces por build (ODE-624: 113 min para un arreglo de 4 líneas) | Mientras se trabaja, solo los archivos afectados; al final, `--changed` una vez; la suite completa solo si se tocan support, config o `package.json` |
 | B2 | El builder comparaba contra un worktree de main por fallos intermitentes ajenos | Re-correr el archivo aislado; comparar contra main solo si falla aislado |
 | B3 | El builder esperaba el CI en un bucle (7 min) | No esperar el CI: el body del PR, el Context Report y la Guía se escriben mientras corre |
-| B4 | Las mutaciones se corrían dos veces, en build y en review | Una sola en BUILD (la fase roja del bug real, o la del modo de fallo); el resto se lista y lo corre REVIEW |
+| B4 | Primero: las mutaciones se corrían dos veces, en build y en review. Se pasó a una sola en BUILD y el resto a REVIEW. Después: la mutación de la Guía que queda en verde pasó a ser la causa más frecuente de FAIL (10 de 26 rechazos del 2026-09-27 al 2026-10-02: ODE-609 ×2, 611, 613, 614, 616, 618, 644, 656, 658), y cada una costaba un ciclo completo de fix y re-review | El builder corre **todas** las mutaciones de la Guía antes del PR, contra solo el archivo de test indicado (segundos por mutación), y pega la salida roja. Una en verde no se entrega. REVIEW re-corre una muestra (como mínimo la del modo de fallo) y todas si falta una salida |
 | B5 | Un prompt de permiso sin responder por escribir en `/tmp` costó unos 30 min (ODE-624) | Temporales en `.cache/` dentro del worktree |
 | B6 | Un `--amend` cayó en el commit equivocado; un `git add -A` tras un merge arrastró archivos ajenos | `git log -1` antes de `--amend`; nunca `git add -A` tras un merge |
 | B7 | El builder declaró "no construible" el test entre render y efecto y sí lo era: 2 FAIL en 609 | Intentarlo de verdad y dejar el intento en el PR antes de declarar algo no construible |
@@ -57,7 +57,7 @@ Origen: los prompts `/orchestration` v2 → v7 de P-ODE-43 (Odessay, 2026-09-27 
 | V1 | El reviewer de ODE-629 dio PASS y se quedó sin tokens antes de mergear | Cerrar primero (merge, ledger, tracker) y escribir el comentario largo después |
 | V2 | Mismo caso: alguien tenía que terminar | Fallback de solo cierre: otra herramienta cierra sin revisar, solo si el head es exactamente el SHA del veredicto y el CI está verde |
 | V3 | Re-reviews completas para fixes de solo docs | Re-review ligera si el diff posterior solo toca docs o tests |
-| V4 | El reviewer re-verificaba a mano el orden de commits y el flip | Con el precheck en verde no se re-verifica; el foco es el rojo por la razón declarada, las mutaciones en vivo y el estado de la fila |
+| V4 | El reviewer re-verificaba a mano el orden de commits y el flip | Con el precheck en verde no se re-verifica; el foco es el rojo por la razón declarada, una muestra de las mutaciones en vivo (B4) y el estado de la fila |
 | V5 | Las heurísticas para juzgar el Status y la Note de la fila dejaban pasar otras redacciones (#574) | La coherencia entre Status y Note la juzga el reviewer, no un script |
 | V6 | El reviewer cambió de rama el checkout principal al escribir el ledger | El ledger se escribe en un worktree temporal de main, nunca en el checkout principal |
 | V7 | Rechazos registrados sin `review_rejected` en el asunto pusieron `drift:strict` en rojo para todos | El asunto del commit de un rechazo lleva `review_rejected` |
