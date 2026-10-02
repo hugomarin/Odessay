@@ -10,11 +10,13 @@
 //! misma ruta y hash, y los bytes de cada `.md` no cambian; la colección queda
 //! soft-deleted y su mutación de metadata encolada.
 //!
-//! F6 (las filas de `writing_collections` de la colección borrada sobreviven,
-//! así que un documento cuya única colección se borró desaparece de la vista
-//! Collections) se caracteriza en el lado TS como `it.fails` y lo arregla
-//! ODE-618 PR1b. Esta prueba no lo afirma: queda verde con el comportamiento
-//! actual y con el arreglo.
+//! ODE-618 PR1b cierra F6 en las dos direcciones: `catalog_delete_collection`
+//! borra, en la misma transacción del soft-delete, las filas de
+//! `writing_collections` de esa colección (paridad con web), y
+//! `catalog_list_collection_snapshot` solo devuelve relaciones de colecciones
+//! vivas, así que también repara los huérfanos que dejó el build anterior. Las
+//! pruebas de abajo afirman las dos cosas sobre SQLite real; en PR1 el caso TS
+//! caracterizó F6 como `it.fails`.
 //!
 //! La costura TS → `invoke()` real → Rust/SQLite sigue siendo el gap nativo
 //! declarado en `integration-harness-catalog.md`; aquí los `pub fn` reales se
@@ -318,6 +320,230 @@ fn deleting_a_collection_keeps_its_documents_bindings_and_markdown() {
         )
         .expect("read queued metadata mutation");
     assert_eq!(queued, 1, "la mutación de delete quedó encolada");
+
+    let _ = fs::remove_dir_all(&base);
+}
+
+/// Lee solo las filas de unión (`writing_collections`) con una conexión nueva.
+fn read_relations(db_path: &str) -> Vec<(String, String)> {
+    let connection = Connection::open(db_path).expect("open catalog for relation reads");
+    let mut statement = connection
+        .prepare(
+            "SELECT writing_id, collection_id FROM writing_collections
+             ORDER BY writing_id, collection_id",
+        )
+        .expect("prepare relation read");
+    statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("query relations")
+        .collect::<Result<_, _>>()
+        .expect("collect relations")
+}
+
+fn delete_mutation() -> catalog::CatalogMetadataMutationInput {
+    catalog::CatalogMetadataMutationInput {
+        id: DELETE_MUTATION.into(),
+        entity_kind: "collection".into(),
+        entity_id: COLLECTION_ONE.into(),
+        operation: "delete".into(),
+        payload_json: "{\"name\":\"Collection One\"}".into(),
+        status: "pending".into(),
+        attempt_count: 0,
+        next_retry_at: None,
+        created_at: 4,
+        last_error: None,
+    }
+}
+
+/// F6 (D4, ODE-618 PR1b): el DELETE de las relaciones va en la MISMA
+/// transacción del soft-delete de la colección. Solo desaparecen las relaciones
+/// de la colección borrada; la relación con la colección viva y los `.md`
+/// quedan intactos.
+#[test]
+fn deleting_a_collection_removes_its_relation_rows_in_the_same_transaction() {
+    let base = temp_base();
+    let root = base.join("root");
+    fs::create_dir_all(&root).expect("create temp root");
+    let db = base.join("desktop-index.sqlite3");
+    let db_path = db.to_string_lossy().into_owned();
+
+    let one_body = "# One\n\nFirst document body.\n";
+    let two_body = "# Two\n\nSecond document body.\n";
+    let one_path = write_markdown(&root, "one.md", one_body);
+    let two_path = write_markdown(&root, "two.md", two_body);
+
+    for (id, path, body) in [
+        (DOC_ONE, &one_path, one_body),
+        (DOC_TWO, &two_path, two_body),
+    ] {
+        let hash = workspace::workspace_compute_content_hash(body.to_string())
+            .expect("compute content hash");
+        catalog::catalog_dual_write(
+            db_path.clone(),
+            catalog::CatalogDualWriteInput {
+                document: document(id),
+                binding: Some(binding(
+                    &root.to_string_lossy(),
+                    Path::new(path)
+                        .file_name()
+                        .expect("markdown file name")
+                        .to_string_lossy()
+                        .as_ref(),
+                    path,
+                    &hash,
+                    body.len() as u64,
+                )),
+                mutation: None,
+            },
+        )
+        .unwrap_or_else(|error| panic!("catalog_dual_write({id}): {error}"));
+    }
+    catalog::catalog_save_collection(
+        db_path.clone(),
+        collection(COLLECTION_ONE, "Collection One"),
+        None,
+    )
+    .expect("save collection one");
+    catalog::catalog_save_collection(
+        db_path.clone(),
+        collection(COLLECTION_TWO, "Collection Two"),
+        None,
+    )
+    .expect("save collection two");
+    catalog::catalog_replace_writing_collections(
+        db_path.clone(),
+        DOC_ONE.into(),
+        vec![COLLECTION_ONE.into(), COLLECTION_TWO.into()],
+        "2026-10-01T12:00:00.000Z".into(),
+        2,
+        None,
+    )
+    .expect("assign one to both collections");
+    catalog::catalog_replace_writing_collections(
+        db_path.clone(),
+        DOC_TWO.into(),
+        vec![COLLECTION_ONE.into()],
+        "2026-10-01T12:00:00.000Z".into(),
+        3,
+        None,
+    )
+    .expect("assign two to the deleted collection");
+
+    // Control positivo de alcanzabilidad: las dos relaciones con la colección
+    // que se borra existen de verdad antes del DELETE.
+    let before = read_relations(&db_path);
+    assert_eq!(
+        before
+            .iter()
+            .filter(|(_, collection_id)| collection_id == COLLECTION_ONE)
+            .count(),
+        2,
+        "control positivo: dos relaciones con la colección que se borra"
+    );
+
+    catalog::catalog_delete_collection(
+        db_path.clone(),
+        COLLECTION_ONE.into(),
+        "2026-10-01T13:00:00.000Z".into(),
+        4,
+        delete_mutation(),
+    )
+    .expect("delete collection one");
+
+    // Resultado canónico: no queda ninguna relación de la colección borrada y
+    // solo sobrevive la de la colección viva.
+    let after = read_relations(&db_path);
+    assert!(
+        !after
+            .iter()
+            .any(|(_, collection_id)| collection_id == COLLECTION_ONE),
+        "F6: el borrado elimina las relaciones de la colección borrada"
+    );
+    assert_eq!(
+        after,
+        vec![(DOC_ONE.to_string(), COLLECTION_TWO.to_string())],
+        "solo sobrevive la relación con la colección viva"
+    );
+
+    // La otra mitad del invariante: los documentos y los bytes de su `.md` no
+    // se tocan.
+    assert_eq!(read_rows(&db_path).len(), 2, "los documentos sobreviven");
+    assert_eq!(
+        fs::read(&one_path).expect("read one.md after delete"),
+        one_body.as_bytes(),
+        "one.md conserva sus bytes"
+    );
+    assert_eq!(
+        fs::read(&two_path).expect("read two.md after delete"),
+        two_body.as_bytes(),
+        "two.md conserva sus bytes"
+    );
+
+    let _ = fs::remove_dir_all(&base);
+}
+
+/// D-5 (ODE-618 PR1b): los huérfanos que ya existen en instalaciones previas
+/// (una relación viva de una colección soft-deleted, el residuo que dejaba el
+/// build anterior) no vuelven al snapshot: solo se listan relaciones de
+/// colecciones vivas.
+#[test]
+fn collection_snapshot_omits_relations_of_soft_deleted_collections() {
+    let base = temp_base();
+    let db = base.join("desktop-index.sqlite3");
+    fs::create_dir_all(&base).expect("create temp base");
+    let db_path = db.to_string_lossy().into_owned();
+
+    // Estado heredado construido con los comandos reales: el upsert acepta
+    // `deleted_at` y el replace de relaciones no filtra por vida, así que
+    // reprodujo esta forma el build anterior (soft-delete sin limpiar la unión).
+    catalog::catalog_dual_write(
+        db_path.clone(),
+        catalog::CatalogDualWriteInput {
+            document: document(DOC_ONE),
+            binding: None,
+            mutation: None,
+        },
+    )
+    .expect("dual write one");
+    let mut deleted_collection = collection(COLLECTION_ONE, "Collection One");
+    deleted_collection.deleted_at = Some("2026-10-01T13:00:00.000Z".into());
+    catalog::catalog_save_collection(db_path.clone(), deleted_collection, None)
+        .expect("save soft-deleted collection");
+    catalog::catalog_save_collection(
+        db_path.clone(),
+        collection(COLLECTION_TWO, "Collection Two"),
+        None,
+    )
+    .expect("save live collection");
+    catalog::catalog_replace_writing_collections(
+        db_path.clone(),
+        DOC_ONE.into(),
+        vec![COLLECTION_ONE.into(), COLLECTION_TWO.into()],
+        "2026-10-01T12:00:00.000Z".into(),
+        2,
+        None,
+    )
+    .expect("assign one to the dead and the live collection");
+
+    // Control positivo: la fila huérfana existe en SQLite; la ausencia que se
+    // afirma después no viene de que nunca se escribió.
+    assert!(
+        read_relations(&db_path).contains(&(DOC_ONE.to_string(), COLLECTION_ONE.to_string())),
+        "control positivo: la relación huérfana existe en el catálogo"
+    );
+
+    let snapshot = catalog::catalog_list_collection_snapshot(db_path.clone())
+        .expect("list collection snapshot");
+    let relations: Vec<(String, String)> = snapshot
+        .writing_collections
+        .iter()
+        .map(|row| (row.writing_id.clone(), row.collection_id.clone()))
+        .collect();
+    assert_eq!(
+        relations,
+        vec![(DOC_ONE.to_string(), COLLECTION_TWO.to_string())],
+        "D-5: solo las relaciones de colecciones vivas entran al snapshot"
+    );
 
     let _ = fs::remove_dir_all(&base);
 }
