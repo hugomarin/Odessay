@@ -59,10 +59,13 @@ let users: SeedUser[] = []
 let owner!: SeedUser
 let viewer!: SeedUser
 let stranger!: SeedUser
+let owner2!: SeedUser
 let ownerClient: SupabaseClient
+let owner2Client: SupabaseClient
 
 let privateDoc = ""
 let sharedDoc = ""
+let sharedDocSlug = ""
 let publicDoc = ""
 let publicSharedDoc = ""
 let publicSharedSlug: string | null = null
@@ -70,6 +73,11 @@ let legacyPrivateDoc = ""
 let legacyPrivateSlug: string | null = null
 let revokedDoc = ""
 let publicSlug = ""
+let notesSharedA = ""
+let notesSharedB = ""
+let notesOwn = ""
+let notesSharedSlug = ""
+let notesOwnSlug = ""
 
 const createClientMock = createClient as unknown as {
   mockImplementation: (impl: () => Promise<SupabaseClient>) => void
@@ -177,9 +185,10 @@ const hrefFor = (id: string, slug: string | null) => [`/shared/${id}`, slug ? `/
 
 beforeAll(async () => {
   admin = createLocalAdminClient()
-  users = await seedUsers(runId, ["owner", "viewer", "stranger"])
-  ;[owner, viewer, stranger] = users
+  users = await seedUsers(runId, ["owner", "viewer", "stranger", "owner2"])
+  ;[owner, viewer, stranger, owner2] = users
   ownerClient = await createUserClient(owner)
+  owner2Client = await createUserClient(owner2)
 
   privateDoc = await seedWritingWithShare({ title: "Privado", visibility: "private" })
   sharedDoc = await seedWritingWithShare({
@@ -403,6 +412,70 @@ describe("Revocación — la fila quitada quita el acceso service-role", () => {
     await actAs(viewer)
     const metadata = await generateMetadata(pageParams(revokedDoc))
     expect(metadata.title).toBe("Reading — Artifact Studio")
+  })
+})
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+describe("ODE-659 — /shared resuelve por viewer y el id es la URL canónica", () => {
+  beforeAll(async () => {
+    // El slug es único por autor y sale del título: dos autores con el mismo
+    // título colisionan. El trigger solo genera slug con visibility shared o
+    // public.
+    const notesTitle = `Notes ${runId}`
+    const ownNotesTitle = `Own notes ${runId}`
+
+    notesOwn = await seedWriting(admin, { authorId: viewer.id, title: ownNotesTitle, visibility: "shared" })
+    await sleep(15)
+    const notesOwnedByOther = await seedWriting(admin, {
+      authorId: owner2.id,
+      title: ownNotesTitle,
+      visibility: "shared",
+    })
+    await seedShare(owner2Client, { writingId: notesOwnedByOther, sharedWithId: viewer.id })
+
+    notesSharedA = await seedWriting(admin, { authorId: owner.id, title: notesTitle, visibility: "shared" })
+    await seedShare(ownerClient, { writingId: notesSharedA, sharedWithId: viewer.id })
+    await sleep(15)
+    notesSharedB = await seedWriting(admin, { authorId: owner2.id, title: notesTitle, visibility: "shared" })
+    await seedShare(owner2Client, { writingId: notesSharedB, sharedWithId: viewer.id })
+
+    const sharedRow = await readRow<{ slug: string | null }>(admin, "writings", sharedDoc)
+    const notesSharedRow = await readRow<{ slug: string | null }>(admin, "writings", notesSharedA)
+    const notesOwnRow = await readRow<{ slug: string | null }>(admin, "writings", notesOwn)
+    sharedDocSlug = sharedRow?.slug ?? ""
+    notesSharedSlug = notesSharedRow?.slug ?? ""
+    notesOwnSlug = notesOwnRow?.slug ?? ""
+    if (!sharedDocSlug || !notesSharedSlug || !notesOwnSlug) {
+      throw new Error("[sharing] el trigger no generó los slugs de ODE-659")
+    }
+  })
+
+  it.fails("un slug viejo redirige al id canónico", async () => {
+    await actAs(viewer)
+    await expectRedirect(() => SharedReadingPage(pageParams(sharedDocSlug)), `/shared/${sharedDoc}`)
+  })
+
+  it.fails("el id de cada autor abre su propio documento sin redirect", async () => {
+    await actAs(viewer)
+    expect(readingProps(await SharedReadingPage(pageParams(notesSharedA))).writing.id).toBe(notesSharedA)
+    expect(readingProps(await SharedReadingPage(pageParams(notesSharedB))).writing.id).toBe(notesSharedB)
+  })
+
+  it.fails("el slug repetido elige el documento legible más reciente", async () => {
+    await actAs(viewer)
+    await expectRedirect(() => SharedReadingPage(pageParams(notesSharedSlug)), `/shared/${notesSharedB}`)
+  })
+
+  it.fails("el slug repetido prefiere el documento del propio viewer", async () => {
+    await actAs(viewer)
+    // `notesOwn` es más antiguo que el de owner2; aun así gana el propio.
+    await expectRedirect(() => SharedReadingPage(pageParams(notesOwnSlug)), `/shared/${notesOwn}`)
+  })
+
+  it.fails("un extraño con el slug repetido recibe 404, nunca 500", async () => {
+    await actAs(stranger)
+    await expectNotFound(() => SharedReadingPage(pageParams(notesSharedSlug)))
   })
 })
 
