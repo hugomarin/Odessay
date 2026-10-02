@@ -1,14 +1,18 @@
-//! ODE-613 — the TS → invoke() → Rust → SQLite seam, replayed.
+//! ODE-613 — the TS → invoke() → Rust → SQLite seam, replayed; ODE-644 PR2
+//! extends it to the sync-mutation queue.
 //!
-//! `tests/fixtures/catalog-seam/catalog-seam-v3.json` is recorded by
+//! `tests/fixtures/catalog-seam/catalog-seam-v4.json` is recorded by
 //! `tests/support/catalog-seam-recorder.ts` (driven from
 //! `tests/catalog-seam-fixture.test.ts`) executing the REAL TS production code —
 //! `SqliteDocumentCatalog` and the `WorkspaceReconciler` wired like
-//! `desktop-workspace-reconciler.ts` — against a recording `@tauri-apps/api/core`
-//! invoke. This test replays that exact `{cmd, args}` sequence over the real
-//! `pub fn` commands (no AppHandle) and a real temporary SQLite catalog and
-//! filesystem, and asserts the canonical outcome: the catalog rows must match
-//! the durable disk state and every UUID must resolve to the same document.
+//! `desktop-workspace-reconciler.ts`; and, for SYNC-05,
+//! `DesktopDocumentService.saveWriting` + `desktopCatalogSyncService
+//! .flushPending`, with only Supabase doubled — against a recording
+//! `@tauri-apps/api/core` invoke. This test replays that exact `{cmd, args}`
+//! sequence over the real `pub fn` commands (no AppHandle) and a real temporary
+//! SQLite catalog and filesystem, and asserts the canonical outcome: the
+//! catalog rows must match the durable disk state and every UUID must resolve
+//! to the same document.
 //!
 //! The loop is CLOSED on responses too: every recorded invoke carries a
 //! projection of the double's response, and this test projects the real
@@ -16,22 +20,31 @@
 //! recorded arguments are only trustworthy while Rust returns the same
 //! identity/presence/content fields the double returned — the ids and hashes
 //! per path and `unboundPaths` of `workspace_sync`, `changed` of
-//! `catalog_apply_reconcile`, and the read rows. `folderCount` is excluded on purpose; see
-//! `project_workspace_sync`.
+//! `catalog_apply_reconcile`, the read rows, the mutation listings, the
+//! touched binding and the reopened `.md` body. `folderCount` and the
+//! machine-dependent fields of `workspace_touch_file` are excluded on purpose;
+//! see `project_workspace_sync` and `project_touch`.
+//!
+//! The SYNC-05 scenarios add CONTROL steps (Req 5): after each flush boundary,
+//! the canonical state the double believes — `documents.sync_status`,
+//! `documents.cloud_present` and every `sync_mutations` row of the document —
+//! is asserted against a brand-new SQLite connection, so a green response loop
+//! cannot hide a wrong durable queue.
 //!
 //! The only thing still outside this proof is the Tauri IPC transport itself
 //! (JSON serialization/deserialization across the real webview bridge), which
 //! stays RUNTIME (ODE-622).
 
-use odessay_lib::commands::{index as catalog, workspace};
-use rusqlite::Connection;
+use odessay_lib::commands::{document, index as catalog, workspace};
+use rusqlite::{params, Connection};
+use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const FIXTURE: &str = include_str!("../../tests/fixtures/catalog-seam/catalog-seam-v3.json");
+const FIXTURE: &str = include_str!("../../tests/fixtures/catalog-seam/catalog-seam-v4.json");
 
 #[derive(Deserialize)]
 struct Fixture {
@@ -52,6 +65,35 @@ struct Scenario {
 enum Step {
     Fs(FsStep),
     Invoke(InvokeStep),
+    Control(ControlStep),
+}
+
+/// Req 5: canonical durable state the recorder asserted against the queue
+/// double. `assert_control` reads it back from a fresh SQLite connection.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ControlStep {
+    name: String,
+    document_id: String,
+    document: ControlDocument,
+    mutations: Vec<ControlMutation>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ControlDocument {
+    sync_status: String,
+    cloud_present: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ControlMutation {
+    id: String,
+    status: String,
+    attempt_count: i64,
+    next_retry_at: Option<i64>,
+    last_error: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -123,12 +165,18 @@ fn rewrite_str(text: &str, paths: &PlaceholderPaths) -> String {
 }
 
 fn string_arg(args: &Value, key: &str) -> String {
+    typed_arg(args, key)
+}
+
+/// Deserializes any recorded arg (i64/usize/bool/Option/struct) with the same
+/// missing-key diagnostics as `string_arg`.
+fn typed_arg<T: DeserializeOwned>(args: &Value, key: &str) -> T {
     serde_json::from_value(
         args.get(key)
             .cloned()
             .unwrap_or_else(|| panic!("catalog_seam: invoke args missing {key}")),
     )
-    .unwrap_or_else(|error| panic!("catalog_seam: invoke args {key} is not a string: {error}"))
+    .unwrap_or_else(|error| panic!("catalog_seam: invoke args {key} has the wrong shape: {error}"))
 }
 
 /// The read fields that determine identity/presence/content for SYS-01/SYS-05/WATCH-07. Mirrors
@@ -206,6 +254,69 @@ fn project_reconcile_result(result: &catalog::CatalogReconcileResult) -> Value {
     json!({ "applied": result.applied, "changed": result.changed })
 }
 
+/// Mirrors the recorder's `workspace_touch_file` projection. `file.path` is
+/// excluded because the real command canonicalizes the root (`/var` →
+/// `/private/var` on macOS) and the canonical path already travels in the
+/// recorded `catalog_dual_write` args; inode/modifiedAt/device are excluded for
+/// the same reason as `unboundFiles.inode` (real fs in the replay, synthetic in
+/// the recording). What is compared is the binding identity and content
+/// evidence the save path consumes: id, relative path, name, size, hash.
+fn project_touch(result: &workspace::WorkspaceFileTouchResult) -> Value {
+    match result {
+        workspace::WorkspaceFileTouchResult::Updated {
+            root_path,
+            binding_root_id,
+            file,
+        } => json!({
+            "status": "updated",
+            "rootPath": root_path,
+            "bindingRootId": binding_root_id,
+            "file": {
+                "id": file.id,
+                "relativePath": file.relative_path,
+                "name": file.name,
+                "size": file.size,
+                "contentHash": file.content_hash,
+            },
+        }),
+        workspace::WorkspaceFileTouchResult::NeedsReconcile { reason } => {
+            json!({ "status": "needsReconcile", "reason": reason })
+        }
+    }
+}
+
+/// Mirrors the recorder's mutation listing projection. `payloadJson` is
+/// deliberately excluded: it is a byte-for-byte echo of the
+/// `catalog_dual_write` argument already in the fixture.
+fn project_mutation_row(row: &catalog::CatalogMutationRow) -> Value {
+    json!({
+        "id": row.id,
+        "documentId": row.document_id,
+        "operation": row.operation,
+        "status": row.status,
+        "attemptCount": row.attempt_count,
+        "nextRetryAt": row.next_retry_at,
+        "createdAt": row.created_at,
+        "lastError": row.last_error,
+    })
+}
+
+/// Mirrors the recorder's metadata listing projection (same `payloadJson`
+/// exclusion).
+fn project_metadata_mutation_row(row: &catalog::CatalogMetadataMutationRow) -> Value {
+    json!({
+        "id": row.id,
+        "entityKind": row.entity_kind,
+        "entityId": row.entity_id,
+        "operation": row.operation,
+        "status": row.status,
+        "attemptCount": row.attempt_count,
+        "nextRetryAt": row.next_retry_at,
+        "createdAt": row.created_at,
+        "lastError": row.last_error,
+    })
+}
+
 /// Dispatch one recorded `invoke` to the real command and project its response
 /// with the same shape the recorder recorded. The caller asserts the projected
 /// response equals the recording: the recorded args are only valid while the
@@ -248,10 +359,133 @@ fn dispatch(cmd: &str, args: &Value) -> Result<Value, String> {
             catalog::catalog_apply_reconcile(string_arg(args, "dbPath"), input)
                 .map(|result| project_reconcile_result(&result))
         }
+        // ── SYNC-05: la cadena de guardado y la cola de mutaciones ────────────
+        "write_file" => {
+            let expected: Option<String> = typed_arg(args, "expectedContentHash");
+            document::write_file(
+                string_arg(args, "path"),
+                string_arg(args, "content"),
+                expected,
+            )
+            .map(|()| Value::Null)
+        }
+        "open_file" => document::open_file(string_arg(args, "path")).map(Value::String),
+        "workspace_touch_file" => workspace::workspace_touch_file(
+            string_arg(args, "rootPath"),
+            string_arg(args, "relativePath"),
+            string_arg(args, "documentId"),
+        )
+        .map(|result| project_touch(&result)),
+        "catalog_dual_write" => {
+            let input: catalog::CatalogDualWriteInput = typed_arg(args, "input");
+            catalog::catalog_dual_write(string_arg(args, "dbPath"), input).map(|()| Value::Null)
+        }
+        "catalog_list_pending_mutations" => catalog::catalog_list_pending_mutations(
+            string_arg(args, "dbPath"),
+            typed_arg(args, "now"),
+            typed_arg(args, "limit"),
+            typed_arg(args, "includeFailed"),
+        )
+        .map(|rows| Value::Array(rows.iter().map(project_mutation_row).collect())),
+        "catalog_update_mutation_status" => catalog::catalog_update_mutation_status(
+            string_arg(args, "dbPath"),
+            string_arg(args, "mutationId"),
+            string_arg(args, "status"),
+            typed_arg(args, "attemptCount"),
+            typed_arg(args, "nextRetryAt"),
+            typed_arg(args, "lastError"),
+        )
+        .map(|()| Value::Null),
+        "catalog_list_pending_metadata_mutations" => {
+            catalog::catalog_list_pending_metadata_mutations(
+                string_arg(args, "dbPath"),
+                typed_arg(args, "now"),
+                typed_arg(args, "limit"),
+                typed_arg(args, "includeFailed"),
+            )
+            .map(|rows| {
+                Value::Array(rows.iter().map(project_metadata_mutation_row).collect())
+            })
+        }
+        "catalog_apply_cloud_snapshots" => {
+            let snapshots: Vec<catalog::CatalogCloudSnapshotInput> = typed_arg(args, "snapshots");
+            catalog::catalog_apply_cloud_snapshots(string_arg(args, "dbPath"), snapshots)
+                .map(|()| Value::Null)
+        }
         other => Err(format!(
             "catalog_seam: unhandled command {other} — extend the Rust dispatch to cover it"
         )),
     }
+}
+
+/// Req 5: contrast the recorded control state with a brand-new SQLite
+/// connection — `documents.sync_status`/`cloud_present` and every
+/// `sync_mutations` row of the document, ordered like the real listing
+/// (`created_at ASC`) with `id` as the deterministic tiebreak the recorder uses.
+fn assert_control(step: &ControlStep, paths: &PlaceholderPaths, scenario: &Scenario) {
+    let connection =
+        Connection::open(&paths.db).expect("catalog_seam: open catalog for the control step");
+    let (sync_status, cloud_present): (String, i64) = connection
+        .query_row(
+            "SELECT sync_status, cloud_present FROM documents WHERE id=?1",
+            params![step.document_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap_or_else(|error| {
+            panic!(
+                "scenario {}: control {}: documents row {} unreadable: {error}",
+                scenario.name, step.name, step.document_id
+            )
+        });
+    assert_eq!(
+        sync_status, step.document.sync_status,
+        "scenario {}: control {}: documents.sync_status diverged",
+        scenario.name, step.name
+    );
+    assert_eq!(
+        cloud_present != 0,
+        step.document.cloud_present,
+        "scenario {}: control {}: documents.cloud_present diverged",
+        scenario.name, step.name
+    );
+
+    let mut statement = connection
+        .prepare(
+            "SELECT id,status,attempt_count,next_retry_at,last_error FROM sync_mutations
+             WHERE document_id=?1 ORDER BY created_at ASC, id ASC",
+        )
+        .expect("catalog_seam: prepare control mutations");
+    let actual_mutations: Vec<Value> = statement
+        .query_map(params![step.document_id], |row| {
+            Ok(json!({
+                "id": row.get::<_, String>(0)?,
+                "status": row.get::<_, String>(1)?,
+                "attemptCount": row.get::<_, i64>(2)?,
+                "nextRetryAt": row.get::<_, Option<i64>>(3)?,
+                "lastError": row.get::<_, Option<String>>(4)?,
+            }))
+        })
+        .expect("catalog_seam: query control mutations")
+        .collect::<Result<_, _>>()
+        .expect("catalog_seam: collect control mutations");
+    let expected_mutations: Vec<Value> = step
+        .mutations
+        .iter()
+        .map(|mutation| {
+            json!({
+                "id": mutation.id,
+                "status": mutation.status,
+                "attemptCount": mutation.attempt_count,
+                "nextRetryAt": mutation.next_retry_at,
+                "lastError": mutation.last_error,
+            })
+        })
+        .collect();
+    assert_eq!(
+        actual_mutations, expected_mutations,
+        "scenario {}: control {}: sync_mutations diverged from the recording",
+        scenario.name, step.name
+    );
 }
 
 fn apply_fs_step(step: &FsStep, paths: &PlaceholderPaths) {
@@ -617,7 +851,7 @@ fn assert_scenario(scenario: &Scenario, paths: &PlaceholderPaths) {
 #[test]
 fn catalog_seam_replays_the_recorded_ts_sequence_over_real_sqlite() {
     let fixture: Fixture = serde_json::from_str(FIXTURE).expect("catalog_seam: parse fixture");
-    assert_eq!(fixture.version, 3, "catalog_seam: unexpected fixture version");
+    assert_eq!(fixture.version, 4, "catalog_seam: unexpected fixture version");
     assert!(!fixture.scenarios.is_empty());
 
     let base = std::env::temp_dir().join(format!("odessay-catalog-seam-{}", uuid::Uuid::new_v4()));
@@ -636,6 +870,7 @@ fn catalog_seam_replays_the_recorded_ts_sequence_over_real_sqlite() {
         for (index, step) in scenario.steps.iter().enumerate() {
             match step {
                 Step::Fs(fs_step) => apply_fs_step(fs_step, &paths),
+                Step::Control(control) => assert_control(control, &paths, scenario),
                 Step::Invoke(invoke) => {
                     let args = rewrite(&invoke.args, &paths);
                     let actual = dispatch(&invoke.cmd, &args).unwrap_or_else(|error| {
