@@ -61,6 +61,32 @@ jobs:
       - name: Start Supabase
         run: supabase start -x studio,imgproxy,mailpit,realtime,edge-runtime,logflare,vector,postgres-meta,supavisor
 
+      - name: Ensure service_role DML on the public schema
+        run: |
+          set -euo pipefail
+          CONTAINER=supabase_db_odessay
+          PROBE="select has_table_privilege('service_role','public.writings','select'), has_table_privilege('service_role','public.writings','insert'), has_table_privilege('service_role','public.writings','update'), has_table_privilege('service_role','public.invitations','select'), has_table_privilege('service_role','public.invitations','insert'), has_table_privilege('service_role','public.invitations','update')"
+          BEFORE="$(docker exec "${CONTAINER}" psql -U postgres -d postgres -tAc "${PROBE}")"
+          echo "service_role (writings sel/ins/upd, invitations sel/ins/upd) antes: ${BEFORE}"
+          if [[ "${BEFORE}" == "t|t|t|t|t|t" ]]; then
+            echo "Los defaults de la imagen ya conceden DML a service_role."
+            exit 0
+          fi
+          # Mismo caso que documenta el catálogo de harnesses (volumen con el
+          # ACL por defecto incompleto): el harness service-role y los pgTAP
+          # que lo ejercitan fallan con `permission denied`. Es una reparación
+          # del stack efímero de CI, no toca producción.
+          docker exec "${CONTAINER}" psql -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          grant all on all tables in schema public to service_role;
+          grant all on all sequences in schema public to service_role;
+          grant all on all functions in schema public to service_role;
+          alter default privileges in schema public grant all on tables to service_role;
+          alter default privileges in schema public grant all on sequences to service_role;
+          alter default privileges in schema public grant all on functions to service_role;
+          SQL
+          AFTER="$(docker exec "${CONTAINER}" psql -U postgres -d postgres -tAc "${PROBE}")"
+          echo "service_role después: ${AFTER}"
+
       - name: Show local endpoints
         run: |
           set -euo pipefail

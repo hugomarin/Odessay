@@ -80,9 +80,9 @@ select throws_like(
 );
 
 -- Requirement 1, the old relationship: a row whose writing_id no longer
--- resolves to its inviter (a forged historical row, simulated here via
--- service_role the way an old pre-fix row would look) must not be a
--- candidate for update at all. USING filters candidate rows against the OLD
+-- resolves to its inviter (a forged historical row, simulated here directly
+-- as the migration owner, the way an old pre-fix row would look) must not be
+-- a candidate for update at all. USING filters candidate rows against the OLD
 -- row, so this is not an exception — the row is simply invisible to B, and
 -- the UPDATE silently affects nothing, unlike the WITH CHECK violation on
 -- insert (test 2) or the BEFORE trigger on a retarget of a row B still owns
@@ -91,11 +91,9 @@ select throws_like(
 -- rol): es exactamente la fila histórica anterior a la policy.
 reset role;
 alter table public.invitations disable trigger invitations_enforce_status_update;
-set local role service_role;
 update public.invitations
 set writing_id = '52010000-0000-4000-8000-000000000001'
 where token = 'attacker-b-own-token-0001';
-reset role;
 alter table public.invitations enable trigger invitations_enforce_status_update;
 
 set local role authenticated;
