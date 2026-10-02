@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEntityKey, type LocalDB } from "../lib/local-db";
-import type { LocalWriting, SyncMutation } from "../lib/local-db/schema";
+import type { LocalWriting, RemoteCollectionPayload, SyncMutation } from "../lib/local-db/schema";
 import { getRetryDelayMs } from "../lib/sync/retry";
 import type { RemoteWritingRecord } from "../lib/sync/remote-bootstrap";
 import { SyncWorker } from "../lib/sync/worker";
@@ -38,6 +38,26 @@ const createMutation = (
     artifact_type: "general",
     visibility: "private",
     version: 1,
+    updated_at: "2026-03-17T00:00:00.000Z",
+  },
+  created_at: 1,
+  attempts: 0,
+  ...overrides,
+});
+
+const createCollectionDeleteMutation = (
+  overrides: Partial<Extract<SyncMutation, { entity_kind: "collection" }>> = {},
+): Extract<SyncMutation, { entity_kind: "collection" }> => ({
+  id: "mutation-collection-1",
+  entity_kind: "collection",
+  entity_id: "collection-1",
+  entity_key: createEntityKey("collection", "collection-1"),
+  operation: "delete",
+  payload: {
+    owner_id: "user-1",
+    name: "Principal",
+    description: null,
+    visibility: "private",
     updated_at: "2026-03-17T00:00:00.000Z",
   },
   created_at: 1,
@@ -287,5 +307,63 @@ describe("SyncWorker", () => {
         slug: "draft-1",
       }),
     );
+  });
+
+  it("deja la cola synced cuando el segundo DELETE de una colección no borra nada", async () => {
+    // Idempotencia de ODE-660: el primer DELETE borra la fila (deleted:true) y
+    // el segundo —la repetición de una respuesta perdida, o una colección
+    // creada y borrada offline— responde deleted:false. Los dos son éxito para
+    // la cola: si el segundo se tratara como error, el worker reintentaría
+    // hasta 10 veces antes de marcarla fallida terminal.
+    const localDb = createLocalDbMock();
+    const first = createCollectionDeleteMutation();
+    const second = createCollectionDeleteMutation({
+      id: "mutation-collection-2",
+      created_at: 2,
+    });
+    let current: SyncMutation = first;
+    localDb.syncQueue.getPending = vi.fn(async () => [current]) as unknown as typeof localDb.syncQueue.getPending;
+    localDb.syncQueue.getCurrentForEntity = vi.fn(async () => current) as unknown as typeof localDb.syncQueue.getCurrentForEntity;
+
+    const responses = [
+      { id: first.entity_id, deleted: true },
+      { id: second.entity_id, deleted: false },
+    ];
+    const deleteCollection = vi.fn(
+      async (collectionId: string, _payload: RemoteCollectionPayload): Promise<void> => {
+        // El handler real responde 200 con `{ id, deleted }` en las dos
+        // llamadas; la segunda (deleted:false) es el caso de ODE-660. El
+        // transporte del worker no consume el cuerpo, así que el doble modela
+        // la respuesta del endpoint sin alterar el resultado.
+        const response = responses.shift();
+        if (!response || response.id !== collectionId) {
+          throw new Error(`DELETE inesperado: ${collectionId}`);
+        }
+      },
+    );
+
+    const worker = new SyncWorker({
+      localDb,
+      isOnline: () => true,
+      transport: {
+        upsertWriting: vi.fn(async () => createRemoteWriting()),
+        deleteWriting: vi.fn(async () => undefined),
+        upsertCollection: vi.fn(async () => undefined),
+        deleteCollection,
+        setWritingCollections: vi.fn(async () => undefined),
+      },
+    });
+
+    await worker.flush();
+    expect(deleteCollection).toHaveBeenCalledTimes(1);
+    expect(deleteCollection).toHaveBeenLastCalledWith(first.entity_id, first.payload);
+    expect(localDb.syncQueue.markSynced).toHaveBeenCalledWith(first.id);
+
+    current = second;
+    await worker.flush();
+    expect(deleteCollection).toHaveBeenCalledTimes(2);
+    expect(deleteCollection).toHaveBeenLastCalledWith(second.entity_id, second.payload);
+    expect(localDb.syncQueue.markSynced).toHaveBeenCalledWith(second.id);
+    expect(localDb.syncQueue.markFailed, "deleted:false no es un fallo").not.toHaveBeenCalled();
   });
 });
