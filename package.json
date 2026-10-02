@@ -34,6 +34,8 @@
     "test:desktop:draft-lifecycle": "node scripts/check-desktop-draft-lifecycle.mjs",
     "seed:phase1": "npx tsx scripts/seed-phase-1.ts",
     "test": "vitest run",
+    "test:supabase": "node scripts/run-supabase-tests.mjs",
+    "supabase:locked": "node scripts/supabase-locked.mjs",
     "test:architecture": "vitest run tests/architecture",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

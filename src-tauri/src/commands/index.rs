@@ -1634,7 +1634,11 @@ pub fn catalog_list_collection_snapshot(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("catalog list collections row: {e}"))?;
     let mut relation_stmt = conn.prepare(
-        "SELECT writing_id,collection_id,added_at,local_updated_at FROM writing_collections ORDER BY writing_id,collection_id",
+        "SELECT wc.writing_id,wc.collection_id,wc.added_at,wc.local_updated_at
+         FROM writing_collections wc
+         JOIN collections c ON c.id = wc.collection_id
+         WHERE c.deleted_at IS NULL
+         ORDER BY wc.writing_id,wc.collection_id",
     ).map_err(|e| format!("catalog list relations prepare: {e}"))?;
     let writing_collections = relation_stmt
         .query_map([], |row| {
@@ -1687,6 +1691,11 @@ pub fn catalog_delete_collection(
     tx.execute("UPDATE collections SET deleted_at=?2,sync_status='deleted',local_updated_at=?3 WHERE id=?1",
         params![collection_id, deleted_at, local_updated_at])
       .map_err(|e| format!("catalog delete collection: {e}"))?;
+    tx.execute(
+        "DELETE FROM writing_collections WHERE collection_id=?1",
+        params![collection_id],
+    )
+    .map_err(|e| format!("catalog delete collection relations: {e}"))?;
     enqueue_metadata_mutation(&tx, &mutation)?;
     tx.commit()
         .map_err(|e| format!("catalog delete collection commit: {e}"))

@@ -24,8 +24,10 @@
  *
  * F6 (las relaciones de la colección borrada sobreviven, así que un documento
  * cuya única colección se borró desaparece de la vista Collections) se
- * caracteriza aquí como `it.fails` y lo arregla ODE-618 PR1b. COL-06 queda en
- * `PARTIAL_INTEGRATION` con dos seams nombrados: web (PR2) y F6 (PR1b).
+ * caracterizó aquí como `it.fails` en PR1 y ODE-618 PR1b lo arregló: el comando
+ * borra las relaciones en la misma transacción y el snapshot solo devuelve
+ * relaciones de colecciones vivas. COL-06 queda en `PARTIAL_INTEGRATION` con un
+ * solo seam: la mitad web (PR2).
  */
 import "fake-indexeddb/auto"
 import { mkdtempSync, rmSync } from "node:fs"
@@ -295,14 +297,11 @@ describe("COL-06 desktop — borrar una colección no toca sus documentos", () =
     expect(collections.map((collection) => collection.id)).not.toContain(principal.id)
   })
 
-  // follow-up pendiente (ODE-618): F6 — el comando real deja las filas de
-  // `writing_collections` de la colección borrada y el snapshot devuelve todas
-  // las relaciones, así que `getUncategorizedWritings` sigue viendo asignado un
-  // documento cuya única colección ya no existe y desaparece de la vista
-  // Collections. Lo arregla ODE-618 PR1b (DELETE en la misma transacción +
-  // filtro de relaciones vivas en el snapshot); entonces este `it.fails` pasa a
-  // `it` sin tocar su cuerpo.
-  it.fails("(F6) un documento cuya única colección se borró vuelve a estar sin clasificar", async () => {
+  // F6 (ODE-618 PR1b): el comando borra las relaciones de la colección en la
+  // misma transacción y el snapshot solo devuelve relaciones de colecciones
+  // vivas, así que `getUncategorizedWritings` vuelve a ver sin clasificar al
+  // documento cuya única colección se borró.
+  it("(F6) un documento cuya única colección se borró vuelve a estar sin clasificar", async () => {
     const { second, principal } = await setupCollectionScenario()
 
     await deleteLocalCollection(principal)
