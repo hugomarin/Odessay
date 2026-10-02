@@ -1050,7 +1050,10 @@ pub fn catalog_reactivate_binding_root(
 
 /// Project a complete cloud metadata burst without changing filesystem facts.
 /// Cloud hydration owns cloud presence/account/metadata only; an existing local
-/// binding and `local_present` always survive this transaction.
+/// binding and `local_present` always survive this transaction. A row with
+/// unsynced local work (`pending`/`failed`/`conflict`) also keeps every
+/// metadata cache: the snapshot must not revert a change whose mutation has not
+/// reached the cloud yet (ODE-617, D-4).
 #[tauri::command]
 pub fn catalog_apply_cloud_snapshots(
     db_path: String,
@@ -1069,12 +1072,30 @@ pub fn catalog_apply_cloud_snapshots(
                cloud_present=excluded.cloud_present,
                cloud_account_id=excluded.cloud_account_id,
                cloud_content_hash=excluded.cloud_content_hash,
-               title_cache=excluded.title_cache,
-               slug_cache=excluded.slug_cache,
-               status_cache=excluded.status_cache,
-               artifact_type_cache=excluded.artifact_type_cache,
-               visibility_cache=excluded.visibility_cache,
-               version_cache=excluded.version_cache,
+               -- ODE-617 (D-4): una fila con trabajo local sin subir no puede
+               -- recibir la metadata de la nube. El snapshot trae el valor
+               -- remoto viejo y pisar la caché revierte el cambio local (p. ej.
+               -- visibility) antes de que su mutación llegue; el siguiente
+               -- guardado encola el valor viejo. La guarda cubre TODAS las
+               -- cachés de metadata, no solo visibility.
+               title_cache=CASE
+                 WHEN documents.sync_status IN ('pending','failed','conflict')
+                 THEN documents.title_cache ELSE excluded.title_cache END,
+               slug_cache=CASE
+                 WHEN documents.sync_status IN ('pending','failed','conflict')
+                 THEN documents.slug_cache ELSE excluded.slug_cache END,
+               status_cache=CASE
+                 WHEN documents.sync_status IN ('pending','failed','conflict')
+                 THEN documents.status_cache ELSE excluded.status_cache END,
+               artifact_type_cache=CASE
+                 WHEN documents.sync_status IN ('pending','failed','conflict')
+                 THEN documents.artifact_type_cache ELSE excluded.artifact_type_cache END,
+               visibility_cache=CASE
+                 WHEN documents.sync_status IN ('pending','failed','conflict')
+                 THEN documents.visibility_cache ELSE excluded.visibility_cache END,
+               version_cache=CASE
+                 WHEN documents.sync_status IN ('pending','failed','conflict')
+                 THEN documents.version_cache ELSE excluded.version_cache END,
                deleted_at_cache=CASE
                  WHEN documents.deleted_at_cache IS NOT NULL
                    AND documents.sync_status IN ('pending','failed','conflict')
@@ -2430,7 +2451,11 @@ mod catalog_tests {
         );
         assert!(local.cloud_present);
         assert_eq!(local.sync_status, "pending", "pending local work wins");
-        assert_eq!(local.title.as_deref(), Some("Cloud metadata"));
+        // ODE-617 (D-4): la guarda cubre todas las cachés de metadata, no solo
+        // la visibilidad; el snapshot no revierte el trabajo local pendiente.
+        assert_eq!(local.title.as_deref(), Some("Doc"), "title_cache local");
+        assert_eq!(local.slug, None, "slug_cache local");
+        assert_eq!(local.version, Some(1), "version_cache local");
 
         let cloud = catalog_get_by_id(path.clone(), "doc-cloud".into())
             .unwrap()

@@ -951,7 +951,9 @@ export async function tauriCatalogBulkDualWriteDouble(dbPath: string, inputs: De
  * Un snapshot de la nube actualiza los campos cloud, pero **no** mueve una
  * fila `pending`/`failed`/`conflict` a `synced`: eso lo hace la confirmación
  * de su mutación. Una fila sin estado pendiente pasa a `synced` si la nube la
- * tiene. Una fila que no existía entra como solo-nube.
+ * tiene. Una fila que no existía entra como solo-nube. Y una fila con trabajo
+ * pendiente conserva **todas** sus cachés de metadata (ODE-617, D-4): el
+ * snapshot no revierte un cambio local que todavía no subió.
  */
 export async function tauriCatalogApplyCloudSnapshotsDouble(
   dbPath: string,
@@ -960,8 +962,31 @@ export async function tauriCatalogApplyCloudSnapshotsDouble(
   const rows = rowsFor(dbPath)
   for (const snapshot of snapshots) {
     const prior = rows.get(snapshot.id)
-    const keepsPending = prior && ["pending", "failed", "conflict"].includes(prior.syncStatus)
+    const keepsPending = prior !== undefined && ["pending", "failed", "conflict"].includes(prior.syncStatus)
     const syncStatus = keepsPending ? prior.syncStatus : snapshot.cloudPresent ? "synced" : (prior?.syncStatus ?? "local-only")
+    // ODE-617 (D-4): espejo de la guarda del SQL real
+    // (`catalog_apply_cloud_snapshots`): con trabajo local pendiente, el
+    // snapshot no proyecta NINGUNA caché de metadata — ni title/slug/status
+    // ni artifactType/visibility/version. Sin trabajo pendiente sí las aplica
+    // (la hidratación normal no se congela). Antes usaba `??` y omitía
+    // visibility/artifactType/version, así que ocultaba la hipótesis.
+    const metadata = keepsPending
+      ? {
+          title: prior.title,
+          slug: prior.slug,
+          status: prior.status,
+          artifactType: prior.artifactType,
+          visibility: prior.visibility,
+          version: prior.version,
+        }
+      : {
+          title: snapshot.title ?? null,
+          slug: snapshot.slug ?? null,
+          status: snapshot.status ?? null,
+          artifactType: snapshot.artifactType ?? null,
+          visibility: snapshot.visibility ?? null,
+          version: snapshot.version ?? null,
+        }
     rows.set(snapshot.id, {
       ...(prior ?? {
         id: snapshot.id,
@@ -978,9 +1003,7 @@ export async function tauriCatalogApplyCloudSnapshotsDouble(
       }),
       cloudPresent: snapshot.cloudPresent,
       cloudAccountId: snapshot.cloudAccountId,
-      title: snapshot.title ?? prior?.title ?? null,
-      slug: snapshot.slug ?? prior?.slug ?? null,
-      status: snapshot.status ?? prior?.status ?? null,
+      ...metadata,
       syncStatus,
     } as DesktopCatalogRow)
   }
