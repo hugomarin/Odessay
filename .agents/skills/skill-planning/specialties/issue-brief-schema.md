@@ -115,6 +115,7 @@ Verificado en: main@<sha corto> (<fecha>)
 Mapa del área: <documento y sección donde vive el mapa completo>
 Qué cambiar: <símbolo> — <archivo>:<desde>-<hasta>   (una línea por símbolo)
 Cómo funciona hoy: <3–5 líneas: flujo, orden de efectos, quién llama a quién>
+Construir con: <qué reutilizar (API, helper, hook, doble) con archivo:líneas> · <sibling cuya forma seguir, si hace falta una pieza nueva> · <qué NO crear porque ya tiene owner>
 Dónde probar: <archivos de test a extender o que deben pasar idénticos> + <helpers del harness>
 Trampas: <lo ya pagado que no hay que redescubrir>
 No tocar: <lo que queda fuera de alcance aunque esté al lado>

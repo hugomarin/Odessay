@@ -1,6 +1,20 @@
 # Recon de área
 
-Especialidad de Planning. Investiga **una vez** el código de un área que van a tocar varios issues, encuentra lo que podría frenar el BUILD o la orquestación, y deja todo listo para despachar. El builder después **valida** el pack (`architecture-recon`, modo validación) en vez de volver a explorar.
+Especialidad de Planning. Investiga **una vez** el código de un área que van a tocar varios issues y deja todo listo para despachar. El builder después **valida** el pack (`architecture-recon`, modo validación) en vez de volver a explorar.
+
+## Objetivo: dos resultados, los dos obligatorios
+
+1. **Mejor código.** El builder recibe el diseño ya resuelto contra el código real:
+   - dónde vive el cambio (el owner correcto, no el archivo más cercano ni el hotspot);
+   - qué reutilizar (la API, el helper o el doble que ya resuelve el caso) y qué patrón seguir;
+   - qué **no** crear, para no duplicar una responsabilidad que ya tiene owner;
+   - el cambio más simple que cumple el brief;
+   - qué invariantes preservar y dónde y cómo probarlo (el test canónico, el punto de entrada de producción).
+
+   Un buen Recon simplifica: en la tanda 3, el de ODE-657 dejó un diseño más simple que el del brief.
+2. **Que nada frene la orquestación.** Contratos completos, decisiones humanas resueltas antes, conflictos entre issues ordenados en olas y requisitos operativos listos.
+
+Un Recon que solo cumple el segundo es incompleto: el builder llega sin bloqueos, pero vuelve a decidir el diseño por su cuenta y tiende a crear piezas nuevas en vez de reutilizar las que hay.
 
 ## Cuándo aplica, y cuándo no
 
@@ -15,12 +29,25 @@ Especialidad de Planning. Investiga **una vez** el código de un área que van a
 2. Partir la tanda en **clusters**: issues que comparten owner o archivos.
 3. Lanzar **un worker por cluster, en paralelo y en solo lectura**: sin tocar Linear ni el repo. Cada worker:
    - usa el método de `.agents/skills/architecture-recon/SKILL.md` (buscar por símbolo y rango, no paginar hotspots);
-   - recorre la lista de huecos (§ 2) por cada issue;
+   - recorre las dos listas de huecos (§ 2) por cada issue: calidad del código y bloqueos;
    - **resuelve desde el código** todo lo que pueda, con evidencia (`archivo:líneas`);
    - **escala solo lo que el código no contesta.**
 4. El planner consolida: escribe en Linear, abre el PR del mapa y entrega el reporte (§ 3 y § 4).
 
 ## 2. Lista de huecos
+
+**Calidad del código (objetivo 1):**
+
+| # | Hueco | Qué buscar | Dónde termina |
+|---|---|---|---|
+| C1 | **Owner** | Dónde debe vivir el cambio según el contrato, y si el brief apunta a un hotspot o a un archivo que no es el owner | Recon Pack, campo "Qué cambiar" |
+| C2 | **Reutilización** | La API, el helper, el hook o el doble del harness que ya cubre el caso; el sibling cuya **forma** seguir si hace falta una pieza nueva | Recon Pack, campo "Construir con" |
+| C3 | **Duplicación** | Una segunda implementación que el brief, tal como está, obligaría a crear | Recon Pack, campo "Construir con" (qué **no** crear) |
+| C4 | **Diseño más simple** | Si el código permite una solución más simple que la del brief, con menos piezas o sin estado nuevo | Corrección en "Auditoría"; si cambia el alcance, decisión humana |
+| C5 | **Invariantes y orden** | Lo que el cambio no puede romper: orden de efectos, refs en callbacks de larga vida, identidad, escritores únicos | Recon Pack, campo "Trampas" |
+| C6 | **Cómo probarlo** | Test canónico a extender, punto de entrada de producción, helpers del harness, la mutación que discrimina el bug | Recon Pack, campo "Dónde probar" |
+
+**Lo que puede frenar la orquestación (objetivo 2):**
 
 | # | Hueco | Qué buscar | Dónde termina |
 |---|---|---|---|
@@ -37,7 +64,7 @@ Especialidad de Planning. Investiga **una vez** el código de un área que van a
 ## 3. Qué deja (definición de hecho)
 
 **En Linear, por issue:**
-- el comentario `## Recon Pack (verificado en main@<sha>)`, con el formato de `issue-brief-schema.md` § Recon Pack;
+- el comentario `## Recon Pack (verificado en main@<sha>)`, con el formato de `issue-brief-schema.md` § Recon Pack, **incluido "Construir con"** (qué reutilizar, qué patrón seguir, qué no crear);
 - una sección **"Auditoría (<fecha>)"** en la descripción: correcciones al brief con líneas y hallazgos ya resueltos;
 - `Architecture Contract` y `Reference docs` completos en la descripción;
 - cada decisión pendiente escrita como **"Default, pendiente de confirmar por <humano>"**.
@@ -58,7 +85,7 @@ Reglas del PR: solo docs, label `process` y **ningún `ODE-###` en el asunto de 
 En el idioma del humano, a nivel de producto y sin jerga. Seis partes, en este orden:
 
 1. **Cómo quedó cada issue.** Tabla `Issue | Estado | Nota`. Estados: *Listo*, *Listo con un cambio de contrato*, *Espera a <issue>*, *Sin brief todavía*.
-2. **Lo que la auditoría encontró y ya quedó resuelto.** Cada punto contado por su efecto para el usuario. Ejemplo: "basta con que dos personas te compartan un documento llamado 'Notes' para que el enlace dé error".
+2. **Lo que la auditoría encontró y ya quedó resuelto.** Cada punto contado por su efecto para el usuario. Ejemplo: "basta con que dos personas te compartan un documento llamado 'Notes' para que el enlace dé error". Incluye las **simplificaciones de diseño** ("más simple que el original: ya no hace falta…") y lo que se va a **reutilizar en vez de crear**.
 3. **Decisiones tuyas**, con letras (A, B…). Por cada una:
    - la pregunta;
    - qué pasa hoy;

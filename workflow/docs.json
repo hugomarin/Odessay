@@ -502,7 +502,7 @@
     {
       "path": ".agents/skills/skill-planning/specialties/area-recon.md",
       "type": "skill-reference",
-      "description": "Recon de área de Planning: workers en paralelo y en solo lectura, lista de huecos que pueden frenar la orquestación, definición de hecho (Recon Pack, Auditoría, PR del mapa abierto, lint) y plantilla del reporte al humano con decisiones por defecto."
+      "description": "Recon de área de Planning con dos objetivos (mejor código y que nada frene la orquestación): workers en paralelo y en solo lectura, listas de huecos de calidad (owner, reutilización, duplicación, diseño más simple, invariantes, pruebas) y de bloqueos, definición de hecho (Recon Pack, Auditoría, PR del mapa abierto, lint) y plantilla del reporte al humano con decisiones por defecto."
     },
     {
       "path": ".agents/skills/skill-planning/specialties/linear-conventions.md",

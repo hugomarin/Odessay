@@ -85,6 +85,7 @@ El PR del mapa que deja un Recon de área (`skill-planning/specialties/area-reco
 
 - Por cada issue, elegir **al menos 4 rangos al azar** de su Recon Pack y confirmar el símbolo en el commit declarado: `git show <sha>:<archivo> | sed -n '<a>,<b>p'`.
 - Confirmar contra el código los hallazgos que **cambian el alcance**: correcciones al brief, seguridad, contratos externos.
+- Confirmar el **"Construir con"** de cada pack: la API o el helper que manda a reutilizar existe y cubre el caso; lo que dice "no crear" de verdad ya tiene owner; el owner propuesto no es un hotspot que absorbería responsabilidad nueva. Una recomendación de reutilización falsa lleva al builder a un diseño peor que no tenerla.
 - Repetir el recuento con el comando que trae el mapa, si lo trae.
 - Confirmar que el diff solo toca docs y que ningún asunto de commit menciona un `ODE-###`.
 - **PASS:** mergear el PR del mapa y comentar en cada issue "Mapa de Recon en main @ <SHA>". **FAIL:** hallazgos con línea, en el PR y en el issue afectado. Nada se despacha antes del PASS.

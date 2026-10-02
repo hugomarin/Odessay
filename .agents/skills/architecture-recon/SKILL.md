@@ -70,6 +70,8 @@ Si el brief trae un `Recon Pack` (ver `issue-brief-schema.md`), no repetir la ex
 2. Con cambios: re-verificar solo los símbolos cuyo rango cambió y actualizar sus líneas.
 3. Si el cambio es estructural (el símbolo desapareció, cambió de dueño o de archivo, o el orden de efectos que el pack describe ya no es cierto), detener BUILD con `Context Gap — Recon Pack` y pedir al planner que actualice el mapa. No redescubrir el área por cuenta propia.
 
+El campo "Construir con" del pack es el punto de partida del `Construction order`: reutilizar lo que nombra y no crear lo que excluye. Desviarse exige una `Recon correction` con la evidencia.
+
 El output es un Recon breve que confirma el pack, más una `Recon correction` (qué decía el pack, qué hay en el código, con líneas) por cada diferencia encontrada. Las correcciones van en el Context Report.
 
 ## 6. Manejo de fallos e incertidumbre
