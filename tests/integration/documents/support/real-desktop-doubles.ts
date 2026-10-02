@@ -17,6 +17,7 @@ import type {
   DesktopWorkspaceFile,
   DesktopWorkspaceSnapshot,
   DesktopWorkspaceTouchResult,
+  DesktopWorkspaceUnboundFile,
 } from "@/lib/services/desktop/tauri-commands"
 import { WriteFileConflictError } from "@/lib/services/desktop/write-file-conflict-error"
 import { computeMarkdownContentHash } from "@/lib/content-hash"
@@ -48,6 +49,34 @@ const catalogsByDb = new Map<string, Map<string, DesktopCatalogRow>>()
 // deliberately-open native gap as the rest of this file.
 const collectionsByDb = new Map<string, Map<string, DesktopCatalogCollection>>()
 const writingCollectionsByDb = new Map<string, Map<string, DesktopCatalogWritingCollection>>()
+// Cola durable de metadata (`metadata_sync_mutations`), en memoria. La alimenta
+// `tauriCatalogDeleteCollectionDouble`, espejo del SQL actual de
+// `catalog_delete_collection`; los dobles de save/replace de colecciones siguen
+// ignorando su `mutation` porque ninguna prueba lee la cola después de ellos.
+type MetadataMutationRow = {
+  id: string
+  entityKind: DesktopCatalogMetadataMutation["entityKind"]
+  entityId: string
+  operation: DesktopCatalogMetadataMutation["operation"]
+  payloadJson: string
+  // Sin `processing`: ningún doble escribe ese estado (el real lo admite en el
+  // CHECK, pero solo el worker lo usa).
+  status: "pending" | "synced" | "failed"
+  attemptCount: number
+  nextRetryAt: number | null
+  createdAt: number
+  lastError: string | null
+}
+const metadataMutationsByDb = new Map<string, Map<string, MetadataMutationRow>>()
+
+function metadataMutationsFor(dbPath: string): Map<string, MetadataMutationRow> {
+  let store = metadataMutationsByDb.get(dbPath)
+  if (!store) {
+    store = new Map()
+    metadataMutationsByDb.set(dbPath, store)
+  }
+  return store
+}
 const bindingRootIdsByRoot = new Map<string, string>()
 // Per-root durable manifest state (relativePath -> document id), real enough
 // to prove Workspace-manifest convergence (WS-02): an explicit-IDs call binds
@@ -113,6 +142,7 @@ export function resetCatalogDoubles(): void {
   catalogsByDb.clear()
   collectionsByDb.clear()
   writingCollectionsByDb.clear()
+  metadataMutationsByDb.clear()
   bindingRootIdsByRoot.clear()
   manifestsByRoot.clear()
   manifestInodesByRoot.clear()
@@ -245,6 +275,7 @@ async function statAsWorkspaceFile(rootPath: string, relativePath: string, docum
     modifiedAt: stat.mtimeMs,
     size: stat.size,
     inode: stat.ino,
+    device: stat.dev,
     contentHash,
   }
 }
@@ -771,18 +802,33 @@ async function tauriWorkspaceSyncDoubleWithMode(
   const files = await Promise.all(
     [...manifest.entries()].map(([relativePath, id]) => statAsWorkspaceFile(rootPath, relativePath, id)),
   )
-  const unboundPaths =
+  const unboundEntries =
     mode === "invoke"
-      ? (await listUnmanifestedMarkdown(rootPath, manifest))
-          .filter(({ relativePath }) => {
-            if (effectiveSelectedPaths.length === 0) return true
-            return effectiveSelectedPaths.some((selectedPath) => {
-              const normalized = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "")
-              return relativePath === normalized || relativePath.startsWith(`${normalized}/`)
-            })
+      ? (await listUnmanifestedMarkdown(rootPath, manifest)).filter(({ relativePath }) => {
+          if (effectiveSelectedPaths.length === 0) return true
+          return effectiveSelectedPaths.some((selectedPath) => {
+            const normalized = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "")
+            return relativePath === normalized || relativePath.startsWith(`${normalized}/`)
           })
-          .map(({ relativePath }) => relativePath)
+        })
       : []
+  const unboundPaths = unboundEntries.map(({ relativePath }) => relativePath)
+  // Additive evidence (ODE-657), same order as `unboundPaths`: the real scan
+  // already computed inode/hash/size while deciding the file was unbound.
+  const unboundFiles: DesktopWorkspaceUnboundFile[] = await Promise.all(
+    unboundEntries.map(async ({ relativePath, inode }) => {
+      const fullPath = join(rootPath, relativePath)
+      const stat = await fs.stat(fullPath)
+      return {
+        relativePath,
+        inode,
+        device: stat.dev,
+        contentHash: await hashFile(fullPath),
+        size: stat.size,
+        modifiedAt: stat.mtimeMs,
+      }
+    }),
+  )
   const inodes = new Map<string, number>()
   for (const file of files) inodes.set(file.relativePath, file.inode)
   manifestInodesByRoot.set(rootPath, inodes)
@@ -797,6 +843,7 @@ async function tauriWorkspaceSyncDoubleWithMode(
     selectedPaths: effectiveSelectedPaths,
     files,
     unboundPaths,
+    unboundFiles,
   }
 }
 
@@ -1153,6 +1200,81 @@ export async function tauriCatalogReplaceWritingCollectionsDouble(
   }
 }
 
+/**
+ * Espejo del SQL **actual** de `catalog_delete_collection` (`index.rs`): marca
+ * la colección como borrada (`deleted_at`, `sync_status='deleted'`,
+ * `local_updated_at`) y encola la mutación de metadata (`supersede` de las
+ * accionables anteriores de la entidad + `INSERT … ON CONFLICT DO NOTHING`),
+ * **sin** borrar las filas de `writing_collections` de esa colección. Eso
+ * reproduce F6 (ODE-618): un documento cuya única colección se borró queda
+ * "asignado" y desaparece de la vista Collections. La prueba Rust
+ * `collection_delete_keeps_documents.rs` da la verdad de SQLite; este doble es
+ * el comportamiento vigente contra el que se caracteriza F6 como `it.fails`.
+ */
+export async function tauriCatalogDeleteCollectionDouble(
+  dbPath: string,
+  collectionId: string,
+  deletedAt: string,
+  localUpdatedAt: number,
+  mutation: DesktopCatalogMetadataMutation,
+): Promise<void> {
+  const collections = collectionsByDb.get(dbPath)
+  const collection = collections?.get(collectionId)
+  if (collections && collection) {
+    // UPDATE … WHERE id=?1: sin fila, no hay nada que marcar; la mutación se
+    // encola igual, como el comando real.
+    collections.set(collectionId, {
+      ...collection,
+      deletedAt,
+      syncStatus: "deleted",
+      localUpdatedAt,
+    })
+  }
+  enqueueMetadataMutationDouble(dbPath, mutation)
+}
+
+/**
+ * Espejo de `enqueue_metadata_mutation` (`index.rs`): supersede las mutaciones
+ * accionables anteriores de la misma entidad (`pending`/`failed` → `synced`
+ * con `last_error` "superseded…") e inserta la nueva con
+ * `ON CONFLICT(id) DO NOTHING`.
+ */
+function enqueueMetadataMutationDouble(
+  dbPath: string,
+  mutation: DesktopCatalogMetadataMutation,
+): void {
+  const store = metadataMutationsFor(dbPath)
+  for (const [id, row] of [...store.entries()]) {
+    if (
+      row.entityKind === mutation.entityKind &&
+      row.entityId === mutation.entityId &&
+      id !== mutation.id &&
+      (row.status === "pending" || row.status === "failed")
+    ) {
+      store.set(id, {
+        ...row,
+        status: "synced",
+        nextRetryAt: null,
+        lastError: "superseded by later metadata mutation",
+      })
+    }
+  }
+  if (!store.has(mutation.id)) {
+    store.set(mutation.id, {
+      id: mutation.id,
+      entityKind: mutation.entityKind,
+      entityId: mutation.entityId,
+      operation: mutation.operation,
+      payloadJson: mutation.payloadJson,
+      status: mutation.status,
+      attemptCount: mutation.attemptCount,
+      nextRetryAt: mutation.nextRetryAt,
+      createdAt: mutation.createdAt,
+      lastError: mutation.lastError,
+    })
+  }
+}
+
 export async function tauriCatalogDetachLocalFileDouble(dbPath: string, id: string): Promise<void> {
   const rows = rowsFor(dbPath)
   const row = rows.get(id)
@@ -1283,28 +1405,51 @@ export async function tauriCatalogUpdateMutationStatusDouble(
 }
 
 /**
- * No hay ninguna prueba que encole en `metadata_sync_mutations` (las ediciones
- * de metadata de un writing viajan por `sync_mutations`), así que la cola real
- * está vacía: una cola vacía es la forma real de "nada que hacer", no un atajo.
+ * Espejo de `catalog_list_pending_metadata_mutations` (mismo `WHERE` que la cola
+ * de contenido: `pending` siempre, `failed` solo con `include_failed` y
+ * `attempt_count < MAX_SYNC_ATTEMPTS`, filtrado por `next_retry_at <= now` y
+ * ordenado por `created_at ASC`). La cola la alimenta
+ * `tauriCatalogDeleteCollectionDouble`; con las pruebas que no borran
+ * colecciones sigue vacía, que es la forma real de "nada que hacer".
  */
 export async function tauriCatalogListPendingMetadataMutationsDouble(
-  _dbPath: string,
-  _now = Date.now(),
-  _limit = 200,
-  _includeFailed = true,
+  dbPath: string,
+  now = Date.now(),
+  limit = 200,
+  includeFailed = true,
 ): Promise<DesktopCatalogMetadataMutation[]> {
-  return []
+  return [...metadataMutationsFor(dbPath).values()]
+    .filter(
+      (mutation) =>
+        (mutation.status === "pending" ||
+          (includeFailed &&
+            mutation.status === "failed" &&
+            mutation.attemptCount < MAX_SYNC_ATTEMPTS)) &&
+        (mutation.nextRetryAt === null || mutation.nextRetryAt <= now),
+    )
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .slice(0, limit)
+    .map((mutation) => ({ ...mutation }))
 }
 
-/** Con la cola de metadata siempre vacía, este UPDATE no encuentra fila y no afecta nada. */
+/**
+ * Espejo de `catalog_update_metadata_mutation_status` post ODE-644: el UPDATE
+ * solo toca filas accionables (`WHERE id=?1 AND status IN ('pending','failed')`).
+ * Una respuesta tardía de una mutación superada o ya resuelta no revive.
+ */
 export async function tauriCatalogUpdateMetadataMutationStatusDouble(
-  _dbPath: string,
-  _mutationId: string,
-  _status: "pending" | "synced" | "failed",
-  _attemptCount: number,
-  _nextRetryAt: number | null,
-  _lastError: string | null,
-): Promise<void> {}
+  dbPath: string,
+  mutationId: string,
+  status: "pending" | "synced" | "failed",
+  attemptCount: number,
+  nextRetryAt: number | null,
+  lastError: string | null,
+): Promise<void> {
+  const store = metadataMutationsFor(dbPath)
+  const mutation = store.get(mutationId)
+  if (!mutation || (mutation.status !== "pending" && mutation.status !== "failed")) return
+  store.set(mutationId, { ...mutation, status, attemptCount, nextRetryAt, lastError })
+}
 
 /** Espejo de `catalog_prune_synced_mutations` (`index.rs:1394-1407`): borra las filas `synced` de las dos colas. */
 export async function tauriCatalogPruneSyncedMutationsDouble(dbPath: string): Promise<number> {
@@ -1334,6 +1479,17 @@ export async function tauriCatalogPurgeDocumentDouble(dbPath: string, id: string
  */
 export function catalogMutationsDouble(dbPath: string): ReadonlyArray<SyncMutationRow> {
   return [...mutationsFor(dbPath).values()].map((mutation) => ({ ...mutation }))
+}
+
+/**
+ * Lectura de la cola durable de metadata para las aserciones de las pruebas.
+ * Devuelve una copia de las filas (mutación de un test jamás altera el estado
+ * del doble).
+ */
+export function catalogMetadataMutationsDouble(
+  dbPath: string,
+): ReadonlyArray<DesktopCatalogMetadataMutation> {
+  return [...metadataMutationsFor(dbPath).values()].map((mutation) => ({ ...mutation }))
 }
 
 // ─── settings tauri-commands doubles (real in-memory key/value store) ─────
