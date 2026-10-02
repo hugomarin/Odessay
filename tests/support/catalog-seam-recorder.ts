@@ -30,18 +30,27 @@
 
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
 import { computeMarkdownContentHash } from "@/lib/content-hash"
-import { tauriWorkspaceSync, type DesktopCatalogRow } from "@/lib/services/desktop/tauri-commands"
+import {
+  tauriWorkspaceSync,
+  type DesktopCatalogRow,
+  type DesktopWorkspaceSnapshot,
+} from "@/lib/services/desktop/tauri-commands"
 import {
   createWorkspaceReconciler,
   type KnownBinding,
   type ObservedFile,
   type ReconcilerRoot,
+  type UnboundFile,
   type WorkspaceReconciler,
 } from "@/lib/services/desktop/workspace-reconciler"
 
 export const CATALOG_SEAM_FIXTURE_VERSION = 3 as const
 export const FIXTURE_DB_PATH = "$DB"
 export const FIXTURE_ROOT_PATHS = { rootA: "$ROOT_A", rootB: "$ROOT_B" } as const
+// Synthetic volume for every fixture file, like the synthetic inode: the
+// double cannot know the replay machine's `st_dev`, so the projection excludes
+// it and the recording only needs one shared volume (ODE-657 review P1).
+const FIXTURE_DEVICE = 1
 export type FixtureRootKey = keyof typeof FIXTURE_ROOT_PATHS
 
 /** The read fields that determine identity/presence/content for SYS-01/SYS-05/WATCH-07. */
@@ -54,7 +63,11 @@ export type CatalogSeamRowProjection = {
 }
 
 export type CatalogSeamInvokeResponse =
-  | { files: { relativePath: string; id: string; contentHash: string }[]; unboundPaths: string[] }
+  | {
+      files: { relativePath: string; id: string; contentHash: string }[]
+      unboundPaths: string[]
+      unboundFiles: { relativePath: string; contentHash: string; size: number }[]
+    }
   | { applied: boolean; changed: string[] }
   | CatalogSeamRowProjection
   | CatalogSeamRowProjection[]
@@ -151,6 +164,20 @@ function byRelativePath<T extends { relativePath: string }>(left: T, right: T): 
   return left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0
 }
 
+/** Mirrors the adapter's mapping from a `workspace_sync` snapshot to observed files. */
+function observedFilesFromSnapshot(snapshot: DesktopWorkspaceSnapshot): ObservedFile[] {
+  return snapshot.files.map((file) => ({
+    relativePath: file.relativePath,
+    canonicalPath: file.path,
+    inode: file.inode || null,
+    device: file.device ?? null,
+    contentHash: file.contentHash || null,
+    size: file.size,
+    modifiedAt: file.modifiedAt,
+    manifestId: file.id || null,
+  }))
+}
+
 function projectCatalogRow(row: DesktopCatalogRow): CatalogSeamRowProjection {
   return {
     id: row.id,
@@ -185,6 +212,7 @@ export function projectInvokeResponse(cmd: string, response: unknown): CatalogSe
       const snapshot = response as {
         files: { relativePath: string; id: string; contentHash: string }[]
         unboundPaths: string[]
+        unboundFiles?: { relativePath: string; contentHash: string; size: number }[]
       }
       return {
         files: snapshot.files
@@ -195,6 +223,16 @@ export function projectInvokeResponse(cmd: string, response: unknown): CatalogSe
           }))
           .sort(byRelativePath),
         unboundPaths: [...snapshot.unboundPaths].sort(),
+        // Inode is deliberately excluded: it is synthetic in the double and
+        // real in the replay, so it can never be compared across the seam. The
+        // identity signal the wrapper reads is path + hash + size (ODE-657).
+        unboundFiles: [...(snapshot.unboundFiles ?? [])]
+          .map((file) => ({
+            relativePath: file.relativePath,
+            contentHash: file.contentHash,
+            size: file.size,
+          }))
+          .sort(byRelativePath),
       }
     }
     case "catalog_apply_reconcile": {
@@ -297,15 +335,17 @@ export class CatalogSeamSession {
         selectedPaths: [],
       })),
       scanRoot: async (root) => {
-        const snapshot = await tauriWorkspaceSync(root.rootPath)
-        const observed: ObservedFile[] = snapshot.files.map((file) => ({
+        const snapshot = await tauriWorkspaceSync(root.rootPath, undefined, undefined, {
+          mintUnbound: false,
+        })
+        const observed = observedFilesFromSnapshot(snapshot)
+        const unbound: UnboundFile[] = (snapshot.unboundFiles ?? []).map((file) => ({
           relativePath: file.relativePath,
-          canonicalPath: file.path,
           inode: file.inode || null,
+          device: file.device ?? null,
           contentHash: file.contentHash || null,
           size: file.size,
           modifiedAt: file.modifiedAt,
-          manifestId: file.id || null,
         }))
         const rows = await catalog.listByBindingRoot(root.id)
         const knownBindings: KnownBinding[] = rows
@@ -317,7 +357,11 @@ export class CatalogSeamSession {
             inode: row.binding!.inode,
             contentHash: row.binding!.contentHash,
           }))
-        return { observed, knownBindings }
+        return { observed, unbound, knownBindings }
+      },
+      bindUnbound: async (root, ids) => {
+        const snapshot = await tauriWorkspaceSync(root.rootPath, undefined, ids)
+        return observedFilesFromSnapshot(snapshot)
       },
       commit: async (commit) => {
         await catalog.applyReconcileTransaction(commit)
@@ -332,6 +376,15 @@ export class CatalogSeamSession {
       if (binding.canonicalPath === canonicalPath) return binding.documentId
     }
     throw new Error(`catalog-seam recorder: no document bound at ${canonicalPath}`)
+  }
+
+  /** True when the model still holds a binding at that canonical path. */
+  hasBindingAtPath(rootKey: FixtureRootKey, relativePath: string): boolean {
+    const canonicalPath = `${FIXTURE_ROOT_PATHS[rootKey]}/${relativePath}`
+    for (const binding of this.bindings.values()) {
+      if (binding.canonicalPath === canonicalPath) return true
+    }
+    return false
   }
 
   toScenario(): CatalogSeamScenario {
@@ -399,9 +452,18 @@ export class CatalogSeamSession {
       modifiedAt: number
       size: number
       inode: number
+      device: number
       contentHash: string
     }[] = []
     const unboundPaths: string[] = []
+    const unboundFiles: {
+      relativePath: string
+      inode: number
+      device: number
+      contentHash: string
+      size: number
+      modifiedAt: number
+    }[] = []
     const nextManifest = new Map<string, ModelEntry>()
 
     const observedPaths = [...root.files.keys()].sort((left, right) => left.localeCompare(right))
@@ -415,6 +477,14 @@ export class CatalogSeamSession {
       const id = existing?.id ?? documentIds?.[relativePath]
       if (!id) {
         unboundPaths.push(relativePath)
+        unboundFiles.push({
+          relativePath,
+          inode: file.inode,
+          device: FIXTURE_DEVICE,
+          contentHash,
+          size: Buffer.byteLength(file.content),
+          modifiedAt: file.modifiedAt,
+        })
         continue
       }
       const entry: ModelEntry = {
@@ -433,6 +503,7 @@ export class CatalogSeamSession {
         modifiedAt: file.modifiedAt,
         size: entry.size,
         inode: file.inode,
+        device: FIXTURE_DEVICE,
         contentHash,
       })
     }
@@ -452,6 +523,7 @@ export class CatalogSeamSession {
       selectedPaths: [],
       files,
       unboundPaths,
+      unboundFiles,
     }
   }
 
@@ -621,6 +693,7 @@ const LETTER_V2 = "# Letter\n\nversion two — renamed on disk\n"
 const NEIGHBOUR = "# Neighbour\n\ncreated outside the app\n"
 const WATCH07_EXTERNAL_V1 = "# External edit\n\noriginal content\n"
 const WATCH07_EXTERNAL_V2 = "# External edit\n\nchanged outside the app\n"
+const WATCH04_KEEPER = "# Keeper\n\nresident in root A\n"
 
 async function buildSys01RegisterMoveReopen(session: CatalogSeamSession): Promise<void> {
   session.defineRoot("rootA", "fixture-root-a")
@@ -730,6 +803,58 @@ async function buildWatch07ExternalEditSamePath(session: CatalogSeamSession): Pr
   reconciler.dispose()
 }
 
+async function buildWatch04ExternalMoveAcrossRoots(session: CatalogSeamSession): Promise<void> {
+  session.defineRoot("rootA", "fixture-root-a")
+  session.defineRoot("rootB", "fixture-root-b")
+  session.fsWrite("rootA", "notes/letter.md", LETTER_V1, {
+    inode: 601,
+    modifiedAt: 1_700_000_008_000,
+  })
+  // A resident sibling keeps root A's volume knowable after the move: the
+  // correlation only trusts an inode match when both roots report the same
+  // device, and a root with no file evidence is "volume unknown" (ODE-657
+  // review P1). It also proves the move does not disturb the files it leaves.
+  session.fsWrite("rootA", "notes/keeper.md", WATCH04_KEEPER, {
+    inode: 602,
+    modifiedAt: 1_700_000_007_500,
+  })
+
+  const catalog = session.createCatalog()
+  const reconciler = session.createReconciler(catalog)
+  await reconciler.start()
+  const documentId = session.documentIdForPath("rootA", "notes/letter.md")
+  const keeperId = session.documentIdForPath("rootA", "notes/keeper.md")
+
+  // Moved outside the app from root A to root B: the origin disappears in the
+  // same pass the destination appears unbound. Identity must survive through
+  // device + inode + content_hash correlation across roots, not a fresh UUID.
+  session.fsDelete("rootA", "notes/letter.md")
+  session.fsWrite("rootB", "notes/letter.md", LETTER_V1, {
+    inode: 601,
+    modifiedAt: 1_700_000_009_000,
+  })
+  await reconciler.rescanAll()
+  reconciler.dispose()
+
+  const movedId = session.documentIdForPath("rootB", "notes/letter.md")
+  if (movedId !== documentId) {
+    throw new Error(
+      `catalog-seam recorder: cross-root move minted ${movedId} instead of ${documentId}`,
+    )
+  }
+  if (session.hasBindingAtPath("rootA", "notes/letter.md")) {
+    throw new Error("catalog-seam recorder: the moved document kept a stale binding in root A")
+  }
+  if (session.documentIdForPath("rootA", "notes/keeper.md") !== keeperId) {
+    throw new Error("catalog-seam recorder: the resident sibling lost its identity in the move")
+  }
+  const row = await catalog.getById(documentId)
+  if (row?.binding?.bindingRootId !== "fixture-root-b" || row.localPresent !== true) {
+    throw new Error("catalog-seam recorder: the moved document is not bound to root B")
+  }
+  await catalog.resolvePath(`${FIXTURE_ROOT_PATHS.rootB}/notes/letter.md`)
+}
+
 export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
   const scenarios = [
     await recordScenario(
@@ -757,6 +882,13 @@ export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
       "WATCH-07: an external edit changes markdown at the same path and inode; after rescan, getById " +
         "returns the updated BLAKE3 content hash for the same document identity.",
       buildWatch07ExternalEditSamePath,
+    ),
+    await recordScenario(
+      "watch04-external-move-across-roots",
+      "WATCH-04: a file moved outside the app from root A to root B keeps its UUID — the " +
+        "destination scan reports it unbound with inode + content hash, the pass correlates it " +
+        "against A's confirmed detach, and the binding moves to B with no detach in A.",
+      buildWatch04ExternalMoveAcrossRoots,
     ),
   ]
   return {

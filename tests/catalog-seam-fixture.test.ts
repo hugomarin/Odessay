@@ -80,6 +80,7 @@ describe("catalog seam fixture (ODE-613, ODE-637)", () => {
       "sys01-homonyms-distinct-roots",
       "sys01-register-move-reopen",
       "sys05-reconcile-tracks-disk",
+      "watch04-external-move-across-roots",
       "watch07-external-edit-same-path",
     ])
 
