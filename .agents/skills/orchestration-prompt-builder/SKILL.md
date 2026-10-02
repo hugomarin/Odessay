@@ -1,9 +1,22 @@
 ---
-name: skill-orchestration
-description: Convierte un conjunto de issues en el prompt de orquestación para Orca (/orchestration). Ordena el trabajo en un DAG con olas, asigna roles y modelos, fija gates humanos, reglas de BUILD y REVIEW, cierre, ledger, control de tiempo y paradas, y deja el prompt versionado listo para lanzar.
+name: orchestration-prompt-builder
+description: Orchestration Prompt Builder. Dado un conjunto de issues, escribe el prompt /orchestration COMPLETO que ejecuta el coordinador de Orca (orchestration-v<N>.md + delta), con DAG por PR y olas, roles y modelos comprobados, gates humanos, reglas de BUILD/REVIEW, cierre y ledger, control de tiempo y paradas. No es el skill "orchestration" de Orca (ese ejecuta el prompt), y no se limita a escribir specs de worker.
 ---
 
-# Orquestación (plan para Orca)
+# Orchestration Prompt Builder
+
+## Contrato de salida (leer primero)
+
+**Terminado** = existe `orchestration-v<N>.md`:
+- con **todas** las secciones de `specialties/prompt-template.md`, en ese orden;
+- autosuficiente, porque el coordinador no estuvo en ninguna conversación;
+- con su delta `orchestration-v<N>-delta.md`;
+- con la autocomprobación de § 5 pasada.
+
+**No es terminado:**
+- **Specs de worker sueltos** ("Target / Change / Constraints / Ownership / Observable acceptance"). Son una pieza que va **dentro** del prompt, en la plantilla de spec. Sin el DAG, los roles, el cierre, el ledger, los gates, el tiempo y las paradas, el coordinador no tiene con qué orquestar.
+- **Cargar el skill `orchestration` de Orca** (`orca skills get orchestration`). Ese skill lo usa el coordinador para **ejecutar** el prompt; este skill **lo escribe**.
+- **Crear un Run o lanzar workers.** Este skill solo escribe el prompt; lanzarlo es del humano.
 
 ## 1. Objetivo
 
