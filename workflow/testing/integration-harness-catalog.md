@@ -544,7 +544,7 @@ El comando de la sección "Recuento del capability map", en main@210bc0e6, da `C
 
 ## Harness Supabase local (ODE-616)
 
-**Creado en:** ODE-616 PR1 (2026-10-01). El proof service-role de SHARE-04 vive en `tests/integration/sharing/service-role-authorization.supabase.test.ts` (ODE-616 PR2, +ODE-659); además lo consumen ODE-617-B, la parte web de ODE-618, ODE-659 y ODE-660.
+**Creado en:** ODE-616 PR1 (2026-10-01). El proof service-role de SHARE-04 vive en `tests/integration/sharing/service-role-authorization.supabase.test.ts` (ODE-616 PR2, +ODE-659); además lo consumen ODE-617-B (`tests/integration/sharing/visibility-persistence.supabase.test.ts`), la parte web de ODE-618, ODE-659 y ODE-660.
 
 **Qué es.** Un harness de Vitest contra la única instancia Supabase local (`project_id "odessay"`, API 54321, DB 54322) para ejercitar los caminos que saltan RLS a propósito (cliente admin/service role) con Postgres real y la app real. pgTAP no alcanza ese camino porque el código bajo prueba es TypeScript; los tests unitarios existentes de esos caminos son mock-based.
 
@@ -594,3 +594,4 @@ npm run supabase:locked -- psql "<DB_URL>" -f supabase/migrations/<nueva>.sql
 - **`[auth.rate_limit].sign_in_sign_ups`.** Con CLI 2.113 + gotrue v2.195 la clave se parsea pero no llega al contenedor: esa versión no tiene `GOTRUE_RATE_LIMIT_SIGN_IN_SIGN_UPS`. Sí se aplican `token_refresh` y `token_verifications` (`GOTRUE_RATE_LIMIT_TOKEN_REFRESH`, `GOTRUE_RATE_LIMIT_VERIFY`). La config se mantiene (no afecta a remoto y cubre versiones futuras), pero no asumir que sube el límite de sign-in en este stack.
 - **pgTAP de `supabase/tests`.** Al 2026-10-01, `margins_enforce_identity.test.sql` y `enforce_invitation_writing_ownership.test.sql` fallan en main por drift test↔schema (insertan `profiles` sin `display_name`, que es `not null`; y esperan `42501` donde la migración lanza `P0001`). `writing_shares_permission_enforcement.test.sql` pasa (17/17, con el caso F1 de privado con share viejo desde ODE-616 PR2). No es del harness; correr un archivo concreto con `npm run supabase:locked -- supabase test db --local <archivo>`.
 - **`.cache/**`.** `npm test` recogía copias de recon alojadas ahí; desde este PR las dos configs de Vitest lo excluyen.
+- **DOM para el motor de documentos en node.** El flujo desktop del proof de SHARE-05 (ODE-617 PR-B) necesita el round-trip markdown → TipTap, que usa `window.DOMParser` y `Node`/`document`; el archivo los presta desde un `Window` de happy-dom (peer requerido de `@tiptap/html`) sin cambiar de entorno, para no reemplazar `fetch`/`Request`/`Response` ni perder el pass-through a `127.0.0.1:54321`.
