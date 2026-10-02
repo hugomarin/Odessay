@@ -61,6 +61,8 @@ import { join } from "node:path"
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { ExternalFileNotice } from "@/hooks/useExternalDocumentChanges"
+
 vi.mock("@tiptap/react", async (importOriginal) => {
   const { createTiptapCaptureModule } = await import("../../support/editor-shell-doubles")
   return createTiptapCaptureModule(await importOriginal<Record<string, unknown>>())
@@ -73,14 +75,14 @@ vi.mock("@tiptap/react", async (importOriginal) => {
  * render lo haría reejecutar en bucle.
  */
 const externalNoticeObserver = vi.hoisted(() => {
-  const notices: Array<{ kind: string; path: string | null }> = []
-  let latest: ((notice: { kind: string; path: string | null } | null) => void) | null = null
+  const notices: ExternalFileNotice[] = []
+  let latest: ((notice: ExternalFileNotice | null) => void) | null = null
   return {
     notices,
-    connect(setter: (notice: { kind: string; path: string | null } | null) => void) {
+    connect(setter: (notice: ExternalFileNotice | null) => void) {
       latest = setter
     },
-    emit(notice: { kind: string; path: string | null } | null) {
+    emit(notice: ExternalFileNotice | null) {
       if (notice) notices.push(notice)
       latest?.(notice)
     },
