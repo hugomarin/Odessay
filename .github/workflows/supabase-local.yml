@@ -75,18 +75,12 @@ jobs:
           fi
           # Mismo caso que documenta el catálogo de harnesses (volumen sin el
           # ACL completo): el harness service-role y los pgTAP que lo ejercitan
-          # fallan con `permission denied`. El grant debe correr como
-          # `supabase_admin` (superusuario del contenedor): si las tablas no son
-          # de `postgres`, su GRANT sería un warning no-op. Es una reparación
-          # del stack efímero de CI, no toca producción.
-          docker exec "${CONTAINER}" psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 <<'SQL'
-          grant all on all tables in schema public to service_role;
-          grant all on all sequences in schema public to service_role;
-          grant all on all functions in schema public to service_role;
-          alter default privileges in schema public grant all on tables to service_role;
-          alter default privileges in schema public grant all on sequences to service_role;
-          alter default privileges in schema public grant all on functions to service_role;
-          SQL
+          # fallan con `permission denied`. El grant corre como
+          # `supabase_admin` (superusuario del contenedor), así funciona
+          # cualquiera sea el owner de las tablas. Es una reparación del stack
+          # efímero de CI, no toca producción.
+          GRANTS="grant all on all tables in schema public to service_role; grant all on all sequences in schema public to service_role; grant all on all functions in schema public to service_role; alter default privileges in schema public grant all on tables to service_role; alter default privileges in schema public grant all on sequences to service_role; alter default privileges in schema public grant all on functions to service_role;"
+          docker exec "${CONTAINER}" psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -c "${GRANTS}"
           AFTER="$(docker exec "${CONTAINER}" psql -U postgres -d postgres -tAc "${PROBE}")"
           echo "service_role después: ${AFTER}"
           [[ "${AFTER}" == "t|t|t|t|t|t" ]]
