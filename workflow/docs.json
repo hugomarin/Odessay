@@ -637,6 +637,36 @@
       "description": "Reglas del subsistema de correcciones AI: identidad de sugerencias separada de ubicación, admisión única, estados con salida garantizada, matching con límites de token, degradación por item, learned words, memoria de decisiones y checklist de review."
     },
     {
+      "path": ".agents/skills/skill-orchestration/SKILL.md",
+      "type": "skill",
+      "description": "Convierte un conjunto de issues en el prompt /orchestration de Orca: DAG por PR con olas, roles y modelos comprobados, gates humanos, reglas de BUILD/REVIEW, cierre y ledger, control de tiempo y paradas; versionado con su delta."
+    },
+    {
+      "path": ".agents/skills/skill-orchestration/specialties/prompt-template.md",
+      "type": "skill-reference",
+      "description": "Esqueleto del prompt de orquestación con bloques fijos y de tanda, y plantillas de spec de worker (build y review)."
+    },
+    {
+      "path": ".agents/skills/skill-orchestration/specialties/dag-and-waves.md",
+      "type": "skill-reference",
+      "description": "Método para el DAG de una tanda: nodos por PR, aristas duras, olas, concurrencia, orden de merge y gates humanos."
+    },
+    {
+      "path": ".agents/skills/skill-orchestration/specialties/roles-and-models.md",
+      "type": "skill-reference",
+      "description": "Roles y modelos de la orquestación, detalles de lanzamiento en Orca por herramienta, independencia, fallback y recordatorios por spec."
+    },
+    {
+      "path": ".agents/skills/skill-orchestration/specialties/lessons.md",
+      "type": "skill-reference",
+      "description": "Catálogo incidente → regla de los prompts de orquestación v2–v7 (secuencia, Recon, BUILD, REVIEW, herramientas, coordinador)."
+    },
+    {
+      "path": ".agents/skills/skill-orchestration/specialties/odessay-binding.md",
+      "type": "skill-reference",
+      "description": "Hechos de Odessay para la orquestación: repo, Linear ODE y CLI, checks mecánicos, ledger y traceability, Supabase local, producción y configuración de herramientas."
+    },
+    {
       "path": ".agents/skills/skill-audit-planning/SKILL.md",
       "type": "skill",
       "description": "Método de auditoría para cobertura, solapamientos, dependencias, owners, contratos y evidencia de una fase; fuentes, severidad y formato de Odessay viven en su especialidad local."
