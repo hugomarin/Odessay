@@ -1,6 +1,6 @@
 /**
  * COL-06 web (ODE-618, PR2) — borrar una colección no borra ni corrompe sus
- * documentos.
+ * documentos; contrato de respuesta (ODE-660) — el DELETE informa si borró.
  *
  * Entry point: el handler real `DELETE` de `app/api/collections/[id]/route.ts`,
  * el owner de la operación en web (el worker de sync lo llama en producción).
@@ -16,10 +16,14 @@
  * PostgREST commitea el DELETE; recién ahí se afirman las filas canónicas
  * (`writings`, `collections`, `writing_collections`) leídas por el admin.
  *
- * El caso del extraño afirma "nada cambió" (filas y cuerpos), nunca el código
- * HTTP: hoy el DELETE ajeno responde 200 sin borrar nada y el código de
- * respuesta es alcance de ODE-660. Tras el no-op ajeno corre el control
- * positivo: el dueño borra la misma colección y el setup sí cambia.
+ * ODE-660: el DELETE cuenta lo que borró y responde 200 con
+ * `{ data: { id, deleted } }` — `deleted:false` tanto si la colección no
+ * existía como si es ajena, sin distinguir "no existe" de "no es tuya". Un
+ * segundo DELETE del dueño también responde `deleted:false`: la cola de sync
+ * lo trata como éxito (la prueba del worker vive en `tests/sync-worker.test.ts`).
+ * El caso del extraño afirma las dos cosas: el cuerpo de la respuesta y que
+ * "nada cambió" (filas y cuerpos); el borrado del dueño es el control
+ * positivo, y el PATCH ajeno un control de no-2xx con la fila intacta.
  *
  * `ODE618_RUN_ID` fija el tag del run (y con él el email `owner_<runId>`) para
  * el mutation test del trigger `zz_mutation_ode618_<runId>`, que se acota al
@@ -146,6 +150,10 @@ describe("COL-06 web — borrar una colección no toca sus documentos", () => {
 
     const response = await deleteCollection(principalId)
     expect(response.status, "DELETE real de la colección del dueño").toBe(200)
+    expect(await response.json(), "el dueño sí borró la colección").toEqual({
+      data: { id: principalId, deleted: true },
+      error: null,
+    })
 
     // Resultado canónico 1: los dos documentos siguen ahí, byte a byte de fila
     // (cuerpo y metadata incluidos); nada los tocó.
@@ -193,9 +201,14 @@ describe("COL-06 web — borrar una colección no toca sus documentos", () => {
     sessionState.user = stranger
     const response = await deleteCollection(principalId)
     expect(response).toBeInstanceOf(Response)
+    expect(response.status, "el DELETE ajeno no es un error de transporte").toBe(200)
+    expect(await response.json(), "el extraño no borró nada").toEqual({
+      data: { id: principalId, deleted: false },
+      error: null,
+    })
 
     // Nada cambió: la colección, los tres documentos y las tres asignaciones
-    // están como antes. El código HTTP ajeno no se afirma (ODE-660).
+    // están como antes.
     expect(await readRow(admin, "collections", principalId), "la colección sigue viva").toEqual(beforeCollection)
     expect(await readWriting(firstWritingId), "el primer documento no se tocó").toEqual(beforeFirst)
     expect(await readWriting(secondWritingId), "el segundo documento no se tocó").toEqual(beforeSecond)
@@ -209,8 +222,71 @@ describe("COL-06 web — borrar una colección no toca sus documentos", () => {
     sessionState.user = owner
     const ownerResponse = await deleteCollection(principalId)
     expect(ownerResponse.status).toBe(200)
+    expect(await ownerResponse.json(), "el control del dueño sí borró").toEqual({
+      data: { id: principalId, deleted: true },
+      error: null,
+    })
     expect(await readRow(admin, "collections", principalId)).toBeNull()
     expect(await readMemberships(principalId)).toHaveLength(0)
     expect(await readWriting(firstWritingId), "y el documento sigue vivo").not.toBeNull()
+  })
+
+  it("un segundo DELETE del dueño responde deleted:false (idempotente para la cola de sync)", async () => {
+    sessionState.user = owner
+    const collectionId = await createCollection("Idempotente")
+    expect(await readRow(admin, "collections", collectionId)).not.toBeNull()
+
+    const firstResponse = await deleteCollection(collectionId)
+    expect(firstResponse.status).toBe(200)
+    expect(await firstResponse.json(), "el primer DELETE borró la fila").toEqual({
+      data: { id: collectionId, deleted: true },
+      error: null,
+    })
+    expect(await readRow(admin, "collections", collectionId)).toBeNull()
+
+    // El segundo DELETE ya no encuentra fila (la respuesta del primero se
+    // perdió o el cliente repite): no es un error, es deleted:false.
+    const secondResponse = await deleteCollection(collectionId)
+    expect(secondResponse.status, "el segundo DELETE no es un error de transporte").toBe(200)
+    expect(await secondResponse.json(), "la segunda vez no había nada que borrar").toEqual({
+      data: { id: collectionId, deleted: false },
+      error: null,
+    })
+    expect(await readRow(admin, "collections", collectionId)).toBeNull()
+  })
+
+  it("el PATCH de un extraño no es 2xx y deja la fila intacta (control de ODE-660)", async () => {
+    sessionState.user = owner
+    const collectionId = await createCollection("PATCH ajena")
+    const before = await readRow<Record<string, unknown>>(admin, "collections", collectionId)
+    expect(before).not.toBeNull()
+
+    sessionState.user = stranger
+    const strangerResponse = await PATCH(
+      jsonRequest(`http://localhost/api/collections/${collectionId}`, "PATCH", {
+        name: "PATCH ajena robada",
+        description: null,
+        visibility: "private",
+        updated_at: new Date().toISOString(),
+      }),
+      { params: Promise.resolve({ id: collectionId }) },
+    )
+    expect(strangerResponse.status, "el PATCH ajeno no es 2xx").toBeGreaterThanOrEqual(400)
+    expect(await readRow(admin, "collections", collectionId), "la fila ajena queda intacta").toEqual(before)
+
+    // Control positivo: el dueño sí puede editar la misma colección; sin esto,
+    // el no-op ajeno podría deberse a un PATCH muerto para todos.
+    sessionState.user = owner
+    const ownerResponse = await PATCH(
+      jsonRequest(`http://localhost/api/collections/${collectionId}`, "PATCH", {
+        name: "PATCH del dueño",
+        description: null,
+        visibility: "private",
+        updated_at: new Date().toISOString(),
+      }),
+      { params: Promise.resolve({ id: collectionId }) },
+    )
+    expect(ownerResponse.status, "el PATCH del dueño sí pasa").toBe(200)
+    expect(await readRow(admin, "collections", collectionId)).not.toEqual(before)
   })
 })
