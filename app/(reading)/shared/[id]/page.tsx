@@ -37,15 +37,14 @@ function normalizeProfile(
 const WRITING_SELECT =
   "id, title, slug, body_json, body_text, updated_at, author_id, visibility, deleted_at, profiles!author_id(username, display_name)"
 
-async function resolveSharedWriting(identifier: string): Promise<WritingRow | null> {
+async function resolveSharedWriting(identifier: string, viewerId: string | null): Promise<WritingRow | null> {
   const admin = createAdminClient()
-  const lookupOrder = isUuidLikeWritingIdentifier(identifier) ? ["id", "slug"] : ["slug", "id"]
 
-  for (const field of lookupOrder) {
+  if (isUuidLikeWritingIdentifier(identifier)) {
     const { data, error } = await admin
       .from("writings")
       .select(WRITING_SELECT)
-      .eq(field, identifier)
+      .eq("id", identifier)
       .is("deleted_at", null)
       .maybeSingle()
 
@@ -54,11 +53,34 @@ async function resolveSharedWriting(identifier: string): Promise<WritingRow | nu
     }
 
     if (data) {
-      return data as WritingRow
+      const writing = data as WritingRow
+      return (await canViewerReadWriting(admin, writing, viewerId)) ? writing : null
     }
   }
 
-  return null
+  // El slug es único por autor, así que puede haber varios candidatos para el
+  // mismo slug (ODE-659). Se conservan solo los legibles por el viewer (misma
+  // regla D-1) y la elección es determinista: primero el suyo y, si no, el más
+  // reciente. Nunca un maybeSingle que reviente con dos filas.
+  const { data, error } = await admin
+    .from("writings")
+    .select(WRITING_SELECT)
+    .eq("slug", identifier)
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false })
+
+  if (error) {
+    throw error
+  }
+
+  const readable: WritingRow[] = []
+  for (const candidate of (data ?? []) as WritingRow[]) {
+    if (await canViewerReadWriting(admin, candidate, viewerId)) {
+      readable.push(candidate)
+    }
+  }
+
+  return readable.find((candidate) => candidate.author_id === viewerId) ?? readable[0] ?? null
 }
 
 /**
@@ -107,16 +129,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     data: { user },
   } = await supabase.auth.getUser()
 
-  const writing = await resolveSharedWriting(identifier)
-  const readable = writing
-    ? await canViewerReadWriting(createAdminClient(), writing, user?.id ?? null)
-    : false
+  const writing = await resolveSharedWriting(identifier, user?.id ?? null)
 
   return {
-    title:
-      readable && writing?.title
-        ? `${writing.title} — Artifact Studio`
-        : "Reading — Artifact Studio",
+    title: writing?.title ? `${writing.title} — Artifact Studio` : "Reading — Artifact Studio",
   }
 }
 
@@ -131,18 +147,16 @@ export default async function SharedReadingPage({ params }: PageProps) {
 
   if (!user) redirect("/login")
 
-  const writing = await resolveSharedWriting(identifier)
+  const writing = await resolveSharedWriting(identifier, user.id)
 
   if (!writing) notFound()
 
-  const canRead = await canViewerReadWriting(createAdminClient(), writing, user.id)
-
-  if (!canRead) notFound()
-
   const isAuthor = writing.author_id === user.id
 
-  if (writing.slug && identifier !== writing.slug) {
-    redirect(`/shared/${writing.slug}`)
+  // La URL canónica de `/shared` es el id (ODE-659): un slug viejo que
+  // resuelve para el viewer redirige al id.
+  if (identifier !== writing.id) {
+    redirect(`/shared/${writing.id}`)
   }
 
   const profile = normalizeProfile((writing as WritingRow).profiles)

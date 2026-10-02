@@ -451,29 +451,29 @@ describe("ODE-659 — /shared resuelve por viewer y el id es la URL canónica", 
     }
   })
 
-  it.fails("un slug viejo redirige al id canónico", async () => {
+  it("un slug viejo redirige al id canónico", async () => {
     await actAs(viewer)
     await expectRedirect(() => SharedReadingPage(pageParams(sharedDocSlug)), `/shared/${sharedDoc}`)
   })
 
-  it.fails("el id de cada autor abre su propio documento sin redirect", async () => {
+  it("el id de cada autor abre su propio documento sin redirect", async () => {
     await actAs(viewer)
     expect(readingProps(await SharedReadingPage(pageParams(notesSharedA))).writing.id).toBe(notesSharedA)
     expect(readingProps(await SharedReadingPage(pageParams(notesSharedB))).writing.id).toBe(notesSharedB)
   })
 
-  it.fails("el slug repetido elige el documento legible más reciente", async () => {
+  it("el slug repetido elige el documento legible más reciente", async () => {
     await actAs(viewer)
     await expectRedirect(() => SharedReadingPage(pageParams(notesSharedSlug)), `/shared/${notesSharedB}`)
   })
 
-  it.fails("el slug repetido prefiere el documento del propio viewer", async () => {
+  it("el slug repetido prefiere el documento del propio viewer", async () => {
     await actAs(viewer)
     // `notesOwn` es más antiguo que el de owner2; aun así gana el propio.
     await expectRedirect(() => SharedReadingPage(pageParams(notesOwnSlug)), `/shared/${notesOwn}`)
   })
 
-  it.fails("un extraño con el slug repetido recibe 404, nunca 500", async () => {
+  it("un extraño con el slug repetido recibe 404, nunca 500", async () => {
     await actAs(stranger)
     await expectNotFound(() => SharedReadingPage(pageParams(notesSharedSlug)))
   })

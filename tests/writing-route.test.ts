@@ -15,7 +15,7 @@ describe("writing route helpers", () => {
     expect(getWritingRouteIdentifier({ id: "writing-1", slug: null })).toBe("writing-1")
   })
 
-  it.fails("builds the /shared href with the id, the canonical URL", () => {
+  it("builds the /shared href with the id, the canonical URL", () => {
     expect(buildWritingRouteHref("/shared", { id: "writing-1", slug: "semantic-title" })).toBe(
       "/shared/writing-1",
     )
