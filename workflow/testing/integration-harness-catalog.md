@@ -542,6 +542,66 @@ El comando de la sección "Recuento del capability map", en main@210bc0e6, da `C
 - la caché de "Shared with me" de desktop (sin caché persistente según el código);
 - el transporte IPC real.
 
+## Mapa de Recon — milestone 4, tanda 4 (ODE-648, 652, 647)
+
+**Verificado en: main@77ef767f (2026-10-02).** Es el primer Recon hecho con `skill-planning/specialties/area-recon.md` en modo completo (PR #596). Tres workers, uno por cluster, leyeron el código en solo lectura: no se ejecutó ningún test.
+
+Cada issue lleva:
+- en la descripción, la sección "Auditoría (2026-10-02, verificado en main@77ef767f)", que manda, y `## Architecture Contract`: añadido en 652 y 647, corregido por campo en la Auditoría de 648;
+- un comentario `## Recon Pack (verificado en main@77ef767f)` con el campo "Construir con".
+
+`ops:brief:lint --require-contract --require-recon` pasa en los tres. Antes del Recon fallaba en los tres: sin contrato (652, 647), sin Reference docs (652) y con el pack en la descripción en vez de en un comentario.
+
+Si BUILD encuentra algo distinto, corrige este mapa en su PR.
+
+### Hallazgos que cambian el alcance de los briefs
+
+| Issue | Hallazgo | Evidencia |
+|---|---|---|
+| ODE-648 | El caso "guardado pendiente + metadata" **falla hoy**. Un cambio de metadata reemplaza en la cola el guardado pendiente y se sube como parche: la nube se queda con el cuerpo viejo y el catálogo dice `synced`. Si el documento nunca subió, el UPDATE afecta 0 filas y entra en reintentos. ODE-644 no lo cubrió. Arreglo por defecto: en el consumidor (`processMutation`), con el snapshot completo para documentos con binding. El caso solo-nube pasa desde el inicio. | supersede `index.rs:704-711` (doble `real-desktop-doubles.ts:220-241`, `:903`); parche `desktop-catalog-sync-service.ts:293-311`; 0 filas `:306-308` |
+| ODE-648 | "Coordinar con ODE-644" está desfasado: ODE-644 cerró con su replay nativo de SYNC-05, sin metadata ni `catalog_bulk_dual_write`. El paso nativo de SYNC-08 se queda sin owner (seguimiento). | `built.jsonl:200`, `:208`; `catalog-seam-recorder.ts:349`, `:370-447` |
+| ODE-652 | Los bytes ya son del documento del click: el id se captura por valor y los bytes se fijan antes del diálogo. **El defecto es el aviso:** el de A aparece en el panel de B y se queda, también sin carrera. El dueño del arreglo es `properties-panel.tsx`, no `editor-shell.tsx`. | `editor-shell.tsx:2283-2301` (antes `:2343-2361`); `properties-panel.tsx:144-151`, `:310-348`; panel sin `key` `editor-shell.tsx:2856` |
+| ODE-647 | `importDesktopWritingFile` ya no existe (lo borró ODE-619). Tal como está escrito, el test no detectaría nada: la aserción solo observa los dobles de FilesystemDocumentService y las funciones de módulo hablan con Tauri directo, así que la mutación de R5 saldría verde. Hay que observar los comandos Tauri de fs por posición de ruta y exigir un descubrimiento exacto. Ningún bug hoy. | `a6b7ac07`; `tests/services/document-service-factory.test.ts:1070`, `:1094-1101`; `document-service-factory.ts:805`, `:810`, `:853`, `:875`, `:941`, `:1003` |
+
+### Grafo de conflictos (solo código, tests, dobles y fixtures)
+
+| Issue | Archivos de código que toca |
+|---|---|
+| ODE-648 | `tests/integration/sync/desktop-sync-multiple-saves-before-flush.test.ts`, `lib/sync/desktop-catalog-sync-service.ts` (arreglo por defecto); opcional `tests/desktop-catalog-sync-service.test.ts` |
+| ODE-652 | `components/editor/panels/properties-panel.tsx`, `tests/support/editor-shell-doubles.ts` (amplía el tipo de `saveDialogResult`, compatible hacia atrás), `tests/editor-shell-export-delivery-desktop.test.tsx` |
+| ODE-647 | `tests/services/document-service-factory.test.ts` |
+
+**Sin conflictos de código entre los tres.** Solo comparten este catálogo y el mapa de capabilities, en filas distintas (SYNC-08, EXP-05, SYS-02), y eso no cuenta como conflicto.
+
+Acoplamiento a vigilar: si un arreglo futuro añadiera a `lib/services/document-service-factory.ts` una función exportada que toque fs, el descubrimiento exacto de ODE-647 se pondrá rojo. Es la guardia buscada.
+
+### Olas (máximo 3 builders a la vez)
+
+- **Ola única:** ODE-647 (S) · ODE-652 (M) · ODE-648 (M), los tres en paralelo, sin Docker, sin Supabase local y sin cargo.
+- **Orden de merge preferente:** ODE-647 → ODE-652 → ODE-648, de menor a mayor. Ninguno desbloquea a otro.
+
+### Trampas transversales
+
+- **ODE-652 monta `EditorShell`:** le afectan los flakes conocidos del harness de la shell (ODE-639, ODE-641). Relojes reales, sin fake timers, y timeout de 90 s por test.
+- **ODE-648 y ODE-647 no montan la shell.** Son de nivel servicio (ODE-648) y de contrato source-level (ODE-647).
+- **Sin `it.fails` en ODE-647:** no hay bug. ODE-648 (caso con binding) y ODE-652 (aviso en B) sí entran con `it.fails` y después el arreglo.
+- **Follow-ups:** no se crean issues durante la orquestación. Cada Auditoría tiene su lista de seguimientos.
+
+### Recuento del capability map (tanda 4)
+
+El comando de la sección "Recuento del capability map", en main@77ef767f, da `CONTRACT=7, INTEGRATION=40, NONE=1, PARTIAL_INTEGRATION=47, RELEASE=1, UNIT_ONLY=11, total=107`. Filas de esta tanda:
+
+| Fila | Status |
+|---|---|
+| SYNC-08 | `CONTRACT` |
+| EXP-05 | `PARTIAL_INTEGRATION` |
+| SYS-02 | `CONTRACT` (se queda en CONTRACT por la decisión de ODE-621; ODE-647 solo amplía la evidencia) |
+
+**No explorado en esta tanda:**
+- si el diálogo nativo de guardado es modal en macOS (D4 de ODE-636);
+- el transporte IPC real (ODE-622);
+- el coste real de re-subir el cuerpo en cada cambio de metadata de un documento con `.md` (ODE-648).
+
 ## Harness Supabase local (ODE-616)
 
 **Creado en:** ODE-616 PR1 (2026-10-01). El proof service-role de SHARE-04 vive en `tests/integration/sharing/service-role-authorization.supabase.test.ts` (ODE-616 PR2, +ODE-659); además lo consumen ODE-617-B (`tests/integration/sharing/visibility-persistence.supabase.test.ts`), la parte web de ODE-618, ODE-659 y ODE-660.
