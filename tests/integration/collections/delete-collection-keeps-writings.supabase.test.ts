@@ -132,7 +132,7 @@ async function setupScenario() {
 }
 
 describe("COL-06 web — borrar una colección no toca sus documentos", () => {
-  it.fails("los documentos, sus cuerpos y su metadata sobreviven, y solo desaparecen las filas de unión de la colección borrada", async () => {
+  it("los documentos, sus cuerpos y su metadata sobreviven, y solo desaparecen las filas de unión de la colección borrada", async () => {
     sessionState.user = owner
     const { firstWritingId, secondWritingId, principalId, secondaryId } = await setupScenario()
 
@@ -188,7 +188,7 @@ describe("COL-06 web — borrar una colección no toca sus documentos", () => {
     )
   })
 
-  it.fails("el intento de un usuario ajeno no borra la colección ni toca sus documentos (y el dueño sí puede borrarla)", async () => {
+  it("el intento de un usuario ajeno no borra la colección ni toca sus documentos (y el dueño sí puede borrarla)", async () => {
     sessionState.user = owner
     const { firstWritingId, secondWritingId, principalId, secondaryId } = await setupScenario()
 
@@ -231,7 +231,7 @@ describe("COL-06 web — borrar una colección no toca sus documentos", () => {
     expect(await readWriting(firstWritingId), "y el documento sigue vivo").not.toBeNull()
   })
 
-  it.fails("un segundo DELETE del dueño responde deleted:false (idempotente para la cola de sync)", async () => {
+  it("un segundo DELETE del dueño responde deleted:false (idempotente para la cola de sync)", async () => {
     sessionState.user = owner
     const collectionId = await createCollection("Idempotente")
     expect(await readRow(admin, "collections", collectionId)).not.toBeNull()

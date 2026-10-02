@@ -128,9 +128,13 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   }
 
   const { id } = parsedParams.data;
-  const { error } = await supabase
+  // `count: "exact"` reporta si RLS dejó borrar la fila: la respuesta importa
+  // para la cola de sync, que reintenta un DELETE de una fila que puede no
+  // existir (creada y borrada offline, o respuesta perdida). `deleted:false`
+  // no distingue "no existe" de "no es tuya" y sigue siendo un 200 idempotente.
+  const { error, count } = await supabase
     .from("collections")
-    .delete()
+    .delete({ count: "exact" })
     .eq("id", id)
     .eq("owner_id", userId);
 
@@ -139,5 +143,8 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
     return jsonError(500, "DB_ERROR", "Failed to delete collection.");
   }
 
-  return NextResponse.json({ data: { id }, error: null }, { status: 200 });
+  return NextResponse.json(
+    { data: { id, deleted: (count ?? 0) > 0 }, error: null },
+    { status: 200 },
+  );
 }
