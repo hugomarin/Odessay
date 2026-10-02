@@ -18,8 +18,15 @@
  * `assertLocalSupabaseEnv` pone rojo el primer caso. El resto de mutaciones
  * (quitar el filtro de RLS no aplica: no lo controlamos; forzar
  * `sanitizeSupabaseEnv` a copiar el entorno) va en la Guía de review.
+ *
+ * Caso de URL local ≠ `supabase status`: un host local distinto (localhost vs
+ * 127.0.0.1) pasa el guard de hostname, así que el setup corre en un proceso
+ * Vitest hijo y debe abortar por la comparación exacta antes de importar los
+ * tests. Quitar esa comparación de `guard.ts` deja rojo este caso.
  */
+import { spawnSync } from "node:child_process"
 import { randomUUID } from "node:crypto"
+import { join } from "node:path"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { assertLocalSupabaseEnv, sanitizeSupabaseEnv } from "../../scripts/lib/supabase-local-env.mjs"
@@ -73,6 +80,57 @@ describe("harness Supabase local", () => {
       }).url,
     ).toBe(env.url)
   })
+
+  it.skipIf(process.env.ODE616_GUARD_MISMATCH_PROBE === "1")(
+    "aborta el setup si una URL local no coincide con supabase status",
+    () => {
+      const statusUrl = localSupabaseEnv().url
+      const mismatchedUrl = statusUrl.includes("127.0.0.1")
+        ? statusUrl.replace("127.0.0.1", "localhost")
+        : statusUrl.replace("localhost", "127.0.0.1")
+      expect(mismatchedUrl, `no pude construir una URL local distinta de ${statusUrl}`).not.toBe(statusUrl)
+
+      // El guard de hostname por sí solo acepta las dos: solo la comparación
+      // exacta con `supabase status` detecta el desacuerdo.
+      expect(() =>
+        assertLocalSupabaseEnv({
+          NEXT_PUBLIC_SUPABASE_URL: mismatchedUrl,
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: "anon",
+          SUPABASE_SERVICE_ROLE_KEY: "service-role",
+        }),
+      ).not.toThrow()
+
+      const env = localSupabaseEnv()
+      const vitestBin = join(
+        process.cwd(),
+        "node_modules",
+        ".bin",
+        process.platform === "win32" ? "vitest.cmd" : "vitest",
+      )
+      const result = spawnSync(
+        vitestBin,
+        ["run", "--config", "vitest.supabase.config.ts", "tests/integration/supabase-local-smoke.supabase.test.ts"],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          timeout: 120000,
+          env: {
+            ...process.env,
+            NEXT_PUBLIC_SUPABASE_URL: mismatchedUrl,
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: env.publishableKey,
+            SUPABASE_SERVICE_ROLE_KEY: env.serviceRoleKey,
+            ODE616_GUARD_MISMATCH_PROBE: "1",
+          },
+        },
+      )
+      const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`
+      expect(result.status, `el setup no abortó el proceso hijo; salida: ${output}`).not.toBe(0)
+      expect(output, `el setup no abortó por la comparación URL/status: ${output}`).toContain("no coincide con")
+      expect(output).toContain(mismatchedUrl)
+      expect(output).toContain(statusUrl)
+    },
+    120000,
+  )
 
   it("descarta las variables *SUPABASE* y TAURI_* heredadas", () => {
     const env = localSupabaseEnv()
