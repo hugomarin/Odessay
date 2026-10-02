@@ -49,6 +49,8 @@ export async function listSharedWritingsForUser(userId: string): Promise<SharedW
     .from("writings")
     .select("id, title, slug, body_text, updated_at, profiles!author_id(username, display_name)")
     .in("id", writingIds)
+    .neq("author_id", userId)
+    .in("visibility", ["shared", "public"])
     .is("deleted_at", null)
     .order("updated_at", { ascending: false })
 

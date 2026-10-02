@@ -34,5 +34,11 @@ export const buildWritingRouteHref = (basePath: string, writing: WritingRouteSou
     return `${basePath}?id=${encodeURIComponent(writing.id)}`
   }
 
+  // ODE-659: the canonical URL of /shared is the id, because the slug is only
+  // unique per author and a slug collision made /shared/<slug> ambiguous.
+  if (basePath === "/shared") {
+    return `${basePath}/${writing.id}`
+  }
+
   return `${basePath}/${getWritingRouteIdentifier(writing)}`
 }
