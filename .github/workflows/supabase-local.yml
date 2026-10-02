@@ -1,0 +1,85 @@
+name: Supabase Local Tests
+
+# pgTAP + harness Vitest contra la única instancia Supabase local
+# (`project_id "odessay"`, API 54321, DB 54322) en un runner aislado (ODE-658).
+# `supabase start` aplica las migraciones de `supabase/migrations`, después
+# corren los pgTAP de `supabase/tests` (`supabase test db --local`) y la suite
+# Vitest del harness de ODE-616 (`npm run test:supabase`, que toma el lock,
+# exige localhost y descarta las *SUPABASE* heredadas).
+#
+# NO es required: se llama desde blocking-ci.yml sin `secrets: inherit` y queda
+# fuera del agregador "CI required", así que un fallo aquí no bloquea el merge
+# mientras Hugo no decida lo contrario (dos semanas en verde). Tampoco recibe
+# secretos del repo: los secretos incluyen la URL y la publishable key de
+# PRODUCCIÓN y TAURI_SIGNING_PRIVATE_KEY.
+#
+# Cada job es un runner aislado: este declara su propio checkout, Node, npm ci
+# y Supabase CLI; no hereda el setup de los jobs de blocking-ci.yml.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  supabase-local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.113.0
+
+      - name: Assert no Supabase credentials in the environment
+        run: |
+          set -euo pipefail
+          # Solo nombres de variable: el PATH tras setup-cli contiene
+          # ".../supabase/..." y no debe contar como credencial.
+          CREDENTIALS="$(env | cut -d= -f1 | grep -i 'SUPABASE' || true)"
+          if [[ -n "${CREDENTIALS}" ]]; then
+            echo "::error::El job no debe recibir variables *SUPABASE* (se llama sin secrets: inherit)."
+            printf '%s\n' "${CREDENTIALS}"
+            exit 1
+          fi
+          echo "Sin variables *SUPABASE* en el entorno."
+
+      - name: Start Supabase
+        run: supabase start -x studio,imgproxy,mailpit,realtime,edge-runtime,logflare,vector,postgres-meta,supavisor
+
+      - name: Show local endpoints
+        run: |
+          set -euo pipefail
+          supabase status -o json | node -e '
+            let raw = "";
+            process.stdin.on("data", (chunk) => (raw += chunk));
+            process.stdin.on("end", () => {
+              const status = JSON.parse(raw);
+              console.log(`API_URL=${status.API_URL}`);
+              console.log(`DB_URL=${status.DB_URL}`);
+            });
+          '
+
+      - name: pgTAP (supabase test db --local)
+        run: supabase test db --local
+
+      - name: Harness Vitest (npm run test:supabase)
+        run: npm run test:supabase
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup

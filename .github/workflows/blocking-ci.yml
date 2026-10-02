@@ -40,6 +40,7 @@ jobs:
     outputs:
       app_changed: ${{ steps.detect.outputs.app_changed }}
       rust_changed: ${{ steps.detect.outputs.rust_changed }}
+      supabase_changed: ${{ steps.detect.outputs.supabase_changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -92,6 +93,19 @@ jobs:
             echo "Sin cambios de Rust/seam — se salta cargo test."
           fi
 
+          # El harness de Supabase local (pgTAP + Vitest, ODE-658) solo se paga
+          # cuando el diff puede cambiar RLS, migraciones, los caminos
+          # service-role o la propia infraestructura del harness. Un cambio puro
+          # de UI/editor no levanta el stack.
+          SUPABASE_PATTERN='^(supabase/|lib/supabase/|lib/sharing/|lib/services/web-sharing-service\.ts$|lib/collections/|app/api/|app/\(reading\)/shared/|app/\[username\]/|tests/.*\.supabase\.test\.|tests/support/supabase-local/|vitest\.supabase\.config\.ts$|scripts/run-supabase-tests\.mjs$|package\.json$|package-lock\.json$|\.github/workflows/supabase-local\.yml$|\.github/workflows/blocking-ci\.yml$)'
+          if echo "${CHANGED}" | grep -qE "${SUPABASE_PATTERN}"; then
+            echo "supabase_changed=true" >> "${GITHUB_OUTPUT}"
+            echo "Cambios de Supabase/RLS/harness — corre el job supabase-local."
+          else
+            echo "supabase_changed=false" >> "${GITHUB_OUTPUT}"
+            echo "Sin cambios de Supabase — se salta el job supabase-local."
+          fi
+
   process-checks:
     needs: detect-changes
     if: needs.detect-changes.outputs.app_changed == 'true'
@@ -120,6 +134,16 @@ jobs:
     needs: [detect-changes, process-checks]
     if: needs.detect-changes.outputs.rust_changed == 'true' && needs.process-checks.result == 'success'
     uses: ./.github/workflows/desktop-rust.yml
+
+  # pgTAP + harness Vitest contra Supabase local (ODE-658). Deliberadamente
+  # fuera de `required.needs`: hoy no es required, así que un fallo aquí no
+  # bloquea `CI required` (dos semanas en verde lo deciden). Sin
+  # `secrets: inherit` — el reusable no referencia ningún secreto y los del
+  # repo incluyen la URL y la publishable key de PRODUCCIÓN.
+  supabase-local:
+    needs: [detect-changes, process-checks]
+    if: needs.detect-changes.outputs.supabase_changed == 'true' && needs.process-checks.result == 'success'
+    uses: ./.github/workflows/supabase-local.yml
 
   # scoped-ci.yml (Playwright E2E) ya no es parte de la composición blocking:
   # ver el comentario de costo arriba. Sigue existiendo como workflow reusable
