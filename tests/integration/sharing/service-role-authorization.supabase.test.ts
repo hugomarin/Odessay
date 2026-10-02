@@ -62,6 +62,7 @@ let stranger!: SeedUser
 let owner2!: SeedUser
 let ownerClient: SupabaseClient
 let owner2Client: SupabaseClient
+let viewerClient: SupabaseClient
 
 let privateDoc = ""
 let sharedDoc = ""
@@ -189,6 +190,7 @@ beforeAll(async () => {
   ;[owner, viewer, stranger, owner2] = users
   ownerClient = await createUserClient(owner)
   owner2Client = await createUserClient(owner2)
+  viewerClient = await createUserClient(viewer)
 
   privateDoc = await seedWritingWithShare({ title: "Privado", visibility: "private" })
   sharedDoc = await seedWritingWithShare({
@@ -278,6 +280,24 @@ describe("F1c — secuencia anterior/siguiente", () => {
     for (const option of legacyOptions) {
       expect([props.prevWritingHref, props.nextWritingHref]).not.toContain(option)
     }
+  })
+
+  it.fails("la secuencia excluye el escrito propio con fila de self-share (D-1 autor)", async () => {
+    // `writing_shares_insert_author` deja que una persona cree una fila hacia
+    // sí misma sobre un escrito propio. No es una fuga entre usuarios, pero si
+    // esa fila entra en la secuencia incumple D-1 (`author_id <> viewer`).
+    const ownDoc = await seedWriting(admin, {
+      authorId: viewer.id,
+      title: `Propio con self-share ${runId}`,
+      visibility: "shared",
+    })
+    await seedShare(viewerClient, { writingId: ownDoc, sharedWithId: viewer.id })
+
+    await actAs(viewer)
+    const props = await openShared(publicSharedDoc)
+    // sharedDoc + publicSharedDoc + revokedDoc; su propio escrito self-share no.
+    expect(props.sequenceTotal).toBe(3)
+    expect([props.prevWritingId, props.nextWritingId]).not.toContain(ownDoc)
   })
 })
 
