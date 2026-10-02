@@ -46,8 +46,9 @@
  *   futuro por hash u Open Document" (`odessay-desktop-document-catalog.md:519`),
  *   no "no encontrado". Se espera verde: mismo UUID, `local_present=0`, sin
  *   binding huérfano, sin fila nueva y aviso de la shell del kind `deleted`
- *   (`hooks/useExternalDocumentChanges.ts:169-173`) — se afirma ese kind a
- *   través de su proyección en el banner, nunca el texto "removed" suelto.
+ *   (`hooks/useExternalDocumentChanges.ts:169-173`) — se afirma el
+ *   discriminante tipado en la salida del owner real (el objeto
+ *   `{ kind, path }` que el hook entrega), nunca el texto "removed" suelto.
  * - **Dos ráfagas separadas (>250 ms).** Decisión de Hugo (2026-10-01): fuera
  *   de alcance, documentado como `it.fails` con "follow-up pendiente (ODE-615)".
  *   Las dos variantes reproducen el fallo de identidad: si B llega primero, B
@@ -63,6 +64,40 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 vi.mock("@tiptap/react", async (importOriginal) => {
   const { createTiptapCaptureModule } = await import("../../support/editor-shell-doubles")
   return createTiptapCaptureModule(await importOriginal<Record<string, unknown>>())
+})
+/**
+ * Observa la salida tipada del owner real del aviso (`useExternalDocumentChanges`),
+ * sin sustituirlo: el hook corre entero y el wrapper solo registra el valor
+ * (`{ kind, path }`) que le entrega a la shell. `emit` es estable a propósito:
+ * el efecto del hook lo lleva en sus dependencias y una función nueva por
+ * render lo haría reejecutar en bucle.
+ */
+const externalNoticeObserver = vi.hoisted(() => {
+  const notices: Array<{ kind: string; path: string | null }> = []
+  let latest: ((notice: { kind: string; path: string | null } | null) => void) | null = null
+  return {
+    notices,
+    connect(setter: (notice: { kind: string; path: string | null } | null) => void) {
+      latest = setter
+    },
+    emit(notice: { kind: string; path: string | null } | null) {
+      if (notice) notices.push(notice)
+      latest?.(notice)
+    },
+  }
+})
+vi.mock("@/hooks/useExternalDocumentChanges", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/hooks/useExternalDocumentChanges")>()
+  return {
+    ...actual,
+    useExternalDocumentChanges: (input: Parameters<typeof actual.useExternalDocumentChanges>[0]) => {
+      externalNoticeObserver.connect(input.setExternalFileNotice)
+      return actual.useExternalDocumentChanges({
+        ...input,
+        setExternalFileNotice: externalNoticeObserver.emit,
+      })
+    },
+  }
 })
 vi.mock("next/navigation", async () =>
   (await import("../../support/editor-shell-doubles")).nextNavigationDouble(),
@@ -151,6 +186,7 @@ beforeEach(() => {
   })
   vi.spyOn(window, "confirm").mockReturnValue(true)
   alerts = []
+  externalNoticeObserver.notices.length = 0
   window.alert = (message?: unknown) => {
     alerts.push(String(message))
   }
@@ -431,12 +467,26 @@ describe("ODE-615 — variantes de la prueba WATCH-04", () => {
       )
 
       // El aviso de la shell es la proyección de `kind: "deleted"` (el hook
-      // `useExternalDocumentChanges.ts:169-173`), no un texto suelto.
-      await waitFor(() => bannerText().includes(DELETED_NOTICE), {
-        label: "la shell avisa deleted tras salir a una carpeta no registrada",
-        timeoutMs: 15_000,
-      })
-      expect(bannerText()).not.toContain(MOVED_NOTICE)
+      // `useExternalDocumentChanges.ts:169-173`), no un texto suelto. Se afirma
+      // el discriminante tipado en la salida del owner real (el objeto
+      // `{ kind, path }` que el hook entrega); el texto visible solo proyecta
+      // esa rama y no demuestra el kind.
+      await waitFor(
+        () => externalNoticeObserver.notices.some((notice) => notice.kind === "deleted"),
+        {
+          label: "el owner emite el aviso de kind deleted",
+          timeoutMs: 15_000,
+        },
+      )
+      const deletedNotice = externalNoticeObserver.notices.find(
+        (notice) => notice.kind === "deleted",
+      )!
+      expect(deletedNotice.path, "el aviso apunta a la ruta que se desligó").toBe(pathA)
+      expect(
+        externalNoticeObserver.notices.some((notice) => notice.kind === "moved"),
+        "ningún aviso moved",
+      ).toBe(false)
+      expect(bannerText()).toContain(DELETED_NOTICE)
       expect(activeTab()?.writing_id, "la pestaña conserva el UUID").toBe(writingId)
       expect(editorText()).toContain("ODE615 cuerpo sin registro.")
       assertNoUnhandledErrors()
