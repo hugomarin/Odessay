@@ -39,15 +39,67 @@
  *
  * Fuera de alcance declarado (brief): movimiento repartido en dos ráfagas
  * (>250 ms) y entre volúmenes.
+ *
+ * Extensión ODE-615 — variantes de la prueba (el fix es de ODE-657):
+ *
+ * - **Carpeta no registrada.** Política documentada: "detach local y rebind
+ *   futuro por hash u Open Document" (`odessay-desktop-document-catalog.md:519`),
+ *   no "no encontrado". Se espera verde: mismo UUID, `local_present=0`, sin
+ *   binding huérfano, sin fila nueva y aviso de la shell del kind `deleted`
+ *   (`hooks/useExternalDocumentChanges.ts:169-173`) — se afirma el
+ *   discriminante tipado en la salida del owner real (el objeto
+ *   `{ kind, path }` que el hook entrega), nunca el texto "removed" suelto.
+ * - **Dos ráfagas separadas (>250 ms).** Decisión de Hugo (2026-10-01): fuera
+ *   de alcance, documentado como `it.fails` con "follow-up pendiente (ODE-615)".
+ *   Las dos variantes reproducen el fallo de identidad: si B llega primero, B
+ *   acuña un UUID nuevo porque A no está en la pasada; si A llega primero, A
+ *   desliga y la evidencia se pierde. Los dos órdenes de raíz dentro de una
+ *   misma ráfaga (<250 ms) ya los cubre este archivo arriba (ODE-657).
  */
 import { mkdirSync, renameSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { ExternalFileNotice } from "@/hooks/useExternalDocumentChanges"
+
 vi.mock("@tiptap/react", async (importOriginal) => {
   const { createTiptapCaptureModule } = await import("../../support/editor-shell-doubles")
   return createTiptapCaptureModule(await importOriginal<Record<string, unknown>>())
+})
+/**
+ * Observa la salida tipada del owner real del aviso (`useExternalDocumentChanges`),
+ * sin sustituirlo: el hook corre entero y el wrapper solo registra el valor
+ * (`{ kind, path }`) que le entrega a la shell. `emit` es estable a propósito:
+ * el efecto del hook lo lleva en sus dependencias y una función nueva por
+ * render lo haría reejecutar en bucle.
+ */
+const externalNoticeObserver = vi.hoisted(() => {
+  const notices: ExternalFileNotice[] = []
+  let latest: ((notice: ExternalFileNotice | null) => void) | null = null
+  return {
+    notices,
+    connect(setter: (notice: ExternalFileNotice | null) => void) {
+      latest = setter
+    },
+    emit(notice: ExternalFileNotice | null) {
+      if (notice) notices.push(notice)
+      latest?.(notice)
+    },
+  }
+})
+vi.mock("@/hooks/useExternalDocumentChanges", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/hooks/useExternalDocumentChanges")>()
+  return {
+    ...actual,
+    useExternalDocumentChanges: (input: Parameters<typeof actual.useExternalDocumentChanges>[0]) => {
+      externalNoticeObserver.connect(input.setExternalFileNotice)
+      return actual.useExternalDocumentChanges({
+        ...input,
+        setExternalFileNotice: externalNoticeObserver.emit,
+      })
+    },
+  }
 })
 vi.mock("next/navigation", async () =>
   (await import("../../support/editor-shell-doubles")).nextNavigationDouble(),
@@ -136,6 +188,7 @@ beforeEach(() => {
   })
   vi.spyOn(window, "confirm").mockReturnValue(true)
   alerts = []
+  externalNoticeObserver.notices.length = 0
   window.alert = (message?: unknown) => {
     alerts.push(String(message))
   }
@@ -349,6 +402,186 @@ describe("ODE-657 — movimiento externo entre dos raíces vigiladas (WATCH-04)"
       expect(record.id).toBe(writingId)
       expect(record.binding?.canonicalPath).toBe(movedPath)
       expect((await (await getDocumentCatalog()).resolvePath(pathA)).kind).toBe("unbound")
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+describe("ODE-615 — variantes de la prueba WATCH-04", () => {
+  async function waitForCatalogDetached(id: string) {
+    const catalog = await getDocumentCatalog()
+    const deadline = Date.now() + 15_000
+    while (Date.now() < deadline) {
+      const record = await catalog.getById(id)
+      if (record && !record.localPresent) return record
+      await advance(100)
+    }
+    throw new Error(`El catálogo no desligó ${id}`)
+  }
+
+  it(
+    "carpeta no registrada: desliga localmente sin documento fantasma y avisa deleted",
+    async () => {
+      const rootA = makeRoot("Raiz 615 sin registro")
+      const pathA = writeMarkdownIn(rootA, "Carta sin registro", "ODE615 cuerpo sin registro.")
+      await registerWorkspace(rootA)
+      await startReconciler()
+      await mountLoaded()
+      const writingId = await openFromNativeMenu(pathA, "ODE615 cuerpo sin registro.")
+      await waitForWatcherOn(rootA)
+
+      // Vecino residente: control positivo de que la raíz A sigue observable y
+      // una ausencia real no arrastra a los demás documentos (mismo montaje).
+      const neighbourPath = writeMarkdownIn(rootA, "Vecino de A 615", "ODE615 vecino residente.")
+      await emitFsWatchEvent([neighbourPath])
+      await advance(500)
+      await waitForCatalogBindingAt(neighbourPath)
+
+      const outside = join(desktopWorkspaceRoot(), "Fuera de raices 615")
+      mkdirSync(outside, { recursive: true })
+      const outsidePath = join(outside, "Carta sin registro.md")
+
+      const catalog = await getDocumentCatalog()
+      const idsBefore = (await catalog.list())
+        .map((row) => row.id)
+        .sort()
+
+      renameSync(pathA, outsidePath)
+      // El watcher de A ve el rename salir de su alcance; la carpeta destino no
+      // está registrada, así que ningún watcher la observa.
+      await emitFsWatchEvent([pathA])
+      await advance(500)
+
+      const detached = await waitForCatalogDetached(writingId)
+      expect(detached.localPresent, "desligado localmente").toBe(false)
+      expect(detached.binding ?? null, "sin binding huérfano").toBeNull()
+      const idsAfter = (await catalog.list())
+        .map((row) => row.id)
+        .sort()
+      // `list()` filtra las filas sin presencia local ni cloud: el desligado es
+      // la única que sale, y ninguna otra entra (no hay documento fantasma).
+      expect(idsAfter, "solo sale el desligado; ninguna fila nueva").toEqual(
+        idsBefore.filter((id) => id !== writingId),
+      )
+      expect((await catalog.resolvePath(outsidePath)).kind, "nadie resolvió la ruta externa").toBe(
+        "unbound",
+      )
+
+      // El aviso de la shell es la proyección de `kind: "deleted"` (el hook
+      // `useExternalDocumentChanges.ts:169-173`), no un texto suelto. Se afirma
+      // el discriminante tipado en la salida del owner real (el objeto
+      // `{ kind, path }` que el hook entrega); el texto visible solo proyecta
+      // esa rama y no demuestra el kind.
+      await waitFor(
+        () => externalNoticeObserver.notices.some((notice) => notice.kind === "deleted"),
+        {
+          label: "el owner emite el aviso de kind deleted",
+          timeoutMs: 15_000,
+        },
+      )
+      const deletedNotice = externalNoticeObserver.notices.find(
+        (notice) => notice.kind === "deleted",
+      )!
+      expect(deletedNotice.path, "el aviso apunta a la ruta que se desligó").toBe(pathA)
+      expect(
+        externalNoticeObserver.notices.some((notice) => notice.kind === "moved"),
+        "ningún aviso moved",
+      ).toBe(false)
+      expect(bannerText()).toContain(DELETED_NOTICE)
+      expect(activeTab()?.writing_id, "la pestaña conserva el UUID").toBe(writingId)
+      expect(editorText()).toContain("ODE615 cuerpo sin registro.")
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "dos ráfagas: si B llega primero, B no acuña un UUID nuevo [follow-up pendiente (ODE-615)]",
+    async () => {
+      // Decisión de Hugo (2026-10-01): el movimiento repartido en dos ráfagas
+      // (>250 ms) queda fuera de alcance y se documenta aquí; el fallo de hoy
+      // lo reproduce esta prueba (B acuña un UUID nuevo porque A no está en la
+      // pasada y el original queda desligado). Es el failure mode "los eventos
+      // llegan con retraso" de WATCH-04, anotado en la fila del capability map.
+      const rootA = makeRoot("Raiz 615 A")
+      const rootB = makeRoot("Raiz 615 B")
+      const pathA = writeMarkdownIn(rootA, "Carta en dos rafagas", "ODE615 cuerpo dos rafagas B.")
+      writeMarkdownIn(rootA, "Vecino 615 de A", "ODE615 vecino A.")
+      await registerWorkspace(rootA)
+      await registerWorkspace(rootB)
+      await startReconciler()
+      await mountLoaded()
+      const writingId = await openFromNativeMenu(pathA, "ODE615 cuerpo dos rafagas B.")
+      await waitForWatcherOn(rootA)
+      await waitForWatcherOn(rootB)
+
+      const pathB = join(rootB, "Carta en dos rafagas.md")
+      renameSync(pathA, pathB)
+      await emitFsWatchEvent([pathB])
+      await advance(500) // primera pasada: solo B
+      await emitFsWatchEvent([pathA])
+      await advance(500) // segunda pasada (>250 ms después): solo A
+
+      const catalog = await getDocumentCatalog()
+      const record = await waitForCatalogBindingAt(pathB)
+      expect(record.id, "el UUID de A sobrevive en B").toBe(writingId)
+      expect(record.localPresent).toBe(true)
+      expect((await catalog.resolvePath(pathA)).kind, "la ruta vieja ya no resuelve").toBe("unbound")
+      expect(
+        (await catalog.getById(writingId))?.localPresent,
+        "el original no queda desligado",
+      ).toBe(true)
+      await waitFor(() => bannerText().includes(MOVED_NOTICE), {
+        label: "la shell avisa moved pese a las dos ráfagas",
+        timeoutMs: 15_000,
+      })
+      expect(bannerText()).not.toContain(DELETED_NOTICE)
+      expect(activeTab()?.writing_id).toBe(writingId)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "dos ráfagas: si A llega primero, el detach no se pierde [follow-up pendiente (ODE-615)]",
+    async () => {
+      // Misma decisión de alcance que la variante B-primero: la ráfaga que
+      // desliga a A pierde la evidencia antes de que B escanee, así que B
+      // acuña una identidad nueva en vez de reusar el UUID original.
+      const rootA = makeRoot("Raiz 615 A inversa")
+      const rootB = makeRoot("Raiz 615 B inversa")
+      const pathA = writeMarkdownIn(rootA, "Carta en dos rafagas inversa", "ODE615 cuerpo dos rafagas A.")
+      writeMarkdownIn(rootA, "Vecino 615 de A inversa", "ODE615 vecino A inverso.")
+      await registerWorkspace(rootA)
+      await registerWorkspace(rootB)
+      await startReconciler()
+      await mountLoaded()
+      const writingId = await openFromNativeMenu(pathA, "ODE615 cuerpo dos rafagas A.")
+      await waitForWatcherOn(rootA)
+      await waitForWatcherOn(rootB)
+
+      const pathB = join(rootB, "Carta en dos rafagas inversa.md")
+      renameSync(pathA, pathB)
+      await emitFsWatchEvent([pathA])
+      await advance(500) // primera pasada: solo A desliga
+      await emitFsWatchEvent([pathB])
+      await advance(500) // segunda pasada (>250 ms después): solo B acuña
+
+      const catalog = await getDocumentCatalog()
+      const record = await waitForCatalogBindingAt(pathB)
+      expect(record.id, "la evidencia del detach no se pierde: B reusa el UUID").toBe(writingId)
+      expect(record.localPresent).toBe(true)
+      expect(
+        (await catalog.getById(writingId))?.binding?.canonicalPath,
+        "el UUID original sigue vivo en B",
+      ).toBe(pathB)
+      await waitFor(() => bannerText().includes(MOVED_NOTICE), {
+        label: "la shell avisa moved pese a las dos ráfagas inversas",
+        timeoutMs: 15_000,
+      })
+      expect(bannerText()).not.toContain(DELETED_NOTICE)
+      expect(activeTab()?.writing_id).toBe(writingId)
       assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
