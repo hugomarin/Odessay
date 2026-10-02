@@ -169,6 +169,21 @@ fn project_workspace_sync(snapshot: &workspace::WorkspaceSnapshot) -> Value {
     files.sort();
     let mut unbound_paths = snapshot.unbound_paths.clone();
     unbound_paths.sort();
+    // Mirrors the recorder: inode is deliberately excluded (synthetic in the
+    // double, real in the replay), so the compared evidence is path + hash +
+    // size, sorted by path on both sides.
+    let mut unbound_files: Vec<(String, String, u64)> = snapshot
+        .unbound_files
+        .iter()
+        .map(|file| {
+            (
+                file.relative_path.clone(),
+                file.content_hash.clone(),
+                file.size,
+            )
+        })
+        .collect();
+    unbound_files.sort();
     json!({
         "files": files
             .into_iter()
@@ -177,6 +192,12 @@ fn project_workspace_sync(snapshot: &workspace::WorkspaceSnapshot) -> Value {
             })
             .collect::<Vec<Value>>(),
         "unboundPaths": unbound_paths,
+        "unboundFiles": unbound_files
+            .into_iter()
+            .map(|(relative_path, content_hash, size)| {
+                json!({ "relativePath": relative_path, "contentHash": content_hash, "size": size })
+            })
+            .collect::<Vec<Value>>(),
     })
 }
 

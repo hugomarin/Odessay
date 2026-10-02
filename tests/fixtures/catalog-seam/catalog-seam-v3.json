@@ -48,28 +48,14 @@
             "files": [],
             "unboundPaths": [
               "letter.md"
-            ]
-          }
-        },
-        {
-          "kind": "invoke",
-          "cmd": "workspace_sync",
-          "args": {
-            "rootPath": "$ROOT_A",
-            "selectedPaths": null,
-            "documentIds": {
-              "letter.md": "00000000-0000-4000-8000-000000000001"
-            }
-          },
-          "response": {
-            "files": [
+            ],
+            "unboundFiles": [
               {
                 "relativePath": "letter.md",
-                "id": "00000000-0000-4000-8000-000000000001",
-                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                "size": 22
               }
-            ],
-            "unboundPaths": []
+            ]
           }
         },
         {
@@ -83,6 +69,81 @@
         },
         {
           "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_B",
+            "selectedPaths": null,
+            "documentIds": null
+          },
+          "response": {
+            "files": [],
+            "unboundPaths": [
+              "letter.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "letter.md",
+                "contentHash": "blake3:cf85183dc2224aaa5880b0927bceef4cf192e27db726539d723f003c4b07ae8d",
+                "size": 42
+              }
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_binding_root_documents",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-b"
+          },
+          "response": []
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": {
+              "letter.md": "00000000-0000-4000-8000-000000000003"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "letter.md",
+                "id": "00000000-0000-4000-8000-000000000003",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_B",
+            "selectedPaths": null,
+            "documentIds": {
+              "letter.md": "00000000-0000-4000-8000-000000000004"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "letter.md",
+                "id": "00000000-0000-4000-8000-000000000004",
+                "contentHash": "blake3:cf85183dc2224aaa5880b0927bceef4cf192e27db726539d723f003c4b07ae8d"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
           "cmd": "catalog_apply_reconcile",
           "args": {
             "dbPath": "$DB",
@@ -93,7 +154,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000001",
+                  "documentId": "00000000-0000-4000-8000-000000000003",
                   "relativePath": "letter.md",
                   "canonicalPath": "$ROOT_A/letter.md",
                   "inode": 201,
@@ -111,54 +172,9 @@
           "response": {
             "applied": true,
             "changed": [
-              "00000000-0000-4000-8000-000000000001"
+              "00000000-0000-4000-8000-000000000003"
             ]
           }
-        },
-        {
-          "kind": "invoke",
-          "cmd": "workspace_sync",
-          "args": {
-            "rootPath": "$ROOT_B",
-            "selectedPaths": null,
-            "documentIds": null
-          },
-          "response": {
-            "files": [],
-            "unboundPaths": [
-              "letter.md"
-            ]
-          }
-        },
-        {
-          "kind": "invoke",
-          "cmd": "workspace_sync",
-          "args": {
-            "rootPath": "$ROOT_B",
-            "selectedPaths": null,
-            "documentIds": {
-              "letter.md": "00000000-0000-4000-8000-000000000003"
-            }
-          },
-          "response": {
-            "files": [
-              {
-                "relativePath": "letter.md",
-                "id": "00000000-0000-4000-8000-000000000003",
-                "contentHash": "blake3:cf85183dc2224aaa5880b0927bceef4cf192e27db726539d723f003c4b07ae8d"
-              }
-            ],
-            "unboundPaths": []
-          }
-        },
-        {
-          "kind": "invoke",
-          "cmd": "catalog_list_binding_root_documents",
-          "args": {
-            "dbPath": "$DB",
-            "bindingRootId": "fixture-root-b"
-          },
-          "response": []
         },
         {
           "kind": "invoke",
@@ -172,7 +188,7 @@
                   "rootPath": "$ROOT_B",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000003",
+                  "documentId": "00000000-0000-4000-8000-000000000004",
                   "relativePath": "letter.md",
                   "canonicalPath": "$ROOT_B/letter.md",
                   "inode": 301,
@@ -190,23 +206,8 @@
           "response": {
             "applied": true,
             "changed": [
-              "00000000-0000-4000-8000-000000000003"
+              "00000000-0000-4000-8000-000000000004"
             ]
-          }
-        },
-        {
-          "kind": "invoke",
-          "cmd": "catalog_get_by_id",
-          "args": {
-            "dbPath": "$DB",
-            "id": "00000000-0000-4000-8000-000000000001"
-          },
-          "response": {
-            "id": "00000000-0000-4000-8000-000000000001",
-            "relativePath": "letter.md",
-            "localPresent": true,
-            "bindingRootId": "fixture-root-a",
-            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
           }
         },
         {
@@ -218,6 +219,21 @@
           },
           "response": {
             "id": "00000000-0000-4000-8000-000000000003",
+            "relativePath": "letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000004"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000004",
             "relativePath": "letter.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-b",
@@ -232,7 +248,7 @@
             "path": "$ROOT_A/letter.md"
           },
           "response": {
-            "id": "00000000-0000-4000-8000-000000000001",
+            "id": "00000000-0000-4000-8000-000000000003",
             "relativePath": "letter.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-a",
@@ -247,7 +263,7 @@
             "path": "$ROOT_B/letter.md"
           },
           "response": {
-            "id": "00000000-0000-4000-8000-000000000003",
+            "id": "00000000-0000-4000-8000-000000000004",
             "relativePath": "letter.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-b",
@@ -266,11 +282,12 @@
             "files": [
               {
                 "relativePath": "letter.md",
-                "id": "00000000-0000-4000-8000-000000000001",
+                "id": "00000000-0000-4000-8000-000000000003",
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -282,11 +299,48 @@
           },
           "response": [
             {
-              "id": "00000000-0000-4000-8000-000000000001",
+              "id": "00000000-0000-4000-8000-000000000003",
               "relativePath": "letter.md",
               "localPresent": true,
               "bindingRootId": "fixture-root-a",
               "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+            }
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_B",
+            "selectedPaths": null,
+            "documentIds": null
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "letter.md",
+                "id": "00000000-0000-4000-8000-000000000004",
+                "contentHash": "blake3:cf85183dc2224aaa5880b0927bceef4cf192e27db726539d723f003c4b07ae8d"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_binding_root_documents",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-b"
+          },
+          "response": [
+            {
+              "id": "00000000-0000-4000-8000-000000000004",
+              "relativePath": "letter.md",
+              "localPresent": true,
+              "bindingRootId": "fixture-root-b",
+              "contentHash": "blake3:cf85183dc2224aaa5880b0927bceef4cf192e27db726539d723f003c4b07ae8d"
             }
           ]
         },
@@ -302,7 +356,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000001",
+                  "documentId": "00000000-0000-4000-8000-000000000003",
                   "relativePath": "letter.md",
                   "canonicalPath": "$ROOT_A/letter.md",
                   "inode": 201,
@@ -324,42 +378,6 @@
         },
         {
           "kind": "invoke",
-          "cmd": "workspace_sync",
-          "args": {
-            "rootPath": "$ROOT_B",
-            "selectedPaths": null,
-            "documentIds": null
-          },
-          "response": {
-            "files": [
-              {
-                "relativePath": "letter.md",
-                "id": "00000000-0000-4000-8000-000000000003",
-                "contentHash": "blake3:cf85183dc2224aaa5880b0927bceef4cf192e27db726539d723f003c4b07ae8d"
-              }
-            ],
-            "unboundPaths": []
-          }
-        },
-        {
-          "kind": "invoke",
-          "cmd": "catalog_list_binding_root_documents",
-          "args": {
-            "dbPath": "$DB",
-            "bindingRootId": "fixture-root-b"
-          },
-          "response": [
-            {
-              "id": "00000000-0000-4000-8000-000000000003",
-              "relativePath": "letter.md",
-              "localPresent": true,
-              "bindingRootId": "fixture-root-b",
-              "contentHash": "blake3:cf85183dc2224aaa5880b0927bceef4cf192e27db726539d723f003c4b07ae8d"
-            }
-          ]
-        },
-        {
-          "kind": "invoke",
           "cmd": "catalog_apply_reconcile",
           "args": {
             "dbPath": "$DB",
@@ -370,7 +388,7 @@
                   "rootPath": "$ROOT_B",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000003",
+                  "documentId": "00000000-0000-4000-8000-000000000004",
                   "relativePath": "letter.md",
                   "canonicalPath": "$ROOT_B/letter.md",
                   "inode": 301,
@@ -423,28 +441,14 @@
             "files": [],
             "unboundPaths": [
               "notes/letter.md"
-            ]
-          }
-        },
-        {
-          "kind": "invoke",
-          "cmd": "workspace_sync",
-          "args": {
-            "rootPath": "$ROOT_A",
-            "selectedPaths": null,
-            "documentIds": {
-              "notes/letter.md": "00000000-0000-4000-8000-000000000001"
-            }
-          },
-          "response": {
-            "files": [
+            ],
+            "unboundFiles": [
               {
                 "relativePath": "notes/letter.md",
-                "id": "00000000-0000-4000-8000-000000000001",
-                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                "size": 22
               }
-            ],
-            "unboundPaths": []
+            ]
           }
         },
         {
@@ -458,6 +462,28 @@
         },
         {
           "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": {
+              "notes/letter.md": "00000000-0000-4000-8000-000000000002"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/letter.md",
+                "id": "00000000-0000-4000-8000-000000000002",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
           "cmd": "catalog_apply_reconcile",
           "args": {
             "dbPath": "$DB",
@@ -468,7 +494,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000001",
+                  "documentId": "00000000-0000-4000-8000-000000000002",
                   "relativePath": "notes/letter.md",
                   "canonicalPath": "$ROOT_A/notes/letter.md",
                   "inode": 101,
@@ -486,7 +512,7 @@
           "response": {
             "applied": true,
             "changed": [
-              "00000000-0000-4000-8000-000000000001"
+              "00000000-0000-4000-8000-000000000002"
             ]
           }
         },
@@ -495,10 +521,10 @@
           "cmd": "catalog_get_by_id",
           "args": {
             "dbPath": "$DB",
-            "id": "00000000-0000-4000-8000-000000000001"
+            "id": "00000000-0000-4000-8000-000000000002"
           },
           "response": {
-            "id": "00000000-0000-4000-8000-000000000001",
+            "id": "00000000-0000-4000-8000-000000000002",
             "relativePath": "notes/letter.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-a",
@@ -513,7 +539,7 @@
             "path": "$ROOT_A/notes/letter.md"
           },
           "response": {
-            "id": "00000000-0000-4000-8000-000000000001",
+            "id": "00000000-0000-4000-8000-000000000002",
             "relativePath": "notes/letter.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-a",
@@ -539,11 +565,12 @@
             "files": [
               {
                 "relativePath": "archive/letter-final.md",
-                "id": "00000000-0000-4000-8000-000000000001",
+                "id": "00000000-0000-4000-8000-000000000002",
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -555,7 +582,7 @@
           },
           "response": [
             {
-              "id": "00000000-0000-4000-8000-000000000001",
+              "id": "00000000-0000-4000-8000-000000000002",
               "relativePath": "notes/letter.md",
               "localPresent": true,
               "bindingRootId": "fixture-root-a",
@@ -575,7 +602,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000001",
+                  "documentId": "00000000-0000-4000-8000-000000000002",
                   "relativePath": "archive/letter-final.md",
                   "canonicalPath": "$ROOT_A/archive/letter-final.md",
                   "inode": 101,
@@ -593,7 +620,7 @@
           "response": {
             "applied": true,
             "changed": [
-              "00000000-0000-4000-8000-000000000001"
+              "00000000-0000-4000-8000-000000000002"
             ]
           }
         },
@@ -602,10 +629,10 @@
           "cmd": "catalog_get_by_id",
           "args": {
             "dbPath": "$DB",
-            "id": "00000000-0000-4000-8000-000000000001"
+            "id": "00000000-0000-4000-8000-000000000002"
           },
           "response": {
-            "id": "00000000-0000-4000-8000-000000000001",
+            "id": "00000000-0000-4000-8000-000000000002",
             "relativePath": "archive/letter-final.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-a",
@@ -620,7 +647,7 @@
             "path": "$ROOT_A/archive/letter-final.md"
           },
           "response": {
-            "id": "00000000-0000-4000-8000-000000000001",
+            "id": "00000000-0000-4000-8000-000000000002",
             "relativePath": "archive/letter-final.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-a",
@@ -639,11 +666,12 @@
             "files": [
               {
                 "relativePath": "archive/letter-final.md",
-                "id": "00000000-0000-4000-8000-000000000001",
+                "id": "00000000-0000-4000-8000-000000000002",
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -655,7 +683,7 @@
           },
           "response": [
             {
-              "id": "00000000-0000-4000-8000-000000000001",
+              "id": "00000000-0000-4000-8000-000000000002",
               "relativePath": "archive/letter-final.md",
               "localPresent": true,
               "bindingRootId": "fixture-root-a",
@@ -675,7 +703,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000001",
+                  "documentId": "00000000-0000-4000-8000-000000000002",
                   "relativePath": "archive/letter-final.md",
                   "canonicalPath": "$ROOT_A/archive/letter-final.md",
                   "inode": 101,
@@ -700,10 +728,10 @@
           "cmd": "catalog_get_by_id",
           "args": {
             "dbPath": "$DB",
-            "id": "00000000-0000-4000-8000-000000000001"
+            "id": "00000000-0000-4000-8000-000000000002"
           },
           "response": {
-            "id": "00000000-0000-4000-8000-000000000001",
+            "id": "00000000-0000-4000-8000-000000000002",
             "relativePath": "archive/letter-final.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-a",
@@ -718,7 +746,7 @@
             "path": "$ROOT_A/archive/letter-final.md"
           },
           "response": {
-            "id": "00000000-0000-4000-8000-000000000001",
+            "id": "00000000-0000-4000-8000-000000000002",
             "relativePath": "archive/letter-final.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-a",
@@ -767,28 +795,14 @@
             "files": [],
             "unboundPaths": [
               "notes/a.md"
-            ]
-          }
-        },
-        {
-          "kind": "invoke",
-          "cmd": "workspace_sync",
-          "args": {
-            "rootPath": "$ROOT_A",
-            "selectedPaths": null,
-            "documentIds": {
-              "notes/a.md": "00000000-0000-4000-8000-000000000001"
-            }
-          },
-          "response": {
-            "files": [
+            ],
+            "unboundFiles": [
               {
                 "relativePath": "notes/a.md",
-                "id": "00000000-0000-4000-8000-000000000001",
-                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                "size": 22
               }
-            ],
-            "unboundPaths": []
+            ]
           }
         },
         {
@@ -802,6 +816,28 @@
         },
         {
           "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": {
+              "notes/a.md": "00000000-0000-4000-8000-000000000002"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/a.md",
+                "id": "00000000-0000-4000-8000-000000000002",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
           "cmd": "catalog_apply_reconcile",
           "args": {
             "dbPath": "$DB",
@@ -812,7 +848,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000001",
+                  "documentId": "00000000-0000-4000-8000-000000000002",
                   "relativePath": "notes/a.md",
                   "canonicalPath": "$ROOT_A/notes/a.md",
                   "inode": 401,
@@ -830,7 +866,7 @@
           "response": {
             "applied": true,
             "changed": [
-              "00000000-0000-4000-8000-000000000001"
+              "00000000-0000-4000-8000-000000000002"
             ]
           }
         },
@@ -855,39 +891,20 @@
             "files": [
               {
                 "relativePath": "notes/a.md",
-                "id": "00000000-0000-4000-8000-000000000001",
+                "id": "00000000-0000-4000-8000-000000000002",
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               }
             ],
             "unboundPaths": [
               "notes/b.md"
-            ]
-          }
-        },
-        {
-          "kind": "invoke",
-          "cmd": "workspace_sync",
-          "args": {
-            "rootPath": "$ROOT_A",
-            "selectedPaths": null,
-            "documentIds": {
-              "notes/b.md": "00000000-0000-4000-8000-000000000003"
-            }
-          },
-          "response": {
-            "files": [
-              {
-                "relativePath": "notes/a.md",
-                "id": "00000000-0000-4000-8000-000000000001",
-                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
-              },
+            ],
+            "unboundFiles": [
               {
                 "relativePath": "notes/b.md",
-                "id": "00000000-0000-4000-8000-000000000003",
-                "contentHash": "blake3:334ab566830e125402ed851d95d01e83e91f6ec85b28a100916e196206d83158"
+                "contentHash": "blake3:334ab566830e125402ed851d95d01e83e91f6ec85b28a100916e196206d83158",
+                "size": 37
               }
-            ],
-            "unboundPaths": []
+            ]
           }
         },
         {
@@ -899,13 +916,40 @@
           },
           "response": [
             {
-              "id": "00000000-0000-4000-8000-000000000001",
+              "id": "00000000-0000-4000-8000-000000000002",
               "relativePath": "notes/a.md",
               "localPresent": true,
               "bindingRootId": "fixture-root-a",
               "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
             }
           ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": {
+              "notes/b.md": "00000000-0000-4000-8000-000000000004"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/a.md",
+                "id": "00000000-0000-4000-8000-000000000002",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+              },
+              {
+                "relativePath": "notes/b.md",
+                "id": "00000000-0000-4000-8000-000000000004",
+                "contentHash": "blake3:334ab566830e125402ed851d95d01e83e91f6ec85b28a100916e196206d83158"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
         },
         {
           "kind": "invoke",
@@ -919,7 +963,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000003",
+                  "documentId": "00000000-0000-4000-8000-000000000004",
                   "relativePath": "notes/b.md",
                   "canonicalPath": "$ROOT_A/notes/b.md",
                   "inode": 402,
@@ -935,7 +979,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000001",
+                  "documentId": "00000000-0000-4000-8000-000000000002",
                   "relativePath": "notes/a.md",
                   "canonicalPath": "$ROOT_A/notes/a.md",
                   "inode": 401,
@@ -953,7 +997,7 @@
           "response": {
             "applied": true,
             "changed": [
-              "00000000-0000-4000-8000-000000000003"
+              "00000000-0000-4000-8000-000000000004"
             ]
           }
         },
@@ -976,16 +1020,17 @@
             "files": [
               {
                 "relativePath": "notes/a-moved.md",
-                "id": "00000000-0000-4000-8000-000000000001",
+                "id": "00000000-0000-4000-8000-000000000002",
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               },
               {
                 "relativePath": "notes/b.md",
-                "id": "00000000-0000-4000-8000-000000000003",
+                "id": "00000000-0000-4000-8000-000000000004",
                 "contentHash": "blake3:334ab566830e125402ed851d95d01e83e91f6ec85b28a100916e196206d83158"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -997,14 +1042,14 @@
           },
           "response": [
             {
-              "id": "00000000-0000-4000-8000-000000000001",
+              "id": "00000000-0000-4000-8000-000000000002",
               "relativePath": "notes/a.md",
               "localPresent": true,
               "bindingRootId": "fixture-root-a",
               "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
             },
             {
-              "id": "00000000-0000-4000-8000-000000000003",
+              "id": "00000000-0000-4000-8000-000000000004",
               "relativePath": "notes/b.md",
               "localPresent": true,
               "bindingRootId": "fixture-root-a",
@@ -1024,7 +1069,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000003",
+                  "documentId": "00000000-0000-4000-8000-000000000004",
                   "relativePath": "notes/b.md",
                   "canonicalPath": "$ROOT_A/notes/b.md",
                   "inode": 402,
@@ -1040,7 +1085,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000001",
+                  "documentId": "00000000-0000-4000-8000-000000000002",
                   "relativePath": "notes/a-moved.md",
                   "canonicalPath": "$ROOT_A/notes/a-moved.md",
                   "inode": 401,
@@ -1058,7 +1103,7 @@
           "response": {
             "applied": true,
             "changed": [
-              "00000000-0000-4000-8000-000000000001"
+              "00000000-0000-4000-8000-000000000002"
             ]
           }
         },
@@ -1080,11 +1125,12 @@
             "files": [
               {
                 "relativePath": "notes/a-moved.md",
-                "id": "00000000-0000-4000-8000-000000000001",
+                "id": "00000000-0000-4000-8000-000000000002",
                 "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -1096,14 +1142,14 @@
           },
           "response": [
             {
-              "id": "00000000-0000-4000-8000-000000000001",
+              "id": "00000000-0000-4000-8000-000000000002",
               "relativePath": "notes/a-moved.md",
               "localPresent": true,
               "bindingRootId": "fixture-root-a",
               "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
             },
             {
-              "id": "00000000-0000-4000-8000-000000000003",
+              "id": "00000000-0000-4000-8000-000000000004",
               "relativePath": "notes/b.md",
               "localPresent": true,
               "bindingRootId": "fixture-root-a",
@@ -1123,7 +1169,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000001",
+                  "documentId": "00000000-0000-4000-8000-000000000002",
                   "relativePath": "notes/a-moved.md",
                   "canonicalPath": "$ROOT_A/notes/a-moved.md",
                   "inode": 401,
@@ -1136,14 +1182,14 @@
                 }
               ],
               "detached": [
-                "00000000-0000-4000-8000-000000000003"
+                "00000000-0000-4000-8000-000000000004"
               ]
             }
           },
           "response": {
             "applied": true,
             "changed": [
-              "00000000-0000-4000-8000-000000000003"
+              "00000000-0000-4000-8000-000000000004"
             ]
           }
         },
@@ -1152,10 +1198,10 @@
           "cmd": "catalog_get_by_id",
           "args": {
             "dbPath": "$DB",
-            "id": "00000000-0000-4000-8000-000000000001"
+            "id": "00000000-0000-4000-8000-000000000002"
           },
           "response": {
-            "id": "00000000-0000-4000-8000-000000000001",
+            "id": "00000000-0000-4000-8000-000000000002",
             "relativePath": "notes/a-moved.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-a",
@@ -1170,7 +1216,7 @@
             "path": "$ROOT_A/notes/a-moved.md"
           },
           "response": {
-            "id": "00000000-0000-4000-8000-000000000001",
+            "id": "00000000-0000-4000-8000-000000000002",
             "relativePath": "notes/a-moved.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-a",
@@ -1210,28 +1256,14 @@
             "files": [],
             "unboundPaths": [
               "notes/watched.md"
-            ]
-          }
-        },
-        {
-          "kind": "invoke",
-          "cmd": "workspace_sync",
-          "args": {
-            "rootPath": "$ROOT_A",
-            "selectedPaths": null,
-            "documentIds": {
-              "notes/watched.md": "00000000-0000-4000-8000-000000000001"
-            }
-          },
-          "response": {
-            "files": [
+            ],
+            "unboundFiles": [
               {
                 "relativePath": "notes/watched.md",
-                "id": "00000000-0000-4000-8000-000000000001",
-                "contentHash": "blake3:c378d710f75b8ee9c516944dd07f0022b49bf14f74fb7a505dfad0e682c2aecb"
+                "contentHash": "blake3:c378d710f75b8ee9c516944dd07f0022b49bf14f74fb7a505dfad0e682c2aecb",
+                "size": 34
               }
-            ],
-            "unboundPaths": []
+            ]
           }
         },
         {
@@ -1245,6 +1277,28 @@
         },
         {
           "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": {
+              "notes/watched.md": "00000000-0000-4000-8000-000000000002"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/watched.md",
+                "id": "00000000-0000-4000-8000-000000000002",
+                "contentHash": "blake3:c378d710f75b8ee9c516944dd07f0022b49bf14f74fb7a505dfad0e682c2aecb"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
           "cmd": "catalog_apply_reconcile",
           "args": {
             "dbPath": "$DB",
@@ -1255,7 +1309,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000001",
+                  "documentId": "00000000-0000-4000-8000-000000000002",
                   "relativePath": "notes/watched.md",
                   "canonicalPath": "$ROOT_A/notes/watched.md",
                   "inode": 501,
@@ -1273,7 +1327,7 @@
           "response": {
             "applied": true,
             "changed": [
-              "00000000-0000-4000-8000-000000000001"
+              "00000000-0000-4000-8000-000000000002"
             ]
           }
         },
@@ -1282,10 +1336,10 @@
           "cmd": "catalog_get_by_id",
           "args": {
             "dbPath": "$DB",
-            "id": "00000000-0000-4000-8000-000000000001"
+            "id": "00000000-0000-4000-8000-000000000002"
           },
           "response": {
-            "id": "00000000-0000-4000-8000-000000000001",
+            "id": "00000000-0000-4000-8000-000000000002",
             "relativePath": "notes/watched.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-a",
@@ -1313,11 +1367,12 @@
             "files": [
               {
                 "relativePath": "notes/watched.md",
-                "id": "00000000-0000-4000-8000-000000000001",
+                "id": "00000000-0000-4000-8000-000000000002",
                 "contentHash": "blake3:deaafcaa417ec2f772efb8f67e0c27053b44babefbd8ea8630f29ef08aabc822"
               }
             ],
-            "unboundPaths": []
+            "unboundPaths": [],
+            "unboundFiles": []
           }
         },
         {
@@ -1329,7 +1384,7 @@
           },
           "response": [
             {
-              "id": "00000000-0000-4000-8000-000000000001",
+              "id": "00000000-0000-4000-8000-000000000002",
               "relativePath": "notes/watched.md",
               "localPresent": true,
               "bindingRootId": "fixture-root-a",
@@ -1349,7 +1404,7 @@
                   "rootPath": "$ROOT_A",
                   "manifestVersion": 2,
                   "visibleAsWorkspace": true,
-                  "documentId": "00000000-0000-4000-8000-000000000001",
+                  "documentId": "00000000-0000-4000-8000-000000000002",
                   "relativePath": "notes/watched.md",
                   "canonicalPath": "$ROOT_A/notes/watched.md",
                   "inode": 501,
@@ -1367,7 +1422,7 @@
           "response": {
             "applied": true,
             "changed": [
-              "00000000-0000-4000-8000-000000000001"
+              "00000000-0000-4000-8000-000000000002"
             ]
           }
         },
@@ -1376,14 +1431,412 @@
           "cmd": "catalog_get_by_id",
           "args": {
             "dbPath": "$DB",
-            "id": "00000000-0000-4000-8000-000000000001"
+            "id": "00000000-0000-4000-8000-000000000002"
           },
           "response": {
-            "id": "00000000-0000-4000-8000-000000000001",
+            "id": "00000000-0000-4000-8000-000000000002",
             "relativePath": "notes/watched.md",
             "localPresent": true,
             "bindingRootId": "fixture-root-a",
             "contentHash": "blake3:deaafcaa417ec2f772efb8f67e0c27053b44babefbd8ea8630f29ef08aabc822"
+          }
+        }
+      ]
+    },
+    {
+      "name": "watch04-external-move-across-roots",
+      "description": "WATCH-04: a file moved outside the app from root A to root B keeps its UUID — the destination scan reports it unbound with inode + content hash, the pass correlates it against A's confirmed detach, and the binding moves to B with no detach in A.",
+      "steps": [
+        {
+          "kind": "fs",
+          "op": "seed-manifest",
+          "root": "rootA",
+          "bindingRootId": "fixture-root-a"
+        },
+        {
+          "kind": "fs",
+          "op": "seed-manifest",
+          "root": "rootB",
+          "bindingRootId": "fixture-root-b"
+        },
+        {
+          "kind": "fs",
+          "op": "write",
+          "root": "rootA",
+          "relativePath": "notes/letter.md",
+          "content": "# Letter\n\nversion one\n",
+          "inode": 601,
+          "modifiedAt": 1700000008000
+        },
+        {
+          "kind": "fs",
+          "op": "write",
+          "root": "rootA",
+          "relativePath": "notes/keeper.md",
+          "content": "# Keeper\n\nresident in root A\n",
+          "inode": 602,
+          "modifiedAt": 1700000007500
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": null
+          },
+          "response": {
+            "files": [],
+            "unboundPaths": [
+              "notes/keeper.md",
+              "notes/letter.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "notes/keeper.md",
+                "contentHash": "blake3:c39e10c1e32eaeb924762d18eaeb22dfce87d8f72883e1e286c2480fc5a3e347",
+                "size": 29
+              },
+              {
+                "relativePath": "notes/letter.md",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                "size": 22
+              }
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_binding_root_documents",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-a"
+          },
+          "response": []
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_B",
+            "selectedPaths": null,
+            "documentIds": null
+          },
+          "response": {
+            "files": [],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_binding_root_documents",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-b"
+          },
+          "response": []
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": {
+              "notes/keeper.md": "00000000-0000-4000-8000-000000000003",
+              "notes/letter.md": "00000000-0000-4000-8000-000000000004"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/keeper.md",
+                "id": "00000000-0000-4000-8000-000000000003",
+                "contentHash": "blake3:c39e10c1e32eaeb924762d18eaeb22dfce87d8f72883e1e286c2480fc5a3e347"
+              },
+              {
+                "relativePath": "notes/letter.md",
+                "id": "00000000-0000-4000-8000-000000000004",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_reconcile",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "upserts": [
+                {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000004",
+                  "relativePath": "notes/letter.md",
+                  "canonicalPath": "$ROOT_A/notes/letter.md",
+                  "inode": 601,
+                  "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                  "size": 22,
+                  "lastSeenAt": 1700000008000,
+                  "title": "letter",
+                  "createdAt": 1700000008000,
+                  "modifiedAt": 1700000008000
+                },
+                {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000003",
+                  "relativePath": "notes/keeper.md",
+                  "canonicalPath": "$ROOT_A/notes/keeper.md",
+                  "inode": 602,
+                  "contentHash": "blake3:c39e10c1e32eaeb924762d18eaeb22dfce87d8f72883e1e286c2480fc5a3e347",
+                  "size": 29,
+                  "lastSeenAt": 1700000007500,
+                  "title": "keeper",
+                  "createdAt": 1700000007500,
+                  "modifiedAt": 1700000007500
+                }
+              ],
+              "detached": []
+            }
+          },
+          "response": {
+            "applied": true,
+            "changed": [
+              "00000000-0000-4000-8000-000000000004",
+              "00000000-0000-4000-8000-000000000003"
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_reconcile",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "upserts": [],
+              "detached": []
+            }
+          },
+          "response": {
+            "applied": true,
+            "changed": []
+          }
+        },
+        {
+          "kind": "fs",
+          "op": "delete",
+          "root": "rootA",
+          "relativePath": "notes/letter.md"
+        },
+        {
+          "kind": "fs",
+          "op": "write",
+          "root": "rootB",
+          "relativePath": "notes/letter.md",
+          "content": "# Letter\n\nversion one\n",
+          "inode": 601,
+          "modifiedAt": 1700000009000
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": null
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/keeper.md",
+                "id": "00000000-0000-4000-8000-000000000003",
+                "contentHash": "blake3:c39e10c1e32eaeb924762d18eaeb22dfce87d8f72883e1e286c2480fc5a3e347"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_binding_root_documents",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-a"
+          },
+          "response": [
+            {
+              "id": "00000000-0000-4000-8000-000000000003",
+              "relativePath": "notes/keeper.md",
+              "localPresent": true,
+              "bindingRootId": "fixture-root-a",
+              "contentHash": "blake3:c39e10c1e32eaeb924762d18eaeb22dfce87d8f72883e1e286c2480fc5a3e347"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000004",
+              "relativePath": "notes/letter.md",
+              "localPresent": true,
+              "bindingRootId": "fixture-root-a",
+              "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+            }
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_B",
+            "selectedPaths": null,
+            "documentIds": null
+          },
+          "response": {
+            "files": [],
+            "unboundPaths": [
+              "notes/letter.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "notes/letter.md",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                "size": 22
+              }
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_binding_root_documents",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-b"
+          },
+          "response": []
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_B",
+            "selectedPaths": null,
+            "documentIds": {
+              "notes/letter.md": "00000000-0000-4000-8000-000000000004"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/letter.md",
+                "id": "00000000-0000-4000-8000-000000000004",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_reconcile",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "upserts": [
+                {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000003",
+                  "relativePath": "notes/keeper.md",
+                  "canonicalPath": "$ROOT_A/notes/keeper.md",
+                  "inode": 602,
+                  "contentHash": "blake3:c39e10c1e32eaeb924762d18eaeb22dfce87d8f72883e1e286c2480fc5a3e347",
+                  "size": 29,
+                  "lastSeenAt": 1700000007500,
+                  "title": "keeper",
+                  "createdAt": 1700000007500,
+                  "modifiedAt": 1700000007500
+                }
+              ],
+              "detached": []
+            }
+          },
+          "response": {
+            "applied": true,
+            "changed": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_reconcile",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "upserts": [
+                {
+                  "bindingRootId": "fixture-root-b",
+                  "rootPath": "$ROOT_B",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000004",
+                  "relativePath": "notes/letter.md",
+                  "canonicalPath": "$ROOT_B/notes/letter.md",
+                  "inode": 601,
+                  "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                  "size": 22,
+                  "lastSeenAt": 1700000009000,
+                  "title": "letter",
+                  "createdAt": 1700000009000,
+                  "modifiedAt": 1700000009000
+                }
+              ],
+              "detached": []
+            }
+          },
+          "response": {
+            "applied": true,
+            "changed": [
+              "00000000-0000-4000-8000-000000000004"
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000004"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-b",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_resolve_path",
+          "args": {
+            "dbPath": "$DB",
+            "path": "$ROOT_B/notes/letter.md"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-b",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
           }
         }
       ]

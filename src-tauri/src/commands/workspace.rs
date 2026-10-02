@@ -21,8 +21,37 @@ pub struct WorkspaceFileSnapshot {
     pub modified_at: u64,
     pub size: u64,
     pub inode: u64,
+    /// Volume the file lives on (`st_dev`), additive and optional. An inode
+    /// number is only unique within one volume, so the TS cross-root
+    /// correlation only matches when both sides report the same device
+    /// (ODE-657 review P1). Absent on non-unix or when the stat cannot
+    /// provide it; the walk already holds the metadata, so this is free.
+    #[serde(rename = "device", default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<u64>,
     #[serde(rename = "contentHash")]
     pub content_hash: String,
+}
+
+/// Evidence for one file a scan could not bind. Additive to `unboundPaths`
+/// (ODE-657): the TS orchestrator correlates an external cross-root move by
+/// device + inode + content_hash before minting a UUID, and the scan already
+/// computed all three while deciding whether the file was bound — zero extra
+/// I/O. Device and inode are only comparable within one volume, so both sides
+/// of a correlation must agree on the device (ODE-657 review P1).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WorkspaceUnboundFile {
+    #[serde(rename = "relativePath")]
+    pub relative_path: String,
+    pub inode: u64,
+    /// Volume the file lives on (`st_dev`), same additive/optional contract as
+    /// `WorkspaceFileSnapshot::device` (ODE-657 review P1).
+    #[serde(rename = "device", default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<u64>,
+    #[serde(rename = "contentHash")]
+    pub content_hash: String,
+    pub size: u64,
+    #[serde(rename = "modifiedAt")]
+    pub modified_at: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,6 +80,10 @@ pub struct WorkspaceSnapshot {
     // `workspace_sync` pairing always paid.
     #[serde(rename = "unboundPaths")]
     pub unbound_paths: Vec<String>,
+    // Same order as `unbound_paths` (invariant). The inode is only comparable
+    // within one machine, so the TS seam recording projects it out.
+    #[serde(rename = "unboundFiles", default)]
+    pub unbound_files: Vec<WorkspaceUnboundFile>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -445,6 +478,9 @@ pub fn workspace_inspect(root_path: String) -> Result<WorkspaceSnapshot, String>
         updated_at,
         selected_paths: normalize_selected_paths(existing_index.selected_paths)?,
         files,
+        // `workspace_inspect` is a read-only listing with no caller-supplied
+        // ids; it never mints identity, so it reports no unbound evidence.
+        unbound_files: vec![],
         unbound_paths,
     })
 }
@@ -692,6 +728,7 @@ pub fn workspace_touch_file(
             modified_at,
             size: metadata.len(),
             inode,
+            device: device_for_metadata(&metadata),
             content_hash,
         },
     })
@@ -825,6 +862,7 @@ pub fn workspace_sync(
     }
 
     let mut unbound_paths = Vec::new();
+    let mut unbound_files = Vec::new();
     for mut file in files {
         let existing_at_path = existing_index.files.get(&file.relative_path).cloned();
         let can_reuse_hash = existing_at_path.as_ref().is_some_and(|entry| {
@@ -869,6 +907,14 @@ pub fn workspace_sync(
                 .and_then(|ids| ids.get(&file.relative_path).cloned())
         }) else {
             unbound_paths.push(file.relative_path.clone());
+            unbound_files.push(WorkspaceUnboundFile {
+                relative_path: file.relative_path.clone(),
+                inode: file.inode,
+                device: file.device,
+                content_hash,
+                size: file.size,
+                modified_at: file.modified_at,
+            });
             continue;
         };
 
@@ -907,6 +953,7 @@ pub fn workspace_sync(
         selected_paths: effective_selected_paths,
         files: files_with_ids,
         unbound_paths,
+        unbound_files,
     })
 }
 
@@ -1035,6 +1082,7 @@ fn snapshot_workspace_file(
         modified_at,
         size: metadata.len(),
         inode: inode_for_path(&path.to_path_buf()),
+        device: device_for_metadata(metadata),
         content_hash: String::new(),
     })
 }
@@ -1138,6 +1186,21 @@ fn inode_for_path(path: &PathBuf) -> u64 {
 #[cfg(not(unix))]
 fn inode_for_path(_path: &PathBuf) -> u64 {
     0
+}
+
+/// Volume identity (`st_dev`) for a file the walk already stat'ed. `None` when
+/// the platform cannot report it: inode is the only identity then, and the TS
+/// correlation must refuse to cross roots (ODE-657 review P1).
+#[cfg(unix)]
+fn device_for_metadata(metadata: &fs::Metadata) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+
+    Some(metadata.dev())
+}
+
+#[cfg(not(unix))]
+fn device_for_metadata(_metadata: &fs::Metadata) -> Option<u64> {
+    None
 }
 
 #[cfg(test)]
@@ -1283,6 +1346,7 @@ mod tests {
                 modified_at: 3,
                 size: 9,
                 inode: 77,
+                device: None,
                 content_hash: "blake3:b".to_string(),
             },
         };
@@ -1703,6 +1767,111 @@ mod tests {
         assert_eq!(next_snapshot.files[0].relative_path, "after.md");
         assert_eq!(next_snapshot.files[0].id, initial_id);
         assert_eq!(next_snapshot.selected_paths, vec!["after.md"]);
+
+        cleanup(&root);
+    }
+
+    /// ODE-657 — the scan already computes inode/hash/size for every file it
+    /// leaves unbound; the additive `unboundFiles` field reports them so the TS
+    /// orchestrator can correlate a cross-root move BEFORE minting identity.
+    #[test]
+    fn workspace_sync_reports_unbound_files_with_inode_hash_and_size() {
+        let root = temp_workspace_root("unbound-files-evidence");
+        let known_path = root.join("known.md");
+        let new_path = root.join("new.md");
+        fs::write(&known_path, "Known\n").expect("write known");
+        fs::write(&new_path, "New content\n").expect("write unbound");
+
+        let bound_ids = HashMap::from([("known.md".to_string(), "doc-known".to_string())]);
+        let initial =
+            super::workspace_sync(root.to_string_lossy().to_string(), None, Some(bound_ids))
+                .expect("bind known file");
+        assert_eq!(initial.files.len(), 1);
+        assert_eq!(initial.unbound_paths, vec!["new.md".to_string()]);
+
+        let snapshot = super::workspace_sync(root.to_string_lossy().to_string(), None, None)
+            .expect("scan with an unbound file");
+
+        // Invariante del contrato: la evidencia espeja `unboundPaths`, en orden.
+        let relative_paths: Vec<String> = snapshot
+            .unbound_files
+            .iter()
+            .map(|file| file.relative_path.clone())
+            .collect();
+        assert_eq!(relative_paths, snapshot.unbound_paths);
+
+        let value = serde_json::to_value(&snapshot).expect("serialize snapshot");
+        let unbound = value
+            .get("unboundFiles")
+            .expect("workspace_sync must report unboundFiles (ODE-657)")
+            .as_array()
+            .expect("unboundFiles is an array");
+        assert_eq!(unbound.len(), 1);
+        assert_eq!(unbound[0]["relativePath"], "new.md");
+        assert_eq!(
+            unbound[0]["inode"].as_u64(),
+            Some(inode_for_path(&new_path)),
+            "the unbound file carries the inode the move correlation needs"
+        );
+        assert_eq!(
+            unbound[0]["contentHash"],
+            format!(
+                "{CONTENT_HASH_PREFIX}:{}",
+                blake3::hash(b"New content\n").to_hex()
+            )
+        );
+        assert_eq!(unbound[0]["size"].as_u64(), Some(12));
+
+        cleanup(&root);
+    }
+
+    /// ODE-657 REVIEW ronda 1 (P1): un inode solo es único dentro de un
+    /// volumen. `workspace_sync` debe reportar el dispositivo (`st_dev`) junto
+    /// al inode en cada archivo y en cada evidencia no ligada, para que la
+    /// correlación entre raíces del lado TS exija un volumen compartido antes
+    /// de emparejar. Cuesta cero I/O extra: el walk ya tiene el metadata.
+    #[cfg(unix)]
+    #[test]
+    fn workspace_sync_reports_device_on_files_and_unbound_evidence() {
+        use std::os::unix::fs::MetadataExt;
+
+        let root = temp_workspace_root("device-evidence");
+        let bound_path = root.join("bound.md");
+        let unbound_path = root.join("unbound.md");
+        fs::write(&bound_path, "Bound\n").expect("write bound");
+        fs::write(&unbound_path, "Unbound\n").expect("write unbound");
+
+        let bound_ids = HashMap::from([("bound.md".to_string(), "doc-bound".to_string())]);
+        super::workspace_sync(root.to_string_lossy().to_string(), None, Some(bound_ids))
+            .expect("bind bound file");
+        let snapshot = super::workspace_sync(root.to_string_lossy().to_string(), None, None)
+            .expect("scan bound and unbound files");
+
+        let value = serde_json::to_value(&snapshot).expect("serialize snapshot");
+        let files = value["files"].as_array().expect("files is an array");
+        let unbound = value["unboundFiles"]
+            .as_array()
+            .expect("unboundFiles is an array");
+        assert_eq!(files.len(), 1);
+        assert_eq!(unbound.len(), 1);
+
+        let bound_device = fs::metadata(&bound_path).expect("stat bound").dev();
+        let unbound_device = fs::metadata(&unbound_path).expect("stat unbound").dev();
+        assert_eq!(
+            bound_device, unbound_device,
+            "both files live in the same temp volume"
+        );
+
+        assert_eq!(
+            files[0]["device"].as_u64(),
+            Some(bound_device),
+            "bound files must carry the volume the move correlation checks"
+        );
+        assert_eq!(
+            unbound[0]["device"].as_u64(),
+            Some(unbound_device),
+            "unbound evidence must carry the volume the move correlation checks"
+        );
 
         cleanup(&root);
     }
