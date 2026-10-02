@@ -10,3 +10,8 @@ enabled = true
 
 [db.seed]
 enabled = false
+
+[auth.rate_limit]
+sign_in_sign_ups = 1000
+token_refresh = 1000
+token_verifications = 1000
