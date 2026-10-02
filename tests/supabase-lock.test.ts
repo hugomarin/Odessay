@@ -16,6 +16,10 @@
  * devolver siempre `true`, y saltarse la reverificación de `staleReason` antes
  * del `rmSync` del huérfano) deja rojo este caso. Cualquiera de las dos capas
  * por separado lo mantiene verde.
+ *
+ * Regresión de `release()`: un proceso cuyo token ya no es el del owner no puede
+ * borrar el lock ajeno. Quitar la comprobación de token en `release()` deja rojo
+ * el caso "un proceso que ya no es el owner no libera el lock de otro".
  */
 import { execFileSync, spawn } from "node:child_process"
 import type { ChildProcessByStdio } from "node:child_process"
@@ -59,6 +63,26 @@ fs.appendFileSync(ODE616_LOG, "release " + ODE616_LABEL + " " + Date.now() + "\\
 lock.release()
 `
 
+const staleReleaserSource = `
+import fs from "node:fs"
+import { acquireSupabaseLock } from ${JSON.stringify(lockModuleUrl)}
+
+const { ODE616_LOCK_CWD, ODE616_SIGNAL, ODE616_GO } = process.env
+
+const lock = await acquireSupabaseLock({ cwd: ODE616_LOCK_CWD, waitMs: 30000, pollMs: 10 })
+fs.writeFileSync(ODE616_SIGNAL, String(process.pid))
+
+// Espera a que el test simule que otro proceso tomó el lock, y solo entonces
+// libera con el token viejo.
+const sleeper = new Int32Array(new SharedArrayBuffer(4))
+const deadline = Date.now() + 30000
+while (!fs.existsSync(ODE616_GO) && Date.now() < deadline) {
+  Atomics.wait(sleeper, 0, 0, 20)
+}
+
+lock.release()
+`
+
 type Waiter = {
   child: ChildProcessByStdio<null, Readable, Readable>
   output: () => string
@@ -70,13 +94,17 @@ afterEach(() => {
   for (const dir of temporaryDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
-function createOrphanRepo(): { repoDir: string; lockPath: string } {
+function createRepo(): { repoDir: string; lockPath: string } {
   const root = mkdtempSync(join(tmpdir(), "ode-616-lock-"))
   temporaryDirs.push(root)
   const repoDir = join(root, "repo")
   mkdirSync(repoDir)
   execFileSync("git", ["init", "-q"], { cwd: repoDir })
-  const lockPath = join(repoDir, ".git", "odessay-supabase-local.lock")
+  return { repoDir, lockPath: join(repoDir, ".git", "odessay-supabase-local.lock") }
+}
+
+function createOrphanRepo(): { repoDir: string; lockPath: string } {
+  const { repoDir, lockPath } = createRepo()
   mkdirSync(lockPath)
   writeFileSync(
     join(lockPath, "owner.json"),
@@ -110,6 +138,33 @@ function spawnWaiter(options: {
       ODE616_LOG: options.logPath,
       ODE616_LABEL: options.label,
       ODE616_HOLD_MS: String(options.holdMs),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  })
+  let output = ""
+  child.stdout.on("data", (chunk) => {
+    output += chunk
+  })
+  child.stderr.on("data", (chunk) => {
+    output += chunk
+  })
+  return { waiter: { child, output: () => output }, signalPath, goPath }
+}
+
+function spawnStaleReleaser(options: {
+  root: string
+  repoDir: string
+}): { waiter: Waiter; signalPath: string; goPath: string } {
+  const signalPath = join(options.root, "signal-stale")
+  const goPath = join(options.root, "go-stale")
+  const workerPath = join(options.root, "stale-releaser.mjs")
+  writeFileSync(workerPath, staleReleaserSource)
+  const child = spawn(process.execPath, [workerPath], {
+    env: {
+      ...process.env,
+      ODE616_LOCK_CWD: options.repoDir,
+      ODE616_SIGNAL: signalPath,
+      ODE616_GO: goPath,
     },
     stdio: ["ignore", "pipe", "pipe"],
   })
@@ -201,6 +256,44 @@ describe("lock de Supabase local entre worktrees", () => {
         overlap,
         `los dos waiters tuvieron el lock a la vez: ${intervals.map((i) => `${i.label}[${i.start},${i.end}]`).join(" ")}`,
       ).toBe(false)
+    },
+    30000,
+  )
+
+  it(
+    "un proceso que ya no es el owner no libera el lock de otro",
+    async () => {
+      const { repoDir, lockPath } = createRepo()
+      const root = temporaryDirs[temporaryDirs.length - 1]
+      const releaser = spawnStaleReleaser({ root, repoDir })
+
+      const signaled = await waitForFile(releaser.signalPath, 10000)
+      expect(signaled, `el proceso no tomó el lock; salida: ${releaser.waiter.output()}`).toBe(true)
+
+      // Otro proceso toma el lock: el token de owner.json deja de ser el del
+      // proceso que espera para liberar.
+      writeFileSync(
+        join(lockPath, "owner.json"),
+        JSON.stringify({
+          token: "token-del-nuevo-owner",
+          pid: process.pid,
+          worktree: "/tmp/otro-worktree",
+          startedAt: new Date().toISOString(),
+        }),
+      )
+
+      writeFileSync(releaser.goPath, "go")
+      const code = await waitForExit(releaser.waiter.child, 20000)
+      expect(code, `el liberador falló; salida: ${releaser.waiter.output()}`).toBe(0)
+
+      expect(
+        existsSync(lockPath),
+        `el proceso obsoleto liberó el lock del nuevo owner; salida: ${releaser.waiter.output()}`,
+      ).toBe(true)
+      expect(JSON.parse(readFileSync(join(lockPath, "owner.json"), "utf8"))).toMatchObject({
+        token: "token-del-nuevo-owner",
+      })
+      expect(releaser.waiter.output()).toContain("no libero")
     },
     30000,
   )
