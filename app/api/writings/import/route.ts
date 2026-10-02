@@ -100,6 +100,9 @@ export async function POST(request: Request) {
     }
 
     if (writing.author_id !== userId) {
+      const dbError = (message: string) => jsonError(500, "DB_ERROR", message)
+      const forbidden = () => jsonError(403, "FORBIDDEN", "You do not have access to this shared artifact.")
+
       const { data: shareRow, error: shareError } = await supabase
         .from("writing_shares")
         .select("id")
@@ -108,11 +111,26 @@ export async function POST(request: Request) {
         .maybeSingle()
 
       if (shareError) {
-        return jsonError(500, "DB_ERROR", shareError.message)
+        return dbError(shareError.message)
       }
 
       if (!shareRow) {
-        return jsonError(403, "FORBIDDEN", "You do not have access to this shared artifact.")
+        return forbidden()
+      }
+
+      // D-1: la fila de share sola no autoriza; tiene que seguir siendo
+      // legible según la misma regla que RLS (un privado con share viejo no).
+      const { data: canRead, error: canReadError } = await supabase.rpc("can_read_writing", {
+        target_writing_id: writing.id,
+        viewer_id: userId,
+      })
+
+      if (canReadError) {
+        return dbError(canReadError.message)
+      }
+
+      if (canRead !== true) {
+        return forbidden()
       }
     }
 

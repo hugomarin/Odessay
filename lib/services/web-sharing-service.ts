@@ -506,6 +506,7 @@ export async function createWebSharingService(
         .select("id, title, slug, body_text, updated_at, profiles!author_id(username, display_name)")
         .in("id", writingIds)
         .neq("author_id", context.userId)
+        .in("visibility", ["shared", "public"])
         .is("deleted_at", null)
         .order("updated_at", { ascending: false })
 
