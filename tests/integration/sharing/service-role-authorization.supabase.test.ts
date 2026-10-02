@@ -228,7 +228,7 @@ describe("D-1 — superficies /shared/[id]", () => {
     expect((await openShared(publicSharedDoc)).writing.id).toBe(publicSharedDoc)
   })
 
-  it.fails("el invitado NO abre un privado con share viejo (F1)", async () => {
+  it("el invitado NO abre un privado con share viejo (F1)", async () => {
     await actAs(viewer)
     await expectNotFound(() => SharedReadingPage(pageParams(legacyPrivateDoc)))
   })
@@ -259,7 +259,7 @@ describe("F1c — secuencia anterior/siguiente", () => {
     expect(hrefs.some((href) => href !== null && expected.includes(href))).toBe(true)
   })
 
-  it.fails("la secuencia no incluye privados con share viejo", async () => {
+  it("la secuencia no incluye privados con share viejo", async () => {
     await actAs(viewer)
     const props = await openShared(publicSharedDoc)
     // sharedDoc + publicSharedDoc + revokedDoc; el privado con share viejo no.
@@ -287,19 +287,19 @@ describe("F2 — generateMetadata no revela el título sin acceso", () => {
     expect(viewerMetadata.title).toBe(`Compartido ${runId} — Artifact Studio`)
   })
 
-  it.fails("el extraño recibe el título genérico para un compartido ajeno", async () => {
+  it("el extraño recibe el título genérico para un compartido ajeno", async () => {
     await actAs(stranger)
     const metadata = await generateMetadata(pageParams(sharedDoc))
     expect(metadata.title).toBe("Reading — Artifact Studio")
   })
 
-  it.fails("sin sesión el título es genérico", async () => {
+  it("sin sesión el título es genérico", async () => {
     await actAs(null)
     const metadata = await generateMetadata(pageParams(publicDoc))
     expect(metadata.title).toBe("Reading — Artifact Studio")
   })
 
-  it.fails("el invitado no ve el título de un privado con share viejo", async () => {
+  it("el invitado no ve el título de un privado con share viejo", async () => {
     await actAs(viewer)
     const metadata = await generateMetadata(pageParams(legacyPrivateDoc))
     expect(metadata.title).toBe("Reading — Artifact Studio")
@@ -330,7 +330,7 @@ describe("Import /api/writings/import (rama shared)", () => {
     expect(response.status).toBe(403)
   })
 
-  it.fails("el invitado no importa un privado con share viejo (F1)", async () => {
+  it("el invitado no importa un privado con share viejo (F1)", async () => {
     const response = await postImport(viewer, legacyPrivateDoc)
     expect(response.status).toBe(403)
   })
@@ -351,7 +351,7 @@ describe("Listados — GET /api/shared/writings y RPC", () => {
     expect(ids).toContain(sharedDoc)
   })
 
-  it.fails("el listado excluye el privado con share viejo", async () => {
+  it("el listado excluye el privado con share viejo", async () => {
     const ids = await incomingIds(viewer)
     expect(ids).not.toContain(legacyPrivateDoc)
   })
@@ -369,12 +369,12 @@ describe("Listados — GET /api/shared/writings y RPC", () => {
     expect(ids).toContain(publicSharedDoc)
   })
 
-  it.fails("la RPC excluye el privado con share viejo", async () => {
+  it("la RPC excluye el privado con share viejo", async () => {
     const ids = await rpcIncomingIds(viewer)
     expect(ids).not.toContain(legacyPrivateDoc)
   })
 
-  it.fails("listSharedWritingsForUser excluye el privado con share viejo (NON_PRODUCTION_PATH)", async () => {
+  it("listSharedWritingsForUser excluye el privado con share viejo (NON_PRODUCTION_PATH)", async () => {
     const items = await listSharedWritingsForUser(viewer.id)
     expect(items.map((item) => item.id)).not.toContain(legacyPrivateDoc)
   })
@@ -399,7 +399,7 @@ describe("Revocación — la fila quitada quita el acceso service-role", () => {
     expect(rpcIds).not.toContain(revokedDoc)
   })
 
-  it.fails("después de revocar, la metadata es genérica (F2)", async () => {
+  it("después de revocar, la metadata es genérica (F2)", async () => {
     await actAs(viewer)
     const metadata = await generateMetadata(pageParams(revokedDoc))
     expect(metadata.title).toBe("Reading — Artifact Studio")

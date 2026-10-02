@@ -61,12 +61,62 @@ async function resolveSharedWriting(identifier: string): Promise<WritingRow | nu
   return null
 }
 
+/**
+ * Regla D-1 del camino service-role (intersección): autor, o fila de share
+ * `can_read_writing` (la misma regla que RLS). Un público ajeno sin share no
+ * abre por `/shared`, y un privado con share viejo tampoco: el exceso de
+ * confianza en la fila de share es la fuga F1.
+ */
+async function canViewerReadWriting(
+  admin: ReturnType<typeof createAdminClient>,
+  writing: WritingRow,
+  viewerId: string | null,
+): Promise<boolean> {
+  if (!viewerId) return false
+  if (writing.author_id === viewerId) return true
+
+  const { data: shareRow, error: shareError } = await admin
+    .from("writing_shares")
+    .select("id")
+    .eq("writing_id", writing.id)
+    .eq("shared_with_id", viewerId)
+    .maybeSingle()
+
+  if (shareError) {
+    throw shareError
+  }
+
+  if (!shareRow) return false
+
+  const { data: canRead, error: canReadError } = await admin.rpc("can_read_writing", {
+    target_writing_id: writing.id,
+    viewer_id: viewerId,
+  })
+
+  if (canReadError) {
+    throw canReadError
+  }
+
+  return canRead === true
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id: identifier } = await params
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   const writing = await resolveSharedWriting(identifier)
+  const readable = writing
+    ? await canViewerReadWriting(createAdminClient(), writing, user?.id ?? null)
+    : false
 
   return {
-    title: writing?.title ? `${writing.title} — Artifact Studio` : "Reading — Artifact Studio",
+    title:
+      readable && writing?.title
+        ? `${writing.title} — Artifact Studio`
+        : "Reading — Artifact Studio",
   }
 }
 
@@ -85,20 +135,11 @@ export default async function SharedReadingPage({ params }: PageProps) {
 
   if (!writing) notFound()
 
+  const canRead = await canViewerReadWriting(createAdminClient(), writing, user.id)
+
+  if (!canRead) notFound()
+
   const isAuthor = writing.author_id === user.id
-
-  // Access check: author can always view; others need a writing_share row
-  if (!isAuthor) {
-    const admin = createAdminClient()
-    const { data: shareRow } = await admin
-      .from("writing_shares")
-      .select("id")
-      .eq("writing_id", writing.id)
-      .eq("shared_with_id", user.id)
-      .maybeSingle()
-
-    if (!shareRow) notFound()
-  }
 
   if (writing.slug && identifier !== writing.slug) {
     redirect(`/shared/${writing.slug}`)
@@ -128,6 +169,7 @@ export default async function SharedReadingPage({ params }: PageProps) {
         .from("writings")
         .select("id, slug, updated_at")
         .in("id", sharedWritingIds)
+        .in("visibility", ["shared", "public"])
         .is("deleted_at", null)
         .order("updated_at", { ascending: false })
 
