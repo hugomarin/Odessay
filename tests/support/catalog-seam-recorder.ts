@@ -1,5 +1,5 @@
 /**
- * Catalog seam recorder — ODE-613 (vía a).
+ * Catalog seam recorder — ODE-613 (vía a), ampliado por ODE-644 PR2.
  *
  * Records, from the REAL TS side, the exact sequence of Tauri `invoke` calls a
  * desktop flow produces, so `src-tauri/tests/catalog_seam.rs` can replay that
@@ -10,19 +10,30 @@
  *     + real reconciler (createWorkspaceReconciler, wired exactly like
  *       desktop-workspace-reconciler.ts: workspace_sync → listByBindingRoot →
  *       applyReconcileTransaction)
+ *     +, para SYNC-05, las entradas de producción reales
+ *       (DesktopDocumentService.saveWriting vía getDocumentService y
+ *       desktopCatalogSyncService.flushPending)
  *     → mocked `@tauri-apps/api/core` invoke that RECORDS {cmd, args} and
  *       answers with the per-command semantics of the Rust layer
- *     → tests/fixtures/catalog-seam/catalog-seam-v3.json
+ *     → tests/fixtures/catalog-seam/catalog-seam-v4.json
  *
  * Only the IPC boundary is doubled (external boundary, capability-proof
- * contract rule 3). The double's responses are NOT throwaway: they decide what
- * the TS side does next (which ids it re-sends, which upserts it commits). So
- * every recorded invoke also stores a projection of the response — the fields
- * that determine identity and presence — and the Rust replay asserts the REAL
- * command's response matches that projection step by step, on top of the
- * canonical outcome (SQLite rows vs. files on disk). See
- * `projectInvokeResponse` for the exact fields and the one documented
- * exclusion (`folderCount`, which no consumer of this sequence reads).
+ * contract rule 3), plus the Supabase network in the SYNC-05 scenarios
+ * (`fake-supabase-server.ts`, retención/fallo del próximo write). The
+ * double's responses are NOT throwaway: they decide what the TS side does
+ * next (which ids it re-sends, which upserts it commits). So every recorded
+ * invoke also stores a projection of the response — the fields that determine
+ * identity and presence — and the Rust replay asserts the REAL command's
+ * response matches that projection step by step, on top of the canonical
+ * outcome (SQLite rows vs. files on disk). See `projectInvokeResponse` for
+ * the exact fields and the documented exclusions (`folderCount`, and the
+ * machine-dependent fields of `workspace_touch_file`).
+ *
+ * SYNC-05 (ODE-644 PR2) no escribe una tercera copia del SQL de la cola: el
+ * dispatch delega `catalog_*` en los dobles de comportamiento de
+ * `real-desktop-doubles.ts` (el mismo espejo que consumen ODE-611/612), y el
+ * grabador afirma en cada paso de control que el estado del doble es el
+ * correcto. El replay Rust contrasta ese mismo estado en SQLite real.
  *
  * Paths are placeholders ($DB, $ROOT_A, $ROOT_B) so the fixture is machine
  * independent; the Rust runner rewrites them to its own temp dirs.
@@ -32,8 +43,13 @@ import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-ca
 import { computeMarkdownContentHash } from "@/lib/content-hash"
 import {
   tauriWorkspaceSync,
+  type DesktopCatalogDualWriteInput,
+  type DesktopCatalogMetadataMutation,
+  type DesktopCatalogMutationRow,
+  type DesktopCatalogReconcileInput,
   type DesktopCatalogRow,
   type DesktopWorkspaceSnapshot,
+  type DesktopWorkspaceTouchResult,
 } from "@/lib/services/desktop/tauri-commands"
 import {
   createWorkspaceReconciler,
@@ -43,8 +59,24 @@ import {
   type UnboundFile,
   type WorkspaceReconciler,
 } from "@/lib/services/desktop/workspace-reconciler"
+import { getDocumentService } from "@/lib/services/document-service-factory"
+import { desktopCatalogSyncService } from "@/lib/sync/desktop-catalog-sync-service"
+import { fakeSupabase } from "../integration/documents/support/fake-supabase-server"
+import {
+  catalogMutationsDouble,
+  resetCatalogDoubles,
+  tauriCatalogApplyCloudSnapshotsDouble,
+  tauriCatalogApplyReconcileDouble,
+  tauriCatalogDualWriteDouble,
+  tauriCatalogGetByIdDouble,
+  tauriCatalogListBindingRootDocumentsDouble,
+  tauriCatalogListPendingMetadataMutationsDouble,
+  tauriCatalogListPendingMutationsDouble,
+  tauriCatalogResolvePathDouble,
+  tauriCatalogUpdateMutationStatusDouble,
+} from "../integration/documents/support/real-desktop-doubles"
 
-export const CATALOG_SEAM_FIXTURE_VERSION = 3 as const
+export const CATALOG_SEAM_FIXTURE_VERSION = 4 as const
 export const FIXTURE_DB_PATH = "$DB"
 export const FIXTURE_ROOT_PATHS = { rootA: "$ROOT_A", rootB: "$ROOT_B" } as const
 // Synthetic volume for every fixture file, like the synthetic inode: the
@@ -62,6 +94,58 @@ export type CatalogSeamRowProjection = {
   contentHash: string | null
 }
 
+/**
+ * Proyección de `workspace_touch_file`. `file.path` queda fuera: el comando
+ * real canonicaliza la raíz (`/var` → `/private/var` en macOS) y el
+ * `canonicalPath` del binding ya viaja en los args grabados de
+ * `catalog_dual_write`. Inode, modifiedAt y device también quedan fuera: son
+ * del fs real en el replay y sintéticos en la grabación (misma razón que
+ * `unboundFiles.inode`).
+ */
+export type CatalogSeamTouchProjection =
+  | {
+      status: "updated"
+      rootPath: string
+      bindingRootId: string
+      file: {
+        id: string
+        relativePath: string
+        name: string
+        size: number
+        contentHash: string
+      }
+    }
+  | { status: "needsReconcile"; reason: string }
+
+/**
+ * Proyección de una fila de `catalog_list_pending_mutations`. `payloadJson`
+ * queda fuera a propósito: es eco byte a byte del argumento de
+ * `catalog_dual_write`, que ya está grabado en la secuencia.
+ */
+export type CatalogSeamMutationProjection = {
+  id: string
+  documentId: string
+  operation: string
+  status: string
+  attemptCount: number
+  nextRetryAt: number | null
+  createdAt: number
+  lastError: string | null
+}
+
+/** Proyección de una fila de la cola de metadata (misma exclusión de `payloadJson`). */
+export type CatalogSeamMetadataMutationProjection = {
+  id: string
+  entityKind: string
+  entityId: string
+  operation: string
+  status: string
+  attemptCount: number
+  nextRetryAt: number | null
+  createdAt: number
+  lastError: string | null
+}
+
 export type CatalogSeamInvokeResponse =
   | {
       files: { relativePath: string; id: string; contentHash: string }[]
@@ -69,11 +153,36 @@ export type CatalogSeamInvokeResponse =
       unboundFiles: { relativePath: string; contentHash: string; size: number }[]
     }
   | { applied: boolean; changed: string[] }
+  | CatalogSeamTouchProjection
+  | CatalogSeamMutationProjection[]
+  | CatalogSeamMetadataMutationProjection[]
   | CatalogSeamRowProjection
   | CatalogSeamRowProjection[]
+  | string
   | null
 
+/**
+ * Paso de control (Req 5): el estado canónico que el doble cree del documento y
+ * de su cola. El grabador lo afirma contra el doble antes de grabarlo, y el
+ * replay Rust lo contrasta en una conexión SQLite nueva sobre `documents` y
+ * `sync_mutations`.
+ */
+export type CatalogSeamControlStep = {
+  kind: "control"
+  name: string
+  documentId: string
+  document: { syncStatus: string; cloudPresent: boolean }
+  mutations: {
+    id: string
+    status: string
+    attemptCount: number
+    nextRetryAt: number | null
+    lastError: string | null
+  }[]
+}
+
 export type CatalogSeamFixtureStep =
+  | CatalogSeamControlStep
   | { kind: "fs"; op: "seed-manifest"; root: FixtureRootKey; bindingRootId: string }
   | {
       kind: "fs"
@@ -192,6 +301,56 @@ function projectCatalogRowOrNull(row: DesktopCatalogRow | null): CatalogSeamRowP
   return row ? projectCatalogRow(row) : null
 }
 
+function stringArg(args: Record<string, unknown>, key: string): string {
+  const value = args[key]
+  if (typeof value !== "string") {
+    throw new Error(`catalog-seam recorder: invoke args ${key} is not a string`)
+  }
+  return value
+}
+
+function numberArg(args: Record<string, unknown>, key: string): number {
+  const value = args[key]
+  if (typeof value !== "number") {
+    throw new Error(`catalog-seam recorder: invoke args ${key} is not a number`)
+  }
+  return value
+}
+
+function boolArg(args: Record<string, unknown>, key: string): boolean {
+  const value = args[key]
+  if (typeof value !== "boolean") {
+    throw new Error(`catalog-seam recorder: invoke args ${key} is not a boolean`)
+  }
+  return value
+}
+
+function nullableNumberArg(args: Record<string, unknown>, key: string): number | null {
+  const value = args[key]
+  if (value === null || value === undefined) return null
+  if (typeof value !== "number") {
+    throw new Error(`catalog-seam recorder: invoke args ${key} is not a number or null`)
+  }
+  return value
+}
+
+function nullableStringArg(args: Record<string, unknown>, key: string): string | null {
+  const value = args[key]
+  if (value === null || value === undefined) return null
+  if (typeof value !== "string") {
+    throw new Error(`catalog-seam recorder: invoke args ${key} is not a string or null`)
+  }
+  return value
+}
+
+function requireQueueBackend(backend: "session" | "queue", cmd: string): void {
+  if (backend !== "queue") {
+    throw new Error(
+      `catalog-seam recorder: command "${cmd}" sin backend de cola — el escenario debe grabarse con backend "queue"`,
+    )
+  }
+}
+
 /**
  * The response projection the Rust replay must reproduce exactly. It keeps only
  * the fields that determine identity, presence, and content along the recorded
@@ -241,6 +400,62 @@ export function projectInvokeResponse(cmd: string, response: unknown): CatalogSe
     }
     case "catalog_list_binding_root_documents":
       return (response as DesktopCatalogRow[]).map(projectCatalogRow)
+    // ── Cadena de SYNC-05 (ODE-644 PR2) ─────────────────────────────────────
+    case "write_file":
+      // Void command: el write real lo verifica el replay con open_file y con
+      // el hash del binding en SQLite.
+      return null
+    case "open_file":
+      // El .md es la autoridad del cuerpo: se compara el contenido completo
+      // que el flush releyó, no solo un hash.
+      return response as string
+    case "workspace_touch_file": {
+      const result = response as DesktopWorkspaceTouchResult
+      if (result.status !== "updated") {
+        return { status: "needsReconcile", reason: result.reason }
+      }
+      return {
+        status: "updated",
+        rootPath: result.rootPath,
+        bindingRootId: result.bindingRootId,
+        file: {
+          id: result.file.id,
+          relativePath: result.file.relativePath,
+          name: result.file.name,
+          size: result.file.size,
+          contentHash: result.file.contentHash,
+        },
+      }
+    }
+    case "catalog_dual_write":
+    case "catalog_update_mutation_status":
+    case "catalog_update_metadata_mutation_status":
+    case "catalog_apply_cloud_snapshots":
+      // Void commands: su efecto se afirma en los pasos de control.
+      return null
+    case "catalog_list_pending_mutations":
+      return (response as DesktopCatalogMutationRow[]).map((mutation) => ({
+        id: mutation.id,
+        documentId: mutation.documentId,
+        operation: mutation.operation,
+        status: mutation.status,
+        attemptCount: mutation.attemptCount,
+        nextRetryAt: mutation.nextRetryAt,
+        createdAt: mutation.createdAt,
+        lastError: mutation.lastError,
+      }))
+    case "catalog_list_pending_metadata_mutations":
+      return (response as DesktopCatalogMetadataMutation[]).map((mutation) => ({
+        id: mutation.id,
+        entityKind: mutation.entityKind,
+        entityId: mutation.entityId,
+        operation: mutation.operation,
+        status: mutation.status,
+        attemptCount: mutation.attemptCount,
+        nextRetryAt: mutation.nextRetryAt,
+        createdAt: mutation.createdAt,
+        lastError: mutation.lastError,
+      }))
     default:
       // The remaining commands are reads: catalog_get_by_id / catalog_resolve_path.
       return projectCatalogRowOrNull(response as DesktopCatalogRow | null)
@@ -261,6 +476,14 @@ export class CatalogSeamSession {
   constructor(
     readonly name: string,
     readonly description: string,
+    /**
+     * `session`: los `catalog_*` los responde el modelo sintético de esta
+     * clase (escenarios SYS-01/SYS-05/WATCH-04/WATCH-07).
+     * `queue`: los `catalog_*` se delegan en `real-desktop-doubles.ts`, la
+     * única copia TS de la semántica de la cola, y el registro/lecturas van al
+     * mismo modelo (SYNC-05, ODE-644 PR2).
+     */
+    private readonly backend: "session" | "queue" = "session",
   ) {}
 
   defineRoot(key: FixtureRootKey, bindingRootId: string): ReconcilerRoot {
@@ -405,17 +628,70 @@ export class CatalogSeamSession {
   }
 
   private async dispatch(cmd: string, args: Record<string, unknown>): Promise<unknown> {
+    const dbPath = this.backend === "queue" ? FIXTURE_DB_PATH : null
     switch (cmd) {
       case "workspace_sync":
         return this.workspaceSync(args)
+      // ── Cadena de fs/workspace (modelo sintético también en SYNC-05) ──────
+      case "write_file":
+        return this.writeFile(args)
+      case "open_file":
+        return this.openFile(args)
+      case "workspace_touch_file":
+        return this.touchFile(args)
+      // ── Catálogo ──────────────────────────────────────────────────────────
       case "catalog_list_binding_root_documents":
-        return this.listBindingRootDocuments(args)
+        return dbPath
+          ? tauriCatalogListBindingRootDocumentsDouble(dbPath, stringArg(args, "bindingRootId"))
+          : this.listBindingRootDocuments(args)
       case "catalog_get_by_id":
-        return this.getById(args)
+        return dbPath
+          ? tauriCatalogGetByIdDouble(dbPath, stringArg(args, "id"))
+          : this.getById(args)
       case "catalog_resolve_path":
-        return this.resolvePath(args)
+        return dbPath
+          ? tauriCatalogResolvePathDouble(dbPath, stringArg(args, "path"))
+          : this.resolvePath(args)
       case "catalog_apply_reconcile":
-        return this.applyReconcile(args)
+        return dbPath
+          ? tauriCatalogApplyReconcileDouble(dbPath, args.input as DesktopCatalogReconcileInput)
+          : this.applyReconcile(args)
+      // ── Cola de sync: delegada entera en real-desktop-doubles ─────────────
+      case "catalog_dual_write":
+        requireQueueBackend(this.backend, cmd)
+        return tauriCatalogDualWriteDouble(FIXTURE_DB_PATH, args.input as DesktopCatalogDualWriteInput).then(() => null)
+      case "catalog_list_pending_mutations":
+        requireQueueBackend(this.backend, cmd)
+        return tauriCatalogListPendingMutationsDouble(
+          FIXTURE_DB_PATH,
+          numberArg(args, "now"),
+          numberArg(args, "limit"),
+          boolArg(args, "includeFailed"),
+        )
+      case "catalog_update_mutation_status":
+        requireQueueBackend(this.backend, cmd)
+        return tauriCatalogUpdateMutationStatusDouble(
+          FIXTURE_DB_PATH,
+          stringArg(args, "mutationId"),
+          stringArg(args, "status") as "pending" | "synced" | "failed",
+          numberArg(args, "attemptCount"),
+          nullableNumberArg(args, "nextRetryAt"),
+          nullableStringArg(args, "lastError"),
+        ).then(() => null)
+      case "catalog_list_pending_metadata_mutations":
+        requireQueueBackend(this.backend, cmd)
+        return tauriCatalogListPendingMetadataMutationsDouble(
+          FIXTURE_DB_PATH,
+          numberArg(args, "now"),
+          numberArg(args, "limit"),
+          boolArg(args, "includeFailed"),
+        )
+      case "catalog_apply_cloud_snapshots":
+        requireQueueBackend(this.backend, cmd)
+        return tauriCatalogApplyCloudSnapshotsDouble(
+          FIXTURE_DB_PATH,
+          args.snapshots as Parameters<typeof tauriCatalogApplyCloudSnapshotsDouble>[1],
+        ).then(() => null)
       default:
         throw new Error(
           `catalog-seam recorder: unhandled command "${cmd}" — a production call shape changed; ` +
@@ -598,6 +874,140 @@ export class CatalogSeamSession {
     return { applied: true, changed }
   }
 
+  // ── fs sintético de la cadena de guardado (SYNC-05) ───────────────────────
+
+  private rootForPath(path: string): { root: ModelRoot; relativePath: string } {
+    for (const root of this.roots.values()) {
+      if (path === root.rootPath) return { root, relativePath: "" }
+      if (path.startsWith(`${root.rootPath}/`)) {
+        return { root, relativePath: path.slice(root.rootPath.length + 1) }
+      }
+    }
+    throw new Error(`catalog-seam recorder: no fixture root owns path ${path}`)
+  }
+
+  /**
+   * Espejo de `write_file` (regla 7 del contrato): el archivo real lo escribe
+   * el replay; la grabación solo actualiza su modelo y, si el caller mandó
+   * `expectedContentHash`, responde CONFLICT cuando no coincide (el mismo
+   * contrato que Rust).
+   */
+  private async writeFile(args: Record<string, unknown>): Promise<null> {
+    const path = stringArg(args, "path")
+    const { root, relativePath } = this.rootForPath(path)
+    const file = root.files.get(relativePath)
+    if (!file) throw new Error(`catalog-seam recorder: write_file for unmodeled path ${path}`)
+    const expected = nullableStringArg(args, "expectedContentHash")
+    if (expected !== null) {
+      const actual = await computeMarkdownContentHash(file.content)
+      if (actual !== expected) {
+        throw new Error(`CONFLICT: ${path} changed on disk (expected ${expected}, found ${actual})`)
+      }
+    }
+    root.files.set(relativePath, { ...file, content: stringArg(args, "content") })
+    return null
+  }
+
+  private openFile(args: Record<string, unknown>): string {
+    const path = stringArg(args, "path")
+    const { root, relativePath } = this.rootForPath(path)
+    const file = root.files.get(relativePath)
+    if (!file) throw new Error(`catalog-seam recorder: open_file for unmodeled path ${path}`)
+    return file.content
+  }
+
+  /**
+   * Espejo de `workspace_touch_file`: solo responde `updated` si el path sigue
+   * en el manifiesto sintético con el mismo id (el comando real lo exige).
+   */
+  private async touchFile(args: Record<string, unknown>): Promise<DesktopWorkspaceTouchResult> {
+    const rootPath = stringArg(args, "rootPath")
+    const relativePath = stringArg(args, "relativePath")
+    const documentId = stringArg(args, "documentId")
+    const { root } = this.rootForPath(`${rootPath}/${relativePath}`)
+    const entry = root.manifest.get(relativePath)
+    const file = root.files.get(relativePath)
+    if (!entry || entry.id !== documentId || !file) {
+      return { status: "needsReconcile", reason: "path is not bound in the manifest" }
+    }
+    return {
+      status: "updated",
+      rootPath,
+      bindingRootId: root.bindingRootId,
+      file: {
+        id: documentId,
+        path: `${rootPath}/${relativePath}`,
+        relativePath,
+        name: relativePath.split("/").pop() ?? relativePath,
+        modifiedAt: file.modifiedAt,
+        size: Buffer.byteLength(file.content),
+        inode: file.inode,
+        device: FIXTURE_DEVICE,
+        contentHash: await computeMarkdownContentHash(file.content),
+      },
+    }
+  }
+
+  // ── Estado de la cola (delegado en real-desktop-doubles) ──────────────────
+
+  /** Id que el reconciliador acuñó para un path ya registrado (manifiesto sintético). */
+  registeredDocumentId(rootKey: FixtureRootKey, relativePath: string): string {
+    const entry = this.requireRoot(rootKey).manifest.get(relativePath)
+    if (!entry) {
+      throw new Error(`catalog-seam recorder: ${relativePath} is not registered in ${rootKey}`)
+    }
+    return entry.id
+  }
+
+  /** Filas de la cola del documento, ordenadas como el listado real. */
+  queueMutations(documentId: string) {
+    return catalogMutationsDouble(FIXTURE_DB_PATH)
+      .filter((mutation) => mutation.documentId === documentId)
+      .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))
+  }
+
+  /**
+   * Req 5: afirma en TS que el doble cree el estado correcto y lo graba como
+   * paso de control para que el replay lo contraste en SQLite real.
+   */
+  async control(
+    documentId: string,
+    name: string,
+    expected: {
+      document: CatalogSeamControlStep["document"]
+      mutations: CatalogSeamControlStep["mutations"]
+    },
+  ): Promise<void> {
+    const row = await tauriCatalogGetByIdDouble(FIXTURE_DB_PATH, documentId)
+    if (!row) throw new Error(`catalog-seam recorder: control ${name} has no catalog row for ${documentId}`)
+    const actual = {
+      document: { syncStatus: row.syncStatus, cloudPresent: row.cloudPresent },
+      mutations: this.queueMutations(documentId).map((mutation) => ({
+        id: mutation.id,
+        status: mutation.status,
+        attemptCount: mutation.attemptCount,
+        nextRetryAt: mutation.nextRetryAt,
+        lastError: mutation.lastError,
+      })),
+    }
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      throw new Error(
+        `catalog-seam recorder: control ${name} diverged from the expected canonical state — ` +
+          `actual ${JSON.stringify(actual)} expected ${JSON.stringify(expected)}`,
+      )
+    }
+    this.steps.push({ kind: "control", name, documentId, ...expected })
+  }
+
+  /** Reloj sintético de la escena (stub de `Date.now`, Req 8). */
+  now(): number {
+    return fixtureClock
+  }
+
+  advanceClock(ms: number): void {
+    fixtureClock += ms
+  }
+
   private rowFor(id: string): DesktopCatalogRow | null {
     const document = this.documents.get(id)
     if (!document) return null
@@ -649,6 +1059,10 @@ function countFolders(relativePaths: string[]): number {
 let activeSession: CatalogSeamSession | null = null
 let uuidCounter = 0
 
+/** Reloj del fixture: determinista y por escena (Req 8); afecta createdAt, el `now` del listado y el backoff. */
+const FIXTURE_CLOCK_START = 1_700_100_000_000
+let fixtureClock = FIXTURE_CLOCK_START
+
 /** Installed as the mocked `invoke` of `@tauri-apps/api/core`. */
 export async function catalogSeamInvoke(cmd: string, args: Record<string, unknown>): Promise<unknown> {
   if (!activeSession) {
@@ -661,11 +1075,14 @@ async function recordScenario(
   name: string,
   description: string,
   build: (session: CatalogSeamSession) => Promise<void>,
+  backend: "session" | "queue" = "session",
 ): Promise<CatalogSeamScenario> {
-  const session = new CatalogSeamSession(name, description)
+  const session = new CatalogSeamSession(name, description, backend)
   activeSession = session
   uuidCounter = 0
+  fixtureClock = FIXTURE_CLOCK_START
   const originalRandomUuid = globalThis.crypto.randomUUID
+  const originalDateNow = Date.now
   const randomUuidStub = () => {
     uuidCounter += 1
     return `00000000-0000-4000-8000-${uuidCounter.toString(16).padStart(12, "0")}`
@@ -676,6 +1093,7 @@ async function recordScenario(
       configurable: true,
       writable: true,
     })
+    Date.now = () => fixtureClock
     await build(session)
     return session.toScenario()
   } finally {
@@ -684,6 +1102,7 @@ async function recordScenario(
       configurable: true,
       writable: true,
     })
+    Date.now = originalDateNow
     activeSession = null
   }
 }
@@ -855,6 +1274,179 @@ async function buildWatch04ExternalMoveAcrossRoots(session: CatalogSeamSession):
   await catalog.resolvePath(`${FIXTURE_ROOT_PATHS.rootB}/notes/letter.md`)
 }
 
+// ─── SYNC-05: guardado durante un flush en vuelo (ODE-644 PR2) ───────────────
+
+const SYNC05_V1 = "# Letter\n\nversion one\n"
+
+const sync05Doc = (text: string) => ({
+  type: "doc",
+  content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+})
+const sync05Timestamp = (version: number) =>
+  `2026-09-30T12:00:${String(version).padStart(2, "0")}.000Z`
+
+/**
+ * Estado limpio por escena: la cola de `real-desktop-doubles` y el fake de
+ * Supabase son procesos en memoria compartidos por escena, y el servicio de
+ * sync guarda flags de flush. Sin esto, una escena vería las mutaciones de la
+ * anterior.
+ */
+async function resetQueueHarness(): Promise<void> {
+  resetCatalogDoubles()
+  fakeSupabase.reset()
+  await desktopCatalogSyncService.stop()
+}
+
+/**
+ * Registro del documento por el reconciliador real (premisa de
+ * `assert_scenario`): el archivo nace en el fs sintético y la identidad sale
+ * del descubrimiento, no de un input armado a mano.
+ */
+async function registerSync05Document(session: CatalogSeamSession): Promise<string> {
+  session.defineRoot("rootA", "fixture-root-a")
+  session.fsWrite("rootA", "notes/letter.md", SYNC05_V1, {
+    inode: 701,
+    modifiedAt: 1_700_090_000_000,
+  })
+  const reconciler = session.createReconciler(session.createCatalog())
+  await reconciler.start()
+  reconciler.dispose()
+  return session.registeredDocumentId("rootA", "notes/letter.md")
+}
+
+/** Guardado real del editor: relee el documento abierto y manda el cuerpo nuevo (misma entrada que ODE-611). */
+async function saveFromEditor(
+  documentId: string,
+  text: string,
+  version: number,
+  status?: string,
+): Promise<void> {
+  const service = await getDocumentService()
+  const opened = await service.openWriting(documentId)
+  if (opened.error || !opened.data) {
+    throw new Error(`catalog-seam recorder: openWriting(${documentId}) failed: ${opened.error?.message}`)
+  }
+  const current = opened.data
+  const saved = await service.saveWriting({
+    writing: {
+      ...current,
+      content: { ...current.content, richText: sync05Doc(text), plainText: text },
+      status: (status ?? current.status) as typeof current.status,
+      version,
+      updatedAt: sync05Timestamp(version),
+    },
+  })
+  if (saved.error) {
+    throw new Error(`catalog-seam recorder: saveWriting(${documentId}) failed: ${saved.error.message}`)
+  }
+}
+
+function mutationByVersion(session: CatalogSeamSession, documentId: string, version: number) {
+  const mutation = session
+    .queueMutations(documentId)
+    .find((candidate) => JSON.parse(candidate.payloadJson).version === version)
+  if (!mutation) {
+    throw new Error(`catalog-seam recorder: no mutation for version ${version} of ${documentId}`)
+  }
+  return mutation
+}
+
+/**
+ * Éxito en vuelo (Req 2): la v3 sale con el write retenido, la v4 la supersede,
+ * la respuesta de la v3 llega después y el segundo flush sube la v4.
+ */
+async function buildSync05SuccessDuringFlush(session: CatalogSeamSession): Promise<void> {
+  await resetQueueHarness()
+  const documentId = await registerSync05Document(session)
+
+  session.advanceClock(1_000)
+  await saveFromEditor(documentId, "Versión 3.", 3)
+
+  session.advanceClock(1_000)
+  const hold = fakeSupabase.holdNextWrite()
+  const flushing = desktopCatalogSyncService.flushPending()
+  await hold.started
+
+  session.advanceClock(1_000)
+  await saveFromEditor(documentId, "Versión 4.", 4)
+
+  hold.release()
+  await flushing
+
+  const v3 = mutationByVersion(session, documentId, 3)
+  const v4 = mutationByVersion(session, documentId, 4)
+  await session.control(documentId, "success-after-v3-response", {
+    document: { syncStatus: "pending", cloudPresent: true },
+    mutations: [
+      { id: v3.id, status: "synced", attemptCount: 0, nextRetryAt: null, lastError: "superseded by later snapshot mutation" },
+      { id: v4.id, status: "pending", attemptCount: 0, nextRetryAt: null, lastError: null },
+    ],
+  })
+
+  session.advanceClock(1_000)
+  const second = await desktopCatalogSyncService.flushPending()
+  if (second.error) {
+    throw new Error(`catalog-seam recorder: second flush failed: ${second.error.message}`)
+  }
+  await session.control(documentId, "success-after-second-flush", {
+    document: { syncStatus: "synced", cloudPresent: true },
+    mutations: [
+      { id: v3.id, status: "synced", attemptCount: 0, nextRetryAt: null, lastError: "superseded by later snapshot mutation" },
+      { id: v4.id, status: "synced", attemptCount: 0, nextRetryAt: null, lastError: null },
+    ],
+  })
+}
+
+/**
+ * Fallo en vuelo (Req 3): el write de la v3 falla después de que la v4 lo
+ * superó; la v3 no revive y, con el reloj por delante del backoff de 2 s, el
+ * segundo flush lista solo la v4.
+ */
+async function buildSync05FailureDuringFlush(session: CatalogSeamSession): Promise<void> {
+  await resetQueueHarness()
+  const documentId = await registerSync05Document(session)
+
+  session.advanceClock(1_000)
+  await saveFromEditor(documentId, "Versión 3.", 3, "draft")
+
+  fakeSupabase.failNextWrite({ message: "network down", code: "503" })
+  session.advanceClock(1_000)
+  const hold = fakeSupabase.holdNextWrite()
+  const flushing = desktopCatalogSyncService.flushPending()
+  await hold.started
+
+  session.advanceClock(1_000)
+  await saveFromEditor(documentId, "Versión 4.", 4, "review")
+
+  hold.release()
+  await flushing
+
+  const v3 = mutationByVersion(session, documentId, 3)
+  const v4 = mutationByVersion(session, documentId, 4)
+  await session.control(documentId, "failure-after-v3-response", {
+    document: { syncStatus: "pending", cloudPresent: false },
+    mutations: [
+      { id: v3.id, status: "synced", attemptCount: 0, nextRetryAt: null, lastError: "superseded by later snapshot mutation" },
+      { id: v4.id, status: "pending", attemptCount: 0, nextRetryAt: null, lastError: null },
+    ],
+  })
+
+  // El backoff de attempts=1 es 2 s: pasado ese umbral, la v3 superada sigue
+  // sin listarse y el segundo flush manda solo la v4.
+  session.advanceClock(2_000)
+  const second = await desktopCatalogSyncService.flushPending()
+  if (second.error) {
+    throw new Error(`catalog-seam recorder: second flush failed: ${second.error.message}`)
+  }
+  await session.control(documentId, "failure-after-second-flush", {
+    document: { syncStatus: "synced", cloudPresent: true },
+    mutations: [
+      { id: v3.id, status: "synced", attemptCount: 0, nextRetryAt: null, lastError: "superseded by later snapshot mutation" },
+      { id: v4.id, status: "synced", attemptCount: 0, nextRetryAt: null, lastError: null },
+    ],
+  })
+}
+
 export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
   const scenarios = [
     await recordScenario(
@@ -889,6 +1481,22 @@ export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
         "destination scan reports it unbound with inode + content hash, the pass correlates it " +
         "against A's confirmed detach, and the binding moves to B with no detach in A.",
       buildWatch04ExternalMoveAcrossRoots,
+    ),
+    await recordScenario(
+      "sync05-save-during-flush-failure",
+      "SYNC-05 (failure in flight): the in-flight write fails after a newer save superseded it; " +
+        "the superseded mutation does not come back as failed, and past its backoff a second " +
+        "flush lists only the newer mutation.",
+      buildSync05FailureDuringFlush,
+      "queue",
+    ),
+    await recordScenario(
+      "sync05-save-during-flush-success",
+      "SYNC-05 (success in flight): a save made while a flush is in flight supersedes the " +
+        "mutation being written; when the older response arrives it stays synced and the " +
+        "document stays pending until the next flush uploads the newer mutation and resolves it.",
+      buildSync05SuccessDuringFlush,
+      "queue",
     ),
   ]
   return {
