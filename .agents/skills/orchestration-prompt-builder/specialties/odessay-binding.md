@@ -6,11 +6,11 @@ Lo que este skill necesita saber de Odessay para escribir un prompt ejecutable. 
 
 - **Repo:** `hugomarin/Odessay`. `main` no tiene protección de rama: un PR se puede mergear en rojo, así que el reviewer comprueba el CI antes de mergear.
 - **Orca:** repo id `0b0529c6-cbaa-461d-bbfb-aca9c2238ab2`. El coordinador carga el skill de orquestación de Orca y recibe el prompt con `/orchestration`.
-- **Tracker:** Linear, team **ODE ("Artifact Studio")**, workspace `hugo-marin`. **Nunca CON** ("Context Atelier", otro team).
+- **Tracker:** Linear. La organización se llama **"Context Atelier"** (urlKey `hugo-marin`). Dentro viven el team **ODE ("Artifact Studio")**, que es el de este proyecto, y el team **CON**. Los issues se crean y se leen **siempre en ODE, nunca en CON**.
   - Lectura, comentarios y estados: `node scripts/linear-cli.mjs get|comment|move`, desde el checkout principal (que tiene `.env.local`) o con `LINEAR_API_KEY` exportada.
   - Crear issues y editar briefs o comentarios existentes: GraphQL con `LINEAR_API_KEY`. El CLI no crea issues.
   - El MCP de Linear de los agentes apunta a otro workspace: **no se usa**.
-  - **Precondición:** la config de Linear de Orca (`~/.orca/linear-workspaces.json`) apunta al workspace correcto.
+  - **Precondición:** `orca linear issue <un ODE de la tanda> --json` devuelve el issue con team ODE. No se juzga por el nombre de la organización en `~/.orca/linear-workspaces.json`: se llama "Context Atelier" y es la correcta.
   - La integración GitHub → Linear mueve a Done al mergear, también los PRs parciales.
 - **Prompts:**
   - se escriben en `.cache/orchestration-v<N>.md` del checkout principal (ignorado por git), con su delta en `.cache/orchestration-v<N>-delta.md`;

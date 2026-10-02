@@ -103,6 +103,10 @@ En modo completo, todo lo de abajo. En "Solo construir", el Recon Pack, el contr
 
 Reglas del PR: solo docs, label `process` y **ningún `ODE-###` en el asunto de los commits** (`ops:status:drift:strict` exigiría una fila de ledger por issue nombrado).
 
+**Cómo publicar en el tracker:** con el CLI o la API del proyecto, no con un MCP que apunte a otro workspace. En Odessay: comentarios y estados con `node scripts/linear-cli.mjs`; editar la descripción por GraphQL (`scripts/lib/linear-client.mjs`), añadiendo la sección sin reescribir el brief y sin duplicarla si ya existe.
+
+**Antes de publicar,** pasar el lint en seco sobre el contenido final (descripción + sección, comentarios + pack) con `lintIssueBrief` de `scripts/lib/issue-brief-lint.mjs`. Así se ve qué fallaba antes y qué pasa después.
+
 **Gate:** `npm run ops:brief:lint -- <todos los issues> --require-contract --require-recon` en verde.
 
 **En el chat:** el reporte de § 4. Al terminar no quedan copias de trabajo en `.cache/`.

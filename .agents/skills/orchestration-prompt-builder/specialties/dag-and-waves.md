@@ -6,6 +6,7 @@ Cómo convertir una tanda de issues en el grafo que ejecuta el coordinador. Las 
 
 - Un nodo es **un PR**, no un issue. Un issue que el Recon Pack parte en pasos genera varios nodos: `<n>-PR1`, `<n>-PR2`, o `<n>-A` y `<n>-B` cuando son mitades distintas (por ejemplo, "sin base de datos" y "contra la base local").
 - Un nodo de solo docs también es un nodo (por ejemplo, la corrección de un diagnóstico).
+- **Después de la fase H, re-evaluar el tamaño:** las decisiones pueden agrandar un issue. Si dos partes tocan el mismo archivo, se parten en dos nodos en serie (lección P4).
 - **Cada nodo lleva:**
   - su **trabajo** en una línea;
   - su **tamaño**: XS, S, M o L. Si un L pasa de unas 800 líneas, se parte;
@@ -22,6 +23,7 @@ Una arista `A → B` significa que B no se lanza hasta que A está **mergeado en
    - Si los dos regeneran el mismo fixture, se escribe la regla: "el que mergea segundo lo regenera".
 3. **Hay un recurso compartido con estado:** por ejemplo, el nodo que crea el harness de la base local va primero y **solo**, sin otro worker usándola.
 4. **Hay un gate humano** (§ 5): el nodo depende del gate resuelto.
+   - **Un PR abierto fuera de la tanda que toca los mismos archivos** (por ejemplo, uno parado y en conflicto) es una decisión humana: esperar o no. Lleva default y gate (lección P5).
 5. **Una fase de preparación lo exige:** todo depende de la fase 0R (el mapa mergeado) y de la fase H (las decisiones escritas).
 
 **Comprobar** que no hay ciclos y que ninguna arista apunta a una rama sin mergear (S5).
@@ -55,6 +57,8 @@ Cada tarea humana de la Auditoría se convierte en un gate de Orca (`gate-create
 | **Mensaje exacto** | Lo que el coordinador le escribe al humano: corto, accionable y con el archivo o la consulta exactos. Ejemplo: "Abre Docker.app y espera a que la ballena deje de moverse; responde 'listo'." |
 | **Verificación** | Cómo comprueba el coordinador que se cumplió (por ejemplo, `docker info` con exit 0) |
 | **Qué sigue mientras tanto** | Qué parte del DAG puede avanzar sin el gate |
+
+**Un gate espera `gate-resolve`.** Un default nunca se aplica solo por timeout; mientras tanto avanza el resto del DAG (lección P3).
 
 Gates típicos:
 - un recurso local (Docker);

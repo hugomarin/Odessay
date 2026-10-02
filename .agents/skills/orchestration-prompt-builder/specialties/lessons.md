@@ -92,10 +92,23 @@ Origen: los prompts `/orchestration` v2 → v7 de P-ODE-43 (Odessay, 2026-09-27 
 | C5 | Fases que pasaban de una hora sin que nadie preguntara | Control de tiempo: 60 min sin commits → preguntar; 90 min sin avance → fallback; 2 h sin causa legítima → parar |
 | C6 | Issues de seguimiento creados duplicados (653 de 649) o en el workspace equivocado (CON) | No se crean issues durante la orquestación: `it.fails` "follow-up pendiente" y una lista para el humano al cerrar |
 | C7 | El reviewer se detenía a pedir permiso para `git push`, `gh pr merge`, `cargo test` o el CLI del tracker | Precondición: permisos de los agentes configurados antes de arrancar |
-| C8 | La config de Linear de Orca apuntaba a otro workspace | Precondición: verificar el workspace del tracker en la config de Orca |
+| C8 | En la tanda 3 se creyó que la config de Linear de Orca apuntaba a otro workspace porque decía "Context Atelier". Era falsa alarma: es el nombre de la organización (urlKey `hugo-marin`), que contiene los teams ODE y CON | Precondición: leer un issue de la tanda con `orca linear issue <id>` y comprobar team ODE; no juzgar por el nombre de la organización |
 | C9 | El MCP del tracker apuntaba a otro workspace | Usar el CLI o GraphQL del proyecto, no el MCP |
 | C10 | Los agentes no deben tocar producción | Toda acción en producción es un gate humano con mensaje exacto (conteo antes, migración después) |
 | C11 | `.env.local` tiene la service role de producción y los worktrees lo heredan por symlink | Nada fuera del harness usa esa key; los comandos peligrosos del CLI de la base de datos están prohibidos |
 | C12 | Dos workers usando la misma base local se pisaban | Lock compartido para la base local y un solo worker la reinicia, una vez |
 | C13 | Compilar Rust desde cero en cada worktree tarda mucho | Clonar `target/` con un clon APFS (`cp -cR`) antes de compilar |
 | C14 | El humano se perdía con reportes largos y frecuentes | Reporte de 3 líneas solo al cerrar un PR, ante un gate o ante una pregunta; una sola pregunta |
+
+## 7. Lecciones de la primera prueba del skill (v8, 2026-10-02)
+
+| # | Incidente | Regla |
+|---|---|---|
+| P1 | Un agente al que se le pidió "usa el skill de orquestación" cargó el skill `orchestration` de **Orca** (el que ejecuta el prompt) y entregó tres specs de worker sueltos, sin DAG, roles, cierre, ledger, gates, tiempo ni paradas | Nombre distintivo (`orchestration-prompt-builder`), contrato de salida al inicio del SKILL.md ("specs sueltos no es terminado") y puntero en `workflow/agents.md` |
+| P2 | El skill solo existía en la rama de un PR; el agente trabajaba en `main` y no lo encontró | El skill tiene que estar en la rama donde trabaja el agente; mientras no esté en `main`, el agente trabaja en la rama del PR |
+| P3 | Al generar el prompt apareció una decisión nueva (un PR abierto fuera de la tanda que toca los mismos archivos) y se inventó un "default a los 10 min" | Un gate espera `gate-resolve`; **un default nunca se aplica solo**. Mientras tanto avanza el resto del DAG |
+| P4 | Las decisiones C, D y G hicieron crecer ODE-652 por encima de un PR revisable | Después de la fase H, re-evaluar el tamaño de cada nodo: una decisión puede obligar a partir un issue en varios PRs |
+| P5 | Un PR abierto ajeno a la tanda (#423, parado y en conflicto) tocaba los archivos de un nodo | Los PRs abiertos fuera de la tanda que tocan los mismos archivos entran al grafo como decisión humana (esperar o no) con default y gate |
+| P6 | El Recon tuvo correcciones posteriores (comentario "Recon Pack correction", "segunda pasada" de la auditoría) | En la precedencia de entradas, una corrección o ronda posterior manda sobre la anterior del mismo tipo |
+| P7 | Precondiciones escritas sin comando ("verificar permisos") | Cada precondición lleva su comando y su resultado esperado; si no se puede verificar con un comando, es una pregunta al humano |
+

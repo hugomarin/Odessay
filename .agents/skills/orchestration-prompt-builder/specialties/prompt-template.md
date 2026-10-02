@@ -20,11 +20,12 @@ v<N> (<fecha>). <Base: v<N-1> + delta, o "autosuficiente">. <Una línea: qué cu
 
 ## Precondiciones (comprobarlas antes de despachar nada)
 1. <PR o issue que debe estar mergeado> — `<comando de verificación>` → <resultado esperado>.
-2. La orquestación anterior (Run `<id>`) está cerrada y sin dispatches vivos. No corre en paralelo con otra.
+2. La orquestación anterior (Run `<id>`) está cerrada y sin dispatches vivos: `orca orchestration worker-list --json`, todo `completed` o `failed`. No corre en paralelo con otra. Opcional: `worker-release` de las terminales retenidas.
 3. Lint de todos los issues: `npm run ops:brief:lint -- <ids> --require-contract --require-recon`. Si alguno falla: parar y reportar. No completar briefs a mano.
-4. <Permisos de los agentes, workspace del tracker en Orca, otras precondiciones operativas de la Auditoría.>
+4. <Permisos de los agentes, que el tracker se lee bien desde Orca y otras precondiciones operativas de la Auditoría. **Cada una con su comando y su resultado esperado.**>
 
 ## Entradas de cada issue (orden de precedencia)
+<Regla: una corrección o ronda posterior manda sobre la anterior del mismo tipo ("Recon Pack correction" > Recon Pack; "segunda pasada" > primera Auditoría).>
 1. El comentario `## Decisiones (<humano>, <fecha>)`. Un "— ajuste" manda sobre lo anterior.
 2. La sección "Auditoría" de la descripción.
 3. El comentario `## Recon Pack (verificado en main@<sha>)` y el `## Architecture Contract` del brief.
@@ -89,6 +90,7 @@ Plantillas de spec: más abajo (Target / Change / Constraints / Ownership / Obse
 - **La rama no toca** los ledgers ni `workflow/status.json`.
 - **Temporales en `.cache/` del worktree.** `git log -1` antes de `--amend`. Nunca `git add -A` tras un merge de main.
 - **No sobre-complicar:** el mínimo que cumple el brief; lo demás se anota.
+- **UI:** si el nodo cambia una superficie visible, el builder declara el Presentation Contract (copy, estados, accesibilidad) según `/wf-build` paso 1. El chrome de la app va en inglés; el contenido del usuario, en su idioma.
 - **Entrega:** PR abierto **sin esperar CI**, con body, Context Report y Guía de review (en el body y como comentario en el tracker). Issue en In Review, o In Progress si es PARTIAL DELIVERY. El Context Report trae: tiempo de validación del pack y Recon corrections, tiempo total, corridas de la suite, la mutación y su salida roja, y el estado final de la fila y por qué.
 
 <Bloques de recursos compartidos de la tanda, si los hay: base local con lock, comandos prohibidos, secretos de producción, aislamiento.>
