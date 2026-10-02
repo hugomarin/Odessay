@@ -2,26 +2,51 @@
 
 Especialidad de Planning. Investiga **una vez** el código de un área que van a tocar varios issues y deja todo listo para despachar. El builder después **valida** el pack (`architecture-recon`, modo validación) en vez de volver a explorar.
 
-## Objetivo: dos resultados, los dos obligatorios
+## Un proceso, dos usos
 
-1. **Mejor código.** El builder recibe el diseño ya resuelto contra el código real:
-   - dónde vive el cambio (el owner correcto, no el archivo más cercano ni el hotspot);
-   - qué reutilizar (la API, el helper o el doble que ya resuelve el caso) y qué patrón seguir;
-   - qué **no** crear, para no duplicar una responsabilidad que ya tiene owner;
-   - el cambio más simple que cumple el brief;
-   - qué invariantes preservar y dónde y cómo probarlo (el test canónico, el punto de entrada de producción).
+Es **un solo proceso**: workers que leen el código en profundidad, en solo lectura y con evidencia. La misma lectura sirve para **dos usos**, y cada uno deja algo para un lector distinto.
 
-   Un buen Recon simplifica: en la tanda 3, el de ODE-657 dejó un diseño más simple que el del brief.
-2. **Que nada frene la orquestación.** Contratos completos, decisiones humanas resueltas antes, conflictos entre issues ordenados en olas y requisitos operativos listos.
+### El núcleo, que no se negocia en ningún modo
 
-Un Recon que solo cumple el segundo es incompleto: el builder llega sin bloqueos, pero vuelve a decidir el diseño por su cuenta y tiende a crear piezas nuevas en vez de reutilizar las que hay.
+Por cada issue, los workers leen el código actual y responden dos preguntas:
+
+1. **¿Cómo se construye bien?** El owner correcto (no el archivo más cercano ni el hotspot), qué reutilizar, qué no crear, el diseño más simple, qué invariantes preservar y cómo probarlo.
+2. **Si se construye tal como está escrito, ¿qué se rompe, a quién afecta y qué nos frena?** Se siguen los consumidores, la sync, las APIs y sus reintentos, los datos, los permisos y producción. La mirada es **adversarial**: se busca lo que falla, no la confirmación del brief.
+
+Reglas del núcleo:
+- cada afirmación lleva evidencia (`archivo:líneas`) del commit declarado;
+- se resuelve desde el código todo lo que se pueda; **solo se escala lo que el código no contesta**;
+- nunca es un resumen de un Recon anterior: si se repite, se vuelve a leer el código y se corrige el pack si estaba mal.
+
+Lo que esta lectura encontró en la tanda 3 del milestone 4 no salía de un mapa de construcción:
+- el 404 que pedía ODE-660 habría roto la sync;
+- un quinto punto de fuga en ODE-616;
+- un filtro que habría escondido documentos públicos con invitación;
+- un diseño más simple para ODE-657.
+
+### Los dos usos
+
+| | **Construir** | **Despachar** |
+|---|---|---|
+| Para quién | El builder | El humano y el coordinador |
+| Lista de huecos (§ 2) | C1–C6: calidad del código | 1–9: lo que puede frenar la orquestación |
+| Qué deja (§ 3) | Recon Pack con "Construir con", y el PR del mapa con el grafo de conflictos y las olas | Sección "Auditoría", decisiones con default, tareas humanas y el reporte de § 4 |
+| Se verifica con | La fase 0R, por hechos | La respuesta del humano: comentario `## Decisiones` |
+
+Un Recon que solo cubre "Despachar" deja al builder sin diseño: lo decide solo y tiende a crear piezas nuevas en vez de reutilizar. Uno que solo cubre "Construir" deja la orquestación expuesta a paradas que se podían ver antes.
+
+### Modos de ejecución
+
+- **Completo (por defecto, para una tanda que va a orquestarse):** una sola pasada; cada worker aplica las dos listas a su cluster. Así se hizo en la tanda 3 ("Recon+audit").
+- **Solo construir:** uno o pocos issues que no van a orquestarse.
+- **Solo despachar ("ronda N"):** cuando `main` avanzó o justo antes de lanzar. **Es igual de profundo**: vuelve a leer el código, corrige el pack y actualiza la auditoría. Es lo que `/wf-audit` hace sobre una tanda (`skill-audit-planning`).
 
 ## Cuándo aplica, y cuándo no
 
 - **Aplica** cuando varios issues comparten un área de código, o cuando una tanda va a orquestarse.
 - **No aplica** a una pregunta puntual ("¿qué podría romper la opción B?"). Eso es un **análisis**: la respuesta queda en el chat y, si sirve, como comentario en el issue. Sin PR.
 
-**Quién lo hace:** el planner (Claude Code, o un worker con ese rol). Nunca el builder. Antes de construir, lo verifica **otro agente** (fase 0R, § 5).
+**Quién lo hace:** el planner (Claude Code, o un worker con ese rol). Nunca el builder. Antes de construir, el mapa lo verifica **otro agente** (fase 0R, § 5).
 
 ## 1. Método
 
@@ -29,14 +54,14 @@ Un Recon que solo cumple el segundo es incompleto: el builder llega sin bloqueos
 2. Partir la tanda en **clusters**: issues que comparten owner o archivos.
 3. Lanzar **un worker por cluster, en paralelo y en solo lectura**: sin tocar Linear ni el repo. Cada worker:
    - usa el método de `.agents/skills/architecture-recon/SKILL.md` (buscar por símbolo y rango, no paginar hotspots);
-   - recorre las dos listas de huecos (§ 2) por cada issue: calidad del código y bloqueos;
+   - aplica el núcleo y recorre, por cada issue, las listas de huecos (§ 2) de los usos del modo elegido; en modo completo, las dos;
    - **resuelve desde el código** todo lo que pueda, con evidencia (`archivo:líneas`);
    - **escala solo lo que el código no contesta.**
 4. El planner consolida: escribe en Linear, abre el PR del mapa y entrega el reporte (§ 3 y § 4).
 
 ## 2. Lista de huecos
 
-**Calidad del código (objetivo 1):**
+**Uso "Construir": calidad del código:**
 
 | # | Hueco | Qué buscar | Dónde termina |
 |---|---|---|---|
@@ -47,7 +72,7 @@ Un Recon que solo cumple el segundo es incompleto: el builder llega sin bloqueos
 | C5 | **Invariantes y orden** | Lo que el cambio no puede romper: orden de efectos, refs en callbacks de larga vida, identidad, escritores únicos | Recon Pack, campo "Trampas" |
 | C6 | **Cómo probarlo** | Test canónico a extender, punto de entrada de producción, helpers del harness, la mutación que discrimina el bug | Recon Pack, campo "Dónde probar" |
 
-**Lo que puede frenar la orquestación (objetivo 2):**
+**Uso "Despachar": lo que puede frenar la orquestación:**
 
 | # | Hueco | Qué buscar | Dónde termina |
 |---|---|---|---|
@@ -62,6 +87,8 @@ Un Recon que solo cumple el segundo es incompleto: el builder llega sin bloqueos
 | 9 | **Seguimientos** | Problemas reales fuera del alcance de la tanda | Se anotan, **no se crean** issues |
 
 ## 3. Qué deja (definición de hecho)
+
+En modo completo, todo lo de abajo. En "Solo construir", el Recon Pack, el contrato y el PR del mapa. En "Solo despachar", la auditoría, las decisiones, el lint y el reporte, más las correcciones al pack si las hubo.
 
 **En Linear, por issue:**
 - el comentario `## Recon Pack (verificado en main@<sha>)`, con el formato de `issue-brief-schema.md` § Recon Pack, **incluido "Construir con"** (qué reutilizar, qué patrón seguir, qué no crear);
