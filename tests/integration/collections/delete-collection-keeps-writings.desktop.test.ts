@@ -302,7 +302,7 @@ describe("COL-06 desktop — borrar una colección no toca sus documentos", () =
   // Collections. Lo arregla ODE-618 PR1b (DELETE en la misma transacción +
   // filtro de relaciones vivas en el snapshot); entonces este `it.fails` pasa a
   // `it` sin tocar su cuerpo.
-  it.fails("(F6) un documento cuya única colección se borró vuelve a estar sin clasificar", async () => {
+  it("(F6) un documento cuya única colección se borró vuelve a estar sin clasificar", async () => {
     const { second, principal } = await setupCollectionScenario()
 
     await deleteLocalCollection(principal)
