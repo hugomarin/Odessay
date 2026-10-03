@@ -1671,6 +1671,46 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
+  it.fails(
+    "cerrar todas las pestañas: el dueño conservado está oculto y no ocupa layout",
+    async () => {
+      const textA = "ODE652-CLOSE-ALL-HIDDEN"
+      const a = await createAndOpenDocument(textA)
+      await confirmInCloud(a, textA)
+
+      world.getPreviewLink = async () => ({ error: null, data: previewLink(LINK_A) })
+      let releaseRotate: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la rotación no quedó retenida")
+      }
+      const heldRotate = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseRotate = resolve
+      })
+      world.rotatePreviewLink = async () => heldRotate
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la regeneración")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickShareAction("Regenerate")
+      await closeEditorTab(a)
+      await flush(3)
+      expect(getEditorSessionState().session.tabs.length, "sin pestañas abiertas").toBe(0)
+
+      const panelNode = document.querySelector('[data-testid="editor-panel-properties"]')
+      expect(panelNode, "el dueño del enlace sobrevive al cierre").not.toBeNull()
+      expect(
+        document.querySelector('[data-testid="editor-right-panel"]')?.parentElement?.hasAttribute("hidden"),
+        "el dueño conservado está oculto y no ocupa el layout del estado vacío",
+      ).toBe(true)
+
+      releaseRotate({ error: null, data: previewLink(LINK_A_ROTATED) })
+      await flush(5)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
   it(
     "regreso a A: una recarga vieja que falla no borra la regeneración",
     async () => {
