@@ -101,12 +101,19 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2)", () => {
     ).toBe(committed)
   })
 
-  it("records the commands SYS-01/SYS-05/WATCH-07/SYNC-05 depend on, from production code only", async () => {
+  it("records the commands SYS-01/SYS-05/WATCH-07/SYNC-05/SYNC-08 depend on, from production code only", async () => {
     const fixture = JSON.parse(await generate()) as {
       version: number
       scenarios: {
         name: string
-        steps: { kind: string; cmd?: string; response?: unknown; mutations?: unknown[] }[]
+        steps: {
+          kind: string
+          name?: string
+          cmd?: string
+          args?: Record<string, unknown>
+          response?: unknown
+          mutations?: unknown[]
+        }[]
       }[]
     }
 
@@ -114,6 +121,9 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2)", () => {
     expect(fixture.scenarios.map((scenario) => scenario.name).sort()).toEqual([
       "sync05-save-during-flush-failure",
       "sync05-save-during-flush-success",
+      "sync08-bound-pending-save-metadata",
+      "sync08-first-upload-metadata-before-flush",
+      "sync08-settings-metadata-batch",
       "sys01-homonyms-distinct-roots",
       "sys01-register-move-reopen",
       "sys05-reconcile-tracks-disk",
@@ -129,14 +139,18 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2)", () => {
     expect([...commands].sort()).toEqual([
       "catalog_apply_cloud_snapshots",
       "catalog_apply_reconcile",
+      "catalog_bulk_dual_write",
       "catalog_dual_write",
       "catalog_get_by_id",
+      "catalog_list",
       "catalog_list_binding_root_documents",
       "catalog_list_pending_metadata_mutations",
       "catalog_list_pending_mutations",
       "catalog_resolve_path",
       "catalog_update_mutation_status",
       "open_file",
+      "settings_read",
+      "settings_write",
       "workspace_sync",
       "workspace_touch_file",
       "write_file",
@@ -208,5 +222,128 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2)", () => {
       .filter((step) => step.kind === "invoke" && step.cmd === "catalog_get_by_id")
       .at(-1)
     expect(finalRead?.response).toHaveProperty("contentHash", watchedHashes[1])
+
+    // ODE-670: el contrato de `catalog_bulk_dual_write` es "ids escritos, en
+    // orden de entrada"; invertir el orden debe romper el replay.
+    const bulkWrites = fixture.scenarios.flatMap((scenario) =>
+      scenario.steps.filter((step) => step.kind === "invoke" && step.cmd === "catalog_bulk_dual_write"),
+    )
+    expect(bulkWrites.length).toBeGreaterThan(0)
+    for (const step of bulkWrites) {
+      const inputs = step.args!.inputs as { document: { id: string } }[]
+      expect(step.response).toEqual(inputs.map((input) => input.document.id))
+    }
+
+    // ODE-670: el camino de Settings pasa la query real del productor
+    // (`cloudAccountId:null`) y el catálogo real excluye la fila solo-nube con
+    // cuenta (filtro de cuenta del SQL); el replay contrasta esa misma lista.
+    const settingsScenario = fixture.scenarios.find(
+      (scenario) => scenario.name === "sync08-settings-metadata-batch",
+    )
+    expect(settingsScenario).toBeDefined()
+    const listStep = settingsScenario!.steps.find(
+      (step) => step.kind === "invoke" && step.cmd === "catalog_list",
+    )
+    expect(listStep).toBeDefined()
+    expect(listStep!.args).toEqual({
+      dbPath: "$DB",
+      cloudAccountId: null,
+      includeDeleted: false,
+      localOnly: false,
+      limit: 100000,
+    })
+    const listedIds = (listStep!.response as { id: string }[]).map((row) => row.id)
+    const cloudOnlyControl = settingsScenario!.steps.find(
+      (step) =>
+        step.kind === "control" &&
+        (step as { name?: string }).name === "sync08-settings-cloud-only-excluded",
+    ) as { documentId: string } | undefined
+    expect(cloudOnlyControl).toBeDefined()
+    expect(listedIds).not.toContain(cloudOnlyControl!.documentId)
+    expect(listedIds).toHaveLength(2)
+
+    // ODE-670: cada escenario SYNC-08 afirma el payload que distingue una
+    // mutación de metadata real de una de cuerpo, y los controles de Settings
+    // separan la fila cloud-owned, el control local-only y la fila excluida.
+    for (const name of [
+      "sync08-bound-pending-save-metadata",
+      "sync08-first-upload-metadata-before-flush",
+    ]) {
+      const scenario = fixture.scenarios.find((candidate) => candidate.name === name)
+      expect(scenario).toBeDefined()
+      const controls = scenario!.steps.filter((step) => step.kind === "control") as {
+        mutations: { status: string; payload?: { mutationKind: string | null } }[]
+      }[]
+      const actionableMetadata = controls.flatMap((control) =>
+        control.mutations.filter(
+          (mutation) => mutation.status === "pending" && mutation.payload?.mutationKind === "metadata",
+        ),
+      )
+      const supersededBody = controls.flatMap((control) =>
+        control.mutations.filter(
+          (mutation) => mutation.status === "synced" && mutation.payload?.mutationKind === null,
+        ),
+      )
+      expect(actionableMetadata).toHaveLength(1)
+      expect(supersededBody).toHaveLength(1)
+    }
+    const settingsControls = settingsScenario!.steps.filter((step) => step.kind === "control") as {
+      name: string
+      mutations: { status: string; payload?: { mutationKind: string | null } }[]
+    }[]
+    expect(
+      settingsControls.find((control) => control.name === "sync08-settings-cloud-owned-rewritten")!.mutations,
+    ).toEqual([
+      expect.objectContaining({
+        status: "pending",
+        payload: expect.objectContaining({ mutationKind: "metadata" }),
+      }),
+    ])
+    expect(
+      settingsControls.find((control) => control.name === "sync08-settings-local-only-control")!.mutations,
+    ).toEqual([])
+    expect(
+      settingsControls.find((control) => control.name === "sync08-settings-cloud-only-excluded")!.mutations,
+    ).toEqual([])
   })
 })
+
+/**
+ * Follow-up pendiente (ODE-670): el productor de Settings pasa
+ * `cloudAccountId:null` a `catalog_list` (desktop-settings-service.ts:446) y el
+ * SQL real trata null como "sin cuenta activa", así que una fila solo-nube con
+ * cuenta nunca entra al lote y no recibe la reescritura. ODE-648 no lo vio
+ * porque su doble (`tauriCatalogListDouble`, real-desktop-doubles.ts:1130)
+ * ignora la query. Este `it.fails` fija la conducta correcta: cuando el
+ * productor pase la cuenta activa, el lote debe incluir la fila solo-nube; al
+ * arreglarlo, este test pasa y el `it.fails` se convierte en `it`.
+ */
+it.fails(
+  "follow-up pendiente (ODE-670): Settings debe reescribir también la fila solo-nube con cuenta",
+  async () => {
+    const fixture = JSON.parse(await generate()) as {
+      scenarios: {
+        name: string
+        steps: {
+          kind: string
+          name?: string
+          cmd?: string
+          args?: Record<string, unknown>
+          documentId?: string
+        }[]
+      }[]
+    }
+    const scenario = fixture.scenarios.find(
+      (candidate) => candidate.name === "sync08-settings-metadata-batch",
+    )!
+    const cloudOnly = scenario.steps.find(
+      (step) => step.kind === "control" && step.name === "sync08-settings-cloud-only-excluded",
+    )!
+    const bulkIds = scenario.steps
+      .filter((step) => step.kind === "invoke" && step.cmd === "catalog_bulk_dual_write")
+      .flatMap((step) =>
+        (step.args!.inputs as { document: { id: string } }[]).map((input) => input.document.id),
+      )
+    expect(bulkIds).toContain(cloudOnly.documentId)
+  },
+)
