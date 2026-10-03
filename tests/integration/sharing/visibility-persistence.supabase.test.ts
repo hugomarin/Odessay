@@ -13,9 +13,14 @@
  * - Web sin shares, público → privado: la fila en la DB queda `private`, el
  *   PATCH lleva `visibility: "private"` explícito y el extraño pierde
  *   `/[username]/[slug]` (control positivo antes: lo leía sin sesión).
- * - Web con shares, shared → privado: el guardrail del PATCH
- *   (`app/api/writings/[id]/route.ts:135-149`) lo devuelve como `shared`; el
+ * - Web con shares, shared → privado: el owner único sigue siendo el trigger;
+ *   el PATCH ya no consulta `writing_shares` — envía `private` y responde la
+ *   fila que el trigger persistió (`shared`, porque el grant sigue vigente); el
  *   invitado conserva `/shared/[id]` y el listado.
+ * - Web, grant revocado entre el SELECT y el UPDATE (contrato unificado): sin
+ *   guard manual que reescriba la visibilidad, el trigger ve la revocación y
+ *   persiste `private`; la respuesta del PATCH es exactamente ese valor
+ *   persistido, no una lectura previa de `writing_shares`.
  * - Desktop, private con grant (estado auditado de ODE-664: un writing
  *   `private` que conserva filas en `writing_shares`): el owner del contrato
  *   unificado es el trigger `public.writings_set_derived_fields()`, así que un
@@ -258,7 +263,14 @@ async function rpcIncomingIds(as: SeedUser): Promise<string[]> {
  * Router de fetch para el SyncWorker real: `/api/...` entra al handler real
  * con el Bearer del usuario; `127.0.0.1:54321` usa el fetch original (los
  * clientes que se construyen dentro del handler no se recursan).
+ *
+ * `beforeWritingsUpdate` es el punto de interleaving de ODE-664 en la web: se
+ * dispara en el transporte justo antes de que salga el UPDATE del handler a
+ * `writings` (después de su SELECT, si lo hubiera), que es la ventana real en
+ * la que puede cambiar `writing_shares`. Se consume una sola vez.
  */
+let beforeWritingsUpdate: (() => Promise<void>) | null = null
+
 function installRoutedFetch(
   routes: Record<string, (request: Request) => Promise<Response> | Response>,
   as: SeedUser | null,
@@ -270,7 +282,14 @@ function installRoutedFetch(
         ? input
         : new Request(typeof input === "string" ? new URL(input, "http://harness.test").toString() : input, init)
     const url = new URL(request.url)
-    if (url.origin === "http://127.0.0.1:54321") return originalFetch(request)
+    if (url.origin === "http://127.0.0.1:54321") {
+      if (beforeWritingsUpdate && request.method === "PATCH" && url.pathname === "/rest/v1/writings") {
+        const hook = beforeWritingsUpdate
+        beforeWritingsUpdate = null
+        await hook()
+      }
+      return originalFetch(request)
+    }
     return routeFetch(request)
   })
 }
@@ -415,6 +434,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  beforeWritingsUpdate = null
   resetCatalogDoubles()
   resetSettingsStoreDouble()
   vi.restoreAllMocks()
@@ -490,8 +510,8 @@ describe("Requirement 2 — Web", () => {
     expect(saved.error).toBeNull()
     await worker.flush()
 
-    // El guardrail del servidor conserva "shared" aunque el payload pida
-    // "private": la DB y el eco local dicen shared.
+    // Owner único: el payload pide "private" con grant vigente y el trigger lo
+    // persiste como shared; la respuesta es la fila canónica.
     expect(JSON.parse(sent[0])).toMatchObject({ visibility: "private" })
     expect((received[0]?.data as { visibility?: string } | undefined)?.visibility).toBe("shared")
     expect((await readRow<{ visibility: string }>(admin, "writings", id))?.visibility).toBe("shared")
@@ -502,6 +522,55 @@ describe("Requirement 2 — Web", () => {
     expect(readingProps(await SharedReadingPage(pageParams(id))).writing.id).toBe(id)
     expect(await incomingIds(viewer)).toContain(id)
   })
+
+  it.fails(
+    "contrato unificado: la web responde la visibilidad que persistió el trigger, no su lectura previa de writing_shares",
+    async () => {
+      const title = `Web revocacion ${runId}`
+      const id = await seedWriting(admin, { authorId: owner.id, title, visibility: "shared" })
+      await seedShare(ownerClient, { writingId: id, sharedWithId: viewer.id })
+
+      // Control positivo: el invitado ya lo lee.
+      await actAs(viewer)
+      expect(readingProps(await SharedReadingPage(pageParams(id))).writing.id).toBe(id)
+
+      const local = await seedLocalWriting({ id, title, visibility: "shared" })
+      const sent: string[] = []
+      const received: Array<Record<string, unknown>> = []
+      installRoutedFetch({ [`/api/writings/${id}`]: patchRouteWithCapture(id, sent, received) }, owner)
+
+      // El grant se revoca entre la lectura previa del handler (si existe) y su
+      // UPDATE: la ventana real que el guard manual no puede cubrir. El trigger
+      // ve la revocación; la web debe responder lo que él persistió.
+      beforeWritingsUpdate = async () => {
+        const { error } = await admin.from("writing_shares").delete().eq("writing_id", id)
+        expect(error).toBeNull()
+      }
+
+      const worker = new SyncWorker({ localDb: localDB, isOnline: () => true })
+      const saved = await webDocumentService.saveWriting({
+        writing: webRecordFrom(local, { visibility: "private" }),
+      })
+      expect(saved.error).toBeNull()
+      await worker.flush()
+
+      // Evento de completitud: la respuesta del handler y la fila canónica.
+      expect(sent).toHaveLength(1)
+      expect(JSON.parse(sent[0]), "el payload lleva la visibilidad explícita").toMatchObject({
+        visibility: "private",
+      })
+      const responseVisibility = (received[0]?.data as { visibility?: string } | undefined)?.visibility
+      const persistedVisibility = (await readRow<{ visibility: string }>(admin, "writings", id))?.visibility
+      expect(responseVisibility, "la web responde el valor que persistió el trigger").toBe(
+        persistedVisibility,
+      )
+      expect(persistedVisibility, "sin grant en el UPDATE, el trigger deja private").toBe("private")
+
+      // La revocación es efectiva: sin fila de share, el invitado pierde el acceso.
+      await actAs(viewer)
+      await expectNotFound(() => SharedReadingPage(pageParams(id)))
+    },
+  )
 })
 
 describe("Requirement 2 — Desktop", () => {
