@@ -16,10 +16,15 @@
  * - Web con shares, shared → privado: el guardrail del PATCH
  *   (`app/api/writings/[id]/route.ts:135-149`) lo devuelve como `shared`; el
  *   invitado conserva `/shared/[id]` y el listado.
- * - Desktop con shares, shared → privado: el sync de desktop escribe bajo RLS
- *   (`payload.visibility`), sin el guardrail web, así que crea el estado
- *   privado-con-share (F1b de ODE-616). El invitado pierde `/shared/[id]`,
- *   `GET /api/shared/writings` y la RPC `list_incoming_shared_writings`.
+ * - Desktop, private con grant (estado auditado de ODE-664: un writing
+ *   `private` que conserva filas en `writing_shares`): el owner del contrato
+ *   unificado es el trigger `public.writings_set_derived_fields()`, así que un
+ *   UPDATE que toca `visibility` converge a `shared` en la nube — la promoción
+ *   corre antes de derivar el slug. El invitado recupera `/shared/[id]`,
+ *   `GET /api/shared/writings` y la RPC `list_incoming_shared_writings`; el
+ *   extraño y el anónimo (sin fila de share) siguen sin acceso. El catálogo
+ *   desktop proyecta la visibilidad canónica leída de vuelta, sin pisar una
+ *   mutación local más nueva.
  * - Desktop, recarga desde la nube: `hydrateWritings` refleja la visibilidad
  *   remota cambiada por otra sesión (web real) y **no** revierte un cambio
  *   local pendiente (D-4; la guarda canónica vive en Rust,
@@ -82,7 +87,7 @@ import {
 } from "../../support/supabase-local/fixtures"
 import { createLocalAdminClient, createUserClient } from "../../support/supabase-local/local-supabase"
 import { createRouteFetch } from "../../support/supabase-local/route-fetch"
-import { expectNotFound, serverClientAs } from "../../support/supabase-local/session"
+import { expectNotFound, expectRedirect, serverClientAs } from "../../support/supabase-local/session"
 
 type LocalWriting = import("@/lib/local-db/schema").LocalWriting
 type WritingRecord = import("@/lib/services/contracts/document-service").WritingRecord
@@ -101,6 +106,17 @@ function unimplemented(name: string) {
     throw new Error(`real-desktop-doubles: "${name}" is out of scope for the SHARE-05 proof and was not expected to be called`)
   })
 }
+
+/**
+ * Punto de interleaving de ODE-664: se dispara una sola vez, después de que el
+ * flush marca una mutación como `synced` y antes de que proyecte el batch de
+ * snapshots (`desktop-catalog-sync-service.ts`, applyCloudSnapshots al cierre).
+ * Ahí el test crea una mutación local más nueva para probar que el readback no
+ * la pisa.
+ */
+const desktopFlushHook = vi.hoisted(() => ({
+  afterMutationStatusSynced: null as null | (() => Promise<void>),
+}))
 
 vi.mock("@tauri-apps/api/path", () => tauriPathModuleDouble)
 vi.mock("@/lib/services/desktop/runtime-detection", () => ({ isDesktopRuntime: () => true }))
@@ -145,6 +161,16 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriCatalogPurgeDocument: tauriCatalogPurgeDocumentDouble,
   tauriCatalogListPendingMetadataMutations: tauriCatalogListPendingMetadataMutationsDouble,
   tauriCatalogUpdateMetadataMutationStatus: tauriCatalogUpdateMetadataMutationStatusDouble,
+  tauriCatalogUpdateMutationStatus: async (
+    ...args: Parameters<typeof tauriCatalogUpdateMutationStatusDouble>
+  ) => {
+    await tauriCatalogUpdateMutationStatusDouble(...args)
+    const hook = desktopFlushHook.afterMutationStatusSynced
+    if (hook) {
+      desktopFlushHook.afterMutationStatusSynced = null
+      await hook()
+    }
+  },
   tauriCatalogApplyCollectionSnapshot: unimplemented("tauriCatalogApplyCollectionSnapshot"),
   tauriCatalogListCollectionSnapshot: unimplemented("tauriCatalogListCollectionSnapshot"),
   tauriCatalogSaveCollection: unimplemented("tauriCatalogSaveCollection"),
@@ -480,37 +506,99 @@ describe("Requirement 2 — Web", () => {
 })
 
 describe("Requirement 2 — Desktop", () => {
-  it("de shared a privado con shares: el invitado pierde /shared, el listado y la RPC", async () => {
-    const writingId = await createDesktopDoc(`Desktop compartido ${runId}`)
-    await flushDesktop()
-    await saveDesktopVisibility(writingId, "shared")
-    await flushDesktop()
-    await seedShare(ownerClient, { writingId, sharedWithId: viewer.id })
+  it.fails(
+    "de private con grant a shared: el trigger lo persiste, el invitado recupera el acceso y el catálogo proyecta el valor canónico",
+    async () => {
+      const writingId = await createDesktopDoc(`Desktop compartido ${runId}`)
+      await flushDesktop()
 
-    // Control positivo: el invitado ya lo lee, el listado y la RPC lo incluyen.
-    await actAs(viewer)
-    expect(readingProps(await SharedReadingPage(pageParams(writingId))).writing.id).toBe(writingId)
-    expect(await incomingIds(viewer)).toContain(writingId)
-    expect(await rpcIncomingIds(viewer)).toContain(writingId)
+      // Estado auditado de ODE-664 (alcanzable: F1b de ODE-616 permitía
+      // persistir private con shares): un grant vigente sin visibilidad shared
+      // todavía no da acceso.
+      await seedShare(ownerClient, { writingId, sharedWithId: viewer.id })
+      await actAs(viewer)
+      await expectNotFound(() => SharedReadingPage(pageParams(writingId)))
 
-    // El cambio real de desktop: save bajo RLS, sin el guardrail web (F1b).
-    await saveDesktopVisibility(writingId, "private")
-    await flushDesktop()
+      // El UPDATE bajo RLS toca visibility: el trigger lo normaliza a shared.
+      await saveDesktopVisibility(writingId, "private")
+      await flushDesktop()
 
-    // Fila en la DB local.
-    expect((await readRow<{ visibility: string }>(admin, "writings", writingId))?.visibility).toBe(
-      "private",
-    )
+      // Evento de completitud: la fila canónica de la nube. La promoción corre
+      // antes de derivar el slug, así que este writing (nunca shared) estrena
+      // slug en este UPDATE.
+      const cloud = await readRow<{ visibility: string; slug: string | null }>(admin, "writings", writingId)
+      expect(cloud?.visibility, "el trigger promueve private con grant a shared").toBe("shared")
+      expect(cloud?.slug, "la promoción corre antes de derivar el slug").toBeTruthy()
 
-    await actAs(viewer)
-    await expectNotFound(() => SharedReadingPage(pageParams(writingId)))
-    expect(await incomingIds(viewer)).not.toContain(writingId)
-    expect(await rpcIncomingIds(viewer)).not.toContain(writingId)
+      // El readback proyecta la visibilidad canónica en SQLite.
+      const projected = await catalog.getById(writingId)
+      expect(projected?.visibility, "el catálogo desktop refleja la nube").toBe("shared")
+      expect(projected?.syncStatus).toBe("synced")
 
-    // El dueño conserva el acceso (control).
-    await actAs(owner)
-    expect(readingProps(await SharedReadingPage(pageParams(writingId))).writing.id).toBe(writingId)
-  })
+      // El invitado recupera la ruta compartida, el listado y la RPC.
+      await actAs(viewer)
+      expect(readingProps(await SharedReadingPage(pageParams(writingId))).writing.id).toBe(writingId)
+      expect(await incomingIds(viewer)).toContain(writingId)
+      expect(await rpcIncomingIds(viewer)).toContain(writingId)
+
+      // El dueño conserva el acceso.
+      await actAs(owner)
+      expect(readingProps(await SharedReadingPage(pageParams(writingId))).writing.id).toBe(writingId)
+
+      // El trigger no amplía el acceso: extraño y anónimo no tienen fila.
+      await actAs(stranger)
+      await expectNotFound(() => SharedReadingPage(pageParams(writingId)))
+      await actAs(null)
+      await expectRedirect(() => SharedReadingPage(pageParams(writingId)), "/login")
+
+      // Control negativo: sin fila de share, `private` persiste.
+      const withoutGrant = await createDesktopDoc(`Desktop sin grant ${runId}`)
+      await flushDesktop()
+      await saveDesktopVisibility(withoutGrant, "private")
+      await flushDesktop()
+      expect((await readRow<{ visibility: string }>(admin, "writings", withoutGrant))?.visibility).toBe(
+        "private",
+      )
+      expect((await catalog.getById(withoutGrant))?.visibility).toBe("private")
+    },
+  )
+
+  it.fails(
+    "una mutación local más nueva durante el readback no se pisa con la visibilidad canónica",
+    async () => {
+      const writingId = await createDesktopDoc(`Desktop readback ${runId}`)
+      await flushDesktop()
+      await seedShare(ownerClient, { writingId, sharedWithId: viewer.id })
+
+      // A pide private; el trigger lo persistirá shared. Cuando el flush marca
+      // A como synced (después del readback, antes de proyectar el batch), el
+      // usuario guarda una decisión más nueva: public.
+      await saveDesktopVisibility(writingId, "private")
+      desktopFlushHook.afterMutationStatusSynced = async () => {
+        await saveDesktopVisibility(writingId, "public")
+      }
+      await flushDesktop()
+
+      // La nube confirma A (shared), todavía sin la mutación nueva.
+      expect((await readRow<{ visibility: string }>(admin, "writings", writingId))?.visibility).toBe(
+        "shared",
+      )
+
+      // La fila local conserva la decisión más nueva, no el readback de A.
+      const pendingView = await catalog.getById(writingId)
+      expect(pendingView?.visibility, "el readback no pisa la mutación pendiente").toBe("public")
+      expect(pendingView?.syncStatus, "la mutación nueva sigue pendiente").toBe("pending")
+
+      // El flush siguiente sube la decisión nueva y el catálogo converge.
+      await flushDesktop()
+      expect((await readRow<{ visibility: string }>(admin, "writings", writingId))?.visibility).toBe(
+        "public",
+      )
+      const confirmedView = await catalog.getById(writingId)
+      expect(confirmedView?.visibility).toBe("public")
+      expect(confirmedView?.syncStatus).toBe("synced")
+    },
+  )
 })
 
 describe("Requirement 3 — Desktop, recarga desde la nube", () => {
