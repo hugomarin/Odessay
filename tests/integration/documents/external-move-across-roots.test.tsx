@@ -496,7 +496,7 @@ describe("ODE-615 — variantes de la prueba WATCH-04", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "dos ráfagas: si B llega primero, B no acuña un UUID nuevo [follow-up pendiente (ODE-615)]",
     async () => {
       // Decisión de Hugo (2026-10-01): el movimiento repartido en dos ráfagas
@@ -543,7 +543,7 @@ describe("ODE-615 — variantes de la prueba WATCH-04", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "dos ráfagas: si A llega primero, el detach no se pierde [follow-up pendiente (ODE-615)]",
     async () => {
       // Misma decisión de alcance que la variante B-primero: la ráfaga que
