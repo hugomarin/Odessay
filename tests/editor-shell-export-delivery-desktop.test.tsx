@@ -1382,13 +1382,11 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
   )
 
   it(
-    "cambio a un documento local: el indicador de carga de A no queda visible en B",
+    "cambio a un borrador sin id: el indicador de carga de A no queda visible en el nuevo documento",
     async () => {
       const textA = "ODE652-LOCAL-SWITCH-A"
-      const textB = "ODE652-LOCAL-SWITCH-B"
       const a = await createAndOpenDocument(textA)
       await confirmInCloud(a, textA)
-      const b = await createAndOpenSecondDocument(textB)
 
       let releaseA: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
         throw new Error("la carga de A no quedó retenida")
@@ -1399,6 +1397,13 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
       world.getPreviewLink = async (writingId) =>
         writingId === a ? heldA : { error: null, data: null }
 
+      // Borrador en blanco (sin id) en la misma montura: su early return no
+      // puede disparar ninguna carga contra el servicio.
+      await clickNewArtifact(mounted!.container)
+      await flush(3)
+      const blankTab = getEditorSessionState().session.tabs.find((tab) => !tab.writing_id)
+      if (!blankTab) throw new Error("No hay pestaña de borrador sin id")
+
       await clickEditorTab(a)
       await waitForHydrationReady("A remoto activo")
       await openShareTab()
@@ -1406,13 +1411,26 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
         label: "A muestra que está cargando su enlace",
       })
 
-      await clickEditorTab(b)
-      await waitForHydrationReady("B local activo")
-      expect(pageText(), "B no hereda el indicador de carga de A").not.toContain(
+      const blankNode = document.querySelector<HTMLElement>(`[data-editor-tab-id="${blankTab.id}"]`)
+      if (!blankNode) throw new Error("La pestaña del borrador no está en el DOM")
+      await pointerClick(blankNode)
+      await flush(3)
+      expect(getEditorSessionState().session.active_tab_id, "el borrador quedó activo").toBe(blankTab.id)
+      expect(pageText(), "el borrador no hereda el indicador de carga de A").not.toContain(
         "Loading preview link…",
       )
 
       releaseA({ error: null, data: previewLink(LINK_A) })
+      await flush(3)
+
+      // La pestaña efímera no debe quedar viva al desmontar: vuelve a A y
+      // cierra el borrador.
+      await clickEditorTab(a)
+      const blankAfter = document.querySelector<HTMLElement>(`[data-editor-tab-id="${blankTab.id}"]`)
+      const close = blankAfter?.querySelector<HTMLElement>('[aria-label^="Close "]')
+      if (close) {
+        await pointerClick(close)
+      }
       await flush(3)
       assertNoUnhandledErrors()
     },
