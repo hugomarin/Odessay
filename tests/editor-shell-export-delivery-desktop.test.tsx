@@ -1315,7 +1315,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "mutación en vuelo: una recarga iniciada después no pisa el resultado de la regeneración",
     async () => {
       const textA = "ODE652-MUTATION-ORDER-A"
@@ -1381,7 +1381,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "cambio a un documento local: el indicador de carga de A no queda visible en B",
     async () => {
       const textA = "ODE652-LOCAL-SWITCH-A"

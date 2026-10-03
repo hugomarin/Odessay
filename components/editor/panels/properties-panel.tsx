@@ -180,17 +180,23 @@ export function PropertiesPanel({
   const [isExportingDocx, setIsExportingDocx] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [pathCopied, setPathCopied] = useState(false)
+  /** Fuerza una relectura del enlace del documento actual. */
+  const [shareLinkRevision, setShareLinkRevision] = useState(0)
   /**
-   * Identifica el último pedido de enlace (carga, generación o revocación).
-   * Solo ese pedido escribe el estado del enlace: sube al cambiar de documento
-   * y al iniciar cada operación, así una respuesta vieja no pisa otra más
-   * nueva del mismo documento (SHARE-03, ODE-652).
+   * Identidad del documento: sube al cambiar de writingId e invalida cualquier
+   * respuesta en vuelo del documento anterior (SHARE-03, ODE-652).
    */
-  const shareLinkRequestRef = useRef(0)
+  const shareLinkGenerationRef = useRef(0)
   /**
-   * Identifica la última carga de enlace pedida. Solo esa carga apaga el
-   * indicador: la respuesta vieja de otro documento no debe habilitar las
-   * acciones del documento actual mientras su carga sigue viva (SHARE-03).
+   * Época de escritura del enlace: sube al iniciar y al terminar una
+   * generación o revocación. Una carga que empezó antes o durante la mutación
+   * queda con una época vieja y no puede pisar su resultado.
+   */
+  const shareLinkWriteEpochRef = useRef(0)
+  /**
+   * Identifica la última carga: solo ella escribe el enlace y apaga el
+   * indicador, para que una respuesta vieja no habilite las acciones del
+   * documento actual mientras su carga sigue viva.
    */
   const shareLinkLoadRef = useRef(0)
   /**
@@ -216,17 +222,26 @@ export function PropertiesPanel({
 
   const loadShareLink = useCallback(async () => {
     if (!hasRemoteWriting || !writingId) {
-      // El DEFAULT también invalida pedidos en vuelo de este documento.
-      shareLinkRequestRef.current += 1
+      // Sin escritura remota no hay carga que esperar: invalida la anterior y
+      // apaga el indicador para no heredarlo en el documento actual.
+      shareLinkWriteEpochRef.current += 1
+      shareLinkLoadRef.current += 1
+      setIsLoadingShareLink(false)
       setShareLinkState({ writingId, link: DEFAULT_PREVIEW_LINK_STATE })
       setShareError(null)
       return
     }
 
-    const requestId = ++shareLinkRequestRef.current
+    const requestGeneration = shareLinkGenerationRef.current
+    const requestWriteEpoch = shareLinkWriteEpochRef.current
     const requestLoad = ++shareLinkLoadRef.current
     setIsLoadingShareLink(true)
     setShareError(null)
+
+    const stillOwnsWrite = () =>
+      shareLinkGenerationRef.current === requestGeneration &&
+      shareLinkWriteEpochRef.current === requestWriteEpoch &&
+      shareLinkLoadRef.current === requestLoad
 
     try {
       const result = await sharingService.getPreviewLink(writingId)
@@ -234,10 +249,10 @@ export function PropertiesPanel({
         throw new Error(result.error?.message ?? "Failed to load preview link.")
       }
 
-      if (shareLinkRequestRef.current !== requestId) return
+      if (!stillOwnsWrite()) return
       setShareLinkState({ writingId, link: result.data })
     } catch (error) {
-      if (shareLinkRequestRef.current !== requestId) return
+      if (!stillOwnsWrite()) return
       setShareLinkState({ writingId, link: DEFAULT_PREVIEW_LINK_STATE })
       setShareError(error instanceof Error ? error.message : "Failed to load preview link.")
     } finally {
@@ -251,20 +266,22 @@ export function PropertiesPanel({
 
   useEffect(() => {
     // Invalida cualquier respuesta en vuelo del documento anterior.
-    shareLinkRequestRef.current += 1
+    shareLinkGenerationRef.current += 1
+    shareLinkWriteEpochRef.current += 1
   }, [writingId])
 
   useEffect(() => {
     void loadShareLink()
-  }, [loadShareLink])
+  }, [loadShareLink, shareLinkRevision])
 
   const handleGenerateShareLink = useCallback(async () => {
     if (!hasRemoteWriting || !writingId) {
       return
     }
 
-    const requestId = ++shareLinkRequestRef.current
+    const requestGeneration = shareLinkGenerationRef.current
     const sourceTitle = writingTitle
+    shareLinkWriteEpochRef.current += 1
     setIsSavingShareLink(true)
     setShareError(null)
 
@@ -274,7 +291,7 @@ export function PropertiesPanel({
         throw new Error(result.error?.message ?? "Failed to generate preview link.")
       }
 
-      if (shareLinkRequestRef.current === requestId) {
+      if (shareLinkGenerationRef.current === requestGeneration) {
         setShareLinkState({ writingId, link: result.data })
       }
       setActionNotice({ kind: "success", message: shareSuccessMessage(sourceTitle) })
@@ -287,7 +304,13 @@ export function PropertiesPanel({
         ),
       })
     } finally {
+      // Cualquier carga que empezó antes o durante la mutación queda vieja, y
+      // si la navegación invalidó la respuesta se relee el documento actual.
+      shareLinkWriteEpochRef.current += 1
       setIsSavingShareLink(false)
+      if (shareLinkGenerationRef.current !== requestGeneration) {
+        setShareLinkRevision((revision) => revision + 1)
+      }
     }
   }, [hasRemoteWriting, sharingService, writingId, writingTitle])
 
@@ -296,7 +319,8 @@ export function PropertiesPanel({
       return
     }
 
-    const requestId = ++shareLinkRequestRef.current
+    const requestGeneration = shareLinkGenerationRef.current
+    shareLinkWriteEpochRef.current += 1
     setIsSavingShareLink(true)
     setShareError(null)
 
@@ -306,13 +330,17 @@ export function PropertiesPanel({
         throw new Error(result.error?.message ?? "Failed to revoke preview link.")
       }
 
-      if (shareLinkRequestRef.current !== requestId) return
+      if (shareLinkGenerationRef.current !== requestGeneration) return
       setShareLinkState({ writingId, link: DEFAULT_PREVIEW_LINK_STATE })
     } catch (error) {
-      if (shareLinkRequestRef.current !== requestId) return
+      if (shareLinkGenerationRef.current !== requestGeneration) return
       setShareError(error instanceof Error ? error.message : "Failed to revoke preview link.")
     } finally {
+      shareLinkWriteEpochRef.current += 1
       setIsSavingShareLink(false)
+      if (shareLinkGenerationRef.current !== requestGeneration) {
+        setShareLinkRevision((revision) => revision + 1)
+      }
     }
   }, [hasRemoteWriting, sharingService, writingId])
 
