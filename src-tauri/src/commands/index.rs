@@ -1557,17 +1557,23 @@ pub fn catalog_list_pending_mutations(
         .map_err(|e| format!("catalog list pending row: {e}"))
 }
 
-fn upsert_collection(conn: &Connection, collection: &CatalogCollectionInput) -> Result<(), String> {
+fn upsert_collection(
+    conn: &Connection,
+    collection: &CatalogCollectionInput,
+    preserve_local_tombstone: bool,
+) -> Result<(), String> {
     conn.execute(
         "INSERT INTO collections(id,owner_id,name,description,visibility,sync_status,lifecycle,deleted_at,created_at,updated_at,local_updated_at)
          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)
          ON CONFLICT(id) DO UPDATE SET owner_id=excluded.owner_id,name=excluded.name,
            description=excluded.description,visibility=excluded.visibility,sync_status=excluded.sync_status,
            lifecycle=excluded.lifecycle,deleted_at=excluded.deleted_at,created_at=excluded.created_at,
-           updated_at=excluded.updated_at,local_updated_at=excluded.local_updated_at",
+           updated_at=excluded.updated_at,local_updated_at=excluded.local_updated_at
+         WHERE ?12=0 OR collections.deleted_at IS NULL",
         params![collection.id, collection.owner_id, collection.name, collection.description,
             collection.visibility, collection.sync_status, collection.lifecycle, collection.deleted_at,
-            collection.created_at, collection.updated_at, collection.local_updated_at],
+            collection.created_at, collection.updated_at, collection.local_updated_at,
+            preserve_local_tombstone as i64],
     )
     .map_err(|e| format!("catalog upsert collection: {e}"))?;
     Ok(())
@@ -1606,12 +1612,17 @@ pub fn catalog_apply_collection_snapshot(
         .transaction()
         .map_err(|e| format!("collection snapshot begin: {e}"))?;
     for collection in &snapshot.collections {
-        upsert_collection(&tx, collection)?;
+        // ODE-666: la hidratación manda `deletedAt:null` (la nube no tiene
+        // `deleted_at`: su delete es físico), así que un snapshot atrasado no
+        // puede pisar un tombstone local pendiente o confirmado.
+        upsert_collection(&tx, collection, true)?;
     }
     for relation in &snapshot.writing_collections {
         tx.execute(
             "INSERT INTO writing_collections(writing_id,collection_id,added_at,local_updated_at)
-             VALUES(?1,?2,?3,?4) ON CONFLICT(writing_id,collection_id) DO UPDATE SET
+             SELECT ?1,?2,?3,?4
+             WHERE NOT EXISTS(SELECT 1 FROM collections WHERE id=?2 AND deleted_at IS NOT NULL)
+             ON CONFLICT(writing_id,collection_id) DO UPDATE SET
              added_at=excluded.added_at,local_updated_at=excluded.local_updated_at",
             params![
                 relation.writing_id,
@@ -1689,7 +1700,7 @@ pub fn catalog_save_collection(
     let tx = conn
         .transaction()
         .map_err(|e| format!("catalog save collection begin: {e}"))?;
-    upsert_collection(&tx, &collection)?;
+    upsert_collection(&tx, &collection, false)?;
     if let Some(value) = mutation.as_ref() {
         enqueue_metadata_mutation(&tx, value)?;
     }
