@@ -30,6 +30,7 @@ import { useVocabulary } from "@/hooks/useVocabulary"
 import { listVisibleVocabulary } from "@/lib/vocabulary/resolve"
 import { WritingCollectionsSection } from "./writing-collections-section"
 import { WritingSharesSection } from "./writing-shares-section"
+import { DocumentActionToast } from "./document-action-toast"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
 
 type PropertiesPanelProps = {
@@ -41,6 +42,11 @@ type PropertiesPanelProps = {
    */
   tab: "properties" | "share"
   writingId: string | null
+  /**
+   * Title of the document the panel is showing. Captured when an export
+   * starts so a late result keeps naming its source document (ODE-652).
+   */
+  writingTitle: string
   lifecycle: WritingLifecycle
   status: WritingStatus
   artifactType: ArtifactType
@@ -51,12 +57,22 @@ type PropertiesPanelProps = {
   onStatusChange: (next: WritingStatus) => void
   onArtifactTypeChange: (next: ArtifactType) => void
   onVisibilityChange: (next: WritingVisibility) => void
-  onExportMarkdown: () => Promise<boolean | void> | boolean | void
   onExportPdf: () => Promise<boolean | void> | boolean | void
   onExportDocx: () => Promise<boolean | void> | boolean | void
 }
 
-type ExportFormat = "markdown" | "pdf" | "docx"
+type ExportFormat = "pdf" | "docx"
+
+const EXPORT_LABEL: Record<ExportFormat, string> = {
+  pdf: "PDF",
+  docx: "Word",
+}
+
+const exportSuccessMessage = (format: ExportFormat, title: string) =>
+  `${EXPORT_LABEL[format]} export for ‘${title}’ is ready`
+
+const exportFailureMessage = (format: ExportFormat, title: string, detail: string | null) =>
+  `${EXPORT_LABEL[format]} export for ‘${title}’ failed${detail ? `: ${detail}` : ""}`
 
 function DropdownTrigger({
   open,
@@ -124,13 +140,13 @@ function MetricRow({ label, value }: { label: string; value: string }) {
 export function PropertiesPanel({
   tab,
   writingId,
+  writingTitle,
   lifecycle,
   status,
   artifactType,
   visibility,
   metrics,
   canonicalPath = null,
-  onExportMarkdown,
   onExportPdf,
   onExportDocx,
   onStatusChange,
@@ -141,11 +157,12 @@ export function PropertiesPanel({
   const [isLoadingShareLink, setIsLoadingShareLink] = useState(false)
   const [isSavingShareLink, setIsSavingShareLink] = useState(false)
   const [shareError, setShareError] = useState<string | null>(null)
-  const [exportFeedback, setExportFeedback] = useState<string | null>(null)
-  const [exportError, setExportError] = useState<string | null>(null)
+  const [exportNotice, setExportNotice] = useState<{
+    kind: "success" | "error"
+    message: string
+  } | null>(null)
   const [externalLinkError, setExternalLinkError] = useState<string | null>(null)
   const [openingExternalAction, setOpeningExternalAction] = useState<WebWritingAction | null>(null)
-  const [isExportingMarkdown, setIsExportingMarkdown] = useState(false)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingDocx, setIsExportingDocx] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
@@ -310,41 +327,37 @@ export function PropertiesPanel({
   const handleExport = useCallback(
     async (format: ExportFormat) => {
       setExportOpen(false)
-      setExportFeedback(null)
-      setExportError(null)
+      setExportNotice(null)
 
-      if (format === "markdown") {
-        setIsExportingMarkdown(true)
-      } else if (format === "pdf") {
+      const sourceTitle = writingTitle
+      if (format === "pdf") {
         setIsExportingPdf(true)
       } else {
         setIsExportingDocx(true)
       }
 
       try {
-        if (format === "markdown") {
-          const exported = await onExportMarkdown()
-          if (exported !== true) return
-          setExportFeedback("Markdown export generated.")
-        } else if (format === "pdf") {
-          const exported = await onExportPdf()
-          if (exported !== true) return
-          setExportFeedback("PDF export generated.")
-        } else {
-          const exported = await onExportDocx()
-          if (exported !== true) return
-          setExportFeedback("Word export generated.")
-        }
+        const exported = format === "pdf" ? await onExportPdf() : await onExportDocx()
+        if (exported !== true) return
+        setExportNotice({ kind: "success", message: exportSuccessMessage(format, sourceTitle) })
       } catch (error) {
-        const fallback = format === "markdown" ? "Markdown" : format === "pdf" ? "PDF" : "Word"
-        setExportError(error instanceof Error ? error.message : `Failed to export ${fallback}.`)
+        setExportNotice({
+          kind: "error",
+          message: exportFailureMessage(
+            format,
+            sourceTitle,
+            error instanceof Error ? error.message : null,
+          ),
+        })
       } finally {
-        setIsExportingMarkdown(false)
-        setIsExportingPdf(false)
-        setIsExportingDocx(false)
+        if (format === "pdf") {
+          setIsExportingPdf(false)
+        } else {
+          setIsExportingDocx(false)
+        }
       }
     },
-    [onExportDocx, onExportMarkdown, onExportPdf],
+    [onExportDocx, onExportPdf, writingTitle],
   )
 
   return (
@@ -514,12 +527,6 @@ export function PropertiesPanel({
             </PopoverTrigger>
             <PopoverContent align="start" className="w-[216px] p-[5px]">
               <PopoverItem
-                label={isExportingMarkdown ? "Exporting Markdown..." : "Markdown (.md)"}
-                icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />}
-                onSelect={() => void handleExport("markdown")}
-                disabled={isExportingMarkdown}
-              />
-              <PopoverItem
                 label={isExportingPdf ? "Exporting PDF..." : "PDF (.pdf)"}
                 icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />}
                 onSelect={() => void handleExport("pdf")}
@@ -533,16 +540,17 @@ export function PropertiesPanel({
               />
               <div className="my-1 h-px bg-border" />
               <p className="px-[10px] pb-1 pt-1.5 text-[10px] leading-[1.4] text-ink-4">
-                Markdown is local. PDF and Word require a saved artifact.
+                PDF and Word require a saved artifact.
               </p>
             </PopoverContent>
           </Popover>
-          {exportFeedback ? <p className="text-[11px] text-ink-3">{exportFeedback}</p> : null}
-          {exportError ? <p className="text-[11px] text-[hsl(0,72%,45%)]">{exportError}</p> : null}
         </section>
           </>
         )}
       </div>
+      {exportNotice ? (
+        <DocumentActionToast kind={exportNotice.kind} message={exportNotice.message} />
+      ) : null}
     </aside>
   )
 }

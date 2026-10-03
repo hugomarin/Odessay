@@ -1,16 +1,17 @@
 /**
  * EXP-05 — Export success is reported only if an artifact was actually
- * written.
+ * written, and the report names the document that started the export.
  *
  * `PropertiesPanel.handleExport` is the real, unmodified production code
- * under test here: it owns the `if (exported === false) return` guard that
- * decides whether to show "X export generated." after `onExportMarkdown` /
- * `onExportPdf` / `onExportDocx` resolve. Those three props are the only
- * fakes — this proof is about the panel's *reaction* to what they report,
- * not about `saveDesktopBinaryExport`/`tauriWriteBinaryFile` themselves
- * (covered separately, with real fs, in
- * tests/lib/services/desktop/export-delivery.test.ts). Together the two
- * files chain-prove the full path: dialog/fs -> service -> UI feedback.
+ * under test here: it owns the `if (exported !== true) return` guard that
+ * decides whether to show a success toast after `onExportPdf` / `onExportDocx`
+ * resolve, and it owns the source-title capture that keeps the report
+ * attributed to A while B is selected (ODE-652). Those two props are the only
+ * fakes — this proof is about the panel's *reaction* to what they report, not
+ * about `saveDesktopBinaryExport`/`tauriWriteBinaryFile` themselves (covered
+ * separately, with real fs, in
+ * tests/lib/services/desktop/export-delivery.test.ts). Together the files
+ * chain-prove the full path: dialog/fs -> service -> UI feedback.
  *
  * See workflow/quality/capability-integration-map.md (EXP-05).
  */
@@ -52,6 +53,8 @@ const metrics: TextMetrics = {
   pages: 0.1,
 }
 
+const DOCUMENT_TITLE = "Carta"
+
 let container: HTMLDivElement
 let root: Root | null = null
 
@@ -68,7 +71,6 @@ afterEach(() => {
 })
 
 function renderExportTab(overrides: {
-  onExportMarkdown: () => Promise<boolean | void> | boolean | void
   onExportPdf: () => Promise<boolean | void> | boolean | void
   onExportDocx: () => Promise<boolean | void> | boolean | void
 }) {
@@ -77,6 +79,7 @@ function renderExportTab(overrides: {
       <PropertiesPanel
         tab="share"
         writingId="writing-1"
+        writingTitle={DOCUMENT_TITLE}
         lifecycle="server-confirmed"
         status="draft"
         artifactType="agent"
@@ -85,7 +88,6 @@ function renderExportTab(overrides: {
         onStatusChange={vi.fn()}
         onArtifactTypeChange={vi.fn()}
         onVisibilityChange={vi.fn()}
-        onExportMarkdown={overrides.onExportMarkdown}
         onExportPdf={overrides.onExportPdf}
         onExportDocx={overrides.onExportDocx}
       />,
@@ -101,6 +103,14 @@ function findButtonByText(text: string): HTMLButtonElement {
   return button
 }
 
+function hasButtonText(text: string): boolean {
+  return Array.from(container.querySelectorAll("button")).some((el) => el.textContent?.trim() === text)
+}
+
+function actionToast(): HTMLElement | null {
+  return container.querySelector<HTMLElement>('[data-testid="document-action-toast"]')
+}
+
 async function clickAndFlush(button: HTMLButtonElement) {
   await act(async () => {
     button.click()
@@ -112,32 +122,35 @@ async function clickAndFlush(button: HTMLButtonElement) {
 describe("PropertiesPanel export feedback (EXP-05)", () => {
   it("shows no feedback and no error when the export reports a dialog cancel (returns false)", async () => {
     const onExportPdf = vi.fn().mockResolvedValue(false)
-    renderExportTab({ onExportMarkdown: vi.fn(), onExportPdf, onExportDocx: vi.fn() })
+    renderExportTab({ onExportPdf, onExportDocx: vi.fn() })
 
     await clickAndFlush(findButtonByText("PDF (.pdf)"))
 
     expect(onExportPdf).toHaveBeenCalledTimes(1)
-    expect(container.textContent).not.toContain("PDF export generated.")
-    expect(container.textContent).not.toContain("Failed to export")
+    expect(actionToast()).toBeNull()
   })
 
-  it("shows the success message when the export genuinely wrote a file (returns true)", async () => {
+  it("shows the source-attributed success toast when the export genuinely wrote a file (returns true)", async () => {
     const onExportPdf = vi.fn().mockResolvedValue(true)
-    renderExportTab({ onExportMarkdown: vi.fn(), onExportPdf, onExportDocx: vi.fn() })
+    renderExportTab({ onExportPdf, onExportDocx: vi.fn() })
 
     await clickAndFlush(findButtonByText("PDF (.pdf)"))
 
-    expect(container.textContent).toContain("PDF export generated.")
+    const toast = actionToast()
+    expect(toast?.getAttribute("data-notice")).toBe("success")
+    expect(toast?.textContent).toBe(`PDF export for ‘${DOCUMENT_TITLE}’ is ready`)
   })
 
-  it("shows an error, never a success message, when the export rejects (write failure)", async () => {
+  it("shows a source-attributed error, never a success message, when the export rejects (write failure)", async () => {
     const onExportPdf = vi.fn().mockRejectedValue(new Error("disk full"))
-    renderExportTab({ onExportMarkdown: vi.fn(), onExportPdf, onExportDocx: vi.fn() })
+    renderExportTab({ onExportPdf, onExportDocx: vi.fn() })
 
     await clickAndFlush(findButtonByText("PDF (.pdf)"))
 
-    expect(container.textContent).toContain("disk full")
-    expect(container.textContent).not.toContain("PDF export generated.")
+    const toast = actionToast()
+    expect(toast?.getAttribute("data-notice")).toBe("error")
+    expect(toast?.textContent).toBe(`PDF export for ‘${DOCUMENT_TITLE}’ failed: disk full`)
+    expect(toast?.textContent).not.toContain("is ready")
   })
 
   it("treats a void/undefined return the same as a dialog cancel, never as success (EXP-05 regression)", async () => {
@@ -145,19 +158,18 @@ describe("PropertiesPanel export feedback (EXP-05)", () => {
     // fix: an early return with no explicit `false` resolves the promise to
     // `undefined`, which `exported === false` does not catch.
     const onExportPdf = vi.fn().mockResolvedValue(undefined)
-    renderExportTab({ onExportMarkdown: vi.fn(), onExportPdf, onExportDocx: vi.fn() })
+    renderExportTab({ onExportPdf, onExportDocx: vi.fn() })
 
     await clickAndFlush(findButtonByText("PDF (.pdf)"))
 
-    expect(container.textContent).not.toContain("PDF export generated.")
+    expect(actionToast()).toBeNull()
   })
 
-  it("markdown export follows the same false/true contract as pdf/docx", async () => {
-    const onExportMarkdown = vi.fn().mockResolvedValue(false)
-    renderExportTab({ onExportMarkdown, onExportPdf: vi.fn(), onExportDocx: vi.fn() })
+  it("keeps PDF and Word in the Export menu and drops Markdown (.md)", async () => {
+    renderExportTab({ onExportPdf: vi.fn(), onExportDocx: vi.fn() })
 
-    await clickAndFlush(findButtonByText("Markdown (.md)"))
-
-    expect(container.textContent).not.toContain("Markdown export generated.")
+    expect(hasButtonText("PDF (.pdf)")).toBe(true)
+    expect(hasButtonText("Word (.docx)")).toBe(true)
+    expect(hasButtonText("Markdown (.md)")).toBe(false)
   })
 })

@@ -38,8 +38,12 @@ export type HarnessWorld = {
   tauriInvoke: TauriInvokeHandler
   /** Comandos nativos efectivamente invocados, en orden. */
   tauriCalls: Array<{ command: string; args?: Record<string, unknown> }>
-  /** Resultado del diálogo nativo de guardado (null = cancelado). */
-  saveDialogResult: string | null
+  /**
+   * Resultado del diálogo nativo de guardado (null = cancelado). Una promesa
+   * deja el diálogo retenido: `save` es async y adopta la promesa, así que el
+   * export queda en vuelo hasta que el test la resuelva (ODE-652).
+   */
+  saveDialogResult: string | null | Promise<string | null>
   /** Veces que la app abrió el diálogo nativo de guardado, con sus opciones. */
   saveDialogCalls: Array<Record<string, unknown> | undefined>
   openDialogResult: string | string[] | null

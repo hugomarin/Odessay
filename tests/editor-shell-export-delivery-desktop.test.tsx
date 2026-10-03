@@ -34,11 +34,17 @@
  * Mutation tests (ODE-601), verificados en vivo, cada uno en rojo por su razón:
  * - `exportBinary` devuelve `undefined` en vez del booleano de
  *   `saveBinaryArtifact` → rojo PDF y Word (no aparece el éxito).
- * - `exportMarkdown`, igual → rojo Markdown.
  * - `saveDesktopBinaryExport` devuelve `true` sin escribir → rojo el éxito
  *   (ENOENT: el archivo no existe).
  * - `saveDesktopBinaryExport` devuelve `true` al cancelar el diálogo → rojo el
- *   cancelar (aparece "export generated.").
+ *   cancelar (aparece el toast de éxito).
+ *
+ * ODE-652 (EXP-05, atribución): el éxito y el error de PDF/Word se reportan en
+ * un toast que nombra el documento que inició la exportación, y el aviso
+ * sobrevive al cambio de pestaña. Markdown deja de ofrecerse en el menú
+ * Exportar (decisión G): Guardar y "Copy as Markdown" son acciones distintas y
+ * permanecen. Las mutaciones de esa protección están en la Guía de review del
+ * PR; la discriminante es del lado del aviso, no de los bytes.
  *
  * Fuera de esta prueba, con motivo: `exportBinary` sin `currentWritingId`
  * (bug 1 de EXP-05) no es alcanzable por la UI — el ítem está deshabilitado
@@ -55,6 +61,7 @@ import { mkdtempSync, rmSync, unlinkSync } from "node:fs"
 import { readdir, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import JSZip from "jszip"
 import type { ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
@@ -94,7 +101,9 @@ vi.mock("@/lib/sync/sync-service-factory", async () =>
 const {
   advance,
   assertNoUnhandledErrors,
+  clickEditorTab,
   clickNewArtifact,
+  emitTauriEvent,
   flush,
   installNetworkDouble,
   mountEditorShell,
@@ -102,6 +111,8 @@ const {
   resetEditorShellWorld,
   typeInEditor,
   waitFor,
+  waitForAsync,
+  waitForHydrationReady,
   waitForMarkdownContaining,
   world,
 } = await import("./support/editor-shell-harness")
@@ -159,21 +170,37 @@ const ITEM_LABEL: Record<Format, string> = {
   docx: "Word (.docx)",
 }
 
-const SUCCESS_MESSAGE: Record<Format, string> = {
-  markdown: "Markdown export generated.",
-  pdf: "PDF export generated.",
-  docx: "Word export generated.",
+type PanelFormat = "pdf" | "docx"
+
+const PANEL_ITEM_LABEL: Record<PanelFormat, string> = {
+  pdf: "PDF (.pdf)",
+  docx: "Word (.docx)",
 }
 
-// `invoke` rechaza con el string del comando, no con un `Error`: el panel cae
-// en su mensaje de respaldo, que es lo que ve el usuario en producción.
-const FAILURE_MESSAGE: Record<Format, string> = {
-  markdown: "Failed to export Markdown.",
-  pdf: "Failed to export PDF.",
-  docx: "Failed to export Word.",
+const EXPORT_LABEL: Record<PanelFormat, string> = {
+  pdf: "PDF",
+  docx: "Word",
 }
 
-const SUCCESS_MESSAGES = Object.values(SUCCESS_MESSAGE)
+/**
+ * Copy del toast del panel (ODE-652): qué ocurrió + nombre del documento de
+ * origen. Un rechazo con `Error` añade el detalle tras `failed: `; el string
+ * crudo de Tauri (producción) cae en el mensaje sin detalle.
+ */
+const panelSuccessMessage = (format: PanelFormat, title: string) =>
+  `${EXPORT_LABEL[format]} export for ‘${title}’ is ready`
+
+const panelFailureMessage = (format: PanelFormat, title: string) =>
+  `${EXPORT_LABEL[format]} export for ‘${title}’ failed`
+
+function documentActionToast(kind: "success" | "error") {
+  const notice = document.querySelector<HTMLElement>('[data-testid="document-action-toast"]')
+  return notice?.getAttribute("data-notice") === kind ? notice : null
+}
+
+async function waitForDocumentActionToast(kind: "success" | "error") {
+  return waitFor(() => documentActionToast(kind), { label: `toast de export ${kind}` })
+}
 
 function pageText() {
   return document.body.textContent ?? ""
@@ -224,6 +251,105 @@ async function reopen(writingId: string, text: string, key: string) {
   await mounted!.render({ key, writingId })
   await waitFor(() => mounted!.editor().getText().includes(text), { label: "documento abierto por ruta" })
   await flush(3)
+}
+
+/**
+ * Segundo documento en la MISMA montura de shell (patrón `alreadyOpen` de
+ * `editor-shell-durable-save-state`): `createAndOpenDocument` devuelve el
+ * primero cuando ya hay dos pestañas abiertas.
+ */
+async function createAndOpenSecondDocument(text: string) {
+  const alreadyOpen = new Set(
+    getEditorSessionState().session.tabs
+      .map((tab) => tab.writing_id)
+      .filter((writingId): writingId is string => Boolean(writingId)),
+  )
+  await clickNewArtifact(mounted!.container)
+  await typeInEditor(text)
+  await advance(6_000)
+  await waitForMarkdownContaining(text)
+  const writingId = await waitFor(
+    () => {
+      const tab = getEditorSessionState().session.tabs.find(
+        (candidate) => candidate.writing_id && !alreadyOpen.has(candidate.writing_id),
+      )
+      return tab?.writing_id ?? null
+    },
+    { label: "segundo documento materializado", timeoutMs: 15_000 },
+  )
+  await reopen(writingId, text, writingId)
+  return writingId
+}
+
+/** Texto del `word/document.xml` de un .docx real (JSZip). */
+async function readDocxDocumentXml(bytes: Buffer) {
+  const zip = await JSZip.loadAsync(bytes)
+  const documentXml = zip.file("word/document.xml")
+  if (!documentXml) throw new Error("El .docx no contiene word/document.xml")
+  return documentXml.async("string")
+}
+
+function renameInput() {
+  return document.querySelector<HTMLInputElement>('input[aria-label="Artifact name"]')
+}
+
+/** Renombra la pestaña activa por el modal real (driver canónico de ODE-604). */
+async function renameActiveDocument(title: string) {
+  const session = getEditorSessionState().session
+  const active = session.tabs.find((tab) => tab.id === session.active_tab_id)
+  if (!active) throw new Error("No hay pestaña activa para renombrar")
+  const pencil = document
+    .querySelector<HTMLElement>(`[data-editor-tab-id="${active.id}"]`)
+    ?.querySelector<HTMLElement>('button[aria-label^="Rename"]')
+  if (!pencil) throw new Error("La pestaña activa no tiene lápiz de renombrar")
+  await pointerClick(pencil)
+  const input = await waitFor(() => renameInput(), { label: "modal de renombrado abierto" })
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, title)
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  const save = await waitFor(
+    () =>
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button[type="button"]')).find(
+        (button) => (button.textContent ?? "").trim() === "Save name",
+      ),
+    { label: 'botón "Save name"' },
+  )
+  await act(async () => {
+    save.click()
+  })
+  await flush(2)
+}
+
+/**
+ * Dos documentos con título explícito y confirmados por la nube en la MISMA
+ * montura: el nombre exportado y el nombre del toast distinguen A de B.
+ */
+async function openTwoAttributedDocuments(
+  { text, title }: { text: string; title: string },
+  second: { text: string; title: string },
+) {
+  const a = await createAndOpenDocument(text)
+  await renameActiveDocument(title)
+  await waitForAsync(async () => (await getCatalogRecord(a)).title === title, {
+    label: `título de A persistido (${title})`,
+  })
+  await confirmInCloud(a, text)
+
+  const b = await createAndOpenSecondDocument(second.text)
+  await renameActiveDocument(second.title)
+  await waitForAsync(async () => (await getCatalogRecord(b)).title === second.title, {
+    label: `título de B persistido (${second.title})`,
+  })
+  await confirmInCloud(b, second.text)
+  return { a, b }
+}
+
+/** Convierte el `canonicalPath` de un documento en el nombre del export. */
+function exportedFileName(canonicalPath: string, extension: "docx") {
+  const base = canonicalPath.split("/").pop()
+  if (!base) throw new Error(`Ruta canónica sin nombre: ${canonicalPath}`)
+  return `${base.replace(/\.md$/, "")}.${extension}`
 }
 
 /**
@@ -554,66 +680,59 @@ function freshDir(name: string) {
 }
 
 /**
- * Los tres casos de un formato sobre el mismo documento abierto: éxito
- * (control positivo), cancelar y error real de escritura.
+ * Los tres casos de un formato del panel sobre el mismo documento abierto:
+ * éxito (control positivo, con el toast atribuido), cancelar y error real de
+ * escritura.
  */
-async function assertExportChain(format: Format, fileName: string, verifyBytes: (bytes: Buffer) => void) {
-  // 1. Éxito: el artefacto existe en disco y la UI lo reporta.
+async function assertExportChain(
+  format: PanelFormat,
+  title: string,
+  fileName: string,
+  verifyBytes: (bytes: Buffer) => void,
+) {
+  // 1. Éxito: el artefacto existe en disco y el toast nombra el origen.
   const successDir = freshDir(`${format}-success`)
   const target = join(successDir, fileName)
   world.saveDialogResult = target
   const options = await exportVia(format)
   expect(String(options?.defaultPath ?? ""), "el diálogo propone el nombre del export").toMatch(
-    new RegExp(`\\.${format === "markdown" ? "md" : format}$`),
+    new RegExp(`\\.${format}$`),
   )
-  await waitFor(() => pageText().includes(SUCCESS_MESSAGE[format]), {
-    label: `"${SUCCESS_MESSAGE[format]}" en el DOM`,
-    timeoutMs: 20_000,
-  })
+  const successToast = await waitForDocumentActionToast("success")
+  expect(successToast.textContent, "el toast nombra el documento de origen").toBe(
+    panelSuccessMessage(format, title),
+  )
   verifyBytes(await readFile(target))
   expect(await listExports(successDir), "solo el artefacto, sin `.tmp`").toEqual([fileName])
-  expect(pageText()).not.toContain(FAILURE_MESSAGE[format])
 
-  // 2. Cancelar el diálogo: sin artefacto y sin éxito.
+  // 2. Cancelar el diálogo: sin artefacto y sin toast.
   const cancelDir = freshDir(`${format}-cancel`)
   world.saveDialogResult = null
   await exportVia(format)
   await waitForExportSettled()
   expect(await listExports(cancelDir), "cancelar no escribe nada").toEqual([])
-  for (const message of SUCCESS_MESSAGES) expect(pageText(), "cancelar no reporta éxito").not.toContain(message)
-  expect(pageText(), "cancelar no es un error").not.toContain(FAILURE_MESSAGE[format])
+  expect(documentActionToast("success"), "cancelar no reporta éxito").toBeNull()
+  expect(documentActionToast("error"), "cancelar no es un error").toBeNull()
 
-  // 3. Error real de escritura: la "carpeta" elegida es un archivo.
+  // 3. Error real de escritura: la "carpeta" elegida es un archivo. `invoke`
+  // rechaza con el string del comando, no con un `Error`: el panel cae en su
+  // mensaje de respaldo, que conserva el documento de origen.
   const failureDir = freshDir(`${format}-failure`)
   const blocker = join(failureDir, "not-a-directory")
   await writeFile(blocker, "occupied")
   world.saveDialogResult = join(blocker, fileName)
   await exportVia(format)
-  await waitFor(() => pageText().includes(FAILURE_MESSAGE[format]), {
-    label: `"${FAILURE_MESSAGE[format]}" en el DOM`,
-    timeoutMs: 20_000,
-  })
+  const failureToast = await waitForDocumentActionToast("error")
+  expect(failureToast.textContent, "el error conserva el documento de origen").toBe(
+    panelFailureMessage(format, title),
+  )
   expect(await listExports(failureDir), "el fallo no deja artefacto").toEqual(["not-a-directory"])
-  for (const message of SUCCESS_MESSAGES) expect(pageText(), "el fallo no reporta éxito").not.toContain(message)
 
   // El error se muestra en el panel: no se lo tragó nadie por el camino.
   assertNoUnhandledErrors()
 }
 
 describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
-  it(
-    "Markdown: éxito escribe el cuerpo; cancelar y error de escritura no reportan éxito",
-    async () => {
-      const text = "ODE601-MARKDOWN-BODY"
-      await createAndOpenDocument(text)
-
-      await assertExportChain("markdown", "letter.md", (bytes) => {
-        expect(bytes.toString("utf8")).toContain(text)
-      })
-    },
-    TEST_TIMEOUT_MS,
-  )
-
   it(
     "PDF: éxito escribe un PDF real; cancelar y error de escritura no reportan éxito",
     async () => {
@@ -634,7 +753,9 @@ describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
 
       await confirmInCloud(writingId, text)
 
-      await assertExportChain("pdf", "letter.pdf", (bytes) => {
+      // El nombre del toast es el título visible del documento (derivado del
+      // cuerpo cuando no hay título explícito), no la fila del catálogo.
+      await assertExportChain("pdf", text, "letter.pdf", (bytes) => {
         expect(bytes.subarray(0, 5).toString("latin1"), "cabecera PDF").toBe("%PDF-")
       })
     },
@@ -648,10 +769,131 @@ describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
       const writingId = await createAndOpenDocument(text)
       await confirmInCloud(writingId, text)
 
-      await assertExportChain("docx", "letter.docx", (bytes) => {
+      await assertExportChain("docx", text, "letter.docx", (bytes) => {
         // Un .docx es un zip: firma local-file-header "PK\x03\x04".
         expect([...bytes.subarray(0, 4)], "firma zip del .docx").toEqual([0x50, 0x4b, 0x03, 0x04])
       })
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+describe("EXP-05 — el resultado del export se atribuye al documento de origen (ODE-652)", () => {
+  it(
+    "carrera: el diálogo retenido, el cambio a B y la liberación conservan el aviso y los bytes de A",
+    async () => {
+      const textA = "ODE652-RACE-A"
+      const textB = "ODE652-RACE-B"
+      const titleA = "ODE652 Race A"
+      const titleB = "ODE652 Race B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+      const canonicalA = (await getCatalogRecord(a)).binding?.canonicalPath
+      if (!canonicalA) throw new Error("Expected a canonical path for A")
+      const expectedFileName = exportedFileName(canonicalA, "docx")
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes del export")
+
+      let releaseDialog: (value: string | null) => void = () => {
+        throw new Error("el diálogo no quedó retenido")
+      }
+      const heldDialog = new Promise<string | null>((resolve) => {
+        releaseDialog = resolve
+      })
+      world.saveDialogResult = heldDialog
+      const raceDir = freshDir("ode652-race")
+      const target = join(raceDir, "race.docx")
+
+      try {
+        await exportVia("docx")
+        expect(
+          String(world.saveDialogCalls.at(-1)?.defaultPath ?? ""),
+          "el diálogo retenido propone el nombre de A",
+        ).toBe(expectedFileName)
+
+        // Cambio de pestaña con el export de A todavía en vuelo.
+        await clickEditorTab(b)
+        await waitForHydrationReady("B activo con el export de A en vuelo")
+        expect(mounted!.editor().getText(), "control positivo: B es el documento activo").toContain(textB)
+
+        // Se libera el diálogo de A: el resultado pertenece a A, no a B.
+        releaseDialog(target)
+        const toast = await waitForDocumentActionToast("success")
+        expect(toast.textContent, "el toast nombra A aunque B esté seleccionado").toBe(
+          panelSuccessMessage("docx", titleA),
+        )
+        expect(toast.textContent).not.toContain(titleB)
+      } finally {
+        releaseDialog(null)
+      }
+
+      // El artefacto escrito es el de A: bytes reales del .docx.
+      const documentXml = await readDocxDocumentXml(await readFile(target))
+      expect(documentXml, "el .docx contiene el cuerpo de A").toContain(textA)
+      expect(documentXml, "el .docx no contiene el cuerpo de B").not.toContain(textB)
+      expect(await listExports(raceDir)).toEqual(["race.docx"])
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "sin carrera: el toast nombra A y sigue visible al cambiar a B; Guardar sigue escribiendo el .md",
+    async () => {
+      const textA = "ODE652-NORACE-A"
+      const textB = "ODE652-NORACE-B"
+      const titleA = "ODE652 No Race A"
+      const titleB = "ODE652 No Race B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+      const canonicalA = (await getCatalogRecord(a)).binding?.canonicalPath
+      if (!canonicalA) throw new Error("Expected a canonical path for A")
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes del export")
+
+      const successDir = freshDir("ode652-no-race")
+      const target = join(successDir, "no-race.docx")
+      world.saveDialogResult = target
+      await exportVia("docx")
+      const toast = await waitForDocumentActionToast("success")
+      expect(toast.textContent, "control positivo: el toast aparece sin cambiar de pestaña").toBe(
+        panelSuccessMessage("docx", titleA),
+      )
+      expect(await listExports(successDir)).toEqual(["no-race.docx"])
+
+      // Guardar sigue funcionando: la acción nativa (menu:save-to-disk)
+      // escribe el .md canónico. Markdown salió del menú Exportar, no Guardar.
+      await typeInEditor(" ODE652-SAVED")
+      const saveDir = freshDir("ode652-save")
+      const saveTarget = join(saveDir, "ode652-no-race.md")
+      world.saveDialogResult = saveTarget
+      const saveDialogCalls = world.saveDialogCalls.length
+      await emitTauriEvent("menu:save-to-disk")
+      await waitFor(() => world.saveDialogCalls.length === saveDialogCalls + 1, {
+        label: "diálogo de Guardar invocado",
+        timeoutMs: 10_000,
+      })
+      await waitForAsync(
+        async () => {
+          const saved = await readFile(saveTarget).catch(() => null)
+          return saved?.toString("utf8").includes("ODE652-SAVED") ?? false
+        },
+        { label: "el .md guardado contiene la edición", timeoutMs: 10_000 },
+      )
+
+      // Cambio de pestaña: el aviso de A sigue siendo el de A.
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo después del export de A")
+      const retained = await waitForDocumentActionToast("success")
+      expect(retained.textContent, "el aviso sigue atribuido a A").toBe(panelSuccessMessage("docx", titleA))
+      expect(retained.textContent).not.toContain(titleB)
+      assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
   )
