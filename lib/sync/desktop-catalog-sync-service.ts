@@ -94,25 +94,69 @@ function payloadValue(payload: Record<string, unknown>, camel: string, snake: st
   return payload[camel] ?? payload[snake] ?? null
 }
 
-async function hydrateOne(id: string): Promise<boolean> {
-  const userId = await sessionUserId()
-  if (!userId) return false
-  const { data, error } = await createDesktopClient()
+const CLOUD_METADATA_SELECT =
+  "id,author_id,title,slug,status,artifact_type,visibility,version,created_at,updated_at,content_hash,deleted_at"
+
+type CloudMetadataRow = {
+  id: string
+  author_id: string
+  title: string | null
+  slug: string | null
+  status: string | null
+  artifact_type: string | null
+  visibility: string | null
+  version: number
+  created_at: string
+  updated_at: string
+  content_hash: string | null
+  deleted_at: string | null
+}
+
+function cloudSnapshotFromMetadataRow(data: CloudMetadataRow): CloudDocumentSnapshot {
+  return {
+    id: data.id, localPresent: false, cloudPresent: !data.deleted_at,
+    cloudAccountId: data.author_id, syncStatus: data.deleted_at ? "deleted" : "synced",
+    deletedAt: data.deleted_at, contentHash: data.content_hash,
+    title: data.title, slug: data.slug,
+    status: data.status as CloudDocumentSnapshot["status"],
+    artifactType: data.artifact_type as CloudDocumentSnapshot["artifactType"],
+    visibility: data.visibility as CloudDocumentSnapshot["visibility"],
+    version: data.version,
+    createdAt: Date.parse(data.created_at), modifiedAt: Date.parse(data.updated_at),
+  }
+}
+
+/**
+ * ODE-664: leer de vuelta la fila canónica de la nube después de un UPDATE
+ * verificado. El trigger `public.writings_set_derived_fields()` puede
+ * normalizar la visibilidad (private → shared con un grant vigente) y derivar
+ * el slug, así que el payload enviado no es el estado persistido. La lectura
+ * va en una query aparte — nunca `.select()` encadenado al write, precedente
+ * RLS 42501 (ver `insertVerified`). El snapshot entra al batch del flush, cuya
+ * guarda en Rust (`catalog_apply_cloud_snapshots`, D-4) impide pisar la
+ * metadata de una mutación local pendiente más nueva.
+ */
+async function readbackCloudSnapshot(
+  supabase: ReturnType<typeof createDesktopClient>,
+  id: string,
+  userId: string,
+): Promise<CloudDocumentSnapshot | null> {
+  const { data, error } = await supabase
     .from("writings")
-    .select("id,author_id,title,slug,status,artifact_type,visibility,version,created_at,updated_at,content_hash,deleted_at")
+    .select(CLOUD_METADATA_SELECT)
     .eq("id", id)
     .eq("author_id", userId)
     .maybeSingle()
   if (error) throw new Error(error.message)
-  if (!data) return false
-  await (await catalog()).applyCloudSnapshot({
-    id: data.id, localPresent: false, cloudPresent: !data.deleted_at,
-    cloudAccountId: data.author_id, syncStatus: data.deleted_at ? "deleted" : "synced",
-    deletedAt: data.deleted_at,
-    contentHash: data.content_hash, title: data.title, slug: data.slug,
-    status: data.status, artifactType: data.artifact_type, visibility: data.visibility,
-    version: data.version, createdAt: Date.parse(data.created_at), modifiedAt: Date.parse(data.updated_at),
-  })
+  return data ? cloudSnapshotFromMetadataRow(data as CloudMetadataRow) : null
+}
+
+async function hydrateOne(id: string): Promise<boolean> {
+  const userId = await sessionUserId()
+  if (!userId) return false
+  const snapshot = await readbackCloudSnapshot(createDesktopClient(), id, userId)
+  if (!snapshot) return false
+  await (await catalog()).applyCloudSnapshot(snapshot)
   return true
 }
 
@@ -229,6 +273,14 @@ async function processMutation(
   const version = Number(payload.version ?? 1)
   const supabase = createDesktopClient()
 
+  // ODE-664: tras un UPDATE verificado, el valor canónico puede diferir del
+  // payload (el trigger normaliza visibility y deriva slug). La lectura entra
+  // al batch del flush; la guarda D-4 impide pisar una mutación pendiente.
+  const projectCanonicalVisibility = async () => {
+    const snapshot = await readbackCloudSnapshot(supabase, mutation.documentId, userId)
+    if (snapshot) ctx.confirmedSnapshots.push(snapshot)
+  }
+
   if (payload.mutationKind === "restore") {
     const { error, count } = await supabase.from("writings").update({
       deleted_at: null, updated_at: updatedAt, version,
@@ -330,6 +382,7 @@ async function processMutation(
         if (error) throw new Error(error.message)
         if (requireAffectedRows(count) > 0) {
           ctx.cloudConfirmed.add(mutation.documentId)
+          await projectCanonicalVisibility()
           return
         }
         // 0 rows: the catalog's ownership binding is stale and the cloud row is
@@ -401,6 +454,7 @@ async function processMutation(
     if (error) throw new Error(error.message)
     if (requireAffectedRows(count) > 0) {
       ctx.cloudConfirmed.add(mutation.documentId)
+      await projectCanonicalVisibility()
       return
     }
     // 0 rows: cloud presence could not be verified, so the known hash cannot
@@ -443,6 +497,7 @@ async function processMutation(
     if (error) throw new Error(error.message)
     if (requireAffectedRows(count) > 0) {
       ctx.cloudConfirmed.add(mutation.documentId)
+      await projectCanonicalVisibility()
       return
     }
     // 0 rows affected: the catalog's ownership binding is stale and the cloud

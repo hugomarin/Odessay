@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   selectEq: vi.fn(),
+  selectMaybeSingle: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
   insert: vi.fn(),
@@ -77,10 +78,23 @@ function mutationRow(overrides: Record<string, unknown> = {}) {
   }
 }
 
-/** Wires the writings table mock: update/insert verified writes + select for hydration. */
+/**
+ * Wires the writings table mock: update/insert verified writes + select for
+ * hydration (`.eq()` awaited) and para el readback puntual de ODE-664
+ * (`.eq().eq().maybeSingle()`). Las cadenas de `.eq()` son reencadenables y
+ * además thenables, como el builder real de supabase-js.
+ */
 function wireSupabaseTables() {
   mocks.from.mockImplementation(() => ({
-    select: () => ({ eq: mocks.selectEq }),
+    select: () => {
+      const builder = {
+        eq: () => builder,
+        maybeSingle: mocks.selectMaybeSingle,
+        then: (onFulfilled: (value: unknown) => unknown, onRejected: (reason: unknown) => unknown) =>
+          mocks.selectEq().then(onFulfilled, onRejected),
+      }
+      return builder
+    },
     update: (row: unknown, opts: unknown) => ({
       eq: () => ({ eq: () => mocks.update(row, opts) }),
     }),
@@ -99,6 +113,7 @@ describe("desktopCatalogSyncService", () => {
     mocks.catalogGet.mockResolvedValue(catalogRecord())
     mocks.listPending.mockResolvedValue([])
     mocks.listMetadataPending.mockResolvedValue([])
+    mocks.selectMaybeSingle.mockResolvedValue({ data: null, error: null })
     mocks.applyCloudSnapshots.mockResolvedValue(undefined)
     mocks.updateStatus.mockResolvedValue(undefined)
     mocks.purgeDocument.mockResolvedValue(undefined)
