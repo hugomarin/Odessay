@@ -1152,9 +1152,15 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
       await clickEditorTab(a)
       await waitForHydrationReady("A activo con su carga retenida")
       await openShareTab()
+      await waitFor(() => shareActionButton("Generate link"), {
+        label: "panel de compartir montado con la carga de A en vuelo",
+      })
 
       await clickEditorTab(b)
       await waitForHydrationReady("B activo con ambas cargas retenidas")
+      await waitFor(() => world.sharingGetPreviewLinkCalls.includes(b), {
+        label: "la carga de B salió al servicio",
+      })
 
       // La carga vieja de A termina mientras la de B sigue viva: no debe
       // habilitar ninguna acción de B ni mostrar nada de A.
