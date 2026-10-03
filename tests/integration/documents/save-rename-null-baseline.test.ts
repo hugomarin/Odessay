@@ -1,13 +1,15 @@
 /** @vitest-environment happy-dom */
 import { mkdtempSync, rmSync } from "node:fs"
-import { readdir, readFile } from "node:fs/promises"
+import { readdir, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 
 import {
+  failNextRenameFile,
   holdOpenFile,
   holdWriteFile,
+  holdWriteFileAfterDiskWrite,
   configureRealDesktopDoubles,
   resetCatalogDoubles,
   resetWriteFileFailureState,
@@ -258,6 +260,150 @@ describe("ODE-635 — guardado sin baseline que se cruza con un rename", () => {
       )
     },
   )
+
+  /**
+   * ODE-635 (review ronda 1, P1) — el retiro de la recreación no puede
+   * llevarse contenido de otro escritor. El `write_file` sin guard recrea la
+   * ruta vieja; si en la ventana write → retiro otro escritor reemplaza esa
+   * ruta, el retiro por Trash original se llevaba ese contenido. El retiro
+   * debe comparar el hash de lo que hay en disco contra el markdown que ESTA
+   * operación escribió: solo retira la recreación exacta; cualquier contenido
+   * distinto queda recuperable en la ruta vieja y el guardado reintenta en la
+   * ruta nueva con el `CONFLICT` existente.
+   *
+   * Propiedad: el contenido del escritor externo no termina en `.trash`
+   * —sigue legible en la ruta vieja, que ya no pertenece a este UUID— y el
+   * guardado aterriza en el archivo renombrado. Muta a rojo si el retiro deja
+   * de comparar antes de mover a Trash.
+   */
+  it.fails(
+    "un escritor externo que reemplaza la recreación antes del retiro la deja recuperable, no en Trash",
+    async () => {
+      const draft = await createDesktopDraft({ title: "ODE635 Externo", initialBodyJson: bodyJson("BASE") })
+      const record = draft.data!
+      const service = await getDocumentService()
+      const before = await tauriCatalogGetByIdDouble(await desktopDbPath(), record.id)
+      const originalPath = before!.canonicalPath!
+      const renamedName = "ODE635 Externo Renombrado.md"
+      const externalMarkdown = "# Aporte de otro escritor\n\ntexto externo\n"
+
+      // El guardado sale con baseline nulo y queda retenido dos veces: antes
+      // de escribir en disco y, ya escrita la recreación, antes de que el
+      // invoke resuelva. El escritor externo entra en esa segunda ventana.
+      const heldWrite = holdWriteFile((path) => path === originalPath)
+      const heldAfterDiskWrite = holdWriteFileAfterDiskWrite((path) => path === originalPath)
+      const save = service.saveWriting({
+        writing: {
+          ...record,
+          content: { ...record.content, richText: bodyJson("NUEVO"), plainText: "NUEVO" },
+        },
+        expectedContentHash: null,
+      })
+      await heldWrite.started
+
+      // El rename completa de verdad mientras el guardado sigue en vuelo:
+      // mueve el archivo y commitea el catálogo a la ruta nueva.
+      const renamed = await service.renameWriting({
+        writingId: record.id,
+        title: "ODE635 Externo Renombrado",
+        updatedAt: new Date().toISOString(),
+      })
+      expect(renamed.error, "control positivo: el rename completa").toBeNull()
+
+      // El write sin guard recrea la ruta vieja y queda retenido después de
+      // escribir en disco, todavía en vuelo.
+      heldWrite.release()
+      await heldAfterDiskWrite.started
+
+      // Otro escritor reemplaza la ruta obsoleta en la ventana write → retiro.
+      await writeFile(originalPath, externalMarkdown, "utf8")
+
+      heldAfterDiskWrite.release()
+      const saved = await save
+      expect(saved.error, "control positivo: el guardado retenido resuelve").toBeNull()
+
+      // Propiedad: el contenido externo no se tira a Trash; sigue recuperable
+      // en la ruta vieja, y el guardado aterriza en el archivo renombrado.
+      const contentsAtOldPath = await readFile(originalPath, "utf8").catch(() => "")
+      expect(contentsAtOldPath, "el contenido externo queda recuperable en la ruta vieja").toBe(externalMarkdown)
+      const trash = await trashFiles()
+      expect(trash, "el contenido externo no termina en Trash").toEqual([])
+      const files = await writingFiles()
+      expect(
+        files.map((file) => file.name).sort(),
+        "el renombrado sigue activo y la ruta vieja conserva el contenido externo",
+      ).toEqual(["ODE635 Externo Renombrado.md", "ODE635 Externo.md"].sort())
+      const renamedFile = files.find((file) => file.name === renamedName)
+      expect(renamedFile?.contents, "el guardado aterriza en el archivo renombrado").toContain("NUEVO")
+      const row = await tauriCatalogGetByIdDouble(await desktopDbPath(), record.id)
+      expect(row!.canonicalPath, "el catálogo apunta al archivo renombrado").toBe(
+        join(await writingsDir(), renamedName),
+      )
+    },
+  )
+
+  /**
+   * ODE-635 (review ronda 1, P2) — el `ServiceResponse.error` del retiro no se
+   * puede ignorar. `FilesystemDocumentService.deleteWriting` convierte fallos
+   * de lectura/rename en un resultado con `error`; si el retiro falla y se
+   * ignora, el `CONFLICT` dispara el retry, que guarda con éxito en la ruta
+   * nueva mientras la recreación vieja sigue en el root: el caller ve éxito
+   * con el estado que la Decisión A exige retirar. El error del retiro debe
+   * propagarse antes de permitir que el retry complete.
+   *
+   * Propiedad: el caller no ve éxito; la recreación sigue en la ruta vieja
+   * (sin pérdida) y el catálogo no vuelve a ligarla. Muta a rojo si el
+   * resultado del retiro se ignora.
+   */
+  it.fails(
+    "si el retiro de la recreación falla, el guardado no reporta éxito",
+    async () => {
+      const draft = await createDesktopDraft({ title: "ODE635 RetiroFallido", initialBodyJson: bodyJson("BASE") })
+      const record = draft.data!
+      const service = await getDocumentService()
+      const before = await tauriCatalogGetByIdDouble(await desktopDbPath(), record.id)
+      const originalPath = before!.canonicalPath!
+      const renamedName = "ODE635 RetiroFallido Renombrado.md"
+
+      const heldWrite = holdWriteFile((path) => path === originalPath)
+      const save = service.saveWriting({
+        writing: {
+          ...record,
+          content: { ...record.content, richText: bodyJson("NUEVO"), plainText: "NUEVO" },
+        },
+        expectedContentHash: null,
+      })
+      await heldWrite.started
+
+      const renamed = await service.renameWriting({
+        writingId: record.id,
+        title: "ODE635 RetiroFallido Renombrado",
+        updatedAt: new Date().toISOString(),
+      })
+      expect(renamed.error, "control positivo: el rename completa").toBeNull()
+
+      // El próximo `rename_file` es el que retira la recreación al Trash:
+      // falla como un error nativo.
+      failNextRenameFile(() => {
+        throw new Error("EPERM: no se pudo mover la recreación a .trash")
+      })
+
+      heldWrite.release()
+      const saved = await save
+
+      // Propiedad: el caller no ve éxito mientras la recreación sigue en el
+      // root; el error del retiro se propaga y el catálogo sigue en la ruta
+      // nueva, sin re-ligar la vieja.
+      expect(saved.error, "el guardado no reporta éxito si el retiro falla").not.toBeNull()
+      expect(saved.error?.code, "el error del retiro se propaga").toBe("STORAGE_ERROR")
+      const recreation = await readFile(originalPath, "utf8").catch(() => "")
+      expect(recreation, "la recreación sigue en la ruta vieja, sin pérdida").toContain("NUEVO")
+      const row = await tauriCatalogGetByIdDouble(await desktopDbPath(), record.id)
+      expect(row!.canonicalPath, "el catálogo sigue en la ruta nueva").toBe(
+        join(await writingsDir(), renamedName),
+      )
+    },
+  )
 })
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -281,4 +427,12 @@ async function desktopDbPath(): Promise<string> {
 async function writingsDir(): Promise<string> {
   const { appDataDir, join: joinAsync } = tauriPathModuleDouble
   return joinAsync(await appDataDir(), "Writings")
+}
+
+async function trashFiles(): Promise<Array<{ name: string; contents: string }>> {
+  const dir = join(await writingsDir(), ".trash")
+  const names = await readdir(dir).catch(() => [] as string[])
+  return Promise.all(
+    names.map(async (name) => ({ name, contents: await readFile(join(dir, name), "utf8") })),
+  )
 }
