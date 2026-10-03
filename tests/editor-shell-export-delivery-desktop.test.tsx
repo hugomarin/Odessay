@@ -961,6 +961,7 @@ const clipboardWrites: string[] = []
 describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (ODE-652 / SHARE-03)", () => {
   const LINK_A = "https://preview.odessay.test/ode652-share-a"
   const LINK_A_ROTATED = "https://preview.odessay.test/ode652-share-a-rotated"
+  const LINK_A_STALE = "https://preview.odessay.test/ode652-share-a-stale"
   const LINK_B = "https://preview.odessay.test/ode652-share-b"
 
   beforeEach(() => {
@@ -1174,6 +1175,141 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
 
       releaseB({ error: null, data: previewLink(LINK_B) })
       await waitForShareLinkText(LINK_B)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "regreso a A: una carga vieja de A no pisa la regeneración que ya terminó",
+    async () => {
+      const textA = "ODE652-RETURN-ROTATE-A"
+      const textB = "ODE652-RETURN-ROTATE-B"
+      const titleA = "ODE652 Return Rotate A"
+      const titleB = "ODE652 Return Rotate B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      let releaseB: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la carga de B no quedó retenida")
+      }
+      const heldB = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseB = resolve
+      })
+      let releaseStaleA: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la recarga de A no quedó retenida")
+      }
+      const heldStaleA = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseStaleA = resolve
+      })
+      let aCalls = 0
+      world.getPreviewLink = async (writingId) => {
+        if (writingId === b) return heldB
+        aCalls += 1
+        return aCalls === 1 ? { error: null, data: previewLink(LINK_A) } : heldStaleA
+      }
+      world.rotatePreviewLink = async () => ({ error: null, data: previewLink(LINK_A_ROTATED) })
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo con su enlace cacheado")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      // A→B y de vuelta a A con la recarga todavía en vuelo.
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo con su carga retenida")
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo de nuevo con su recarga retenida")
+      await waitFor(() => aCalls >= 2, { label: "la recarga de A salió al servicio" })
+      expect(pageText(), "control positivo: el enlace cacheado de A sigue visible").toContain(LINK_A)
+
+      // La regeneración termina primero; la recarga vieja no debe pisarla.
+      await clickShareAction("Regenerate")
+      await waitForShareLinkText(LINK_A_ROTATED)
+      releaseStaleA({ error: null, data: previewLink(LINK_A_STALE) })
+      await flush(4)
+
+      expect(pageText(), "la regeneración de A se conserva").toContain(LINK_A_ROTATED)
+      expect(pageText(), "la carga vieja no pisa la regeneración").not.toContain(LINK_A_STALE)
+
+      releaseB({ error: null, data: previewLink(LINK_B) })
+      await flush(2)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "regreso a A: una carga vieja de A no revivía el enlace después de revocar",
+    async () => {
+      const textA = "ODE652-RETURN-REVOKE-A"
+      const textB = "ODE652-RETURN-REVOKE-B"
+      const titleA = "ODE652 Return Revoke A"
+      const titleB = "ODE652 Return Revoke B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      let releaseB: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la carga de B no quedó retenida")
+      }
+      const heldB = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseB = resolve
+      })
+      let releaseStaleA: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la recarga de A no quedó retenida")
+      }
+      const heldStaleA = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseStaleA = resolve
+      })
+      let aCalls = 0
+      world.getPreviewLink = async (writingId) => {
+        if (writingId === b) return heldB
+        aCalls += 1
+        return aCalls === 1 ? { error: null, data: previewLink(LINK_A) } : heldStaleA
+      }
+      world.revokePreviewLink = async (writingId) => ({
+        error: null,
+        data: { writingId, revoked: true },
+      })
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo con su enlace cacheado")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo con su carga retenida")
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo de nuevo con su recarga retenida")
+      await waitFor(() => aCalls >= 2, { label: "la recarga de A salió al servicio" })
+      expect(pageText(), "control positivo: el enlace cacheado de A sigue visible").toContain(LINK_A)
+
+      const revoke = await waitFor(
+        () =>
+          findButton(
+            mounted!.container,
+            (button) => button.getAttribute("aria-label") === "Revoke preview link",
+          ),
+        { label: "botón de revocar el enlace" },
+      )
+      await act(async () => {
+        revoke.click()
+      })
+      await flush(3)
+      await waitFor(() => !pageText().includes(LINK_A), { label: "el enlace de A desaparece al revocar" })
+
+      // La recarga vieja no puede revivir el enlace revocado.
+      releaseStaleA({ error: null, data: previewLink(LINK_A_STALE) })
+      await flush(4)
+      expect(pageText(), "la carga vieja no revivía el enlace").not.toContain(LINK_A_STALE)
+      expect(pageText(), "el enlace revocado sigue ausente").not.toContain(LINK_A)
+
+      releaseB({ error: null, data: previewLink(LINK_B) })
+      await flush(2)
       assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
