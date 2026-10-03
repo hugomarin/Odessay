@@ -22,8 +22,11 @@
  *        once to every active root before minting or confirming a detach
  *        (ODE-661), so the decision follows disk state, not notice timing;
  *      · volume evidence for the origin of a move survives its root losing
- *        every file: the last volume observed for the root verifies the origin
- *        side (ODE-661 review ronda 1), and only equal volumes correlate;
+ *        every file while its freshness can be demonstrated: the last volume
+ *        directly observed for an active root verifies the origin side
+ *        (ODE-661 review ronda 1), an unobservable root or one with mixed
+ *        volumes invalidates it (review ronda 2), and only equal volumes
+ *        correlate;
  *      · a burst of events collapses to one logical transaction / CatalogChange.
  *
  * The pure resolver (`reconcileRoot`) is deterministic. Manifest-atomic writes and
@@ -605,15 +608,28 @@ export function createWorkspaceReconciler(
   let disposed = false
 
   /**
-   * Last volume directly observed per active root (ODE-661 review ronda 1).
+   * Last volume directly observed per active root (ODE-661 review rondas 1-2).
    * A root that just lost its only file no longer offers file evidence in the
    * pass, but the files bound there were observed on a volume; keeping that
    * last direct observation lets the origin side of a cross-root move be
    * verified without requiring the origin to retain files. It is runtime
    * evidence of this reconciler instance only — never durable, never identity
-   * — and a root reporting files on several volumes invalidates it.
+   * — and it is only trusted while its freshness can be demonstrated: an
+   * unobservable scan (possible unmount/re-mount on another volume) drops the
+   * entry, files spanning several volumes contradict it, and a newer direct
+   * observation replaces it (review ronda 2). When the evidence cannot be
+   * demonstrated, correlation abstains and the safe new UUID is used instead.
+   * Entries are pruned to the active roots on every start/rescan so retired
+   * roots cannot accumulate or be resurrected by a re-add.
    */
   const observedDeviceByRootId = new Map<string, number>()
+
+  /** Drops remembered volumes for roots that are no longer active (ronda 2 P2). */
+  function pruneObservedDeviceEvidence() {
+    for (const rootId of observedDeviceByRootId.keys()) {
+      if (!rootsById.has(rootId)) observedDeviceByRootId.delete(rootId)
+    }
+  }
 
   function setReadiness(next: CatalogReadiness) {
     if (readiness === next) return
@@ -663,14 +679,21 @@ export function createWorkspaceReconciler(
      * whose only file just left — the volume last observed for that root still
      * verifies the origin side, so correlation does not depend on the origin
      * retaining files. Files spanning several volumes contradict any
-     * remembered volume. Correlation still requires both sides to agree, so
-     * cross-volume moves stay out of scope.
+     * remembered volume, and an unobservable root drops it: a scan that could
+     * not read the root (unmounted, permission loss) is evidence that the
+     * mount may have changed, so the remembered volume cannot be demonstrated
+     * to still hold (ODE-661 review ronda 2 P1). Correlation still requires
+     * both sides to agree, so cross-volume moves stay out of scope.
      */
     const deviceEvidenceFor = (
       rootId: string,
       observed: ObservedFile[] | null,
       unbound: UnboundFile[],
     ): number | null => {
+      if (observed === null) {
+        observedDeviceByRootId.delete(rootId)
+        return null
+      }
       const devices = observedDevicesFor(observed, unbound)
       if (devices.size === 1) {
         const device = [...devices][0]
@@ -681,7 +704,6 @@ export function createWorkspaceReconciler(
         observedDeviceByRootId.delete(rootId)
         return null
       }
-      if (observed === null) return null
       return observedDeviceByRootId.get(rootId) ?? null
     }
 
@@ -834,6 +856,7 @@ export function createWorkspaceReconciler(
       try {
         const roots = await deps.loadRoots()
         rootsById = new Map(roots.map((root) => [root.id, root]))
+        pruneObservedDeviceEvidence()
         await reconcileRootIds(roots.map((root) => root.id))
       } catch {
         setReadiness("failed")
@@ -852,6 +875,7 @@ export function createWorkspaceReconciler(
     async rescanAll() {
       const roots = await deps.loadRoots()
       rootsById = new Map(roots.map((root) => [root.id, root]))
+      pruneObservedDeviceEvidence()
       setReadiness("rebuilding")
       await reconcileRootIds(roots.map((root) => root.id))
     },

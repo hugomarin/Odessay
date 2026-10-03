@@ -978,7 +978,7 @@ describe("ODE-661 — frescura y poda del volumen recordado (review ronda 2)", (
     return ofRoot[ofRoot.length - 1]
   }
 
-  it.fails(
+  it(
     "un cambio de volumen no liga la identidad vieja a otra raíz",
     async () => {
       // Pasada 1: A montada con su archivo en el volumen 1. Pasada 2: A no
@@ -1039,7 +1039,7 @@ describe("ODE-661 — frescura y poda del volumen recordado (review ronda 2)", (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "una raíz retirada y re-añadida no recupera el volumen recordado",
     async () => {
       // Pasada 1: A montada con su archivo en el volumen 1. Pasada 2: A sale
