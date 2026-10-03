@@ -1097,7 +1097,7 @@ describe("ODE-661 — frescura y poda del volumen recordado (review ronda 2)", (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "un scan rechazado no conserva el volumen recordado de la raíz",
     async () => {
       // Pasada 1: A montada con su archivo en el volumen 1. Pasada 2: el scan

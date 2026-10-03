@@ -614,11 +614,12 @@ export function createWorkspaceReconciler(
    * last direct observation lets the origin side of a cross-root move be
    * verified without requiring the origin to retain files. It is runtime
    * evidence of this reconciler instance only — never durable, never identity
-   * — and it is only trusted while its freshness can be demonstrated: an
-   * unobservable scan (possible unmount/re-mount on another volume) drops the
-   * entry, files spanning several volumes contradict it, and a newer direct
-   * observation replaces it (review ronda 2). When the evidence cannot be
-   * demonstrated, correlation abstains and the safe new UUID is used instead.
+    * — and it is only trusted while its freshness can be demonstrated: an
+    * unobservable or rejected scan (possible unmount/re-mount on another
+    * volume) drops the entry, files spanning several volumes contradict it, and
+    * a newer direct observation replaces it (review rondas 2-3). When the
+    * evidence cannot be demonstrated, correlation abstains and the safe new
+    * UUID is used instead.
    * Entries are pruned to the active roots on every start/rescan so retired
    * roots cannot accumulate or be resurrected by a re-add.
    */
@@ -731,7 +732,12 @@ export function createWorkspaceReconciler(
         // Isolate failures by root. One unavailable/legacy root must not prevent
         // newly adopted roots from reaching the shared catalog. The failed root
         // remains untouched and overall readiness still surfaces the problem.
+        // A rejected scan cannot demonstrate that the remembered volume still
+        // holds — the production adapter can reject after a failed/unconfirmed
+        // `workspace_sync`, while reading the catalog — so its evidence is
+        // dropped: a fresh UUID wins over a stale correlation (review ronda 3).
         anyFailed = true
+        observedDeviceByRootId.delete(root.id)
         return null
       }
     }
