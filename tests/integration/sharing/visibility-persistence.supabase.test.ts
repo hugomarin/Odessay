@@ -506,7 +506,7 @@ describe("Requirement 2 — Web", () => {
 })
 
 describe("Requirement 2 — Desktop", () => {
-  it.fails(
+  it(
     "de private con grant a shared: el trigger lo persiste, el invitado recupera el acceso y el catálogo proyecta el valor canónico",
     async () => {
       const writingId = await createDesktopDoc(`Desktop compartido ${runId}`)
@@ -563,7 +563,7 @@ describe("Requirement 2 — Desktop", () => {
     },
   )
 
-  it.fails(
+  it(
     "una mutación local más nueva durante el readback no se pisa con la visibilidad canónica",
     async () => {
       const writingId = await createDesktopDoc(`Desktop readback ${runId}`)
