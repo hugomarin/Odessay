@@ -37,8 +37,9 @@
  *   dos casos A→B quedan rojos por la razón declarada (UUID nuevo en B +
  *   aviso "deleted" en A) y el control sigue verde.
  *
- * Fuera de alcance declarado (brief): movimiento repartido en dos ráfagas
- * (>250 ms) y entre volúmenes.
+ * Fuera de alcance declarado (brief): movimientos entre volúmenes (el inode no
+ * es comparable). La separación temporal entre avisos dejó de ser límite de
+ * producto en ODE-661: los dos órdenes con 500 ms viven en este archivo.
  *
  * Extensión ODE-615 — variantes de la prueba (el fix es de ODE-657):
  *
@@ -49,14 +50,17 @@
  *   (`hooks/useExternalDocumentChanges.ts:169-173`) — se afirma el
  *   discriminante tipado en la salida del owner real (el objeto
  *   `{ kind, path }` que el hook entrega), nunca el texto "removed" suelto.
- * - **Dos ráfagas separadas (>250 ms).** Decisión de Hugo (2026-10-01): fuera
- *   de alcance, documentado como `it.fails` con "follow-up pendiente (ODE-615)".
- *   Las dos variantes reproducen el fallo de identidad: si B llega primero, B
- *   acuña un UUID nuevo porque A no está en la pasada; si A llega primero, A
- *   desliga y la evidencia se pierde. Los dos órdenes de raíz dentro de una
- *   misma ráfaga (<250 ms) ya los cubre este archivo arriba (ODE-657).
+ * - **Dos ráfagas separadas (500 ms, ODE-661).** Decisión de Hugo
+ *   (2026-10-03): sin máximo temporal entre avisos. Una pasada que ve solo un
+ *   lado de un movimiento posible (un archivo no ligado o un binding
+ *   confirmado ausente, sin su par) expande esa misma pasada a todas las
+ *   raíces activas antes de acuñar un UUID o confirmar el detach. Los dos
+ *   órdenes de raíz con `advance(500)` quedan abajo; los dos órdenes dentro de
+ *   una misma ráfaga (<250 ms) los cubre este archivo arriba (ODE-657), y el
+ *   coste del barrido (edición normal local vs. expansión única) se afirma en
+ *   el último bloque del archivo.
  */
-import { mkdirSync, renameSync, writeFileSync } from "node:fs"
+import { mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
@@ -497,7 +501,7 @@ describe("ODE-615 — variantes de la prueba WATCH-04", () => {
   )
 
   it(
-    "dos ráfagas: si B llega primero, B no acuña un UUID nuevo [follow-up pendiente (ODE-615)]",
+    "dos ráfagas: si B llega primero, conserva el UUID original",
     async () => {
       // Decisión de Hugo (2026-10-01): el movimiento repartido en dos ráfagas
       // (>250 ms) queda fuera de alcance y se documenta aquí; el fallo de hoy
@@ -544,7 +548,7 @@ describe("ODE-615 — variantes de la prueba WATCH-04", () => {
   )
 
   it(
-    "dos ráfagas: si A llega primero, el detach no se pierde [follow-up pendiente (ODE-615)]",
+    "dos ráfagas: si A llega primero, el detach no se pierde",
     async () => {
       // Misma decisión de alcance que la variante B-primero: la ráfaga que
       // desliga a A pierde la evidencia antes de que B escanee, así que B
@@ -582,6 +586,158 @@ describe("ODE-615 — variantes de la prueba WATCH-04", () => {
       })
       expect(bannerText()).not.toContain(DELETED_NOTICE)
       expect(activeTab()?.writing_id).toBe(writingId)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+/**
+ * ODE-661 — coste del barrido. La expansión solo existe para un resultado
+ * sospechoso y una vez por ráfaga; la edición normal de un archivo ligado debe
+ * seguir costando un scan de su raíz. Se instrumenta el transporte Tauri
+ * (boundary externo ya doblado): cada `scanRoot` del reconciler real emite
+ * exactamente un `workspace_sync` con `mintUnbound:false`, así que contar
+ * `workspace_sync` por `rootPath` cuenta pasadas y archivos inspeccionados
+ * (manifest + unbound) sin tocar el owner.
+ */
+describe("ODE-661 — coste del barrido", () => {
+  type ScanCall = { rootPath: string; files: number }
+
+  function countWorkspaceSyncScans(): ScanCall[] {
+    const scans: ScanCall[] = []
+    const inner = world.tauriInvoke
+    world.tauriInvoke = async (command, args) => {
+      const result = await inner(command, args)
+      if (command === "workspace_sync") {
+        const snapshot = result as { files?: unknown[]; unboundFiles?: unknown[] }
+        scans.push({
+          rootPath: typeof args?.rootPath === "string" ? args.rootPath : "",
+          files: (snapshot.files?.length ?? 0) + (snapshot.unboundFiles?.length ?? 0),
+        })
+      }
+      return result
+    }
+    return scans
+  }
+
+  function writeNeighbours(root: string, prefix: string, count: number) {
+    for (let index = 1; index <= count; index += 1) {
+      writeMarkdownIn(root, `${prefix} ${index}`, `ODE661 ${prefix} ${index}.`)
+    }
+  }
+
+  async function waitForCatalogDetached(writingId: string) {
+    const catalog = await getDocumentCatalog()
+    const deadline = Date.now() + 15_000
+    while (Date.now() < deadline) {
+      const record = await catalog.getById(writingId)
+      if (record && !record.localPresent) return record
+      await advance(100)
+    }
+    throw new Error(`El catálogo no desligó ${writingId}`)
+  }
+
+  it(
+    "una edición externa normal escanea solo su raíz",
+    async () => {
+      const rootA = makeRoot("Raiz coste A")
+      const rootB = makeRoot("Raiz coste B")
+      const pathA = writeMarkdownIn(rootA, "Carta coste", "ODE661 cuerpo coste.")
+      writeNeighbours(rootA, "Vecino coste A", 4)
+      writeNeighbours(rootB, "Vecino coste B", 3)
+      await registerWorkspace(rootA)
+      await registerWorkspace(rootB)
+      await startReconciler()
+      await mountLoaded()
+      const writingId = await openFromNativeMenu(pathA, "ODE661 cuerpo coste.")
+      await waitForWatcherOn(rootA)
+      await waitForWatcherOn(rootB)
+
+      const catalog = await getDocumentCatalog()
+      const before = await waitForCatalogBindingAt(pathA)
+      expect(before.binding?.contentHash).toBeTruthy()
+
+      const scans = countWorkspaceSyncScans()
+      writeFileSync(pathA, "ODE661 cuerpo coste editado.\n")
+      await emitFsWatchEvent([pathA])
+      await advance(500)
+
+      // Completion event: la fila canónica ya proyecta el hash editado.
+      const deadline = Date.now() + 15_000
+      let projected = false
+      while (Date.now() < deadline) {
+        const record = await catalog.getById(writingId)
+        if (
+          record?.localPresent &&
+          record.binding?.contentHash &&
+          record.binding.contentHash !== before.binding?.contentHash
+        ) {
+          projected = true
+          break
+        }
+        await advance(100)
+      }
+      expect(projected, "el catálogo proyectó la edición normal").toBe(true)
+      expect(
+        scans.map((scan) => scan.rootPath),
+        "la edición normal no lanza un escaneo global",
+      ).toEqual([rootA])
+      expect(scans[0]?.files, "archivos inspeccionados: solo los del root editado").toBe(5)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "un detach sin par expande una sola vez a las raíces activas",
+    async () => {
+      const rootA = makeRoot("Raiz coste A inversa")
+      const rootB = makeRoot("Raiz coste B inversa")
+      const pathA = writeMarkdownIn(rootA, "Carta coste inversa", "ODE661 cuerpo inverso.")
+      writeNeighbours(rootA, "Vecino inverso A", 4)
+      writeNeighbours(rootB, "Vecino inverso B", 3)
+      await registerWorkspace(rootA)
+      await registerWorkspace(rootB)
+      await startReconciler()
+      await mountLoaded()
+      const writingId = await openFromNativeMenu(pathA, "ODE661 cuerpo inverso.")
+      await waitForWatcherOn(rootA)
+      await waitForWatcherOn(rootB)
+
+      const outside = join(desktopWorkspaceRoot(), "Fuera de raices 661")
+      mkdirSync(outside, { recursive: true })
+      const scans = countWorkspaceSyncScans()
+      renameSync(pathA, join(outside, "Carta coste inversa.md"))
+      // El watcher de A ve el rename salir de su alcance: detach confirmado
+      // sin archivo no ligado en la pasada.
+      await emitFsWatchEvent([pathA])
+      await advance(500)
+
+      await waitForCatalogDetached(writingId)
+      const scansByRoot = new Map(scans.map((scan) => [scan.rootPath, scan]))
+      // La ráfaga escanea cada raíz activa como máximo una vez: la raíz origen
+      // en la fase 1 y, ante el detach sin par, la expansión única que suma
+      // las demás raíces (incluida la gestionada), sin repetir ninguna.
+      expect(scansByRoot.size, "ninguna raíz se escanea dos veces en la misma ráfaga").toBe(
+        scans.length,
+      )
+      // El documento movido ya no está en A: la raíz origen inspecciona sus 4
+      // residentes y el detach se confirma por el binding ausente.
+      expect(scansByRoot.get(rootA)?.files, "archivos inspeccionados de la raíz origen").toBe(4)
+      expect(
+        scansByRoot.get(rootB)?.files,
+        "la raíz expandida se inspecciona con sus archivos",
+      ).toBe(3)
+      expect([...scansByRoot.keys()], "la expansión alcanza todas las raíces activas").toEqual(
+        expect.arrayContaining([rootA, rootB]),
+      )
+      const managedRoot = join(desktopWorkspaceRoot(), "config", "artifact-studio-managed")
+      const managedFiles = readdirSync(managedRoot).filter((entry) => entry.endsWith(".md")).length
+      expect(
+        scansByRoot.get(managedRoot)?.files,
+        "la raíz gestionada también entra en la expansión",
+      ).toBe(managedFiles)
       assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
