@@ -2,13 +2,20 @@
  * ODE-667 — DELETE remoto ya ausente: éxito idempotente owner-scoped.
  *
  * Entry points reales: `webDocumentService.saveWriting` / `deleteWriting` (los
- * que usa el editor en web) encolan las mutaciones sobre el `localDB` real;
- * el `SyncWorker` real hace el flush con su transporte de producción, enrutado
- * por `createRouteFetch` al handler real `DELETE /api/writings/[id]`, que es el
- * owner de la autorización y la semántica HTTP. Postgres es la instancia
- * Supabase local real (service role para el handler, admin del harness para
- * leer el estado canónico). Lo único doblado es la frontera externa de red: el
- * `fetch` del worker entra directo al handler en vez de salir a un servidor.
+ * que usa el editor en web) encolan las mutaciones sobre el `localDB` real a
+ * través de `lib/sync/queue.ts`, que llama al `getSyncService()` real. Su
+ * `scheduleFlush()` es el `webSyncService` de producción: programa al
+ * `SyncWorker` singleton real (`getSyncWorker().schedule(0)`) y el timer
+ * dispara su `flush()`. El test no construye ningún worker ni sustituye el
+ * scheduler: controla el tiempo con fake timers de vitest (solo `setTimeout`/
+ * `clearTimeout`) y avanza el timer que el propio scheduler registró. El
+ * worker usa su transporte de producción, enrutado por `createRouteFetch` al
+ * handler real `DELETE /api/writings/[id]`, que es el owner de la autorización
+ * y la semántica HTTP. Postgres es la instancia Supabase local real (service
+ * role para el handler, admin del harness para leer el estado canónico). Lo
+ * único doblado es la frontera externa: el `fetch` de red (entra directo al
+ * handler) y el runtime de navegador (`window` y `navigator.onLine`, como en
+ * el navegador real).
  *
  * Bug real (it.fails): el handler respondía 404 cuando la fila no existía
  * (p. ej. un writing local-only borrado antes de su primer upsert) y el
@@ -16,17 +23,22 @@
  * reintentándose hasta agotar los 10 intentos y marcarse terminalmente
  * fallida, sin que el borrado remoto hubiera nada que completar.
  *
- * Evento de completitud: la promesa de `worker.flush()` resuelve después de
- * que el handler real commiteó en Postgres. Recién ahí se afirma el resultado
- * canónico: la cola local (mutación consumida, sin reintentos), la fila
- * remota y las filas de `writing_shares`.
+ * Evento de completitud: `SyncWorker.flush()` emite la métrica `sync.flush`
+ * (rama de producción de `lib/observability/sync-metrics.ts`) después de
+ * aplicar la mutación y de que el handler commiteó en Postgres. La prueba
+ * registra ese sink de producción y solo tras la métrica del flush disparado
+ * por el scheduler afirma el resultado canónico: la cola sin la mutación ni
+ * reintentos pendientes, la fila local y la fila remota. El `trigger` de la
+ * métrica delata el camino real (`auth` para `schedule(0)`, `debounce` para el
+ * tick de retry del worker).
  *
  * Escenarios:
- * - (A) crear local-only → encolar delete → flush antes de cualquier upsert:
- *   la ausencia remota converge como éxito idempotente sin consumir intentos.
+ * - (A) crear local-only → encolar delete → flush del scheduler antes de
+ *   cualquier upsert: la ausencia remota converge como éxito idempotente sin
+ *   consumir intentos.
  * - (B) respuesta perdida tras un delete ya aplicado y replay de la misma
- *   mutación: converge sin duplicar ni corromper la fila (y el cleanup del
- *   dueño sí corre).
+ *   mutación en el tick de retry real del worker: converge sin duplicar ni
+ *   corromper la fila (y el cleanup del dueño sí corre).
  * - (C) fila de otra cuenta: el DELETE del owner no la muta ni limpia sus
  *   shares, y su respuesta es indistinguible de la de un ID inexistente; el
  *   dueño real sí puede borrarla (control positivo).
@@ -47,16 +59,13 @@ import {
 import { createLocalAdminClient, createUserClient } from "../../support/supabase-local/local-supabase"
 import { createRouteFetch } from "../../support/supabase-local/route-fetch"
 
-vi.mock("@/lib/sync/sync-service-factory", () => ({
-  getSyncService: () => ({ scheduleFlush: async () => ({ data: undefined, error: null }) }),
-}))
-
 const { localDB, setLocalDBScope } = await import("@/lib/local-db")
 const { webDocumentService } = await import("@/lib/services/web-document-service")
-const { SyncWorker } = await import("@/lib/sync/worker")
+const { setSyncMetricSink } = await import("@/lib/observability/sync-metrics")
 const { DELETE, PATCH } = await import("@/app/api/writings/[id]/route")
 
 type WritingRecord = import("@/lib/services/contracts/document-service").WritingRecord
+type SyncFlushMetric = import("@/lib/observability/sync-metrics").SyncFlushMetric
 
 const originalFetch = globalThis.fetch
 const runId = randomUUID().replace(/[^a-z0-9]/g, "").slice(0, 8)
@@ -67,6 +76,23 @@ let admin: SupabaseClient
 let users: SeedUser[] = []
 let owner!: SeedUser
 let stranger!: SeedUser
+
+/**
+ * Completitud real del flush: `SyncWorker.flush()` emite `sync.flush` al
+ * terminar, después de `markSynced` y de que el handler commiteó. El sink es
+ * una salida de producción (`setSyncMetricSink`); la prueba solo lo observa.
+ */
+const flushMetrics: SyncFlushMetric[] = []
+const flushCompletions: Array<() => void> = []
+
+/** Avanza el timer que el scheduler real registró y espera el flush completo. */
+async function runScheduledFlush(advanceMs = 0): Promise<void> {
+  const completed = new Promise<void>((resolve) => {
+    flushCompletions.push(resolve)
+  })
+  await vi.advanceTimersByTimeAsync(advanceMs)
+  await completed
+}
 
 beforeAll(async () => {
   admin = createLocalAdminClient()
@@ -79,7 +105,11 @@ afterAll(async () => {
 })
 
 beforeEach(() => {
-  setLocalDBScope(`ode-667-${crypto.randomUUID()}`)
+  // El scheduler de producción corre sobre `window.setTimeout`; se controla
+  // con fake timers para disparar el flush determinísticamente. Se limitan a
+  // `setTimeout`/`clearTimeout` para no interferir con fake-indexeddb.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+  vi.stubGlobal("navigator", { onLine: true })
   vi.stubGlobal("window", {
     setTimeout,
     clearTimeout,
@@ -88,11 +118,21 @@ beforeEach(() => {
     dispatchEvent: vi.fn(),
     CustomEvent: class {},
   })
+  setLocalDBScope(`ode-667-${crypto.randomUUID()}`)
+  flushMetrics.length = 0
+  flushCompletions.length = 0
+  setSyncMetricSink((metric) => {
+    if (metric.type !== "sync.flush") return
+    flushMetrics.push(metric)
+    flushCompletions.shift()?.()
+  })
 })
 
 afterEach(() => {
+  setSyncMetricSink(null)
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  vi.useRealTimers()
 })
 
 /** Lo que el editor manda a `saveWriting` para un borrador nuevo en web. */
@@ -180,8 +220,6 @@ function installRoutedFetch(
   })
 }
 
-const makeWorker = () => new SyncWorker({ localDb: localDB, isOnline: () => true })
-
 /** Re-encola la mutación actual con `next_retry_at` a 0, como un tick real del reloj. */
 const makeMutationImmediatelyDue = async (writingId: string) => {
   const current = await localDB.syncQueue.getCurrentForWriting(writingId)
@@ -197,7 +235,8 @@ describe("ODE-667 — DELETE remoto ya ausente converge como éxito idempotente"
       const writingId = randomUUID()
 
       // 1. Crear local-only (entry real del editor web): el body queda en
-      // `localDB` y el upsert remoto se encola.
+      // `localDB` y el upsert remoto se encola; el scheduler real programa su
+      // timer.
       const saved = await webDocumentService.saveWriting({
         writing: editorRecord(writingId, "Borrador que nunca llegó a la nube."),
       })
@@ -209,7 +248,8 @@ describe("ODE-667 — DELETE remoto ya ausente converge como éxito idempotente"
       ).toBe("upsert")
 
       // 2. El autor borra antes de que el upsert remoto ocurra: la cola
-      // reemplaza el upsert por el delete (dedup por entity_key).
+      // reemplaza el upsert por el delete (dedup por entity_key) y el timer
+      // del scheduler queda reprogramado.
       const deleted = await deleteWritingLocally(writingId)
       expect(deleted.error, "el borrado local entra").toBeNull()
       expect(
@@ -217,20 +257,27 @@ describe("ODE-667 — DELETE remoto ya ausente converge como éxito idempotente"
         "el delete reemplazó al upsert pendiente",
       ).toBe("delete")
 
-      // 3. Flush real: SyncWorker → DELETE real → Postgres real.
+      // 3. El timer del scheduler real dispara el flush del worker singleton:
+      // SyncWorker → DELETE real → Postgres real.
       const captured: CapturedResponse[] = []
       installRoutedFetch({ [`/api/writings/${writingId}`]: capturingDelete(writingId, captured) }, owner)
-      await makeWorker().flush()
+      await runScheduledFlush()
 
       // Evento de completitud consumido; resultado canónico.
       expect(captured, "el handler real recibió el delete").toHaveLength(1)
       expect(captured[0]?.status, "la ausencia remota es un éxito idempotente").toBe(200)
       expect(captured[0]?.body, "sin error de envelope").toEqual({ data: null, error: null })
+      expect(flushMetrics, "un solo flush, disparado por el scheduler de producción").toHaveLength(1)
+      expect(flushMetrics[0]?.trigger, "schedule(0) real, no un flush a mano").toBe("auth")
+      expect(flushMetrics[0]?.examined, "el flush examinó la mutación de delete").toBe(1)
+      expect(flushMetrics[0]?.succeeded, "la consumió sin fallar").toBe(1)
+      expect(flushMetrics[0]?.failed, "sin reintentos pendientes").toBe(0)
 
       expect(
         await localDB.syncQueue.getCurrentForWriting(writingId),
         "la mutación se consumió; no quedó reintentándose hacia el fallo terminal",
       ).toBeNull()
+      expect(await localDB.syncQueue.getPending(), "la cola no conserva reintentos pendientes").toEqual([])
       expect(
         (await localDB.writings.get(writingId))?.sync_status,
         "la fila local sigue borrada, no marcada fallida",
@@ -244,19 +291,20 @@ describe("ODE-667 — DELETE remoto ya ausente converge como éxito idempotente"
     async () => {
       const writingId = randomUUID()
 
-      // Secuencia real previa: crear local-only y subir el upsert (control
-      // positivo de que la fila remota existe de verdad).
+      // Secuencia real previa: crear local-only y subir el upsert con el
+      // scheduler real (control positivo de que la fila remota existe).
       const saved = await webDocumentService.saveWriting({
         writing: editorRecord(writingId, "Carta que sí llegó a la nube."),
       })
       expect(saved.error).toBeNull()
       installRoutedFetch({ [`/api/writings/${writingId}`]: patchRoute(writingId) }, owner)
-      const worker = makeWorker()
-      await worker.flush()
+      await runScheduledFlush()
 
       const afterUpsert = await readRow<{ deleted_at: string | null }>(admin, "writings", writingId)
       expect(afterUpsert?.deleted_at, "el upsert real creó la fila viva").toBeNull()
       expect(await localDB.syncQueue.getCurrentForWriting(writingId), "el upsert se consumió").toBeNull()
+      expect(flushMetrics).toHaveLength(1)
+      expect(flushMetrics[0]?.succeeded, "el scheduler corrió el upsert").toBe(1)
 
       // El dueño comparte el writing y después lo borra.
       const ownerClient = await createUserClient(owner)
@@ -266,8 +314,9 @@ describe("ODE-667 — DELETE remoto ya ausente converge como éxito idempotente"
       const deleted = await deleteWritingLocally(writingId)
       expect(deleted.error).toBeNull()
 
-      // Primera vuelta: el handler aplica el delete, pero la respuesta se
-      // pierde en la red (frontera externa simulada: el fetch rechaza).
+      // Primera vuelta del delete: el handler aplica el delete, pero la
+      // respuesta se pierde en la red (frontera externa simulada: el fetch
+      // rechaza). El timer del scheduler real vuelve a disparar el flush.
       let loseResponse = true
       installRoutedFetch(
         {
@@ -282,24 +331,34 @@ describe("ODE-667 — DELETE remoto ya ausente converge como éxito idempotente"
         },
         owner,
       )
-      await worker.flush()
+      await runScheduledFlush()
 
       const afterLost = await readRow<Record<string, unknown>>(admin, "writings", writingId)
       expect(afterLost?.deleted_at, "el delete sí se aplicó en la nube").not.toBeNull()
       const pending = await localDB.syncQueue.getCurrentForWriting(writingId)
       expect(pending, "la respuesta perdida deja la mutación en cola").not.toBeNull()
       expect(pending?.attempts, "el fallo de red consume un intento (política de retry intacta)").toBe(1)
+      expect(flushMetrics).toHaveLength(2)
+      expect(flushMetrics[1]?.trigger, "el delete salió por el schedule(0) de producción").toBe("auth")
+      expect(flushMetrics[1]?.failed, "el flush falló por la respuesta perdida").toBe(1)
 
-      // Replay de la misma mutación: ya está aplicada; el worker la consume
-      // sin duplicar ni corromper la fila.
+      // Replay de la misma mutación: el fallo dejó el tick de retry del
+      // worker (`schedule()` → debounce 1500). El reloj ya hizo due la
+      // mutación (como en producción al vencer `next_retry_at`), así que ese
+      // tick real la reintenta; ya está aplicada, el worker la consume sin
+      // duplicar ni corromper la fila.
       await makeMutationImmediatelyDue(writingId)
       installRoutedFetch({ [`/api/writings/${writingId}`]: (request) => runDelete(request, writingId) }, owner)
-      await worker.flush()
+      await runScheduledFlush(1500)
 
+      expect(flushMetrics).toHaveLength(3)
+      expect(flushMetrics[2]?.trigger, "el replay corre en el tick de retry del worker").toBe("debounce")
+      expect(flushMetrics[2]?.succeeded, "el replay consumió la mutación").toBe(1)
       expect(
         await localDB.syncQueue.getCurrentForWriting(writingId),
         "el replay converge y la mutación se consume",
       ).toBeNull()
+      expect(await localDB.syncQueue.getPending(), "sin reintentos pendientes").toEqual([])
       const afterReplay = await readRow<Record<string, unknown>>(admin, "writings", writingId)
       expect(afterReplay?.deleted_at, "el replay conserva el tombstone ya aplicado").toBe(afterLost?.deleted_at)
       expect(afterReplay?.version, "sin regresión ni doble aplicación de versión").toBe(afterLost?.version)
@@ -327,7 +386,8 @@ describe("ODE-667 — DELETE remoto ya ausente converge como éxito idempotente"
       expect(before?.deleted_at, "control positivo: la fila ajena está viva").toBeNull()
 
       // El owner tiene un writing local-only con el mismo UUID (colisión) y lo
-      // borra: la mutación sale con SU bearer contra el handler real.
+      // borra: la mutación sale con SU bearer contra el handler real,
+      // disparada por el scheduler real.
       const saved = await webDocumentService.saveWriting({
         writing: editorRecord(writingId, "Colisión de UUID del owner."),
       })
@@ -337,11 +397,14 @@ describe("ODE-667 — DELETE remoto ya ausente converge como éxito idempotente"
 
       const captured: CapturedResponse[] = []
       installRoutedFetch({ [`/api/writings/${writingId}`]: capturingDelete(writingId, captured) }, owner)
-      await makeWorker().flush()
+      await runScheduledFlush()
 
       // Éxito idempotente indistinguible: la mutación del owner se consume.
+      expect(captured).toHaveLength(1)
       expect(captured[0]?.status, "el delete ajeno no es un error de transporte").toBe(200)
+      expect(flushMetrics[0]?.succeeded, "el flush real consumió la mutación").toBe(1)
       expect(await localDB.syncQueue.getCurrentForWriting(writingId), "la mutación del owner se consumió").toBeNull()
+      expect(await localDB.syncQueue.getPending(), "sin reintentos pendientes").toEqual([])
 
       // La fila ajena y su share quedan intactos.
       expect(await readRow(admin, "writings", writingId), "la fila ajena no se muta").toEqual(before)
