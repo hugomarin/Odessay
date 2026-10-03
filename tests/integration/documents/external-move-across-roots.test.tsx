@@ -1096,4 +1096,68 @@ describe("ODE-661 — frescura y poda del volumen recordado (review ronda 2)", (
     },
     TEST_TIMEOUT_MS,
   )
+
+  it.fails(
+    "un scan rechazado no conserva el volumen recordado de la raíz",
+    async () => {
+      // Pasada 1: A montada con su archivo en el volumen 1. Pasada 2: el scan
+      // de A rechaza — el adapter de producción puede rechazar después de un
+      // `workspace_sync` fallido o de un snapshot, al leer el catálogo fuera
+      // de su try interno — y ese rechazo impide demostrar que el volumen
+      // recordado siga vigente. Pasada 3: A re-montada vacía en otro volumen;
+      // B ofrece un archivo no ligado con el device, inode y hash viejos de A.
+      // Sin invalidar la evidencia en el rechazo, A reutiliza el device
+      // obsoleto y B adopta doc-a.
+      let mintCounter = 0
+      const mintId = () => `uuid-nuevo-${++mintCounter}`
+      const commits: ReconcileCommit[] = []
+      let phase: "montada" | "rechazada" | "remontada-vacia" = "montada"
+
+      const reconciler = createWorkspaceReconciler({
+        loadRoots: async () => [rootA, rootB],
+        mintId,
+        scanRoot: async (candidate) => {
+          if (candidate.id === rootA.id) {
+            if (phase === "montada") {
+              return { observed: [observedInA()], unbound: [], knownBindings: [] }
+            }
+            if (phase === "rechazada") {
+              throw new Error("scan de la raíz A rechazado")
+            }
+            return { observed: [], unbound: [], knownBindings: [knownInA()] }
+          }
+          return {
+            observed: [],
+            unbound: phase === "remontada-vacia" ? [unboundInB()] : [],
+            knownBindings: [],
+          }
+        },
+        bindUnbound: async (candidate, ids) => boundIn(candidate, ids),
+        commit: async (commit) => {
+          commits.push(commit)
+        },
+      })
+
+      await reconciler.start()
+      phase = "rechazada"
+      await reconciler.rescanAll()
+      phase = "remontada-vacia"
+      await reconciler.rescanAll()
+
+      const commitA = lastCommitFor(commits, rootA.id)
+      const commitB = lastCommitFor(commits, rootB.id)
+      expect(
+        commitB?.upserts.map((upsert) => upsert.documentId),
+        "B no adopta la identidad de un volumen cuyo scan fue rechazado",
+      ).not.toContain("doc-a")
+      expect(commitB?.upserts[0]?.documentId, "B acuña una identidad nueva").toMatch(
+        /^uuid-nuevo-/,
+      )
+      expect(
+        commitA?.detached,
+        "A desliga su binding: la evidencia no sobrevive al scan rechazado",
+      ).toEqual(["doc-a"])
+    },
+    TEST_TIMEOUT_MS,
+  )
 })
