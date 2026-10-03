@@ -24,6 +24,18 @@
  * debounce, el retry ticker y el wakeup — cuando lo decide, y afirma después
  * de que el flush termina.
  *
+ * SYNC-08 (ODE-648) — una mutación de metadata no puede borrar el cuerpo. El
+ * supersede de la cola (`index.rs:704-711`, espejo en el doble) descarta el
+ * guardado pendiente cuando llega la metadata, así que el cuerpo que la nube
+ * conserva debe venir del `.md` (documento con binding) o de la propia fila
+ * (solo-nube, `binding:null`). El consumidor resuelve el snapshot completo para
+ * documentos con binding; sobre una fila existente actualiza solo cuerpo, hash
+ * y la metadata de la mutación — title, slug, visibility, parent_id y
+ * correspondence_id no se pisan. Un documento cuyo `cloudAccountId` pertenece a
+ * otra cuenta activa nunca se inserta bajo la sesión actual: la mutación se
+ * retiene para su dueño. El replay nativo (Rust/SQLite) queda fuera y sin
+ * probar: la cola de este harness es un espejo conductual (ODE-670).
+ *
  * Casos:
  * 1. Tres guardados con cuerpos distintos y un cambio de metadata entre medio,
  *    antes del flush: la cola supersede y solo envía la última mutación; el
@@ -47,6 +59,19 @@
  * 6. El segundo flush tras el fallo en vuelo aplica una sola escritura, la de
  *    la v4. El orden del listado (`created_at ASC`, `index.rs:1516`) se cubre
  *    en Rust (`catalog_tests`), con dos accionables sembradas por SQL.
+ * 7. (SYNC-08) Solo-nube con `binding:null`: borrar un ítem de vocabulario
+ *    reescribe el catálogo y encola metadata; la nube conserva el cuerpo
+ *    remoto exacto. Verde desde el inicio; la mutación de quitar
+ *    `mutationKind: "metadata"` en el productor lo vacía.
+ * 8. (SYNC-08) Con binding y fila en la nube: la metadata reemplaza al guardado
+ *    v2 en la cola; el flush debe subir el cuerpo v2 del `.md` y la metadata
+ *    final sin pisar slug/visibility. Rojo hoy.
+ * 9. (SYNC-08) Borrador de primera subida sin flush inicial: la metadata no
+ *    puede descartar la primera subida; la nube recibe un INSERT con el `.md`
+ *    más reciente y la metadata final. Rojo hoy.
+ * 10. (SYNC-08) Límite de cuenta: una fila local de otra cuenta activa nunca
+ *    se inserta bajo la sesión actual; la mutación se retiene para su dueño.
+ *    Rojo hoy (hoy inserta en la cuenta equivocada).
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { readFile } from "node:fs/promises"
@@ -164,6 +189,8 @@ vi.mock("@/lib/sync/sync-service-factory", () => ({
 const { createDesktopDraft, getDocumentService } = await import("@/lib/services/document-service-factory")
 const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
 const { SqliteDocumentCatalog } = await import("@/lib/services/desktop/sqlite-document-catalog")
+const { DesktopSettingsService } = await import("@/lib/services/desktop/desktop-settings-service")
+const { appConfigDir } = await import("@tauri-apps/api/path")
 
 const doc = (text: string) => ({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] })
 const timestamp = (version: number) => `2026-09-30T12:00:${String(version).padStart(2, "0")}.000Z`
@@ -212,11 +239,16 @@ function cloudBodyTexts(table: string): string[] {
   })
 }
 
-async function createMaterializedDraft(initialText: string) {
+async function createMaterializedDraft(
+  initialText: string,
+  options: { authorId?: string; slug?: string; visibility?: "private" | "shared" | "public" } = {},
+) {
   const draft = await createDesktopDraft({
     title: "Carta ODE-611",
     initialBodyJson: doc(initialText),
-    authorId: "user-1",
+    authorId: options.authorId ?? "user-1",
+    slug: options.slug,
+    visibility: options.visibility,
   })
   expect(draft.error).toBeNull()
   const writingId = draft.data!.id
@@ -493,5 +525,165 @@ describe("SYNC-05 desktop — varios guardados antes del flush: la última versi
     expect(fakeSupabase.row("writings", writingId)?.status).toBe("review")
     expect(fakeSupabase.row("writings", writingId)?.body_text).toBe("Versión 4.")
     expect(actionableMutations(writingId), "y la cola queda quieta").toHaveLength(0)
+  })
+})
+
+describe("SYNC-08 desktop — una mutación de metadata no borra el cuerpo", () => {
+  it("solo-nube (binding:null): la metadata del vocabulario conserva el cuerpo remoto", async () => {
+    const cloudOnlyId = "0c10d0c0-0648-4000-8000-000000000648"
+    const settings = new DesktopSettingsService(await appConfigDir())
+    const created = await settings.createVocabularyItem({
+      kind: "status",
+      name: "In review",
+      icon: "eye",
+      color: "#5B5BD6",
+    })
+    expect(created.error).toBeNull()
+    const item = created.data!
+
+    // "Otro dispositivo": la fila ya existe en la nube con cuerpo no vacío.
+    // El control positivo de "el cuerpo no se toca" es que arranca no vacío.
+    await fakeSupabaseClient.from("writings").insert({
+      id: cloudOnlyId,
+      author_id: "user-1",
+      title: "Carta solo-nube",
+      body_json: doc("Cuerpo remoto intacto."),
+      body_text: "Cuerpo remoto intacto.",
+      content_hash: "remote-hash",
+      slug: "carta-solo-nube",
+      status: item.key,
+      artifact_type: "general",
+      visibility: "public",
+      parent_id: null,
+      correspondence_id: null,
+      version: 3,
+      created_at: timestamp(1),
+      updated_at: timestamp(3),
+      deleted_at: null,
+    }, { count: "exact" })
+
+    const hydrated = await desktopCatalogSyncService.hydrateWritings()
+    expect(hydrated.error).toBeNull()
+    const record = await catalog.getById(cloudOnlyId)
+    expect(record?.binding, "control positivo: no hay binding local").toBeNull()
+
+    // Productor real de solo-nube: borrar el item reescribe el catálogo y
+    // encola la mutación de metadata con binding:null en la misma transacción.
+    const deleted = await settings.deleteVocabularyItem(item.id)
+    expect(deleted.error).toBeNull()
+    expect(deleted.data?.rewrittenCount, "la fila del catálogo se reescribió").toBe(1)
+    const queued = actionableMutations(cloudOnlyId)
+    expect(queued, "queda una sola mutación accionable").toHaveLength(1)
+
+    const result = await desktopCatalogSyncService.flushPending()
+    expect(result.error).toBeNull()
+    expect(result.data?.failedMutations).toEqual([])
+
+    // Afirmación después del evento de completitud, sobre la fila canónica.
+    const cloud = fakeSupabase.row("writings", cloudOnlyId)
+    expect(cloud?.body_text, "el cuerpo remoto no se toca").toBe("Cuerpo remoto intacto.")
+    expect(cloud?.body_json).toEqual(doc("Cuerpo remoto intacto."))
+    expect(cloud?.status, "la metadata final sí llega").toBe("draft")
+    expect(cloud?.version, "y la versión avanza").toBe(4)
+    expect(cloud?.slug, "y el slug de la fila se conserva").toBe("carta-solo-nube")
+    expect(actionableMutations(cloudOnlyId), "cola accionable vacía").toHaveLength(0)
+  })
+
+  it.fails("con binding y fila en la nube: el guardado v2 pendiente + metadata conserva el cuerpo v2", async () => {
+    const { writingId, canonicalPath } = await createMaterializedDraft("Versión 1.", {
+      slug: "carta-ode-648",
+      visibility: "public",
+    })
+    const service = await getDocumentService()
+
+    const first = await desktopCatalogSyncService.flushPending()
+    expect(first.error).toBeNull()
+    expect(first.data?.failedMutations).toEqual([])
+    expect(fakeSupabase.row("writings", writingId)?.body_text, "precondición: la v1 ya está en la nube").toBe("Versión 1.")
+
+    await saveFromEditor(writingId, "Versión 2.", 2)
+    const meta = await service.updateWritingMetadata({
+      writingId,
+      status: "review",
+      version: 3,
+      updatedAt: timestamp(3),
+    })
+    expect(meta.error).toBeNull()
+    const queued = actionableMutations(writingId)
+    expect(queued, "la metadata reemplazó al guardado v2 en la cola").toHaveLength(1)
+    expect(JSON.parse(queued[0].payloadJson).mutationKind, "la mutación accionable es de metadata").toBe("metadata")
+
+    const result = await desktopCatalogSyncService.flushPending()
+    expect(result.error).toBeNull()
+    expect(result.data?.failedMutations).toEqual([])
+
+    const cloud = fakeSupabase.row("writings", writingId)
+    expect(cloud?.body_text, "el cuerpo del .md v2 no se pierde").toBe("Versión 2.")
+    expect(cloud?.content_hash, "y su hash es el del .md").toBe(
+      await computeMarkdownContentHash(await readFile(canonicalPath, "utf8")),
+    )
+    expect(cloud?.status, "la metadata final").toBe("review")
+    expect(cloud?.version).toBe(3)
+    expect(cloud?.slug, "control positivo: el slug no-default de la fila se conserva").toBe("carta-ode-648")
+    expect(cloud?.visibility, "control positivo: la visibilidad pública se conserva").toBe("public")
+    expect(actionableMutations(writingId), "cola accionable vacía").toHaveLength(0)
+  })
+
+  it.fails("primer borrador con binding, sin flush inicial: la metadata no descarta la primera subida", async () => {
+    const { writingId, canonicalPath } = await createMaterializedDraft("Versión 1.", {
+      slug: "carta-ode-648",
+      visibility: "public",
+    })
+    const service = await getDocumentService()
+
+    await saveFromEditor(writingId, "Versión 2.", 2)
+    const meta = await service.updateWritingMetadata({
+      writingId,
+      status: "review",
+      version: 3,
+      updatedAt: timestamp(3),
+    })
+    expect(meta.error).toBeNull()
+    expect(actionableMutations(writingId), "solo queda la metadata").toHaveLength(1)
+    expect(fakeSupabase.row("writings", writingId), "control positivo: la nube todavía no tiene la fila").toBeNull()
+
+    const result = await desktopCatalogSyncService.flushPending()
+    expect(result.error).toBeNull()
+    expect(result.data?.failedMutations).toEqual([])
+
+    const applied = appliedCloudWrites("writings")
+    expect(applied, "la primera subida llega como INSERT").toHaveLength(1)
+    expect(applied[0].kind).toBe("insert")
+    const cloud = fakeSupabase.row("writings", writingId)
+    expect(cloud?.body_text, "con el cuerpo más reciente del .md").toBe("Versión 2.")
+    expect(cloud?.content_hash, "y su hash").toBe(
+      await computeMarkdownContentHash(await readFile(canonicalPath, "utf8")),
+    )
+    expect(cloud?.status, "y la metadata final").toBe("review")
+    expect(cloud?.version).toBe(3)
+    expect(cloud?.slug, "control positivo: el slug del registro llega al INSERT").toBe("carta-ode-648")
+    expect(cloud?.visibility, "control positivo: la visibilidad pública llega al INSERT").toBe("public")
+    expect((await catalog.getById(writingId))?.syncStatus, "la fila queda confirmada").toBe("synced")
+  })
+
+  // El caso anterior es el control positivo de este: con la cuenta correcta la
+  // misma secuencia SÍ inserta. Aquí el dueño es otra cuenta activa y la
+  // aserción es una ausencia: ningún INSERT puede caer bajo la sesión actual.
+  it.fails("una fila con cloudAccountId de otra cuenta activa nunca se inserta bajo la sesión actual", async () => {
+    const { writingId } = await createMaterializedDraft("Versión 1.", { authorId: "user-2" })
+    await saveFromEditor(writingId, "Versión 2 ajena.", 2)
+
+    expect(fakeSupabase.row("writings", writingId), "control positivo: la nube no tiene la fila").toBeNull()
+
+    const result = await desktopCatalogSyncService.flushPending()
+    expect(result.error).toBeNull()
+    expect(appliedCloudWrites("writings"), "ningún write aplicado bajo la sesión equivocada").toHaveLength(0)
+    expect(fakeSupabase.row("writings", writingId), "la fila ajena no existe en la nube").toBeNull()
+
+    const queued = actionableMutations(writingId)
+    expect(queued, "la mutación se retiene para su dueño").toHaveLength(1)
+    expect(queued[0].status, "como fallo reintentable, no como synced").toBe("failed")
+    expect(queued[0].lastError ?? "", "con la razón del límite de cuenta").toMatch(/another account/i)
+    expect(result.data?.failedMutations).toEqual([queued[0].id])
   })
 })
