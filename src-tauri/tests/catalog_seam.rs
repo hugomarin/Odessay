@@ -221,6 +221,22 @@ fn string_arg(args: &Value, key: &str) -> String {
     typed_arg(args, key)
 }
 
+/// Real identity of a replayed file, for the ODE-635 identity guard: the
+/// fixture's inodes are synthetic (model fs), so the replay maps any recorded
+/// guard to the file the real command will actually see.
+fn real_file_inode(path: &str) -> Option<u64> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(path).ok().map(|metadata| metadata.ino())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        None
+    }
+}
+
 /// Deserializes any recorded arg (i64/usize/bool/Option/struct) with the same
 /// missing-key diagnostics as `string_arg`.
 fn typed_arg<T: DeserializeOwned>(args: &Value, key: &str) -> T {
@@ -465,16 +481,21 @@ fn dispatch(cmd: &str, args: &Value) -> Result<Value, String> {
         // ── SYNC-05: la cadena de guardado y la cola de mutaciones ────────────
         "write_file" => {
             let expected: Option<String> = typed_arg(args, "expectedContentHash");
-            // ODE-635: optional identity guard; recordings made before it carry
-            // no `expectedInode`, so an absent key is the "no guard" shape.
-            let expected_inode: Option<u64> = args.get("expectedInode").and_then(Value::as_u64);
-            document::write_file(
-                string_arg(args, "path"),
-                string_arg(args, "content"),
-                expected,
-                expected_inode,
-            )
-            .map(|()| Value::Null)
+            let path = string_arg(args, "path");
+            // ODE-635: the optional identity guard. The recording carries the
+            // model fs's synthetic inode (machine-dependent values are excluded
+            // from projections for the same reason — see
+            // `project_workspace_sync`); the replayed file lives on the real
+            // fs, so any recorded `Some` is re-pointed at the real file's
+            // inode: the guard stays engaged instead of comparing synthetic
+            // identity against real identity. An absent key (recordings made
+            // before the guard) stays `None`.
+            let expected_inode = match args.get("expectedInode").and_then(Value::as_u64) {
+                Some(_) => real_file_inode(&path),
+                None => None,
+            };
+            document::write_file(path, string_arg(args, "content"), expected, expected_inode)
+                .map(|()| Value::Null)
         }
         "open_file" => document::open_file(string_arg(args, "path")).map(Value::String),
         "workspace_touch_file" => workspace::workspace_touch_file(
