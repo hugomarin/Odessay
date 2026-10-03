@@ -121,6 +121,7 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2)", () => {
     expect(fixture.scenarios.map((scenario) => scenario.name).sort()).toEqual([
       "sync05-save-during-flush-failure",
       "sync05-save-during-flush-success",
+      "sync05-workspace-removal-not-exists",
       "sync08-bound-pending-save-metadata",
       "sync08-first-upload-metadata-before-flush",
       "sync08-settings-metadata-batch",
@@ -137,8 +138,10 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2)", () => {
       ),
     )
     expect([...commands].sort()).toEqual([
+      "catalog_activate_binding_root",
       "catalog_apply_cloud_snapshots",
       "catalog_apply_reconcile",
+      "catalog_apply_workspace_removal",
       "catalog_bulk_dual_write",
       "catalog_dual_write",
       "catalog_get_by_id",
@@ -192,7 +195,11 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2)", () => {
 
     // Req 5: cada escena de SYNC-05 cierra con controles de estado canónico
     // (documento + cola) que el replay contrasta en SQLite real.
-    for (const name of ["sync05-save-during-flush-failure", "sync05-save-during-flush-success"]) {
+    for (const name of [
+      "sync05-save-during-flush-failure",
+      "sync05-save-during-flush-success",
+      "sync05-workspace-removal-not-exists",
+    ]) {
       const scenario = fixture.scenarios.find((candidate) => candidate.name === name)
       expect(scenario).toBeDefined()
       const controls = scenario!.steps.filter((step) => step.kind === "control")
@@ -203,6 +210,51 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2)", () => {
         expect(control.mutations!.length).toBeGreaterThan(0)
       }
     }
+
+    // ODE-663: la escena del retiro llega a la rama `NOT EXISTS` por la
+    // secuencia real — `catalog_apply_workspace_removal` retira la raíz y encola
+    // el delete del documento cloud-owned. El id que Rust acuña (index.rs:957)
+    // se graba con alias estable, nunca literal; el resto de la fila se
+    // compara en los controles (estado, retry, payload, orden, documentId).
+    const removal = fixture.scenarios.find(
+      (scenario) => scenario.name === "sync05-workspace-removal-not-exists",
+    )
+    const removalInvocations = removal!.steps.filter(
+      (step) => step.kind === "invoke" && step.cmd === "catalog_apply_workspace_removal",
+    )
+    expect(removalInvocations).toHaveLength(1)
+    expect(removalInvocations[0]!.args).toEqual(
+      expect.objectContaining({
+        bindingRootId: "fixture-root-a",
+        rootPath: "$ROOT_A",
+      }),
+    )
+    const removalControls = removal!.steps.filter((step) => step.kind === "control") as unknown as {
+      name: string
+      documentId: string
+      mutations: { id: string; status: string }[]
+    }[]
+    expect(removalControls.map((control) => control.name)).toEqual([
+      "sync05-removal-not-exists-guard",
+      "sync05-removal-delete-resolved",
+    ])
+    expect(removalInvocations[0]!.response).toEqual([removalControls[0]!.documentId])
+    expect(removalControls[0]!.mutations.map((mutation) => mutation.status)).toEqual([
+      "synced",
+      "pending",
+    ])
+    expect(removalControls[1]!.mutations.map((mutation) => mutation.status)).toEqual([
+      "synced",
+      "synced",
+    ])
+    const generatedId = removalControls[0]!.mutations[1]!.id
+    expect(generatedId.startsWith("$MUTATION_")).toBe(true)
+    expect(removalControls[1]!.mutations[1]!.id).toBe(generatedId)
+    expect(
+      removal!.steps.filter(
+        (step) => step.kind === "invoke" && step.cmd === "catalog_activate_binding_root",
+      ),
+    ).toHaveLength(1)
 
     const watch07 = fixture.scenarios.find((scenario) => scenario.name === "watch07-external-edit-same-path")
     expect(watch07).toBeDefined()

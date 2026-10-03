@@ -15,8 +15,8 @@ const createWriting = (partial: Partial<LocalWriting> & Pick<LocalWriting, "id">
   version: partial.version ?? 1,
   sync_status: partial.sync_status ?? "synced",
   lifecycle: partial.lifecycle ?? "server-confirmed",
-  created_at: partial.created_at ?? "2026-03-10T00:00:00.000Z",
-  updated_at: partial.updated_at ?? "2026-03-10T00:00:00.000Z",
+  created_at: partial.created_at ?? "2026-03-09T12:00:00.000Z",
+  updated_at: partial.updated_at ?? "2026-03-09T12:00:00.000Z",
   local_updated_at: partial.local_updated_at ?? 1,
   author_id: partial.author_id ?? "user-1",
   correspondence_id: partial.correspondence_id ?? null,
@@ -145,14 +145,10 @@ describe("buildDeskActivitySummary", () => {
     expect(todayRow?.dateLabel).toBe("Today")
   })
 
-  // KNOWN FAILURE (surfaced by PR4 adding `npm test` to CI, not caused by it):
-  // fails only in CI's UTC runner, not on a non-UTC local machine — the
-  // fixture's created_at plus createdLabel's date formatting cross a day
-  // boundary differently depending on timezone ("Created Mar 10" in CI vs
-  // the hardcoded "Created Mar 9" expectation). Needs a real fix to either
-  // the fixture or the date formatter, not a CI change. Tracked as
-  // follow-up in ODE-543, not fixed here.
-  it.skip("exposes document state for Desk rows and hero cards", () => {
+  // ODE-543 — the fixture sits at noon UTC so the local date-label formatter
+  // reads the same calendar day in UTC and in America/Bogota; midnight UTC
+  // crossed into the previous day west of Greenwich.
+  it("exposes document state for Desk rows and hero cards", () => {
     const summary = buildDeskActivitySummary(
       [
         createWriting({

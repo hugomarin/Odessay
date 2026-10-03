@@ -3019,6 +3019,583 @@
       ]
     },
     {
+      "name": "sync05-workspace-removal-not-exists",
+      "description": "SYNC-05 (workspace removal in flight): a held save is in flight when the real `catalog_apply_workspace_removal` retires the root and enqueues the delete of the cloud-owned document — the second actionable mutation the `NOT EXISTS` projection guards against. The in-flight response does not project the document; resolving the delete does; re-registering the root re-binds the surviving .md.",
+      "profile": "filesystem",
+      "steps": [
+        {
+          "kind": "fs",
+          "op": "seed-manifest",
+          "root": "rootA",
+          "bindingRootId": "fixture-root-a"
+        },
+        {
+          "kind": "fs",
+          "op": "write",
+          "root": "rootA",
+          "relativePath": "notes/letter.md",
+          "content": "# Letter\n\nversion one\n",
+          "inode": 901,
+          "modifiedAt": 1700150000000
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": null
+          },
+          "response": {
+            "files": [],
+            "unboundPaths": [
+              "notes/letter.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "notes/letter.md",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                "size": 22
+              }
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_binding_root_documents",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-a"
+          },
+          "response": []
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": {
+              "notes/letter.md": "00000000-0000-4000-8000-000000000002"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/letter.md",
+                "id": "00000000-0000-4000-8000-000000000002",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_reconcile",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "upserts": [
+                {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000002",
+                  "relativePath": "notes/letter.md",
+                  "canonicalPath": "$ROOT_A/notes/letter.md",
+                  "inode": 901,
+                  "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                  "size": 22,
+                  "lastSeenAt": 1700150000000,
+                  "title": "letter",
+                  "createdAt": 1700150000000,
+                  "modifiedAt": 1700150000000
+                }
+              ],
+              "detached": []
+            }
+          },
+          "response": {
+            "applied": true,
+            "changed": [
+              "00000000-0000-4000-8000-000000000002"
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_cloud_snapshots",
+          "args": {
+            "dbPath": "$DB",
+            "snapshots": [
+              {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "cloudPresent": true,
+                "cloudAccountId": "user-1",
+                "contentHash": "cloud-hash",
+                "title": "Letter",
+                "slug": "carta-ode-663",
+                "status": "draft",
+                "artifactType": "general",
+                "visibility": "private",
+                "version": 1,
+                "deletedAt": null,
+                "createdAt": 1700150000000,
+                "modifiedAt": 1700150000000
+              }
+            ]
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "open_file",
+          "args": {
+            "path": "$ROOT_A/notes/letter.md"
+          },
+          "response": "# Letter\n\nversion one\n"
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "write_file",
+          "args": {
+            "path": "$ROOT_A/notes/letter.md",
+            "content": "Versión 2.",
+            "expectedContentHash": null
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_touch_file",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "relativePath": "notes/letter.md",
+            "documentId": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "status": "updated",
+            "rootPath": "$ROOT_A",
+            "bindingRootId": "fixture-root-a",
+            "file": {
+              "id": "00000000-0000-4000-8000-000000000002",
+              "relativePath": "notes/letter.md",
+              "name": "letter.md",
+              "size": 11,
+              "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450"
+            }
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_dual_write",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "document": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "localPresent": true,
+                "cloudPresent": true,
+                "cloudAccountId": "user-1",
+                "syncStatus": "pending",
+                "title": "letter",
+                "slug": "carta-ode-663",
+                "status": "draft",
+                "artifactType": "general",
+                "visibility": "private",
+                "version": 2,
+                "deletedAt": null,
+                "createdAt": 1700150000000,
+                "modifiedAt": 1790769602000
+              },
+              "binding": {
+                "bindingRootId": "fixture-root-a",
+                "rootPath": "$ROOT_A",
+                "manifestVersion": 2,
+                "visibleAsWorkspace": false,
+                "relativePath": "notes/letter.md",
+                "canonicalPath": "$ROOT_A/notes/letter.md",
+                "inode": 901,
+                "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450",
+                "size": 11,
+                "lastSeenAt": 1700150000000
+              },
+              "mutation": {
+                "id": "00000000-0000-4000-8000-000000000004",
+                "operation": "upsert",
+                "payloadJson": "{\"title\":\"letter\",\"slug\":\"carta-ode-663\",\"status\":\"draft\",\"artifactType\":\"general\",\"visibility\":\"private\",\"parentId\":null,\"correspondenceId\":null,\"version\":2,\"updatedAt\":\"2026-09-30T12:00:02.000Z\",\"deletedAt\":null,\"contentHash\":\"blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450\",\"contentUnchanged\":false}",
+                "status": "pending",
+                "attemptCount": 0,
+                "nextRetryAt": null,
+                "createdAt": 1700100001000,
+                "lastError": null
+              }
+            }
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_pending_mutations",
+          "args": {
+            "dbPath": "$DB",
+            "now": 1700100002000,
+            "limit": 16,
+            "includeFailed": true
+          },
+          "response": [
+            {
+              "id": "00000000-0000-4000-8000-000000000004",
+              "documentId": "00000000-0000-4000-8000-000000000002",
+              "operation": "upsert",
+              "status": "pending",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "createdAt": 1700100001000,
+              "lastError": null
+            }
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_pending_metadata_mutations",
+          "args": {
+            "dbPath": "$DB",
+            "now": 1700100002000,
+            "limit": 16,
+            "includeFailed": true
+          },
+          "response": []
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "open_file",
+          "args": {
+            "path": "$ROOT_A/notes/letter.md"
+          },
+          "response": "Versión 2."
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_workspace_removal",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-a",
+            "rootPath": "$ROOT_A",
+            "deletedAt": "2023-11-16T02:00:03.000Z",
+            "updatedAt": "2023-11-16T02:00:03.000Z",
+            "nowMillis": 1700100003000
+          },
+          "response": [
+            "00000000-0000-4000-8000-000000000002"
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_update_mutation_status",
+          "args": {
+            "dbPath": "$DB",
+            "mutationId": "00000000-0000-4000-8000-000000000004",
+            "status": "synced",
+            "attemptCount": 0,
+            "nextRetryAt": null,
+            "lastError": null
+          },
+          "response": null
+        },
+        {
+          "kind": "control",
+          "name": "sync05-removal-not-exists-guard",
+          "documentId": "00000000-0000-4000-8000-000000000002",
+          "document": {
+            "syncStatus": "pending",
+            "cloudPresent": true
+          },
+          "mutations": [
+            {
+              "id": "00000000-0000-4000-8000-000000000004",
+              "status": "synced",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "lastError": null,
+              "payload": {
+                "mutationKind": null,
+                "version": 2,
+                "updatedAt": "2026-09-30T12:00:02.000Z",
+                "status": "draft",
+                "artifactType": "general"
+              }
+            },
+            {
+              "id": "$MUTATION_REMOVAL_00000000-0000-4000-8000-000000000002",
+              "status": "pending",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "lastError": null,
+              "payload": {
+                "mutationKind": null,
+                "version": 2,
+                "updatedAt": "2023-11-16T02:00:03.000Z",
+                "status": null,
+                "artifactType": null
+              }
+            }
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_pending_mutations",
+          "args": {
+            "dbPath": "$DB",
+            "now": 1700100005000,
+            "limit": 16,
+            "includeFailed": true
+          },
+          "response": [
+            {
+              "id": "$MUTATION_REMOVAL_00000000-0000-4000-8000-000000000002",
+              "documentId": "00000000-0000-4000-8000-000000000002",
+              "operation": "delete",
+              "status": "pending",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "createdAt": 1700100003000,
+              "lastError": null
+            }
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_pending_metadata_mutations",
+          "args": {
+            "dbPath": "$DB",
+            "now": 1700100005000,
+            "limit": 16,
+            "includeFailed": true
+          },
+          "response": []
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": null,
+            "localPresent": false,
+            "bindingRootId": null,
+            "contentHash": null
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_update_mutation_status",
+          "args": {
+            "dbPath": "$DB",
+            "mutationId": "$MUTATION_REMOVAL_00000000-0000-4000-8000-000000000002",
+            "status": "synced",
+            "attemptCount": 0,
+            "nextRetryAt": null,
+            "lastError": null
+          },
+          "response": null
+        },
+        {
+          "kind": "control",
+          "name": "sync05-removal-delete-resolved",
+          "documentId": "00000000-0000-4000-8000-000000000002",
+          "document": {
+            "syncStatus": "deleted",
+            "cloudPresent": false
+          },
+          "mutations": [
+            {
+              "id": "00000000-0000-4000-8000-000000000004",
+              "status": "synced",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "lastError": null,
+              "payload": {
+                "mutationKind": null,
+                "version": 2,
+                "updatedAt": "2026-09-30T12:00:02.000Z",
+                "status": "draft",
+                "artifactType": "general"
+              }
+            },
+            {
+              "id": "$MUTATION_REMOVAL_00000000-0000-4000-8000-000000000002",
+              "status": "synced",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "lastError": null,
+              "payload": {
+                "mutationKind": null,
+                "version": 2,
+                "updatedAt": "2023-11-16T02:00:03.000Z",
+                "status": null,
+                "artifactType": null
+              }
+            }
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_activate_binding_root",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-a",
+            "rootPath": "$ROOT_A"
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": null
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/letter.md",
+                "id": "00000000-0000-4000-8000-000000000002",
+                "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_binding_root_documents",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-a"
+          },
+          "response": []
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_reconcile",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "upserts": [
+                {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000002",
+                  "relativePath": "notes/letter.md",
+                  "canonicalPath": "$ROOT_A/notes/letter.md",
+                  "inode": 901,
+                  "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450",
+                  "size": 11,
+                  "lastSeenAt": 1700150000000,
+                  "title": "letter",
+                  "createdAt": 1700150000000,
+                  "modifiedAt": 1700150000000
+                }
+              ],
+              "detached": []
+            }
+          },
+          "response": {
+            "applied": true,
+            "changed": [
+              "00000000-0000-4000-8000-000000000002"
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450"
+          }
+        }
+      ]
+    },
+    {
       "name": "sync08-bound-pending-save-metadata",
       "description": "SYNC-08: on a bound, cloud-owned document (hydrated from the fake cloud) a real body save enqueues a pending mutation and a real metadata update before the flush supersedes it — one actionable metadata mutation remains and the binding keeps the body hash.",
       "profile": "filesystem",

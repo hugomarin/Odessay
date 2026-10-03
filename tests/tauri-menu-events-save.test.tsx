@@ -133,24 +133,30 @@ describe("useTauriMenuEvents save flow", () => {
     expect(mocks.invoke).not.toHaveBeenCalledWith("write_file", expect.anything())
   })
 
-  // KNOWN FAILURE (surfaced by PR4 adding `npm test` to CI, not caused by it):
-  // `mocks.invoke` is called 3 times instead of the expected 2 — an extra
-  // `invoke` call happens somewhere in the save-as -> save-to-disk flow that
-  // this test's expectation was never updated for. Needs investigation into
-  // the actual save flow, not a CI change. Tracked as follow-up in ODE-543, not fixed here.
-  it.skip("falls back to a plain write when no move handler is provided", async () => {
+  // ODE-543 — count only the save flow's own `write_file` calls. The startup
+  // drain legitimately invokes `take_pending_open_paths` before any menu event
+  // (hooks/useTauriMenuEvents.ts:128-134), so the global total is not the
+  // contract; each save must produce its own write_file with the right args.
+  it("falls back to a plain write when no move handler is provided", async () => {
     await mountHarness()
+
+    const writeFileCalls = () =>
+      mocks.invoke.mock.calls.filter(([command]) => command === "write_file")
 
     await emit("save-as")
     await vi.waitFor(() =>
-      expect(mocks.invoke).toHaveBeenCalledWith("write_file", {
-        path: "/chosen/Letter.md",
-        content: "# Letter\n",
-      }),
+      expect(writeFileCalls()).toEqual([
+        ["write_file", { path: "/chosen/Letter.md", content: "# Letter\n" }],
+      ]),
     )
 
     await emit("save-to-disk")
-    await vi.waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() =>
+      expect(writeFileCalls()).toEqual([
+        ["write_file", { path: "/chosen/Letter.md", content: "# Letter\n" }],
+        ["write_file", { path: "/chosen/Letter.md", content: "# Letter\n" }],
+      ]),
+    )
     expect(mocks.saveDialog).toHaveBeenCalledTimes(1)
   })
 })
