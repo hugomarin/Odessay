@@ -416,6 +416,83 @@ describe("ODE-635 — guardado sin baseline que se cruza con un rename", () => {
       )
     },
   )
+
+  /**
+   * ODE-635 (review ronda 2, P1) — un archivo externo que aparece en la ruta
+   * obsoleta antes del write no se puede pisar. El guardado sale con baseline
+   * nulo y queda retenido en `write_file` sobre la ruta vieja, ya con su ruta
+   * resuelta; el rename completa y otro escritor crea contenido distinto en esa
+   * ruta antes de que el guardado libere su escritura. Como el adapter pasa
+   * `null` sin guardia, `write_file` hace `fs::rename` sobre el destino
+   * existente: pisa el archivo externo y la comparación posterior ve el
+   * markdown de ESTA operación, así que lo retira a `.trash`. Se pierde el
+   * contenido ajeno.
+   *
+   * Propiedad: el contenido externo sigue legible en la ruta vieja, fuera de
+   * `.trash`; el guardado aterriza en el archivo renombrado y el catálogo sigue
+   * enlazado a la ruta nueva. `null` sigue siendo "sin baseline": la ruta
+   * obsoleta no se escribe, no se sustituye ningún hash.
+   *
+   * Muta a rojo si el write sin guardia vuelve a pisar la ruta obsoleta.
+   */
+  it.fails(
+    "un archivo externo que aparece en la ruta obsoleta antes del write no se pisa",
+    async () => {
+      const draft = await createDesktopDraft({ title: "ODE635 ExternoPreWrite", initialBodyJson: bodyJson("BASE") })
+      const record = draft.data!
+      const service = await getDocumentService()
+      const before = await tauriCatalogGetByIdDouble(await desktopDbPath(), record.id)
+      const originalPath = before!.canonicalPath!
+      const renamedName = "ODE635 ExternoPreWrite Renombrado.md"
+      const externalMarkdown = "# Aporte de otro escritor\n\naparece antes del write\n"
+
+      // El guardado sale con baseline nulo y queda retenido en `write_file`
+      // sobre la ruta vieja, ya con su ruta resuelta.
+      const held = holdWriteFile((path) => path === originalPath)
+      const save = service.saveWriting({
+        writing: {
+          ...record,
+          content: { ...record.content, richText: bodyJson("NUEVO"), plainText: "NUEVO" },
+        },
+        expectedContentHash: null,
+      })
+      await held.started
+
+      // El rename completa de verdad mientras el guardado sigue en vuelo.
+      const renamed = await service.renameWriting({
+        writingId: record.id,
+        title: "ODE635 ExternoPreWrite Renombrado",
+        updatedAt: new Date().toISOString(),
+      })
+      expect(renamed.error, "control positivo: el rename completa").toBeNull()
+
+      // Otro escritor crea contenido distinto en la ruta vieja antes de que el
+      // guardado libere su escritura sin guardia.
+      await writeFile(originalPath, externalMarkdown, "utf8")
+
+      held.release()
+      const saved = await save
+      expect(saved.error, "control positivo: el guardado retenido resuelve").toBeNull()
+
+      // Propiedad: el contenido externo no se pisa ni termina en Trash; el
+      // guardado aterriza en el renombrado y el catálogo sigue ahí.
+      const contentsAtOldPath = await readFile(originalPath, "utf8").catch(() => "")
+      expect(contentsAtOldPath, "el contenido externo sigue legible en la ruta vieja").toBe(externalMarkdown)
+      const trash = await trashFiles()
+      expect(trash, "el contenido externo no termina en Trash").toEqual([])
+      const files = await writingFiles()
+      expect(
+        files.map((file) => file.name).sort(),
+        "el renombrado sigue activo y la ruta vieja conserva el contenido externo",
+      ).toEqual(["ODE635 ExternoPreWrite Renombrado.md", "ODE635 ExternoPreWrite.md"].sort())
+      const renamedFile = files.find((file) => file.name === renamedName)
+      expect(renamedFile?.contents, "el guardado aterriza en el archivo renombrado").toContain("NUEVO")
+      const row = await tauriCatalogGetByIdDouble(await desktopDbPath(), record.id)
+      expect(row!.canonicalPath, "el catálogo apunta al archivo renombrado").toBe(
+        join(await writingsDir(), renamedName),
+      )
+    },
+  )
 })
 
 // ─── helpers ────────────────────────────────────────────────────────────────
