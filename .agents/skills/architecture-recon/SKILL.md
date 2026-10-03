@@ -62,13 +62,15 @@ Architecture Recon
 
 El Recon completo es contexto de trabajo de la tarea. Su persistencia y la promoción de hallazgos recurrentes siguen el protocolo del proyecto.
 
-### Modo validación (piloto desde ODE-605)
+### Modo validación
 
 Si el brief trae un `Recon Pack` (ver `issue-brief-schema.md`), no repetir la exploración: validarlo, en ≤10 minutos.
 
 1. `git diff <sha del pack>..origin/main -- <archivos del pack>`. Sin cambios: el pack vale tal cual; empezar a implementar.
 2. Con cambios: re-verificar solo los símbolos cuyo rango cambió y actualizar sus líneas.
 3. Si el cambio es estructural (el símbolo desapareció, cambió de dueño o de archivo, o el orden de efectos que el pack describe ya no es cierto), detener BUILD con `Context Gap — Recon Pack` y pedir al planner que actualice el mapa. No redescubrir el área por cuenta propia.
+
+El campo "Construir con" del pack es el punto de partida del `Construction order`: reutilizar lo que nombra y no crear lo que excluye. Desviarse exige una `Recon correction` con la evidencia.
 
 El output es un Recon breve que confirma el pack, más una `Recon correction` (qué decía el pack, qué hay en el código, con líneas) por cada diferencia encontrada. Las correcciones van en el Context Report.
 

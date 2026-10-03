@@ -45,4 +45,5 @@ Planning produce briefs ejecutables; Audit Planning comprueba la coherencia del 
 
 - **Especialidad local:** en Odessay, [specialties/phase-audit-contract.md](specialties/phase-audit-contract.md) contiene fuentes de roadmap y DoD, preguntas de auditoría, criterios de rechazo, severidad y formato de salida. Cargarla al auditar una fase del proyecto.
 - **Prompt por issue:** la misma especialidad incluye un prompt reutilizable para auditar un issue individual; aplicarlo junto con el schema del Issue Brief cuando se revise readiness para BUILD.
+- **Antes de orquestar una tanda:** para auditar contra el código lo que puede frenar la orquestación (contratos, brief contra código, seguridad, contratos externos, conflictos, requisitos operativos, tareas humanas), con decisiones por defecto y el reporte al humano, usar el uso "Despachar" de [skill-planning/specialties/area-recon.md](../skill-planning/specialties/area-recon.md). Es la misma lectura profunda del código que el Recon de área; no se duplica aquí.
 - **Mecanismos:** reutilizar la información del tracker y checks existentes; este skill no requiere scripts propios.

@@ -32,7 +32,7 @@ Antes de buscar findings:
 2. Suficiente código circundante para entender cada path cambiado, no solo las líneas con `+`/`-`.
 3. El owner, siblings relevantes y call sites cuando la corrección del cambio dependa de ellos.
 4. El estado de CI del head que se revisa. BUILD entrega sin esperar a CI, así que confirmarlo es parte del review. Si el Context Report declara fallos intermitentes por carga, comprobar que CI pasó esos archivos; un fallo que se reproduce aislado no es intermitente y cuenta como finding.
-5. Las mutaciones que lista la Guía de review. BUILD ya no las corre todas, así que ejecutarlas es parte de la evidencia de testing del review: cada una debe poner rojo el test declarado por la razón declarada.
+5. Las mutaciones que lista la Guía de review. BUILD las corre todas y pega su salida roja; el review re-corre en vivo una muestra (como mínimo la del modo de fallo, más las que no convenzan) y todas si falta la salida de alguna. Cada una debe poner rojo el test declarado por la razón declarada; una salida pegada que no se reproduce es finding.
 6. El resultado de `npm run ops:proof:precheck` (también corre en CI, en `process-checks`). Cubre lo mecánico: que un commit `test(...)` no toque producción, que el `it.fails` entre antes que su fix y que el fix solo lo convierta en `it`, y que las filas tocadas del capability map tengan tantas celdas como su cabecera. Con el precheck en verde, eso no se re-verifica a mano. Siguen siendo del review comprobar que el `it.fails` está rojo **por la razón declarada** y juzgar si el Status de la fila y su Note dicen lo mismo: eso es texto libre y ningún script lo decide.
 
 **Re-review tras un ciclo de fix.** Si el diff desde el head revisado en la ronda anterior solo toca docs o tests y fixtures, la re-review es ligera: verificar cada hallazgo anterior más los checks mecánicos (CI, precheck, recuento del mapa) y que no se amplió el alcance, sin repetir las mutaciones ya verificadas. Si toca producción, la re-review es completa. El veredicto dice cuál de las dos se hizo (`workflow/workflow.md` § `/wf-review`).
@@ -77,7 +77,18 @@ Buscar defectos sistémicos antes que defectos locales:
 
 Un finding sistémico cambia cómo se debe corregir el PR entero, no solo una línea — vale más que varios findings locales y debe aparecer primero en el reporte.
 
-Si el brief trae `Recon Pack` (piloto desde ODE-605), contrastar el diff con su `No tocar` y con los símbolos que declara. Un cambio fuera del pack sin `Recon correction` que lo explique es un finding de alcance; una `Recon correction` reportada no lo es.
+Si el brief trae `Recon Pack`, contrastar el diff con su `No tocar` y con los símbolos que declara. Un cambio fuera del pack sin `Recon correction` que lo explique es un finding de alcance; una `Recon correction` reportada no lo es.
+
+### Review de un Recon (fase 0R)
+
+El PR del mapa que deja un Recon de área (`skill-planning/specialties/area-recon.md`) se revisa por **hechos**, no por redacción. Lo revisa un agente distinto del que hizo el Recon.
+
+- Por cada issue, elegir **al menos 4 rangos al azar** de su Recon Pack y confirmar el símbolo en el commit declarado: `git show <sha>:<archivo> | sed -n '<a>,<b>p'`.
+- Confirmar contra el código los hallazgos que **cambian el alcance**: correcciones al brief, seguridad, contratos externos.
+- Confirmar el **"Construir con"** de cada pack: la API o el helper que manda a reutilizar existe y cubre el caso; lo que dice "no crear" de verdad ya tiene owner; el owner propuesto no es un hotspot que absorbería responsabilidad nueva. Una recomendación de reutilización falsa lleva al builder a un diseño peor que no tenerla.
+- Repetir el recuento con el comando que trae el mapa, si lo trae.
+- Confirmar que el diff solo toca docs y que ningún asunto de commit menciona un `ODE-###`.
+- **PASS:** mergear el PR del mapa y comentar en cada issue "Mapa de Recon en main @ <SHA>". **FAIL:** hallazgos con línea, en el PR y en el issue afectado. Nada se despacha antes del PASS.
 
 ---
 
