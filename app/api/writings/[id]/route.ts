@@ -130,30 +130,17 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   const { id } = await context.params;
-  let visibility = parsed.data.visibility ?? "private";
-
-  // Guardrail: if the writing already has recipients, keep at least "shared" visibility.
-  if (visibility === "private") {
-    const { count, error: sharesError } = await supabase
-      .from("writing_shares")
-      .select("id", { head: true, count: "exact" })
-      .eq("writing_id", id);
-
-    if (sharesError) {
-      return jsonError(500, "DB_ERROR", sharesError.message);
-    }
-
-    if ((count ?? 0) > 0) {
-      visibility = "shared";
-    }
-  }
-
+  // ODE-664: la visibilidad del payload se persiste tal cual. Normalizarla
+  // (private con grant vigente → shared) es responsabilidad exclusiva del
+  // owner de base de datos, public.writings_set_derived_fields(); un SELECT
+  // paralelo a writing_shares aquí divergiría si el grant se revoca entre la
+  // lectura y el UPDATE. `select()` devuelve la fila canónica después del
+  // trigger, así que la respuesta consume lo persistido.
   const writingRecord = {
     id,
     author_id: userId,
     ...parsed.data,
     status: normalizeWritingStatus(parsed.data.status),
-    visibility,
   };
 
   // Try update first to keep ownership checks strict and avoid duplicate-key races on insert.
