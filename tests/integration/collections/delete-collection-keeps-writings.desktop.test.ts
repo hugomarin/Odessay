@@ -41,6 +41,7 @@ import {
   configureRealDesktopDoubles,
   resetCatalogDoubles,
   resetSettingsStoreDouble,
+  tauriCatalogApplyCollectionSnapshotDouble,
   tauriCatalogDeleteCollectionDouble,
   tauriCatalogDualWriteDouble,
   tauriCatalogGetByIdDouble,
@@ -71,6 +72,11 @@ function unimplemented(name: string) {
     )
   })
 }
+
+const supabaseMock = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  from: vi.fn(),
+}))
 
 vi.mock("@tauri-apps/api/path", () => tauriPathModuleDouble)
 
@@ -112,7 +118,7 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriCatalogPurgeDocument: unimplemented("tauriCatalogPurgeDocument"),
   tauriCatalogListPendingMetadataMutations: tauriCatalogListPendingMetadataMutationsDouble,
   tauriCatalogUpdateMetadataMutationStatus: tauriCatalogUpdateMetadataMutationStatusDouble,
-  tauriCatalogApplyCollectionSnapshot: unimplemented("tauriCatalogApplyCollectionSnapshot"),
+  tauriCatalogApplyCollectionSnapshot: tauriCatalogApplyCollectionSnapshotDouble,
   tauriCatalogListCollectionSnapshot: tauriCatalogListCollectionSnapshotDouble,
   tauriCatalogSaveCollection: tauriCatalogSaveCollectionDouble,
   tauriCatalogDeleteCollection: tauriCatalogDeleteCollectionDouble,
@@ -131,7 +137,10 @@ vi.mock("@/lib/services/desktop/runtime-detection", () => ({
 }))
 
 vi.mock("@/lib/supabase/desktop-client", () => ({
-  createDesktopClient: () => ({}),
+  createDesktopClient: () => ({
+    auth: { getSession: supabaseMock.getSession },
+    from: supabaseMock.from,
+  }),
 }))
 
 // Igual que el resto de las pruebas desktop: agendar el flush por debounce no
@@ -175,6 +184,8 @@ afterAll(() => {
 afterEach(() => {
   resetCatalogDoubles()
   resetSettingsStoreDouble()
+  supabaseMock.getSession.mockReset()
+  supabaseMock.from.mockReset()
   // La configuración y el disco se rehacen por prueba; el root queda.
   rmSync(join(baseDir, "data"), { recursive: true, force: true })
   rmSync(join(baseDir, "config"), { recursive: true, force: true })
@@ -322,6 +333,98 @@ describe("COL-06 desktop — borrar una colección no toca sus documentos", () =
 
     const snapshot = await tauriCatalogListCollectionSnapshotDouble(dbPath)
     expect(snapshot.collections.map((collection) => collection.id)).not.toContain(principal.id)
+    const deleted = catalogMetadataMutationsDouble(dbPath).find(
+      (mutation) => mutation.entityId === principal.id && mutation.operation === "delete",
+    )
+    expect(deleted?.status).toBe("pending")
+  })
+
+  // ODE-666: la hidratación desktop (`hydrateCollections`) manda snapshots con
+  // `deletedAt:null` porque la nube no tiene `deleted_at` y su delete es físico.
+  // Un snapshot atrasado no puede revivir la colección borrada ni reinsertar sus
+  // relaciones; los documentos y sus `.md` quedan intactos. El dueño de la
+  // secuencia es el servicio real; la verdad de SQLite vive en
+  // `src-tauri/tests/collection_delete_keeps_documents.rs`.
+  it("(ODE-666) un snapshot cloud atrasado no revive la colección borrada ni sus relaciones", async () => {
+    const { first, second, principal, secondary } = await setupCollectionScenario()
+    const firstBytes = await readFile(first.canonicalPath)
+    const secondBytes = await readFile(second.canonicalPath)
+
+    await deleteLocalCollection(principal)
+
+    // Snapshot cloud atrasado, la forma real de `hydrateCollections`: `principal`
+    // vuelve a venir viva (`deletedAt:null`) con sus viejas relaciones;
+    // `secondary` trae nombre nuevo y una relación nueva (control positivo de que
+    // el merge sí aplica) y `cloudOnly` solo existe en la nube.
+    const cloudCollection = (id: string, name: string, localUpdatedAt: number) => ({
+      id, ownerId: "user-ode-618", name, description: null, visibility: "private" as const,
+      syncStatus: "synced", lifecycle: "server-confirmed", deletedAt: null,
+      createdAt: "2026-10-01T12:00:00.000Z", updatedAt: "2026-10-01T12:30:00.000Z", localUpdatedAt,
+    })
+    const cloudOnlyId = "collection-ode-666-cloud"
+    supabaseMock.getSession.mockResolvedValue({
+      data: { session: { user: { id: "user-ode-618" } } },
+      error: null,
+    })
+    supabaseMock.from.mockImplementation((table: string) => {
+      if (table === "collections") {
+        return {
+          select: () => ({
+            eq: async () => ({
+              data: [
+                cloudCollection(principal.id, "Principal", 3),
+                cloudCollection(secondary.id, "Secundaria (cloud)", 3),
+                cloudCollection(cloudOnlyId, "Cloud only", 5),
+              ],
+              error: null,
+            }),
+          }),
+        }
+      }
+      return {
+        select: async () => ({
+          data: [
+            { writing_id: first.writingId, collection_id: principal.id, added_at: "2026-10-01T12:00:00.000Z" },
+            { writing_id: second.writingId, collection_id: principal.id, added_at: "2026-10-01T12:00:00.000Z" },
+            { writing_id: first.writingId, collection_id: secondary.id, added_at: "2026-10-01T12:00:00.000Z" },
+            { writing_id: second.writingId, collection_id: secondary.id, added_at: "2026-10-01T12:00:00.000Z" },
+          ],
+          error: null,
+        }),
+      }
+    })
+
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+    const result = await desktopCatalogSyncService.hydrateCollections()
+    expect(result.error).toBeNull()
+
+    // Resultado canónico: la colección borrada sigue fuera de las superficies de
+    // Collections y no recupera ninguna relación; la viva sí recibió el merge.
+    const { collections, writingCollections } = await loadCollectionState()
+    expect(collections.map((collection) => collection.id)).not.toContain(principal.id)
+    expect(collections.map((collection) => collection.id)).toContain(secondary.id)
+    expect(collections.map((collection) => collection.id)).toContain(cloudOnlyId)
+    expect(collections.find((collection) => collection.id === secondary.id)?.name).toBe(
+      "Secundaria (cloud)",
+    )
+    expect(
+      writingCollections.filter((row) => row.collection_id === principal.id),
+      "cero relaciones de la colección tombstoned",
+    ).toHaveLength(0)
+    expect(
+      writingCollections.filter((row) => row.collection_id === secondary.id),
+      "control positivo: el merge insertó la relación nueva de la colección viva",
+    ).toHaveLength(2)
+
+    // Los documentos y sus `.md` no se tocan.
+    expect(await readFile(first.canonicalPath)).toEqual(firstBytes)
+    expect(await readFile(second.canonicalPath)).toEqual(secondBytes)
+    const afterFirst = await catalog.getById(first.writingId)
+    const afterSecond = await catalog.getById(second.writingId)
+    expect(afterFirst?.binding?.canonicalPath).toBe(first.canonicalPath)
+    expect(afterSecond?.binding?.canonicalPath).toBe(second.canonicalPath)
+
+    // La colección sigue soft-deleted y su mutación de delete sigue encolada.
     const deleted = catalogMetadataMutationsDouble(dbPath).find(
       (mutation) => mutation.entityId === principal.id && mutation.operation === "delete",
     )
