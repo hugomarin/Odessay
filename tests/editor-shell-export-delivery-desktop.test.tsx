@@ -1436,6 +1436,203 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     },
     TEST_TIMEOUT_MS,
   )
+
+  it.fails(
+    "cerrar y reabrir el panel durante una regeneración no pierde la mutación",
+    async () => {
+      const textA = "ODE652-CLOSE-REOPEN-ROTATE"
+      const a = await createAndOpenDocument(textA)
+      await confirmInCloud(a, textA)
+
+      world.getPreviewLink = async () => ({ error: null, data: previewLink(LINK_A) })
+      let releaseRotate: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la rotación no quedó retenida")
+      }
+      const heldRotate = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseRotate = resolve
+      })
+      world.rotatePreviewLink = async () => heldRotate
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la regeneración")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickShareAction("Regenerate")
+
+      const close = await waitFor(
+        () =>
+          findButton(
+            mounted!.container,
+            (button) => button.getAttribute("aria-label") === "Close panel",
+          ),
+        { label: 'botón "Close panel"' },
+      )
+      await act(async () => {
+        close.click()
+      })
+      await flush(3)
+      expect(
+        document.querySelector('[data-testid="editor-right-panel-tabs"]'),
+        "el panel quedó cerrado con la mutación en vuelo",
+      ).toBeNull()
+
+      // Reabrir: la misma instancia sigue esperando la mutación.
+      await openShareTab()
+      const regenerate = shareActionButton("Regenerate")
+      expect(regenerate, "el panel reabrió con la regeneración en curso").not.toBeNull()
+      expect(regenerate!.disabled, "la instancia sobrevivió al cierre: sigue guardando").toBe(true)
+
+      releaseRotate({ error: null, data: previewLink(LINK_A_ROTATED) })
+      await waitForShareLinkText(LINK_A_ROTATED)
+      expect(pageText(), "el enlace regenerado quedó visible").toContain(LINK_A_ROTATED)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "cerrar y reabrir el panel durante una revocación no revive el enlace",
+    async () => {
+      const textA = "ODE652-CLOSE-REOPEN-REVOKE"
+      const a = await createAndOpenDocument(textA)
+      await confirmInCloud(a, textA)
+
+      world.getPreviewLink = async () => ({ error: null, data: previewLink(LINK_A) })
+      let releaseRevoke: (value: { error: unknown; data: { writingId: string; revoked: boolean } | null }) => void =
+        () => {
+          throw new Error("la revocación no quedó retenida")
+        }
+      const heldRevoke = new Promise<{
+        error: unknown
+        data: { writingId: string; revoked: boolean } | null
+      }>((resolve) => {
+        releaseRevoke = resolve
+      })
+      world.revokePreviewLink = async () => heldRevoke
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de revocar")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      const revoke = await waitFor(
+        () =>
+          findButton(
+            mounted!.container,
+            (button) => button.getAttribute("aria-label") === "Revoke preview link",
+          ),
+        { label: "botón de revocar el enlace" },
+      )
+      await act(async () => {
+        revoke.click()
+      })
+      await flush(3)
+
+      const close = await waitFor(
+        () =>
+          findButton(
+            mounted!.container,
+            (button) => button.getAttribute("aria-label") === "Close panel",
+          ),
+        { label: 'botón "Close panel"' },
+      )
+      await act(async () => {
+        close.click()
+      })
+      await flush(3)
+      expect(
+        document.querySelector('[data-testid="editor-right-panel-tabs"]'),
+        "el panel quedó cerrado con la revocación en vuelo",
+      ).toBeNull()
+
+      await openShareTab()
+      const revokeAfter = await waitFor(
+        () =>
+          findButton(
+            mounted!.container,
+            (button) => button.getAttribute("aria-label") === "Revoke preview link",
+          ),
+        { label: "el panel reabrió con la revocación en curso" },
+      )
+      expect(revokeAfter.disabled, "la instancia sobrevivió al cierre: sigue guardando").toBe(true)
+
+      releaseRevoke({ error: null, data: { writingId: a, revoked: true } })
+      await waitFor(() => !pageText().includes(LINK_A), {
+        label: "el enlace desaparece al completar la revocación",
+      })
+      expect(pageText(), "el enlace revocado no revive").not.toContain(LINK_A)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "regreso a A: una recarga vieja que falla no borra la regeneración",
+    async () => {
+      const textA = "ODE652-STALE-LOAD-ERROR-A"
+      const textB = "ODE652-STALE-LOAD-ERROR-B"
+      const titleA = "ODE652 Stale Load Error A"
+      const titleB = "ODE652 Stale Load Error B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      let currentA = previewLink(LINK_A)
+      let releaseRotate: (value: SharePreviewLink) => void = () => {
+        throw new Error("la rotación no quedó retenida")
+      }
+      const heldRotate = new Promise<SharePreviewLink>((resolve) => {
+        releaseRotate = resolve
+      })
+      let releaseReload: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la recarga de A no quedó retenida")
+      }
+      const heldReload = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseReload = resolve
+      })
+      let aCalls = 0
+      world.getPreviewLink = async (writingId) => {
+        if (writingId === b) return { error: null, data: previewLink(LINK_B) }
+        aCalls += 1
+        if (aCalls === 1) return { error: null, data: currentA }
+        if (aCalls === 2) return heldReload
+        return { error: null, data: currentA }
+      }
+      world.rotatePreviewLink = async () => {
+        const rotated = await heldRotate
+        currentA = rotated
+        return { error: null, data: currentA }
+      }
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la mutación")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickShareAction("Regenerate")
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo con la mutación en vuelo")
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo con su recarga post-navegación retenida")
+      await waitFor(() => aCalls >= 2, { label: "la recarga de A salió al servicio" })
+
+      releaseRotate(previewLink(LINK_A_ROTATED))
+      await waitForShareLinkText(LINK_A_ROTATED)
+
+      // La recarga vieja falla después: su error no puede borrar la mutación.
+      releaseReload({
+        error: { code: "DB_ERROR", message: "load failed", retryable: true },
+        data: null,
+      })
+      await flush(4)
+      expect(pageText(), "la regeneración se conserva tras el fallo viejo").toContain(LINK_A_ROTATED)
+      expect(pageText(), "el error de la carga vieja no aparece").not.toContain("load failed")
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
 })
 
 describe("EXP-05 — callers reales de Desk y Collections (ODE-636)", () => {
