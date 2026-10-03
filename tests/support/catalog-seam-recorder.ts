@@ -66,8 +66,10 @@ import { fakeSupabase, fakeSupabaseClient } from "../integration/documents/suppo
 import {
   catalogMutationsDouble,
   resetCatalogDoubles,
+  tauriCatalogActivateBindingRootDouble,
   tauriCatalogApplyCloudSnapshotsDouble,
   tauriCatalogApplyReconcileDouble,
+  tauriCatalogApplyWorkspaceRemovalDouble,
   tauriCatalogBulkDualWriteDouble,
   tauriCatalogDualWriteDouble,
   tauriCatalogGetByIdDouble,
@@ -81,6 +83,13 @@ import {
 
 export const CATALOG_SEAM_FIXTURE_VERSION = 4 as const
 export const FIXTURE_DB_PATH = "$DB"
+/**
+ * Prefijo del alias estable con el que el recorder normaliza SOLO los ids que
+ * el runtime nativo acuña dentro de un comando (ODE-663): el UUID del delete de
+ * `catalog_apply_workspace_removal` (`uuid::Uuid::new_v4()`, index.rs:957).
+ * Ningún otro campo se normaliza.
+ */
+export const GENERATED_ID_ALIAS_PREFIX = "$MUTATION_"
 export const FIXTURE_ROOT_PATHS = { rootA: "$ROOT_A", rootB: "$ROOT_B" } as const
 // Synthetic volume for every fixture file, like the synthetic inode: the
 // double cannot know the replay machine's `st_dev`, so the projection excludes
@@ -556,6 +565,11 @@ export function projectInvokeResponse(cmd: string, response: unknown): CatalogSe
         },
       }
     }
+    case "catalog_apply_workspace_removal":
+      // Devuelve los ids afectados (la señal con la que el wrapper emite un
+      // CatalogChange); el UUID del delete no viaja en la respuesta.
+      return [...(response as string[])]
+    case "catalog_activate_binding_root":
     case "catalog_dual_write":
     case "catalog_update_mutation_status":
     case "catalog_update_metadata_mutation_status":
@@ -605,6 +619,12 @@ export class CatalogSeamSession {
   private readonly bindings = new Map<string, ModelBinding>()
   /** Store de settings de la escena (espejo de `commands/settings.rs`), aislado por sesión. */
   private readonly settingsStore = new Map<string, unknown>()
+  /**
+   * Ids que el runtime nativo acuña dentro de un comando → alias estable. Solo
+   * se normaliza en la copia grabada (args, respuestas, controles); el flujo TS
+   * sigue viendo el id real que devuelve el doble.
+   */
+  private readonly generatedIdAliases = new Map<string, string>()
 
   constructor(
     readonly name: string,
@@ -749,13 +769,54 @@ export class CatalogSeamSession {
 
   // ── command semantics (the doubled IPC boundary) ──────────────────────────
 
+  /**
+   * Registra un id que el runtime nativo acuña dentro de un comando y que, por
+   * tanto, no puede compararse literalmente entre la grabación TS (UUID del
+   * stub) y el replay Rust (`uuid::Uuid::new_v4()`). El alias debe ser estable
+   * por evento/documento y con forma `$MUTATION_…`; el replay valida que el id
+   * real tenga forma UUID y que el alias no se ligue dos veces a valores
+   * distintos.
+   */
+  aliasGeneratedId(realId: string, alias: string): void {
+    if (!alias.startsWith(GENERATED_ID_ALIAS_PREFIX)) {
+      throw new Error(
+        `catalog-seam recorder: alias ${alias} no empieza por ${GENERATED_ID_ALIAS_PREFIX}`,
+      )
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(realId)) {
+      throw new Error(`catalog-seam recorder: id generado ${realId} no tiene forma de UUID`)
+    }
+    if (this.generatedIdAliases.has(realId)) {
+      throw new Error(`catalog-seam recorder: el id ${realId} ya tiene un alias`)
+    }
+    if ([...this.generatedIdAliases.values()].includes(alias)) {
+      throw new Error(`catalog-seam recorder: el alias ${alias} ya está en uso`)
+    }
+    this.generatedIdAliases.set(realId, alias)
+  }
+
+  /** Sustituye los ids generados ya registrados por su alias, en la copia grabada. */
+  private withGeneratedIdAliases(value: unknown): unknown {
+    if (value === undefined) return null
+    if (Array.isArray(value)) return value.map((entry) => this.withGeneratedIdAliases(entry))
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, entry]) => [key, this.withGeneratedIdAliases(entry)]),
+      )
+    }
+    if (typeof value === "string") return this.generatedIdAliases.get(value) ?? value
+    return value
+  }
+
   async invoke(cmd: string, args: Record<string, unknown>): Promise<unknown> {
     const response = await this.dispatch(cmd, args)
     this.steps.push({
       kind: "invoke",
       cmd,
-      args: normalizeFixtureJson(args) as Record<string, unknown>,
-      response: projectInvokeResponse(cmd, response),
+      args: this.withGeneratedIdAliases(normalizeFixtureJson(args)) as Record<string, unknown>,
+      response: this.withGeneratedIdAliases(
+        projectInvokeResponse(cmd, response),
+      ) as CatalogSeamInvokeResponse,
     })
     return response
   }
@@ -825,6 +886,24 @@ export class CatalogSeamSession {
           FIXTURE_DB_PATH,
           args.snapshots as Parameters<typeof tauriCatalogApplyCloudSnapshotsDouble>[1],
         ).then(() => null)
+      // ── Ciclo de vida de la raíz (ODE-663) ─────────────────────────────────
+      case "catalog_apply_workspace_removal":
+        requireQueueBackend(this.backend, cmd)
+        return tauriCatalogApplyWorkspaceRemovalDouble(
+          FIXTURE_DB_PATH,
+          stringArg(args, "bindingRootId"),
+          stringArg(args, "rootPath"),
+          stringArg(args, "deletedAt"),
+          stringArg(args, "updatedAt"),
+          numberArg(args, "nowMillis"),
+        )
+      case "catalog_activate_binding_root":
+        requireQueueBackend(this.backend, cmd)
+        return tauriCatalogActivateBindingRootDouble(
+          FIXTURE_DB_PATH,
+          stringArg(args, "bindingRootId"),
+          stringArg(args, "rootPath"),
+        )
       // ── Camino de metadata de Settings (ODE-670) ────────────────────────────
       case "catalog_list":
         requireQueueBackend(this.backend, cmd)
@@ -1186,7 +1265,17 @@ export class CatalogSeamSession {
           `actual ${JSON.stringify(actual)} expected ${JSON.stringify(expected)}`,
       )
     }
-    this.steps.push({ kind: "control", name, documentId, ...expected })
+    // La copia grabada lleva el alias del id generado por el runtime nativo
+    // (el doble conserva el UUID del stub para el flujo TS).
+    this.steps.push({
+      kind: "control",
+      name,
+      documentId,
+      ...(this.withGeneratedIdAliases(expected) as {
+        document: CatalogSeamControlStep["document"]
+        mutations: CatalogSeamControlStep["mutations"]
+      }),
+    })
   }
 
   /**
@@ -1659,6 +1748,161 @@ async function buildSync05FailureDuringFlush(session: CatalogSeamSession): Promi
       { id: v4.id, status: "synced", attemptCount: 0, nextRetryAt: null, lastError: null },
     ],
   })
+}
+
+// ─── SYNC-05: retiro de workspace durante un flush (ODE-663) ─────────────────
+
+/**
+ * SYNC-05 (retiro durante un flush, ODE-663): un guardado viaja retenido
+ * mientras el usuario retira el workspace. El retiro archiva el documento
+ * cloud-owned y encola su `delete` — la segunda mutación accionable del mismo
+ * UUID, que solo `catalog_apply_workspace_removal` produce en producción—.
+ * Cuando la respuesta del guardado en vuelo llega, `catalog_update_mutation_status`
+ * NO debe proyectar el documento: `NOT EXISTS` deja mandar a la mutación de
+ * retiro pendiente. El segundo flush resuelve el delete (ahí sí proyecta) y el
+ * cierre vuelve a registrar la carpeta, porque retirar un root no borra su
+ * directorio ni su `.md`.
+ */
+async function buildSync05WorkspaceRemovalNotExists(session: CatalogSeamSession): Promise<void> {
+  await resetQueueHarness()
+  session.defineRoot("rootA", "fixture-root-a")
+  const fileTime = 1_700_150_000_000
+  session.fsWrite("rootA", "notes/letter.md", SYNC05_V1, { inode: 901, modifiedAt: fileTime })
+  const reconciler = session.createReconciler(session.createCatalog())
+  await reconciler.start()
+  reconciler.dispose()
+  const documentId = session.registeredDocumentId("rootA", "notes/letter.md")
+  const rootPath = FIXTURE_ROOT_PATHS.rootA
+  const rootId = "fixture-root-a"
+
+  // "Otro dispositivo": la fila cloud ya existe y la hidratación real la trae
+  // conservando el binding local → el documento es cloud-owned, así que el
+  // retiro toma la rama que encola el delete (index.rs:950-976).
+  await fakeSupabaseClient.from("writings").insert(
+    fakeCloudWriting({
+      id: documentId,
+      status: "draft",
+      version: 1,
+      updatedAt: new Date(fileTime).toISOString(),
+      title: "Letter",
+      slug: "carta-ode-663",
+    }),
+    { count: "exact" },
+  )
+  await hydrateFromFakeCloud()
+
+  session.advanceClock(1_000)
+  await saveFromEditor(documentId, "Versión 2.", 2)
+  const body = mutationByVersion(session, documentId, 2)
+
+  // El guardado v2 viaja retenido; con el flush en vuelo se retira la raíz.
+  session.advanceClock(1_000)
+  const hold = fakeSupabase.holdNextWrite()
+  const flushing = desktopCatalogSyncService.flushPending()
+  await hold.started
+
+  session.advanceClock(1_000)
+  const nowIso = new Date().toISOString()
+  const catalog = session.createCatalog()
+  const removalChange = await catalog.applyWorkspaceRemoval(rootId, rootPath, nowIso, nowIso)
+  if (removalChange.documentIds.length !== 1 || removalChange.documentIds[0] !== documentId) {
+    throw new Error(
+      `catalog-seam recorder: workspace removal affected ${JSON.stringify(removalChange.documentIds)} instead of the bound document`,
+    )
+  }
+  const removalDelete = session
+    .queueMutations(documentId)
+    .find((mutation) => mutation.operation === "delete")
+  if (!removalDelete) {
+    throw new Error("catalog-seam recorder: workspace removal enqueued no delete mutation")
+  }
+  // El UUID del delete se acuña en el runtime nativo (index.rs:957): alias
+  // estable por documento; el resto de la fila se compara literal.
+  session.aliasGeneratedId(removalDelete.id, `$MUTATION_REMOVAL_${documentId}`)
+
+  hold.release()
+  await flushing
+
+  // La respuesta del guardado en vuelo llega con el delete aún accionable: la
+  // proyección del documento no corre y el documento sigue `pending`.
+  await session.control(documentId, "sync05-removal-not-exists-guard", {
+    document: { syncStatus: "pending", cloudPresent: true },
+    mutations: [
+      {
+        id: body.id,
+        status: "synced",
+        attemptCount: 0,
+        nextRetryAt: null,
+        lastError: null,
+        payload: {
+          mutationKind: null,
+          version: 2,
+          updatedAt: sync05Timestamp(2),
+          status: "draft",
+          artifactType: "general",
+        },
+      },
+      {
+        id: removalDelete.id,
+        status: "pending",
+        attemptCount: 0,
+        nextRetryAt: null,
+        lastError: null,
+        payload: {
+          mutationKind: null,
+          version: 2,
+          updatedAt: nowIso,
+          status: null,
+          artifactType: null,
+        },
+      },
+    ],
+  })
+
+  // Segundo flush explícito: resuelve el delete y recién ahí la proyección
+  // aplica el estado de retiro (control positivo: sin otra accionable sí corre).
+  session.advanceClock(2_000)
+  const removalFlush = await desktopCatalogSyncService.flushPending()
+  if (removalFlush.error) {
+    throw new Error(`catalog-seam recorder: removal flush failed: ${removalFlush.error.message}`)
+  }
+  const bodyPayload = {
+    mutationKind: null,
+    version: 2,
+    updatedAt: sync05Timestamp(2),
+    status: "draft",
+    artifactType: "general",
+  } as const
+  const deletePayload = {
+    mutationKind: null,
+    version: 2,
+    updatedAt: nowIso,
+    status: null,
+    artifactType: null,
+  } as const
+  await session.control(documentId, "sync05-removal-delete-resolved", {
+    document: { syncStatus: "deleted", cloudPresent: false },
+    mutations: [
+      { id: body.id, status: "synced", attemptCount: 0, nextRetryAt: null, lastError: null, payload: bodyPayload },
+      { id: removalDelete.id, status: "synced", attemptCount: 0, nextRetryAt: null, lastError: null, payload: deletePayload },
+    ],
+  })
+
+  // Cierre canónico: el retiro no borró el `.md`; el consentimiento explícito
+  // levanta la valla y el reconciliador real vuelve a atar el mismo UUID.
+  await catalog.activateBindingRoot(rootId, rootPath)
+  const restarted = session.createReconciler(session.createCatalog())
+  await restarted.start()
+  restarted.dispose()
+  const rebound = await catalog.getById(documentId)
+  if (
+    !rebound?.localPresent ||
+    rebound.binding?.canonicalPath !== `${rootPath}/notes/letter.md`
+  ) {
+    throw new Error(
+      "catalog-seam recorder: re-registering the root did not re-bind the surviving .md",
+    )
+  }
 }
 
 // ─── SYNC-08: metadata encolada por los productores reales (ODE-670) ─────────
@@ -2178,6 +2422,16 @@ export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
         "mutation being written; when the older response arrives it stays synced and the " +
         "document stays pending until the next flush uploads the newer mutation and resolves it.",
       buildSync05SuccessDuringFlush,
+      "queue",
+    ),
+    await recordScenario(
+      "sync05-workspace-removal-not-exists",
+      "SYNC-05 (workspace removal in flight): a held save is in flight when the real " +
+        "`catalog_apply_workspace_removal` retires the root and enqueues the delete of the " +
+        "cloud-owned document — the second actionable mutation the `NOT EXISTS` projection " +
+        "guards against. The in-flight response does not project the document; resolving the " +
+        "delete does; re-registering the root re-binds the surviving .md.",
+      buildSync05WorkspaceRemovalNotExists,
       "queue",
     ),
     await recordScenario(

@@ -98,6 +98,11 @@ const manifestInodesByRoot = new Map<string, Map<string, number>>()
 // a call with `selectedPaths` replaces it, a call without one reuses it
 // (`workspace.rs` `uses_persisted_selection`). Empty means the whole root.
 const selectedPathsByRoot = new Map<string, string[]>()
+// Valla durable de retirada (`binding_roots.retired_at`, index.rs:876-912):
+// `catalog_apply_workspace_removal` la levanta por id y por path, y solo el
+// consentimiento explícito (`catalog_activate_binding_root`) la retira. Con la
+// valla puesta, `catalog_apply_reconcile` no proyecta nada (index.rs:1250-1271).
+const retiredRootKeys = new Set<string>()
 
 /**
  * Cola durable de sync (`sync_mutations`), en memoria. Espeja las tres reglas
@@ -150,6 +155,7 @@ export function resetCatalogDoubles(): void {
   manifestsByRoot.clear()
   manifestInodesByRoot.clear()
   selectedPathsByRoot.clear()
+  retiredRootKeys.clear()
   mutationsByDb.clear()
   for (const gate of [...catalogReadGates]) gate.release()
 }
@@ -1041,13 +1047,18 @@ export async function tauriCatalogGetByIdDouble(dbPath: string, id: string): Pro
  * ids cuyo binding guardado difería de verdad (ruta, inode o hash) o que
  * perdieron presencia: un rescan que reconfirma lo mismo no emite nada.
  *
- * Sin raíces retiradas en ningún test que use este doble, la valla de
- * retirada nunca aplica (mismo premisa que `tauriCatalogListRetiredBindingRootsDouble`).
+ * La valla de retirada se consulta como el SQL real (index.rs:1250-1271): una
+ * ráfaga sobre una raíz retirada no proyecta nada (`applied:false`) hasta que
+ * el consentimiento explícito (`catalog_activate_binding_root`) la levante.
  */
 export async function tauriCatalogApplyReconcileDouble(
   dbPath: string,
   input: DesktopCatalogReconcileInput,
 ): Promise<DesktopCatalogReconcileResult> {
+  const first = input.upserts[0]
+  if (first && (retiredRootKeys.has(first.bindingRootId) || retiredRootKeys.has(first.rootPath))) {
+    return { applied: false, changed: [] }
+  }
   const rows = rowsFor(dbPath)
   const changed: string[] = []
   for (const binding of input.upserts) {
@@ -1173,13 +1184,88 @@ export async function tauriCatalogListRetiredBindingRootsDouble(_dbPath: string)
 }
 
 /**
- * Same premise as `tauriCatalogListRetiredBindingRootsDouble`: no test using
- * this double retires a BindingRoot, so there is never a retirement fence to
- * lift and activating one is a real no-op. Registering a Workspace
- * (`DesktopWorkspaceService.registerWorkspace`) calls it before writing
- * Settings.
+ * Espejo de `catalog_activate_binding_root` (index.rs:835-850): el único
+ * consentimiento explícito que levanta la valla durable de retirada, por id o
+ * por path. Registrar un Workspace (`DesktopWorkspaceService.registerWorkspace`)
+ * lo invoca antes de escribir Settings; sin valla, es un no-op real.
  */
-export async function tauriCatalogActivateBindingRootDouble(): Promise<void> {}
+export async function tauriCatalogActivateBindingRootDouble(
+  _dbPath: string,
+  bindingRootId: string,
+  rootPath: string,
+): Promise<void> {
+  retiredRootKeys.delete(bindingRootId)
+  retiredRootKeys.delete(rootPath)
+}
+
+/**
+ * Espejo de `catalog_apply_workspace_removal` (index.rs:852-991): retira la
+ * raíz (valla durable por id y path), desata sus bindings y archiva sus
+ * documentos. Un documento cloud-owned (`cloud_present` o `cloud_account_id`)
+ * encola UNA mutación `delete` —sin superseder ninguna previa, como el INSERT
+ * real— y queda `pending` con `deleted_at_cache`; uno solo local queda
+ * `deleted` sin tocar la nube. Devuelve los ids afectados. El `.md` y el
+ * manifiesto en disco no se tocan: retirar un root no borra su directorio.
+ *
+ * El UUID de la mutación lo acuña este doble, igual que Rust
+ * (`uuid::Uuid::new_v4()`, index.rs:957); el recorder lo normaliza con un
+ * alias estable porque los dos runtimes no pueden compartir el valor.
+ */
+export async function tauriCatalogApplyWorkspaceRemovalDouble(
+  dbPath: string,
+  bindingRootId: string,
+  rootPath: string,
+  deletedAt: string,
+  updatedAt: string,
+  nowMillis: number,
+): Promise<string[]> {
+  retiredRootKeys.add(bindingRootId)
+  retiredRootKeys.add(rootPath)
+  const rows = rowsFor(dbPath)
+  const mutations = mutationsFor(dbPath)
+  const affected: string[] = []
+  for (const [id, row] of [...rows.entries()]) {
+    if (row.bindingRootId !== bindingRootId) continue
+    affected.push(id)
+    const detached = {
+      ...row,
+      bindingRootId: null,
+      relativePath: null,
+      canonicalPath: null,
+      inode: null,
+      contentHash: null,
+      size: null,
+      lastSeenAt: null,
+      excerpt: null,
+      excerptContentHash: null,
+    }
+    if (row.cloudPresent || row.cloudAccountId !== null) {
+      const version = row.version ?? 1
+      const mutationId = globalThis.crypto.randomUUID()
+      mutations.set(mutationId, {
+        id: mutationId,
+        documentId: id,
+        operation: "delete",
+        payloadJson: JSON.stringify({ version, deletedAt, updatedAt }),
+        status: "pending",
+        attemptCount: 0,
+        nextRetryAt: null,
+        createdAt: nowMillis,
+        lastError: null,
+      })
+      rows.set(id, {
+        ...detached,
+        localPresent: false,
+        syncStatus: "pending",
+        deletedAt,
+        modifiedAt: nowMillis,
+      })
+    } else {
+      rows.set(id, { ...detached, localPresent: false, syncStatus: "deleted", deletedAt: null })
+    }
+  }
+  return affected
+}
 
 /**
  * Same premise: with no retired BindingRoot there is nothing archived to
