@@ -59,6 +59,12 @@ type PropertiesPanelProps = {
   onVisibilityChange: (next: WritingVisibility) => void
   onExportPdf: () => Promise<boolean | void> | boolean | void
   onExportDocx: () => Promise<boolean | void> | boolean | void
+  /**
+   * Informa al shell que hay una generación/revocación de enlace en vuelo:
+   * mientras exista, cerrar el panel debe ocultarlo sin desmontarlo para que
+   * la mutación y su época sobrevivan al cierre (SHARE-03, ODE-652).
+   */
+  onShareActionPendingChange?: (pending: boolean) => void
 }
 
 type ExportFormat = "pdf" | "docx"
@@ -159,6 +165,7 @@ export function PropertiesPanel({
   canonicalPath = null,
   onExportPdf,
   onExportDocx,
+  onShareActionPendingChange,
   onStatusChange,
   onArtifactTypeChange,
   onVisibilityChange,
@@ -269,6 +276,11 @@ export function PropertiesPanel({
     shareLinkGenerationRef.current += 1
     shareLinkWriteEpochRef.current += 1
   }, [writingId])
+
+  useEffect(() => {
+    onShareActionPendingChange?.(isSavingShareLink)
+    return () => onShareActionPendingChange?.(false)
+  }, [isSavingShareLink, onShareActionPendingChange])
 
   useEffect(() => {
     void loadShareLink()

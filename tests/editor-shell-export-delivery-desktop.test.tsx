@@ -1437,7 +1437,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "cerrar y reabrir el panel durante una regeneración no pierde la mutación",
     async () => {
       const textA = "ODE652-CLOSE-REOPEN-ROTATE"
@@ -1491,7 +1491,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "cerrar y reabrir el panel durante una revocación no revive el enlace",
     async () => {
       const textA = "ODE652-CLOSE-REOPEN-REVOKE"
