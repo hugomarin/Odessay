@@ -1,7 +1,12 @@
 //! ODE-613 — the TS → invoke() → Rust → SQLite seam, replayed; ODE-644 PR2
 //! extends it to the sync-mutation queue; ODE-670 extends it to the SYNC-08
 //! metadata path (`catalog_list` + `catalog_bulk_dual_write` from the real
-//! Settings producer, and the bound/first-upload metadata producers).
+//! Settings producer, and the bound/first-upload metadata producers); ODE-663
+//! extends it to the SYNC-05 workspace-removal branch: the recorded sequence
+//! runs the real `catalog_apply_workspace_removal` while a save is in flight,
+//! so a second actionable mutation of the same document exists when the first
+//! response lands and the `NOT EXISTS` guard of `catalog_update_mutation_status`
+//! is actually exercised.
 //!
 //! `tests/fixtures/catalog-seam/catalog-seam-v4.json` is recorded by
 //! `tests/support/catalog-seam-recorder.ts` (driven from
@@ -32,6 +37,14 @@
 //! `documents.cloud_present` and every `sync_mutations` row of the document —
 //! is asserted against a brand-new SQLite connection, so a green response loop
 //! cannot hide a wrong durable queue.
+//!
+//! Generated ids (ODE-663): the mutation `catalog_apply_workspace_removal`
+//! mints inside Rust (`uuid::Uuid::new_v4()`, index.rs:957) cannot be compared
+//! literally against the recorder's stub. The fixture carries a stable alias
+//! (`$MUTATION_…`) for exactly that id; `bind_generated_ids` binds it to the
+//! real UUID v4 the first time a response or a control exposes it (validating
+//! shape and uniqueness) and `resolve_generated_ids` feeds that real id to the
+//! following real commands. Every other field stays literal.
 //!
 //! The only thing still outside this proof is the Tauri IPC transport itself
 //! (JSON serialization/deserialization across the real webview bridge), which
@@ -436,6 +449,129 @@ fn project_control_payload(payload_json: &str) -> Result<Value, String> {
     }))
 }
 
+/// Alias estable con el que el recorder normaliza SOLO los ids que Rust acuña
+/// dentro de un comando — hoy, el UUID del delete de
+/// `catalog_apply_workspace_removal` (`uuid::Uuid::new_v4()`, index.rs:957).
+/// El resto de la secuencia (tipo, payload, versión, timestamps, estado,
+/// retry, orden, document id y conteos) se compara literal.
+fn is_generated_id_alias(text: &str) -> bool {
+    text.starts_with("$MUTATION_") && text.len() > "$MUTATION_".len()
+}
+
+/// Ligado alias → UUID real, por escenario.
+type GeneratedIdBindings = HashMap<String, String>;
+
+/// Forma y unicidad: el id real ligado a un alias debe ser un UUID v4.
+fn assert_uuid_v4(real: &str, context: &str) {
+    let uuid = uuid::Uuid::parse_str(real)
+        .unwrap_or_else(|_| panic!("catalog_seam: {context}: el id generado {real} no tiene forma UUID"));
+    assert_eq!(
+        uuid.get_version_num(),
+        4,
+        "catalog_seam: {context}: el id generado {real} no es un UUID v4"
+    );
+}
+
+/// Resuelve los alias ya ligados en los args grabados antes de despachar el
+/// comando real: el UPDATE/INSERT de Rust tiene que recibir el id que Rust
+/// generó, no el del estudio TS. Un alias sin ligar es un error de grabación.
+fn resolve_generated_ids(value: &Value, bindings: &GeneratedIdBindings) -> Value {
+    match value {
+        Value::String(text) if is_generated_id_alias(text) => Value::String(
+            bindings
+                .get(text)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "catalog_seam: el alias {text} aparece en los args antes de ligarse a un UUID real"
+                    )
+                })
+                .clone(),
+        ),
+        Value::Array(items) => {
+            Value::Array(items.iter().map(|item| resolve_generated_ids(item, bindings)).collect())
+        }
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, entry)| (key.clone(), resolve_generated_ids(entry, bindings)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// Cierra el lazo de los ids generados: recorre la proyección grabada y la
+/// respuesta/control real en paralelo; donde la grabación trae un alias, el
+/// valor real debe ser un UUID v4 y el alias queda ligado a él. Un alias no
+/// puede ligarse a dos valores distintos (unicidad) y cada ligado se reafirma
+/// en los pasos siguientes. El resto del árbol se compara tal cual.
+fn bind_generated_ids(
+    expected: &Value,
+    actual: &Value,
+    bindings: &mut GeneratedIdBindings,
+    context: &str,
+) -> Value {
+    match expected {
+        Value::String(text) if is_generated_id_alias(text) => {
+            let Value::String(real) = actual else {
+                panic!(
+                    "catalog_seam: {context}: el alias {text} esperaba un UUID real, llegó {actual}"
+                );
+            };
+            assert_uuid_v4(real, context);
+            if let Some(previous) = bindings.get(text) {
+                assert_eq!(
+                    previous, real,
+                    "catalog_seam: {context}: el alias {text} se ligó a dos UUID distintos"
+                );
+            } else {
+                bindings.insert(text.clone(), real.clone());
+            }
+            Value::String(real.clone())
+        }
+        Value::Array(expected_items) => {
+            let Value::Array(actual_items) = actual else {
+                panic!("catalog_seam: {context}: la grabación esperaba un arreglo y la respuesta real no lo es");
+            };
+            assert_eq!(
+                expected_items.len(),
+                actual_items.len(),
+                "catalog_seam: {context}: conteo de filas distinto (grabación {} vs real {})",
+                expected_items.len(),
+                actual_items.len()
+            );
+            Value::Array(
+                expected_items
+                    .iter()
+                    .zip(actual_items)
+                    .map(|(expected_item, actual_item)| {
+                        bind_generated_ids(expected_item, actual_item, bindings, context)
+                    })
+                    .collect(),
+            )
+        }
+        Value::Object(expected_map) => {
+            let Value::Object(actual_map) = actual else {
+                panic!("catalog_seam: {context}: la grabación esperaba un objeto y la respuesta real no lo es");
+            };
+            Value::Object(
+                expected_map
+                    .iter()
+                    .map(|(key, entry)| {
+                        let actual_entry = actual_map.get(key).unwrap_or_else(|| {
+                            panic!("catalog_seam: {context}: falta {key} en la respuesta real")
+                        });
+                        (
+                            key.clone(),
+                            bind_generated_ids(entry, actual_entry, bindings, context),
+                        )
+                    })
+                    .collect(),
+            )
+        }
+        other => other.clone(),
+    }
+}
+
 /// Dispatch one recorded `invoke` to the real command and project its response
 /// with the same shape the recorder recorded. The caller asserts the projected
 /// response equals the recording: the recorded args are only valid while the
@@ -540,6 +676,22 @@ fn dispatch(cmd: &str, args: &Value) -> Result<Value, String> {
             catalog::catalog_apply_cloud_snapshots(string_arg(args, "dbPath"), snapshots)
                 .map(|()| Value::Null)
         }
+        // ── Ciclo de vida de la raíz (ODE-663) ────────────────────────────────
+        "catalog_apply_workspace_removal" => catalog::catalog_apply_workspace_removal(
+            string_arg(args, "dbPath"),
+            string_arg(args, "bindingRootId"),
+            string_arg(args, "rootPath"),
+            string_arg(args, "deletedAt"),
+            string_arg(args, "updatedAt"),
+            typed_arg(args, "nowMillis"),
+        )
+        .map(|ids| Value::Array(ids.into_iter().map(Value::String).collect())),
+        "catalog_activate_binding_root" => catalog::catalog_activate_binding_root(
+            string_arg(args, "dbPath"),
+            string_arg(args, "bindingRootId"),
+            string_arg(args, "rootPath"),
+        )
+        .map(|()| Value::Null),
         // ── SYNC-08: la ruta de metadata de Settings (ODE-670) ────────────────
         "catalog_list" => catalog::catalog_list(
             string_arg(args, "dbPath"),
@@ -587,7 +739,12 @@ fn dispatch(cmd: &str, args: &Value) -> Result<Value, String> {
 /// caches and the binding content hash are compared field by field; when it
 /// declares a mutation payload, the projection that distinguishes a metadata
 /// mutation from a body one is compared too.
-fn assert_control(step: &ControlStep, paths: &PlaceholderPaths, scenario: &Scenario) {
+fn assert_control(
+    step: &ControlStep,
+    paths: &PlaceholderPaths,
+    scenario: &Scenario,
+    generated_ids: &mut GeneratedIdBindings,
+) {
     let connection =
         Connection::open(&paths.db).expect("catalog_seam: open catalog for the control step");
     let (
@@ -760,8 +917,15 @@ fn assert_control(step: &ControlStep, paths: &PlaceholderPaths, scenario: &Scena
             value
         })
         .collect();
+    let actual_mutations_value = Value::Array(actual_mutations);
+    let expected_mutations_value = bind_generated_ids(
+        &Value::Array(expected_mutations),
+        &actual_mutations_value,
+        generated_ids,
+        &format!("scenario {}: control {}", scenario.name, step.name),
+    );
     assert_eq!(
-        actual_mutations, expected_mutations,
+        actual_mutations_value, expected_mutations_value,
         "scenario {}: control {}: sync_mutations diverged from the recording",
         scenario.name, step.name
     );
@@ -1147,19 +1311,28 @@ fn catalog_seam_replays_the_recorded_ts_sequence_over_real_sqlite() {
         fs::create_dir_all(&paths.root_a).expect("catalog_seam: create root A");
         fs::create_dir_all(&paths.root_b).expect("catalog_seam: create root B");
 
+        let mut generated_ids: GeneratedIdBindings = HashMap::new();
         for (index, step) in scenario.steps.iter().enumerate() {
             match step {
                 Step::Fs(fs_step) => apply_fs_step(fs_step, &paths),
-                Step::Control(control) => assert_control(control, &paths, scenario),
+                Step::Control(control) => {
+                    assert_control(control, &paths, scenario, &mut generated_ids)
+                }
                 Step::Invoke(invoke) => {
-                    let args = rewrite(&invoke.args, &paths);
+                    let args =
+                        resolve_generated_ids(&rewrite(&invoke.args, &paths), &generated_ids);
                     let actual = dispatch(&invoke.cmd, &args).unwrap_or_else(|error| {
                         panic!(
                             "scenario {}: step {index}: {} failed: {error}",
                             scenario.name, invoke.cmd
                         )
                     });
-                    let expected = rewrite(&invoke.response, &paths);
+                    let expected = bind_generated_ids(
+                        &rewrite(&invoke.response, &paths),
+                        &actual,
+                        &mut generated_ids,
+                        &format!("scenario {}: step {index}: {}", scenario.name, invoke.cmd),
+                    );
                     assert_eq!(
                         actual, expected,
                         "scenario {}: step {index}: {} response diverged from the recording — the \
