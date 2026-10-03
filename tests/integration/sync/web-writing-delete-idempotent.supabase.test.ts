@@ -191,7 +191,7 @@ const makeMutationImmediatelyDue = async (writingId: string) => {
 }
 
 describe("ODE-667 — DELETE remoto ya ausente converge como éxito idempotente", () => {
-  it.fails(
+  it(
     "borrar un writing local-only antes de cualquier upsert converge sin consumir reintentos hasta fallar",
     async () => {
       const writingId = randomUUID()
@@ -312,7 +312,7 @@ describe("ODE-667 — DELETE remoto ya ausente converge como éxito idempotente"
     },
   )
 
-  it.fails(
+  it(
     "el delete de una fila ajena no la muta ni limpia sus shares, y es indistinguible de un ID inexistente",
     async () => {
       const writingId = randomUUID()
