@@ -111,10 +111,15 @@ afterEach(() => {
  * dos archivos y el catálogo vuelve a la ruta vieja.
  *
  * Fix (ODE-635): `persist()` espera al rename en curso, relee el binding y, si
- * el write aterrizó en una ruta que el documento ya no posee, retira esa
- * recreación por el trash del owner de filesystem y lanza `CONFLICT` para que
- * `persistFollowingRename` reintente en la ruta actual. `null` sigue siendo
- * "sin baseline": no se sustituye ningún hash.
+ * el write aterrizó en una ruta que el documento ya no posee, compara el hash
+ * de lo que hay en disco contra el markdown que ESTA operación escribió. Solo
+ * cuando coincide exactamente retira esa recreación por el trash del owner de
+ * filesystem; si otro escritor reemplazó la ruta (o no se puede leer), no
+ * retira nada —el contenido ajeno queda recuperable en la ruta vieja, nunca en
+ * `.trash`— y lanza `CONFLICT` para que `persistFollowingRename` reintente en
+ * la ruta actual. Un fallo del retiro (`ServiceResponse.error`) se propaga:
+ * el caller no ve éxito con la recreación todavía en el root. `null` sigue
+ * siendo "sin baseline": no se sustituye ningún hash.
  *
  * Entrada real del camino: `saveWriting` con `expectedContentHash: null` es una
  * llamada de producción — `PersistenceCoordinator.persistNow` manda null
@@ -131,12 +136,19 @@ afterEach(() => {
  * Control positivo: el mismo caso con baseline correcto es el `it` de la
  * carrera en `tests/editor-shell-create-rename.test.tsx` (ODE-629); aquí el
  * control es que el guardado retenido resuelve sin error y que el rename
- * completa, y la propiedad se mide sobre el disco y el catálogo.
+ * completa, y la propiedad se mide sobre el disco y el catálogo. En el caso
+ * del escritor externo, el control positivo de que la recreación sí se
+ * alcanza a retirar es el caso canónico (su `.trash` vacío), y el de que el
+ * retiro sí puede fallar es `failNextRenameFile` sobre el rename al Trash.
  *
  * Mutation control (corrido en rojo antes del PR): quitar el chequeo de ruta
- * obsoleta o quitar el retiro de la recreación deja dos archivos y el catálogo
- * en la ruta vieja; quitar la espera a `renamesInFlight` pone rojo el caso
- * hermano de la ventana move→commit.
+ * obsoleta deja dos archivos y el catálogo en la ruta vieja (canónico y
+ * move→commit); quitar el retiro de la recreación exacta deja la ruta vieja
+ * en el root (canónico y move→commit) y hace ver éxito con el retiro fallido;
+ * quitar la comparación de contenido tira el contenido del escritor externo a
+ * `.trash`; ignorar el `ServiceResponse.error` del retiro reporta éxito con la
+ * recreación aún en el root; quitar la espera a `renamesInFlight` pone rojo
+ * el caso hermano de la ventana move→commit.
  */
 describe("ODE-635 — guardado sin baseline que se cruza con un rename", () => {
   it(
