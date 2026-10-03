@@ -479,6 +479,13 @@ lotes acotados y hasta el máximo definido por el contrato de sync. Un documento
 local-only sin ownership cloud puede actualizar metadata local sin fabricar una
 mutación remota ni cambiar su estado a `pending`.
 
+Una mutación de metadata de un documento con binding no es un snapshot: al
+drenar, el cuerpo se resuelve del `.md` (snapshot completo), sobre una fila
+existente solo se actualizan cuerpo, hash y los campos que la mutación posee
+—nunca se pisan title, slug, visibility, parent_id ni correspondence_id—, y una
+fila cuyo `cloudAccountId` pertenece a otra cuenta activa nunca se inserta bajo
+la sesión actual (la mutación se retiene para su dueño).
+
 La respuesta de una mutación ya resuelta (superada por un snapshot más nuevo, o
 confirmada antes) no revive la fila ni proyecta `documents.sync_status`: el
 command solo actualiza filas accionables (`pending`/`failed`) y la proyección
