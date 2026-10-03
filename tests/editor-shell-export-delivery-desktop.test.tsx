@@ -1568,7 +1568,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "entrar en focus mode durante una regeneración no pierde la mutación",
     async () => {
       const textA = "ODE652-FOCUS-ROTATE"
