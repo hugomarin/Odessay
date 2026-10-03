@@ -162,7 +162,17 @@ const { clearOdessaySelfWritePathsForTests } = await import("@/lib/services/desk
 const { disposeWorkspaceReconciler, ensureWorkspaceReconciler } = await import(
   "@/lib/services/desktop/desktop-workspace-reconciler"
 )
+import type {
+  KnownBinding,
+  ObservedFile,
+  ReconcileCommit,
+  ReconcilerRoot,
+  UnboundFile,
+} from "@/lib/services/desktop/workspace-reconciler"
 const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
+const { createWorkspaceReconciler } = await import(
+  "@/lib/services/desktop/workspace-reconciler"
+)
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 
 const TEST_TIMEOUT_MS = 60_000
@@ -880,6 +890,209 @@ describe("ODE-661 — coste del barrido", () => {
         "la raíz gestionada también entra en la expansión",
       ).toBe(managedFiles)
       assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+/**
+ * ODE-661 — review ronda 2 (P1 frescura del volumen recordado, P2 poda).
+ *
+ * El `st_dev` de dos directorios temporales del harness es el mismo por
+ * construcción, así que un cambio de volumen no es fabricable desde el
+ * filesystem real. Estas regresiones conducen al owner real
+ * (`createWorkspaceReconciler`) con su frontera de scan doblada —`scanRoot`
+ * entrega observed/unbound/knownBindings, exactamente como la conecta
+ * `desktop-workspace-reconciler.ts`— y afirman sobre el resultado canónico del
+ * commit (`upserts`/`detached`), nunca sobre el mapa interno: un volumen
+ * recordado que no puede demostrarse vigente no se usa como evidencia, y ante
+ * la duda la identidad segura es un UUID nuevo, no ligar mal entre volúmenes.
+ */
+describe("ODE-661 — frescura y poda del volumen recordado (review ronda 2)", () => {
+  const rootA: ReconcilerRoot = {
+    id: "root-a",
+    rootPath: "/Users/h/Raiz 661 ronda 2 A",
+    kind: "external",
+    visibleAsWorkspace: true,
+    selectedPaths: [],
+  }
+  const rootB: ReconcilerRoot = {
+    id: "root-b",
+    rootPath: "/Users/h/Raiz 661 ronda 2 B",
+    kind: "external",
+    visibleAsWorkspace: true,
+    selectedPaths: [],
+  }
+
+  function observedInA(): ObservedFile {
+    return {
+      relativePath: "letter.md",
+      canonicalPath: `${rootA.rootPath}/letter.md`,
+      inode: 100,
+      device: 1,
+      contentHash: "blake3:aaa",
+      size: 10,
+      modifiedAt: 1_000,
+      manifestId: "doc-a",
+    }
+  }
+
+  function knownInA(): KnownBinding {
+    return {
+      documentId: "doc-a",
+      bindingRootId: rootA.id,
+      relativePath: "letter.md",
+      inode: 100,
+      contentHash: "blake3:aaa",
+    }
+  }
+
+  function unboundInB(): UnboundFile {
+    return {
+      relativePath: "letter.md",
+      inode: 100,
+      device: 1,
+      contentHash: "blake3:aaa",
+      size: 10,
+      modifiedAt: 1_000,
+    }
+  }
+
+  function boundIn(candidate: ReconcilerRoot, ids: Record<string, string>): ObservedFile[] {
+    return [
+      {
+        relativePath: "letter.md",
+        canonicalPath: `${candidate.rootPath}/letter.md`,
+        inode: 100,
+        device: 1,
+        contentHash: "blake3:aaa",
+        size: 10,
+        modifiedAt: 1_000,
+        manifestId: ids["letter.md"],
+      },
+    ]
+  }
+
+  function lastCommitFor(commits: ReconcileCommit[], rootId: string) {
+    const ofRoot = commits.filter((commit) => commit.bindingRootId === rootId)
+    return ofRoot[ofRoot.length - 1]
+  }
+
+  it.fails(
+    "un cambio de volumen no liga la identidad vieja a otra raíz",
+    async () => {
+      // Pasada 1: A montada con su archivo en el volumen 1. Pasada 2: A no
+      // observable (desmontada) — evidencia de que el volumen recordado no
+      // puede darse por vigente. Pasada 3: A re-montada vacía en otro volumen;
+      // B ofrece un archivo no ligado con el device, inode y hash viejos de A.
+      // Sin frescura, A reutiliza el device obsoleto y B adopta doc-a.
+      let mintCounter = 0
+      const mintId = () => `uuid-nuevo-${++mintCounter}`
+      const commits: ReconcileCommit[] = []
+      let phase: "montada" | "desmontada" | "remontada-vacia" = "montada"
+
+      const reconciler = createWorkspaceReconciler({
+        loadRoots: async () => [rootA, rootB],
+        mintId,
+        scanRoot: async (candidate) => {
+          if (candidate.id === rootA.id) {
+            if (phase === "montada") {
+              return { observed: [observedInA()], unbound: [], knownBindings: [] }
+            }
+            if (phase === "desmontada") {
+              return { observed: null, unbound: [], knownBindings: [knownInA()] }
+            }
+            return { observed: [], unbound: [], knownBindings: [knownInA()] }
+          }
+          return {
+            observed: [],
+            unbound: phase === "remontada-vacia" ? [unboundInB()] : [],
+            knownBindings: [],
+          }
+        },
+        bindUnbound: async (candidate, ids) => boundIn(candidate, ids),
+        commit: async (commit) => {
+          commits.push(commit)
+        },
+      })
+
+      await reconciler.start()
+      phase = "desmontada"
+      await reconciler.rescanAll()
+      phase = "remontada-vacia"
+      await reconciler.rescanAll()
+
+      const commitA = lastCommitFor(commits, rootA.id)
+      const commitB = lastCommitFor(commits, rootB.id)
+      expect(
+        commitB?.upserts.map((upsert) => upsert.documentId),
+        "B no adopta la identidad de un volumen que no puede demostrarse",
+      ).not.toContain("doc-a")
+      expect(commitB?.upserts[0]?.documentId, "B acuña una identidad nueva").toMatch(
+        /^uuid-nuevo-/,
+      )
+      expect(
+        commitA?.detached,
+        "A desliga su binding: no hay correlación entre volúmenes distintos",
+      ).toEqual(["doc-a"])
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "una raíz retirada y re-añadida no recupera el volumen recordado",
+    async () => {
+      // Pasada 1: A montada con su archivo en el volumen 1. Pasada 2: A sale
+      // del conjunto activo (retirada). Pasada 3: se re-añade con el mismo id
+      // pero vacía, y B ofrece el device, inode y hash viejos de A. Si la
+      // evidencia retirada sobrevive, A la reutiliza y B adopta doc-a; la poda
+      // acota la tabla a las raíces activas y no resucita evidencia vieja.
+      let mintCounter = 0
+      const mintId = () => `uuid-nuevo-${++mintCounter}`
+      const commits: ReconcileCommit[] = []
+      let phase: "montada" | "retirada" | "readoptada" = "montada"
+
+      const reconciler = createWorkspaceReconciler({
+        loadRoots: async () => (phase === "retirada" ? [rootB] : [rootA, rootB]),
+        mintId,
+        scanRoot: async (candidate) => {
+          if (candidate.id === rootA.id) {
+            if (phase === "montada") {
+              return { observed: [observedInA()], unbound: [], knownBindings: [] }
+            }
+            return { observed: [], unbound: [], knownBindings: [knownInA()] }
+          }
+          return {
+            observed: [],
+            unbound: phase === "readoptada" ? [unboundInB()] : [],
+            knownBindings: [],
+          }
+        },
+        bindUnbound: async (candidate, ids) => boundIn(candidate, ids),
+        commit: async (commit) => {
+          commits.push(commit)
+        },
+      })
+
+      await reconciler.start()
+      phase = "retirada"
+      await reconciler.rescanAll()
+      phase = "readoptada"
+      await reconciler.rescanAll()
+
+      const commitA = lastCommitFor(commits, rootA.id)
+      const commitB = lastCommitFor(commits, rootB.id)
+      expect(
+        commitB?.upserts.map((upsert) => upsert.documentId),
+        "B no adopta la identidad de un volumen retirado",
+      ).not.toContain("doc-a")
+      expect(commitB?.upserts[0]?.documentId, "B acuña una identidad nueva").toMatch(
+        /^uuid-nuevo-/,
+      )
+      expect(
+        commitA?.detached,
+        "A desliga su binding: la evidencia retirada se podó",
+      ).toEqual(["doc-a"])
     },
     TEST_TIMEOUT_MS,
   )
