@@ -1013,12 +1013,48 @@ describe("desktop document service after compatibility retirement", () => {
   })
 
   describe("DesktopDocumentService filesystem boundary contract", () => {
-    function getFilesystemDelegatingMethods(sourcePath: string) {
+    const sourcePath = `${process.cwd()}/lib/services/document-service-factory.ts`
+
+    // Exact, literal scan boundary. Class methods are the DesktopDocumentService
+    // methods whose body delegates through this.runtime.filesystem/this.persist(
+    // and whose first parameter is id: string or *WritingInput. Module functions
+    // are the exported functions whose body touches a native fs boundary
+    // (tauri-commands or runtime.filesystem) or whose first parameter is
+    // id: string, plus the explicitly named createDesktopDraft (decision E:
+    // it delegates through the service instance, so the generic predicate
+    // cannot discover it). markDesktopWritingDeletedByCanonicalPath is excluded
+    // on purpose: it only touches the catalog (resolvePath/detachLocalFile).
+    const EXPECTED_CLASS_METHODS = [
+      "deleteWriting",
+      "downloadWriting",
+      "exportWriting",
+      "openWriting",
+      "performRenameWriting",
+      "saveWriting",
+    ]
+    const EXPECTED_MODULE_FUNCTIONS = [
+      "createDesktopDraft",
+      "getDesktopWritingCanonicalPath",
+      "relocateDesktopWriting",
+      "relocateDesktopWritingByCanonicalPath",
+    ]
+
+    function collectFilesystemBoundaryTargets(sourcePath: string) {
       const sourceText = ts.sys.readFile(sourcePath)
       if (!sourceText) throw new Error(`Could not read ${sourcePath}`)
       const sourceFile = ts.createSourceFile(sourcePath, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
 
-      const methods: { name: string; shape: "id" | "writingId" | "writingRecord" }[] = []
+      const classMethods: { name: string; shape: "id" | "writingId" | "writingRecord" }[] = []
+      const moduleFunctions: string[] = []
+      const boundaryTokens = [
+        "tauriWriteFile",
+        "tauriOpenFile",
+        "tauriRelocateFile",
+        "tauriWorkspaceSync",
+        "tauriWorkspaceTouchFile",
+        "runtime.filesystem",
+      ]
+      const namedModuleTargets = new Set(["createDesktopDraft"])
 
       function visit(node: ts.Node) {
         if (ts.isClassDeclaration(node) && node.name?.text === "DesktopDocumentService") {
@@ -1028,7 +1064,10 @@ describe("desktop document service after compatibility retirement", () => {
             if (methodName === "constructor") continue
 
             const bodyText = member.getText(sourceFile)
-            if (!bodyText.includes("this.runtime.filesystem") && !bodyText.includes("this.persist(")) continue
+            // saveWriting delegates through this.persistFollowingRename(, not
+            // this.persist( — the pack's literal predicate skipped the whole
+            // save path. /this\.persist/ reaches persist and its rename retry.
+            if (!bodyText.includes("this.runtime.filesystem") && !/this\.persist/.test(bodyText)) continue
 
             const param = member.parameters[0]
             if (!param) continue
@@ -1042,36 +1081,143 @@ describe("desktop document service after compatibility retirement", () => {
             } else if (paramType === "SaveWritingInput") shape = "writingRecord"
             else if (paramType.endsWith("WritingInput")) shape = "writingId"
 
-            if (shape) methods.push({ name: methodName, shape })
+            if (shape) classMethods.push({ name: methodName, shape })
+          }
+        }
+        if (ts.isFunctionDeclaration(node) && node.name && ts.isIdentifier(node.name)) {
+          const isExported = node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false
+          if (isExported) {
+            const bodyText = node.body?.getText(sourceFile) ?? ""
+            const firstParam = node.parameters[0]
+            const firstParamIsId =
+              firstParam?.name.getText(sourceFile) === "id" &&
+              firstParam.type?.getText(sourceFile) === "string"
+            if (
+              boundaryTokens.some((token) => bodyText.includes(token)) ||
+              firstParamIsId ||
+              namedModuleTargets.has(node.name.text)
+            ) {
+              moduleFunctions.push(node.name.text)
+            }
           }
         }
         ts.forEachChild(node, visit)
       }
       visit(sourceFile)
-      return methods
+      return {
+        classMethods: classMethods.sort((left, right) => left.name.localeCompare(right.name)),
+        moduleFunctions: moduleFunctions.sort(),
+      }
     }
 
-    function extractIdentifier(callArg: unknown): string | null {
-      if (typeof callArg === "string") return callArg
-      if (callArg && typeof callArg === "object") {
-        const record = callArg as Record<string, unknown>
-        if (typeof record.writingId === "string") return record.writingId
-        if (record.writing && typeof record.writing === "object") {
-          const writing = record.writing as Record<string, unknown>
-          if (typeof writing.id === "string") return writing.id
+    function filesystemDoublePathArguments(callArg: unknown): string[] {
+      if (typeof callArg === "string") return [callArg]
+      if (!callArg || typeof callArg !== "object") return []
+      const record = callArg as Record<string, unknown>
+      if (typeof record.writingId === "string") return [record.writingId]
+      if (record.writing && typeof record.writing === "object") {
+        const writingRecord = record.writing as Record<string, unknown>
+        if (typeof writingRecord.id === "string") return [writingRecord.id]
+      }
+      if (typeof record.path === "string") return [record.path]
+      return []
+    }
+
+    // Path positions of the real signatures in lib/services/desktop/tauri-commands.ts.
+    // Decision F: the same observer applies to class methods (persist/save and
+    // delete) and to module-level functions. UUIDs are legitimate as workspace-sync
+    // map VALUES and as workspace-touch documentId, so only path positions are read.
+    function collectFilesystemPathArguments(): string[] {
+      const pathArguments: string[] = []
+      for (const [callArg] of mocks.openFile.mock.calls) pathArguments.push(...filesystemDoublePathArguments(callArg))
+      for (const [callArg] of mocks.saveFile.mock.calls) pathArguments.push(...filesystemDoublePathArguments(callArg))
+      for (const [callArg] of mocks.deleteFile.mock.calls) pathArguments.push(...filesystemDoublePathArguments(callArg))
+      for (const [callArg] of mocks.renameFile.mock.calls) pathArguments.push(...filesystemDoublePathArguments(callArg))
+      for (const [callArg] of mocks.downloadWriting.mock.calls) pathArguments.push(...filesystemDoublePathArguments(callArg))
+      for (const [callArg] of mocks.exportFile.mock.calls) pathArguments.push(...filesystemDoublePathArguments(callArg))
+
+      for (const [openPath] of mocks.tauriOpen.mock.calls) {
+        if (typeof openPath === "string") pathArguments.push(openPath)
+      }
+      for (const [writePath] of mocks.tauriWrite.mock.calls) {
+        if (typeof writePath === "string") pathArguments.push(writePath)
+      }
+      for (const [oldPath, newPath] of mocks.tauriRelocate.mock.calls) {
+        if (typeof oldPath === "string") pathArguments.push(oldPath)
+        if (typeof newPath === "string") pathArguments.push(newPath)
+      }
+      for (const [rootPath, selectedPaths, documentIds] of mocks.workspaceSync.mock.calls) {
+        if (typeof rootPath === "string") pathArguments.push(rootPath)
+        if (Array.isArray(selectedPaths)) {
+          for (const selected of selectedPaths) {
+            if (typeof selected === "string") pathArguments.push(selected)
+          }
+        }
+        if (documentIds && typeof documentIds === "object") {
+          pathArguments.push(...Object.keys(documentIds))
         }
       }
-      return null
+      for (const [rootPath, relativePath] of mocks.workspaceTouch.mock.calls) {
+        if (typeof rootPath === "string") pathArguments.push(rootPath)
+        if (typeof relativePath === "string") pathArguments.push(relativePath)
+      }
+      return pathArguments
     }
 
-    const sourcePath = `${process.cwd()}/lib/services/document-service-factory.ts`
+    function expectNoUuidInFilesystemPathPositions() {
+      for (const pathArgument of collectFilesystemPathArguments()) {
+        expect(pathArgument).not.toContain(id)
+      }
+    }
+
+    const managedRecord = {
+      ...catalogRecord,
+      binding: {
+        ...catalogRecord.binding,
+        bindingRootId: "managed-root",
+        relativePath: "Letter.md",
+        canonicalPath: "/managed/Letter.md",
+      },
+    }
+    const managedRoot = {
+      id: "managed-root", rootPath: "/managed", kind: "managed" as const,
+      visibleAsWorkspace: false, selectedPaths: [], consentedAt: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }
+    const destinationRoot = {
+      id: "dest-root", rootPath: "/chosen", kind: "external" as const,
+      visibleAsWorkspace: false, selectedPaths: ["Other.md"],
+      consentedAt: "2026-01-01T00:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z",
+    }
+    const relocatedFile = {
+      id, path: "/chosen/Renamed.md", relativePath: "Renamed.md",
+      inode: 7, contentHash: "blake3:b", size: 8, modifiedAt: 9,
+    }
+
+    function useManagedRelocateSetup() {
+      mocks.catalogGet.mockResolvedValue(managedRecord)
+      mocks.tauriRelocate.mockResolvedValue("/chosen/Renamed.md")
+      mocks.getBindingRoots.mockResolvedValue([managedRoot])
+      mocks.workspaceSync.mockImplementation(async (rootPath: string) => ({
+        rootPath,
+        bindingRootId: rootPath === "/managed" ? "managed-root" : "dest-root",
+        selectedPaths: rootPath === "/managed" ? [] : ["Renamed.md"],
+        files: rootPath === "/managed" ? [] : [relocatedFile],
+      }))
+    }
+
+    it("discovers exactly the declared class methods and module-level fs boundary functions", () => {
+      const targets = collectFilesystemBoundaryTargets(sourcePath)
+      expect(targets.classMethods.map(({ name }) => name)).toEqual(EXPECTED_CLASS_METHODS)
+      expect(targets.moduleFunctions).toEqual(EXPECTED_MODULE_FUNCTIONS)
+    })
+
     it("never passes a raw document UUID through any filesystem-delegating service method", async () => {
-      const methods = getFilesystemDelegatingMethods(sourcePath)
-      expect(methods.length).toBeGreaterThan(0)
+      const { classMethods } = collectFilesystemBoundaryTargets(sourcePath)
       const { getDocumentService } = await import("@/lib/services/document-service-factory")
       const service = await getDocumentService()
 
-      for (const method of methods) {
+      for (const method of classMethods) {
         vi.clearAllMocks()
         mocks.catalogGet.mockResolvedValue(catalogRecord)
         mocks.openFile.mockResolvedValue({
@@ -1080,6 +1226,12 @@ describe("desktop document service after compatibility retirement", () => {
         })
         mocks.renameFile.mockResolvedValue({ data: { ...writing, id: path, title: "Renamed" }, error: null })
         mocks.createDraft.mockResolvedValue({ data: { path, writing: { ...writing, id: path } }, error: null })
+        mocks.saveFile.mockResolvedValue({ data: writing, error: null })
+        mocks.deleteFile.mockResolvedValue({ data: { ...writing, deletedAt: "2026-01-02T00:00:00.000Z" }, error: null })
+        mocks.workspaceSync.mockResolvedValue({
+          rootPath: "/docs", bindingRootId: "root-1", selectedPaths: ["Letter.md"],
+          files: [{ id, path, relativePath: "Letter.md", inode: 1, contentHash: "blake3:a", size: 5, modifiedAt: 2 }],
+        })
 
         let input: unknown
         if (method.shape === "id") input = id
@@ -1091,19 +1243,131 @@ describe("desktop document service after compatibility retirement", () => {
 
         await (service[method.name as keyof typeof service] as (input: unknown) => Promise<unknown>)(input)
 
-        const filesystemCalls = [
-          ...mocks.openFile.mock.calls,
-          ...mocks.saveFile.mock.calls,
-          ...mocks.deleteFile.mock.calls,
-          ...mocks.renameFile.mock.calls,
-          ...mocks.downloadWriting.mock.calls,
-          ...mocks.exportFile.mock.calls,
-        ]
-        for (const [callArg] of filesystemCalls) {
-          const identifier = extractIdentifier(callArg)
-          expect(identifier).not.toBe(id)
-        }
+        expectNoUuidInFilesystemPathPositions()
       }
+    })
+
+    it("relocateDesktopWriting with content: commits to the canonical path, moves and binds by path", async () => {
+      useManagedRelocateSetup()
+      const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
+
+      const result = await relocateDesktopWriting(id, "/chosen/Renamed.md", "# Letter\n\nHello\n")
+
+      // Positive scope control: the branch reached its outcome and its fs calls.
+      expect(result).toEqual({ status: "relocated", path: "/chosen/Renamed.md" })
+      expect(mocks.tauriWrite).toHaveBeenCalledWith("/managed/Letter.md", "# Letter\n\nHello\n")
+      expect(mocks.tauriRelocate).toHaveBeenCalledWith("/managed/Letter.md", "/chosen/Renamed.md")
+      // Scope control: the UUID is a legitimate workspace-sync map VALUE here,
+      // so the assertion must stay scoped to path positions.
+      expect(mocks.workspaceSync).toHaveBeenCalledWith("/chosen", ["Renamed.md"], { "Renamed.md": id })
+      expectNoUuidInFilesystemPathPositions()
+    })
+
+    it("relocateDesktopWriting without content: reads the moved file by path, never by UUID", async () => {
+      useManagedRelocateSetup()
+      mocks.tauriOpen.mockResolvedValue("# Letter\n\nHello\n")
+      const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
+
+      const result = await relocateDesktopWriting(id, "/chosen/Renamed.md")
+
+      expect(result).toEqual({ status: "relocated", path: "/chosen/Renamed.md" })
+      expect(mocks.tauriWrite).not.toHaveBeenCalled()
+      expect(mocks.tauriOpen).toHaveBeenCalledWith("/chosen/Renamed.md")
+      expectNoUuidInFilesystemPathPositions()
+    })
+
+    it("relocateDesktopWriting retries the destination manifest scope by path, never by UUID", async () => {
+      mocks.catalogGet.mockResolvedValue(managedRecord)
+      mocks.tauriRelocate.mockResolvedValue("/chosen/Renamed.md")
+      mocks.getBindingRoots.mockResolvedValue([managedRoot, destinationRoot])
+      let destinationCalls = 0
+      mocks.workspaceSync.mockImplementation(async (rootPath: string) => {
+        if (rootPath === "/managed") {
+          return { rootPath, bindingRootId: "managed-root", selectedPaths: [], files: [] }
+        }
+        destinationCalls += 1
+        return {
+          rootPath,
+          bindingRootId: "dest-root",
+          selectedPaths: ["Other.md", "Renamed.md"],
+          files: destinationCalls === 1 ? [] : [relocatedFile],
+        }
+      })
+      const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
+
+      const result = await relocateDesktopWriting(id, "/chosen/Renamed.md", "# Letter\n\nHello\n")
+
+      expect(result).toEqual({ status: "relocated", path: "/chosen/Renamed.md" })
+      expect(destinationCalls).toBe(2)
+      expect(mocks.workspaceSync).toHaveBeenNthCalledWith(1, "/chosen", ["Other.md", "Renamed.md"], { "Renamed.md": id })
+      expect(mocks.workspaceSync).toHaveBeenNthCalledWith(2, "/chosen", ["Other.md", "Renamed.md"], { "Renamed.md": id })
+      expectNoUuidInFilesystemPathPositions()
+    })
+
+    it("relocateDesktopWritingByCanonicalPath: scans by the catalog-resolved root, never by UUID", async () => {
+      mocks.catalogResolve.mockResolvedValue({ kind: "resolved", record: catalogRecord })
+      mocks.workspaceSync.mockResolvedValue({
+        rootPath: "/docs", bindingRootId: "root-1", selectedPaths: [],
+        files: [{
+          id, path: "/docs/Sub/Letter.md", relativePath: "Sub/Letter.md",
+          inode: 1, contentHash: "blake3:a", size: 5, modifiedAt: 10,
+        }],
+      })
+      const { relocateDesktopWritingByCanonicalPath } = await import("@/lib/services/document-service-factory")
+
+      await relocateDesktopWritingByCanonicalPath("/docs/Letter.md", "/docs/Sub/Letter.md")
+
+      expect(mocks.workspaceSync).toHaveBeenCalledWith("/docs")
+      expect(mocks.applyReconcile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          upserts: [expect.objectContaining({
+            documentId: id,
+            canonicalPath: "/docs/Sub/Letter.md",
+          })],
+        }),
+      )
+      expectNoUuidInFilesystemPathPositions()
+    })
+
+    it("getDesktopWritingCanonicalPath resolves the UUID through the catalog to its bound path", async () => {
+      mocks.catalogGet.mockResolvedValue(catalogRecord)
+      const { getDesktopWritingCanonicalPath } = await import("@/lib/services/document-service-factory")
+
+      const result = await getDesktopWritingCanonicalPath(id)
+
+      expect(result).toBe(path)
+      expect(mocks.catalogGet).toHaveBeenCalledWith(id)
+      expectNoUuidInFilesystemPathPositions()
+    })
+
+    it("getDesktopWritingCanonicalPath returns null for an unbound UUID, never the UUID", async () => {
+      mocks.catalogGet.mockResolvedValue(null)
+      const { getDesktopWritingCanonicalPath } = await import("@/lib/services/document-service-factory")
+
+      await expect(getDesktopWritingCanonicalPath(id)).resolves.toBeNull()
+      expect(mocks.catalogGet).toHaveBeenCalledWith(id)
+      expectNoUuidInFilesystemPathPositions()
+    })
+
+    it("createDesktopDraft (wrapper) allocates and binds by path, never by UUID", async () => {
+      const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
+
+      const result = await createDesktopDraft({
+        writingId: id,
+        title: "Untitled",
+        initialBodyText: "First words",
+        initialBodyJson: {
+          type: "doc",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "First words" }] }],
+        },
+      })
+
+      expect(result.error).toBeNull()
+      expect(mocks.createDraft).toHaveBeenCalledTimes(1)
+      expect(mocks.saveFile).toHaveBeenCalledTimes(1)
+      // Scope control: the UUID is the legitimate documentId of workspace_touch_file.
+      expect(mocks.workspaceTouch).toHaveBeenCalledWith("/docs", "Letter.md", id)
+      expectNoUuidInFilesystemPathPositions()
     })
 
     it("falls back to web export for a cloud-only record without durable local effects", async () => {
