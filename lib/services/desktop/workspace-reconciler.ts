@@ -21,6 +21,9 @@
  *      · a pass that saw only one half of a possible cross-root move expands
  *        once to every active root before minting or confirming a detach
  *        (ODE-661), so the decision follows disk state, not notice timing;
+ *      · volume evidence for the origin of a move survives its root losing
+ *        every file: the last volume observed for the root verifies the origin
+ *        side (ODE-661 review ronda 1), and only equal volumes correlate;
  *      · a burst of events collapses to one logical transaction / CatalogChange.
  *
  * The pure resolver (`reconcileRoot`) is deterministic. Manifest-atomic writes and
@@ -491,20 +494,21 @@ export function correlateAcrossRoots(input: {
 }
 
 /**
- * The one volume every file this pass saw in a root lives on, or `null` when
- * the root offered no file evidence or its files span several volumes.
- * Cross-root correlation must never infer a shared volume from an inode alone,
- * so an unknown root volume simply produces no candidates (ODE-657 review P1).
+ * Distinct volumes reported by this pass's file evidence for one root. Empty
+ * when the root offered no file evidence (the origin of a move whose only file
+ * just left), several entries when its files span more than one volume.
+ * Cross-root correlation must never infer a shared volume from an inode alone
+ * (ODE-657 review P1).
  */
-function rootDeviceFor(
+function observedDevicesFor(
   observed: ObservedFile[] | null,
   unbound: UnboundFile[],
-): number | null {
+): Set<number> {
   const devices = new Set<number>()
   for (const file of [...(observed ?? []), ...unbound]) {
     if (typeof file.device === "number" && file.device > 0) devices.add(file.device)
   }
-  return devices.size === 1 ? [...devices][0] : null
+  return devices
 }
 
 // ─── Orchestrator ──────────────────────────────────────────────────────────────
@@ -600,6 +604,17 @@ export function createWorkspaceReconciler(
   let burstTimer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
 
+  /**
+   * Last volume directly observed per active root (ODE-661 review ronda 1).
+   * A root that just lost its only file no longer offers file evidence in the
+   * pass, but the files bound there were observed on a volume; keeping that
+   * last direct observation lets the origin side of a cross-root move be
+   * verified without requiring the origin to retain files. It is runtime
+   * evidence of this reconciler instance only — never durable, never identity
+   * — and a root reporting files on several volumes invalidates it.
+   */
+  const observedDeviceByRootId = new Map<string, number>()
+
   function setReadiness(next: CatalogReadiness) {
     if (readiness === next) return
     readiness = next
@@ -611,7 +626,12 @@ export function createWorkspaceReconciler(
     unbound: UnboundFile[]
     knownBindings: KnownBinding[]
     result: ReconcileRootResult
-    /** Volume shared by every file this pass saw in the root, else null. */
+    /**
+     * Volume that verifies this root in the pass: the one shared by the files
+     * it just offered, or the last volume observed for the root when it is
+     * observable but currently offers none. Null when the evidence is mixed or
+     * the root is unobservable.
+     */
     device: number | null
   }
 
@@ -636,6 +656,35 @@ export function createWorkspaceReconciler(
     let anyUnobservable = false
     let anyFailed = false
 
+    /**
+     * Volume evidence for one root this pass (ODE-661 review ronda 1 P1). The
+     * files the pass just observed are the primary source; when the root is
+     * observable but offers no file evidence at all — the origin of a move
+     * whose only file just left — the volume last observed for that root still
+     * verifies the origin side, so correlation does not depend on the origin
+     * retaining files. Files spanning several volumes contradict any
+     * remembered volume. Correlation still requires both sides to agree, so
+     * cross-volume moves stay out of scope.
+     */
+    const deviceEvidenceFor = (
+      rootId: string,
+      observed: ObservedFile[] | null,
+      unbound: UnboundFile[],
+    ): number | null => {
+      const devices = observedDevicesFor(observed, unbound)
+      if (devices.size === 1) {
+        const device = [...devices][0]
+        observedDeviceByRootId.set(rootId, device)
+        return device
+      }
+      if (devices.size > 1) {
+        observedDeviceByRootId.delete(rootId)
+        return null
+      }
+      if (observed === null) return null
+      return observedDeviceByRootId.get(rootId) ?? null
+    }
+
     const scanAndResolve = async (root: ReconcilerRoot): Promise<ScannedRoot | null> => {
       try {
         const { observed, unbound, knownBindings } = await deps.scanRoot(root)
@@ -654,7 +703,7 @@ export function createWorkspaceReconciler(
           unbound: unboundFiles,
           knownBindings,
           result,
-          device: rootDeviceFor(observed, unboundFiles),
+          device: deviceEvidenceFor(root.id, observed, unboundFiles),
         }
       } catch {
         // Isolate failures by root. One unavailable/legacy root must not prevent

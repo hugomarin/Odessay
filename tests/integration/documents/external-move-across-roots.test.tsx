@@ -646,7 +646,7 @@ describe("ODE-615 — variantes de la prueba WATCH-04", () => {
  * inspeccionada sin archivos.
  */
 describe("ODE-661 — raíz de origen vacía (review ronda 1)", () => {
-  it.fails(
+  it(
     "dos ráfagas con raíz de origen vacía: si B llega primero, conserva el UUID original",
     async () => {
       const rootA = makeRoot("Raiz 661 vacia A")
@@ -699,7 +699,7 @@ describe("ODE-661 — raíz de origen vacía (review ronda 1)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "dos ráfagas con raíz de origen vacía: si A llega primero, el detach no se pierde",
     async () => {
       const rootA = makeRoot("Raiz 661 vacia A inversa")
