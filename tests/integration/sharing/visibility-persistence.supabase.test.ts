@@ -631,6 +631,55 @@ describe("Requirement 2 — Desktop", () => {
     },
   )
 
+  it.fails(
+    "el fallback de INSERT ante 23505 proyecta la fila que persistió el trigger, no la enviada",
+    async () => {
+      const title = `Desktop fallback ${runId}`
+      // Draft local sin autor todavía (se resuelve al flush con la sesión
+      // activa): su fila de catálogo no conoce presencia cloud, así que el
+      // flush intenta el INSERT aunque la nube ya tenga ese UUID.
+      const draft = await createDesktopDraft({
+        title,
+        initialBodyJson: doc("Cuerpo SHARE-05"),
+        visibility: "private",
+      })
+      expect(draft.error).toBeNull()
+      const writingId = draft.data!.id
+      expect((await catalog.getById(writingId))?.binding?.canonicalPath).toBeTruthy()
+
+      // Carrera documentada por `insertVerified` ("parallel pre-flight flush won
+      // the race"): otra sesión insertó la fila cloud con el mismo UUID antes de
+      // que este flush intente la suya. El grant vigente ya existe cuando el
+      // UPDATE del fallback dispara el trigger, que persiste `shared`.
+      const { error } = await admin.from("writings").insert({
+        id: writingId,
+        author_id: owner.id,
+        title,
+        body_json: doc("Cuerpo SHARE-05"),
+        body_text: "Cuerpo SHARE-05",
+        status: "draft",
+        artifact_type: "general",
+        visibility: "private",
+        version: 1,
+      })
+      expect(error).toBeNull()
+      await seedShare(ownerClient, { writingId, sharedWithId: viewer.id })
+
+      await flushDesktop()
+
+      // Evento de completitud: la fila canónica de la nube y el catálogo
+      // proyectado. La visibilidad enviada era `private`, la persistida `shared`.
+      expect((await readRow<{ visibility: string }>(admin, "writings", writingId))?.visibility).toBe(
+        "shared",
+      )
+      const projected = await catalog.getById(writingId)
+      expect(projected?.visibility, "el catálogo proyecta la fila persistida, no la enviada").toBe(
+        "shared",
+      )
+      expect(projected?.syncStatus).toBe("synced")
+    },
+  )
+
   it(
     "una mutación local más nueva durante el readback no se pisa con la visibilidad canónica",
     async () => {
