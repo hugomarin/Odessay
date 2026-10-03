@@ -410,15 +410,28 @@ fn keep_beside(target: &Path, displaced: &Path) -> Result<PathBuf, String> {
 }
 
 /// Atomically swaps two existing paths.
+///
+/// Fail-closed on the volume capability (review ronda 3, P1; Apple
+/// FB24419773): on a volume that does not support swap renaming,
+/// `renamex_np(RENAME_SWAP)` can report success while performing an ordinary
+/// rename that clobbers the destination (reproduced on a FAT volume on macOS
+/// 27). The exchange runs only when the destination's volume declares
+/// `VOL_CAP_INT_RENAME_SWAP` as valid and supported; otherwise, or when the
+/// capability cannot be determined, the callers take their existing
+/// revalidating commit, which never replaces a different file.
 #[cfg(target_os = "macos")]
 fn exchange_paths(a: &Path, b: &Path) -> std::io::Result<()> {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
+    if volume_swap_capability(b) != Some(true) {
+        return Err(std::io::Error::from(std::io::ErrorKind::Unsupported));
+    }
     #[cfg(test)]
     if swap_test_volume::lying_swap() {
         // Test-only model of Apple FB24419773: `renamex_np(RENAME_SWAP)`
         // reports success while performing an ordinary rename that clobbers
-        // `b`. Reproduced for real on a FAT volume on macOS 27.
+        // `b`. The capability gate above keeps this unreachable while the
+        // volume does not declare the swap; removing that gate lands here.
         return fs::rename(a, b);
     }
     let a = CString::new(a.as_os_str().as_bytes())?;
@@ -430,6 +443,73 @@ fn exchange_paths(a: &Path, b: &Path) -> std::io::Result<()> {
     } else {
         Err(std::io::Error::last_os_error())
     }
+}
+
+/// Whether the volume holding `path` declares `VOL_CAP_INT_RENAME_SWAP` as
+/// valid and supported — what `URLResourceValues.volumeSupportsSwapRenaming`
+/// reads. `None` means it could not be determined (`getattrlist` failed or
+/// the volume does not report the bit as valid), which `exchange_paths`
+/// treats as "do not swap".
+#[cfg(target_os = "macos")]
+fn volume_swap_capability(path: &Path) -> Option<bool> {
+    #[cfg(test)]
+    if let Some(forced) = swap_test_volume::forced_capability() {
+        return Some(forced);
+    }
+    query_volume_swap_capability(path)
+}
+
+/// `getattrlist(ATTR_VOL_CAPABILITIES)` for `path`. The attribute buffer is
+/// the shape from Apple's sample and `sys/attr.h`: a `u32` length (of the
+/// whole buffer, length field included) followed by
+/// `vol_capabilities_attr_t`.
+#[cfg(target_os = "macos")]
+fn query_volume_swap_capability(path: &Path) -> Option<bool> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    #[repr(C)]
+    struct SwapCapabilityBuffer {
+        length: u32,
+        capabilities: libc::vol_capabilities_attr_t,
+    }
+
+    let path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut attr_list = libc::attrlist {
+        bitmapcount: libc::ATTR_BIT_MAP_COUNT,
+        reserved: 0,
+        commonattr: 0,
+        volattr: libc::ATTR_VOL_INFO | libc::ATTR_VOL_CAPABILITIES,
+        dirattr: 0,
+        fileattr: 0,
+        forkattr: 0,
+    };
+    let mut buffer = SwapCapabilityBuffer {
+        length: 0,
+        capabilities: libc::vol_capabilities_attr_t {
+            capabilities: [0; 4],
+            valid: [0; 4],
+        },
+    };
+    // SAFETY: `path` is a NUL-terminated string; `attr_list` and `buffer` are
+    // valid, correctly sized pointers for the duration of the call.
+    let rc = unsafe {
+        libc::getattrlist(
+            path.as_ptr(),
+            &mut attr_list as *mut libc::attrlist as *mut libc::c_void,
+            &mut buffer as *mut SwapCapabilityBuffer as *mut libc::c_void,
+            std::mem::size_of::<SwapCapabilityBuffer>(),
+            0,
+        )
+    };
+    if rc != 0 || (buffer.length as usize) < std::mem::size_of::<SwapCapabilityBuffer>() {
+        return None;
+    }
+    let interfaces = libc::VOL_CAPABILITIES_INTERFACES;
+    if buffer.capabilities.valid[interfaces] & libc::VOL_CAP_INT_RENAME_SWAP == 0 {
+        return None;
+    }
+    Some(buffer.capabilities.capabilities[interfaces] & libc::VOL_CAP_INT_RENAME_SWAP != 0)
 }
 
 /// Test seam for the macOS swap helpers (Apple FB24419773). Compiled out of
@@ -462,6 +542,12 @@ mod swap_test_volume {
 
     pub fn lying_swap() -> bool {
         LYING.with(|cell| cell.get())
+    }
+
+    /// `None` = query the real volume; `Some(false)` = the modeled volume
+    /// does not declare the swap capability.
+    pub fn forced_capability() -> Option<bool> {
+        LYING.with(|cell| if cell.get() { Some(false) } else { None })
     }
 }
 
