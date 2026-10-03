@@ -14,18 +14,36 @@ import { describe, expect, it } from "vitest"
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8")
 
 describe("studio shell contract", () => {
-  // KNOWN FAILURE (surfaced by PR4 adding `npm test` to CI, not caused by it):
-  // status-bar.tsx no longer uses `grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]`
-  // at all — it was refactored to a flex layout and this contract test was
-  // never updated to match. Needs a real fix to the assertion (or the
-  // component), not a CI change. Tracked as follow-up in ODE-543, not fixed here.
-  it.skip("keeps the titlebar and the status bar as siblings of the middle band", () => {
+  // ODE-543 — the status bar drifted to a two-group flex row. Studio and the
+  // authorized prototype keep it as the three-region grid; `it.fails` until
+  // the product fix lands in its own commit, then flipped to `it` (same body).
+  it.fails("keeps the titlebar and the status bar as siblings of the middle band", () => {
     const titlebar = read("components/editor/editor-topbar.tsx")
     const statusBar = read("components/editor/status-bar.tsx")
 
     expect(titlebar).toContain("h-[46px]")
-    expect(statusBar).toContain("h-[46px]")
-    expect(statusBar).toContain("grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]")
+    // Layout: 46px tall, on the three-column grid the Studio view and the
+    // prototype share, not a flex row between two groups.
+    expect(statusBar).toContain("grid h-[46px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]")
+    // Regions, in grid order and with their own owners: save state, the
+    // edit-mode control, then metrics + shortcuts + notes.
+    const regions = [...statusBar.matchAll(/data-region="([^"]+)"/g)].map(([, region]) => region)
+    expect(regions).toEqual(["save-state", "mode", "metrics"])
+    const regionSource = (region: string) => {
+      const start = statusBar.indexOf(`data-region="${region}"`)
+      const next = statusBar.indexOf('data-region="', start + `data-region="${region}"`.length)
+      return statusBar.slice(start, next === -1 ? statusBar.length : next)
+    }
+    expect(regionSource("save-state")).toContain("SAVE_STATE_LABELS[saveState]")
+    expect(regionSource("save-state")).not.toContain("editor-statusbar-metrics")
+    expect(regionSource("mode")).toContain('onToggleMode("rich")')
+    expect(regionSource("mode")).toContain('onToggleMode("markdown")')
+    expect(regionSource("mode")).toContain("justify-self-center")
+    expect(regionSource("mode")).not.toContain("editor-statusbar-metrics")
+    expect(regionSource("metrics")).toContain('data-testid="editor-statusbar-metrics"')
+    expect(regionSource("metrics")).toContain("Keyboard shortcuts")
+    expect(regionSource("metrics")).toContain("Notes panel")
+    expect(regionSource("metrics")).toContain("justify-self-end")
     // Neither owns the format toolbar: that lives inside the sheet column.
     expect(titlebar).not.toContain("EditorFormatToolbar")
     // The status bar is in flow under the band, not pinned over the content.
