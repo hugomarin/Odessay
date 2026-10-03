@@ -101,11 +101,18 @@ afterEach(() => {
  * `write_file` estaba en vuelo; el contenido nuevo tiene que terminar en el
  * archivo renombrado, con un solo archivo y el catálogo apuntando a él.
  *
- * Bug vigente: sin guard de `write_file` no hay `CONFLICT` y
- * `persistFollowingRename` (que solo reacciona a `CONFLICT`) nunca reencamina;
- * el `write_file` recrea la ruta vieja, `persist()` no puede ligarla a la fila
- * ya movida y cae al `workspace_sync` con hint, que rebindea la ruta vieja al
- * mismo UUID. Quedan dos archivos y el catálogo vuelve a la ruta vieja.
+ * Bug (caracterización del commit rojo, cuerpo conservado sin cambios): sin
+ * guard de `write_file` no hay `CONFLICT` y `persistFollowingRename` (que solo
+ * reacciona a `CONFLICT`) nunca reencamina; el `write_file` recrea la ruta
+ * vieja, `persist()` no puede ligarla a la fila ya movida y cae al
+ * `workspace_sync` con hint, que rebindea la ruta vieja al mismo UUID. Quedan
+ * dos archivos y el catálogo vuelve a la ruta vieja.
+ *
+ * Fix (ODE-635): `persist()` espera al rename en curso, relee el binding y, si
+ * el write aterrizó en una ruta que el documento ya no posee, retira esa
+ * recreación por el trash del owner de filesystem y lanza `CONFLICT` para que
+ * `persistFollowingRename` reintente en la ruta actual. `null` sigue siendo
+ * "sin baseline": no se sustituye ningún hash.
  *
  * Entrada real del camino: `saveWriting` con `expectedContentHash: null` es una
  * llamada de producción — `PersistenceCoordinator.persistNow` manda null
@@ -121,17 +128,15 @@ afterEach(() => {
  *
  * Control positivo: el mismo caso con baseline correcto es el `it` de la
  * carrera en `tests/editor-shell-create-rename.test.tsx` (ODE-629); aquí el
- * control es que el guardado retenido resuelve sin error (no falla: escribe,
- * solo que en la ruta equivocada) y que el rename completa.
+ * control es que el guardado retenido resuelve sin error y que el rename
+ * completa, y la propiedad se mide sobre el disco y el catálogo.
  *
- * Mutation control (por qué esto es `it.fails`): adoptar la dirección de fix ya
- * validada en el issue (usar `existing.binding.contentHash` como baseline
- * cuando el caller manda null, o serializar el guardado con el rename en
- * curso) hace que el cuerpo pase y este `it.fails` se ponga rojo — es la señal
- * de que el bug quedó cerrado y el caso debe promoverse a `it` sin tocar su
- * cuerpo, como manda el contrato de la red.
+ * Mutation control (corrido en rojo antes del PR): quitar el chequeo de ruta
+ * obsoleta o quitar el retiro de la recreación deja dos archivos y el catálogo
+ * en la ruta vieja; quitar la espera a `renamesInFlight` pone rojo el caso
+ * hermano de la ventana move→commit.
  */
-describe("ODE-635 — guardado sin baseline que se cruza con un rename (bug vigente)", () => {
+describe("ODE-635 — guardado sin baseline que se cruza con un rename", () => {
   it(
     "un guardado sin baseline que se cruza con un rename no recrea el archivo en la ruta vieja",
     async () => {
