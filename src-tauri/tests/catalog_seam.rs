@@ -1,5 +1,7 @@
 //! ODE-613 — the TS → invoke() → Rust → SQLite seam, replayed; ODE-644 PR2
-//! extends it to the sync-mutation queue.
+//! extends it to the sync-mutation queue; ODE-670 extends it to the SYNC-08
+//! metadata path (`catalog_list` + `catalog_bulk_dual_write` from the real
+//! Settings producer, and the bound/first-upload metadata producers).
 //!
 //! `tests/fixtures/catalog-seam/catalog-seam-v4.json` is recorded by
 //! `tests/support/catalog-seam-recorder.ts` (driven from
@@ -35,7 +37,7 @@
 //! (JSON serialization/deserialization across the real webview bridge), which
 //! stays RUNTIME (ODE-622).
 
-use odessay_lib::commands::{document, index as catalog, workspace};
+use odessay_lib::commands::{document, index as catalog, settings, workspace};
 use rusqlite::{params, Connection};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -57,7 +59,22 @@ struct Scenario {
     name: String,
     #[allow(dead_code)]
     description: String,
+    /// `filesystem`: the scenario registers documents through the real
+    /// reconciler, so the end state is asserted against disk + catalog.
+    /// `queue`: the scenario enters through producers that do not commit a
+    /// `catalog_apply_reconcile` (first-upload draft); its canonical state is
+    /// asserted by the control steps against a fresh SQLite connection.
+    #[serde(default)]
+    profile: ScenarioProfile,
     steps: Vec<Step>,
+}
+
+#[derive(Deserialize, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+enum ScenarioProfile {
+    #[default]
+    Filesystem,
+    Queue,
 }
 
 #[derive(Deserialize)]
@@ -70,6 +87,8 @@ enum Step {
 
 /// Req 5: canonical durable state the recorder asserted against the queue
 /// double. `assert_control` reads it back from a fresh SQLite connection.
+/// `document.metadata` and `mutations[].payload` are optional: only the
+/// SYNC-08 scenarios declare them, and they are only compared when present.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ControlStep {
@@ -84,6 +103,21 @@ struct ControlStep {
 struct ControlDocument {
     sync_status: String,
     cloud_present: bool,
+    #[serde(default)]
+    metadata: Option<ControlMetadata>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ControlMetadata {
+    status: Option<String>,
+    artifact_type: Option<String>,
+    version: Option<i64>,
+    title: Option<String>,
+    slug: Option<String>,
+    visibility: Option<String>,
+    cloud_account_id: Option<String>,
+    content_hash: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -94,6 +128,20 @@ struct ControlMutation {
     attempt_count: i64,
     next_retry_at: Option<i64>,
     last_error: Option<String>,
+    #[serde(default)]
+    payload: Option<ControlMutationPayload>,
+}
+
+/// The payload fields that distinguish a real metadata mutation
+/// (`mutationKind:"metadata"`) from a body mutation (no `mutationKind`).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ControlMutationPayload {
+    mutation_kind: Option<String>,
+    version: Option<i64>,
+    updated_at: Option<String>,
+    status: Option<String>,
+    artifact_type: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -124,6 +172,7 @@ struct PlaceholderPaths {
     root_a: PathBuf,
     root_b: PathBuf,
     db: PathBuf,
+    config: PathBuf,
 }
 
 impl PlaceholderPaths {
@@ -136,8 +185,9 @@ impl PlaceholderPaths {
     }
 }
 
-/// The fixture uses placeholders ($DB, $ROOT_A, $ROOT_B) so it is machine
-/// independent. Rewrite every string before dispatching it to the real command.
+/// The fixture uses placeholders ($DB, $ROOT_A, $ROOT_B, $CONFIG) so it is
+/// machine independent. Rewrite every string before dispatching it to the real
+/// command.
 fn rewrite(value: &Value, paths: &PlaceholderPaths) -> Value {
     match value {
         Value::String(text) => Value::String(rewrite_str(text, paths)),
@@ -154,6 +204,9 @@ fn rewrite(value: &Value, paths: &PlaceholderPaths) -> Value {
 fn rewrite_str(text: &str, paths: &PlaceholderPaths) -> String {
     if text == "$DB" {
         return paths.db.to_string_lossy().into_owned();
+    }
+    if text == "$CONFIG" {
+        return paths.config.to_string_lossy().into_owned();
     }
     if let Some(rest) = text.strip_prefix("$ROOT_A") {
         return format!("{}{rest}", paths.root_a.display());
@@ -317,6 +370,56 @@ fn project_metadata_mutation_row(row: &catalog::CatalogMetadataMutationRow) -> V
     })
 }
 
+/// Mirrors `projectMetadataRow` in the recorder: the fields the SYNC-08
+/// Settings producer reads from `catalog_list` and the metadata caches the
+/// controls assert. Machine-dependent fields (inode, size, lastSeenAt,
+/// excerpt) are excluded exactly as on the TS side.
+fn project_metadata_row(row: &catalog::CatalogRow) -> Value {
+    json!({
+        "id": row.id,
+        "localPresent": row.local_present,
+        "cloudPresent": row.cloud_present,
+        "cloudAccountId": row.cloud_account_id,
+        "syncStatus": row.sync_status,
+        "title": row.title,
+        "slug": row.slug,
+        "status": row.status,
+        "artifactType": row.artifact_type,
+        "visibility": row.visibility,
+        "version": row.version,
+        "deletedAt": row.deleted_at,
+        "createdAt": row.created_at,
+        "modifiedAt": row.modified_at,
+        "bindingRootId": row.binding_root_id,
+        "relativePath": row.relative_path,
+        "canonicalPath": row.canonical_path,
+        "contentHash": row.content_hash,
+    })
+}
+
+/// Mirrors the recorder's mutation payload projection: only the fields that
+/// distinguish a metadata mutation from a body one, never the whole
+/// `payload_json` echo.
+fn project_control_payload(payload_json: &str) -> Result<Value, String> {
+    let payload: Value = serde_json::from_str(payload_json)
+        .map_err(|error| format!("control payload is not JSON: {error}"))?;
+    let text = |key: &str| match payload.get(key) {
+        Some(Value::String(value)) => Value::String(value.clone()),
+        _ => Value::Null,
+    };
+    let number = |key: &str| match payload.get(key) {
+        Some(Value::Number(value)) => Value::Number(value.clone()),
+        _ => Value::Null,
+    };
+    Ok(json!({
+        "mutationKind": text("mutationKind"),
+        "version": number("version"),
+        "updatedAt": text("updatedAt"),
+        "status": text("status"),
+        "artifactType": text("artifactType"),
+    }))
+}
+
 /// Dispatch one recorded `invoke` to the real command and project its response
 /// with the same shape the recorder recorded. The caller asserts the projected
 /// response equals the recording: the recorded args are only valid while the
@@ -412,6 +515,39 @@ fn dispatch(cmd: &str, args: &Value) -> Result<Value, String> {
             catalog::catalog_apply_cloud_snapshots(string_arg(args, "dbPath"), snapshots)
                 .map(|()| Value::Null)
         }
+        // ── SYNC-08: la ruta de metadata de Settings (ODE-670) ────────────────
+        "catalog_list" => catalog::catalog_list(
+            string_arg(args, "dbPath"),
+            typed_arg(args, "cloudAccountId"),
+            typed_arg(args, "includeDeleted"),
+            typed_arg(args, "localOnly"),
+            typed_arg(args, "limit"),
+        )
+        .map(|rows| Value::Array(rows.iter().map(project_metadata_row).collect())),
+        "catalog_bulk_dual_write" => {
+            let inputs: Vec<catalog::CatalogDualWriteInput> = typed_arg(args, "inputs");
+            catalog::catalog_bulk_dual_write(string_arg(args, "dbPath"), inputs).map(|ids| {
+                Value::Array(ids.into_iter().map(Value::String).collect())
+            })
+        }
+        "settings_read" => settings::settings_read(
+            string_arg(args, "configDir"),
+            string_arg(args, "key"),
+        )
+        .and_then(|raw| {
+            serde_json::from_str(&raw).map_err(|error| format!("settings_read decode: {error}"))
+        }),
+        "settings_write" => settings::settings_write(
+            string_arg(args, "configDir"),
+            string_arg(args, "key"),
+            string_arg(args, "valueJson"),
+        )
+        .map(|()| Value::Null),
+        "settings_delete" => settings::settings_delete(
+            string_arg(args, "configDir"),
+            string_arg(args, "key"),
+        )
+        .map(|()| Value::Null),
         other => Err(format!(
             "catalog_seam: unhandled command {other} — extend the Rust dispatch to cover it"
         )),
@@ -422,14 +558,57 @@ fn dispatch(cmd: &str, args: &Value) -> Result<Value, String> {
 /// connection — `documents.sync_status`/`cloud_present` and every
 /// `sync_mutations` row of the document, ordered like the real listing
 /// (`created_at ASC`) with `id` as the deterministic tiebreak the recorder uses.
+/// When the scenario declares `document.metadata` (SYNC-08), the metadata
+/// caches and the binding content hash are compared field by field; when it
+/// declares a mutation payload, the projection that distinguishes a metadata
+/// mutation from a body one is compared too.
 fn assert_control(step: &ControlStep, paths: &PlaceholderPaths, scenario: &Scenario) {
     let connection =
         Connection::open(&paths.db).expect("catalog_seam: open catalog for the control step");
-    let (sync_status, cloud_present): (String, i64) = connection
+    let (
+        sync_status,
+        cloud_present,
+        status_cache,
+        artifact_type_cache,
+        version_cache,
+        title_cache,
+        slug_cache,
+        visibility_cache,
+        cloud_account_id,
+        binding_content_hash,
+    ): (
+        String,
+        i64,
+        Option<String>,
+        Option<String>,
+        Option<i64>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) = connection
         .query_row(
-            "SELECT sync_status, cloud_present FROM documents WHERE id=?1",
+            "SELECT d.sync_status, d.cloud_present, d.status_cache, d.artifact_type_cache,
+                    d.version_cache, d.title_cache, d.slug_cache, d.visibility_cache,
+                    d.cloud_account_id, b.content_hash
+             FROM documents d LEFT JOIN document_bindings b ON b.document_id=d.id
+             WHERE d.id=?1",
             params![step.document_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get(9)?,
+                ))
+            },
         )
         .unwrap_or_else(|error| {
             panic!(
@@ -448,37 +627,112 @@ fn assert_control(step: &ControlStep, paths: &PlaceholderPaths, scenario: &Scena
         "scenario {}: control {}: documents.cloud_present diverged",
         scenario.name, step.name
     );
+    if let Some(metadata) = &step.document.metadata {
+        assert_eq!(
+            status_cache, metadata.status,
+            "scenario {}: control {}: documents.status_cache diverged",
+            scenario.name, step.name
+        );
+        assert_eq!(
+            artifact_type_cache, metadata.artifact_type,
+            "scenario {}: control {}: documents.artifact_type_cache diverged",
+            scenario.name, step.name
+        );
+        assert_eq!(
+            version_cache, metadata.version,
+            "scenario {}: control {}: documents.version_cache diverged",
+            scenario.name, step.name
+        );
+        assert_eq!(
+            title_cache, metadata.title,
+            "scenario {}: control {}: documents.title_cache diverged",
+            scenario.name, step.name
+        );
+        assert_eq!(
+            slug_cache, metadata.slug,
+            "scenario {}: control {}: documents.slug_cache diverged",
+            scenario.name, step.name
+        );
+        assert_eq!(
+            visibility_cache, metadata.visibility,
+            "scenario {}: control {}: documents.visibility_cache diverged",
+            scenario.name, step.name
+        );
+        assert_eq!(
+            cloud_account_id, metadata.cloud_account_id,
+            "scenario {}: control {}: documents.cloud_account_id diverged",
+            scenario.name, step.name
+        );
+        assert_eq!(
+            binding_content_hash, metadata.content_hash,
+            "scenario {}: control {}: document_bindings.content_hash diverged",
+            scenario.name, step.name
+        );
+    }
 
+    let wants_payload = step.mutations.iter().any(|mutation| mutation.payload.is_some());
     let mut statement = connection
         .prepare(
-            "SELECT id,status,attempt_count,next_retry_at,last_error FROM sync_mutations
+            "SELECT id,status,attempt_count,next_retry_at,last_error,payload_json FROM sync_mutations
              WHERE document_id=?1 ORDER BY created_at ASC, id ASC",
         )
         .expect("catalog_seam: prepare control mutations");
-    let actual_mutations: Vec<Value> = statement
+    let raw_mutations: Vec<(String, String, i64, Option<i64>, Option<String>, String)> = statement
         .query_map(params![step.document_id], |row| {
-            Ok(json!({
-                "id": row.get::<_, String>(0)?,
-                "status": row.get::<_, String>(1)?,
-                "attemptCount": row.get::<_, i64>(2)?,
-                "nextRetryAt": row.get::<_, Option<i64>>(3)?,
-                "lastError": row.get::<_, Option<String>>(4)?,
-            }))
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+            ))
         })
         .expect("catalog_seam: query control mutations")
         .collect::<Result<_, _>>()
         .expect("catalog_seam: collect control mutations");
+    let actual_mutations: Vec<Value> = raw_mutations
+        .iter()
+        .map(|(id, status, attempt_count, next_retry_at, last_error, payload_json)| {
+            let mut value = json!({
+                "id": id,
+                "status": status,
+                "attemptCount": attempt_count,
+                "nextRetryAt": next_retry_at,
+                "lastError": last_error,
+            });
+            if wants_payload {
+                value["payload"] = project_control_payload(payload_json).unwrap_or_else(|error| {
+                    panic!(
+                        "scenario {}: control {}: mutation {id} payload unreadable: {error}",
+                        scenario.name, step.name
+                    )
+                });
+            }
+            value
+        })
+        .collect();
     let expected_mutations: Vec<Value> = step
         .mutations
         .iter()
         .map(|mutation| {
-            json!({
+            let mut value = json!({
                 "id": mutation.id,
                 "status": mutation.status,
                 "attemptCount": mutation.attempt_count,
                 "nextRetryAt": mutation.next_retry_at,
                 "lastError": mutation.last_error,
-            })
+            });
+            if let Some(payload) = &mutation.payload {
+                value["payload"] = json!({
+                    "mutationKind": payload.mutation_kind,
+                    "version": payload.version,
+                    "updatedAt": payload.updated_at,
+                    "status": payload.status,
+                    "artifactType": payload.artifact_type,
+                });
+            }
+            value
         })
         .collect();
     assert_eq!(
@@ -863,6 +1117,7 @@ fn catalog_seam_replays_the_recorded_ts_sequence_over_real_sqlite() {
             root_a: scenario_base.join("root-a"),
             root_b: scenario_base.join("root-b"),
             db: scenario_base.join("desktop-index.sqlite3"),
+            config: scenario_base.join("config"),
         };
         fs::create_dir_all(&paths.root_a).expect("catalog_seam: create root A");
         fs::create_dir_all(&paths.root_b).expect("catalog_seam: create root B");
@@ -893,7 +1148,11 @@ fn catalog_seam_replays_the_recorded_ts_sequence_over_real_sqlite() {
             }
         }
 
-        assert_scenario(scenario, &paths);
+        // `queue` scenarios do not register documents through the reconciler;
+        // their canonical state is asserted by the control steps above.
+        if scenario.profile == ScenarioProfile::Filesystem {
+            assert_scenario(scenario, &paths);
+        }
     }
 
     let _ = fs::remove_dir_all(&base);

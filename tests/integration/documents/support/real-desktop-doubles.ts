@@ -44,9 +44,10 @@ const catalogsByDb = new Map<string, Map<string, DesktopCatalogRow>>()
 // Collection state (`collections` + `writing_collections`), real enough for a
 // proof that drives production's own collection create/assign calls and then
 // reads the view's join back. Mirrors the SQL of `upsert_collection`,
-// `catalog_replace_writing_collections` and `catalog_list_collection_snapshot`
-// (`index.rs:1520-1730`), read by hand; the TS → real SQLite seam is the same
-// deliberately-open native gap as the rest of this file.
+// `catalog_replace_writing_collections`, `catalog_apply_collection_snapshot` and
+// `catalog_list_collection_snapshot` (`index.rs:1520-1730`), read by hand; the
+// TS → real SQLite seam is the same deliberately-open native gap as the rest of
+// this file.
 const collectionsByDb = new Map<string, Map<string, DesktopCatalogCollection>>()
 const writingCollectionsByDb = new Map<string, Map<string, DesktopCatalogWritingCollection>>()
 // Cola durable de metadata (`metadata_sync_mutations`), en memoria. La alimenta
@@ -1132,6 +1133,35 @@ export async function tauriCatalogListDouble(dbPath: string): Promise<DesktopCat
 }
 
 /**
+ * Espejo fiel de `catalog_list` (`index.rs:1166-1187`): aplica los mismos
+ * filtros y el mismo `ORDER BY modified_at DESC` del SQL. El seam de ODE-670 lo
+ * necesita para grabar la ruta real de Settings; `tauriCatalogListDouble` de
+ * arriba es un atajo deliberado "todas las filas" que no aplica la query, y por
+ * eso ODE-648 no vio que una fila solo-nube con cuenta queda fuera cuando el
+ * productor pasa `cloudAccountId:null` (seguimiento en
+ * `tests/catalog-seam-fixture.test.ts`, `it.fails` ODE-670). Aquí no se cambia
+ * ese atajo: los consumidores existentes conservan su semántica.
+ */
+export async function tauriCatalogListQueryDouble(
+  dbPath: string,
+  query: { cloudAccountId?: string | null; includeDeleted?: boolean; localOnly?: boolean; limit?: number } = {},
+): Promise<DesktopCatalogRow[]> {
+  const cloudAccountId = query.cloudAccountId ?? null
+  const includeDeleted = query.includeDeleted ?? false
+  const localOnly = query.localOnly ?? false
+  const limit = query.limit ?? 200
+  return [...rowsFor(dbPath).values()]
+    .filter((row) => includeDeleted || (row.deletedAt === null && row.syncStatus !== "deleted"))
+    .filter((row) => !localOnly || row.localPresent)
+    .filter(
+      (row) =>
+        row.localPresent || row.cloudAccountId === null || row.cloudAccountId === cloudAccountId,
+    )
+    .sort((left, right) => (right.modifiedAt ?? 0) - (left.modifiedAt ?? 0))
+    .slice(0, limit)
+}
+
+/**
  * No test using this double ever retires a BindingRoot, so this always
  * returns empty — a real, minimal shape of "nothing to recover," not a
  * shortcut around the property under test. `DesktopWorkspaceService.
@@ -1270,6 +1300,41 @@ export async function tauriCatalogDeleteCollectionDouble(
     }
   }
   enqueueMetadataMutationDouble(dbPath, mutation)
+}
+
+/**
+ * Espejo del merge transaccional de `catalog_apply_collection_snapshot` desde
+ * ODE-666 (`index.rs`): cada colección del snapshot se upsertea salvo que su
+ * fila local conserve un tombstone (`deletedAt`), y las relaciones de una
+ * colección tombstoned se omiten. No poda filas ausentes del snapshot ni toca
+ * writings o archivos. La verdad de SQLite la da
+ * `src-tauri/tests/collection_delete_keeps_documents.rs`; este doble espeja el
+ * SQL vigente para el caso TS.
+ */
+export async function tauriCatalogApplyCollectionSnapshotDouble(
+  dbPath: string,
+  snapshot: DesktopCatalogCollectionSnapshot,
+): Promise<void> {
+  let collections = collectionsByDb.get(dbPath)
+  if (!collections) {
+    collections = new Map()
+    collectionsByDb.set(dbPath, collections)
+  }
+  for (const collection of snapshot.collections) {
+    const local = collections.get(collection.id)
+    if (local && local.deletedAt != null) continue
+    collections.set(collection.id, { ...collection })
+  }
+  let writingCollections = writingCollectionsByDb.get(dbPath)
+  if (!writingCollections) {
+    writingCollections = new Map()
+    writingCollectionsByDb.set(dbPath, writingCollections)
+  }
+  for (const relation of snapshot.writingCollections) {
+    const collection = collections.get(relation.collectionId)
+    if (collection && collection.deletedAt != null) continue
+    writingCollections.set(`${relation.writingId}:${relation.collectionId}`, { ...relation })
+  }
 }
 
 /**
