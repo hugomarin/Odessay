@@ -249,22 +249,13 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   }
 
   const { id } = await context.params;
-  const { data: currentWriting, error: currentWritingError } = await supabase
-    .from("writings")
-    .select("id")
-    .eq("id", id)
-    .eq("author_id", userId)
-    .maybeSingle();
-
-  if (currentWritingError) {
-    return jsonError(500, "DB_ERROR", currentWritingError.message);
-  }
-
-  if (!currentWriting) {
-    return jsonError(404, "NOT_FOUND", "Writing not found.");
-  }
-
-  const { data, error } = await supabase
+  // ODE-667: mutación condicional owner-scoped, sin SELECT→UPDATE. `select()`
+  // devuelve las filas afectadas, así que cero filas (ID inexistente o fila de
+  // otra cuenta) es un éxito idempotente indistinguible: la cola de sync no
+  // reintenta hasta fallar un borrado cuya fila remota ya no existe. El
+  // cleanup solo corre con una fila propia confirmada, para no tocar shares ni
+  // invitaciones de otra cuenta.
+  const { data: deletedWritings, error } = await supabase
     .from("writings")
     .update({
       deleted_at: parsed.data.deleted_at,
@@ -273,11 +264,16 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     })
     .eq("id", id)
     .eq("author_id", userId)
-    .select()
-    .single();
+    .select();
 
   if (error) {
     return jsonError(500, "DB_ERROR", error.message);
+  }
+
+  const deletedWriting = deletedWritings?.[0] ?? null;
+
+  if (!deletedWriting) {
+    return NextResponse.json({ data: null, error: null }, { status: 200 });
   }
 
   const { error: sharesError } = await supabase
@@ -300,5 +296,5 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     console.error("[writings:delete:cascade]", { writingId: id, userId, operation: "expire_invitations", error: invitationsError.message });
   }
 
-  return NextResponse.json({ data, error: null }, { status: 200 });
+  return NextResponse.json({ data: deletedWriting, error: null }, { status: 200 });
 }
