@@ -435,7 +435,7 @@ describe("ODE-635 — guardado sin baseline que se cruza con un rename", () => {
    *
    * Muta a rojo si el write sin guardia vuelve a pisar la ruta obsoleta.
    */
-  it.fails(
+  it(
     "un archivo externo que aparece en la ruta obsoleta antes del write no se pisa",
     async () => {
       const draft = await createDesktopDraft({ title: "ODE635 ExternoPreWrite", initialBodyJson: bodyJson("BASE") })
