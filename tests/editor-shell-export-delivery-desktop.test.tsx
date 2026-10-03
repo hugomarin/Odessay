@@ -1080,7 +1080,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "carga retenida: el enlace de A no queda visible ni copiable bajo B mientras B carga",
     async () => {
       const textA = "ODE652-LOAD-RACE-A"
@@ -1123,7 +1123,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "carga retenida: la respuesta vieja de A no habilita las acciones de B mientras B carga",
     async () => {
       const textA = "ODE652-STALE-LOAD-A"

@@ -63,6 +63,11 @@ type PropertiesPanelProps = {
 
 type ExportFormat = "pdf" | "docx"
 
+type ShareLinkByDocument = {
+  writingId: string | null
+  link: PreviewLinkState
+}
+
 const EXPORT_LABEL: Record<ExportFormat, string> = {
   pdf: "PDF",
   docx: "Word",
@@ -158,7 +163,10 @@ export function PropertiesPanel({
   onArtifactTypeChange,
   onVisibilityChange,
 }: PropertiesPanelProps) {
-  const [shareLink, setShareLink] = useState<PreviewLinkState>(DEFAULT_PREVIEW_LINK_STATE)
+  const [shareLinkState, setShareLinkState] = useState<ShareLinkByDocument>({
+    writingId: null,
+    link: DEFAULT_PREVIEW_LINK_STATE,
+  })
   const [isLoadingShareLink, setIsLoadingShareLink] = useState(false)
   const [isSavingShareLink, setIsSavingShareLink] = useState(false)
   const [shareError, setShareError] = useState<string | null>(null)
@@ -179,6 +187,19 @@ export function PropertiesPanel({
    * enlace y su "Copy".
    */
   const shareLinkGenerationRef = useRef(0)
+  /**
+   * Identifica la última carga de enlace pedida. Solo esa carga apaga el
+   * indicador: la respuesta vieja de otro documento no debe habilitar las
+   * acciones del documento actual mientras su carga sigue viva (SHARE-03).
+   */
+  const shareLinkLoadRef = useRef(0)
+  /**
+   * El enlace activo pertenece a su documento: el de A nunca se renderiza ni
+   * se copia bajo B, ni siquiera mientras B todavía está cargando el suyo
+   * (SHARE-03, ODE-652).
+   */
+  const shareLink =
+    shareLinkState.writingId === writingId ? shareLinkState.link : DEFAULT_PREVIEW_LINK_STATE
   const catalog = useVocabulary()
   const sharingService = useMemo(() => createSharingService(), [])
   const enabledStatuses = useMemo(
@@ -195,12 +216,13 @@ export function PropertiesPanel({
 
   const loadShareLink = useCallback(async () => {
     if (!hasRemoteWriting || !writingId) {
-      setShareLink(DEFAULT_PREVIEW_LINK_STATE)
+      setShareLinkState({ writingId, link: DEFAULT_PREVIEW_LINK_STATE })
       setShareError(null)
       return
     }
 
     const requestGeneration = shareLinkGenerationRef.current
+    const requestLoad = ++shareLinkLoadRef.current
     setIsLoadingShareLink(true)
     setShareError(null)
 
@@ -211,13 +233,17 @@ export function PropertiesPanel({
       }
 
       if (shareLinkGenerationRef.current !== requestGeneration) return
-      setShareLink(result.data)
+      setShareLinkState({ writingId, link: result.data })
     } catch (error) {
       if (shareLinkGenerationRef.current !== requestGeneration) return
-      setShareLink(DEFAULT_PREVIEW_LINK_STATE)
+      setShareLinkState({ writingId, link: DEFAULT_PREVIEW_LINK_STATE })
       setShareError(error instanceof Error ? error.message : "Failed to load preview link.")
     } finally {
-      setIsLoadingShareLink(false)
+      // Solo la última carga apaga el indicador: una respuesta vieja no debe
+      // habilitar acciones del documento actual mientras su carga sigue viva.
+      if (shareLinkLoadRef.current === requestLoad) {
+        setIsLoadingShareLink(false)
+      }
     }
   }, [hasRemoteWriting, sharingService, writingId])
 
@@ -247,7 +273,7 @@ export function PropertiesPanel({
       }
 
       if (shareLinkGenerationRef.current === requestGeneration) {
-        setShareLink(result.data)
+        setShareLinkState({ writingId, link: result.data })
       }
       setActionNotice({ kind: "success", message: shareSuccessMessage(sourceTitle) })
     } catch (error) {
@@ -279,7 +305,7 @@ export function PropertiesPanel({
       }
 
       if (shareLinkGenerationRef.current !== requestGeneration) return
-      setShareLink(DEFAULT_PREVIEW_LINK_STATE)
+      setShareLinkState({ writingId, link: DEFAULT_PREVIEW_LINK_STATE })
     } catch (error) {
       if (shareLinkGenerationRef.current !== requestGeneration) return
       setShareError(error instanceof Error ? error.message : "Failed to revoke preview link.")
