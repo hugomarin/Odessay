@@ -2992,6 +2992,31 @@
           "response": null
         },
         {
+          "kind": "invoke",
+          "cmd": "catalog_apply_cloud_snapshots",
+          "args": {
+            "dbPath": "$DB",
+            "snapshots": [
+              {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "cloudPresent": true,
+                "cloudAccountId": "user-1",
+                "contentHash": "blake3:4215f7720982f4be2fb7b70b447e47ae3c3b43f9b3ff785b8976c329cab043e0",
+                "title": "letter",
+                "slug": null,
+                "status": "draft",
+                "artifactType": "general",
+                "visibility": "private",
+                "version": 4,
+                "deletedAt": null,
+                "createdAt": null,
+                "modifiedAt": 1790769604000
+              }
+            ]
+          },
+          "response": null
+        },
+        {
           "kind": "control",
           "name": "success-after-second-flush",
           "documentId": "00000000-0000-4000-8000-000000000002",
