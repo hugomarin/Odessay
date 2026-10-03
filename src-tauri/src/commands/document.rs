@@ -414,6 +414,13 @@ fn keep_beside(target: &Path, displaced: &Path) -> Result<PathBuf, String> {
 fn exchange_paths(a: &Path, b: &Path) -> std::io::Result<()> {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
+    #[cfg(test)]
+    if swap_test_volume::lying_swap() {
+        // Test-only model of Apple FB24419773: `renamex_np(RENAME_SWAP)`
+        // reports success while performing an ordinary rename that clobbers
+        // `b`. Reproduced for real on a FAT volume on macOS 27.
+        return fs::rename(a, b);
+    }
     let a = CString::new(a.as_os_str().as_bytes())?;
     let b = CString::new(b.as_os_str().as_bytes())?;
     // SAFETY: both pointers are valid NUL-terminated strings for the call.
@@ -422,6 +429,39 @@ fn exchange_paths(a: &Path, b: &Path) -> std::io::Result<()> {
         Ok(())
     } else {
         Err(std::io::Error::last_os_error())
+    }
+}
+
+/// Test seam for the macOS swap helpers (Apple FB24419773). Compiled out of
+/// production builds: the volume query and `renamex_np` are the real ones.
+#[cfg(all(test, target_os = "macos"))]
+mod swap_test_volume {
+    use std::cell::Cell;
+
+    thread_local! {
+        /// Models a volume that does not declare `VOL_CAP_INT_RENAME_SWAP`
+        /// and whose `RENAME_SWAP` reports success while clobbering the other
+        /// path (FSKit on macOS 27; reproduced on a FAT volume).
+        static LYING: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// Runs `run` while the macOS swap helpers model that lying volume.
+    pub fn with_lying_volume<R>(run: impl FnOnce() -> R) -> R {
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                LYING.with(|cell| cell.set(false));
+            }
+        }
+        LYING.with(|cell| cell.set(true));
+        let reset = Reset;
+        let result = run();
+        drop(reset);
+        result
+    }
+
+    pub fn lying_swap() -> bool {
+        LYING.with(|cell| cell.get())
     }
 }
 
@@ -1210,6 +1250,46 @@ mod tests {
             "positive control: the window was reached"
         );
         let error = result.expect_err("a different file in the commit window must conflict");
+        assert!(error.starts_with("CONFLICT:"), "got: {error}");
+        assert_eq!(
+            fs::read_to_string(&target).expect("read target"),
+            "External\n",
+            "the external file must remain untouched"
+        );
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    // ODE-635 (review ronda 3, P1) — Apple FB24419773: on a volume that does
+    // not declare `VOL_CAP_INT_RENAME_SWAP` (FSKit on macOS 27), the swap
+    // can report success while performing an ordinary rename that clobbers
+    // the destination. The commit must not trust that success without the
+    // declared capability: it falls back to revalidation and the external
+    // file stays untouched. The test seam injects only the volume behavior;
+    // the rest of the write chain is the real one.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn write_file_without_a_declared_swap_capability_keeps_an_external_file() {
+        let root = temp_dir("identity-no-swap-capability");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+        let expected_inode = inode_of(&target);
+
+        let (result, seen) = swap_test_volume::with_lying_volume(|| {
+            identity_guarded_write(&target, "Mine\n", expected_inode, |stage| {
+                if stage == WriteStage::BeforeCommit {
+                    let sibling = target.with_file_name(".Letter.md.sb-external");
+                    fs::write(&sibling, "External\n").expect("external sibling");
+                    fs::rename(&sibling, &target).expect("external atomic replace");
+                }
+            })
+        });
+
+        assert!(
+            seen.contains(&WriteStage::BeforeCommit),
+            "positive control: the commit window was reached"
+        );
+        let error = result.expect_err("a lying swap must not be trusted");
         assert!(error.starts_with("CONFLICT:"), "got: {error}");
         assert_eq!(
             fs::read_to_string(&target).expect("read target"),
