@@ -3392,6 +3392,31 @@
           "response": null
         },
         {
+          "kind": "invoke",
+          "cmd": "catalog_apply_cloud_snapshots",
+          "args": {
+            "dbPath": "$DB",
+            "snapshots": [
+              {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "cloudPresent": true,
+                "cloudAccountId": "user-1",
+                "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450",
+                "title": "letter",
+                "slug": "carta-ode-663",
+                "status": "draft",
+                "artifactType": "general",
+                "visibility": "private",
+                "version": 2,
+                "deletedAt": null,
+                "createdAt": 1700150000000,
+                "modifiedAt": 1790769602000
+              }
+            ]
+          },
+          "response": null
+        },
+        {
           "kind": "control",
           "name": "sync05-removal-not-exists-guard",
           "documentId": "00000000-0000-4000-8000-000000000002",
