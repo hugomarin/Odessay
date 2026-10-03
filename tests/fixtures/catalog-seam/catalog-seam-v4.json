@@ -5,6 +5,7 @@
     {
       "name": "sys01-homonyms-distinct-roots",
       "description": "SYS-01: two documents with the same name in two BindingRoots never collide — each canonical path resolves to its own UUID and each UUID keeps its own binding across a rescan.",
+      "profile": "filesystem",
       "steps": [
         {
           "kind": "fs",
@@ -413,6 +414,7 @@
     {
       "name": "sys01-register-move-reopen",
       "description": "SYS-01: reconcile registers notes/letter.md, the file is renamed on disk and reconciled (same UUID via inode correlation), the catalog is reopened and the UUID still resolves to the moved path; the old path resolves to nothing.",
+      "profile": "filesystem",
       "steps": [
         {
           "kind": "fs",
@@ -767,6 +769,7 @@
     {
       "name": "sys05-reconcile-tracks-disk",
       "description": "SYS-05: after an external create, move and delete each followed by a reconcile, the catalog matches the durable disk state: the moved file keeps its UUID at the new path, the created file got its own row and the deleted file is detached (local_present=false, no binding).",
+      "profile": "filesystem",
       "steps": [
         {
           "kind": "fs",
@@ -1228,6 +1231,7 @@
     {
       "name": "watch07-external-edit-same-path",
       "description": "WATCH-07: an external edit changes markdown at the same path and inode; after rescan, getById returns the updated BLAKE3 content hash for the same document identity.",
+      "profile": "filesystem",
       "steps": [
         {
           "kind": "fs",
@@ -1446,6 +1450,7 @@
     {
       "name": "watch04-external-move-across-roots",
       "description": "WATCH-04: a file moved outside the app from root A to root B keeps its UUID — the destination scan reports it unbound with inode + content hash, the pass correlates it against A's confirmed detach, and the binding moves to B with no detach in A.",
+      "profile": "filesystem",
       "steps": [
         {
           "kind": "fs",
@@ -1844,6 +1849,7 @@
     {
       "name": "sync05-save-during-flush-failure",
       "description": "SYNC-05 (failure in flight): the in-flight write fails after a newer save superseded it; the superseded mutation does not come back as failed, and past its backoff a second flush lists only the newer mutation.",
+      "profile": "filesystem",
       "steps": [
         {
           "kind": "fs",
@@ -2429,6 +2435,7 @@
     {
       "name": "sync05-save-during-flush-success",
       "description": "SYNC-05 (success in flight): a save made while a flush is in flight supersedes the mutation being written; when the older response arrives it stays synced and the document stays pending until the next flush uploads the newer mutation and resolves it.",
+      "profile": "filesystem",
       "steps": [
         {
           "kind": "fs",
@@ -3008,6 +3015,1329 @@
               "lastError": null
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "sync08-bound-pending-save-metadata",
+      "description": "SYNC-08: on a bound, cloud-owned document (hydrated from the fake cloud) a real body save enqueues a pending mutation and a real metadata update before the flush supersedes it — one actionable metadata mutation remains and the binding keeps the body hash.",
+      "profile": "filesystem",
+      "steps": [
+        {
+          "kind": "fs",
+          "op": "seed-manifest",
+          "root": "rootA",
+          "bindingRootId": "fixture-root-a"
+        },
+        {
+          "kind": "fs",
+          "op": "write",
+          "root": "rootA",
+          "relativePath": "notes/letter.md",
+          "content": "# Letter\n\nversion one\n",
+          "inode": 801,
+          "modifiedAt": 1700120000000
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": null
+          },
+          "response": {
+            "files": [],
+            "unboundPaths": [
+              "notes/letter.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "notes/letter.md",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                "size": 22
+              }
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_binding_root_documents",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-a"
+          },
+          "response": []
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": {
+              "notes/letter.md": "00000000-0000-4000-8000-000000000002"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/letter.md",
+                "id": "00000000-0000-4000-8000-000000000002",
+                "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_reconcile",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "upserts": [
+                {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000002",
+                  "relativePath": "notes/letter.md",
+                  "canonicalPath": "$ROOT_A/notes/letter.md",
+                  "inode": 801,
+                  "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965",
+                  "size": 22,
+                  "lastSeenAt": 1700120000000,
+                  "title": "letter",
+                  "createdAt": 1700120000000,
+                  "modifiedAt": 1700120000000
+                }
+              ],
+              "detached": []
+            }
+          },
+          "response": {
+            "applied": true,
+            "changed": [
+              "00000000-0000-4000-8000-000000000002"
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_cloud_snapshots",
+          "args": {
+            "dbPath": "$DB",
+            "snapshots": [
+              {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "cloudPresent": true,
+                "cloudAccountId": "user-1",
+                "contentHash": "cloud-hash",
+                "title": "Letter",
+                "slug": "carta-ode-670",
+                "status": "draft",
+                "artifactType": "general",
+                "visibility": "public",
+                "version": 1,
+                "deletedAt": null,
+                "createdAt": 1700120000000,
+                "modifiedAt": 1700120000000
+              }
+            ]
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "open_file",
+          "args": {
+            "path": "$ROOT_A/notes/letter.md"
+          },
+          "response": "# Letter\n\nversion one\n"
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "write_file",
+          "args": {
+            "path": "$ROOT_A/notes/letter.md",
+            "content": "Versión 2.",
+            "expectedContentHash": null
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_touch_file",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "relativePath": "notes/letter.md",
+            "documentId": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "status": "updated",
+            "rootPath": "$ROOT_A",
+            "bindingRootId": "fixture-root-a",
+            "file": {
+              "id": "00000000-0000-4000-8000-000000000002",
+              "relativePath": "notes/letter.md",
+              "name": "letter.md",
+              "size": 11,
+              "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450"
+            }
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_dual_write",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "document": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "localPresent": true,
+                "cloudPresent": true,
+                "cloudAccountId": "user-1",
+                "syncStatus": "pending",
+                "title": "letter",
+                "slug": "carta-ode-670",
+                "status": "draft",
+                "artifactType": "general",
+                "visibility": "public",
+                "version": 2,
+                "deletedAt": null,
+                "createdAt": 1700120000000,
+                "modifiedAt": 1790769602000
+              },
+              "binding": {
+                "bindingRootId": "fixture-root-a",
+                "rootPath": "$ROOT_A",
+                "manifestVersion": 2,
+                "visibleAsWorkspace": false,
+                "relativePath": "notes/letter.md",
+                "canonicalPath": "$ROOT_A/notes/letter.md",
+                "inode": 801,
+                "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450",
+                "size": 11,
+                "lastSeenAt": 1700120000000
+              },
+              "mutation": {
+                "id": "00000000-0000-4000-8000-000000000004",
+                "operation": "upsert",
+                "payloadJson": "{\"title\":\"letter\",\"slug\":\"carta-ode-670\",\"status\":\"draft\",\"artifactType\":\"general\",\"visibility\":\"public\",\"parentId\":null,\"correspondenceId\":null,\"version\":2,\"updatedAt\":\"2026-09-30T12:00:02.000Z\",\"deletedAt\":null,\"contentHash\":\"blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450\",\"contentUnchanged\":false}",
+                "status": "pending",
+                "attemptCount": 0,
+                "nextRetryAt": null,
+                "createdAt": 1700100001000,
+                "lastError": null
+              }
+            }
+          },
+          "response": null
+        },
+        {
+          "kind": "control",
+          "name": "sync08-bound-body-save-pending",
+          "documentId": "00000000-0000-4000-8000-000000000002",
+          "document": {
+            "syncStatus": "pending",
+            "cloudPresent": true,
+            "metadata": {
+              "status": "draft",
+              "artifactType": "general",
+              "version": 2,
+              "title": "letter",
+              "slug": "carta-ode-670",
+              "visibility": "public",
+              "cloudAccountId": "user-1",
+              "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450"
+            }
+          },
+          "mutations": [
+            {
+              "id": "00000000-0000-4000-8000-000000000004",
+              "status": "pending",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "lastError": null,
+              "payload": {
+                "mutationKind": null,
+                "version": 2,
+                "updatedAt": "2026-09-30T12:00:02.000Z",
+                "status": "draft",
+                "artifactType": "general"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_bulk_dual_write",
+          "args": {
+            "dbPath": "$DB",
+            "inputs": [
+              {
+                "document": {
+                  "id": "00000000-0000-4000-8000-000000000002",
+                  "localPresent": true,
+                  "cloudPresent": true,
+                  "cloudAccountId": "user-1",
+                  "syncStatus": "pending",
+                  "title": "letter",
+                  "slug": "carta-ode-670",
+                  "status": "review",
+                  "artifactType": "general",
+                  "visibility": "public",
+                  "version": 3,
+                  "deletedAt": null,
+                  "createdAt": 1700120000000,
+                  "modifiedAt": 1790769603000
+                },
+                "binding": {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": false,
+                  "relativePath": "notes/letter.md",
+                  "canonicalPath": "$ROOT_A/notes/letter.md",
+                  "inode": 801,
+                  "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450",
+                  "size": 11,
+                  "lastSeenAt": 1700120000000
+                },
+                "mutation": {
+                  "id": "00000000-0000-4000-8000-000000000006",
+                  "operation": "upsert",
+                  "payloadJson": "{\"mutationKind\":\"metadata\",\"status\":\"review\",\"artifactType\":\"general\",\"version\":3,\"updatedAt\":\"2026-09-30T12:00:03.000Z\"}",
+                  "status": "pending",
+                  "attemptCount": 0,
+                  "nextRetryAt": null,
+                  "createdAt": 1700100002000,
+                  "lastError": null
+                }
+              }
+            ]
+          },
+          "response": [
+            "00000000-0000-4000-8000-000000000002"
+          ]
+        },
+        {
+          "kind": "control",
+          "name": "sync08-metadata-supersedes-body",
+          "documentId": "00000000-0000-4000-8000-000000000002",
+          "document": {
+            "syncStatus": "pending",
+            "cloudPresent": true,
+            "metadata": {
+              "status": "review",
+              "artifactType": "general",
+              "version": 3,
+              "title": "letter",
+              "slug": "carta-ode-670",
+              "visibility": "public",
+              "cloudAccountId": "user-1",
+              "contentHash": "blake3:f9a68bc951bfb8b2b0125499ae52d646a356b8279ece93660801e8adb4ed8450"
+            }
+          },
+          "mutations": [
+            {
+              "id": "00000000-0000-4000-8000-000000000004",
+              "status": "synced",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "lastError": "superseded by later snapshot mutation",
+              "payload": {
+                "mutationKind": null,
+                "version": 2,
+                "updatedAt": "2026-09-30T12:00:02.000Z",
+                "status": "draft",
+                "artifactType": "general"
+              }
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000006",
+              "status": "pending",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "lastError": null,
+              "payload": {
+                "mutationKind": "metadata",
+                "version": 3,
+                "updatedAt": "2026-09-30T12:00:03.000Z",
+                "status": "review",
+                "artifactType": "general"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sync08-first-upload-metadata-before-flush",
+      "description": "SYNC-08 (first upload): a draft with a known id and author is materialized with a real create (pending upsert), then metadata arrives before its first flush and supersedes the create — the single actionable mutation is the metadata one.",
+      "profile": "queue",
+      "steps": [
+        {
+          "kind": "fs",
+          "op": "seed-manifest",
+          "root": "rootA",
+          "bindingRootId": "fixture-root-a"
+        },
+        {
+          "kind": "fs",
+          "op": "write",
+          "root": "rootA",
+          "relativePath": "letter.md",
+          "content": "# Letter\n\nversion one\n",
+          "inode": 802,
+          "modifiedAt": 1700130000000
+        },
+        {
+          "kind": "invoke",
+          "cmd": "write_file",
+          "args": {
+            "path": "$ROOT_A/letter.md",
+            "content": "Versión 1.",
+            "expectedContentHash": null
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "0de67000-0000-4000-8000-000000067000"
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": {
+              "letter.md": "0de67000-0000-4000-8000-000000067000"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "letter.md",
+                "id": "0de67000-0000-4000-8000-000000067000",
+                "contentHash": "blake3:4977ce1979422b0e093d4f7d640d3dcdc1e6fb8ed6c206d12dbd196d2b7a57b7"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_dual_write",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "document": {
+                "id": "0de67000-0000-4000-8000-000000067000",
+                "localPresent": true,
+                "cloudPresent": false,
+                "cloudAccountId": "user-1",
+                "syncStatus": "pending",
+                "title": "letter",
+                "slug": null,
+                "status": "draft",
+                "artifactType": "general",
+                "visibility": "private",
+                "version": 1,
+                "deletedAt": null,
+                "createdAt": 1700100001000,
+                "modifiedAt": 1700100001000
+              },
+              "binding": {
+                "bindingRootId": "fixture-root-a",
+                "rootPath": "$ROOT_A",
+                "manifestVersion": 2,
+                "visibleAsWorkspace": false,
+                "relativePath": "letter.md",
+                "canonicalPath": "$ROOT_A/letter.md",
+                "inode": 802,
+                "contentHash": "blake3:4977ce1979422b0e093d4f7d640d3dcdc1e6fb8ed6c206d12dbd196d2b7a57b7",
+                "size": 11,
+                "lastSeenAt": 1700130000000
+              },
+              "mutation": {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "operation": "upsert",
+                "payloadJson": "{\"title\":\"letter\",\"slug\":null,\"status\":\"draft\",\"artifactType\":\"general\",\"visibility\":\"private\",\"parentId\":null,\"correspondenceId\":null,\"version\":1,\"updatedAt\":\"2023-11-16T02:00:01.000Z\",\"deletedAt\":null,\"contentHash\":\"blake3:4977ce1979422b0e093d4f7d640d3dcdc1e6fb8ed6c206d12dbd196d2b7a57b7\",\"contentUnchanged\":false}",
+                "status": "pending",
+                "attemptCount": 0,
+                "nextRetryAt": null,
+                "createdAt": 1700100001000,
+                "lastError": null
+              }
+            }
+          },
+          "response": null
+        },
+        {
+          "kind": "control",
+          "name": "sync08-first-upload-create-pending",
+          "documentId": "0de67000-0000-4000-8000-000000067000",
+          "document": {
+            "syncStatus": "pending",
+            "cloudPresent": false,
+            "metadata": {
+              "status": "draft",
+              "artifactType": "general",
+              "version": 1,
+              "title": "letter",
+              "slug": null,
+              "visibility": "private",
+              "cloudAccountId": "user-1",
+              "contentHash": "blake3:4977ce1979422b0e093d4f7d640d3dcdc1e6fb8ed6c206d12dbd196d2b7a57b7"
+            }
+          },
+          "mutations": [
+            {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "status": "pending",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "lastError": null,
+              "payload": {
+                "mutationKind": null,
+                "version": 1,
+                "updatedAt": "2023-11-16T02:00:01.000Z",
+                "status": "draft",
+                "artifactType": "general"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "0de67000-0000-4000-8000-000000067000"
+          },
+          "response": {
+            "id": "0de67000-0000-4000-8000-000000067000",
+            "relativePath": "letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:4977ce1979422b0e093d4f7d640d3dcdc1e6fb8ed6c206d12dbd196d2b7a57b7"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_bulk_dual_write",
+          "args": {
+            "dbPath": "$DB",
+            "inputs": [
+              {
+                "document": {
+                  "id": "0de67000-0000-4000-8000-000000067000",
+                  "localPresent": true,
+                  "cloudPresent": false,
+                  "cloudAccountId": "user-1",
+                  "syncStatus": "pending",
+                  "title": "letter",
+                  "slug": null,
+                  "status": "review",
+                  "artifactType": "general",
+                  "visibility": "private",
+                  "version": 2,
+                  "deletedAt": null,
+                  "createdAt": 1700100001000,
+                  "modifiedAt": 1790769602000
+                },
+                "binding": {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": false,
+                  "relativePath": "letter.md",
+                  "canonicalPath": "$ROOT_A/letter.md",
+                  "inode": 802,
+                  "contentHash": "blake3:4977ce1979422b0e093d4f7d640d3dcdc1e6fb8ed6c206d12dbd196d2b7a57b7",
+                  "size": 11,
+                  "lastSeenAt": 1700130000000
+                },
+                "mutation": {
+                  "id": "00000000-0000-4000-8000-000000000003",
+                  "operation": "upsert",
+                  "payloadJson": "{\"mutationKind\":\"metadata\",\"status\":\"review\",\"artifactType\":\"general\",\"version\":2,\"updatedAt\":\"2026-09-30T12:00:02.000Z\"}",
+                  "status": "pending",
+                  "attemptCount": 0,
+                  "nextRetryAt": null,
+                  "createdAt": 1700100002000,
+                  "lastError": null
+                }
+              }
+            ]
+          },
+          "response": [
+            "0de67000-0000-4000-8000-000000067000"
+          ]
+        },
+        {
+          "kind": "control",
+          "name": "sync08-first-upload-metadata-supersedes-create",
+          "documentId": "0de67000-0000-4000-8000-000000067000",
+          "document": {
+            "syncStatus": "pending",
+            "cloudPresent": false,
+            "metadata": {
+              "status": "review",
+              "artifactType": "general",
+              "version": 2,
+              "title": "letter",
+              "slug": null,
+              "visibility": "private",
+              "cloudAccountId": "user-1",
+              "contentHash": "blake3:4977ce1979422b0e093d4f7d640d3dcdc1e6fb8ed6c206d12dbd196d2b7a57b7"
+            }
+          },
+          "mutations": [
+            {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "status": "synced",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "lastError": "superseded by later snapshot mutation",
+              "payload": {
+                "mutationKind": null,
+                "version": 1,
+                "updatedAt": "2023-11-16T02:00:01.000Z",
+                "status": "draft",
+                "artifactType": "general"
+              }
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000003",
+              "status": "pending",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "lastError": null,
+              "payload": {
+                "mutationKind": "metadata",
+                "version": 2,
+                "updatedAt": "2026-09-30T12:00:02.000Z",
+                "status": "review",
+                "artifactType": "general"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sync08-settings-metadata-batch",
+      "description": "SYNC-08 (Settings): deleting a vocabulary item lists the catalog through the real `catalog_list` and bulk-writes the matching rows with `binding:null`. The bound cloud-owned row gets one metadata mutation, the bound local-only control is rewritten with no mutation, and the account-owned cloud-only row is excluded by the real catalog_list account filter.",
+      "profile": "filesystem",
+      "steps": [
+        {
+          "kind": "fs",
+          "op": "seed-manifest",
+          "root": "rootA",
+          "bindingRootId": "fixture-root-a"
+        },
+        {
+          "kind": "fs",
+          "op": "write",
+          "root": "rootA",
+          "relativePath": "notes/cloud-only.md",
+          "content": "# Cloud only\n\nremote body stays in the cloud\n",
+          "inode": 803,
+          "modifiedAt": 1700140000000
+        },
+        {
+          "kind": "fs",
+          "op": "write",
+          "root": "rootA",
+          "relativePath": "notes/cloud-owned.md",
+          "content": "# Cloud owned\n\nlocal body survives metadata\n",
+          "inode": 804,
+          "modifiedAt": 1700140001000
+        },
+        {
+          "kind": "fs",
+          "op": "write",
+          "root": "rootA",
+          "relativePath": "notes/local-only.md",
+          "content": "# Local only\n\nstays local after the vocabulary rewrite\n",
+          "inode": 805,
+          "modifiedAt": 1700140002000
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": null
+          },
+          "response": {
+            "files": [],
+            "unboundPaths": [
+              "notes/cloud-only.md",
+              "notes/cloud-owned.md",
+              "notes/local-only.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "notes/cloud-only.md",
+                "contentHash": "blake3:446653297569900e7be14882b52264043933e06ca3da206baa4cbe624a9daaf8",
+                "size": 45
+              },
+              {
+                "relativePath": "notes/cloud-owned.md",
+                "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec",
+                "size": 44
+              },
+              {
+                "relativePath": "notes/local-only.md",
+                "contentHash": "blake3:ebc699c72f71c6299523edf833bb49abe07ffe92c42f39e987f81e712bc32f25",
+                "size": 55
+              }
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_binding_root_documents",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-a"
+          },
+          "response": []
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": {
+              "notes/cloud-only.md": "00000000-0000-4000-8000-000000000002",
+              "notes/cloud-owned.md": "00000000-0000-4000-8000-000000000003",
+              "notes/local-only.md": "00000000-0000-4000-8000-000000000004"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/cloud-only.md",
+                "id": "00000000-0000-4000-8000-000000000002",
+                "contentHash": "blake3:446653297569900e7be14882b52264043933e06ca3da206baa4cbe624a9daaf8"
+              },
+              {
+                "relativePath": "notes/cloud-owned.md",
+                "id": "00000000-0000-4000-8000-000000000003",
+                "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec"
+              },
+              {
+                "relativePath": "notes/local-only.md",
+                "id": "00000000-0000-4000-8000-000000000004",
+                "contentHash": "blake3:ebc699c72f71c6299523edf833bb49abe07ffe92c42f39e987f81e712bc32f25"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_reconcile",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "upserts": [
+                {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000004",
+                  "relativePath": "notes/local-only.md",
+                  "canonicalPath": "$ROOT_A/notes/local-only.md",
+                  "inode": 805,
+                  "contentHash": "blake3:ebc699c72f71c6299523edf833bb49abe07ffe92c42f39e987f81e712bc32f25",
+                  "size": 55,
+                  "lastSeenAt": 1700140002000,
+                  "title": "local-only",
+                  "createdAt": 1700140002000,
+                  "modifiedAt": 1700140002000
+                },
+                {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000003",
+                  "relativePath": "notes/cloud-owned.md",
+                  "canonicalPath": "$ROOT_A/notes/cloud-owned.md",
+                  "inode": 804,
+                  "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec",
+                  "size": 44,
+                  "lastSeenAt": 1700140001000,
+                  "title": "cloud-owned",
+                  "createdAt": 1700140001000,
+                  "modifiedAt": 1700140001000
+                },
+                {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000002",
+                  "relativePath": "notes/cloud-only.md",
+                  "canonicalPath": "$ROOT_A/notes/cloud-only.md",
+                  "inode": 803,
+                  "contentHash": "blake3:446653297569900e7be14882b52264043933e06ca3da206baa4cbe624a9daaf8",
+                  "size": 45,
+                  "lastSeenAt": 1700140000000,
+                  "title": "cloud-only",
+                  "createdAt": 1700140000000,
+                  "modifiedAt": 1700140000000
+                }
+              ],
+              "detached": []
+            }
+          },
+          "response": {
+            "applied": true,
+            "changed": [
+              "00000000-0000-4000-8000-000000000004",
+              "00000000-0000-4000-8000-000000000003",
+              "00000000-0000-4000-8000-000000000002"
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "settings_read",
+          "args": {
+            "configDir": "$CONFIG",
+            "key": "desktop_settings_v1"
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "settings_write",
+          "args": {
+            "configDir": "$CONFIG",
+            "key": "desktop_settings_v1",
+            "valueJson": "{\"disabledStatuses\":[],\"vocabularyItems\":[{\"id\":\"00000000-0000-4000-8000-000000000005\",\"kind\":\"status\",\"key\":\"in_review\",\"name\":\"In review\",\"description\":\"\",\"icon\":\"eye\",\"color\":\"#5B5BD6\",\"hidden\":false,\"isBase\":false,\"isRequired\":false,\"position\":8,\"createdAt\":\"2023-11-16T02:00:01.000Z\",\"updatedAt\":\"2023-11-16T02:00:01.000Z\"}]}"
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000004"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "relativePath": "notes/local-only.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:ebc699c72f71c6299523edf833bb49abe07ffe92c42f39e987f81e712bc32f25"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_bulk_dual_write",
+          "args": {
+            "dbPath": "$DB",
+            "inputs": [
+              {
+                "document": {
+                  "id": "00000000-0000-4000-8000-000000000004",
+                  "localPresent": true,
+                  "cloudPresent": false,
+                  "cloudAccountId": null,
+                  "syncStatus": "local-only",
+                  "title": "local-only",
+                  "slug": null,
+                  "status": "in_review",
+                  "artifactType": null,
+                  "visibility": null,
+                  "version": 2,
+                  "deletedAt": null,
+                  "createdAt": 1700140002000,
+                  "modifiedAt": 1700100002000
+                },
+                "binding": {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": false,
+                  "relativePath": "notes/local-only.md",
+                  "canonicalPath": "$ROOT_A/notes/local-only.md",
+                  "inode": 805,
+                  "contentHash": "blake3:ebc699c72f71c6299523edf833bb49abe07ffe92c42f39e987f81e712bc32f25",
+                  "size": 55,
+                  "lastSeenAt": 1700140002000
+                },
+                "mutation": null
+              }
+            ]
+          },
+          "response": [
+            "00000000-0000-4000-8000-000000000004"
+          ]
+        },
+        {
+          "kind": "fs",
+          "op": "delete",
+          "root": "rootA",
+          "relativePath": "notes/cloud-only.md"
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": null
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/cloud-owned.md",
+                "id": "00000000-0000-4000-8000-000000000003",
+                "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec"
+              },
+              {
+                "relativePath": "notes/local-only.md",
+                "id": "00000000-0000-4000-8000-000000000004",
+                "contentHash": "blake3:ebc699c72f71c6299523edf833bb49abe07ffe92c42f39e987f81e712bc32f25"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_binding_root_documents",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-a"
+          },
+          "response": [
+            {
+              "id": "00000000-0000-4000-8000-000000000002",
+              "relativePath": "notes/cloud-only.md",
+              "localPresent": true,
+              "bindingRootId": "fixture-root-a",
+              "contentHash": "blake3:446653297569900e7be14882b52264043933e06ca3da206baa4cbe624a9daaf8"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000003",
+              "relativePath": "notes/cloud-owned.md",
+              "localPresent": true,
+              "bindingRootId": "fixture-root-a",
+              "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000004",
+              "relativePath": "notes/local-only.md",
+              "localPresent": true,
+              "bindingRootId": "fixture-root-a",
+              "contentHash": "blake3:ebc699c72f71c6299523edf833bb49abe07ffe92c42f39e987f81e712bc32f25"
+            }
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_reconcile",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "upserts": [
+                {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000004",
+                  "relativePath": "notes/local-only.md",
+                  "canonicalPath": "$ROOT_A/notes/local-only.md",
+                  "inode": 805,
+                  "contentHash": "blake3:ebc699c72f71c6299523edf833bb49abe07ffe92c42f39e987f81e712bc32f25",
+                  "size": 55,
+                  "lastSeenAt": 1700140002000,
+                  "title": "local-only",
+                  "createdAt": 1700140002000,
+                  "modifiedAt": 1700140002000
+                },
+                {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000003",
+                  "relativePath": "notes/cloud-owned.md",
+                  "canonicalPath": "$ROOT_A/notes/cloud-owned.md",
+                  "inode": 804,
+                  "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec",
+                  "size": 44,
+                  "lastSeenAt": 1700140001000,
+                  "title": "cloud-owned",
+                  "createdAt": 1700140001000,
+                  "modifiedAt": 1700140001000
+                }
+              ],
+              "detached": [
+                "00000000-0000-4000-8000-000000000002"
+              ]
+            }
+          },
+          "response": {
+            "applied": true,
+            "changed": [
+              "00000000-0000-4000-8000-000000000002"
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_cloud_snapshots",
+          "args": {
+            "dbPath": "$DB",
+            "snapshots": [
+              {
+                "id": "00000000-0000-4000-8000-000000000003",
+                "cloudPresent": true,
+                "cloudAccountId": "user-1",
+                "contentHash": "cloud-hash",
+                "title": "Carta cloud-owned",
+                "slug": "carta-cloud",
+                "status": "in_review",
+                "artifactType": "general",
+                "visibility": "public",
+                "version": 2,
+                "deletedAt": null,
+                "createdAt": 1700140001000,
+                "modifiedAt": 1700140001000
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "cloudPresent": true,
+                "cloudAccountId": "user-1",
+                "contentHash": "cloud-hash",
+                "title": "Carta solo-nube",
+                "slug": null,
+                "status": "in_review",
+                "artifactType": "general",
+                "visibility": "private",
+                "version": 4,
+                "deletedAt": null,
+                "createdAt": 1700140000000,
+                "modifiedAt": 1700140000000
+              }
+            ]
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "settings_read",
+          "args": {
+            "configDir": "$CONFIG",
+            "key": "desktop_settings_v1"
+          },
+          "response": {
+            "disabledStatuses": [],
+            "vocabularyItems": [
+              {
+                "id": "00000000-0000-4000-8000-000000000005",
+                "kind": "status",
+                "key": "in_review",
+                "name": "In review",
+                "description": "",
+                "icon": "eye",
+                "color": "#5B5BD6",
+                "hidden": false,
+                "isBase": false,
+                "isRequired": false,
+                "position": 8,
+                "createdAt": "2023-11-16T02:00:01.000Z",
+                "updatedAt": "2023-11-16T02:00:01.000Z"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list",
+          "args": {
+            "dbPath": "$DB",
+            "cloudAccountId": null,
+            "includeDeleted": false,
+            "localOnly": false,
+            "limit": 100000
+          },
+          "response": [
+            {
+              "id": "00000000-0000-4000-8000-000000000004",
+              "localPresent": true,
+              "cloudPresent": false,
+              "cloudAccountId": null,
+              "syncStatus": "local-only",
+              "title": "local-only",
+              "slug": null,
+              "status": "in_review",
+              "artifactType": null,
+              "visibility": null,
+              "version": 2,
+              "deletedAt": null,
+              "createdAt": 1700140002000,
+              "modifiedAt": 1700140002000,
+              "bindingRootId": "fixture-root-a",
+              "relativePath": "notes/local-only.md",
+              "canonicalPath": "$ROOT_A/notes/local-only.md",
+              "contentHash": "blake3:ebc699c72f71c6299523edf833bb49abe07ffe92c42f39e987f81e712bc32f25"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000003",
+              "localPresent": true,
+              "cloudPresent": true,
+              "cloudAccountId": "user-1",
+              "syncStatus": "synced",
+              "title": "Carta cloud-owned",
+              "slug": "carta-cloud",
+              "status": "in_review",
+              "artifactType": "general",
+              "visibility": "public",
+              "version": 2,
+              "deletedAt": null,
+              "createdAt": 1700140001000,
+              "modifiedAt": 1700140001000,
+              "bindingRootId": "fixture-root-a",
+              "relativePath": "notes/cloud-owned.md",
+              "canonicalPath": "$ROOT_A/notes/cloud-owned.md",
+              "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec"
+            }
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_bulk_dual_write",
+          "args": {
+            "dbPath": "$DB",
+            "inputs": [
+              {
+                "document": {
+                  "id": "00000000-0000-4000-8000-000000000004",
+                  "localPresent": true,
+                  "cloudPresent": false,
+                  "cloudAccountId": null,
+                  "syncStatus": "local-only",
+                  "title": "local-only",
+                  "slug": null,
+                  "status": "draft",
+                  "artifactType": null,
+                  "visibility": null,
+                  "version": 3,
+                  "deletedAt": null,
+                  "createdAt": 1700140002000,
+                  "modifiedAt": 1700100003000
+                },
+                "binding": null,
+                "mutation": null
+              },
+              {
+                "document": {
+                  "id": "00000000-0000-4000-8000-000000000003",
+                  "localPresent": true,
+                  "cloudPresent": true,
+                  "cloudAccountId": "user-1",
+                  "syncStatus": "pending",
+                  "title": "Carta cloud-owned",
+                  "slug": "carta-cloud",
+                  "status": "draft",
+                  "artifactType": "general",
+                  "visibility": "public",
+                  "version": 3,
+                  "deletedAt": null,
+                  "createdAt": 1700140001000,
+                  "modifiedAt": 1700100003000
+                },
+                "binding": null,
+                "mutation": {
+                  "id": "00000000-0000-4000-8000-000000000009",
+                  "operation": "upsert",
+                  "payloadJson": "{\"mutationKind\":\"metadata\",\"status\":\"draft\",\"artifactType\":\"general\",\"version\":3,\"updatedAt\":\"2023-11-16T02:00:03.000Z\"}",
+                  "status": "pending",
+                  "attemptCount": 0,
+                  "nextRetryAt": null,
+                  "createdAt": 1700100003000,
+                  "lastError": null
+                }
+              }
+            ]
+          },
+          "response": [
+            "00000000-0000-4000-8000-000000000004",
+            "00000000-0000-4000-8000-000000000003"
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "settings_write",
+          "args": {
+            "configDir": "$CONFIG",
+            "key": "desktop_settings_v1",
+            "valueJson": "{\"disabledStatuses\":[],\"vocabularyItems\":[]}"
+          },
+          "response": null
+        },
+        {
+          "kind": "control",
+          "name": "sync08-settings-cloud-owned-rewritten",
+          "documentId": "00000000-0000-4000-8000-000000000003",
+          "document": {
+            "syncStatus": "pending",
+            "cloudPresent": true,
+            "metadata": {
+              "status": "draft",
+              "artifactType": "general",
+              "version": 3,
+              "title": "Carta cloud-owned",
+              "slug": "carta-cloud",
+              "visibility": "public",
+              "cloudAccountId": "user-1",
+              "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec"
+            }
+          },
+          "mutations": [
+            {
+              "id": "00000000-0000-4000-8000-000000000009",
+              "status": "pending",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "lastError": null,
+              "payload": {
+                "mutationKind": "metadata",
+                "version": 3,
+                "updatedAt": "2023-11-16T02:00:03.000Z",
+                "status": "draft",
+                "artifactType": "general"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "control",
+          "name": "sync08-settings-local-only-control",
+          "documentId": "00000000-0000-4000-8000-000000000004",
+          "document": {
+            "syncStatus": "local-only",
+            "cloudPresent": false,
+            "metadata": {
+              "status": "draft",
+              "artifactType": null,
+              "version": 3,
+              "title": "local-only",
+              "slug": null,
+              "visibility": null,
+              "cloudAccountId": null,
+              "contentHash": "blake3:ebc699c72f71c6299523edf833bb49abe07ffe92c42f39e987f81e712bc32f25"
+            }
+          },
+          "mutations": []
+        },
+        {
+          "kind": "control",
+          "name": "sync08-settings-cloud-only-excluded",
+          "documentId": "00000000-0000-4000-8000-000000000002",
+          "document": {
+            "syncStatus": "synced",
+            "cloudPresent": true,
+            "metadata": {
+              "status": "in_review",
+              "artifactType": "general",
+              "version": 4,
+              "title": "Carta solo-nube",
+              "slug": null,
+              "visibility": "private",
+              "cloudAccountId": "user-1",
+              "contentHash": null
+            }
+          },
+          "mutations": []
         }
       ]
     }

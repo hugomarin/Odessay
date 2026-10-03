@@ -59,19 +59,22 @@ import {
   type UnboundFile,
   type WorkspaceReconciler,
 } from "@/lib/services/desktop/workspace-reconciler"
-import { getDocumentService } from "@/lib/services/document-service-factory"
+import { createDesktopDraft, getDocumentService } from "@/lib/services/document-service-factory"
+import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 import { desktopCatalogSyncService } from "@/lib/sync/desktop-catalog-sync-service"
-import { fakeSupabase } from "../integration/documents/support/fake-supabase-server"
+import { fakeSupabase, fakeSupabaseClient } from "../integration/documents/support/fake-supabase-server"
 import {
   catalogMutationsDouble,
   resetCatalogDoubles,
   tauriCatalogApplyCloudSnapshotsDouble,
   tauriCatalogApplyReconcileDouble,
+  tauriCatalogBulkDualWriteDouble,
   tauriCatalogDualWriteDouble,
   tauriCatalogGetByIdDouble,
   tauriCatalogListBindingRootDocumentsDouble,
   tauriCatalogListPendingMetadataMutationsDouble,
   tauriCatalogListPendingMutationsDouble,
+  tauriCatalogListQueryDouble,
   tauriCatalogResolvePathDouble,
   tauriCatalogUpdateMutationStatusDouble,
 } from "../integration/documents/support/real-desktop-doubles"
@@ -91,6 +94,36 @@ export type CatalogSeamRowProjection = {
   relativePath: string | null
   localPresent: boolean
   bindingRootId: string | null
+  contentHash: string | null
+}
+
+/**
+ * Proyección de una fila de `catalog_list` para el camino de metadata de
+ * Settings (ODE-670): los campos que el productor lee para construir el
+ * `catalog_bulk_dual_write` y los que la cola debe conservar. Incluye las
+ * cachés de metadata porque la ruta de vocabulario decide con `status`/
+ * `artifactType`/`version` y el control posterior afirma que no se pisaron.
+ * `inode`/`size`/`lastSeenAt`/`excerpt` quedan fuera: nadie los lee aquí y son
+ * dependientes de la máquina.
+ */
+export type CatalogSeamMetadataRowProjection = {
+  id: string
+  localPresent: boolean
+  cloudPresent: boolean
+  cloudAccountId: string | null
+  syncStatus: string
+  title: string | null
+  slug: string | null
+  status: string | null
+  artifactType: string | null
+  visibility: string | null
+  version: number | null
+  deletedAt: string | null
+  createdAt: number | null
+  modifiedAt: number | null
+  bindingRootId: string | null
+  relativePath: string | null
+  canonicalPath: string | null
   contentHash: string | null
 }
 
@@ -156,28 +189,64 @@ export type CatalogSeamInvokeResponse =
   | CatalogSeamTouchProjection
   | CatalogSeamMutationProjection[]
   | CatalogSeamMetadataMutationProjection[]
+  | CatalogSeamMetadataRowProjection[]
   | CatalogSeamRowProjection
   | CatalogSeamRowProjection[]
+  | string[]
+  | Record<string, unknown>
   | string
   | null
+
+/**
+ * Proyección del payload de una mutación de la cola. `payloadJson` no se
+ * compara entero (es eco del argumento ya grabado); estos campos son los que
+ * distinguen una mutación de metadata real (`mutationKind:"metadata"`) de la
+ * de un guardado de cuerpo (`mutationKind` ausente) sin volver opaca la
+ * comparación (Recon Pack: "la proyección de mutaciones omite payloadJson").
+ */
+export type CatalogSeamMutationPayloadProjection = {
+  mutationKind: string | null
+  version: number | null
+  updatedAt: string | null
+  status: string | null
+  artifactType: string | null
+}
 
 /**
  * Paso de control (Req 5): el estado canónico que el doble cree del documento y
  * de su cola. El grabador lo afirma contra el doble antes de grabarlo, y el
  * replay Rust lo contrasta en una conexión SQLite nueva sobre `documents` y
  * `sync_mutations`.
+ *
+ * `document.metadata` y `mutations[].payload` son opcionales: solo los
+ * escenarios SYNC-08 los usan, y solo se contrastan cuando el escenario los
+ * declara (los controles de SYNC-05 conservan su forma).
  */
 export type CatalogSeamControlStep = {
   kind: "control"
   name: string
   documentId: string
-  document: { syncStatus: string; cloudPresent: boolean }
+  document: {
+    syncStatus: string
+    cloudPresent: boolean
+    metadata?: {
+      status: string | null
+      artifactType: string | null
+      version: number | null
+      title: string | null
+      slug: string | null
+      visibility: string | null
+      cloudAccountId: string | null
+      contentHash: string | null
+    }
+  }
   mutations: {
     id: string
     status: string
     attemptCount: number
     nextRetryAt: number | null
     lastError: string | null
+    payload?: CatalogSeamMutationPayloadProjection
   }[]
 }
 
@@ -202,9 +271,19 @@ export type CatalogSeamFixtureStep =
       response: CatalogSeamInvokeResponse
     }
 
+/**
+ * `filesystem`: el escenario registra documentos por el reconciliador real, así
+ * que el replay contrasta el estado final canónico del disco y del catálogo
+ * (`assert_scenario`). `queue`: el escenario entra por productores que no
+ * pasan por `catalog_apply_reconcile` (borrador de primera subida), y su estado
+ * canónico se afirma en los pasos de control contra SQLite real.
+ */
+export type CatalogSeamScenarioProfile = "filesystem" | "queue"
+
 export type CatalogSeamScenario = {
   name: string
   description: string
+  profile: CatalogSeamScenarioProfile
   steps: CatalogSeamFixtureStep[]
 }
 
@@ -299,6 +378,45 @@ function projectCatalogRow(row: DesktopCatalogRow): CatalogSeamRowProjection {
 
 function projectCatalogRowOrNull(row: DesktopCatalogRow | null): CatalogSeamRowProjection | null {
   return row ? projectCatalogRow(row) : null
+}
+
+/** Mirrors the Rust `project_metadata_row` used by `catalog_list` and the SYNC-08 controls. */
+function projectMetadataRow(row: DesktopCatalogRow): CatalogSeamMetadataRowProjection {
+  return {
+    id: row.id,
+    localPresent: row.localPresent,
+    cloudPresent: row.cloudPresent,
+    cloudAccountId: row.cloudAccountId,
+    syncStatus: row.syncStatus,
+    title: row.title,
+    slug: row.slug,
+    status: row.status,
+    artifactType: row.artifactType,
+    visibility: row.visibility,
+    version: row.version,
+    deletedAt: row.deletedAt,
+    createdAt: row.createdAt,
+    modifiedAt: row.modifiedAt,
+    bindingRootId: row.bindingRootId,
+    relativePath: row.relativePath,
+    canonicalPath: row.canonicalPath,
+    contentHash: row.contentHash,
+  }
+}
+
+function projectMutationPayload(payloadJson: string): CatalogSeamMutationPayloadProjection {
+  const payload = JSON.parse(payloadJson) as Record<string, unknown>
+  const text = (key: string): string | null =>
+    typeof payload[key] === "string" ? (payload[key] as string) : null
+  const number = (key: string): number | null =>
+    typeof payload[key] === "number" ? (payload[key] as number) : null
+  return {
+    mutationKind: text("mutationKind"),
+    version: number("version"),
+    updatedAt: text("updatedAt"),
+    status: text("status"),
+    artifactType: text("artifactType"),
+  }
 }
 
 function stringArg(args: Record<string, unknown>, key: string): string {
@@ -400,6 +518,17 @@ export function projectInvokeResponse(cmd: string, response: unknown): CatalogSe
     }
     case "catalog_list_binding_root_documents":
       return (response as DesktopCatalogRow[]).map(projectCatalogRow)
+    // ── Camino de metadata de Settings (ODE-670) ────────────────────────────
+    case "catalog_list":
+      return (response as DesktopCatalogRow[]).map(projectMetadataRow)
+    case "catalog_bulk_dual_write":
+      // El contrato del comando es "ids escritos, en orden de entrada"; se
+      // compara tal cual para que invertir el orden ponga el replay rojo.
+      return [...(response as string[])]
+    case "settings_read":
+      // El store real es un JSON plano: se compara el valor parseado, no el
+      // orden de claves.
+      return JSON.parse(response as string) as Record<string, unknown>
     // ── Cadena de SYNC-05 (ODE-644 PR2) ─────────────────────────────────────
     case "write_file":
       // Void command: el write real lo verifica el replay con open_file y con
@@ -431,6 +560,8 @@ export function projectInvokeResponse(cmd: string, response: unknown): CatalogSe
     case "catalog_update_mutation_status":
     case "catalog_update_metadata_mutation_status":
     case "catalog_apply_cloud_snapshots":
+    case "settings_write":
+    case "settings_delete":
       // Void commands: su efecto se afirma en los pasos de control.
       return null
     case "catalog_list_pending_mutations":
@@ -472,6 +603,8 @@ export class CatalogSeamSession {
   private readonly roots = new Map<FixtureRootKey, ModelRoot>()
   private readonly documents = new Map<string, ModelDocument>()
   private readonly bindings = new Map<string, ModelBinding>()
+  /** Store de settings de la escena (espejo de `commands/settings.rs`), aislado por sesión. */
+  private readonly settingsStore = new Map<string, unknown>()
 
   constructor(
     readonly name: string,
@@ -610,8 +743,8 @@ export class CatalogSeamSession {
     return false
   }
 
-  toScenario(): CatalogSeamScenario {
-    return { name: this.name, description: this.description, steps: this.steps }
+  toScenario(profile: CatalogSeamScenarioProfile = "filesystem"): CatalogSeamScenario {
+    return { name: this.name, description: this.description, profile, steps: this.steps }
   }
 
   // ── command semantics (the doubled IPC boundary) ──────────────────────────
@@ -692,6 +825,39 @@ export class CatalogSeamSession {
           FIXTURE_DB_PATH,
           args.snapshots as Parameters<typeof tauriCatalogApplyCloudSnapshotsDouble>[1],
         ).then(() => null)
+      // ── Camino de metadata de Settings (ODE-670) ────────────────────────────
+      case "catalog_list":
+        requireQueueBackend(this.backend, cmd)
+        return tauriCatalogListQueryDouble(FIXTURE_DB_PATH, {
+          cloudAccountId: nullableStringArg(args, "cloudAccountId"),
+          includeDeleted: boolArg(args, "includeDeleted"),
+          localOnly: boolArg(args, "localOnly"),
+          limit: numberArg(args, "limit"),
+        })
+      case "catalog_bulk_dual_write":
+        requireQueueBackend(this.backend, cmd)
+        return tauriCatalogBulkDualWriteDouble(
+          FIXTURE_DB_PATH,
+          args.inputs as DesktopCatalogDualWriteInput[],
+        )
+      // ── Store de settings (espejo de commands/settings.rs) ──────────────────
+      case "settings_read": {
+        const stored = this.settingsStore.get(
+          `${stringArg(args, "configDir")}::${stringArg(args, "key")}`,
+        )
+        return stored === undefined ? "null" : JSON.stringify(stored)
+      }
+      case "settings_write": {
+        this.settingsStore.set(
+          `${stringArg(args, "configDir")}::${stringArg(args, "key")}`,
+          JSON.parse(stringArg(args, "valueJson")),
+        )
+        return null
+      }
+      case "settings_delete": {
+        this.settingsStore.delete(`${stringArg(args, "configDir")}::${stringArg(args, "key")}`)
+        return null
+      }
       default:
         throw new Error(
           `catalog-seam recorder: unhandled command "${cmd}" — a production call shape changed; ` +
@@ -969,6 +1135,10 @@ export class CatalogSeamSession {
   /**
    * Req 5: afirma en TS que el doble cree el estado correcto y lo graba como
    * paso de control para que el replay lo contraste en SQLite real.
+   *
+   * `document.metadata` y `mutations[].payload` solo se proyectan y contrastan
+   * cuando el escenario los declara (así los controles SYNC-05 conservan su
+   * forma exacta).
    */
   async control(
     documentId: string,
@@ -980,14 +1150,34 @@ export class CatalogSeamSession {
   ): Promise<void> {
     const row = await tauriCatalogGetByIdDouble(FIXTURE_DB_PATH, documentId)
     if (!row) throw new Error(`catalog-seam recorder: control ${name} has no catalog row for ${documentId}`)
+    const wantsMetadata = expected.document.metadata !== undefined
+    const wantsPayload = expected.mutations.some((mutation) => mutation.payload !== undefined)
     const actual = {
-      document: { syncStatus: row.syncStatus, cloudPresent: row.cloudPresent },
+      document: {
+        syncStatus: row.syncStatus,
+        cloudPresent: row.cloudPresent,
+        ...(wantsMetadata
+          ? {
+              metadata: {
+                status: row.status,
+                artifactType: row.artifactType,
+                version: row.version,
+                title: row.title,
+                slug: row.slug,
+                visibility: row.visibility,
+                cloudAccountId: row.cloudAccountId,
+                contentHash: row.contentHash,
+              },
+            }
+          : {}),
+      },
       mutations: this.queueMutations(documentId).map((mutation) => ({
         id: mutation.id,
         status: mutation.status,
         attemptCount: mutation.attemptCount,
         nextRetryAt: mutation.nextRetryAt,
         lastError: mutation.lastError,
+        ...(wantsPayload ? { payload: projectMutationPayload(mutation.payloadJson) } : {}),
       })),
     }
     if (JSON.stringify(actual) !== JSON.stringify(expected)) {
@@ -997,6 +1187,20 @@ export class CatalogSeamSession {
       )
     }
     this.steps.push({ kind: "control", name, documentId, ...expected })
+  }
+
+  /**
+   * Lee el contenido del archivo sintético (la autoridad del cuerpo en la
+   * grabación): permite afirmar el hash que el binding debe conservar.
+   */
+  fileContent(rootKey: FixtureRootKey, relativePath: string): string {
+    const file = this.requireRoot(rootKey).files.get(relativePath)
+    if (!file) {
+      throw new Error(
+        `catalog-seam recorder: ${relativePath} is not present in ${rootKey}`,
+      )
+    }
+    return file.content
   }
 
   /** Reloj sintético de la escena (stub de `Date.now`, Req 8). */
@@ -1076,33 +1280,43 @@ async function recordScenario(
   description: string,
   build: (session: CatalogSeamSession) => Promise<void>,
   backend: "session" | "queue" = "session",
+  profile: CatalogSeamScenarioProfile = "filesystem",
 ): Promise<CatalogSeamScenario> {
   const session = new CatalogSeamSession(name, description, backend)
   activeSession = session
   uuidCounter = 0
   fixtureClock = FIXTURE_CLOCK_START
   const originalRandomUuid = globalThis.crypto.randomUUID
-  const originalDateNow = Date.now
+  const originalDate = globalThis.Date
   const randomUuidStub = () => {
     uuidCounter += 1
     return `00000000-0000-4000-8000-${uuidCounter.toString(16).padStart(12, "0")}`
   }
+  // El reloj de la escena también cubre el constructor sin argumentos: los
+  // productores reales (p. ej. `createDraft`) sellan `new Date().toISOString()`
+  // y una grabación no puede depender del reloj de pared.
+  const fixtureDate = new Proxy(originalDate, {
+    construct(target, args) {
+      return Reflect.construct(target, args.length === 0 ? [fixtureClock] : args)
+    },
+  })
+  fixtureDate.now = () => fixtureClock
   try {
     Object.defineProperty(globalThis.crypto, "randomUUID", {
       value: randomUuidStub,
       configurable: true,
       writable: true,
     })
-    Date.now = () => fixtureClock
+    globalThis.Date = fixtureDate
     await build(session)
-    return session.toScenario()
+    return session.toScenario(profile)
   } finally {
     Object.defineProperty(globalThis.crypto, "randomUUID", {
       value: originalRandomUuid,
       configurable: true,
       writable: true,
     })
-    Date.now = originalDateNow
+    globalThis.Date = originalDate
     activeSession = null
   }
 }
@@ -1447,6 +1661,474 @@ async function buildSync05FailureDuringFlush(session: CatalogSeamSession): Promi
   })
 }
 
+// ─── SYNC-08: metadata encolada por los productores reales (ODE-670) ─────────
+
+const SYNC08_CLOUD_ONLY_V1 = "# Cloud only\n\nremote body stays in the cloud\n"
+const SYNC08_CLOUD_OWNED_V1 = "# Cloud owned\n\nlocal body survives metadata\n"
+const SYNC08_LOCAL_ONLY_V1 = "# Local only\n\nstays local after the vocabulary rewrite\n"
+
+/** Fila de `writings` en el fake de Supabase con la forma que lee `hydrateWritings`. */
+function fakeCloudWriting(options: {
+  id: string
+  status: string
+  version: number
+  updatedAt: string
+  title: string
+  slug?: string | null
+  artifactType?: string
+  visibility?: string
+}): Record<string, unknown> {
+  return {
+    id: options.id,
+    author_id: "user-1",
+    title: options.title,
+    slug: options.slug ?? null,
+    status: options.status,
+    artifact_type: options.artifactType ?? "general",
+    visibility: options.visibility ?? "private",
+    version: options.version,
+    created_at: options.updatedAt,
+    updated_at: options.updatedAt,
+    content_hash: "cloud-hash",
+    deleted_at: null,
+  }
+}
+
+/** Hidrata por el productor real (`hydrateWritings`) y falla si el fake no responde. */
+async function hydrateFromFakeCloud(): Promise<void> {
+  const hydrated = await desktopCatalogSyncService.hydrateWritings()
+  if (hydrated.error || !hydrated.data) {
+    throw new Error(`catalog-seam recorder: hydrateWritings failed: ${hydrated.error?.message}`)
+  }
+}
+
+/**
+ * SYNC-08, documento ligado: un guardado pendiente (mutación de cuerpo) seguido
+ * de metadata antes del flush. El supersede deja una sola mutación accionable
+ * y el binding conserva el hash del `.md`.
+ */
+async function buildSync08BoundMetadataBeforeFlush(session: CatalogSeamSession): Promise<void> {
+  await resetQueueHarness()
+  session.defineRoot("rootA", "fixture-root-a")
+  const fileTime = 1_700_120_000_000
+  session.fsWrite("rootA", "notes/letter.md", SYNC05_V1, { inode: 801, modifiedAt: fileTime })
+  const reconciler = session.createReconciler(session.createCatalog())
+  await reconciler.start()
+  reconciler.dispose()
+  const documentId = session.registeredDocumentId("rootA", "notes/letter.md")
+
+  // "Otro dispositivo": la fila ya existe en la nube; la hidratación real la
+  // trae y conserva el binding local. La firma temporal de la fila cloud
+  // coincide con el mtime del archivo para no depender de un timestamp que el
+  // doble de hidratación no proyecta.
+  await fakeSupabaseClient.from("writings").insert(
+    fakeCloudWriting({
+      id: documentId,
+      status: "draft",
+      version: 1,
+      updatedAt: new Date(fileTime).toISOString(),
+      title: "Letter",
+      slug: "carta-ode-670",
+      visibility: "public",
+    }),
+    { count: "exact" },
+  )
+  await hydrateFromFakeCloud()
+
+  // Guardado real del editor: mutación de cuerpo pendiente.
+  session.advanceClock(1_000)
+  await saveFromEditor(documentId, "Versión 2.", 2)
+  const bodyHash = await computeMarkdownContentHash(
+    session.fileContent("rootA", "notes/letter.md"),
+  )
+  const body = mutationByVersion(session, documentId, 2)
+  await session.control(documentId, "sync08-bound-body-save-pending", {
+    document: {
+      syncStatus: "pending",
+      cloudPresent: true,
+      metadata: {
+        status: "draft",
+        artifactType: "general",
+        version: 2,
+        title: "letter",
+        slug: "carta-ode-670",
+        visibility: "public",
+        cloudAccountId: "user-1",
+        contentHash: bodyHash,
+      },
+    },
+    mutations: [
+      {
+        id: body.id,
+        status: "pending",
+        attemptCount: 0,
+        nextRetryAt: null,
+        lastError: null,
+        payload: {
+          mutationKind: null,
+          version: 2,
+          updatedAt: sync05Timestamp(2),
+          status: "draft",
+          artifactType: "general",
+        },
+      },
+    ],
+  })
+
+  // Metadata real del documento ligado: el supersede reemplaza al guardado y
+  // el binding (cuerpo/hash) queda intacto.
+  session.advanceClock(1_000)
+  const service = await getDocumentService()
+  const metadata = await service.updateWritingMetadata({
+    writingId: documentId,
+    status: "review",
+    version: 3,
+    updatedAt: sync05Timestamp(3),
+  })
+  if (metadata.error) {
+    throw new Error(`catalog-seam recorder: updateWritingMetadata failed: ${metadata.error.message}`)
+  }
+  const supersededBody = mutationByVersion(session, documentId, 2)
+  const metadataMutation = mutationByVersion(session, documentId, 3)
+  await session.control(documentId, "sync08-metadata-supersedes-body", {
+    document: {
+      syncStatus: "pending",
+      cloudPresent: true,
+      metadata: {
+        status: "review",
+        artifactType: "general",
+        version: 3,
+        title: "letter",
+        slug: "carta-ode-670",
+        visibility: "public",
+        cloudAccountId: "user-1",
+        contentHash: bodyHash,
+      },
+    },
+    mutations: [
+      {
+        id: supersededBody.id,
+        status: "synced",
+        attemptCount: 0,
+        nextRetryAt: null,
+        lastError: "superseded by later snapshot mutation",
+        payload: {
+          mutationKind: null,
+          version: 2,
+          updatedAt: sync05Timestamp(2),
+          status: "draft",
+          artifactType: "general",
+        },
+      },
+      {
+        id: metadataMutation.id,
+        status: "pending",
+        attemptCount: 0,
+        nextRetryAt: null,
+        lastError: null,
+        payload: {
+          mutationKind: "metadata",
+          version: 3,
+          updatedAt: sync05Timestamp(3),
+          status: "review",
+          artifactType: "general",
+        },
+      },
+    ],
+  })
+}
+
+/**
+ * SYNC-08, borrador de primera subida: el create pendiente (id conocido, como
+ * la materialización de un borrador cloud) queda superseded por la metadata
+ * antes de su primer flush.
+ */
+async function buildSync08FirstUploadMetadataBeforeFlush(session: CatalogSeamSession): Promise<void> {
+  await resetQueueHarness()
+  session.defineRoot("rootA", "fixture-root-a")
+  session.fsWrite("rootA", "letter.md", SYNC05_V1, { inode: 802, modifiedAt: 1_700_130_000_000 })
+  session.advanceClock(1_000)
+  const draftId = "0de67000-0000-4000-8000-000000067000"
+  const created = await createDesktopDraft({
+    writingId: draftId,
+    title: "Carta ODE-670",
+    authorId: "user-1",
+    preferredPath: `${FIXTURE_ROOT_PATHS.rootA}/letter.md`,
+    initialBodyJson: sync05Doc("Versión 1."),
+    initialBodyText: "Versión 1.",
+  })
+  if (created.error || !created.data) {
+    throw new Error(`catalog-seam recorder: createDesktopDraft failed: ${created.error?.message}`)
+  }
+  const createdUpdatedAt = new Date(session.now()).toISOString()
+  const bodyHash = await computeMarkdownContentHash(session.fileContent("rootA", "letter.md"))
+  const createMutation = mutationByVersion(session, draftId, 1)
+  await session.control(draftId, "sync08-first-upload-create-pending", {
+    document: {
+      syncStatus: "pending",
+      cloudPresent: false,
+      metadata: {
+        status: "draft",
+        artifactType: "general",
+        version: 1,
+        title: "letter",
+        slug: null,
+        visibility: "private",
+        cloudAccountId: "user-1",
+        contentHash: bodyHash,
+      },
+    },
+    mutations: [
+      {
+        id: createMutation.id,
+        status: "pending",
+        attemptCount: 0,
+        nextRetryAt: null,
+        lastError: null,
+        payload: {
+          mutationKind: null,
+          version: 1,
+          updatedAt: createdUpdatedAt,
+          status: "draft",
+          artifactType: "general",
+        },
+      },
+    ],
+  })
+
+  session.advanceClock(1_000)
+  const service = await getDocumentService()
+  const metadata = await service.updateWritingMetadata({
+    writingId: draftId,
+    status: "review",
+    version: 2,
+    updatedAt: sync05Timestamp(2),
+  })
+  if (metadata.error) {
+    throw new Error(`catalog-seam recorder: updateWritingMetadata failed: ${metadata.error.message}`)
+  }
+  const supersededCreate = mutationByVersion(session, draftId, 1)
+  const metadataMutation = mutationByVersion(session, draftId, 2)
+  await session.control(draftId, "sync08-first-upload-metadata-supersedes-create", {
+    document: {
+      syncStatus: "pending",
+      cloudPresent: false,
+      metadata: {
+        status: "review",
+        artifactType: "general",
+        version: 2,
+        title: "letter",
+        slug: null,
+        visibility: "private",
+        cloudAccountId: "user-1",
+        contentHash: bodyHash,
+      },
+    },
+    mutations: [
+      {
+        id: supersededCreate.id,
+        status: "synced",
+        attemptCount: 0,
+        nextRetryAt: null,
+        lastError: "superseded by later snapshot mutation",
+        payload: {
+          mutationKind: null,
+          version: 1,
+          updatedAt: createdUpdatedAt,
+          status: "draft",
+          artifactType: "general",
+        },
+      },
+      {
+        id: metadataMutation.id,
+        status: "pending",
+        attemptCount: 0,
+        nextRetryAt: null,
+        lastError: null,
+        payload: {
+          mutationKind: "metadata",
+          version: 2,
+          updatedAt: sync05Timestamp(2),
+          status: "review",
+          artifactType: "general",
+        },
+      },
+    ],
+  })
+}
+
+/**
+ * SYNC-08, ruta de Settings: borrar un ítem de vocabulario reescribe el
+ * catálogo por lotes. El documento cloud-owned ligado recibe su mutación de
+ * metadata; el control local-only se reescribe sin mutación; la fila
+ * solo-nube (hydration con cuenta, sin binding) queda fuera del `catalog_list`
+ * real —el filtro de cuenta del SQL—, así que no se reescribe.
+ */
+async function buildSync08SettingsBatchMetadata(session: CatalogSeamSession): Promise<void> {
+  await resetQueueHarness()
+  session.defineRoot("rootA", "fixture-root-a")
+  const cloudOnlyTime = 1_700_140_000_000
+  const cloudOwnedTime = 1_700_140_001_000
+  session.fsWrite("rootA", "notes/cloud-only.md", SYNC08_CLOUD_ONLY_V1, {
+    inode: 803,
+    modifiedAt: cloudOnlyTime,
+  })
+  session.fsWrite("rootA", "notes/cloud-owned.md", SYNC08_CLOUD_OWNED_V1, {
+    inode: 804,
+    modifiedAt: cloudOwnedTime,
+  })
+  session.fsWrite("rootA", "notes/local-only.md", SYNC08_LOCAL_ONLY_V1, {
+    inode: 805,
+    modifiedAt: 1_700_140_002_000,
+  })
+  const reconciler = session.createReconciler(session.createCatalog())
+  await reconciler.start()
+  const cloudOnlyId = session.registeredDocumentId("rootA", "notes/cloud-only.md")
+  const cloudOwnedId = session.registeredDocumentId("rootA", "notes/cloud-owned.md")
+  const localOnlyId = session.registeredDocumentId("rootA", "notes/local-only.md")
+
+  // El disparador real es el ítem de vocabulario: su key debe estar en las filas.
+  session.advanceClock(1_000)
+  const settings = new DesktopSettingsService("$CONFIG")
+  const created = await settings.createVocabularyItem({
+    kind: "status",
+    name: "In review",
+    icon: "eye",
+    color: "#5B5BD6",
+  })
+  if (created.error || !created.data) {
+    throw new Error(`catalog-seam recorder: createVocabularyItem failed: ${created.error?.message}`)
+  }
+  const item = created.data
+
+  // Control local-only: el mismo key sin ownership cloud, escrito por el
+  // productor real de metadata de un documento local (mutación nula).
+  session.advanceClock(1_000)
+  const service = await getDocumentService()
+  const seeded = await service.updateWritingMetadata({
+    writingId: localOnlyId,
+    status: item.key,
+    version: 2,
+    updatedAt: new Date(session.now()).toISOString(),
+  })
+  if (seeded.error) {
+    throw new Error(`catalog-seam recorder: local metadata seed failed: ${seeded.error.message}`)
+  }
+
+  // Solo-nube: el archivo local se retira y la fila sigue en la nube. La
+  // hidratación la trae con cuenta y sin binding.
+  session.fsDelete("rootA", "notes/cloud-only.md")
+  await reconciler.rescanAll()
+  reconciler.dispose()
+  await fakeSupabaseClient.from("writings").insert(
+    [
+      fakeCloudWriting({
+        id: cloudOwnedId,
+        status: item.key,
+        version: 2,
+        updatedAt: new Date(cloudOwnedTime).toISOString(),
+        title: "Carta cloud-owned",
+        slug: "carta-cloud",
+        visibility: "public",
+      }),
+      fakeCloudWriting({
+        id: cloudOnlyId,
+        status: item.key,
+        version: 4,
+        updatedAt: new Date(cloudOnlyTime).toISOString(),
+        title: "Carta solo-nube",
+      }),
+    ],
+    { count: "exact" },
+  )
+  await hydrateFromFakeCloud()
+
+  const cloudOwnedHash = await computeMarkdownContentHash(SYNC08_CLOUD_OWNED_V1)
+  const localOnlyHash = await computeMarkdownContentHash(SYNC08_LOCAL_ONLY_V1)
+  session.advanceClock(1_000)
+  const rewriteNow = new Date(session.now()).toISOString()
+  const deleted = await settings.deleteVocabularyItem(item.id)
+  if (deleted.error || !deleted.data) {
+    throw new Error(`catalog-seam recorder: deleteVocabularyItem failed: ${deleted.error?.message}`)
+  }
+  if (deleted.data.rewrittenCount !== 2) {
+    throw new Error(
+      `catalog-seam recorder: Settings rewrite touched ${deleted.data.rewrittenCount} rows; ` +
+        "the cloud-only account row must be excluded by the real catalog_list filter",
+    )
+  }
+
+  const ownedMutation = mutationByVersion(session, cloudOwnedId, 3)
+  await session.control(cloudOwnedId, "sync08-settings-cloud-owned-rewritten", {
+    document: {
+      syncStatus: "pending",
+      cloudPresent: true,
+      metadata: {
+        status: "draft",
+        artifactType: "general",
+        version: 3,
+        title: "Carta cloud-owned",
+        slug: "carta-cloud",
+        visibility: "public",
+        cloudAccountId: "user-1",
+        contentHash: cloudOwnedHash,
+      },
+    },
+    mutations: [
+      {
+        id: ownedMutation.id,
+        status: "pending",
+        attemptCount: 0,
+        nextRetryAt: null,
+        lastError: null,
+        payload: {
+          mutationKind: "metadata",
+          version: 3,
+          updatedAt: rewriteNow,
+          status: "draft",
+          artifactType: "general",
+        },
+      },
+    ],
+  })
+
+  await session.control(localOnlyId, "sync08-settings-local-only-control", {
+    document: {
+      syncStatus: "local-only",
+      cloudPresent: false,
+      metadata: {
+        status: "draft",
+        artifactType: null,
+        version: 3,
+        title: "local-only",
+        slug: null,
+        visibility: null,
+        cloudAccountId: null,
+        contentHash: localOnlyHash,
+      },
+    },
+    mutations: [],
+  })
+
+  await session.control(cloudOnlyId, "sync08-settings-cloud-only-excluded", {
+    document: {
+      syncStatus: "synced",
+      cloudPresent: true,
+      metadata: {
+        status: item.key,
+        artifactType: "general",
+        version: 4,
+        title: "Carta solo-nube",
+        slug: null,
+        visibility: "private",
+        cloudAccountId: "user-1",
+        contentHash: null,
+      },
+    },
+    mutations: [],
+  })
+}
+
 export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
   const scenarios = [
     await recordScenario(
@@ -1496,6 +2178,33 @@ export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
         "mutation being written; when the older response arrives it stays synced and the " +
         "document stays pending until the next flush uploads the newer mutation and resolves it.",
       buildSync05SuccessDuringFlush,
+      "queue",
+    ),
+    await recordScenario(
+      "sync08-bound-pending-save-metadata",
+      "SYNC-08: on a bound, cloud-owned document (hydrated from the fake cloud) a real body " +
+        "save enqueues a pending mutation and a real metadata update before the flush supersedes " +
+        "it — one actionable metadata mutation remains and the binding keeps the body hash.",
+      buildSync08BoundMetadataBeforeFlush,
+      "queue",
+    ),
+    await recordScenario(
+      "sync08-first-upload-metadata-before-flush",
+      "SYNC-08 (first upload): a draft with a known id and author is materialized with a real " +
+        "create (pending upsert), then metadata arrives before its first flush and supersedes " +
+        "the create — the single actionable mutation is the metadata one.",
+      buildSync08FirstUploadMetadataBeforeFlush,
+      "queue",
+      "queue",
+    ),
+    await recordScenario(
+      "sync08-settings-metadata-batch",
+      "SYNC-08 (Settings): deleting a vocabulary item lists the catalog through the real " +
+        "`catalog_list` and bulk-writes the matching rows with `binding:null`. The bound " +
+        "cloud-owned row gets one metadata mutation, the bound local-only control is rewritten " +
+        "with no mutation, and the account-owned cloud-only row is excluded by the real " +
+        "catalog_list account filter.",
+      buildSync08SettingsBatchMetadata,
       "queue",
     ),
   ]
