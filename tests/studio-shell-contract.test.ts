@@ -17,7 +17,7 @@ describe("studio shell contract", () => {
   // ODE-543 — the status bar drifted to a two-group flex row. Studio and the
   // authorized prototype keep it as the three-region grid; `it.fails` until
   // the product fix lands in its own commit, then flipped to `it` (same body).
-  it.fails("keeps the titlebar and the status bar as siblings of the middle band", () => {
+  it("keeps the titlebar and the status bar as siblings of the middle band", () => {
     const titlebar = read("components/editor/editor-topbar.tsx")
     const statusBar = read("components/editor/status-bar.tsx")
 
