@@ -1079,6 +1079,99 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     },
     TEST_TIMEOUT_MS,
   )
+
+  it.fails(
+    "carga retenida: el enlace de A no queda visible ni copiable bajo B mientras B carga",
+    async () => {
+      const textA = "ODE652-LOAD-RACE-A"
+      const textB = "ODE652-LOAD-RACE-B"
+      const titleA = "ODE652 Load Race A"
+      const titleB = "ODE652 Load Race B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      let releaseB: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la carga de B no quedó retenida")
+      }
+      const heldB = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseB = resolve
+      })
+      world.getPreviewLink = async (writingId) =>
+        writingId === a ? { error: null, data: previewLink(LINK_A) } : heldB
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la carga retenida de B")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo con su carga retenida")
+
+      // Mientras B carga su enlace, nada de A es visible ni accionable bajo B.
+      expect(pageText(), "el enlace de A no se muestra bajo B").not.toContain(LINK_A)
+      expect(shareActionButton("Copy"), "no hay Copy del enlace de A bajo B").toBeNull()
+      expect(pageText(), "B muestra que sigue cargando su enlace").toContain("Loading preview link…")
+
+      releaseB({ error: null, data: previewLink(LINK_B) })
+      await waitForShareLinkText(LINK_B)
+      await clickShareAction("Copy")
+      expect(clipboardWrites.at(-1), "Copy copia el enlace de B").toBe(LINK_B)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "carga retenida: la respuesta vieja de A no habilita las acciones de B mientras B carga",
+    async () => {
+      const textA = "ODE652-STALE-LOAD-A"
+      const textB = "ODE652-STALE-LOAD-B"
+      const titleA = "ODE652 Stale Load A"
+      const titleB = "ODE652 Stale Load B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      let releaseA: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la carga de A no quedó retenida")
+      }
+      const heldA = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseA = resolve
+      })
+      let releaseB: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la carga de B no quedó retenida")
+      }
+      const heldB = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseB = resolve
+      })
+      world.getPreviewLink = async (writingId) => (writingId === a ? heldA : heldB)
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo con su carga retenida")
+      await openShareTab()
+
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo con ambas cargas retenidas")
+
+      // La carga vieja de A termina mientras la de B sigue viva: no debe
+      // habilitar ninguna acción de B ni mostrar nada de A.
+      releaseA({ error: null, data: previewLink(LINK_A) })
+      await flush(4)
+
+      const generate = shareActionButton("Generate link")
+      expect(generate, "B ofrece Generate mientras carga su enlace").not.toBeNull()
+      expect(generate!.disabled, "la respuesta vieja de A no habilita Generate en B").toBe(true)
+      expect(pageText(), "el enlace de A no se muestra bajo B").not.toContain(LINK_A)
+
+      releaseB({ error: null, data: previewLink(LINK_B) })
+      await waitForShareLinkText(LINK_B)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
 })
 
 describe("EXP-05 — callers reales de Desk y Collections (ODE-636)", () => {
