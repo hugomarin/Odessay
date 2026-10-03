@@ -2658,7 +2658,7 @@ export function EditorShell({
             )}
           </div>
 
-        {(!isFocusMode || isShareActionPending) && (activePanel || isShareActionPending) && editorSession.tabs.length > 0 ? (
+        {(!isFocusMode || isShareActionPending) && (activePanel || isShareActionPending) && (editorSession.tabs.length > 0 || isShareActionPending) ? (
           <div className={activePanel && !isFocusMode ? "contents" : "hidden"}>
           <EditorRightPanel>
           {/* One header for the four surfaces. Each of them used to carry a

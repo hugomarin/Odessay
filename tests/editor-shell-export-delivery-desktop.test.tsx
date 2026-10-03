@@ -1618,7 +1618,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "cerrar todas las pestañas durante una regeneración conserva el dueño hasta que termina",
     async () => {
       const textA = "ODE652-CLOSE-ALL-ROTATE"
