@@ -276,7 +276,7 @@ describe("ODE-635 — guardado sin baseline que se cruza con un rename", () => {
    * guardado aterriza en el archivo renombrado. Muta a rojo si el retiro deja
    * de comparar antes de mover a Trash.
    */
-  it.fails(
+  it(
     "un escritor externo que reemplaza la recreación antes del retiro la deja recuperable, no en Trash",
     async () => {
       const draft = await createDesktopDraft({ title: "ODE635 Externo", initialBodyJson: bodyJson("BASE") })
@@ -355,7 +355,7 @@ describe("ODE-635 — guardado sin baseline que se cruza con un rename", () => {
    * (sin pérdida) y el catálogo no vuelve a ligarla. Muta a rojo si el
    * resultado del retiro se ignora.
    */
-  it.fails(
+  it(
     "si el retiro de la recreación falla, el guardado no reporta éxito",
     async () => {
       const draft = await createDesktopDraft({ title: "ODE635 RetiroFallido", initialBodyJson: bodyJson("BASE") })

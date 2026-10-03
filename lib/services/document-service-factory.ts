@@ -18,6 +18,7 @@ import type {
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import { normalizeArtifactType } from "@/lib/writings/artifact-type"
+import { computeMarkdownContentHash } from "@/lib/content-hash"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { webDocumentService } from "@/lib/services/web-document-service"
 import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-document-service"
@@ -189,8 +190,10 @@ class DesktopDocumentService implements DocumentService {
     options: { writeContent?: boolean } = {},
   ): Promise<WritingRecord> {
     const wroteContent = operation === "upsert" && options.writeContent !== false
+    let writtenMarkdown = ""
     if (wroteContent) {
       const markdown = this.serialize(record)
+      writtenMarkdown = markdown
       const fileResult = await this.runtime.filesystem.saveWriting({
         writing: {
           ...record,
@@ -216,19 +219,38 @@ class DesktopDocumentService implements DocumentService {
     ) {
       // The unguarded write landed on a path this document no longer owns: a
       // rename (or conscious move) committed a different canonical path while
-      // the write was in flight. Retire the obsolete recreation — recoverably,
-      // through the filesystem owner's trash move — and surface the same
-      // CONFLICT shape the guarded path uses, so `persistFollowingRename`
-      // re-resolves the binding and retries on the current path. `null` keeps
+      // the write was in flight. The retire must prove it moves exactly THIS
+      // operation's recreation: another writer may have replaced or updated
+      // that path in the write→retire interval, and the watcher's recent-write
+      // suppression means that edit may not be reconciled yet. Compare the
+      // hash of what is on disk against the markdown this operation wrote; if
+      // they differ (or the path cannot be read), nothing is retired — the
+      // other writer's content stays recoverable at the old path, never in
+      // `.trash` — and the same `CONFLICT` shape routes the bytes to the path
+      // the catalog owns. Only when the recreation is exact is it retired
+      // through the filesystem owner's trash move, and a failure of that move
+      // is propagated so `persistFollowingRename` cannot report success with
+      // the stale recreation still on disk (round 1, P1+P2). `null` keeps
       // meaning "no baseline": this only routes the bytes to the path the
       // catalog owns; it never substitutes a hash and never rebinds the stale
       // path.
-      await this.runtime.filesystem.deleteWriting({
+      const writtenHash = await computeMarkdownContentHash(writtenMarkdown)
+      const onDisk = await this.runtime.filesystem.openWriting(canonicalPath)
+      const diskHash = onDisk.data
+        ? await computeMarkdownContentHash(onDisk.data.content.markdown ?? "")
+        : null
+      if (diskHash === null || diskHash !== writtenHash) {
+        throw conflict(
+          `Writing ${record.id} moved to ${catalogBefore.binding.canonicalPath} while the save was in flight; content at ${canonicalPath} differs from this save and was kept`,
+        )
+      }
+      const retired = await this.runtime.filesystem.deleteWriting({
         writingId: canonicalPath,
         version: record.version,
         updatedAt: record.updatedAt,
         deletedAt: new Date().toISOString(),
       })
+      if (retired.error) throw retired.error
       throw conflict(
         `Writing ${record.id} moved to ${catalogBefore.binding.canonicalPath} while the save was in flight`,
       )
