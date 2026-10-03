@@ -1180,7 +1180,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "regreso a A: una carga vieja de A no pisa la regeneración que ya terminó",
     async () => {
       const textA = "ODE652-RETURN-ROTATE-A"
@@ -1241,7 +1241,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "regreso a A: una carga vieja de A no revivía el enlace después de revocar",
     async () => {
       const textA = "ODE652-RETURN-REVOKE-A"

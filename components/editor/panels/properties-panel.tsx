@@ -181,12 +181,12 @@ export function PropertiesPanel({
   const [exportOpen, setExportOpen] = useState(false)
   const [pathCopied, setPathCopied] = useState(false)
   /**
-   * Sube con cada cambio de documento. Una respuesta del servicio de compartir
-   * que empezó para otro documento no puede escribir el estado del panel
-   * (SHARE-03, ODE-652): el enlace tardío de A se descarta y B conserva su
-   * enlace y su "Copy".
+   * Identifica el último pedido de enlace (carga, generación o revocación).
+   * Solo ese pedido escribe el estado del enlace: sube al cambiar de documento
+   * y al iniciar cada operación, así una respuesta vieja no pisa otra más
+   * nueva del mismo documento (SHARE-03, ODE-652).
    */
-  const shareLinkGenerationRef = useRef(0)
+  const shareLinkRequestRef = useRef(0)
   /**
    * Identifica la última carga de enlace pedida. Solo esa carga apaga el
    * indicador: la respuesta vieja de otro documento no debe habilitar las
@@ -216,12 +216,14 @@ export function PropertiesPanel({
 
   const loadShareLink = useCallback(async () => {
     if (!hasRemoteWriting || !writingId) {
+      // El DEFAULT también invalida pedidos en vuelo de este documento.
+      shareLinkRequestRef.current += 1
       setShareLinkState({ writingId, link: DEFAULT_PREVIEW_LINK_STATE })
       setShareError(null)
       return
     }
 
-    const requestGeneration = shareLinkGenerationRef.current
+    const requestId = ++shareLinkRequestRef.current
     const requestLoad = ++shareLinkLoadRef.current
     setIsLoadingShareLink(true)
     setShareError(null)
@@ -232,10 +234,10 @@ export function PropertiesPanel({
         throw new Error(result.error?.message ?? "Failed to load preview link.")
       }
 
-      if (shareLinkGenerationRef.current !== requestGeneration) return
+      if (shareLinkRequestRef.current !== requestId) return
       setShareLinkState({ writingId, link: result.data })
     } catch (error) {
-      if (shareLinkGenerationRef.current !== requestGeneration) return
+      if (shareLinkRequestRef.current !== requestId) return
       setShareLinkState({ writingId, link: DEFAULT_PREVIEW_LINK_STATE })
       setShareError(error instanceof Error ? error.message : "Failed to load preview link.")
     } finally {
@@ -249,7 +251,7 @@ export function PropertiesPanel({
 
   useEffect(() => {
     // Invalida cualquier respuesta en vuelo del documento anterior.
-    shareLinkGenerationRef.current += 1
+    shareLinkRequestRef.current += 1
   }, [writingId])
 
   useEffect(() => {
@@ -261,7 +263,7 @@ export function PropertiesPanel({
       return
     }
 
-    const requestGeneration = shareLinkGenerationRef.current
+    const requestId = ++shareLinkRequestRef.current
     const sourceTitle = writingTitle
     setIsSavingShareLink(true)
     setShareError(null)
@@ -272,7 +274,7 @@ export function PropertiesPanel({
         throw new Error(result.error?.message ?? "Failed to generate preview link.")
       }
 
-      if (shareLinkGenerationRef.current === requestGeneration) {
+      if (shareLinkRequestRef.current === requestId) {
         setShareLinkState({ writingId, link: result.data })
       }
       setActionNotice({ kind: "success", message: shareSuccessMessage(sourceTitle) })
@@ -294,7 +296,7 @@ export function PropertiesPanel({
       return
     }
 
-    const requestGeneration = shareLinkGenerationRef.current
+    const requestId = ++shareLinkRequestRef.current
     setIsSavingShareLink(true)
     setShareError(null)
 
@@ -304,10 +306,10 @@ export function PropertiesPanel({
         throw new Error(result.error?.message ?? "Failed to revoke preview link.")
       }
 
-      if (shareLinkGenerationRef.current !== requestGeneration) return
+      if (shareLinkRequestRef.current !== requestId) return
       setShareLinkState({ writingId, link: DEFAULT_PREVIEW_LINK_STATE })
     } catch (error) {
-      if (shareLinkGenerationRef.current !== requestGeneration) return
+      if (shareLinkRequestRef.current !== requestId) return
       setShareError(error instanceof Error ? error.message : "Failed to revoke preview link.")
     } finally {
       setIsSavingShareLink(false)
