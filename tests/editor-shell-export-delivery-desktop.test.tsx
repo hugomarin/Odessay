@@ -46,6 +46,13 @@
  * permanecen. Las mutaciones de esa protección están en la Guía de review del
  * PR; la discriminante es del lado del aviso, no de los bytes.
  *
+ * ODE-652 / SHARE-03 (decisión D): una respuesta tardía del enlace de A no
+ * reemplaza el enlace activo de B ni su "Copy", y el toast "Share link for ‘A’
+ * is ready" sigue nombrando a A. El servicio de compartir es el boundary
+ * doblado de esta prueba: no demuestra que un token real resuelva ni autoriza
+ * acceso, y ese límite queda anotado en la fila SHARE-03 del capability map.
+ * Las mutaciones de esta protección están en la Guía de review del PR.
+ *
  * Fuera de esta prueba, con motivo: `exportBinary` sin `currentWritingId`
  * (bug 1 de EXP-05) no es alcanzable por la UI — el ítem está deshabilitado
  * sin documento confirmado —, y el export de Desk (`WritingPreviewModal`) es
@@ -87,6 +94,9 @@ vi.mock("@/lib/runtime/detect", async () =>
 )
 vi.mock("@/lib/services/ai-service-factory", async () =>
   (await import("./support/editor-shell-doubles")).aiServiceDouble(),
+)
+vi.mock("@/lib/services/sharing-service-factory", async () =>
+  (await import("./support/editor-shell-doubles")).sharingServiceDouble(),
 )
 vi.mock("@tauri-apps/api/path", async () =>
   (await import("./support/editor-shell-desktop-doubles")).tauriPathDouble(),
@@ -510,14 +520,10 @@ async function clickPreviewExport(format: Format) {
 }
 
 /**
- * Abre la sección Export con la UI real: el botón "Properties panel" de la
- * barra superior abre el panel lateral y su pestaña "Share" muestra Export
- * (se movió ahí en la revisión del owner; ver `PropertiesPanel.tab`).
+ * Abre el panel lateral en su pestaña "Share" con el gesto real: el botón
+ * "Properties panel" de la barra superior y la pestaña homónima.
  */
-async function openExportSection() {
-  const exportTrigger = () =>
-    findButton(mounted!.container, (button) => button.textContent?.includes("Export as…") ?? false)
-  if (exportTrigger()) return
+async function openShareTab() {
   const toggle = await waitFor(
     () => findButton(mounted!.container, (button) => button.getAttribute("aria-label") === "Properties panel"),
     { label: 'botón "Properties panel"' },
@@ -540,7 +546,58 @@ async function openExportSection() {
     shareTab.click()
   })
   await flush(2)
+}
+
+/**
+ * Abre la sección Export con la UI real: el botón "Properties panel" de la
+ * barra superior abre el panel lateral y su pestaña "Share" muestra Export
+ * (se movió ahí en la revisión del owner; ver `PropertiesPanel.tab`).
+ */
+async function openExportSection() {
+  const exportTrigger = () =>
+    findButton(mounted!.container, (button) => button.textContent?.includes("Export as…") ?? false)
+  if (exportTrigger()) return
+  await openShareTab()
   await waitFor(exportTrigger, { label: 'sección Export con "Export as…"' })
+}
+
+type SharePreviewLink = {
+  active: boolean
+  token: string | null
+  link: string | null
+  createdAt: string | null
+}
+
+function previewLink(link: string): SharePreviewLink {
+  return { active: true, token: link, link, createdAt: "2026-10-02T00:00:00.000Z" }
+}
+
+function shareActionButton(label: "Generate link" | "Regenerate" | "Copy") {
+  return findButton(mounted!.container, (button) => button.textContent?.trim() === label)
+}
+
+/** Pulsa la acción del preview link con el botón real y verifica que ocurrió. */
+async function clickShareAction(label: "Generate link" | "Regenerate" | "Copy") {
+  const button = await waitFor(() => shareActionButton(label), {
+    label: `botón "${label}" del preview link`,
+  })
+  expect(button.disabled, `el botón "${label}" está habilitado`).toBe(false)
+  await act(async () => {
+    button.click()
+  })
+  await flush(3)
+}
+
+async function waitForShareLinkText(text: string) {
+  await waitFor(() => pageText().includes(text), { label: `enlace de compartir visible (${text})` })
+}
+
+/** El toast es el evento de completitud del resultado de compartir. */
+async function waitForShareToast() {
+  return waitFor(() => documentActionToast("success"), {
+    label: "toast de enlace de compartir",
+    timeoutMs: 10_000,
+  })
 }
 
 /**
@@ -893,6 +950,131 @@ describe("EXP-05 — el resultado del export se atribuye al documento de origen 
       const retained = await waitForDocumentActionToast("success")
       expect(retained.textContent, "el aviso sigue atribuido a A").toBe(panelSuccessMessage("docx", titleA))
       expect(retained.textContent).not.toContain(titleB)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+const clipboardWrites: string[] = []
+
+describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (ODE-652 / SHARE-03)", () => {
+  const LINK_A = "https://preview.odessay.test/ode652-share-a"
+  const LINK_A_ROTATED = "https://preview.odessay.test/ode652-share-a-rotated"
+  const LINK_B = "https://preview.odessay.test/ode652-share-b"
+
+  beforeEach(() => {
+    clipboardWrites.length = 0
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          clipboardWrites.push(text)
+        },
+      },
+    })
+  })
+
+  it.fails(
+    "carrera: la respuesta tardía del enlace de A no reemplaza el de B y el toast nombra A",
+    async () => {
+      const textA = "ODE652-SHARE-RACE-A"
+      const textB = "ODE652-SHARE-RACE-B"
+      const titleA = "ODE652 Share Race A"
+      const titleB = "ODE652 Share Race B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      // El enlace activo de cada documento lo sirve el boundary doblado.
+      world.getPreviewLink = async (writingId) => ({
+        error: null,
+        data: writingId === a ? previewLink(LINK_A) : writingId === b ? previewLink(LINK_B) : null,
+      })
+      let releaseRotate: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la respuesta del enlace de A no quedó retenida")
+      }
+      const heldRotate = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseRotate = resolve
+      })
+      world.rotatePreviewLink = async (writingId) =>
+        writingId === a ? heldRotate : { error: null, data: previewLink(LINK_B) }
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de rotar el enlace")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      try {
+        // Respuesta de A en vuelo.
+        await clickShareAction("Regenerate")
+        expect(world.sharingRotatePreviewLinkCalls, "la rotación de A salió al servicio").toEqual([a])
+
+        // Cambio de pestaña con la respuesta de A todavía pendiente.
+        await clickEditorTab(b)
+        await waitForHydrationReady("B activo con el enlace de A en vuelo")
+        await waitForShareLinkText(LINK_B)
+
+        releaseRotate({ error: null, data: previewLink(LINK_A_ROTATED) })
+        const toast = await waitForShareToast()
+        expect(toast.textContent, "el toast nombra A aunque B esté seleccionado").toBe(
+          `Share link for ‘${titleA}’ is ready`,
+        )
+        expect(toast.textContent).not.toContain(titleB)
+      } finally {
+        releaseRotate({ error: null, data: null })
+      }
+
+      // El enlace activo de B sigue siendo el de B, y su "Copy" copia el de B.
+      expect(pageText(), "el enlace tardío de A no ocupa el panel de B").not.toContain(LINK_A_ROTATED)
+      expect(pageText(), "el enlace de B sigue visible").toContain(LINK_B)
+      await clickShareAction("Copy")
+      expect(clipboardWrites.at(-1), "Copy copia el enlace de B").toBe(LINK_B)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "sin carrera: el enlace generado de A aparece y su toast sigue nombrando A al cambiar a B",
+    async () => {
+      const textA = "ODE652-SHARE-SEED-A"
+      const textB = "ODE652-SHARE-SEED-B"
+      const titleA = "ODE652 Share Seed A"
+      const titleB = "ODE652 Share Seed B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      world.getPreviewLink = async (writingId) => ({
+        error: null,
+        data: writingId === b ? previewLink(LINK_B) : null,
+      })
+      world.rotatePreviewLink = async () => ({ error: null, data: previewLink(LINK_A) })
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de generar el enlace")
+      await openShareTab()
+
+      // Control positivo: sin cambio de pestaña, el resultado llega al panel.
+      await clickShareAction("Generate link")
+      const toast = await waitForShareToast()
+      expect(toast.textContent, "el toast nombra A").toBe(`Share link for ‘${titleA}’ is ready`)
+      await waitForShareLinkText(LINK_A)
+
+      // Cambio a B: el aviso de A sigue siendo el de A y el enlace de A no
+      // ocupa el panel de B, que tiene el suyo.
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo después de generar el enlace de A")
+      await waitForShareLinkText(LINK_B)
+      const retained = await waitForShareToast()
+      expect(retained.textContent, "el aviso sigue atribuido a A").toBe(
+        `Share link for ‘${titleA}’ is ready`,
+      )
+      expect(retained.textContent).not.toContain(titleB)
+      expect(pageText(), "el enlace de A no ocupa el panel de B").not.toContain(LINK_A)
       assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
