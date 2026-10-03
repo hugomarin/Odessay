@@ -3,6 +3,7 @@
 - **Estado:** Aceptado — contrato objetivo por implementar
 - **Fecha:** 2026-07-09
 - **Enmienda ODE-384:** 2026-07-18 — delete confirmado, bus único, BindingRoot por path y gates M4/M5
+- **Enmienda ODE-661:** 2026-10-03 — la correlación de movimientos entre raíces no depende del tiempo entre avisos (se retira el límite de 250 ms)
 - **Decide:** Hugo
 - **Scope:** desktop + shared core + cloud
 - **Subordinado a:** `workflow/context/core/odessay-adr-identidad.md`
@@ -386,7 +387,7 @@ El catálogo puede renderizar local en cuanto termina el paso 4; no espera red.
 5. si hay múltiples matches, estado `ambiguous` y decisión explícita;
 6. solo sin matches se acuña un UUID nuevo.
 
-La correlación entre raíces vigiladas está implementada (`correlateAcrossRoots`, ODE-657): dentro de una misma pasada, un archivo no ligado de una raíz se correlaciona con el binding confirmado ausente de **otra** raíz solo si coinciden el inode (mayor que 0) **y** el `content_hash` (no nulo) y la relación es 1↔1; en cualquier otro caso se acuña un UUID nuevo y el origen queda desligado. El binding se escribe antes que SQLite y ningún id upserted o correlacionado termina en un detach, así que el resultado no depende del orden de los commits. Quedan fuera de alcance el movimiento repartido en más de una ráfaga (>250 ms) y entre volúmenes (el inode no es comparable).
+La correlación entre raíces vigiladas está implementada (`correlateAcrossRoots`, ODE-657): dentro de una misma pasada, un archivo no ligado de una raíz se correlaciona con el binding confirmado ausente de **otra** raíz solo si coinciden el inode (mayor que 0) **y** el `content_hash` (no nulo) y la relación es 1↔1; en cualquier otro caso se acuña un UUID nuevo y el origen queda desligado. El binding se escribe antes que SQLite y ningún id upserted o correlacionado termina en un detach, así que el resultado no depende del orden de los commits. La correlación **no depende del tiempo entre avisos** (enmienda ODE-661, decisión de Hugo del 2026-10-03): la ventana de 250 ms del coalesce agrupa trabajo, no define el producto. Si una pasada observa un resultado sospechoso (un archivo no ligado, o un binding confirmado ausente) sin su par, el reconciliador inspecciona las raíces activas antes de acuñar un UUID o confirmar el detach; lo que decide es el estado del disco, no cuándo llegó cada aviso. La expansión ocurre solo ante sospecha y como máximo una vez por ráfaga; la edición normal sigue escaneando solo su raíz. Hasta que ODE-661 se implemente, el movimiento repartido en pasadas separadas sigue como `it.fails` en `tests/integration/documents/external-move-across-roots.test.tsx`. Queda fuera de alcance el movimiento entre volúmenes (el inode no es comparable).
 
 Un save atómico conserva UUID por prioridad de ruta aunque cambien inode y hash.
 

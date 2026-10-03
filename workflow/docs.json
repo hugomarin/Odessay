@@ -163,7 +163,7 @@
       "type": "feature",
       "scope": "desktop-document-catalog-and-identity",
       "state": "accepted-normative-target",
-      "description": "Spec normativo para una sola personalidad documental desktop: ledger `.odessay`, SQLite operacional, bus único de CatalogChange, BindingRoots resueltos por root_path, reconciliador/apertura unificados, gate M5 same-channel y semántica confirmada de borrado local/cloud con Archivados fuera de Desk/Workspace."
+      "description": "Spec normativo para una sola personalidad documental desktop: ledger `.odessay`, SQLite operacional, bus único de CatalogChange, BindingRoots resueltos por root_path, reconciliador/apertura unificados, gate M5 same-channel, semántica confirmada de borrado local/cloud con Archivados fuera de Desk/Workspace y correlación entre raíces sin límite temporal entre avisos (enmienda ODE-661)."
     },
     {
       "path": "workflow/context/features/odessay-desktop-migration-plan.md",
