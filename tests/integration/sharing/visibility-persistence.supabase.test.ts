@@ -156,7 +156,6 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriCatalogReactivateBindingRoot: unimplemented("tauriCatalogReactivateBindingRoot"),
   tauriCatalogEnqueueMutation: tauriCatalogEnqueueMutationDouble,
   tauriCatalogListPendingMutations: tauriCatalogListPendingMutationsDouble,
-  tauriCatalogUpdateMutationStatus: tauriCatalogUpdateMutationStatusDouble,
   tauriCatalogPruneSyncedMutations: tauriCatalogPruneSyncedMutationsDouble,
   tauriCatalogPurgeDocument: tauriCatalogPurgeDocumentDouble,
   tauriCatalogListPendingMetadataMutations: tauriCatalogListPendingMetadataMutationsDouble,
