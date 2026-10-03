@@ -1314,6 +1314,110 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     },
     TEST_TIMEOUT_MS,
   )
+
+  it.fails(
+    "mutación en vuelo: una recarga iniciada después no pisa el resultado de la regeneración",
+    async () => {
+      const textA = "ODE652-MUTATION-ORDER-A"
+      const textB = "ODE652-MUTATION-ORDER-B"
+      const titleA = "ODE652 Mutation Order A"
+      const titleB = "ODE652 Mutation Order B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      let currentA = previewLink(LINK_A)
+      let releaseRotate: (value: SharePreviewLink) => void = () => {
+        throw new Error("la rotación no quedó retenida")
+      }
+      const heldRotate = new Promise<SharePreviewLink>((resolve) => {
+        releaseRotate = resolve
+      })
+      let releaseReload: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la recarga de A no quedó retenida")
+      }
+      const heldReload = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseReload = resolve
+      })
+      let aCalls = 0
+      world.getPreviewLink = async (writingId) => {
+        if (writingId === b) return { error: null, data: previewLink(LINK_B) }
+        aCalls += 1
+        if (aCalls === 1) return { error: null, data: currentA }
+        if (aCalls === 2) return heldReload
+        return { error: null, data: currentA }
+      }
+      world.rotatePreviewLink = async () => {
+        const rotated = await heldRotate
+        currentA = rotated
+        return { error: null, data: currentA }
+      }
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la mutación")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      // Regeneración en vuelo y navegación A→B→A con la recarga retenida.
+      await clickShareAction("Regenerate")
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo con la mutación en vuelo")
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo con la recarga post-navegación retenida")
+      await waitFor(() => aCalls >= 2, { label: "la recarga de A salió al servicio" })
+
+      // La mutación termina: debe revalidar el documento actual.
+      releaseRotate(previewLink(LINK_A_ROTATED))
+      await waitForShareLinkText(LINK_A_ROTATED)
+
+      // La recarga vieja (pre-mutación) no puede pisar la revalidación.
+      releaseReload({ error: null, data: previewLink(LINK_A_STALE) })
+      await flush(4)
+      expect(pageText(), "la revalidación se conserva").toContain(LINK_A_ROTATED)
+      expect(pageText(), "la recarga vieja no pisa la mutación").not.toContain(LINK_A_STALE)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "cambio a un documento local: el indicador de carga de A no queda visible en B",
+    async () => {
+      const textA = "ODE652-LOCAL-SWITCH-A"
+      const textB = "ODE652-LOCAL-SWITCH-B"
+      const a = await createAndOpenDocument(textA)
+      await confirmInCloud(a, textA)
+      const b = await createAndOpenSecondDocument(textB)
+
+      let releaseA: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la carga de A no quedó retenida")
+      }
+      const heldA = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseA = resolve
+      })
+      world.getPreviewLink = async (writingId) =>
+        writingId === a ? heldA : { error: null, data: null }
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A remoto activo")
+      await openShareTab()
+      await waitFor(() => pageText().includes("Loading preview link…"), {
+        label: "A muestra que está cargando su enlace",
+      })
+
+      await clickEditorTab(b)
+      await waitForHydrationReady("B local activo")
+      expect(pageText(), "B no hereda el indicador de carga de A").not.toContain(
+        "Loading preview link…",
+      )
+
+      releaseA({ error: null, data: previewLink(LINK_A) })
+      await flush(3)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
 })
 
 describe("EXP-05 — callers reales de Desk y Collections (ODE-636)", () => {
