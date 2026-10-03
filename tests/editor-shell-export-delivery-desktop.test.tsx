@@ -1671,7 +1671,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "cerrar todas las pestañas: el dueño conservado está oculto y no ocupa layout",
     async () => {
       const textA = "ODE652-CLOSE-ALL-HIDDEN"

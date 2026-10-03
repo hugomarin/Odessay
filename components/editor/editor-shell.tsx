@@ -2659,7 +2659,10 @@ export function EditorShell({
           </div>
 
         {(!isFocusMode || isShareActionPending) && (activePanel || isShareActionPending) && (editorSession.tabs.length > 0 || isShareActionPending) ? (
-          <div className={activePanel && !isFocusMode ? "contents" : "hidden"}>
+          <div
+            className={activePanel && !isFocusMode && editorSession.tabs.length > 0 ? "contents" : "hidden"}
+            hidden={!(activePanel && !isFocusMode && editorSession.tabs.length > 0)}
+          >
           <EditorRightPanel>
           {/* One header for the four surfaces. Each of them used to carry a
               header and a close button of its own, and Share was a section
