@@ -65,6 +65,9 @@ function ok<T>(data: T): ServiceResponse<T> { return { data, error: null } }
 function err<T>(code: ServiceError["code"], message: string): ServiceResponse<T> {
   return { data: null, error: { code, message, retryable: false } }
 }
+function conflict(message: string): ServiceError {
+  return { code: "CONFLICT", message, retryable: false }
+}
 function isConflictError(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -185,7 +188,8 @@ class DesktopDocumentService implements DocumentService {
     expectedContentHash?: string | null,
     options: { writeContent?: boolean } = {},
   ): Promise<WritingRecord> {
-    if (operation === "upsert" && options.writeContent !== false) {
+    const wroteContent = operation === "upsert" && options.writeContent !== false
+    if (wroteContent) {
       const markdown = this.serialize(record)
       const fileResult = await this.runtime.filesystem.saveWriting({
         writing: {
@@ -196,9 +200,39 @@ class DesktopDocumentService implements DocumentService {
         expectedContentHash,
       })
       if (fileResult.error) throw fileResult.error
+      // ODE-635 — with `expectedContentHash: null` the write-side hash guard is
+      // skipped, so a rename that moves the `.md` between path resolution and
+      // this write produces no CONFLICT. The rename may still be mid-flight
+      // (file moved, catalog not yet committed): wait for it before reading the
+      // catalog so the binding compared below is settled, never half-committed.
+      await this.renamesInFlight.get(record.id)?.catch(() => undefined)
     }
 
     const catalogBefore = await this.runtime.catalog.getById(record.id)
+    if (
+      wroteContent &&
+      catalogBefore?.binding?.canonicalPath &&
+      catalogBefore.binding.canonicalPath !== canonicalPath
+    ) {
+      // The unguarded write landed on a path this document no longer owns: a
+      // rename (or conscious move) committed a different canonical path while
+      // the write was in flight. Retire the obsolete recreation — recoverably,
+      // through the filesystem owner's trash move — and surface the same
+      // CONFLICT shape the guarded path uses, so `persistFollowingRename`
+      // re-resolves the binding and retries on the current path. `null` keeps
+      // meaning "no baseline": this only routes the bytes to the path the
+      // catalog owns; it never substitutes a hash and never rebinds the stale
+      // path.
+      await this.runtime.filesystem.deleteWriting({
+        writingId: canonicalPath,
+        version: record.version,
+        updatedAt: record.updatedAt,
+        deletedAt: new Date().toISOString(),
+      })
+      throw conflict(
+        `Writing ${record.id} moved to ${catalogBefore.binding.canonicalPath} while the save was in flight`,
+      )
+    }
     const priorBinding = catalogBefore?.binding
     const rootPath = priorBinding
       ? priorBinding.canonicalPath.slice(0, -(priorBinding.relativePath.length + 1))

@@ -132,7 +132,7 @@ afterEach(() => {
  * cuerpo, como manda el contrato de la red.
  */
 describe("ODE-635 — guardado sin baseline que se cruza con un rename (bug vigente)", () => {
-  it.fails(
+  it(
     "un guardado sin baseline que se cruza con un rename no recrea el archivo en la ruta vieja",
     async () => {
       const draft = await createDesktopDraft({ title: "ODE629 Null", initialBodyJson: bodyJson("BASE") })
@@ -198,7 +198,7 @@ describe("ODE-635 — guardado sin baseline que se cruza con un rename (bug vige
    * (recuperable, vía trash del owner de filesystem) y reintenta en la ruta
    * nueva. Muta a rojo si `persist()` deja de esperar a `renamesInFlight`.
    */
-  it.fails(
+  it(
     "un guardado sin baseline que aterriza entre el move y el commit del rename llega a la ruta nueva",
     async () => {
       const draft = await createDesktopDraft({ title: "ODE629 Midflight", initialBodyJson: bodyJson("BASE") })
