@@ -1132,6 +1132,35 @@ export async function tauriCatalogListDouble(dbPath: string): Promise<DesktopCat
 }
 
 /**
+ * Espejo fiel de `catalog_list` (`index.rs:1166-1187`): aplica los mismos
+ * filtros y el mismo `ORDER BY modified_at DESC` del SQL. El seam de ODE-670 lo
+ * necesita para grabar la ruta real de Settings; `tauriCatalogListDouble` de
+ * arriba es un atajo deliberado "todas las filas" que no aplica la query, y por
+ * eso ODE-648 no vio que una fila solo-nube con cuenta queda fuera cuando el
+ * productor pasa `cloudAccountId:null` (seguimiento en
+ * `tests/catalog-seam-fixture.test.ts`, `it.fails` ODE-670). Aquí no se cambia
+ * ese atajo: los consumidores existentes conservan su semántica.
+ */
+export async function tauriCatalogListQueryDouble(
+  dbPath: string,
+  query: { cloudAccountId?: string | null; includeDeleted?: boolean; localOnly?: boolean; limit?: number } = {},
+): Promise<DesktopCatalogRow[]> {
+  const cloudAccountId = query.cloudAccountId ?? null
+  const includeDeleted = query.includeDeleted ?? false
+  const localOnly = query.localOnly ?? false
+  const limit = query.limit ?? 200
+  return [...rowsFor(dbPath).values()]
+    .filter((row) => includeDeleted || (row.deletedAt === null && row.syncStatus !== "deleted"))
+    .filter((row) => !localOnly || row.localPresent)
+    .filter(
+      (row) =>
+        row.localPresent || row.cloudAccountId === null || row.cloudAccountId === cloudAccountId,
+    )
+    .sort((left, right) => (right.modifiedAt ?? 0) - (left.modifiedAt ?? 0))
+    .slice(0, limit)
+}
+
+/**
  * No test using this double ever retires a BindingRoot, so this always
  * returns empty — a real, minimal shape of "nothing to recover," not a
  * shortcut around the property under test. `DesktopWorkspaceService.
