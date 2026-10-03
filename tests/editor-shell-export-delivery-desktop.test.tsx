@@ -118,6 +118,7 @@ const {
   installNetworkDouble,
   mountEditorShell,
   pointerClick,
+  pressEditorShortcut,
   resetEditorShellWorld,
   typeInEditor,
   waitFor,
@@ -1562,6 +1563,55 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
         label: "el enlace desaparece al completar la revocación",
       })
       expect(pageText(), "el enlace revocado no revive").not.toContain(LINK_A)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "entrar en focus mode durante una regeneración no pierde la mutación",
+    async () => {
+      const textA = "ODE652-FOCUS-ROTATE"
+      const a = await createAndOpenDocument(textA)
+      await confirmInCloud(a, textA)
+
+      world.getPreviewLink = async () => ({ error: null, data: previewLink(LINK_A) })
+      let releaseRotate: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la rotación no quedó retenida")
+      }
+      const heldRotate = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseRotate = resolve
+      })
+      world.rotatePreviewLink = async () => heldRotate
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la regeneración")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickShareAction("Regenerate")
+
+      // Focus mode: el panel entero se oculta.
+      await pressEditorShortcut({ key: "F", code: "KeyF", shift: true })
+      await flush(3)
+      expect(
+        document.querySelector<HTMLElement>('[data-page="editor"]')?.dataset.focusMode,
+        "focus mode activo",
+      ).toBe("true")
+      expect(
+        document.querySelector('[data-testid="editor-right-panel-tabs"]'),
+        "el panel no se ve en focus mode",
+      ).toBeNull()
+
+      // Al salir: la misma instancia sigue esperando la mutación.
+      await pressEditorShortcut({ key: "F", code: "KeyF", shift: true })
+      await flush(3)
+      const regenerate = shareActionButton("Regenerate")
+      expect(regenerate, "el panel volvió con la regeneración en curso").not.toBeNull()
+      expect(regenerate!.disabled, "la instancia sobrevivió al focus mode").toBe(true)
+
+      releaseRotate({ error: null, data: previewLink(LINK_A_ROTATED) })
+      await waitForShareLinkText(LINK_A_ROTATED)
       assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
