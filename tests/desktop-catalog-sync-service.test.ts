@@ -397,6 +397,17 @@ describe("desktopCatalogSyncService", () => {
     mocks.listPending.mockResolvedValue([mutationRow()])
     mocks.insert.mockResolvedValue({ error: { message: "duplicate key", code: "23505" }, count: null })
     mocks.update.mockResolvedValue({ error: null, count: 1 })
+    // ODE-664: el UPDATE del fallback pudo disparar el trigger; se proyecta la
+    // fila leída de vuelta (shared), no el row enviado (private).
+    mocks.selectMaybeSingle.mockResolvedValue({
+      data: {
+        id: "doc-1", author_id: "user-1", title: "Doc", slug: "doc", status: "draft",
+        artifact_type: "general", visibility: "shared", version: 2,
+        created_at: "2026-01-01T00:00:00Z", updated_at: "2026-07-22T10:00:00Z",
+        content_hash: null, deleted_at: null,
+      },
+      error: null,
+    })
 
     const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
     const result = await desktopCatalogSyncService.flushPending()
@@ -406,7 +417,7 @@ describe("desktopCatalogSyncService", () => {
       "/config/desktop-index.sqlite3", "m1", "synced", 0, null, null,
     )
     expect(mocks.applyCloudSnapshots).toHaveBeenCalledWith([
-      expect.objectContaining({ id: "doc-1", cloudPresent: true }),
+      expect.objectContaining({ id: "doc-1", cloudPresent: true, visibility: "shared" }),
     ])
   })
 

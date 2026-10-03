@@ -631,7 +631,7 @@ describe("Requirement 2 — Desktop", () => {
     },
   )
 
-  it.fails(
+  it(
     "el fallback de INSERT ante 23505 proyecta la fila que persistió el trigger, no la enviada",
     async () => {
       const title = `Desktop fallback ${runId}`

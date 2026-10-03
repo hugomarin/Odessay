@@ -226,9 +226,11 @@ type WritingRow = {
  * uses plain INSERT/UPDATE with `{ count: "exact" }` — never upsert, never
  * `.select()` chained to the write. On a unique violation the row already
  * exists (e.g. a parallel pre-flight flush won the race), so converge through
- * a verified UPDATE instead of failing. Either way the confirmed cloud
- * presence is queued for the catalog so `cloud_present=1` lands in this same
- * flush without waiting for hydration.
+ * a verified UPDATE instead of failing. That UPDATE can fire the derived-fields
+ * trigger (private → shared with a live grant), so the fallback projects the
+ * row read back from the cloud, never the submitted one. Either way the
+ * confirmed cloud presence is queued for the catalog so `cloud_present=1`
+ * lands in this same flush without waiting for hydration.
  */
 async function insertVerified(
   supabase: ReturnType<typeof createDesktopClient>,
@@ -254,7 +256,18 @@ async function insertVerified(
       .eq("author_id", row.author_id)
     if (updateError) throw new Error(updateError.message)
     if (requireAffectedRows(updateCount) === 0) throw new Error("Cloud row vanished during insert fallback")
-  } else if (requireAffectedRows(count) === 0) {
+    // ODE-664: el UPDATE del fallback puede disparar el trigger y persistir un
+    // valor distinto del enviado (private → shared con un grant vigente). Se
+    // proyecta la fila canónica leída de vuelta, nunca el row enviado; la
+    // guarda D-4 sigue protegiendo una mutación local más nueva al aplicar el
+    // batch. Si la fila desapareció entre el UPDATE y la lectura, no se
+    // proyecta una presencia cloud que ya no se pudo verificar.
+    const persisted = await readbackCloudSnapshot(supabase, row.id, row.author_id)
+    ctx.cloudConfirmed.add(row.id)
+    if (persisted) ctx.confirmedSnapshots.push(persisted)
+    return
+  }
+  if (requireAffectedRows(count) === 0) {
     throw new Error("Cloud insert did not affect any row")
   }
   ctx.cloudConfirmed.add(row.id)
