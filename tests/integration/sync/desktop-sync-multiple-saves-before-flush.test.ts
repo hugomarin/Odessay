@@ -589,7 +589,7 @@ describe("SYNC-08 desktop — una mutación de metadata no borra el cuerpo", () 
     expect(actionableMutations(cloudOnlyId), "cola accionable vacía").toHaveLength(0)
   })
 
-  it.fails("con binding y fila en la nube: el guardado v2 pendiente + metadata conserva el cuerpo v2", async () => {
+  it("con binding y fila en la nube: el guardado v2 pendiente + metadata conserva el cuerpo v2", async () => {
     const { writingId, canonicalPath } = await createMaterializedDraft("Versión 1.", {
       slug: "carta-ode-648",
       visibility: "public",
@@ -629,7 +629,7 @@ describe("SYNC-08 desktop — una mutación de metadata no borra el cuerpo", () 
     expect(actionableMutations(writingId), "cola accionable vacía").toHaveLength(0)
   })
 
-  it.fails("primer borrador con binding, sin flush inicial: la metadata no descarta la primera subida", async () => {
+  it("primer borrador con binding, sin flush inicial: la metadata no descarta la primera subida", async () => {
     const { writingId, canonicalPath } = await createMaterializedDraft("Versión 1.", {
       slug: "carta-ode-648",
       visibility: "public",
@@ -669,7 +669,7 @@ describe("SYNC-08 desktop — una mutación de metadata no borra el cuerpo", () 
   // El caso anterior es el control positivo de este: con la cuenta correcta la
   // misma secuencia SÍ inserta. Aquí el dueño es otra cuenta activa y la
   // aserción es una ausencia: ningún INSERT puede caer bajo la sesión actual.
-  it.fails("una fila con cloudAccountId de otra cuenta activa nunca se inserta bajo la sesión actual", async () => {
+  it("una fila con cloudAccountId de otra cuenta activa nunca se inserta bajo la sesión actual", async () => {
     const { writingId } = await createMaterializedDraft("Versión 1.", { authorId: "user-2" })
     await saveFromEditor(writingId, "Versión 2 ajena.", 2)
 

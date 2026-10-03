@@ -192,6 +192,14 @@ async function insertVerified(
   record: Awaited<ReturnType<SqliteDocumentCatalog["getById"]>>,
   ctx: FlushContext,
 ) {
+  // ODE-648: the catalog is not partitioned by account and keeps local files
+  // after logout, while the flush runs under the active session. A row whose
+  // owning account is not the current one is never inserted under the current
+  // session: the mutation is retained (retry) for its owner instead of writing
+  // a foreign body to the wrong account.
+  if (record?.cloudAccountId != null && record.cloudAccountId !== row.author_id) {
+    throw new Error("Cloud row belongs to another account; keeping the mutation for its owner")
+  }
   const { error, count } = await supabase.from("writings").insert(row, { count: "exact" })
   if (error) {
     if (error.code !== "23505") throw new Error(error.message)
@@ -291,6 +299,61 @@ async function processMutation(
   }
 
   if (payload.mutationKind === "metadata") {
+    // ODE-648: the queue supersede (index.rs:704-711) already discarded any
+    // pending save when this metadata mutation arrived, so a bound document
+    // resolves as a full snapshot from its .md — otherwise the cloud keeps the
+    // old body while the catalog reports synced. On an existing cloud row only
+    // the body/hash and the fields this mutation owns are written; title, slug,
+    // visibility, parent_id and correspondence_id stay as the cloud has them
+    // (a metadata payload never carries them).
+    if (record?.binding?.canonicalPath) {
+      const markdown = await tauriOpenFile(record.binding.canonicalPath)
+      const parsed = desktopDocumentEngine.parseSourceDocument(markdown)
+      if (!parsed.success) throw new Error(parsed.error)
+      const contentPatch = {
+        body_json: parsed.document.snapshot.bodyJson,
+        body_text: parsed.document.snapshot.bodyText,
+        content_hash: record.binding.contentHash ?? null,
+      }
+      const metadataPatch = {
+        status: payload.status ?? record.status ?? "draft",
+        artifact_type: payloadValue(payload, "artifactType", "artifact_type") ?? record.artifactType ?? "general",
+        version,
+        updated_at: updatedAt,
+      }
+      if (record.cloudAccountId != null || ctx.cloudConfirmed.has(mutation.documentId)) {
+        const { error, count } = await supabase
+          .from("writings")
+          .update({ ...contentPatch, ...metadataPatch }, { count: "exact" })
+          .eq("id", mutation.documentId)
+          .eq("author_id", userId)
+        if (error) throw new Error(error.message)
+        if (requireAffectedRows(count) > 0) {
+          ctx.cloudConfirmed.add(mutation.documentId)
+          return
+        }
+        // 0 rows: the catalog's ownership binding is stale and the cloud row is
+        // absent — fall through to the verified INSERT with the .md snapshot.
+      }
+      await insertVerified(supabase, {
+        id: mutation.documentId,
+        author_id: userId,
+        title: record.title,
+        body_json: contentPatch.body_json,
+        body_text: contentPatch.body_text,
+        content_hash: contentPatch.content_hash,
+        slug: record.slug,
+        status: metadataPatch.status,
+        artifact_type: metadataPatch.artifact_type,
+        visibility: record.visibility ?? "private",
+        parent_id: payloadValue(payload, "parentId", "parent_id"),
+        correspondence_id: payloadValue(payload, "correspondenceId", "correspondence_id"),
+        version,
+        updated_at: updatedAt,
+        deleted_at: record.deletedAt,
+      }, record, ctx)
+      return
+    }
     const patch = {
       status: payload.status,
       artifact_type: payloadValue(payload, "artifactType", "artifact_type"),
