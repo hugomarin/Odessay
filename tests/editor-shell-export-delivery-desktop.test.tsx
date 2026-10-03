@@ -46,6 +46,13 @@
  * permanecen. Las mutaciones de esa protección están en la Guía de review del
  * PR; la discriminante es del lado del aviso, no de los bytes.
  *
+ * ODE-652 / SHARE-03 (decisión D): una respuesta tardía del enlace de A no
+ * reemplaza el enlace activo de B ni su "Copy", y el toast "Share link for ‘A’
+ * is ready" sigue nombrando a A. El servicio de compartir es el boundary
+ * doblado de esta prueba: no demuestra que un token real resuelva ni autoriza
+ * acceso, y ese límite queda anotado en la fila SHARE-03 del capability map.
+ * Las mutaciones de esta protección están en la Guía de review del PR.
+ *
  * Fuera de esta prueba, con motivo: `exportBinary` sin `currentWritingId`
  * (bug 1 de EXP-05) no es alcanzable por la UI — el ítem está deshabilitado
  * sin documento confirmado —, y el export de Desk (`WritingPreviewModal`) es
@@ -88,6 +95,9 @@ vi.mock("@/lib/runtime/detect", async () =>
 vi.mock("@/lib/services/ai-service-factory", async () =>
   (await import("./support/editor-shell-doubles")).aiServiceDouble(),
 )
+vi.mock("@/lib/services/sharing-service-factory", async () =>
+  (await import("./support/editor-shell-doubles")).sharingServiceDouble(),
+)
 vi.mock("@tauri-apps/api/path", async () =>
   (await import("./support/editor-shell-desktop-doubles")).tauriPathDouble(),
 )
@@ -103,11 +113,13 @@ const {
   assertNoUnhandledErrors,
   clickEditorTab,
   clickNewArtifact,
+  closeEditorTab,
   emitTauriEvent,
   flush,
   installNetworkDouble,
   mountEditorShell,
   pointerClick,
+  pressEditorShortcut,
   resetEditorShellWorld,
   typeInEditor,
   waitFor,
@@ -510,14 +522,10 @@ async function clickPreviewExport(format: Format) {
 }
 
 /**
- * Abre la sección Export con la UI real: el botón "Properties panel" de la
- * barra superior abre el panel lateral y su pestaña "Share" muestra Export
- * (se movió ahí en la revisión del owner; ver `PropertiesPanel.tab`).
+ * Abre el panel lateral en su pestaña "Share" con el gesto real: el botón
+ * "Properties panel" de la barra superior y la pestaña homónima.
  */
-async function openExportSection() {
-  const exportTrigger = () =>
-    findButton(mounted!.container, (button) => button.textContent?.includes("Export as…") ?? false)
-  if (exportTrigger()) return
+async function openShareTab() {
   const toggle = await waitFor(
     () => findButton(mounted!.container, (button) => button.getAttribute("aria-label") === "Properties panel"),
     { label: 'botón "Properties panel"' },
@@ -540,7 +548,58 @@ async function openExportSection() {
     shareTab.click()
   })
   await flush(2)
+}
+
+/**
+ * Abre la sección Export con la UI real: el botón "Properties panel" de la
+ * barra superior abre el panel lateral y su pestaña "Share" muestra Export
+ * (se movió ahí en la revisión del owner; ver `PropertiesPanel.tab`).
+ */
+async function openExportSection() {
+  const exportTrigger = () =>
+    findButton(mounted!.container, (button) => button.textContent?.includes("Export as…") ?? false)
+  if (exportTrigger()) return
+  await openShareTab()
   await waitFor(exportTrigger, { label: 'sección Export con "Export as…"' })
+}
+
+type SharePreviewLink = {
+  active: boolean
+  token: string | null
+  link: string | null
+  createdAt: string | null
+}
+
+function previewLink(link: string): SharePreviewLink {
+  return { active: true, token: link, link, createdAt: "2026-10-02T00:00:00.000Z" }
+}
+
+function shareActionButton(label: "Generate link" | "Regenerate" | "Copy") {
+  return findButton(mounted!.container, (button) => button.textContent?.trim() === label)
+}
+
+/** Pulsa la acción del preview link con el botón real y verifica que ocurrió. */
+async function clickShareAction(label: "Generate link" | "Regenerate" | "Copy") {
+  const button = await waitFor(() => shareActionButton(label), {
+    label: `botón "${label}" del preview link`,
+  })
+  expect(button.disabled, `el botón "${label}" está habilitado`).toBe(false)
+  await act(async () => {
+    button.click()
+  })
+  await flush(3)
+}
+
+async function waitForShareLinkText(text: string) {
+  await waitFor(() => pageText().includes(text), { label: `enlace de compartir visible (${text})` })
+}
+
+/** El toast es el evento de completitud del resultado de compartir. */
+async function waitForShareToast() {
+  return waitFor(() => documentActionToast("success"), {
+    label: "toast de enlace de compartir",
+    timeoutMs: 10_000,
+  })
 }
 
 /**
@@ -893,6 +952,827 @@ describe("EXP-05 — el resultado del export se atribuye al documento de origen 
       const retained = await waitForDocumentActionToast("success")
       expect(retained.textContent, "el aviso sigue atribuido a A").toBe(panelSuccessMessage("docx", titleA))
       expect(retained.textContent).not.toContain(titleB)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+const clipboardWrites: string[] = []
+
+describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (ODE-652 / SHARE-03)", () => {
+  const LINK_A = "https://preview.odessay.test/ode652-share-a"
+  const LINK_A_ROTATED = "https://preview.odessay.test/ode652-share-a-rotated"
+  const LINK_A_STALE = "https://preview.odessay.test/ode652-share-a-stale"
+  const LINK_B = "https://preview.odessay.test/ode652-share-b"
+
+  beforeEach(() => {
+    clipboardWrites.length = 0
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          clipboardWrites.push(text)
+        },
+      },
+    })
+  })
+
+  it(
+    "carrera: la respuesta tardía del enlace de A no reemplaza el de B y el toast nombra A",
+    async () => {
+      const textA = "ODE652-SHARE-RACE-A"
+      const textB = "ODE652-SHARE-RACE-B"
+      const titleA = "ODE652 Share Race A"
+      const titleB = "ODE652 Share Race B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      // El enlace activo de cada documento lo sirve el boundary doblado.
+      world.getPreviewLink = async (writingId) => ({
+        error: null,
+        data: writingId === a ? previewLink(LINK_A) : writingId === b ? previewLink(LINK_B) : null,
+      })
+      let releaseRotate: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la respuesta del enlace de A no quedó retenida")
+      }
+      const heldRotate = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseRotate = resolve
+      })
+      world.rotatePreviewLink = async (writingId) =>
+        writingId === a ? heldRotate : { error: null, data: previewLink(LINK_B) }
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de rotar el enlace")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      try {
+        // Respuesta de A en vuelo.
+        await clickShareAction("Regenerate")
+        expect(world.sharingRotatePreviewLinkCalls, "la rotación de A salió al servicio").toEqual([a])
+
+        // Cambio de pestaña con la respuesta de A todavía pendiente.
+        await clickEditorTab(b)
+        await waitForHydrationReady("B activo con el enlace de A en vuelo")
+        await waitForShareLinkText(LINK_B)
+
+        releaseRotate({ error: null, data: previewLink(LINK_A_ROTATED) })
+        const toast = await waitForShareToast()
+        expect(toast.textContent, "el toast nombra A aunque B esté seleccionado").toBe(
+          `Share link for ‘${titleA}’ is ready`,
+        )
+        expect(toast.textContent).not.toContain(titleB)
+      } finally {
+        releaseRotate({ error: null, data: null })
+      }
+
+      // El enlace activo de B sigue siendo el de B, y su "Copy" copia el de B.
+      expect(pageText(), "el enlace tardío de A no ocupa el panel de B").not.toContain(LINK_A_ROTATED)
+      expect(pageText(), "el enlace de B sigue visible").toContain(LINK_B)
+      await clickShareAction("Copy")
+      expect(clipboardWrites.at(-1), "Copy copia el enlace de B").toBe(LINK_B)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "sin carrera: el enlace generado de A aparece y su toast sigue nombrando A al cambiar a B",
+    async () => {
+      const textA = "ODE652-SHARE-SEED-A"
+      const textB = "ODE652-SHARE-SEED-B"
+      const titleA = "ODE652 Share Seed A"
+      const titleB = "ODE652 Share Seed B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      world.getPreviewLink = async (writingId) => ({
+        error: null,
+        data: writingId === b ? previewLink(LINK_B) : null,
+      })
+      world.rotatePreviewLink = async () => ({ error: null, data: previewLink(LINK_A) })
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de generar el enlace")
+      await openShareTab()
+
+      // Control positivo: sin cambio de pestaña, el resultado llega al panel.
+      await clickShareAction("Generate link")
+      const toast = await waitForShareToast()
+      expect(toast.textContent, "el toast nombra A").toBe(`Share link for ‘${titleA}’ is ready`)
+      await waitForShareLinkText(LINK_A)
+
+      // Cambio a B: el aviso de A sigue siendo el de A y el enlace de A no
+      // ocupa el panel de B, que tiene el suyo.
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo después de generar el enlace de A")
+      await waitForShareLinkText(LINK_B)
+      const retained = await waitForShareToast()
+      expect(retained.textContent, "el aviso sigue atribuido a A").toBe(
+        `Share link for ‘${titleA}’ is ready`,
+      )
+      expect(retained.textContent).not.toContain(titleB)
+      expect(pageText(), "el enlace de A no ocupa el panel de B").not.toContain(LINK_A)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "carga retenida: el enlace de A no queda visible ni copiable bajo B mientras B carga",
+    async () => {
+      const textA = "ODE652-LOAD-RACE-A"
+      const textB = "ODE652-LOAD-RACE-B"
+      const titleA = "ODE652 Load Race A"
+      const titleB = "ODE652 Load Race B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      let releaseB: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la carga de B no quedó retenida")
+      }
+      const heldB = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseB = resolve
+      })
+      world.getPreviewLink = async (writingId) =>
+        writingId === a ? { error: null, data: previewLink(LINK_A) } : heldB
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la carga retenida de B")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo con su carga retenida")
+
+      // Mientras B carga su enlace, nada de A es visible ni accionable bajo B.
+      expect(pageText(), "el enlace de A no se muestra bajo B").not.toContain(LINK_A)
+      expect(shareActionButton("Copy"), "no hay Copy del enlace de A bajo B").toBeNull()
+      expect(pageText(), "B muestra que sigue cargando su enlace").toContain("Loading preview link…")
+
+      releaseB({ error: null, data: previewLink(LINK_B) })
+      await waitForShareLinkText(LINK_B)
+      await clickShareAction("Copy")
+      expect(clipboardWrites.at(-1), "Copy copia el enlace de B").toBe(LINK_B)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "carga retenida: la respuesta vieja de A no habilita las acciones de B mientras B carga",
+    async () => {
+      const textA = "ODE652-STALE-LOAD-A"
+      const textB = "ODE652-STALE-LOAD-B"
+      const titleA = "ODE652 Stale Load A"
+      const titleB = "ODE652 Stale Load B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      let releaseA: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la carga de A no quedó retenida")
+      }
+      const heldA = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseA = resolve
+      })
+      let releaseB: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la carga de B no quedó retenida")
+      }
+      const heldB = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseB = resolve
+      })
+      world.getPreviewLink = async (writingId) => (writingId === a ? heldA : heldB)
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo con su carga retenida")
+      await openShareTab()
+      await waitFor(() => shareActionButton("Generate link"), {
+        label: "panel de compartir montado con la carga de A en vuelo",
+      })
+
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo con ambas cargas retenidas")
+      await waitFor(() => world.sharingGetPreviewLinkCalls.includes(b), {
+        label: "la carga de B salió al servicio",
+      })
+
+      // La carga vieja de A termina mientras la de B sigue viva: no debe
+      // habilitar ninguna acción de B ni mostrar nada de A.
+      releaseA({ error: null, data: previewLink(LINK_A) })
+      await flush(4)
+
+      const generate = shareActionButton("Generate link")
+      expect(generate, "B ofrece Generate mientras carga su enlace").not.toBeNull()
+      expect(generate!.disabled, "la respuesta vieja de A no habilita Generate en B").toBe(true)
+      expect(pageText(), "el enlace de A no se muestra bajo B").not.toContain(LINK_A)
+
+      releaseB({ error: null, data: previewLink(LINK_B) })
+      await waitForShareLinkText(LINK_B)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "regreso a A: una carga vieja de A no pisa la regeneración que ya terminó",
+    async () => {
+      const textA = "ODE652-RETURN-ROTATE-A"
+      const textB = "ODE652-RETURN-ROTATE-B"
+      const titleA = "ODE652 Return Rotate A"
+      const titleB = "ODE652 Return Rotate B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      let releaseB: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la carga de B no quedó retenida")
+      }
+      const heldB = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseB = resolve
+      })
+      let releaseStaleA: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la recarga de A no quedó retenida")
+      }
+      const heldStaleA = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseStaleA = resolve
+      })
+      let aCalls = 0
+      world.getPreviewLink = async (writingId) => {
+        if (writingId === b) return heldB
+        aCalls += 1
+        return aCalls === 1 ? { error: null, data: previewLink(LINK_A) } : heldStaleA
+      }
+      world.rotatePreviewLink = async () => ({ error: null, data: previewLink(LINK_A_ROTATED) })
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo con su enlace cacheado")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      // A→B y de vuelta a A con la recarga todavía en vuelo.
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo con su carga retenida")
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo de nuevo con su recarga retenida")
+      await waitFor(() => aCalls >= 2, { label: "la recarga de A salió al servicio" })
+      expect(pageText(), "control positivo: el enlace cacheado de A sigue visible").toContain(LINK_A)
+
+      // La regeneración termina primero; la recarga vieja no debe pisarla.
+      await clickShareAction("Regenerate")
+      await waitForShareLinkText(LINK_A_ROTATED)
+      releaseStaleA({ error: null, data: previewLink(LINK_A_STALE) })
+      await flush(4)
+
+      expect(pageText(), "la regeneración de A se conserva").toContain(LINK_A_ROTATED)
+      expect(pageText(), "la carga vieja no pisa la regeneración").not.toContain(LINK_A_STALE)
+
+      releaseB({ error: null, data: previewLink(LINK_B) })
+      await flush(2)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "regreso a A: una carga vieja de A no revivía el enlace después de revocar",
+    async () => {
+      const textA = "ODE652-RETURN-REVOKE-A"
+      const textB = "ODE652-RETURN-REVOKE-B"
+      const titleA = "ODE652 Return Revoke A"
+      const titleB = "ODE652 Return Revoke B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      let releaseB: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la carga de B no quedó retenida")
+      }
+      const heldB = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseB = resolve
+      })
+      let releaseStaleA: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la recarga de A no quedó retenida")
+      }
+      const heldStaleA = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseStaleA = resolve
+      })
+      let aCalls = 0
+      world.getPreviewLink = async (writingId) => {
+        if (writingId === b) return heldB
+        aCalls += 1
+        return aCalls === 1 ? { error: null, data: previewLink(LINK_A) } : heldStaleA
+      }
+      world.revokePreviewLink = async (writingId) => ({
+        error: null,
+        data: { writingId, revoked: true },
+      })
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo con su enlace cacheado")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo con su carga retenida")
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo de nuevo con su recarga retenida")
+      await waitFor(() => aCalls >= 2, { label: "la recarga de A salió al servicio" })
+      expect(pageText(), "control positivo: el enlace cacheado de A sigue visible").toContain(LINK_A)
+
+      const revoke = await waitFor(
+        () =>
+          findButton(
+            mounted!.container,
+            (button) => button.getAttribute("aria-label") === "Revoke preview link",
+          ),
+        { label: "botón de revocar el enlace" },
+      )
+      await act(async () => {
+        revoke.click()
+      })
+      await flush(3)
+      await waitFor(() => !pageText().includes(LINK_A), { label: "el enlace de A desaparece al revocar" })
+
+      // La recarga vieja no puede revivir el enlace revocado.
+      releaseStaleA({ error: null, data: previewLink(LINK_A_STALE) })
+      await flush(4)
+      expect(pageText(), "la carga vieja no revivía el enlace").not.toContain(LINK_A_STALE)
+      expect(pageText(), "el enlace revocado sigue ausente").not.toContain(LINK_A)
+
+      releaseB({ error: null, data: previewLink(LINK_B) })
+      await flush(2)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "mutación en vuelo: una recarga iniciada después no pisa el resultado de la regeneración",
+    async () => {
+      const textA = "ODE652-MUTATION-ORDER-A"
+      const textB = "ODE652-MUTATION-ORDER-B"
+      const titleA = "ODE652 Mutation Order A"
+      const titleB = "ODE652 Mutation Order B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      let currentA = previewLink(LINK_A)
+      let releaseRotate: (value: SharePreviewLink) => void = () => {
+        throw new Error("la rotación no quedó retenida")
+      }
+      const heldRotate = new Promise<SharePreviewLink>((resolve) => {
+        releaseRotate = resolve
+      })
+      let releaseReload: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la recarga de A no quedó retenida")
+      }
+      const heldReload = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseReload = resolve
+      })
+      let aCalls = 0
+      world.getPreviewLink = async (writingId) => {
+        if (writingId === b) return { error: null, data: previewLink(LINK_B) }
+        aCalls += 1
+        if (aCalls === 1) return { error: null, data: currentA }
+        if (aCalls === 2) return heldReload
+        return { error: null, data: currentA }
+      }
+      world.rotatePreviewLink = async () => {
+        const rotated = await heldRotate
+        currentA = rotated
+        return { error: null, data: currentA }
+      }
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la mutación")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      // Regeneración en vuelo y navegación A→B→A con la recarga retenida.
+      await clickShareAction("Regenerate")
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo con la mutación en vuelo")
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo con la recarga post-navegación retenida")
+      await waitFor(() => aCalls >= 2, { label: "la recarga de A salió al servicio" })
+
+      // La mutación termina: debe revalidar el documento actual.
+      releaseRotate(previewLink(LINK_A_ROTATED))
+      await waitForShareLinkText(LINK_A_ROTATED)
+
+      // La recarga vieja (pre-mutación) no puede pisar la revalidación.
+      releaseReload({ error: null, data: previewLink(LINK_A_STALE) })
+      await flush(4)
+      expect(pageText(), "la revalidación se conserva").toContain(LINK_A_ROTATED)
+      expect(pageText(), "la recarga vieja no pisa la mutación").not.toContain(LINK_A_STALE)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "cambio a un borrador sin id: el indicador de carga de A no queda visible en el nuevo documento",
+    async () => {
+      const textA = "ODE652-LOCAL-SWITCH-A"
+      const a = await createAndOpenDocument(textA)
+      await confirmInCloud(a, textA)
+
+      let releaseA: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la carga de A no quedó retenida")
+      }
+      const heldA = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseA = resolve
+      })
+      world.getPreviewLink = async (writingId) =>
+        writingId === a ? heldA : { error: null, data: null }
+
+      // Borrador en blanco (sin id) en la misma montura: su early return no
+      // puede disparar ninguna carga contra el servicio.
+      await clickNewArtifact(mounted!.container)
+      await flush(3)
+      const blankTab = getEditorSessionState().session.tabs.find((tab) => !tab.writing_id)
+      if (!blankTab) throw new Error("No hay pestaña de borrador sin id")
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A remoto activo")
+      await openShareTab()
+      await waitFor(() => pageText().includes("Loading preview link…"), {
+        label: "A muestra que está cargando su enlace",
+      })
+
+      const blankNode = document.querySelector<HTMLElement>(`[data-editor-tab-id="${blankTab.id}"]`)
+      if (!blankNode) throw new Error("La pestaña del borrador no está en el DOM")
+      await pointerClick(blankNode)
+      await flush(3)
+      expect(getEditorSessionState().session.active_tab_id, "el borrador quedó activo").toBe(blankTab.id)
+      expect(pageText(), "el borrador no hereda el indicador de carga de A").not.toContain(
+        "Loading preview link…",
+      )
+
+      releaseA({ error: null, data: previewLink(LINK_A) })
+      await flush(3)
+
+      // La pestaña efímera no debe quedar viva al desmontar: vuelve a A y
+      // cierra el borrador.
+      await clickEditorTab(a)
+      const blankAfter = document.querySelector<HTMLElement>(`[data-editor-tab-id="${blankTab.id}"]`)
+      const close = blankAfter?.querySelector<HTMLElement>('[aria-label^="Close "]')
+      if (close) {
+        await pointerClick(close)
+      }
+      await flush(3)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "cerrar y reabrir el panel durante una regeneración no pierde la mutación",
+    async () => {
+      const textA = "ODE652-CLOSE-REOPEN-ROTATE"
+      const a = await createAndOpenDocument(textA)
+      await confirmInCloud(a, textA)
+
+      world.getPreviewLink = async () => ({ error: null, data: previewLink(LINK_A) })
+      let releaseRotate: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la rotación no quedó retenida")
+      }
+      const heldRotate = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseRotate = resolve
+      })
+      world.rotatePreviewLink = async () => heldRotate
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la regeneración")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickShareAction("Regenerate")
+
+      const close = await waitFor(
+        () =>
+          findButton(
+            mounted!.container,
+            (button) => button.getAttribute("aria-label") === "Close panel",
+          ),
+        { label: 'botón "Close panel"' },
+      )
+      await act(async () => {
+        close.click()
+      })
+      await flush(3)
+      expect(
+        document.querySelector('[data-testid="editor-right-panel-tabs"]'),
+        "el panel quedó cerrado con la mutación en vuelo",
+      ).toBeNull()
+
+      // Reabrir: la misma instancia sigue esperando la mutación.
+      await openShareTab()
+      const regenerate = shareActionButton("Regenerate")
+      expect(regenerate, "el panel reabrió con la regeneración en curso").not.toBeNull()
+      expect(regenerate!.disabled, "la instancia sobrevivió al cierre: sigue guardando").toBe(true)
+
+      releaseRotate({ error: null, data: previewLink(LINK_A_ROTATED) })
+      await waitForShareLinkText(LINK_A_ROTATED)
+      expect(pageText(), "el enlace regenerado quedó visible").toContain(LINK_A_ROTATED)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "cerrar y reabrir el panel durante una revocación no revive el enlace",
+    async () => {
+      const textA = "ODE652-CLOSE-REOPEN-REVOKE"
+      const a = await createAndOpenDocument(textA)
+      await confirmInCloud(a, textA)
+
+      world.getPreviewLink = async () => ({ error: null, data: previewLink(LINK_A) })
+      let releaseRevoke: (value: { error: unknown; data: { writingId: string; revoked: boolean } | null }) => void =
+        () => {
+          throw new Error("la revocación no quedó retenida")
+        }
+      const heldRevoke = new Promise<{
+        error: unknown
+        data: { writingId: string; revoked: boolean } | null
+      }>((resolve) => {
+        releaseRevoke = resolve
+      })
+      world.revokePreviewLink = async () => heldRevoke
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de revocar")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      const revoke = await waitFor(
+        () =>
+          findButton(
+            mounted!.container,
+            (button) => button.getAttribute("aria-label") === "Revoke preview link",
+          ),
+        { label: "botón de revocar el enlace" },
+      )
+      await act(async () => {
+        revoke.click()
+      })
+      await flush(3)
+
+      const close = await waitFor(
+        () =>
+          findButton(
+            mounted!.container,
+            (button) => button.getAttribute("aria-label") === "Close panel",
+          ),
+        { label: 'botón "Close panel"' },
+      )
+      await act(async () => {
+        close.click()
+      })
+      await flush(3)
+      expect(
+        document.querySelector('[data-testid="editor-right-panel-tabs"]'),
+        "el panel quedó cerrado con la revocación en vuelo",
+      ).toBeNull()
+
+      await openShareTab()
+      const revokeAfter = await waitFor(
+        () =>
+          findButton(
+            mounted!.container,
+            (button) => button.getAttribute("aria-label") === "Revoke preview link",
+          ),
+        { label: "el panel reabrió con la revocación en curso" },
+      )
+      expect(revokeAfter.disabled, "la instancia sobrevivió al cierre: sigue guardando").toBe(true)
+
+      releaseRevoke({ error: null, data: { writingId: a, revoked: true } })
+      await waitFor(() => !pageText().includes(LINK_A), {
+        label: "el enlace desaparece al completar la revocación",
+      })
+      expect(pageText(), "el enlace revocado no revive").not.toContain(LINK_A)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "entrar en focus mode durante una regeneración no pierde la mutación",
+    async () => {
+      const textA = "ODE652-FOCUS-ROTATE"
+      const a = await createAndOpenDocument(textA)
+      await confirmInCloud(a, textA)
+
+      world.getPreviewLink = async () => ({ error: null, data: previewLink(LINK_A) })
+      let releaseRotate: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la rotación no quedó retenida")
+      }
+      const heldRotate = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseRotate = resolve
+      })
+      world.rotatePreviewLink = async () => heldRotate
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la regeneración")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickShareAction("Regenerate")
+
+      // Focus mode: el panel entero se oculta.
+      await pressEditorShortcut({ key: "F", code: "KeyF", shift: true })
+      await flush(3)
+      expect(
+        document.querySelector<HTMLElement>('[data-page="editor"]')?.dataset.focusMode,
+        "focus mode activo",
+      ).toBe("true")
+      expect(
+        document.querySelector('[data-testid="editor-right-panel-tabs"]'),
+        "el panel no se ve en focus mode",
+      ).toBeNull()
+
+      // Al salir: la misma instancia sigue esperando la mutación.
+      await pressEditorShortcut({ key: "F", code: "KeyF", shift: true })
+      await flush(3)
+      const regenerate = shareActionButton("Regenerate")
+      expect(regenerate, "el panel volvió con la regeneración en curso").not.toBeNull()
+      expect(regenerate!.disabled, "la instancia sobrevivió al focus mode").toBe(true)
+
+      releaseRotate({ error: null, data: previewLink(LINK_A_ROTATED) })
+      await waitForShareLinkText(LINK_A_ROTATED)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "cerrar todas las pestañas durante una regeneración conserva el dueño hasta que termina",
+    async () => {
+      const textA = "ODE652-CLOSE-ALL-ROTATE"
+      const a = await createAndOpenDocument(textA)
+      await confirmInCloud(a, textA)
+
+      world.getPreviewLink = async () => ({ error: null, data: previewLink(LINK_A) })
+      let releaseRotate: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la rotación no quedó retenida")
+      }
+      const heldRotate = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseRotate = resolve
+      })
+      world.rotatePreviewLink = async () => heldRotate
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la regeneración")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickShareAction("Regenerate")
+      expect(shareActionButton("Regenerate")?.disabled, "rotación en curso").toBe(true)
+
+      // Cerrar todas las pestañas: la única es A.
+      await closeEditorTab(a)
+      await flush(3)
+      expect(getEditorSessionState().session.tabs.length, "sin pestañas abiertas").toBe(0)
+
+      // Sin el keep-alive, este cierre destruye al dueño que recuerda la
+      // mutación; reabrir A montaría uno nuevo sin época ni memoria del
+      // rotate en vuelo y su GET podría quedarse con el enlace anterior.
+      // Sin el keep-alive, este cierre destruye al dueño que recuerda la
+      // mutación; reabrir A montaría uno nuevo sin época ni memoria del
+      // rotate en vuelo y su GET podría quedarse con el enlace anterior.
+      expect(
+        document.querySelector('[data-testid="editor-panel-properties"]'),
+        "el dueño del enlace sobrevive al cierre de todas las pestañas mientras la acción está en vuelo",
+      ).not.toBeNull()
+
+      releaseRotate({ error: null, data: previewLink(LINK_A_ROTATED) })
+      await flush(5)
+
+      // Al terminar la acción, el panel oculto se retira: no queda DOM vivo.
+      await waitFor(
+        () => (document.querySelector('[data-testid="editor-panel-properties"]') ? null : true),
+        { label: "el panel oculto se retira al terminar la acción" },
+      )
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "cerrar todas las pestañas: el dueño conservado está oculto y no ocupa layout",
+    async () => {
+      const textA = "ODE652-CLOSE-ALL-HIDDEN"
+      const a = await createAndOpenDocument(textA)
+      await confirmInCloud(a, textA)
+
+      world.getPreviewLink = async () => ({ error: null, data: previewLink(LINK_A) })
+      let releaseRotate: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la rotación no quedó retenida")
+      }
+      const heldRotate = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseRotate = resolve
+      })
+      world.rotatePreviewLink = async () => heldRotate
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la regeneración")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickShareAction("Regenerate")
+      await closeEditorTab(a)
+      await flush(3)
+      expect(getEditorSessionState().session.tabs.length, "sin pestañas abiertas").toBe(0)
+
+      const panelNode = document.querySelector('[data-testid="editor-panel-properties"]')
+      expect(panelNode, "el dueño del enlace sobrevive al cierre").not.toBeNull()
+      expect(
+        document.querySelector('[data-testid="editor-right-panel"]')?.parentElement?.hasAttribute("hidden"),
+        "el dueño conservado está oculto y no ocupa el layout del estado vacío",
+      ).toBe(true)
+
+      releaseRotate({ error: null, data: previewLink(LINK_A_ROTATED) })
+      await flush(5)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "regreso a A: una recarga vieja que falla no borra la regeneración",
+    async () => {
+      const textA = "ODE652-STALE-LOAD-ERROR-A"
+      const textB = "ODE652-STALE-LOAD-ERROR-B"
+      const titleA = "ODE652 Stale Load Error A"
+      const titleB = "ODE652 Stale Load Error B"
+      const { a, b } = await openTwoAttributedDocuments(
+        { text: textA, title: titleA },
+        { text: textB, title: titleB },
+      )
+
+      let currentA = previewLink(LINK_A)
+      let releaseRotate: (value: SharePreviewLink) => void = () => {
+        throw new Error("la rotación no quedó retenida")
+      }
+      const heldRotate = new Promise<SharePreviewLink>((resolve) => {
+        releaseRotate = resolve
+      })
+      let releaseReload: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la recarga de A no quedó retenida")
+      }
+      const heldReload = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseReload = resolve
+      })
+      let aCalls = 0
+      world.getPreviewLink = async (writingId) => {
+        if (writingId === b) return { error: null, data: previewLink(LINK_B) }
+        aCalls += 1
+        if (aCalls === 1) return { error: null, data: currentA }
+        if (aCalls === 2) return heldReload
+        return { error: null, data: currentA }
+      }
+      world.rotatePreviewLink = async () => {
+        const rotated = await heldRotate
+        currentA = rotated
+        return { error: null, data: currentA }
+      }
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la mutación")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickShareAction("Regenerate")
+      await clickEditorTab(b)
+      await waitForHydrationReady("B activo con la mutación en vuelo")
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo con su recarga post-navegación retenida")
+      await waitFor(() => aCalls >= 2, { label: "la recarga de A salió al servicio" })
+
+      releaseRotate(previewLink(LINK_A_ROTATED))
+      await waitForShareLinkText(LINK_A_ROTATED)
+
+      // La recarga vieja falla después: su error no puede borrar la mutación.
+      releaseReload({
+        error: { code: "DB_ERROR", message: "load failed", retryable: true },
+        data: null,
+      })
+      await flush(4)
+      expect(pageText(), "la regeneración se conserva tras el fallo viejo").toContain(LINK_A_ROTATED)
+      expect(pageText(), "el error de la carga vieja no aparece").not.toContain("load failed")
       assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,

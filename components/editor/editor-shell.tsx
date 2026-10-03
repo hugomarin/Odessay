@@ -459,6 +459,8 @@ export function EditorShell({
   const lifecycleRef = useRef<WritingLifecycle>("local-only")
   const [isBodyHydrating, setIsBodyHydrating] = useState(false)
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
+  /** Una acción de compartir en vuelo mantiene vivo el panel al cerrarlo. */
+  const [isShareActionPending, setIsShareActionPending] = useState(false)
   // Studio opens with both side panels closed: the ghost rail at the sheet's
   // left edge is the way in (docs/design/views/studio.md).
   const [navigationMode, setNavigationMode] = useState<EditorNavigationMode>(null)
@@ -2656,17 +2658,23 @@ export function EditorShell({
             )}
           </div>
 
-        {!isFocusMode && activePanel && editorSession.tabs.length > 0 ? (
+        {(!isFocusMode || isShareActionPending) && (activePanel || isShareActionPending) && (editorSession.tabs.length > 0 || isShareActionPending) ? (
+          <div
+            className={activePanel && !isFocusMode && editorSession.tabs.length > 0 ? "contents" : "hidden"}
+            hidden={!(activePanel && !isFocusMode && editorSession.tabs.length > 0)}
+          >
           <EditorRightPanel>
           {/* One header for the four surfaces. Each of them used to carry a
               header and a close button of its own, and Share was a section
               buried inside Properties (owner review). */}
-          <EditorRightPanelTabs
-            active={activePanel}
-            onSelect={setActivePanel}
-            onClose={closeActivePanel}
-            badges={{ grammar: visibleCorrectionCount }}
-          />
+          {activePanel ? (
+            <EditorRightPanelTabs
+              active={activePanel}
+              onSelect={setActivePanel}
+              onClose={closeActivePanel}
+              badges={{ grammar: visibleCorrectionCount }}
+            />
+          ) : null}
           <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={null}>
             {activePanel === "notes" ? (
@@ -2852,9 +2860,36 @@ export function EditorShell({
                   return true
                 }}
               />
-            ) : activePanel === "properties" || activePanel === "share" ? (
+            ) : activePanel === "grammar" ? (
+              <CorrectionsPanel
+                suggestions={automaticCorrectionSuggestions}
+                markdown={currentDocumentMarkdown}
+                showCorrections={showCorrections}
+                analysisStatus={{
+                  runState: correctionAnalysisRunState,
+                  progress: correctionAnalysisProgress,
+                }}
+                onAcceptSuggestion={handleAcceptCorrection}
+                onRejectSuggestion={handleRejectCorrection}
+                onLearnWord={handleLearnWord}
+                onAcceptAll={handleAcceptAllCorrections}
+                onRejectAll={handleRejectAllCorrections}
+                learnedWords={learnedWords}
+                learnedWordsLoading={learnedWordsLoading}
+                onRemoveLearnedWord={handleRemoveLearnedWord}
+                onAnalyze={startCorrectionAnalysis}
+                onRetryFailed={retryFailedCorrectionPackages}
+                onCancel={cancelCorrectionAnalysis}
+                onShowCorrectionsChange={setShowCorrections}
+              />
+            ) : null}
+            {activePanel === "properties" || activePanel === "share" || isShareActionPending ? (
+              <div
+                className={activePanel === "properties" || activePanel === "share" ? "h-full" : "hidden"}
+                aria-hidden={activePanel !== "properties" && activePanel !== "share"}
+              >
               <PropertiesPanel
-                tab={activePanel}
+                tab={activePanel === "share" ? "share" : "properties"}
                 writingId={currentWritingId}
                 writingTitle={displayTitle}
                 lifecycle={lifecycle}
@@ -2863,6 +2898,7 @@ export function EditorShell({
                 visibility={writingVisibility}
                 metrics={textMetrics}
                 canonicalPath={canonicalPath}
+                onShareActionPendingChange={setIsShareActionPending}
                 onExportPdf={() => exportBinary("pdf")}
                 onExportDocx={() => exportBinary("docx")}
                 onStatusChange={(nextStatus) => {
@@ -2914,32 +2950,12 @@ export function EditorShell({
                   })
                 }}
               />
-            ) : (
-              <CorrectionsPanel
-                suggestions={automaticCorrectionSuggestions}
-                markdown={currentDocumentMarkdown}
-                showCorrections={showCorrections}
-                analysisStatus={{
-                  runState: correctionAnalysisRunState,
-                  progress: correctionAnalysisProgress,
-                }}
-                onAcceptSuggestion={handleAcceptCorrection}
-                onRejectSuggestion={handleRejectCorrection}
-                onLearnWord={handleLearnWord}
-                onAcceptAll={handleAcceptAllCorrections}
-                onRejectAll={handleRejectAllCorrections}
-                learnedWords={learnedWords}
-                learnedWordsLoading={learnedWordsLoading}
-                onRemoveLearnedWord={handleRemoveLearnedWord}
-                onAnalyze={startCorrectionAnalysis}
-                onRetryFailed={retryFailedCorrectionPackages}
-                onCancel={cancelCorrectionAnalysis}
-                onShowCorrectionsChange={setShowCorrections}
-              />
-            )}
+              </div>
+            ) : null}
           </Suspense>
           </div>
           </EditorRightPanel>
+          </div>
         ) : null}
         </div>
       </div>

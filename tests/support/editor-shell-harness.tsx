@@ -190,6 +190,21 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
   world.learnedWords = []
   world.learnedWordsCalls = 0
   world.learnWordCalls = []
+  world.getPreviewLink = async () => ({
+    error: null,
+    data: { active: false, token: null, link: null, createdAt: null },
+  })
+  world.rotatePreviewLink = async () => ({
+    error: null,
+    data: { active: false, token: null, link: null, createdAt: null },
+  })
+  world.revokePreviewLink = async (writingId: string) => ({
+    error: null,
+    data: { writingId, revoked: true },
+  })
+  world.sharingGetPreviewLinkCalls = []
+  world.sharingRotatePreviewLinkCalls = []
+  world.sharingRevokePreviewLinkCalls = []
   world.hydrateCorrectionBlocks = async () => ({ error: null, data: [] })
   world.correctionHydrationCalls = []
   world.correctionPersistCalls = []

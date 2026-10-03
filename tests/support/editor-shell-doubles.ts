@@ -17,6 +17,7 @@ import type { TableOfContentsInput } from "@/hooks/useTableOfContents"
 import type { CorrectionLifecycleInput } from "@/hooks/useCorrectionLifecycle"
 
 import type { LearnWordInput, LearnedWordEntry } from "@/lib/services/contracts/ai-service"
+import type { PreviewLinkState } from "@/lib/services/contracts/sharing-service"
 
 /* ------------------------------------------------------------------ *
  * Estado compartido de los dobles
@@ -60,6 +61,23 @@ export type HarnessWorld = {
   aiReviewCalls: AiReviewInput[]
   /** Peticiones de sugerencia de título realmente emitidas, en orden. */
   suggestTitleCalls: Array<{ currentTitle?: string; bodyText?: string; writingId?: string }>
+  /**
+   * Respuesta del servicio de compartir para el preview link de un documento.
+   * Devolver una promesa pendiente deja la respuesta "en vuelo": es donde vive
+   * la carrera de identidad A→B de SHARE-03 (ODE-652). El servicio es el
+   * boundary externo (Supabase/API) y el panel lo consume real.
+   */
+  getPreviewLink: (writingId: string) => Promise<{ error: unknown; data: PreviewLinkState | null }>
+  rotatePreviewLink: (writingId: string) => Promise<{ error: unknown; data: PreviewLinkState | null }>
+  revokePreviewLink: (
+    writingId: string,
+  ) => Promise<{ error: unknown; data: { writingId: string; revoked: boolean } | null }>
+  /** Documentos cuyo preview link se pidió al servicio, en orden. */
+  sharingGetPreviewLinkCalls: string[]
+  /** Documentos cuyo preview link se rotó por el servicio, en orden. */
+  sharingRotatePreviewLinkCalls: string[]
+  /** Documentos cuyo preview link se revocó por el servicio, en orden. */
+  sharingRevokePreviewLinkCalls: string[]
   /** Palabras que el proveedor devuelve como aprendidas por el usuario. */
   learnedWords: LearnedWordEntry[]
   /** Veces que el shell pidió la lista de palabras aprendidas. */
@@ -193,6 +211,21 @@ export const world: HarnessWorld = {
   learnedWords: [],
   learnedWordsCalls: 0,
   learnWordCalls: [],
+  getPreviewLink: async () => ({
+    error: null,
+    data: { active: false, token: null, link: null, createdAt: null },
+  }),
+  rotatePreviewLink: async () => ({
+    error: null,
+    data: { active: false, token: null, link: null, createdAt: null },
+  }),
+  revokePreviewLink: async (writingId: string) => ({
+    error: null,
+    data: { writingId, revoked: true },
+  }),
+  sharingGetPreviewLinkCalls: [],
+  sharingRotatePreviewLinkCalls: [],
+  sharingRevokePreviewLinkCalls: [],
   hydrateCorrectionBlocks: async () => ({ error: null, data: [] }),
   correctionHydrationCalls: [],
   correctionPersistCalls: [],
@@ -459,6 +492,41 @@ export function tauriRuntimeDetectDouble() {
   return {
     isTauriRuntime: () => world.isDesktop,
     isWebRuntime: () => !world.isDesktop,
+  }
+}
+
+/**
+ * `@/lib/services/sharing-service-factory`: el servicio de compartir es una
+ * frontera externa (Supabase/API). El doble implementa el contrato completo y
+ * delega en `world` para que la prueba controle el resultado y pueda dejar una
+ * respuesta retenida (SHARE-03, ODE-652).
+ */
+export function sharingServiceDouble() {
+  return {
+    createSharingService: () => ({
+      getPreviewLink: async (writingId: string) => {
+        world.sharingGetPreviewLinkCalls.push(writingId)
+        return world.getPreviewLink(writingId)
+      },
+      rotatePreviewLink: async (writingId: string) => {
+        world.sharingRotatePreviewLinkCalls.push(writingId)
+        return world.rotatePreviewLink(writingId)
+      },
+      revokePreviewLink: async (writingId: string) => {
+        world.sharingRevokePreviewLinkCalls.push(writingId)
+        return world.revokePreviewLink(writingId)
+      },
+      listRecipients: async () => ({ error: null, data: [] }),
+      shareWriting: async () => ({
+        error: { code: "UNAVAILABLE", message: "Sharing is not available in this harness.", retryable: false },
+        data: null,
+      }),
+      revokeShare: async () => ({
+        error: { code: "UNAVAILABLE", message: "Sharing is not available in this harness.", retryable: false },
+        data: null,
+      }),
+      listIncomingShares: async () => ({ error: null, data: [] }),
+    }),
   }
 }
 
