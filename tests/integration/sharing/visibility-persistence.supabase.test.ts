@@ -523,7 +523,7 @@ describe("Requirement 2 — Web", () => {
     expect(await incomingIds(viewer)).toContain(id)
   })
 
-  it.fails(
+  it(
     "contrato unificado: la web responde la visibilidad que persistió el trigger, no su lectura previa de writing_shares",
     async () => {
       const title = `Web revocacion ${runId}`
