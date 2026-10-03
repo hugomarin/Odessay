@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   Check,
   ChevronDown,
@@ -73,6 +73,11 @@ const exportSuccessMessage = (format: ExportFormat, title: string) =>
 
 const exportFailureMessage = (format: ExportFormat, title: string, detail: string | null) =>
   `${EXPORT_LABEL[format]} export for ‘${title}’ failed${detail ? `: ${detail}` : ""}`
+
+const shareSuccessMessage = (title: string) => `Share link for ‘${title}’ is ready`
+
+const shareFailureMessage = (title: string, detail: string | null) =>
+  `Share link for ‘${title}’ failed${detail ? `: ${detail}` : ""}`
 
 function DropdownTrigger({
   open,
@@ -157,7 +162,7 @@ export function PropertiesPanel({
   const [isLoadingShareLink, setIsLoadingShareLink] = useState(false)
   const [isSavingShareLink, setIsSavingShareLink] = useState(false)
   const [shareError, setShareError] = useState<string | null>(null)
-  const [exportNotice, setExportNotice] = useState<{
+  const [actionNotice, setActionNotice] = useState<{
     kind: "success" | "error"
     message: string
   } | null>(null)
@@ -167,6 +172,13 @@ export function PropertiesPanel({
   const [isExportingDocx, setIsExportingDocx] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [pathCopied, setPathCopied] = useState(false)
+  /**
+   * Sube con cada cambio de documento. Una respuesta del servicio de compartir
+   * que empezó para otro documento no puede escribir el estado del panel
+   * (SHARE-03, ODE-652): el enlace tardío de A se descarta y B conserva su
+   * enlace y su "Copy".
+   */
+  const shareLinkGenerationRef = useRef(0)
   const catalog = useVocabulary()
   const sharingService = useMemo(() => createSharingService(), [])
   const enabledStatuses = useMemo(
@@ -188,6 +200,7 @@ export function PropertiesPanel({
       return
     }
 
+    const requestGeneration = shareLinkGenerationRef.current
     setIsLoadingShareLink(true)
     setShareError(null)
 
@@ -197,14 +210,21 @@ export function PropertiesPanel({
         throw new Error(result.error?.message ?? "Failed to load preview link.")
       }
 
+      if (shareLinkGenerationRef.current !== requestGeneration) return
       setShareLink(result.data)
     } catch (error) {
+      if (shareLinkGenerationRef.current !== requestGeneration) return
       setShareLink(DEFAULT_PREVIEW_LINK_STATE)
       setShareError(error instanceof Error ? error.message : "Failed to load preview link.")
     } finally {
       setIsLoadingShareLink(false)
     }
   }, [hasRemoteWriting, sharingService, writingId])
+
+  useEffect(() => {
+    // Invalida cualquier respuesta en vuelo del documento anterior.
+    shareLinkGenerationRef.current += 1
+  }, [writingId])
 
   useEffect(() => {
     void loadShareLink()
@@ -215,6 +235,8 @@ export function PropertiesPanel({
       return
     }
 
+    const requestGeneration = shareLinkGenerationRef.current
+    const sourceTitle = writingTitle
     setIsSavingShareLink(true)
     setShareError(null)
 
@@ -224,19 +246,29 @@ export function PropertiesPanel({
         throw new Error(result.error?.message ?? "Failed to generate preview link.")
       }
 
-      setShareLink(result.data)
+      if (shareLinkGenerationRef.current === requestGeneration) {
+        setShareLink(result.data)
+      }
+      setActionNotice({ kind: "success", message: shareSuccessMessage(sourceTitle) })
     } catch (error) {
-      setShareError(error instanceof Error ? error.message : "Failed to generate preview link.")
+      setActionNotice({
+        kind: "error",
+        message: shareFailureMessage(
+          sourceTitle,
+          error instanceof Error ? error.message : null,
+        ),
+      })
     } finally {
       setIsSavingShareLink(false)
     }
-  }, [hasRemoteWriting, sharingService, writingId])
+  }, [hasRemoteWriting, sharingService, writingId, writingTitle])
 
   const handleRevokeShareLink = useCallback(async () => {
     if (!hasRemoteWriting || !writingId) {
       return
     }
 
+    const requestGeneration = shareLinkGenerationRef.current
     setIsSavingShareLink(true)
     setShareError(null)
 
@@ -246,8 +278,10 @@ export function PropertiesPanel({
         throw new Error(result.error?.message ?? "Failed to revoke preview link.")
       }
 
+      if (shareLinkGenerationRef.current !== requestGeneration) return
       setShareLink(DEFAULT_PREVIEW_LINK_STATE)
     } catch (error) {
+      if (shareLinkGenerationRef.current !== requestGeneration) return
       setShareError(error instanceof Error ? error.message : "Failed to revoke preview link.")
     } finally {
       setIsSavingShareLink(false)
@@ -327,7 +361,7 @@ export function PropertiesPanel({
   const handleExport = useCallback(
     async (format: ExportFormat) => {
       setExportOpen(false)
-      setExportNotice(null)
+      setActionNotice(null)
 
       const sourceTitle = writingTitle
       if (format === "pdf") {
@@ -339,9 +373,9 @@ export function PropertiesPanel({
       try {
         const exported = format === "pdf" ? await onExportPdf() : await onExportDocx()
         if (exported !== true) return
-        setExportNotice({ kind: "success", message: exportSuccessMessage(format, sourceTitle) })
+        setActionNotice({ kind: "success", message: exportSuccessMessage(format, sourceTitle) })
       } catch (error) {
-        setExportNotice({
+        setActionNotice({
           kind: "error",
           message: exportFailureMessage(
             format,
@@ -548,8 +582,8 @@ export function PropertiesPanel({
           </>
         )}
       </div>
-      {exportNotice ? (
-        <DocumentActionToast kind={exportNotice.kind} message={exportNotice.message} />
+      {actionNotice ? (
+        <DocumentActionToast kind={actionNotice.kind} message={actionNotice.message} />
       ) : null}
     </aside>
   )

@@ -975,7 +975,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     })
   })
 
-  it.fails(
+  it(
     "carrera: la respuesta tardía del enlace de A no reemplaza el de B y el toast nombra A",
     async () => {
       const textA = "ODE652-SHARE-RACE-A"
@@ -1036,7 +1036,7 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "sin carrera: el enlace generado de A aparece y su toast sigue nombrando A al cambiar a B",
     async () => {
       const textA = "ODE652-SHARE-SEED-A"
