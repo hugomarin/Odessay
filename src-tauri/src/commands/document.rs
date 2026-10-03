@@ -88,8 +88,9 @@ pub fn write_file(
     path: String,
     content: String,
     expected_content_hash: Option<String>,
+    expected_inode: Option<u64>,
 ) -> Result<(), String> {
-    write_file_with_stages(&path, &content, expected_content_hash, &mut |_| {})
+    write_file_with_stages(&path, &content, expected_content_hash, expected_inode, &mut |_| {})
 }
 
 /// Points inside a guarded write where a test can act as an external editor.
@@ -105,6 +106,7 @@ fn write_file_with_stages(
     path: &str,
     content: &str,
     expected_content_hash: Option<String>,
+    _expected_inode: Option<u64>,
     at_stage: &mut dyn FnMut(WriteStage),
 ) -> Result<(), String> {
     let target = Path::new(path);
@@ -873,7 +875,7 @@ mod tests {
         let target = root.join("Letter.md");
         fs::write(&target, "Original\n").expect("write original");
 
-        write_file(target.to_string_lossy().to_string(), "Replaced\n".into(), None)
+        write_file(target.to_string_lossy().to_string(), "Replaced\n".into(), None, None)
             .expect("write with no baseline should never be refused");
 
         assert_eq!(fs::read_to_string(&target).expect("read target"), "Replaced\n");
@@ -892,6 +894,7 @@ mod tests {
             target.to_string_lossy().to_string(),
             "Updated by me\n".into(),
             Some(baseline),
+            None,
         )
         .expect("write with a correct baseline should succeed");
 
@@ -920,6 +923,7 @@ mod tests {
             target.to_string_lossy().to_string(),
             "My conflicting edit\n".into(),
             Some(stale_baseline),
+            None,
         );
 
         let error = result.expect_err("a stale baseline must refuse the write");
@@ -932,6 +936,126 @@ mod tests {
             "Changed by another app\n",
             "the external edit must remain completely untouched"
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    // ODE-635 (review ronda 2, P1) — a save with `expected_content_hash: None`
+    // has no content baseline, but it was resolved against a concrete file.
+    // The optional identity guard carries that file's inode: the write may
+    // replace that same file (or create it when it is gone), but it must never
+    // replace a different file that appeared at the path in the meantime.
+    // These tests are the deterministic external editor for that property.
+    #[cfg(unix)]
+    fn inode_of(path: &Path) -> u64 {
+        use std::os::unix::fs::MetadataExt;
+        fs::metadata(path).expect("stat file").ino()
+    }
+
+    fn identity_guarded_write(
+        target: &Path,
+        content: &str,
+        expected_inode: u64,
+        on_stage: impl FnMut(WriteStage),
+    ) -> (Result<(), String>, Vec<WriteStage>) {
+        let mut on_stage = on_stage;
+        let mut seen = Vec::new();
+        let result = write_file_with_stages(
+            &target.to_string_lossy(),
+            content,
+            None,
+            Some(expected_inode),
+            &mut |stage| {
+                seen.push(stage);
+                on_stage(stage);
+            },
+        );
+        (result, seen)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_with_expected_inode_overwrites_the_same_resolved_file() {
+        let root = temp_dir("identity-same");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+        let expected_inode = inode_of(&target);
+
+        let (result, _) = identity_guarded_write(&target, "Mine\n", expected_inode, |_| {});
+
+        result.expect("the same resolved file must remain overwritable");
+        assert_eq!(fs::read_to_string(&target).expect("read target"), "Mine\n");
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_with_expected_inode_creates_a_missing_target() {
+        let root = temp_dir("identity-create");
+        let target = root.join("New.md");
+
+        let (result, _) = identity_guarded_write(&target, "Fresh\n", 4242, |_| {});
+
+        result.expect("a missing target must be created");
+        assert_eq!(fs::read_to_string(&target).expect("read target"), "Fresh\n");
+        assert_eq!(entries_in(&root), vec!["New.md"], "no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_replaced_before_the_write_is_refused_and_left_untouched() {
+        let root = temp_dir("identity-early");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+        let expected_inode = inode_of(&target);
+
+        // Another writer replaces the resolved file before the write starts.
+        let sibling = target.with_file_name(".Letter.md.sb-external");
+        fs::write(&sibling, "External\n").expect("external sibling");
+        fs::rename(&sibling, &target).expect("external atomic replace");
+
+        let (result, _) = identity_guarded_write(&target, "Mine\n", expected_inode, |_| {});
+
+        let error = result.expect_err("replacing a different file must conflict");
+        assert!(error.starts_with("CONFLICT:"), "got: {error}");
+        assert_eq!(
+            fs::read_to_string(&target).expect("read target"),
+            "External\n",
+            "the external file must remain untouched"
+        );
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_replaced_in_the_commit_window_is_refused_and_left_untouched() {
+        let root = temp_dir("identity-window");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+        let expected_inode = inode_of(&target);
+
+        let (result, seen) = identity_guarded_write(&target, "Mine\n", expected_inode, |stage| {
+            if stage == WriteStage::BeforeCommit {
+                let sibling = target.with_file_name(".Letter.md.sb-external");
+                fs::write(&sibling, "External\n").expect("external sibling");
+                fs::rename(&sibling, &target).expect("external atomic replace");
+            }
+        });
+
+        assert!(
+            seen.contains(&WriteStage::BeforeCommit),
+            "positive control: the window was reached"
+        );
+        let error = result.expect_err("a different file in the commit window must conflict");
+        assert!(error.starts_with("CONFLICT:"), "got: {error}");
+        assert_eq!(
+            fs::read_to_string(&target).expect("read target"),
+            "External\n",
+            "the external file must remain untouched"
+        );
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "no temp residue");
         let _ = fs::remove_dir_all(root);
     }
 
@@ -954,6 +1078,7 @@ mod tests {
             &target.to_string_lossy(),
             content,
             Some(baseline),
+            None,
             &mut |stage| {
                 seen.push(stage);
                 on_stage(stage);
@@ -1090,6 +1215,7 @@ mod tests {
             target.to_string_lossy().to_string(),
             "My edit\n".into(),
             Some("blake3:0000000000000000000000000000000000000000000000000000000000000000".into()),
+            None,
         );
 
         let error = result.expect_err("a missing file with an expected baseline must conflict, not silently create");

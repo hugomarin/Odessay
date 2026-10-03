@@ -465,10 +465,14 @@ fn dispatch(cmd: &str, args: &Value) -> Result<Value, String> {
         // ── SYNC-05: la cadena de guardado y la cola de mutaciones ────────────
         "write_file" => {
             let expected: Option<String> = typed_arg(args, "expectedContentHash");
+            // ODE-635: optional identity guard; recordings made before it carry
+            // no `expectedInode`, so an absent key is the "no guard" shape.
+            let expected_inode: Option<u64> = args.get("expectedInode").and_then(Value::as_u64);
             document::write_file(
                 string_arg(args, "path"),
                 string_arg(args, "content"),
                 expected,
+                expected_inode,
             )
             .map(|()| Value::Null)
         }
