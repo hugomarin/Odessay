@@ -18,6 +18,9 @@
  *        out-of-scope path or an unobservable mount never detaches anything;
  *      · identity is exhausted (path → inode/move → local hash → cloud hash →
  *        ambiguous) before minting a new UUID;
+ *      · a pass that saw only one half of a possible cross-root move expands
+ *        once to every active root before minting or confirming a detach
+ *        (ODE-661), so the decision follows disk state, not notice timing;
  *      · a burst of events collapses to one logical transaction / CatalogChange.
  *
  * The pure resolver (`reconcileRoot`) is deterministic. Manifest-atomic writes and
@@ -633,11 +636,7 @@ export function createWorkspaceReconciler(
     let anyUnobservable = false
     let anyFailed = false
 
-    // Phase 1 — scan and resolve. A scan failure stays isolated per root.
-    const scanned: ScannedRoot[] = []
-    for (const rootId of rootIds) {
-      const root = rootsById.get(rootId)
-      if (!root) continue
+    const scanAndResolve = async (root: ReconcilerRoot): Promise<ScannedRoot | null> => {
       try {
         const { observed, unbound, knownBindings } = await deps.scanRoot(root)
         const result = reconcileRoot({
@@ -650,18 +649,52 @@ export function createWorkspaceReconciler(
         })
         if (result.unobservable) anyUnobservable = true
         const unboundFiles = unbound ?? []
-        scanned.push({
+        return {
           root,
           unbound: unboundFiles,
           knownBindings,
           result,
           device: rootDeviceFor(observed, unboundFiles),
-        })
+        }
       } catch {
         // Isolate failures by root. One unavailable/legacy root must not prevent
         // newly adopted roots from reaching the shared catalog. The failed root
         // remains untouched and overall readiness still surfaces the problem.
         anyFailed = true
+        return null
+      }
+    }
+
+    // Phase 1 — scan and resolve the affected roots. A scan failure stays
+    // isolated per root.
+    const attempted = new Set(rootIds)
+    const scanned: ScannedRoot[] = []
+    for (const rootId of rootIds) {
+      const root = rootsById.get(rootId)
+      if (!root) continue
+      const entry = await scanAndResolve(root)
+      if (entry) scanned.push(entry)
+    }
+
+    // Phase 1b — a suspicious partial result with no counterpart in this pass
+    // (an unbound file but no confirmed detach, or a confirmed detach but no
+    // unbound file) widens the SAME pass to every active root before identity
+    // is minted or a detach confirmed, so a move split across bursts can still
+    // correlate (ODE-661). At most one expansion per pass: the coalesced burst
+    // is the unit, a root is scanned once, and an ordinary edit — no unbound,
+    // no detach — never pays for another root's scan.
+    const hasUnbound = scanned.some(
+      (entry) => !entry.result.unobservable && entry.unbound.length > 0,
+    )
+    const hasDetached = scanned.some(
+      (entry) => !entry.result.unobservable && entry.result.detached.length > 0,
+    )
+    if (hasUnbound !== hasDetached) {
+      for (const root of rootsById.values()) {
+        if (attempted.has(root.id)) continue
+        attempted.add(root.id)
+        const entry = await scanAndResolve(root)
+        if (entry) scanned.push(entry)
       }
     }
 
