@@ -113,6 +113,7 @@ const {
   assertNoUnhandledErrors,
   clickEditorTab,
   clickNewArtifact,
+  closeEditorTab,
   emitTauriEvent,
   flush,
   installNetworkDouble,
@@ -1612,6 +1613,59 @@ describe("EXP-05 — el enlace de compartir se atribuye al documento de origen (
 
       releaseRotate({ error: null, data: previewLink(LINK_A_ROTATED) })
       await waitForShareLinkText(LINK_A_ROTATED)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "cerrar todas las pestañas durante una regeneración conserva el dueño hasta que termina",
+    async () => {
+      const textA = "ODE652-CLOSE-ALL-ROTATE"
+      const a = await createAndOpenDocument(textA)
+      await confirmInCloud(a, textA)
+
+      world.getPreviewLink = async () => ({ error: null, data: previewLink(LINK_A) })
+      let releaseRotate: (value: { error: unknown; data: SharePreviewLink | null }) => void = () => {
+        throw new Error("la rotación no quedó retenida")
+      }
+      const heldRotate = new Promise<{ error: unknown; data: SharePreviewLink | null }>((resolve) => {
+        releaseRotate = resolve
+      })
+      world.rotatePreviewLink = async () => heldRotate
+
+      await clickEditorTab(a)
+      await waitForHydrationReady("A activo antes de la regeneración")
+      await openShareTab()
+      await waitForShareLinkText(LINK_A)
+
+      await clickShareAction("Regenerate")
+      expect(shareActionButton("Regenerate")?.disabled, "rotación en curso").toBe(true)
+
+      // Cerrar todas las pestañas: la única es A.
+      await closeEditorTab(a)
+      await flush(3)
+      expect(getEditorSessionState().session.tabs.length, "sin pestañas abiertas").toBe(0)
+
+      // Sin el keep-alive, este cierre destruye al dueño que recuerda la
+      // mutación; reabrir A montaría uno nuevo sin época ni memoria del
+      // rotate en vuelo y su GET podría quedarse con el enlace anterior.
+      // Sin el keep-alive, este cierre destruye al dueño que recuerda la
+      // mutación; reabrir A montaría uno nuevo sin época ni memoria del
+      // rotate en vuelo y su GET podría quedarse con el enlace anterior.
+      expect(
+        document.querySelector('[data-testid="editor-panel-properties"]'),
+        "el dueño del enlace sobrevive al cierre de todas las pestañas mientras la acción está en vuelo",
+      ).not.toBeNull()
+
+      releaseRotate({ error: null, data: previewLink(LINK_A_ROTATED) })
+      await flush(5)
+
+      // Al terminar la acción, el panel oculto se retira: no queda DOM vivo.
+      await waitFor(
+        () => (document.querySelector('[data-testid="editor-panel-properties"]') ? null : true),
+        { label: "el panel oculto se retira al terminar la acción" },
+      )
       assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
