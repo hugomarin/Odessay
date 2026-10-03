@@ -78,11 +78,21 @@ pub fn create_file(dir: String, filename: String) -> Result<String, String> {
 /// when it started this save. A mismatch (or the file having disappeared)
 /// means the file changed since the caller last knew about it, and the write
 /// is refused with a `CONFLICT: ` prefixed error instead of silently
-/// clobbering someone else's edit. `None` skips the check entirely — used
-/// for a brand-new file with no prior baseline to compare against. The
+/// clobbering someone else's edit. `None` skips the content check entirely —
+/// used for a brand-new file with no prior baseline to compare against. The
 /// check is made twice: early, before the `.tmp` is written, and again at
 /// the commit itself (`commit_if_unchanged`, ODE-578), so a save that lands
 /// while the `.tmp` is being written is refused too.
+///
+/// `expected_inode` is the ODE-635 identity guard for a write with no content
+/// baseline: the caller resolved the concrete file it was about to overwrite,
+/// and that file's inode travels here. The write may replace that same file,
+/// or create it when it is gone, but it must never replace a different file
+/// that appeared at the path in the meantime (a rename moved the document and
+/// someone else created new content at the old path). The inode is checked
+/// early and revalidated at the commit itself, so the guard holds across the
+/// whole write even when the file is swapped in the window. `None` keeps the
+/// historical behavior (optional guard, not a content baseline).
 #[tauri::command]
 pub fn write_file(
     path: String,
@@ -106,7 +116,7 @@ fn write_file_with_stages(
     path: &str,
     content: &str,
     expected_content_hash: Option<String>,
-    _expected_inode: Option<u64>,
+    expected_inode: Option<u64>,
     at_stage: &mut dyn FnMut(WriteStage),
 ) -> Result<(), String> {
     let target = Path::new(path);
@@ -125,6 +135,20 @@ fn write_file_with_stages(
                 target.display()
             ));
         }
+    } else if let Some(expected) = expected_inode {
+        // No content baseline: the only precondition is the identity of the
+        // file this save resolved. A different file at the path is someone
+        // else's content and must never be replaced.
+        if target.exists() {
+            if let Ok(actual) = file_inode(target) {
+                if actual != expected {
+                    return Err(format!(
+                        "CONFLICT: {} was replaced on disk since it was resolved (expected file identity {expected}, found {actual})",
+                        target.display()
+                    ));
+                }
+            }
+        }
     }
 
     if let Some(parent) = target.parent() {
@@ -135,15 +159,152 @@ fn write_file_with_stages(
     let tmp_path = format!("{}.tmp", path);
     fs::write(&tmp_path, content).map_err(|e| format!("write_file tmp: {e}"))?;
     at_stage(WriteStage::BeforeCommit);
-    match expected_content_hash {
-        Some(expected) => {
+    match (expected_content_hash, expected_inode) {
+        (Some(expected), _) => {
             commit_if_unchanged(target, Path::new(&tmp_path), content, &expected, at_stage)
         }
-        None => fs::rename(&tmp_path, target).map_err(|e| {
+        (None, Some(expected)) => {
+            commit_if_same_file(target, Path::new(&tmp_path), content, expected, at_stage)
+        }
+        (None, None) => fs::rename(&tmp_path, target).map_err(|e| {
             let _ = fs::remove_file(&tmp_path);
             format!("write_file rename: {e}")
         }),
     }
+}
+
+/// Identity of a file for the ODE-635 no-baseline guard: the inode on unix,
+/// which a rename preserves and a replacement does not. Platforms without an
+/// inode report `Unsupported` so the guard degrades to the historical
+/// behavior instead of refusing saves it cannot verify.
+fn file_inode(path: &Path) -> std::io::Result<u64> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        fs::metadata(path).map(|metadata| metadata.ino())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
+    }
+}
+
+/// Commit boundary of an identity-guarded write (ODE-635): same exchange as
+/// `commit_if_unchanged`, but the displaced file is accepted only when its
+/// inode is the one the caller resolved. The target is still the same file
+/// when the write starts and someone swaps it in the window — the swap is
+/// detected and put back instead of being overwritten.
+fn commit_if_same_file(
+    target: &Path,
+    tmp: &Path,
+    content: &str,
+    expected_inode: u64,
+    at_stage: &mut dyn FnMut(WriteStage),
+) -> Result<(), String> {
+    match exchange_paths(tmp, target) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if !target.exists() {
+                // The resolved file was already gone and nothing replaced it:
+                // create the target without ever overwriting (a file that
+                // appears in this very window makes the link fail).
+                return link_into_place(tmp, target);
+            }
+            let _ = fs::remove_file(tmp);
+            return Err(format!(
+                "CONFLICT: {} changed on disk while the save was being written",
+                target.display()
+            ));
+        }
+        Err(error) if exchange_unsupported(&error) => {
+            return commit_by_identity_revalidation(target, tmp, expected_inode);
+        }
+        Err(error) => {
+            let _ = fs::remove_file(tmp);
+            return Err(format!("write_file exchange: {error}"));
+        }
+    }
+
+    let displaced = file_inode(tmp);
+    if matches!(&displaced, Ok(actual) if *actual == expected_inode) {
+        let _ = fs::remove_file(tmp);
+        return Ok(());
+    }
+    let found = match &displaced {
+        Ok(inode) => inode.to_string(),
+        Err(error) => format!("an unreadable identity ({error})"),
+    };
+
+    at_stage(WriteStage::BeforeRestore);
+    if exchange_paths(tmp, target).is_ok() && is_exactly(tmp, content) {
+        let _ = fs::remove_file(tmp);
+        return Err(format!(
+            "CONFLICT: {} was replaced on disk while the save was being written (expected file identity {}, found {found})",
+            target.display(),
+            expected_inode
+        ));
+    }
+    // Restoring did not bring our own content back: the `.tmp` path holds a
+    // version someone else wrote. Keep it beside the target.
+    let kept = keep_beside(target, tmp)?;
+    Err(format!(
+        "CONFLICT: {} was replaced on disk while the save was being written; another version was kept at {}",
+        target.display(),
+        kept.display()
+    ))
+}
+
+/// No-overwrite creation for the identity guard's absent-target branch: the
+/// hard link fails if anything appeared at the target in the window.
+fn link_into_place(tmp: &Path, target: &Path) -> Result<(), String> {
+    match fs::hard_link(tmp, target) {
+        Ok(()) => {
+            let _ = fs::remove_file(tmp);
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let _ = fs::remove_file(tmp);
+            Err(format!(
+                "CONFLICT: {} appeared on disk while the save was being written",
+                target.display()
+            ))
+        }
+        Err(error) => {
+            let _ = fs::remove_file(tmp);
+            Err(format!("write_file link: {error}"))
+        }
+    }
+}
+
+/// Fallback for volumes without an atomic exchange: re-check the identity
+/// right before the replace. This narrows the window to two syscalls instead
+/// of closing it, and preserves the historical behavior on platforms without
+/// an inode.
+fn commit_by_identity_revalidation(target: &Path, tmp: &Path, expected_inode: u64) -> Result<(), String> {
+    if !target.exists() {
+        return link_into_place(tmp, target);
+    }
+    match file_inode(target) {
+        Ok(actual) if actual == expected_inode => {}
+        Err(_) => {
+            return fs::rename(tmp, target).map_err(|e| {
+                let _ = fs::remove_file(tmp);
+                format!("write_file rename: {e}")
+            });
+        }
+        Ok(_) => {
+            let _ = fs::remove_file(tmp);
+            return Err(format!(
+                "CONFLICT: {} was replaced on disk while the save was being written",
+                target.display()
+            ));
+        }
+    }
+    fs::rename(tmp, target).map_err(|e| {
+        let _ = fs::remove_file(tmp);
+        format!("write_file rename: {e}")
+    })
 }
 
 /// The commit boundary of a guarded write (ODE-578). The check above runs
