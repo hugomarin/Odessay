@@ -289,6 +289,49 @@ async function waitForCatalogBindingAt(path: string) {
   throw new Error(`El catálogo no resolvió ${path}`)
 }
 
+type ScanCall = { rootPath: string; files: number }
+
+/**
+ * Cuenta pasadas y archivos inspeccionados por `scanRoot` del reconciler real.
+ * Instrumenta el transporte Tauri (boundary externo ya doblado): cada scan
+ * emite exactamente un `workspace_sync` con `mintUnbound:false`, así que contar
+ * `workspace_sync` por `rootPath` mide el coste del barrido sin tocar el owner.
+ */
+function countWorkspaceSyncScans(): ScanCall[] {
+  const scans: ScanCall[] = []
+  const inner = world.tauriInvoke
+  world.tauriInvoke = async (command, args) => {
+    const result = await inner(command, args)
+    if (command === "workspace_sync") {
+      const snapshot = result as { files?: unknown[]; unboundFiles?: unknown[] }
+      scans.push({
+        rootPath: typeof args?.rootPath === "string" ? args.rootPath : "",
+        files: (snapshot.files?.length ?? 0) + (snapshot.unboundFiles?.length ?? 0),
+      })
+    }
+    return result
+  }
+  return scans
+}
+
+/**
+ * Prefijo de scans de la primera pasada de una ráfaga: corta en la primera
+ * raíz repetida. Una pasada correcta escanea cada raíz activa como máximo una
+ * vez; los bursts posteriores (p. ej. el disparado por la escritura del
+ * manifest del destino) pueden volver a escanear una raíz ya vista y quedan
+ * fuera de la medición.
+ */
+function firstPassScans(scans: ScanCall[]): ScanCall[] {
+  const pass: ScanCall[] = []
+  const seen = new Set<string>()
+  for (const scan of scans) {
+    if (seen.has(scan.rootPath)) break
+    seen.add(scan.rootPath)
+    pass.push(scan)
+  }
+  return pass
+}
+
 describe("ODE-657 — movimiento externo entre dos raíces vigiladas (WATCH-04)", () => {
   it(
     "conserva el UUID de A en B cuando el watcher notifica A primero",
@@ -593,6 +636,123 @@ describe("ODE-615 — variantes de la prueba WATCH-04", () => {
 })
 
 /**
+ * ODE-661 — review ronda 1 (P1): la raíz de origen vacía.
+ *
+ * Si el único archivo de A es el que se mueve, A queda sin archivos y la
+ * pasada no tiene evidencia de archivos para inferir su volumen; la
+ * correlación no puede depender de que la raíz origen conserve archivos para
+ * verificar el mismo volumen. Los dos órdenes de llegada (500 ms) conservan el
+ * UUID y el barrido escanea cada raíz activa una sola vez, con la raíz origen
+ * inspeccionada sin archivos.
+ */
+describe("ODE-661 — raíz de origen vacía (review ronda 1)", () => {
+  it.fails(
+    "dos ráfagas con raíz de origen vacía: si B llega primero, conserva el UUID original",
+    async () => {
+      const rootA = makeRoot("Raiz 661 vacia A")
+      const rootB = makeRoot("Raiz 661 vacia B")
+      const pathA = writeMarkdownIn(rootA, "Carta origen vacio", "ODE661 cuerpo origen vacio B.")
+      await registerWorkspace(rootA)
+      await registerWorkspace(rootB)
+      await startReconciler()
+      await mountLoaded()
+      const writingId = await openFromNativeMenu(pathA, "ODE661 cuerpo origen vacio B.")
+      await waitForWatcherOn(rootA)
+      await waitForWatcherOn(rootB)
+
+      const scans = countWorkspaceSyncScans()
+      const pathB = join(rootB, "Carta origen vacio.md")
+      renameSync(pathA, pathB)
+      await emitFsWatchEvent([pathB])
+      await advance(500) // primera pasada: solo B
+      await waitForCatalogBindingAt(pathB)
+      const firstBurstScans = scans.slice()
+      await emitFsWatchEvent([pathA])
+      await advance(500) // segunda pasada (>250 ms después): solo A
+
+      const catalog = await getDocumentCatalog()
+      const record = await waitForCatalogBindingAt(pathB)
+      expect(record.id, "el UUID de A sobrevive en B").toBe(writingId)
+      expect(record.localPresent).toBe(true)
+      expect((await catalog.resolvePath(pathA)).kind, "la ruta vieja ya no resuelve").toBe("unbound")
+      expect(
+        (await catalog.getById(writingId))?.localPresent,
+        "el original no queda desligado",
+      ).toBe(true)
+      await waitFor(() => bannerText().includes(MOVED_NOTICE), {
+        label: "la shell avisa moved pese a las dos ráfagas",
+        timeoutMs: 15_000,
+      })
+      expect(bannerText()).not.toContain(DELETED_NOTICE)
+      expect(activeTab()?.writing_id).toBe(writingId)
+
+      // Medición de la pasada sospechosa: la expansión escanea las tres raíces
+      // activas una sola vez; la raíz origen vacía no aporta archivos y el
+      // destino inspecciona el archivo no ligado.
+      const passScans = firstPassScans(firstBurstScans)
+      const scansByRoot = new Map(passScans.map((scan) => [scan.rootPath, scan]))
+      expect(passScans.length, "la expansión escanea las tres raíces activas").toBe(3)
+      expect(scansByRoot.get(rootA)?.files, "la raíz origen vacía no aporta archivos").toBe(0)
+      expect(scansByRoot.get(rootB)?.files, "la raíz destino inspecciona el no ligado").toBe(1)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "dos ráfagas con raíz de origen vacía: si A llega primero, el detach no se pierde",
+    async () => {
+      const rootA = makeRoot("Raiz 661 vacia A inversa")
+      const rootB = makeRoot("Raiz 661 vacia B inversa")
+      const pathA = writeMarkdownIn(rootA, "Carta origen vacio inversa", "ODE661 cuerpo origen vacio A.")
+      await registerWorkspace(rootA)
+      await registerWorkspace(rootB)
+      await startReconciler()
+      await mountLoaded()
+      const writingId = await openFromNativeMenu(pathA, "ODE661 cuerpo origen vacio A.")
+      await waitForWatcherOn(rootA)
+      await waitForWatcherOn(rootB)
+
+      const scans = countWorkspaceSyncScans()
+      const pathB = join(rootB, "Carta origen vacio inversa.md")
+      renameSync(pathA, pathB)
+      await emitFsWatchEvent([pathA])
+      await advance(500) // primera pasada: solo A desliga
+      await waitForCatalogBindingAt(pathB)
+      const firstBurstScans = scans.slice()
+      await emitFsWatchEvent([pathB])
+      await advance(500) // segunda pasada (>250 ms después): solo B acuña
+
+      const catalog = await getDocumentCatalog()
+      const record = await waitForCatalogBindingAt(pathB)
+      expect(record.id, "la evidencia del detach no se pierde: B reusa el UUID").toBe(writingId)
+      expect(record.localPresent).toBe(true)
+      expect(
+        (await catalog.getById(writingId))?.binding?.canonicalPath,
+        "el UUID original sigue vivo en B",
+      ).toBe(pathB)
+      await waitFor(() => bannerText().includes(MOVED_NOTICE), {
+        label: "la shell avisa moved pese a las dos ráfagas inversas",
+        timeoutMs: 15_000,
+      })
+      expect(bannerText()).not.toContain(DELETED_NOTICE)
+      expect(activeTab()?.writing_id).toBe(writingId)
+
+      // Medición de la pasada sospechosa: la expansión escanea las tres raíces
+      // activas una sola vez; la raíz origen vacía no aporta archivos y el
+      // destino inspecciona el archivo no ligado.
+      const passScans = firstPassScans(firstBurstScans)
+      const scansByRoot = new Map(passScans.map((scan) => [scan.rootPath, scan]))
+      expect(passScans.length, "la expansión escanea las tres raíces activas").toBe(3)
+      expect(scansByRoot.get(rootA)?.files, "la raíz origen vacía no aporta archivos").toBe(0)
+      expect(scansByRoot.get(rootB)?.files, "la raíz destino inspecciona el no ligado").toBe(1)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+/**
  * ODE-661 — coste del barrido. La expansión solo existe para un resultado
  * sospechoso y una vez por ráfaga; la edición normal de un archivo ligado debe
  * seguir costando un scan de su raíz. Se instrumenta el transporte Tauri
@@ -602,25 +762,6 @@ describe("ODE-615 — variantes de la prueba WATCH-04", () => {
  * (manifest + unbound) sin tocar el owner.
  */
 describe("ODE-661 — coste del barrido", () => {
-  type ScanCall = { rootPath: string; files: number }
-
-  function countWorkspaceSyncScans(): ScanCall[] {
-    const scans: ScanCall[] = []
-    const inner = world.tauriInvoke
-    world.tauriInvoke = async (command, args) => {
-      const result = await inner(command, args)
-      if (command === "workspace_sync") {
-        const snapshot = result as { files?: unknown[]; unboundFiles?: unknown[] }
-        scans.push({
-          rootPath: typeof args?.rootPath === "string" ? args.rootPath : "",
-          files: (snapshot.files?.length ?? 0) + (snapshot.unboundFiles?.length ?? 0),
-        })
-      }
-      return result
-    }
-    return scans
-  }
-
   function writeNeighbours(root: string, prefix: string, count: number) {
     for (let index = 1; index <= count; index += 1) {
       writeMarkdownIn(root, `${prefix} ${index}`, `ODE661 ${prefix} ${index}.`)
