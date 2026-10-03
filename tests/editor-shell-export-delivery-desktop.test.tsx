@@ -733,7 +733,7 @@ async function assertExportChain(
 }
 
 describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
-  it.fails(
+  it(
     "PDF: éxito escribe un PDF real; cancelar y error de escritura no reportan éxito",
     async () => {
       const text = "ODE601-PDF-BODY"
@@ -762,7 +762,7 @@ describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "Word: éxito escribe un .docx real; cancelar y error de escritura no reportan éxito",
     async () => {
       const text = "ODE601-DOCX-BODY"
@@ -779,7 +779,7 @@ describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
 })
 
 describe("EXP-05 — el resultado del export se atribuye al documento de origen (ODE-652)", () => {
-  it.fails(
+  it(
     "carrera: el diálogo retenido, el cambio a B y la liberación conservan el aviso y los bytes de A",
     async () => {
       const textA = "ODE652-RACE-A"
@@ -840,7 +840,7 @@ describe("EXP-05 — el resultado del export se atribuye al documento de origen 
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "sin carrera: el toast nombra A y sigue visible al cambiar a B; Guardar sigue escribiendo el .md",
     async () => {
       const textA = "ODE652-NORACE-A"

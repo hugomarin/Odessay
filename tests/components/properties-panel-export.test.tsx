@@ -130,7 +130,7 @@ describe("PropertiesPanel export feedback (EXP-05)", () => {
     expect(actionToast()).toBeNull()
   })
 
-  it.fails("shows the source-attributed success toast when the export genuinely wrote a file (returns true)", async () => {
+  it("shows the source-attributed success toast when the export genuinely wrote a file (returns true)", async () => {
     const onExportPdf = vi.fn().mockResolvedValue(true)
     renderExportTab({ onExportPdf, onExportDocx: vi.fn() })
 
@@ -141,7 +141,7 @@ describe("PropertiesPanel export feedback (EXP-05)", () => {
     expect(toast?.textContent).toBe(`PDF export for ‘${DOCUMENT_TITLE}’ is ready`)
   })
 
-  it.fails("shows a source-attributed error, never a success message, when the export rejects (write failure)", async () => {
+  it("shows a source-attributed error, never a success message, when the export rejects (write failure)", async () => {
     const onExportPdf = vi.fn().mockRejectedValue(new Error("disk full"))
     renderExportTab({ onExportPdf, onExportDocx: vi.fn() })
 
@@ -165,7 +165,7 @@ describe("PropertiesPanel export feedback (EXP-05)", () => {
     expect(actionToast()).toBeNull()
   })
 
-  it.fails("keeps PDF and Word in the Export menu and drops Markdown (.md)", async () => {
+  it("keeps PDF and Word in the Export menu and drops Markdown (.md)", async () => {
     renderExportTab({ onExportPdf: vi.fn(), onExportDocx: vi.fn() })
 
     expect(hasButtonText("PDF (.pdf)")).toBe(true)

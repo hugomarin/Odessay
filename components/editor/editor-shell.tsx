@@ -2856,13 +2856,13 @@ export function EditorShell({
               <PropertiesPanel
                 tab={activePanel}
                 writingId={currentWritingId}
+                writingTitle={displayTitle}
                 lifecycle={lifecycle}
                 status={writingStatus}
                 artifactType={artifactType}
                 visibility={writingVisibility}
                 metrics={textMetrics}
                 canonicalPath={canonicalPath}
-                onExportMarkdown={exportMarkdown}
                 onExportPdf={() => exportBinary("pdf")}
                 onExportDocx={() => exportBinary("docx")}
                 onStatusChange={(nextStatus) => {
