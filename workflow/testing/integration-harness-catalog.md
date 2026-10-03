@@ -718,21 +718,22 @@ ODE-664 y ODE-665 no comparten archivo de código/test previsto: pgTAP directo q
 
 ### Olas y orden de merge
 
-Olas con máximo 3 builders activos; un issue retenido por decisión humana no se cuenta como dispatch listo.
+**Corrección posterior al merge (2026-10-03, revisión del Recon antes del v9).** Las olas originales dejaban ODE-670 (P0, fila CRITICAL) en la ola 3 y las dos cadenas largas al final. El v9 arranca por las cabezas de las cadenas:
 
-- **Ola 1:** ODE-667 · ODE-543 · ODE-665. Son owners independientes y no dependen de cambios de producto de esta tanda.
-- **Ola 2:** ODE-638 · ODE-661 · ODE-635 (ODE-661 permanece en hold hasta corregir la spec y su registro documental). ODE-638 y ODE-661 no comparten código.
-- **Ola 3:** ODE-670 · ODE-666. Owners distintos; preparan las dependencias de ODE-663 y ODE-664, respectivamente.
-- **Ola 4:** ODE-664 · ODE-663. Requieren merge de sus predecesores de archivo: ODE-664 después de ODE-667 y ODE-666 (y se prefiere después de 665); ODE-663 después de ODE-670.
+- **Ola 1:** ODE-670 · ODE-667 · ODE-666. Son las cabezas de las dos cadenas (670 → 663 y 667/666 → 664).
+- **Al liberarse un hueco, en este orden:** ODE-663 (cuando 670 esté mergeado) · ODE-664 (cuando 667 y 666 estén mergeados; mejor después de 665) · ODE-635 · ODE-661 (requiere la enmienda de la spec en main) · ODE-665 · ODE-638 · ODE-543.
+- Máximo 3 builders activos. Un PR aprobado no espera a otro sin arista dura.
 
-**Orden de merge propuesto para los diez:** ODE-543 → ODE-667 → ODE-665 → ODE-638 → ODE-661 → ODE-635 → ODE-666 → ODE-670 → ODE-664 → ODE-663. El merge order no autoriza deploy: ODE-664 necesita el gate humano de migración de producción descrito abajo.
+**Orden de merge preferente:** ODE-670 → ODE-667 → ODE-666 → ODE-663 → ODE-665 → ODE-664 → ODE-635 → ODE-661 → ODE-638 → ODE-543.
+
+**Merge = deploy.** Vercel despliega `main` en cada merge, así que el gate de producción de ODE-664 va **antes de su merge**, no antes de un deploy aparte (ver abajo).
 
 ### Decisiones y tareas humanas
 
 - **ODE-635 — decisión recibida de Hugo (2026-10-03):** `expectedContentHash:null` conserva el significado de “sin baseline”; no usar el hash actual del binding como sustituto. El guardado debe evitar persistir en la ruta obsoleta y proteger cambios externos. BUILD debe diseñar y probar esa ruta sin reinterpretar `null` como permiso para sobrescribir.
 - **ODE-664 — decisión recibida de Hugo (2026-10-03):** toda fila existente de `writing_shares` cuenta como grant vigente, sin backfill ni revocación automática. Un siguiente UPDATE puede restaurar el acceso al destinatario. Las filas que ya no deban conceder acceso se deben revisar/revocar explícitamente antes del cambio.
-- **ODE-661 — decisión recibida de Hugo (2026-10-03):** no fijar un máximo de tiempo para la separación entre avisos del mismo movimiento. Antes de BUILD, actualizar/aprobar el contrato del catálogo y su registro documental para quitar el límite de 250 ms; hasta entonces el issue sigue en hold. Los movimientos entre volúmenes siguen fuera de alcance según la limitación de inode.
-- **Gate de producción para ODE-664 (tarea humana):** después de staging/local validation y antes del deploy de app que retire el guard web, una persona aplica y confirma la nueva migración en producción. El rollback de la migración debe restaurar la función vigente de `20260331_phase2_visibility_rls.sql` (con slug/body_text), no la versión antigua de `initial_schema.sql`. Este Recon no inspecciona ni modifica producción y no ejecuta comandos Supabase.
+- **ODE-661 — decisión recibida de Hugo (2026-10-03):** no fijar un máximo de tiempo para la separación entre avisos del mismo movimiento. Antes de BUILD, actualizar/aprobar el contrato del catálogo y su registro documental para quitar el límite de 250 ms; hasta entonces el issue sigue en hold. **Hecho en el PR de la enmienda ODE-661 de la spec** (`odessay-desktop-document-catalog.md` § Prioridad de reconciliación, cabecera de enmiendas y `workflow/docs.json`). Los movimientos entre volúmenes siguen fuera de alcance según la limitación de inode.
+- **Gate de producción para ODE-664 (tarea humana), ANTES del merge de su PR.** No existe staging: el único proyecto Supabase se llama "odessay-staging" y **es producción**. Orden: (1) validación completa en Supabase local; (2) Hugo corre la consulta de solo lectura de la Auditoría de ODE-664 (writings privados que conservan filas en `writing_shares`) y revoca las que no deban conceder acceso, porque con el trigger esos writings pasan a `shared` en su siguiente UPDATE; (3) Hugo aplica y confirma la migración en producción; (4) se mergea el PR. El rollback de la migración debe restaurar la función vigente de `20260331_phase2_visibility_rls.sql` (con slug/body_text), no la versión antigua de `initial_schema.sql`. Este Recon no inspecciona ni modifica producción y no ejecuta comandos Supabase.
 - **Antes de cerrar ODE-661:** BUILD aporta medición representativa de roots/archivos seleccionados, contadores de expansión y prueba de ambos órdenes separados por >250 ms; confirma que edit normal no lanza full scan y que un burst sospechoso expande como máximo una vez. No se fija threshold sin dato de volumen del producto.
 - **Para toda la tanda:** Hugo confirmó las decisiones de ODE-635, ODE-664 y ODE-661; sus comentarios `## Decisiones` ya están registrados en Linear. Antes del dispatch, los otros issues necesitan su comentario humano `## Decisiones` de cierre según `area-recon.md`. No se han aplicado defaults que Hugo no haya confirmado.
 
