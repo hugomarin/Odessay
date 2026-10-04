@@ -13,38 +13,125 @@ type PageProps = {
   params: Promise<{ id: string }>
 }
 
-type WritingRow = {
+type SessionClient = Awaited<ReturnType<typeof createClient>>
+
+type WritingSummaryRow = {
   id: string
   title: string | null
-  slug: string | null
+}
+
+type WritingDetailRow = {
+  id: string
+  title: string | null
   body_json: JSONContent | null
   body_text: string
   updated_at: string
-  author_id: string
-  visibility: string
-  deleted_at: string | null
   profiles: { username: string; display_name: string } | { username: string; display_name: string }[] | null
 }
 
+type WritingLifecycle = "owner" | "share"
+
+type ResolvedWritingSummary = WritingSummaryRow & { via: WritingLifecycle }
+
 function normalizeProfile(
-  profiles: WritingRow["profiles"],
+  profiles: WritingDetailRow["profiles"],
 ): { username: string; display_name: string } | null {
   if (!profiles) return null
   if (Array.isArray(profiles)) return profiles[0] ?? null
   return profiles
 }
 
-const WRITING_SELECT =
-  "id, title, slug, body_json, body_text, updated_at, author_id, visibility, deleted_at, profiles!author_id(username, display_name)"
+// ODE-669: la resolución autoriza con la sesión (RLS real) y el share del
+// viewer, y solo la trae la proyección mínima. Ningún candidato perdedor
+// transfiere body_json/body_text; el detalle se pide por el UUID ganador.
+const SUMMARY_SELECT = "id, title"
+const SHARED_SUMMARY_SELECT = `${SUMMARY_SELECT}, writing_shares!inner(writing_id)`
+const DETAIL_SELECT =
+  "id, title, body_json, body_text, updated_at, profiles!author_id(username, display_name)"
+const SHARED_DETAIL_SELECT = `${DETAIL_SELECT}, writing_shares!inner(writing_id)`
 
-async function resolveSharedWriting(identifier: string, viewerId: string | null): Promise<WritingRow | null> {
-  const admin = createAdminClient()
+/**
+ * Resuelve el UUID/slug a un único candidato autorizado sin traer cuerpos:
+ * primero el written del propio viewer y, si no, el candidato compartido
+ * legible más nuevo. La autorización no se reimplementa: la fila de share del
+ * viewer (`writing_shares!inner`) y RLS (`can_read_writing`) son el oracle; el
+ * público ajeno sin share y el privado con share viejo no pasan.
+ *
+ * Un identificador con forma de UUID se resuelve solo por id: si el UUID no
+ * existe o está denegado no se reintenta como slug.
+ */
+async function resolveSharedWriting(
+  supabase: SessionClient,
+  identifier: string,
+  viewerId: string,
+): Promise<ResolvedWritingSummary | null> {
+  const byId = isUuidLikeWritingIdentifier(identifier)
 
-  if (isUuidLikeWritingIdentifier(identifier)) {
-    const { data, error } = await admin
+  const ownerQuery = supabase
+    .from("writings")
+    .select(SUMMARY_SELECT)
+    .eq("author_id", viewerId)
+    .is("deleted_at", null)
+
+  const { data: ownerRow, error: ownerError } = await (byId
+    ? ownerQuery.eq("id", identifier)
+    : ownerQuery.eq("slug", identifier)
+  )
+    .limit(1)
+    .maybeSingle()
+
+  if (ownerError) {
+    throw ownerError
+  }
+
+  if (ownerRow) {
+    return { id: ownerRow.id, title: ownerRow.title, via: "owner" }
+  }
+
+  // El slug es único por autor, así que puede haber varios candidatos para el
+  // mismo slug (ODE-659). El filtro del viewer es el grant vigente; el orden
+  // elige al más nuevo de los legibles y `.limit(1)` evita traer al resto.
+  const sharedQuery = supabase
+    .from("writings")
+    .select(SHARED_SUMMARY_SELECT)
+    .eq("writing_shares.shared_with_id", viewerId)
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false })
+
+  const { data: sharedRow, error: sharedError } = await (byId
+    ? sharedQuery.eq("id", identifier)
+    : sharedQuery.eq("slug", identifier)
+  )
+    .limit(1)
+    .maybeSingle()
+
+  if (sharedError) {
+    throw sharedError
+  }
+
+  if (!sharedRow) {
+    return null
+  }
+
+  return { id: sharedRow.id, title: sharedRow.title, via: "share" }
+}
+
+/**
+ * Carga el detalle solo del UUID ya resuelto y vuelve a comprobar el grant
+ * (relectura bajo RLS + fila de share del viewer). Si el share se revocó entre
+ * el summary y este paso, no hay fila: TOCTOU de revocación cerrado.
+ */
+async function loadAuthorizedDetail(
+  supabase: SessionClient,
+  resolved: ResolvedWritingSummary,
+  viewerId: string,
+): Promise<WritingDetailRow | null> {
+  if (resolved.via === "owner") {
+    const { data, error } = await supabase
       .from("writings")
-      .select(WRITING_SELECT)
-      .eq("id", identifier)
+      .select(DETAIL_SELECT)
+      .eq("id", resolved.id)
+      .eq("author_id", viewerId)
       .is("deleted_at", null)
       .maybeSingle()
 
@@ -52,74 +139,22 @@ async function resolveSharedWriting(identifier: string, viewerId: string | null)
       throw error
     }
 
-    if (data) {
-      const writing = data as WritingRow
-      return (await canViewerReadWriting(admin, writing, viewerId)) ? writing : null
-    }
+    return (data as WritingDetailRow | null) ?? null
   }
 
-  // El slug es único por autor, así que puede haber varios candidatos para el
-  // mismo slug (ODE-659). Se conservan solo los legibles por el viewer (misma
-  // regla D-1) y la elección es determinista: primero el suyo y, si no, el más
-  // reciente. Nunca un maybeSingle que reviente con dos filas.
-  const { data, error } = await admin
+  const { data, error } = await supabase
     .from("writings")
-    .select(WRITING_SELECT)
-    .eq("slug", identifier)
+    .select(SHARED_DETAIL_SELECT)
+    .eq("id", resolved.id)
+    .eq("writing_shares.shared_with_id", viewerId)
     .is("deleted_at", null)
-    .order("updated_at", { ascending: false })
+    .maybeSingle()
 
   if (error) {
     throw error
   }
 
-  const readable: WritingRow[] = []
-  for (const candidate of (data ?? []) as WritingRow[]) {
-    if (await canViewerReadWriting(admin, candidate, viewerId)) {
-      readable.push(candidate)
-    }
-  }
-
-  return readable.find((candidate) => candidate.author_id === viewerId) ?? readable[0] ?? null
-}
-
-/**
- * Regla D-1 del camino service-role (intersección): autor, o fila de share
- * `can_read_writing` (la misma regla que RLS). Un público ajeno sin share no
- * abre por `/shared`, y un privado con share viejo tampoco: el exceso de
- * confianza en la fila de share es la fuga F1.
- */
-async function canViewerReadWriting(
-  admin: ReturnType<typeof createAdminClient>,
-  writing: WritingRow,
-  viewerId: string | null,
-): Promise<boolean> {
-  if (!viewerId) return false
-  if (writing.author_id === viewerId) return true
-
-  const { data: shareRow, error: shareError } = await admin
-    .from("writing_shares")
-    .select("id")
-    .eq("writing_id", writing.id)
-    .eq("shared_with_id", viewerId)
-    .maybeSingle()
-
-  if (shareError) {
-    throw shareError
-  }
-
-  if (!shareRow) return false
-
-  const { data: canRead, error: canReadError } = await admin.rpc("can_read_writing", {
-    target_writing_id: writing.id,
-    viewer_id: viewerId,
-  })
-
-  if (canReadError) {
-    throw canReadError
-  }
-
-  return canRead === true
+  return (data as WritingDetailRow | null) ?? null
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -129,7 +164,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     data: { user },
   } = await supabase.auth.getUser()
 
-  const writing = await resolveSharedWriting(identifier, user?.id ?? null)
+  // Solo el título autorizado: el summary no trae body y sin sesión no hay
+  // candidato legible que consultar.
+  const writing = user ? await resolveSharedWriting(supabase, identifier, user.id) : null
 
   return {
     title: writing?.title ? `${writing.title} — Artifact Studio` : "Reading — Artifact Studio",
@@ -147,19 +184,23 @@ export default async function SharedReadingPage({ params }: PageProps) {
 
   if (!user) redirect("/login")
 
-  const writing = await resolveSharedWriting(identifier, user.id)
+  const resolved = await resolveSharedWriting(supabase, identifier, user.id)
+
+  if (!resolved) notFound()
+
+  // La URL canónica de `/shared` es el id (ODE-659): un slug viejo que
+  // resuelve para el viewer redirige al id sin cargar el cuerpo.
+  if (identifier !== resolved.id) {
+    redirect(`/shared/${resolved.id}`)
+  }
+
+  const writing = await loadAuthorizedDetail(supabase, resolved, user.id)
 
   if (!writing) notFound()
 
-  const isAuthor = writing.author_id === user.id
+  const isAuthor = resolved.via === "owner"
 
-  // La URL canónica de `/shared` es el id (ODE-659): un slug viejo que
-  // resuelve para el viewer redirige al id.
-  if (identifier !== writing.id) {
-    redirect(`/shared/${writing.id}`)
-  }
-
-  const profile = normalizeProfile((writing as WritingRow).profiles)
+  const profile = normalizeProfile(writing.profiles)
 
   // Build sequence: all writings shared with this user (or authored), ordered by updated_at desc
   let prevWritingId: string | null = null
