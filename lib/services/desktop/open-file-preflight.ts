@@ -1,4 +1,3 @@
-import { tauriOpenFile } from "@/lib/services/desktop/tauri-commands"
 import { describeOpenFileReadFailure } from "@/lib/services/open-document-factory"
 
 /**
@@ -21,6 +20,9 @@ export type OpenFilePreflight =
 export async function preflightOpenFile(path: string): Promise<OpenFilePreflight> {
   let content: string
   try {
+    // Same lazy native boundary the four callers used before this helper:
+    // the Tauri command module only loads when a preflight actually runs.
+    const { tauriOpenFile } = await import("@/lib/services/desktop/tauri-commands")
     content = await tauriOpenFile(path)
   } catch (error) {
     const message = describeOpenFileReadFailure(error)
