@@ -157,9 +157,10 @@ Ese rol usa `.agents/skills/architecture-recon/SKILL.md` para localizar owner/si
    - un commit `test(...)` no toca producción;
    - un `it.fails` no entra en el mismo commit que su fix;
    - el commit que convierte `it.fails` → `it` no cambia nada más del test;
-   - cada fila tocada del capability map tiene tantas celdas como su cabecera.
+   - cada fila tocada del capability map tiene tantas celdas como su cabecera;
+   - una fila tocada en `INTEGRATION` no contiene una cláusula vigente que diga que sigue en `PARTIAL` (una mención histórica queda exenta si no afirma el estado actual).
 
-   La coherencia entre `Status`, `Note` y `Evidence` de una fila no la juzga el precheck: es texto libre y la revisa REVIEW. Si la fila toca un rollup o contador, REVIEW confirma que también coincide con la evidencia.
+   El precheck solo detecta esa contradicción explícita. REVIEW juzga la coherencia completa entre `Status`, `Note` y `Evidence`, y confirma que rollups o contadores tocados coincidan con la evidencia.
 
    CI lo vuelve a correr en `process-checks`. Si falla, se corrige la historia de la rama (un rebase no interactivo y `git push --force-with-lease`, solo en la rama del issue) antes de abrir el PR.
 

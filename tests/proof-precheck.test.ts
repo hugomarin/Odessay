@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest"
 // ODE-656 — the pure rules behind `ops:proof:precheck`. Each rule has a case
 // that violates it and one that honours it. The cases mirror the three review
 // FAILs of milestone 4 batch 2 that the precheck now catches before the PR
-// opens (ODE-636 r1, ODE-593 r1). Whether a row's Note fits its Status is
-// free text, so REVIEW judges it; the precheck does not.
+// opens (ODE-636 r1, ODE-637 P2 r1, ODE-593 r1). The map contradiction rule
+// stays narrow; REVIEW still judges full Status/Note/Evidence coherence.
 
 const {
   checkCapabilityMap,

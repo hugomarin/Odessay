@@ -136,6 +136,10 @@ export function tableCells(line) {
 
 const SEPARATOR_ROW = /^\|\s*:?-{3,}/
 const SCENARIO_ROW = /^\|\s*([A-Z]+-\d+)\s*\|/
+const STILL_PARTIAL = /\b(remains|stays|still|sigue|queda|permanece)\b[^.|]{0,40}\bPARTIAL/i
+const HISTORICAL = /histor|hist[oó]ric|\bat the time of\b|\ben su momento\b|\b(before|until|antes de|hasta) ODE-|\b(reported|estaba|quedaba|seguía)\b/i
+const CURRENT = /\b(current|currently|now|today|actualmente|actual|ahora|hoy|todavía hoy)\b/i
+const CLAUSE_BREAK = /,\s+(?:but|pero|while|mientras|and now|y ahora)\s+|;\s+/i
 
 /**
  * Check the capability map rows whose exact text appears in `changedLines`
@@ -171,6 +175,26 @@ export function checkCapabilityMap(text, changedLines) {
         rule: "map-row-cell-count",
         detail: `${CAPABILITY_MAP_PATH}:${index + 1} (${id}) has ${cells.length} cells; its table header has ${headerCells}. Escape literal pipes as \\| or move the text into the Note.`,
       })
+      continue
+    }
+
+    // Keep this mechanical check narrow: only an INTEGRATION row contradicted
+    // by a clause that explicitly says it remains PARTIAL. A historical marker
+    // exempts its clause, unless that same clause also asserts the current state.
+    if (headerCells === 8 && SCENARIO_ROW.test(line)) {
+      const status = cells[4].replace(/[\s*`]/g, "")
+      if (status !== "INTEGRATION") continue
+      const clauses = cells[7].split(/(?<=[.;])\s+/).flatMap((sentence) => sentence.split(CLAUSE_BREAK))
+      const contradiction = clauses.find(
+        (clause) => STILL_PARTIAL.test(clause) && (!HISTORICAL.test(clause) || CURRENT.test(clause)),
+      )
+      if (contradiction) {
+        violations.push({
+          sha: "map",
+          rule: "map-status-note-contradiction",
+          detail: `${CAPABILITY_MAP_PATH}:${index + 1} (${id}) is INTEGRATION but its Note still says: "${contradiction.trim().slice(0, 160)}". Check the current clause against the row's Evidence.`,
+        })
+      }
     }
   }
 
