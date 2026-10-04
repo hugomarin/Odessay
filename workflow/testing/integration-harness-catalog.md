@@ -792,7 +792,7 @@ El recorder delega la cola en `real-desktop-doubles.ts` y añade `tauriCatalogLi
 
 **Decisiones registradas (Hugo, 2026-10-03, Linear MCP):** (A) ODE-632 oculta las seis acciones sin implementación en Markdown y sincroniza su disponibilidad nativa; (B) ODE-649 usa “Could not suggest a name. Try again.”; (C) ODE-640 reemplaza el negativo inalcanzable y protege frente al cambio de UUID activo; (D) ODE-623 queda en G1 y ODE-639/641 en G2, con tope de 60 min. Los comentarios `## Decisiones` están en los issues afectados.
 
-- **Ola 1 (hasta 7 builders paralelos, tras PASS de 0R):** B, C, D, E2, E3, F, G1. El usuario levantó el límite inicial de tres workers; las dependencias de archivos siguen vigentes.
+- **Ola 1 (tras PASS de 0R; máximo 3 builders a la vez):** B, C, D, E2, E3, F, G1, en ese orden de despacho a medida que se liberan huecos. **Corrección del 2026-10-04:** Hugo levantó el límite de agentes del **Recon**, no el de builders. El máximo de 3 builders se mantiene (lección S2: con más de 3 a la vez, 21 archivos fallaron en la suite completa).
 - **Ola 2:** A y E1, tras PASS de 0R; A espera el PR F por el hook compartido.
 - **Ola 3:** G2, solo después de A por `editor-shell-commands.test.tsx`; detener y separar 641 si excede el límite de 60 minutos, sin sustituir condiciones observables por sleeps.
 
@@ -822,4 +822,4 @@ awk -F'|' '/^# Audit Summary/{exit} /^\| *[A-Z]+-[0-9]+ *\|/{s=$6; gsub(/[ *`]/,
 
 No se crean follow-ups en Recon: colas de RAF anidado/error paths de 642; errores de load/create/write de 662; índice slug-leading solo si un EXPLAIN local lo justifica; RunEvent nativo de macOS no cubierto por el evento simulado; posible expansión de 641 si excede el timebox. No se cambia ODE-653.
 
-Los issues con decisiones llevan comentarios humanos `## Decisiones` (ODE-632, 649, 640, 623, 639 y 641); A–D quedaron aceptadas. El `ops:brief:lint --require-contract --require-recon` pasó para los 14. La fase 0R de otro agente es el gate previo a BUILD; este PR documental permanece abierto y sin merge, según instrucción de Hugo.
+Los issues con decisiones llevan comentarios humanos `## Decisiones` (ODE-632, 649, 640, 623, 639 y 641); A–D quedaron aceptadas. El `ops:brief:lint --require-contract --require-recon` pasó para los 14. La fase 0R de otro agente es el gate previo a BUILD. **Corrección del 2026-10-04:** este mapa se mergeó a main (#618, squash) sin 0R; la 0R lo audita en main antes de despachar.

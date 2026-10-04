@@ -32,6 +32,7 @@ Origen: los prompts `/orchestration` v2 → v7 de P-ODE-43 (Odessay, 2026-09-27 
 | R8 | Un commit del Recon con `ODE-###` en el asunto hizo que `drift:strict` exigiera una fila de ledger | Los commits del PR del mapa no nombran ningún `ODE-###` en el asunto |
 | R9 | Desde el paso 2 de un issue, el `git diff` del pack muestra los pasos anteriores, y el builder lo leía como cambio estructural | Prever en el prompt que los cambios de pasos previos del mismo issue son esperados |
 | R10 | La Auditoría profunda encontró problemas que el brief no veía (el 404 de 660, una fuga en 616, un filtro que escondía documentos) | El Recon es una lectura profunda y adversarial del código, nunca un resumen |
+| R11 | Los Recon tardaban de más porque se les aplicaba el tope de 3 agentes, que es de BUILD (Hugo, 2026-10-04) | El Recon no tiene tope de agentes: al menos uno por cluster, y más si un cluster es grande. El tope de 3 (S2) es solo para builders |
 
 ## 3. BUILD
 
@@ -93,7 +94,7 @@ Origen: los prompts `/orchestration` v2 → v7 de P-ODE-43 (Odessay, 2026-09-27 
 | C6 | Issues de seguimiento creados duplicados (653 de 649) o en el workspace equivocado (CON) | No se crean issues durante la orquestación: `it.fails` "follow-up pendiente" y una lista para el humano al cerrar |
 | C7 | El reviewer se detenía a pedir permiso para `git push`, `gh pr merge`, `cargo test` o el CLI del tracker | Precondición: permisos de los agentes configurados antes de arrancar |
 | C8 | En la tanda 3 se creyó que la config de Linear de Orca apuntaba a otro workspace porque decía "Context Atelier". Era falsa alarma: es el nombre de la organización (urlKey `hugo-marin`), que contiene los teams ODE y CON | Precondición: leer un issue de la tanda con `orca linear issue <id>` y comprobar team ODE; no juzgar por el nombre de la organización |
-| C9 | El MCP del tracker apuntaba a otro workspace | Usar el CLI o GraphQL del proyecto, no el MCP |
+| C9 | El MCP del tracker apuntó a otro workspace (2026-09-26) y se prohibió. **Revertida el 2026-10-04:** la prohibición alargó los Recon, y en la tanda 5 el MCP escribió en el workspace correcto | El MCP se puede usar. Antes de escribir, leer un issue de la tanda y comprobar el workspace; si es otro, usar el CLI o GraphQL |
 | C10 | Los agentes no deben tocar producción | Toda acción en producción es un gate humano con mensaje exacto (conteo antes, migración después) |
 | C11 | `.env.local` tiene la service role de producción y los worktrees lo heredan por symlink | Nada fuera del harness usa esa key; los comandos peligrosos del CLI de la base de datos están prohibidos |
 | C12 | Dos workers usando la misma base local se pisaban | Lock compartido para la base local y un solo worker la reinicia, una vez |

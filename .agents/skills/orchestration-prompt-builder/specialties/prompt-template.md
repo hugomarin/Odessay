@@ -131,7 +131,7 @@ Plantillas de spec: más abajo (Target / Change / Constraints / Ownership / Obse
 - **Worker detenido sin `worker_done`:** `worker-stop` (si queda `stop_unknown`, `worker-abandon`), después `worker-start --task <id> --retry-of <dispatch> --worktree path:<mismo> --agent <mismo>`, y `send` con lo ya hecho.
 - **BUILD terminado por evidencia:** PR abierto con body, Context Report y Guía en el issue, e issue en In Review o In Progress.
 - Después de cada merge, avisar a los builders con PR abierto en la misma ola que mergeen `origin/main`.
-- **Tracker:** el CLI desde el checkout principal; los comentarios largos, en `.cache/` con `"$(cat …)"`; la edición de briefs, por GraphQL; nunca el MCP de otro workspace.
+- **Tracker:** el MCP del tracker o el CLI desde el checkout principal, lo que sea más rápido. Con el MCP, comprobar primero que un issue de la tanda devuelve el workspace correcto. Con el CLI, los comentarios largos van en `.cache/` con `"$(cat …)"` y la edición de briefs por GraphQL.
 - No crear issues durante la orquestación.
 
 ## Control de tiempo   ← bloque fijo
