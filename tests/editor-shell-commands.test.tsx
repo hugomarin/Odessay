@@ -688,9 +688,15 @@ const COMMAND_CASES = {
       // "charlie" y no "bravo": el chequeo de Rich ya dejó `**bravo**` en el
       // documento, y togglear sobre él lo desenvolvería (comportamiento
       // correcto, pero no lo que este modo quiere fijar).
+      const before = w.markdownValue()
       await w.selectMarkdownText("charlie")
       await w.enter()
-      expect(w.markdownValue(), "bold envuelto en Markdown").toContain("**charlie**")
+      // ODE-633: valor completo, no substring — un `*charlie*` (italic) también
+      // satisface `toContain("**charlie**")` invertido, y aquí el oráculo es el
+      // delimitador exacto.
+      expect(w.markdownValue(), "bold envuelto en Markdown").toBe(
+        before.replace("charlie", "**charlie**"),
+      )
       await w.waitForSaved((record) => markTypes(asDoc(record.body_json)).includes("bold"), "bold llega a lo guardado")
     },
   },
@@ -702,9 +708,14 @@ const COMMAND_CASES = {
       expect(markTypes(w.json()), "italic aplicado en Rich").toContain("italic")
     },
     markdown: async (w) => {
+      const before = w.markdownValue()
       await w.selectMarkdownText("charlie")
       await w.enter()
-      expect(w.markdownValue(), "italic envuelto en Markdown").toContain("*charlie*")
+      // ODE-633: `toContain("*charlie*")` aceptaba `**charlie**`; el valor
+      // completo distingue cursiva de negrita.
+      expect(w.markdownValue(), "italic envuelto en Markdown").toBe(
+        before.replace("charlie", "*charlie*"),
+      )
     },
   },
   strike: {
@@ -715,9 +726,13 @@ const COMMAND_CASES = {
       expect(markTypes(w.json()), "strike aplicado en Rich").toContain("strike")
     },
     markdown: async (w) => {
+      const before = w.markdownValue()
       await w.selectMarkdownText("charlie")
       await w.enter()
-      expect(w.markdownValue(), "strike envuelto en Markdown").toContain("~~charlie~~")
+      // ODE-633: `~~charlie~~` se satisfacía con `~~~charlie~~~`.
+      expect(w.markdownValue(), "strike envuelto en Markdown").toBe(
+        before.replace("charlie", "~~charlie~~"),
+      )
     },
   },
   highlight: {
@@ -732,9 +747,13 @@ const COMMAND_CASES = {
       expect(markTypes(w.json()), "highlight aplicado en Rich").toContain("highlight")
     },
     markdown: async (w) => {
+      const before = w.markdownValue()
       await w.selectMarkdownText("charlie")
       await w.enter()
-      expect(w.markdownValue(), "highlight envuelto en Markdown").toContain("==charlie==")
+      // ODE-633: `==charlie==` se satisfacía con `===charlie===`.
+      expect(w.markdownValue(), "highlight envuelto en Markdown").toBe(
+        before.replace("charlie", "==charlie=="),
+      )
     },
   },
   inlineCode: {
@@ -745,9 +764,13 @@ const COMMAND_CASES = {
       expect(markTypes(w.json()), "code aplicado en Rich").toContain("code")
     },
     markdown: async (w) => {
+      const before = w.markdownValue()
       await w.selectMarkdownText("charlie")
       await w.enter()
-      expect(w.markdownValue(), "inline code envuelto en Markdown").toContain("`charlie`")
+      // ODE-633: un backtick también se satisface con doble delimitador.
+      expect(w.markdownValue(), "inline code envuelto en Markdown").toBe(
+        before.replace("charlie", "`charlie`"),
+      )
     },
   },
   codeBlock: {
