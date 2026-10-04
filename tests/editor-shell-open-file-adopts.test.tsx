@@ -10,27 +10,35 @@
  *   active keeps the UUID. Empty files remain valid empty documents. An
  *   invalid-UTF-8 `open_file` rejection is visible without opening another tab.
  *   If the first catalog write rejects after the manifest records an id, retry
- *   uses that id.
+ *   uses that id. The "Open With"/Dock entry (`menu:os-open-path`, a wake-up
+ *   signal whose path comes from the pending queue) holds the same properties
+ *   in Write and, outside Write, hands the one-slot pending file off to Write.
  * - Real collaborators: native menu event bus/picker callback, EditorShell,
- *   useGlobalOpenFileMenu, openDocumentByPath, openDesktopDocument,
- *   createOpenDocumentUseCase, DesktopSettingsService, SqliteDocumentCatalog
- *   class, real temporary files, editor session and hydration.
- * - Allowed fakes: Tauri command/IPC boundary and OS dialogs; the existing
- *   desktop doubles use real filesystem reads and model manifest/catalog state
- *   in memory. Cloud auth/hash lookup returns no session. Rust/SQLite command
- *   execution and actual `.odessay/index.json` serialization remain outside
- *   this Vitest proof.
+ *   useGlobalOpenFileMenu, drainPendingOsOpenPaths queue, openDocumentByPath,
+ *   openDesktopDocument, createOpenDocumentUseCase, DesktopSettingsService,
+ *   SqliteDocumentCatalog class, real temporary files, editor session and
+ *   hydration.
+ * - Allowed fakes: Tauri command/IPC boundary and OS dialogs, including the
+ *   `take_pending_open_paths` queue drain; the existing desktop doubles use
+ *   real filesystem reads and model manifest/catalog state in memory. Cloud
+ *   auth/hash lookup returns no session. Rust/SQLite command execution and
+ *   actual `.odessay/index.json` serialization remain outside this Vitest
+ *   proof, and the simulated event is not macOS's real `RunEvent::Opened`.
  * - Production path: `menu:open-file` → picker → `invoke("open_file")` →
  *   handleMenuOpenFile → openDocumentByPath → resolvePath/root registration →
  *   workspace_sync/file evidence → manifest-id reconciliation →
- *   registerBinding → activate/hydrate by UUID.
+ *   registerBinding → activate/hydrate by UUID. `menu:os-open-path` →
+ *   `take_pending_open_paths` → the same read/preflight → opener in Write or
+ *   pending-file handoff + `/write` navigation outside it.
  * - Completion: after the menu action settles, observe the active editor and
  *   query the catalog/path; read the original file bytes. Recovery completes
  *   when the retry opens with the exact id retained in the manifest model.
  *   Outside Write, the positive control confirms pending-file handoff and route
  *   navigation; invalid UTF-8 confirms the alert without either transition.
  * - Mutation: changing the production opener to use the canonical filesystem
- *   path as the document id must fail the UUID assertion.
+ *   path as the document id must fail the UUID assertion; removing the
+ *   invalid-UTF-8 alert from the shared read preflight must fail the OS-open
+ *   rejection cases.
  */
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
@@ -70,10 +78,17 @@ vi.mock("@tauri-apps/api/path", async () =>
 )
 vi.mock("@/lib/services/desktop/tauri-commands", async () => {
   const { tauriCommandsDouble } = await import("./support/editor-shell-desktop-doubles")
+  const { world } = await import("./support/editor-shell-doubles")
   const commands = tauriCommandsDouble()
   const catalogDualWrite = commands.tauriCatalogDualWrite
   return {
     ...commands,
+    // Production's `tauriOpenFile` is a thin wrapper over `invoke("open_file")`.
+    // Routing the double through the world's IPC router keeps one injection
+    // point for native rejections (invalid UTF-8) across both the menu
+    // preflight and the catalog opener.
+    tauriOpenFile: async (path: string) =>
+      world.tauriInvoke("open_file", { path }) as Promise<string>,
     tauriCatalogDualWrite: async (...args: Parameters<typeof catalogDualWrite>) => {
       const [, input] = args
       if (catalogWriteFailure.canonicalPath && input.binding?.canonicalPath === catalogWriteFailure.canonicalPath) {
@@ -133,6 +148,31 @@ let globalMenuContainer: HTMLDivElement | null = null
 const originalConfirm = window.confirm
 const originalAlert = window.alert
 
+/**
+ * Cola que el doble de `take_pending_open_paths` entrega y vacía, como el
+ * `PendingOpenPaths` de Rust: el path nunca viaja en el payload del evento.
+ */
+const pendingOsOpenPaths: string[] = []
+
+/** Router nativo de la prueba: `open_file`, la cola OS y el rechazo UTF-8. */
+function installNativeOpens(invalidPath?: string) {
+  world.tauriInvoke = async (command, args) => {
+    if (command === "open_file" && invalidPath && args?.path === invalidPath) {
+      throw NON_UTF8_OPEN_ERROR
+    }
+    if (command === "open_file") return tauriOpenFileDouble(String(args?.path))
+    if (command === "take_pending_open_paths") return pendingOsOpenPaths.splice(0)
+    throw new Error(`Comando nativo no previsto en esta prueba: ${command}`)
+  }
+}
+
+/** Entrega el path por la cola y despierta el frontend, como macOS. */
+async function queueOsOpenPath(path: string) {
+  pendingOsOpenPaths.push(path)
+  await emitTauriEvent("menu:os-open-path")
+  await flush(5)
+}
+
 function GlobalOpenFileMenuHarness() {
   useGlobalOpenFileMenu()
   return null
@@ -150,10 +190,8 @@ beforeEach(() => {
   resetDesktopWorkspace()
   resetEditorShellWorld({ isDesktop: true })
   catalogWriteFailure.canonicalPath = null
-  world.tauriInvoke = async (command, args) => {
-    if (command === "open_file") return tauriOpenFileDouble(String(args?.path))
-    throw new Error(`Comando nativo no previsto en esta prueba: ${command}`)
-  }
+  pendingOsOpenPaths.length = 0
+  installNativeOpens()
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://127.0.0.1:1")
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "harness-anon-key")
 })
@@ -172,6 +210,7 @@ afterEach(async () => {
   window.confirm = originalConfirm
   window.alert = originalAlert
   catalogWriteFailure.canonicalPath = null
+  pendingOsOpenPaths.length = 0
 })
 
 function installAcceptingConfirm() {
@@ -279,11 +318,7 @@ describe("ODE-619 — Open File adopta el archivo en su sitio", () => {
       content: "# Control\n\nODE619 global positive control\n",
     })
 
-    world.tauriInvoke = async (command, args) => {
-      if (command === "open_file" && args?.path === invalidPath) throw NON_UTF8_OPEN_ERROR
-      if (command === "open_file") return tauriOpenFileDouble(String(args?.path))
-      throw new Error(`Comando nativo no previsto en esta prueba: ${command}`)
-    }
+    installNativeOpens(invalidPath)
     world.openDialogResult = invalidPath
     await emitTauriEvent("menu:open-file")
     await waitFor(() => alerts.includes(NON_UTF8_OPEN_MESSAGE), {
@@ -393,11 +428,7 @@ describe("ODE-619 — Open File adopta el archivo en su sitio", () => {
       await expectCatalogPath(controlPath, controlId)
       const tabCountBeforeFailure = getEditorSessionState().session.tabs.length
 
-      world.tauriInvoke = async (command, args) => {
-        if (command === "open_file" && args?.path === invalidPath) throw NON_UTF8_OPEN_ERROR
-        if (command === "open_file") return tauriOpenFileDouble(String(args?.path))
-        throw new Error(`Comando nativo no previsto en esta prueba: ${command}`)
-      }
+      installNativeOpens(invalidPath)
 
       await selectFileFromNativeMenu(invalidPath)
       await waitFor(() => alerts.some((message) => message === NON_UTF8_OPEN_MESSAGE), {
@@ -411,6 +442,122 @@ describe("ODE-619 — Open File adopta el archivo en su sitio", () => {
       expect(readFileSync(invalidPath)).toEqual(invalidBytes)
       const rows = await (await getDocumentCatalog()).list({ limit: 5000 })
       expect(rows.filter((row) => row.binding?.canonicalPath === invalidPath)).toHaveLength(0)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "abre por Open With/Dock en Write y avisa del no UTF-8 sin pestaña, binding ni fila",
+    async () => {
+      const healthyPath = writeMarkdownFile(
+        "OS Open Healthy.md",
+        "# OS Open\n\nODE655 Write OS control\n",
+      )
+      const invalidPath = join(dirname(healthyPath), "OS Open Not UTF-8.md")
+      const invalidBytes = Buffer.from([0xff, 0xfe, 0x80])
+      writeFileSync(invalidPath, invalidBytes)
+      installAcceptingConfirm()
+      const alerts: string[] = []
+      window.alert = vi.fn((message?: string) => {
+        alerts.push(String(message))
+      })
+
+      await mountDesktopEditor()
+
+      // Control positivo: el path viene de la cola (`take_pending_open_paths`),
+      // no del payload del evento.
+      await queueOsOpenPath(healthyPath)
+      await waitFor(() => mounted!.editor().getText().includes("ODE655 Write OS control"), {
+        label: "archivo válido abierto por Open With/Dock en Write",
+        timeoutMs: 15_000,
+      })
+      await waitForHydrationReady("Open With/Dock en Write: hidratación lista")
+      const healthyId = activeTab()?.writing_id
+      if (!healthyId) throw new Error("Open With/Dock en Write: el tab activo no tiene identidad")
+      expectUuid(healthyId)
+      expect(activeTab()?.title).toBe("OS Open Healthy")
+      await expectCatalogPath(healthyPath, healthyId)
+      const tabsAfterOpen = getEditorSessionState().session.tabs.length
+      const navigationsAfterOpen = [...world.navigations]
+
+      // Señal duplicada con la cola ya drenada: una entrega por path, sin reabrir.
+      await emitTauriEvent("menu:os-open-path")
+      await flush(5)
+      expect(getEditorSessionState().session.tabs).toHaveLength(tabsAfterOpen)
+      expect(activeTab()?.writing_id).toBe(healthyId)
+
+      installNativeOpens(invalidPath)
+      await queueOsOpenPath(invalidPath)
+      await waitFor(() => alerts.includes(NON_UTF8_OPEN_MESSAGE), {
+        label: "aviso no UTF-8 desde Open With/Dock en Write",
+        timeoutMs: 1_000,
+      })
+
+      expect(alerts).toEqual([NON_UTF8_OPEN_MESSAGE])
+      expect(getEditorSessionState().session.tabs).toHaveLength(tabsAfterOpen)
+      expect(activeTab()?.writing_id).toBe(healthyId)
+      expect(world.navigations).toEqual(navigationsAfterOpen)
+      expect(readFileSync(invalidPath)).toEqual(invalidBytes)
+      const invalidRows = (
+        await (await getDocumentCatalog()).list({ limit: 5000 })
+      ).filter((row) => row.binding?.canonicalPath === invalidPath)
+      expect(invalidRows).toHaveLength(0)
+      const invalidSnapshot = await tauriWorkspaceSyncDouble(dirname(invalidPath), undefined)
+      expect(invalidSnapshot.selectedPaths).not.toContain(basename(invalidPath))
+      expect(
+        invalidSnapshot.files.some((file) => file.relativePath === basename(invalidPath)),
+      ).toBe(false)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "encola por Open With/Dock fuera de Write y avisa del no UTF-8 sin navegar",
+    async () => {
+      const healthyPath = writeMarkdownFile(
+        "Global OS Open.md",
+        "# Global OS\n\nODE655 Desk OS control\n",
+      )
+      const invalidPath = join(dirname(healthyPath), "Global OS Not UTF-8.md")
+      const invalidBytes = Buffer.from([0xff, 0xfe, 0x80])
+      writeFileSync(invalidPath, invalidBytes)
+      const alerts: string[] = []
+      window.alert = vi.fn((message?: string) => {
+        alerts.push(String(message))
+      })
+
+      await mountGlobalOpenFileMenu()
+      expect(world.navigations).toEqual([])
+      expect(consumePendingOpenFile()).toBeNull()
+
+      // Control positivo: handoff de un solo slot y navegación a Write.
+      await queueOsOpenPath(healthyPath)
+      await waitFor(() => world.navigations.length === 1, {
+        label: "control positivo de Open With/Dock fuera de Write navega",
+      })
+      expect(world.navigations).toEqual([{ kind: "push", href: "/write" }])
+      expect(consumePendingOpenFile()).toEqual({
+        path: healthyPath,
+        content: "# Global OS\n\nODE655 Desk OS control\n",
+      })
+      // El handoff se consume una sola vez; una señal duplicada no reencola.
+      expect(consumePendingOpenFile()).toBeNull()
+      await emitTauriEvent("menu:os-open-path")
+      await flush(5)
+      expect(consumePendingOpenFile()).toBeNull()
+      expect(world.navigations).toHaveLength(1)
+
+      installNativeOpens(invalidPath)
+      await queueOsOpenPath(invalidPath)
+      await waitFor(() => alerts.includes(NON_UTF8_OPEN_MESSAGE), {
+        label: "aviso no UTF-8 desde Open With/Dock fuera de Write",
+        timeoutMs: 1_000,
+      })
+
+      expect(alerts).toEqual([NON_UTF8_OPEN_MESSAGE])
+      expect(world.navigations).toHaveLength(1)
+      expect(consumePendingOpenFile()).toBeNull()
+      expect(readFileSync(invalidPath)).toEqual(invalidBytes)
     },
     TEST_TIMEOUT_MS,
   )
