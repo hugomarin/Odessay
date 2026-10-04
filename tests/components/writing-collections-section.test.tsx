@@ -505,7 +505,7 @@ describe("WritingCollectionsSection — un solo escritor de selectedIds (ODE-643
     15_000,
   )
 
-  it.fails(
+  it(
     "descarta el create de B resuelto cuando B dejó de estar activo y no lo revive al volver",
     async () => {
       const firstWritingId = uniqueId("writing")
