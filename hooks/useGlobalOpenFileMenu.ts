@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { open } from "@tauri-apps/plugin-dialog"
 import { subscribeMenuAction } from "@/lib/services/desktop/menu-event-bus"
 import { drainPendingOsOpenPaths } from "@/lib/services/desktop/pending-os-open"
-import { preflightOpenFile } from "@/lib/services/desktop/open-file-preflight"
+import { preflightOpenFile } from "@/lib/editor/open-file-preflight"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { setPendingOpenFile } from "@/lib/editor/pending-open-file"
 
