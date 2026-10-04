@@ -375,10 +375,51 @@ export function tauriCoreDouble(actual: Record<string, unknown>) {
 }
 
 /**
+ * Adapters de args para los comandos cuyo objeto de `invoke` no es la lista de
+ * parámetros del doble. Estos se mapean por nombre de campo, nunca por posición:
+ * `catalog_list` aplana su query y `catalog_apply_workspace_removal` añade un
+ * `nowMillis` interno; `settings_write` serializa su valor en `valueJson`.
+ *
+ * El resto de comandos cae al passthrough posicional: su wrapper envía un
+ * literal cuyas claves están en el orden de los parámetros del doble. Un
+ * comando cuya forma se desvíe de eso necesita un adapter aquí — si no,
+ * `Object.values` entregaría argumentos desplazados en silencio (ODE-651).
+ */
+const invokeArgAdapters: Record<string, (args: Record<string, unknown>) => unknown[]> = {
+  catalog_list: (args) => [
+    args.dbPath,
+    {
+      cloudAccountId: args.cloudAccountId ?? null,
+      includeDeleted: args.includeDeleted ?? false,
+      localOnly: args.localOnly ?? false,
+      limit: args.limit ?? 200,
+    },
+  ],
+  catalog_apply_workspace_removal: (args) => [
+    args.dbPath,
+    args.bindingRootId,
+    args.rootPath,
+    args.deletedAt,
+    args.updatedAt,
+    args.nowMillis,
+  ],
+  settings_read: (args) => [args.configDir, args.key],
+  settings_write: (args) => {
+    const valueJson = args.valueJson
+    if (typeof valueJson !== "string") {
+      throw new Error("settings_write requiere valueJson como string")
+    }
+    return [args.configDir, args.key, JSON.parse(valueJson)]
+  },
+}
+
+/**
  * Adapts production `invoke(command, args)` calls to the desktop command
- * doubles. The production wrappers pass object literals in their public
- * argument order; only the two native serialization forms need translation:
- * settings JSON and `write_file`'s string-valued `CONFLICT:` rejection.
+ * doubles. Commands with a non-positional args shape go through
+ * `invokeArgAdapters`, keyed by command and mapped by field name; the rest are
+ * passed through by position. Two native serialization forms still need
+ * translation on the result/rejection side: `settings_read`'s JSON string and
+ * `write_file`'s string-valued `CONFLICT:` rejection.
  */
 export function tauriInvokeRouterDouble(commandDoubles: object) {
   return async (command: string, args?: Record<string, unknown>) => {
@@ -391,15 +432,8 @@ export function tauriInvokeRouterDouble(commandDoubles: object) {
       throw new Error(`Comando Tauri sin doble registrado: ${command}`)
     }
 
-    const callArgs = Object.values(args ?? {})
-    if (command === "settings_write") {
-      const valueJson = args?.valueJson
-      if (typeof valueJson !== "string") {
-        throw new Error("settings_write requiere valueJson como string")
-      }
-      const valueIndex = Object.keys(args ?? {}).indexOf("valueJson")
-      callArgs[valueIndex] = JSON.parse(valueJson)
-    }
+    const adapter = invokeArgAdapters[command]
+    const callArgs = adapter ? adapter(args ?? {}) : Object.values(args ?? {})
 
     try {
       const result = await Reflect.apply(commandDouble, undefined, callArgs)

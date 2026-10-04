@@ -336,13 +336,16 @@ describe("ODE-637 P1 — supresión de auto-escritura en la cadena desktop real"
         const externalPath = writeMarkdownFile("Carta archivo externo mixto", "ODE637 archivo externo.")
         const catalog = await getDocumentCatalog()
         expect((await catalog.resolvePath(externalPath)).kind).toBe("unbound")
+        const syncsBeforeMixedEvent = workspaceSyncCount(rootPath)
         await emitFsWatchEvent([path, externalPath])
 
         const record = await waitForResolvedCatalogRecord(externalPath)
         expect(record.localPresent).toBe(true)
         expect(record.binding?.canonicalPath).toBe(externalPath)
         expect(await readFile(externalPath, "utf8")).toBe("ODE637 archivo externo.\n")
-        expect(workspaceSyncCount(rootPath)).toBeGreaterThan(0)
+        expect(workspaceSyncCount(rootPath), "el evento mixto programa un workspace_sync para la raíz").toBeGreaterThan(
+          syncsBeforeMixedEvent,
+        )
       } finally {
         held.release()
       }
