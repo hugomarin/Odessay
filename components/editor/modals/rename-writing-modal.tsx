@@ -67,9 +67,11 @@ export function RenameWritingModal({
     }
 
     const requestGeneration = ++suggestionRequestGenerationRef.current
-    const requestWritingId = writingId
-    const stillOwnsModal = () =>
-      suggestionRequestGenerationRef.current === requestGeneration && open && writingId === requestWritingId
+    // The generation ref is the only ownership guard: `open`/`writingId` read
+    // here would be the same render's captured props, so comparing them could
+    // never invalidate the in-flight request. Cancel bumps synchronously and
+    // prop changes bump from the passive effect.
+    const stillOwnsModal = () => suggestionRequestGenerationRef.current === requestGeneration
 
     setIsSuggesting(true)
     setSuggestionError(null)
