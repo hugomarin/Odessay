@@ -38,7 +38,7 @@ impl<R: Runtime> EditorMenuItemHandle for MenuItem<R> {
 
 /// Los ítems del menú nativo que el editor gobierna; viven en el estado de la
 /// app para que el comando de disponibilidad los alcance.
-pub struct EditorMenuItems(pub Vec<MenuItem>);
+pub struct EditorMenuItems(pub Vec<MenuItem<tauri::Wry>>);
 
 /// Valida la lista que empuja el frontend: solo ids del contrato del editor.
 /// Un id desconocido es un fallo ruidoso, no un ítem que se queda habilitado.
@@ -129,7 +129,7 @@ mod tests {
             .collect()
     }
 
-    fn named(items: &[FakeMenuItem], id: &str) -> &FakeMenuItem {
+    fn named<'a>(items: &'a [FakeMenuItem], id: &str) -> &'a FakeMenuItem {
         items
             .iter()
             .find(|item| item.id == id)
@@ -179,10 +179,7 @@ mod tests {
 
         let result = apply_editor_menu_availability(&items, &["bold".to_string()]);
 
-        assert_eq!(
-            result,
-            Err("unknown editor menu action: bold".to_string())
-        );
+        assert_eq!(result, Err("unknown editor menu action: bold".to_string()));
         assert!(
             items.iter().all(|item| item.enabled()),
             "a rejected list must not change any item"
