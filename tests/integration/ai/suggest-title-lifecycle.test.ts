@@ -438,7 +438,7 @@ describe("ODE-620 — a stale A suggestion never enters Desk's reused modal for 
 })
 
 describe("ODE-620 — web shell surfaces provider failures and can retry", () => {
-  it.fails.each(["timeout", "provider 5xx", "provider network error", "route network failure"] as const)(
+  it.each(["timeout", "provider 5xx", "provider network error", "route network failure"] as const)(
     "shows the settled %s error with the approved copy, preserves the writing, and retries through the real route",
     async (failureMode) => {
       const writingId = `writing-error-${crypto.randomUUID()}`
