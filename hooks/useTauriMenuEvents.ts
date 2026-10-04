@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { subscribeMenuAction } from "@/lib/services/desktop/menu-event-bus"
 import { drainPendingOsOpenPaths } from "@/lib/services/desktop/pending-os-open"
-import { describeOpenFileReadFailure } from "@/lib/services/open-document-factory"
+import { preflightOpenFile } from "@/lib/editor/open-file-preflight"
 import type { EditorShortcutAction } from "@/lib/editor/shortcuts"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 
@@ -95,17 +95,9 @@ export function useTauriMenuEvents({
         })
         if (!selected) return
         const path = typeof selected === "string" ? selected : selected[0]
-        const { invoke } = await import("@tauri-apps/api/core")
-        let content: string
-        try {
-          content = await invoke<string>("open_file", { path })
-        } catch (error) {
-          const message = describeOpenFileReadFailure(error)
-          if (!message) throw error
-          if (typeof window !== "undefined") window.alert(message)
-          return
-        }
-        onOpenFileRef.current(path, content)
+        const preflight = await preflightOpenFile(path)
+        if (preflight.status === "rejected") return
+        onOpenFileRef.current(path, preflight.content)
       }),
     )
 
@@ -113,17 +105,9 @@ export function useTauriMenuEvents({
     // the OS already gave us the path, so unlike menu:open-file there's no
     // dialog to show (see src-tauri/src/lib.rs RunEvent::Opened).
     const openFromOsPath = async (path: string) => {
-      const { invoke } = await import("@tauri-apps/api/core")
-      let content: string
-      try {
-        content = await invoke<string>("open_file", { path })
-      } catch (error) {
-        const message = describeOpenFileReadFailure(error)
-        if (!message) throw error
-        if (typeof window !== "undefined") window.alert(message)
-        return
-      }
-      onOpenFileRef.current(path, content)
+      const preflight = await preflightOpenFile(path)
+      if (preflight.status === "rejected") return
+      onOpenFileRef.current(path, preflight.content)
     }
     unsubscribers.push(
       subscribeMenuAction("os-open-path", () => drainPendingOsOpenPaths(openFromOsPath)),

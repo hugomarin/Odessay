@@ -66,7 +66,9 @@ const {
   mountEditorShell,
   pointerClick,
   readEditorAnnotations,
+  readViewport,
   resetEditorShellWorld,
+  scrollViewport,
   selectEditorText,
   selectionPopup,
   waitFor,
@@ -142,6 +144,71 @@ afterEach(async () => {
   await mounted?.unmount()
   mounted = null
 })
+
+/* ------------------------------------------------------------------ *
+ * Drivers compartidos de los bloques Markdown (ODE-606 y ODE-642)
+ * ------------------------------------------------------------------ */
+
+const STATE06_TEXT_A = "Documento A con una frase bastante larga para seleccionar."
+const STATE06_TEXT_B = "Documento B con otro texto distinto."
+
+async function openPair(writingA: string, writingB: string) {
+  await localDB.writings.save(makeLocalWriting(writingA, STATE06_TEXT_A, "Documento A"))
+  await localDB.writings.save(makeLocalWriting(writingB, STATE06_TEXT_B, "Documento B"))
+  mounted = await mountEditorShell({ writingId: writingA })
+  await waitFor(() => mounted!.editor().getText().includes("Documento A"), { label: "hidratación de A" })
+  await mounted.render({ writingId: writingB })
+  await waitFor(() => tabFor(writingB), { label: "pestaña de B" })
+}
+
+async function activate(writingId: string, marker: string) {
+  await clickTab(writingId)
+  await waitFor(() => mounted!.editor().getText().includes(marker), { label: `${marker} activo` })
+  await flush(4)
+}
+
+const markdownSource = () =>
+  document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]')
+
+const markdownSelection = () => {
+  const textarea = markdownSource()!
+  return { start: textarea.selectionStart, end: textarea.selectionEnd }
+}
+
+/** Selección en el textarea real; el shell la lee por su `onMouseUp`. */
+async function selectInMarkdown(start: number, end: number) {
+  const textarea = markdownSource()
+  if (!textarea) throw new Error("No hay textarea de Markdown")
+  await act(async () => {
+    textarea.focus()
+    textarea.setSelectionRange(start, end)
+    textarea.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }))
+  })
+  await flush(1)
+  expect(markdownSelection()).toEqual({ start, end })
+}
+
+/** El modo es por pestaña: se cambia con el botón real de la status bar. */
+async function switchToMarkdown(marker: string) {
+  const modeButton = [
+    ...document.querySelectorAll<HTMLButtonElement>('[data-testid="editor-statusbar"] button'),
+  ].find((candidate) => candidate.textContent?.trim() === "Markdown")
+  if (!modeButton) throw new Error("No está el botón de modo Markdown en la status bar")
+  await act(async () => {
+    modeButton.click()
+  })
+  await waitFor(() => markdownSource()?.value.includes(marker) ?? false, { label: `${marker} en Markdown` })
+  await flush(2)
+}
+
+async function activateMarkdown(writingId: string, marker: string) {
+  await clickTab(writingId)
+  await waitFor(() => markdownSource()?.value.includes(marker) ?? false, { label: `${marker} en Markdown` })
+  await flush(4)
+}
+
+const SELECTION_A_MD = { start: 16, end: 25 }
+const SELECTION_B_MD = { start: 16, end: 26 }
 
 describe("ODE-562 — STATE-07: la selección de un documento se restaura al volver a él", () => {
   it("devuelve a A su propia selección tras pasar por B", async () => {
@@ -229,24 +296,6 @@ describe("ODE-562 — STATE-07: la selección de un documento se restaura al vol
  * anterior. Su caso, antes `it.fails`, es un `it` al final del bloque.
  */
 
-const STATE06_TEXT_A = "Documento A con una frase bastante larga para seleccionar."
-const STATE06_TEXT_B = "Documento B con otro texto distinto."
-
-async function openPair(writingA: string, writingB: string) {
-  await localDB.writings.save(makeLocalWriting(writingA, STATE06_TEXT_A, "Documento A"))
-  await localDB.writings.save(makeLocalWriting(writingB, STATE06_TEXT_B, "Documento B"))
-  mounted = await mountEditorShell({ writingId: writingA })
-  await waitFor(() => mounted!.editor().getText().includes("Documento A"), { label: "hidratación de A" })
-  await mounted.render({ writingId: writingB })
-  await waitFor(() => tabFor(writingB), { label: "pestaña de B" })
-}
-
-async function activate(writingId: string, marker: string) {
-  await clickTab(writingId)
-  await waitFor(() => mounted!.editor().getText().includes(marker), { label: `${marker} activo` })
-  await flush(4)
-}
-
 async function persistedHighlights(writingId: string) {
   const writing = await localDB.writings.get(writingId)
   return JSON.stringify(writing?.body_json ?? {}).includes('"highlight"')
@@ -326,54 +375,15 @@ describe("ODE-606 — STATE-06: la selección y el popup de un documento no se f
     expect(await persistedHighlights(writingA), "A sigue sin marcas persistidas").toBe(false)
   }, SHELL_TEST_TIMEOUT_MS)
 
-  const markdownSource = () =>
-    document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]')
-
-  const markdownSelection = () => {
-    const textarea = markdownSource()!
-    return { start: textarea.selectionStart, end: textarea.selectionEnd }
-  }
-
-  /** Selección en el textarea real; el shell la lee por su `onMouseUp`. */
-  async function selectInMarkdown(start: number, end: number) {
-    const textarea = markdownSource()
-    if (!textarea) throw new Error("No hay textarea de Markdown")
-    await act(async () => {
-      textarea.focus()
-      textarea.setSelectionRange(start, end)
-      textarea.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }))
-    })
-    await flush(1)
-    expect(markdownSelection()).toEqual({ start, end })
-  }
-
-  async function activateMarkdown(writingId: string, marker: string) {
-    await clickTab(writingId)
-    await waitFor(() => markdownSource()?.value.includes(marker) ?? false, { label: `${marker} en Markdown` })
-    await flush(4)
-  }
-
-  /** El modo es por pestaña: se cambia con el botón real de la status bar. */
-  async function switchToMarkdown(marker: string) {
-    const modeButton = [
-      ...document.querySelectorAll<HTMLButtonElement>('[data-testid="editor-statusbar"] button'),
-    ].find((candidate) => candidate.textContent?.trim() === "Markdown")
-    if (!modeButton) throw new Error("No está el botón de modo Markdown en la status bar")
-    await act(async () => {
-      modeButton.click()
-    })
-    await waitFor(() => markdownSource()?.value.includes(marker) ?? false, { label: `${marker} en Markdown` })
-    await flush(2)
-  }
-
-  const SELECTION_A_MD = { start: 16, end: 25 }
-  const SELECTION_B_MD = { start: 16, end: 26 }
-
   /**
    * A y B en Markdown con su selección cada uno; control positivo: una vuelta
    * simple a A le devuelve la suya. Después, A → B → A con los frames
-   * retenidos: la restauración de B sigue encolada cuando llega la de A y la
-   * cola las fusiona (la situación de ODE-582).
+   * retenidos y un settle global al final.
+   *
+   * OJO: este caso NO prueba coalescencia — al drenar los frames al final, cada
+   * restauración encuentra el RAF libre y la cola no fusiona nada (observado con
+   * una sonda en el review de ODE-607). La fusión real, con el mismo RAF
+   * retenido, la prueban los casos de ODE-642 al final del archivo.
    */
   async function markdownDoubleRestore(writingA: string, writingB: string) {
     await openPair(writingA, writingB)
@@ -415,8 +425,11 @@ describe("ODE-606 — STATE-06: la selección y el popup de un documento no se f
   // ODE-625 (bug 2, arreglado). Salir de B con su restauración todavía
   // encolada guardaba en el view_state de B la selección de A: el
   // `markdownSelectionRef` del shell no estaba atado a la identidad del
-  // documento. Era `it.fails`; pasó a `it` sin tocar el cuerpo. Mutation
-  // check: revertir el fix de ODE-625 en `editor-shell.tsx` lo pone en rojo.
+  // documento. Era `it.fails`; pasó a `it` sin tocar el cuerpo. Este caso
+  // prueba el resultado de aislamiento (B conserva la suya); la cobertura de
+  // las guardas que lo protegen, con mutaciones parciales, está en el bloque
+  // ODE-642 de abajo (el review de ODE-607 mostró que revertirlas no lo ponía
+  // rojo).
   it("ODE-625 — Markdown: salir de B antes de su restauración no le deja la selección de A", async () => {
     const writingA = "87111111-1111-4111-8111-111111111111"
     const writingB = "88222222-2222-4222-8222-222222222222"
@@ -424,4 +437,243 @@ describe("ODE-606 — STATE-06: la selección y el popup de un documento no se f
     await activateMarkdown(writingB, "Documento B")
     expect(markdownSelection(), "B conserva su propia selección").toEqual(SELECTION_B_MD)
   }, SHELL_TEST_TIMEOUT_MS)
+})
+
+/* ------------------------------------------------------------------ *
+ * ODE-642 — guardas y coalescencia de la cola de restauración
+ * ------------------------------------------------------------------ */
+
+const RAF_TEST_TIMEOUT_MS = 40_000
+const ODE642_SELECTION_A = { start: 16, end: 25 } // "una frase" en STATE06_TEXT_A
+const ODE642_SELECTION_B = { start: 16, end: 26 } // "otro texto" en STATE06_TEXT_B
+
+const currentPhase = () =>
+  document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") ?? null
+
+/** El atajo real de negrita, como lo recibe `window` (mismo camino que ODE-582). */
+async function pressBoldShortcut() {
+  const mac = isMacPlatform()
+  await act(async () => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "b", metaKey: mac, ctrlKey: !mac, bubbles: true }),
+    )
+  })
+}
+
+/**
+ * Abre A y B en Markdown y termina con A activo, listo y su selección
+ * restaurada. Es el recorrido de `markdownDoubleRestore` (ODE-606), con los
+ * scrolls de cada pestaña puestos antes de salir para que el `view_state`
+ * guardado de ambos los conserve.
+ */
+async function openMarkdownPairWithSavedViews() {
+  await localDB.writings.save(makeLocalWriting(WRITING_A, STATE06_TEXT_A, "Documento A"))
+  await localDB.writings.save(makeLocalWriting(WRITING_B, STATE06_TEXT_B, "Documento B"))
+  mounted = await mountEditorShell({ writingId: WRITING_A, withAppMain: true })
+  await waitFor(() => mounted!.editor().getText().includes("Documento A"), { label: "hidratación de A" })
+  await mounted.render({ writingId: WRITING_B })
+  await waitFor(() => tabFor(WRITING_B), { label: "pestaña de B" })
+  await activate(WRITING_B, "Documento B")
+  await switchToMarkdown("Documento B")
+  await activate(WRITING_A, "Documento A")
+  await switchToMarkdown("Documento A")
+  await selectInMarkdown(ODE642_SELECTION_A.start, ODE642_SELECTION_A.end)
+  scrollViewport({ editorScrollTop: 120, shellScrollTop: 240 })
+  await activateMarkdown(WRITING_B, "Documento B")
+  await selectInMarkdown(ODE642_SELECTION_B.start, ODE642_SELECTION_B.end)
+  scrollViewport({ editorScrollTop: 60, shellScrollTop: 80 })
+  await activateMarkdown(WRITING_A, "Documento A")
+  expect(markdownSelection(), "control positivo: A abre con su selección guardada").toEqual(ODE642_SELECTION_A)
+}
+
+/**
+ * Drena los frames retenidos hasta la ventana de coalescencia: `marker` ya está
+ * en el textarea, la fase sigue en "loading" y hay un frame de restauración
+ * pendiente. Es la misma ventana que ODE-582 abre a mano, frame a frame.
+ */
+async function settleIntoRestoreWindow(frames: ReturnType<typeof holdAnimationFrames>, marker: string) {
+  for (let step = 0; step < 40; step += 1) {
+    await flush(2)
+    const pending = frames.takePending()
+    if (pending.length > 0) await frames.runCallbacks(pending)
+    if (
+      currentPhase() === "loading" &&
+      (markdownSource()?.value.includes(marker) ?? false) &&
+      frames.pending() > 0
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+/*
+ * Cada caso viene de la Matriz del Recon Pack (tanda 6). El hallazgo del review
+ * de ODE-607 fue que `markdownDoubleRestore` decía probar la fusión pero
+ * ejecutaba los RAF entre solicitud y solicitud: estas pruebas mantienen el
+ * MISMO frame retenido y afirman ese hecho. La cola de RAF anidados y los
+ * caminos de error de la restauración quedan como follow-up declarado (el
+ * issue no añade una mutación propia para transiciones posteriores al RAF).
+ */
+describe("ODE-642 — la red de la cola de restauración: dueño, llamador y coalescencia", () => {
+  it("Matriz 1: A→B antes del RAF — la restauración de A no toca el textarea ni el scroll de B", async () => {
+    await openMarkdownPairWithSavedViews()
+
+    const frames = holdAnimationFrames()
+    try {
+      await frames.flush()
+
+      // Solicitud llana del dueño A (negrita), sin guard del llamador: retiene
+      // su frame y con él el rango de A.
+      await pressBoldShortcut()
+      expect(frames.pending(), "la solicitud de A retuvo su frame").toBe(1)
+
+      await clickTab(WRITING_B)
+      await waitFor(() => markdownSource()?.value.includes("Documento B") ?? false, {
+        label: "el texto de B en el textarea",
+      })
+      expect(tabFor(WRITING_B)?.id, "B está activo antes de que corra el RAF de A").toBe(
+        getEditorSessionState().session.active_tab_id,
+      )
+
+      // Mientras el frame de A sigue retenido, el usuario coloca su selección
+      // en B y lo desplaza: eso es lo que la restauración obsoleta no debe
+      // pisar.
+      await selectInMarkdown(0, 0)
+      scrollViewport({ editorScrollTop: 5, shellScrollTop: 7 })
+
+      const queued = frames.takePending()
+      expect(queued.length, "el frame retenido de A está primero en la cola").toBeGreaterThan(0)
+      await frames.runCallbacks([queued[0]])
+
+      expect(markdownSelection(), "B conserva su selección: el rango de A no se aplica").toEqual({
+        start: 0,
+        end: 0,
+      })
+      expect(readViewport(), "B conserva su scroll: el de A no se aplica").toEqual({
+        editorScrollTop: 5,
+        shellScrollTop: 7,
+      })
+
+      // Control positivo de la ausencia: en este mismo estado, la restauración
+      // propia de B sí llega al textarea cuando corre su frame.
+      await frames.runCallbacks(queued.slice(1))
+      await frames.settleUntil(
+        () => currentPhase() === "ready" && (markdownSource()?.value.includes("Documento B") ?? false),
+        { label: "B hidratado y con su selección" },
+      )
+      await frames.settle(6)
+      expect(markdownSelection(), "B termina con la selección de su view_state").toEqual(ODE642_SELECTION_B)
+    } finally {
+      frames.restore()
+    }
+    await flush(4)
+  }, RAF_TEST_TIMEOUT_MS)
+
+  it("Matriz 2: guard del llamador falso con dueño estable — no toca el textarea ni la caché", async () => {
+    await openMarkdownPairWithSavedViews()
+
+    const frames = holdAnimationFrames()
+    try {
+      await frames.flush()
+
+      // Re-activar la pestaña activa arranca otra hidratación de A: su
+      // restauración queda pendiente con el frame retenido y su guard del
+      // llamador (`generation.isCurrent`) vigente.
+      await clickTab(WRITING_A)
+      expect(
+        await settleIntoRestoreWindow(frames, "Documento A"),
+        "control positivo: la restauración de A quedó pendiente con el RAF retenido",
+      ).toBe(true)
+
+      // El llamador se invalida sin cambiar el dueño: la re-activación arranca
+      // una generación nueva para el MISMO writingId.
+      await clickTab(WRITING_A)
+      expect(tabFor(WRITING_A)?.id, "el dueño sigue siendo A").toBe(getEditorSessionState().session.active_tab_id)
+      expect(markdownSource()?.value.includes("Documento A"), "A sigue en el textarea").toBe(true)
+
+      // Selección y scroll manuales después de la re-activación: la solicitud
+      // vieja del llamador falso no debe pisarlos.
+      await selectInMarkdown(1, 4)
+      scrollViewport({ editorScrollTop: 5, shellScrollTop: 7 })
+
+      const queued = frames.takePending()
+      await frames.runCallbacks(queued)
+
+      expect(markdownSelection(), "el guard del llamador falso no toca el textarea").toEqual({ start: 1, end: 4 })
+      expect(readViewport(), "el guard del llamador falso no toca el scroll").toEqual({
+        editorScrollTop: 5,
+        shellScrollTop: 7,
+      })
+
+      // La caché se lee por un camino real: la negrita envuelve la selección
+      // manual, no el rango obsoleto que llevaba la solicitud vieja.
+      await pressBoldShortcut()
+      await flush(2)
+      expect(markdownSource()?.value, "la caché conserva la selección manual").toContain("D**ocu**mento A")
+    } finally {
+      frames.restore()
+    }
+    await flush(4)
+  }, RAF_TEST_TIMEOUT_MS)
+
+  it("Matriz 3: caché de A con B activo — la negrita de B usa su view_state, no el final", async () => {
+    await openMarkdownPairWithSavedViews()
+
+    const frames = holdAnimationFrames()
+    try {
+      await frames.flush()
+      await clickTab(WRITING_B)
+
+      // B activo, su texto ya en el textarea y su restauración todavía
+      // pendiente: `markdownSelectionRef` sigue etiquetado con A, así que el
+      // helper puro tiene que caer al `view_state` de la pestaña activa.
+      expect(
+        await settleIntoRestoreWindow(frames, "Documento B"),
+        "control positivo: B tiene su restauración pendiente con el texto cargado",
+      ).toBe(true)
+
+      await pressBoldShortcut()
+      await frames.settle(10)
+      await flush(4)
+      expect(markdownSource()?.value, "la negrita envuelve la selección guardada de B").toContain("**otro texto**")
+    } finally {
+      frames.restore()
+    }
+    await flush(4)
+  }, RAF_TEST_TIMEOUT_MS)
+
+  it("Matriz 4: dos restauraciones del mismo dueño con el RAF retenido — gana la última y el settle se conserva", async () => {
+    await openMarkdownPairWithSavedViews()
+
+    const frames = holdAnimationFrames()
+    try {
+      await frames.flush()
+
+      // La hidratación de A encola su restauración (la primera solicitud) y su
+      // frame queda retenido.
+      await clickTab(WRITING_A)
+      expect(
+        await settleIntoRestoreWindow(frames, "Documento A"),
+        "control positivo: hay una restauración de A pendiente con el RAF retenido",
+      ).toBe(true)
+      const before = frames.pending()
+      expect(before, "la primera solicitud tiene un frame pendiente").toBe(1)
+
+      // La segunda solicitud (negrita, mismo dueño) llega con el MISMO frame
+      // retenido: la cola la fusiona en vez de agendar otro.
+      await pressBoldShortcut()
+      expect(frames.pending(), "la segunda solicitud se fusionó en el mismo frame").toBe(before)
+
+      await frames.settle(10)
+      await flush(4)
+
+      expect(currentPhase(), "el onSettled de la hidratación se conserva al coalescer").toBe("ready")
+      expect(markdownSource()?.value, "gana el contenido de la última solicitud (la negrita)").toContain("**una frase**")
+      expect(markdownSelection(), "solo se aplica la selección de la última solicitud").toEqual({ start: 18, end: 27 })
+    } finally {
+      frames.restore()
+    }
+    await flush(4)
+  }, RAF_TEST_TIMEOUT_MS)
 })
