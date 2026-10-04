@@ -65,6 +65,8 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
   const { selection, selectionRef, setSelection } = useSelectedCollectionIdsState()
   const [collections, setCollections] = useState<LocalCollection[]>([])
   const pendingIntentRef = useRef<PendingAssignmentIntent | null>(null)
+  const activeWritingIdRef = useRef(writingId)
+  activeWritingIdRef.current = writingId
 
   const loadLocalState = async (currentWritingId: string, cancelled?: () => boolean) => {
     const { collections: nextCollections, writingCollections: assignments } =
@@ -180,7 +182,7 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
 
       setSelection({ writingId: ownerWritingId, ids: nextIds })
       await setLocalWritingCollections(ownerWritingId, nextIds)
-    } else {
+    } else if (activeWritingIdRef.current === ownerWritingId) {
       queuePendingAssignment(ownerWritingId, { kind: "add", collectionId: collection.id })
     }
 
