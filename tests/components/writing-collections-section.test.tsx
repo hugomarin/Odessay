@@ -497,4 +497,28 @@ describe("WritingCollectionsSection — un solo escritor de selectedIds (ODE-643
     },
     15_000,
   )
+
+  it("sigue togglando sobre el snapshot de B después de resolver la intención pendiente", async () => {
+    const firstWritingId = uniqueId("writing")
+    const secondWritingId = uniqueId("writing")
+    const alpha = await seedCollection("Alpha")
+    const beta = await seedCollection("Beta")
+    await localDB.writingCollections.replaceForWriting(firstWritingId, [alpha.id])
+
+    renderSection(firstWritingId)
+    await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "carga del primero")
+
+    probe.plan.push({ when: [alpha.id], action: () => findButton(beta.name).click() })
+    act(() => {
+      root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+    })
+    await flush(4)
+    await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "intención resuelta")
+
+    await clickButton(beta.name)
+    const settled = await waitForSettledIds(secondWritingId)
+    expect(settled).toEqual([])
+    await waitFor(() => (triggerText() === "Add to collections" ? true : null), "UI de B tras quitar")
+    expect(await readIds(firstWritingId)).toEqual([alpha.id])
+  }, 15_000)
 })
