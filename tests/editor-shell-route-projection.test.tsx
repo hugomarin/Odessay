@@ -224,10 +224,16 @@ describe("ODE-640 — la navegación por slug del documento activo al sincroniza
     "un synced del activo en desktop no navega",
     async () => {
       await setSlug(writingA, SLUG_A)
-      resetEditorShellWorld({ isDesktop: true })
+      resetEditorShellWorld()
       mounted = await mountEditorShell({ writingId: writingA })
-      await flush(3)
+      await waitFor(() => mounted!.editor().getText().includes("Texto de A"), { label: "hidratación de A" })
       world.navigations = []
+
+      // El runtime desktop es el boundary doblado (`isDesktopRuntime`) y el
+      // helper de navegación lo lee en el momento de navegar. Se fija aquí,
+      // cuando el activo ya es A, para que el único cambio respecto del caso
+      // positivo sea el runtime que decide el skip.
+      world.isDesktop = true
 
       const getSpy = vi.spyOn(localDB.writings, "get")
       try {
