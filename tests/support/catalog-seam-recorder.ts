@@ -7,9 +7,9 @@
  * never written twice:
  *
  *   production wrapper (SqliteDocumentCatalog / tauri-commands)
- *     + real reconciler (createWorkspaceReconciler, wired exactly like
- *       desktop-workspace-reconciler.ts: workspace_sync → listByBindingRoot →
- *       applyReconcileTransaction)
+ *     + real reconciler (createWorkspaceReconciler over the same injectable
+ *       port factory production consumes, createWorkspaceReconcilerPorts:
+ *       workspace_sync → listByBindingRoot → applyReconcileTransaction)
  *     +, para SYNC-05, las entradas de producción reales
  *       (DesktopDocumentService.saveWriting vía getDocumentService y
  *       desktopCatalogSyncService.flushPending)
@@ -42,23 +42,19 @@
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
 import { computeMarkdownContentHash } from "@/lib/content-hash"
 import {
-  tauriWorkspaceSync,
   type DesktopCatalogDualWriteInput,
   type DesktopCatalogMetadataMutation,
   type DesktopCatalogMutationRow,
   type DesktopCatalogReconcileInput,
   type DesktopCatalogRow,
-  type DesktopWorkspaceSnapshot,
   type DesktopWorkspaceTouchResult,
 } from "@/lib/services/desktop/tauri-commands"
 import {
   createWorkspaceReconciler,
-  type KnownBinding,
-  type ObservedFile,
   type ReconcilerRoot,
-  type UnboundFile,
   type WorkspaceReconciler,
 } from "@/lib/services/desktop/workspace-reconciler"
+import { createWorkspaceReconcilerPorts } from "@/lib/services/desktop/workspace-reconciler-ports"
 import { createDesktopDraft, getDocumentService } from "@/lib/services/document-service-factory"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 import { desktopCatalogSyncService } from "@/lib/sync/desktop-catalog-sync-service"
@@ -359,20 +355,6 @@ function normalizeFixtureJson(value: unknown): unknown {
 
 function byRelativePath<T extends { relativePath: string }>(left: T, right: T): number {
   return left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0
-}
-
-/** Mirrors the adapter's mapping from a `workspace_sync` snapshot to observed files. */
-function observedFilesFromSnapshot(snapshot: DesktopWorkspaceSnapshot): ObservedFile[] {
-  return snapshot.files.map((file) => ({
-    relativePath: file.relativePath,
-    canonicalPath: file.path,
-    inode: file.inode || null,
-    device: file.device ?? null,
-    contentHash: file.contentHash || null,
-    size: file.size,
-    modifiedAt: file.modifiedAt,
-    manifestId: file.id || null,
-  }))
 }
 
 function projectCatalogRow(row: DesktopCatalogRow): CatalogSeamRowProjection {
@@ -696,9 +678,10 @@ export class CatalogSeamSession {
   }
 
   /**
-   * The production reconciler wiring (mirror of desktop-workspace-reconciler):
-   * scan = workspace_sync + listByBindingRoot; commit = applyReconcileTransaction.
-   * loadRoots is in-memory here — settings/DirectoryScope is an organizational
+   * The production reconciler ports (`scanRoot` / `bindUnbound` / `commit`)
+   * are not copied here: they come from the same injectable desktop factory
+   * production consumes (ODE-645), so the recorded sequence tracks that glue.
+   * `loadRoots` is in-memory — settings/DirectoryScope is an organizational
    * projection with no catalog semantics, deliberately out of the seam.
    */
   createReconciler(catalog: SqliteDocumentCatalog): WorkspaceReconciler {
@@ -710,38 +693,7 @@ export class CatalogSeamSession {
         visibleAsWorkspace: true,
         selectedPaths: [],
       })),
-      scanRoot: async (root) => {
-        const snapshot = await tauriWorkspaceSync(root.rootPath, undefined, undefined, {
-          mintUnbound: false,
-        })
-        const observed = observedFilesFromSnapshot(snapshot)
-        const unbound: UnboundFile[] = (snapshot.unboundFiles ?? []).map((file) => ({
-          relativePath: file.relativePath,
-          inode: file.inode || null,
-          device: file.device ?? null,
-          contentHash: file.contentHash || null,
-          size: file.size,
-          modifiedAt: file.modifiedAt,
-        }))
-        const rows = await catalog.listByBindingRoot(root.id)
-        const knownBindings: KnownBinding[] = rows
-          .filter((row) => row.binding?.bindingRootId === root.id)
-          .map((row) => ({
-            documentId: row.id,
-            bindingRootId: root.id,
-            relativePath: row.binding!.relativePath,
-            inode: row.binding!.inode,
-            contentHash: row.binding!.contentHash,
-          }))
-        return { observed, unbound, knownBindings }
-      },
-      bindUnbound: async (root, ids) => {
-        const snapshot = await tauriWorkspaceSync(root.rootPath, undefined, ids)
-        return observedFilesFromSnapshot(snapshot)
-      },
-      commit: async (commit) => {
-        await catalog.applyReconcileTransaction(commit)
-      },
+      ...createWorkspaceReconcilerPorts({ catalog }),
     })
   }
 

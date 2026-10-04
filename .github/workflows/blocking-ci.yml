@@ -83,8 +83,11 @@ jobs:
           # cargo test solo se paga cuando el crate o la secuencia grabada que
           # reproduce cambian. El fixture vive en tests/fixtures/catalog-seam/
           # y lo embebe el test Rust (include_str!), así que sus cambios —y los
-          # del grabador— también disparan el job.
-          RUST_PATTERN='^(src-tauri/|tests/fixtures/catalog-seam/|tests/support/catalog-seam-recorder\.ts$|tests/catalog-seam-fixture\.test\.ts$|\.github/workflows/desktop-rust\.yml$)'
+          # del grabador— también disparan el job. La factory de ports que el
+          # grabador y producción comparten (ODE-645) entra aquí: un cambio a
+          # esa glue mueve la secuencia grabada, y el replay Rust debe correr
+          # con la nueva.
+          RUST_PATTERN='^(src-tauri/|lib/services/desktop/workspace-reconciler-ports\.ts$|tests/fixtures/catalog-seam/|tests/support/catalog-seam-recorder\.ts$|tests/catalog-seam-fixture\.test\.ts$|\.github/workflows/desktop-rust\.yml$)'
           if echo "${CHANGED}" | grep -qE "${RUST_PATTERN}"; then
             echo "rust_changed=true" >> "${GITHUB_OUTPUT}"
             echo "Cambios que el crate o su seam grabado tocan — corre cargo test."
