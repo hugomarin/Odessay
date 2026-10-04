@@ -1483,7 +1483,7 @@ async function expectMenuAvailability(expected: EditorShortcutAction[], label: s
 }
 
 /** Abre un menú real de la toolbar por su trigger y espera sus ítems. */
-async function openFormatToolbarMenu(label: "Text" | "Format menu") {
+async function openFormatToolbarMenu(label: "Text" | "Insert" | "Format menu") {
   const trigger = await waitFor(
     () => document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`),
     { label: `trigger "${label}" de la toolbar` },
@@ -1497,6 +1497,19 @@ function formatToolbarItem(prefix: string): HTMLElement | null {
   return (
     Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((item) =>
       (item.textContent ?? "").trim().startsWith(prefix),
+    ) ?? null
+  )
+}
+
+/**
+ * El ítem visible del menú abierto cuyo texto contiene `label` (los ítems de
+ * texto llevan delante su glifo — "Aa", "H1", ">" — así que `startsWith` no
+ * sirve para las aserciones de control positivo).
+ */
+function formatToolbarItemWithLabel(label: string): HTMLElement | null {
+  return (
+    Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((item) =>
+      (item.textContent ?? "").includes(label),
     ) ?? null
   )
 }
@@ -1686,6 +1699,79 @@ describe("ODE-632 — disponibilidad de las acciones sin rama Markdown", () => {
     },
     DESKTOP_TEST_TIMEOUT_MS,
   )
+
+  /**
+   * Control positivo de la decisión A: la ausencia de las seis no puede
+   * lograrse ocultando la toolbar entera. En Markdown las acciones con rama
+   * siguen visibles y operando; solo faltan las seis sin implementación.
+   */
+  it(
+    "control positivo: en Markdown siguen visibles y operando las acciones con rama (toolbar normal y compacta)",
+    async () => {
+      const commandWorld = await mountDesktopCommandWorld("bold", COMMAND_CASES.bold)
+      await commandWorld.setMode("markdown")
+
+      // Usable: el botón real de la toolbar normal aplica Bold en Markdown.
+      const before = commandWorld.markdownValue()
+      await commandWorld.selectMarkdownText("charlie")
+      const boldButton = await waitFor(
+        () => document.querySelector<HTMLButtonElement>('button[aria-label="Bold"]'),
+        { label: "botón Bold de la toolbar normal en Markdown" },
+      )
+      await act(async () => {
+        boldButton.click()
+      })
+      expect(commandWorld.markdownValue(), "Bold de la toolbar opera en Markdown").toBe(
+        before.replace("charlie", "**charlie**"),
+      )
+
+      // Toolbar normal: los cuatro botones de formato siguen visibles y usables.
+      for (const label of ["Bold", "Italic", "Strike", "Inline code"]) {
+        const button = await waitFor(
+          () =>
+            document.querySelector<HTMLButtonElement>(
+              `[data-testid="editor-format-toolbar"] button[aria-label="${label}"]`,
+            ),
+          { label: `botón ${label} de la toolbar normal en Markdown` },
+        )
+        expect(button.disabled, `${label} sigue usable en Markdown`).toBe(false)
+      }
+
+      // Text normal: las soportadas siguen; solo Code falta.
+      await openFormatToolbarMenu("Text")
+      for (const item of ["Normal", "Heading 1", "Heading 2", "Heading 3", "Blockquote"]) {
+        expect(formatToolbarItemWithLabel(item), `${item} sigue en el menú Text en Markdown`).not.toBeNull()
+      }
+      expect(formatToolbarItem("</>"), "en Markdown solo falta Code en el menú Text").toBeNull()
+      await closeFormatToolbarMenu()
+
+      // Insert normal: Link, Table e Image siguen.
+      await openFormatToolbarMenu("Insert")
+      for (const item of ["Link", "Table", "Image"]) {
+        expect(formatToolbarItemWithLabel(item), `${item} sigue en Insert en Markdown`).not.toBeNull()
+      }
+      await closeFormatToolbarMenu()
+
+      // Presentación compacta: quick actions y lista completa salvo Code.
+      await openFormatToolbarMenu("Format menu")
+      for (const quick of ["Bold", "Italic", "Strike", "Inline code", "Link", "Image"]) {
+        expect(
+          document.querySelector(`[role="menuitem"][aria-label="${quick}"]`),
+          `${quick} sigue en las quick actions compactas en Markdown`,
+        ).not.toBeNull()
+      }
+      // La lista compacta muestra el glifo de las acciones de texto ("Aa",
+      // "H1", ">") y el label de las que no lo tienen; solo Code falta.
+      for (const item of ["Aa", "H1", "H2", "H3", ">", "-", "1.", "Inline code", "Link", "Table", "Image"]) {
+        expect(formatToolbarItem(item), `${item} sigue en la lista compacta en Markdown`).not.toBeNull()
+      }
+      expect(formatToolbarItem("</>"), "en Markdown solo falta Code en la lista compacta").toBeNull()
+      await closeFormatToolbarMenu()
+
+      assertNoUnhandledErrors()
+    },
+    DESKTOP_TEST_TIMEOUT_MS,
+  )
 })
 
 describe("ODE-632 — la ayuda de atajos refleja la disponibilidad por modo", () => {
@@ -1699,6 +1785,7 @@ describe("ODE-632 — la ayuda de atajos refleja la disponibilidad por modo", ()
         label: "modal de atajos en Markdown",
       })
       expect(markdownModal.textContent, "control: la ayuda sigue publicando Bold").toContain("Bold")
+      expect(markdownModal.textContent, "control: la ayuda sigue publicando Highlight").toContain("Highlight")
       expect(markdownModal.textContent, "Code block no se publica en Markdown").not.toContain("Code block")
       expect(markdownModal.textContent, "Horizontal rule no se publica en Markdown").not.toContain(
         "Horizontal rule",
