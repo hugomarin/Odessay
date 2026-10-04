@@ -33,6 +33,20 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }))
 
+// ODE-669: se conserva real el cliente admin (service role local). El mock solo
+// es un punto de instrumentación para contar los queries del camino de
+// secuencia y para que una mutación con fan-out por candidato sea medible.
+const adminHolder = vi.hoisted(() => ({ client: null as SupabaseClient | null }))
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => {
+    if (!adminHolder.client) {
+      throw new Error("[sharing] createAdminClient sin cliente configurado por el test")
+    }
+    return adminHolder.client
+  },
+}))
+
 import { createClient } from "@/lib/supabase/server"
 import SharedReadingPage, { generateMetadata } from "@/app/(reading)/shared/[id]/page"
 import PublicWritingPage from "@/app/[username]/[slug]/page"
@@ -46,6 +60,8 @@ import {
   seedShare,
   seedUsers,
   seedWriting,
+  SEED_PASSWORD,
+  SEED_WRITING_BODY,
   type SeedUser,
 } from "../../support/supabase-local/fixtures"
 import { createLocalAdminClient, createUserClient } from "../../support/supabase-local/local-supabase"
@@ -106,7 +122,7 @@ async function seedWritingWithShare(input: {
 }
 
 type ReadingElementProps = {
-  writing: { id: string }
+  writing: { id: string; title: string | null; bodyText: string; bodyJson: unknown }
   prevWritingId: string | null
   nextWritingId: string | null
   prevWritingHref: string | null
@@ -154,6 +170,111 @@ async function openShared(identifier: string): Promise<ReadingElementProps> {
   return readingProps(await SharedReadingPage(pageParams(decodeURIComponent(match[1]))))
 }
 
+type QueryRecord = {
+  client: "session" | "admin"
+  table: string
+  select: string | null
+}
+
+/**
+ * ODE-669 — instrumento de medición. Envuelve un cliente Supabase real (sin
+ * cambiar su comportamiento: cada método delega en el builder original) y
+ * registra cada `.select()`, `.rpc()` y el orden en que se awaita la cadena.
+ * `beforeQuery` permite ordenar una transición real entre dos queries, p. ej.
+ * revocar el share después del summary y antes del detail.
+ */
+function createQueryRecorder() {
+  const records: QueryRecord[] = []
+  let beforeQuery: ((record: QueryRecord) => void | Promise<void>) | null = null
+
+  type LooseClient = {
+    from: (table: string) => object
+    rpc: (fn: string, args?: unknown) => object
+  }
+
+  const wrapBuilder = (builder: object, record: QueryRecord): object =>
+    new Proxy(builder, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop)
+        if (prop === "select" && typeof value === "function") {
+          return (...args: unknown[]) => {
+            const next = value.apply(target, args)
+            const selected: QueryRecord = {
+              ...record,
+              select: typeof args[0] === "string" ? args[0] : null,
+            }
+            records.push(selected)
+            return wrapBuilder(next as object, selected)
+          }
+        }
+        if (prop === "then" && typeof value === "function") {
+          return (onFulfilled?: unknown, onRejected?: unknown) =>
+            Promise.resolve(beforeQuery ? beforeQuery(record) : undefined).then(() =>
+              (value as (f?: unknown, r?: unknown) => unknown).call(target, onFulfilled, onRejected),
+            )
+        }
+        if (typeof value === "function") {
+          return (...args: unknown[]) => {
+            const next = value.apply(target, args)
+            return next &&
+              typeof next === "object" &&
+              typeof (next as PromiseLike<unknown>).then === "function"
+              ? wrapBuilder(next as object, record)
+              : next
+          }
+        }
+        return value
+      },
+    })
+
+  const wrap = (client: SupabaseClient, origin: QueryRecord["client"]): SupabaseClient =>
+    new Proxy(client, {
+      get(target, prop) {
+        if (prop === "from" || prop === "rpc") {
+          return (first: string, second?: unknown) => {
+            const loose = target as unknown as LooseClient
+            const builder = prop === "from" ? loose.from(first) : loose.rpc(first, second)
+            // El query se registra al llamar `.select()` (o `.rpc()`), una vez
+            // por cadena ejecutada, no al construir el builder.
+            if (prop === "rpc") {
+              const record: QueryRecord = { client: origin, table: `rpc:${first}`, select: null }
+              records.push(record)
+              return wrapBuilder(builder, record)
+            }
+            return wrapBuilder(builder, { client: origin, table: first, select: null })
+          }
+        }
+        const value = Reflect.get(target, prop)
+        return typeof value === "function" ? value.bind(target) : value
+      },
+    }) as SupabaseClient
+
+  return {
+    records,
+    wrap,
+    reset() {
+      records.length = 0
+      beforeQuery = null
+    },
+    setBeforeQuery(fn: ((record: QueryRecord) => void | Promise<void>) | null) {
+      beforeQuery = fn
+    },
+    bodySelections() {
+      return records.filter(
+        (record) => record.select?.includes("body_json") || record.select?.includes("body_text"),
+      )
+    },
+  }
+}
+
+const recorder = createQueryRecorder()
+
+async function actAsMeasured(user: SeedUser | null): Promise<void> {
+  const client = await serverClientAs(user)
+  const wrapped = recorder.wrap(client, "session")
+  createClientMock.mockImplementation(async () => wrapped)
+}
+
 async function incomingIds(as: SeedUser | null): Promise<string[]> {
   await actAs(as)
   const fetchRoute = createRouteFetch({ "/api/shared/writings": sharedWritingsGet })
@@ -186,6 +307,8 @@ const hrefFor = (id: string, slug: string | null) => [`/shared/${id}`, slug ? `/
 
 beforeAll(async () => {
   admin = createLocalAdminClient()
+  // El cliente admin de la app es el real; el holder solo lo instrumenta.
+  adminHolder.client = recorder.wrap(admin, "admin")
   users = await seedUsers(runId, ["owner", "viewer", "stranger", "owner2"])
   ;[owner, viewer, stranger, owner2] = users
   ownerClient = await createUserClient(owner)
@@ -496,6 +619,350 @@ describe("ODE-659 — /shared resuelve por viewer y el id es la URL canónica", 
   it("un extraño con el slug repetido recibe 404, nunca 500", async () => {
     await actAs(stranger)
     await expectNotFound(() => SharedReadingPage(pageParams(notesSharedSlug)))
+  })
+})
+
+describe("ODE-669 — resolución acotada al candidato seleccionado", () => {
+  // C candidatos vivos con el mismo slug exigen autores distintos
+  // (`writings_slug_by_author_unique`). Se crean 100 cuentas por admin
+  // (sin sesión) porque el camino medido es el del viewer: la resolución
+  // autoriza con su sesión real. Las filas se siembran por admin (estado
+  // inicial privilegiado, como F1), no doblando el entry point.
+  let candidateAuthorIds: string[] = []
+  let groupOne: string[] = []
+  let groupTen: string[] = []
+  let groupHundred: string[] = []
+  let groupOneSlug = ""
+  let groupTenSlug = ""
+  let groupHundredSlug = ""
+  let ownerFirstOwnDoc = ""
+  let ownerFirstOwnSlug = ""
+  let olderReadableDoc = ""
+  let newerPublicNoShareDoc = ""
+  let collisionSlug = ""
+  let deniedUuidDoc = ""
+  let decoySlugDoc = ""
+  let revokedSharedDoc = ""
+  let revokedPublicDoc = ""
+  let publicShareControlDoc = ""
+
+  async function seedCandidateAuthors(count: number): Promise<string[]> {
+    const ids: string[] = []
+    for (let index = 0; index < count; index += 10) {
+      const batch = await Promise.all(
+        Array.from({ length: Math.min(10, count - index) }, async (_, offset) => {
+          const position = index + offset
+          const username = `ode669c${position}${runId}`.slice(0, 30)
+          const { data, error } = await admin.auth.admin.createUser({
+            email: `${username}@example.test`,
+            password: SEED_PASSWORD,
+            email_confirm: true,
+            user_metadata: { username },
+          })
+          if (error || !data.user) {
+            throw new Error(`[sharing] no se pudo crear el autor candidato ${position}: ${error?.message ?? "sin usuario"}`)
+          }
+          return data.user.id
+        }),
+      )
+      ids.push(...batch)
+    }
+    return ids
+  }
+
+  async function seedExplicitWriting(input: {
+    id?: string
+    authorId: string
+    title: string
+    visibility: "private" | "shared" | "public"
+    updatedAt: string
+    sharedWithId?: string
+  }): Promise<string> {
+    const id = input.id ?? randomUUID()
+    const { error } = await admin.from("writings").insert({
+      id,
+      author_id: input.authorId,
+      title: input.title,
+      visibility: input.visibility,
+      status: "draft",
+      version: 1,
+      body_json: SEED_WRITING_BODY,
+      updated_at: input.updatedAt,
+    })
+    if (error) throw new Error(`[sharing] seedExplicitWriting falló: ${error.message}`)
+    if (input.sharedWithId) {
+      const { error: shareError } = await admin.from("writing_shares").insert({
+        id: randomUUID(),
+        writing_id: id,
+        shared_with_id: input.sharedWithId,
+      })
+      if (shareError) throw new Error(`[sharing] seedExplicitWriting share falló: ${shareError.message}`)
+    }
+    return id
+  }
+
+  async function seedSlugGroup(
+    authorIds: readonly string[],
+    title: string,
+    secondOffset: number,
+  ): Promise<string[]> {
+    const ids = authorIds.map(() => randomUUID())
+    const base = Date.parse("2026-01-01T00:00:00.000Z")
+    const { error } = await admin.from("writings").insert(
+      authorIds.map((authorId, index) => ({
+        id: ids[index],
+        author_id: authorId,
+        title,
+        visibility: "shared",
+        status: "draft",
+        version: 1,
+        body_json: SEED_WRITING_BODY,
+        updated_at: new Date(base + (secondOffset + index) * 1000).toISOString(),
+      })),
+    )
+    if (error) throw new Error(`[sharing] seedSlugGroup falló: ${error.message}`)
+    const { error: shareError } = await admin.from("writing_shares").insert(
+      ids.map((writingId) => ({
+        id: randomUUID(),
+        writing_id: writingId,
+        shared_with_id: viewer.id,
+      })),
+    )
+    if (shareError) throw new Error(`[sharing] seedSlugGroup share falló: ${shareError.message}`)
+    return ids
+  }
+
+  beforeAll(async () => {
+    candidateAuthorIds = await seedCandidateAuthors(100)
+
+    groupOne = await seedSlugGroup(candidateAuthorIds.slice(0, 1), `Collision one ${runId}`, 0)
+    groupTen = await seedSlugGroup(candidateAuthorIds.slice(0, 10), `Collision ten ${runId}`, 100)
+    groupHundred = await seedSlugGroup(candidateAuthorIds, `Collision hundred ${runId}`, 200)
+
+    const oneRow = await readRow<{ slug: string | null }>(admin, "writings", groupOne[0])
+    const tenRow = await readRow<{ slug: string | null }>(admin, "writings", groupTen[0])
+    const hundredRow = await readRow<{ slug: string | null }>(admin, "writings", groupHundred[0])
+    groupOneSlug = oneRow?.slug ?? ""
+    groupTenSlug = tenRow?.slug ?? ""
+    groupHundredSlug = hundredRow?.slug ?? ""
+    if (!groupOneSlug || !groupTenSlug || !groupHundredSlug) {
+      throw new Error("[sharing] los grupos de colisión no generaron slug")
+    }
+
+    // Dueño primero: el propio es más viejo que el ajeno compartido.
+    ownerFirstOwnDoc = await seedExplicitWriting({
+      authorId: viewer.id,
+      title: `Owner first ${runId}`,
+      visibility: "shared",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    })
+    await seedExplicitWriting({
+      authorId: owner.id,
+      title: `Owner first ${runId}`,
+      visibility: "shared",
+      updatedAt: "2026-02-02T00:00:00.000Z",
+      sharedWithId: viewer.id,
+    })
+    const ownerFirstRow = await readRow<{ slug: string | null }>(admin, "writings", ownerFirstOwnDoc)
+    ownerFirstOwnSlug = ownerFirstRow?.slug ?? ""
+    if (!ownerFirstOwnSlug) {
+      throw new Error("[sharing] el escrito propio de owner-first no generó slug")
+    }
+
+    // El más nuevo legible gana aunque un público ajeno sin share sea más nuevo.
+    olderReadableDoc = await seedExplicitWriting({
+      authorId: owner.id,
+      title: `Winner ${runId}`,
+      visibility: "shared",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+      sharedWithId: viewer.id,
+    })
+    newerPublicNoShareDoc = await seedExplicitWriting({
+      authorId: owner2.id,
+      title: `Winner ${runId}`,
+      visibility: "public",
+      updatedAt: "2026-03-02T00:00:00.000Z",
+    })
+    const winnerRow = await readRow<{ slug: string | null }>(admin, "writings", olderReadableDoc)
+    collisionSlug = winnerRow?.slug ?? ""
+    if (!collisionSlug || collisionSlug !== (await readRow<{ slug: string | null }>(admin, "writings", newerPublicNoShareDoc))?.slug) {
+      throw new Error("[sharing] la colisión de Winner no compartió slug")
+    }
+
+    // UUID existente pero denegado: el decoy usa el mismo string como slug.
+    const deniedId = randomUUID()
+    deniedUuidDoc = await seedExplicitWriting({
+      id: deniedId,
+      authorId: owner.id,
+      title: `Denied ${runId}`,
+      visibility: "private",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    })
+    decoySlugDoc = await seedExplicitWriting({
+      authorId: owner2.id,
+      title: deniedId,
+      visibility: "shared",
+      updatedAt: "2026-04-02T00:00:00.000Z",
+      sharedWithId: viewer.id,
+    })
+    const decoyRow = await readRow<{ slug: string | null }>(admin, "writings", decoySlugDoc)
+    if (decoyRow?.slug !== deniedId) {
+      throw new Error("[sharing] el decoy no tiene como slug el UUID denegado")
+    }
+
+    // Revocación entre summary y detail, en las dos visibilidades: un shared
+    // cae por RLS y un public con share cae por la relectura del grant.
+    revokedSharedDoc = await seedExplicitWriting({
+      authorId: owner.id,
+      title: `Revoked shared ${runId}`,
+      visibility: "shared",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+      sharedWithId: viewer.id,
+    })
+    revokedPublicDoc = await seedExplicitWriting({
+      authorId: owner.id,
+      title: `Revoked public ${runId}`,
+      visibility: "public",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+      sharedWithId: viewer.id,
+    })
+    publicShareControlDoc = await seedExplicitWriting({
+      authorId: owner.id,
+      title: `Public control ${runId}`,
+      visibility: "public",
+      updatedAt: "2026-05-03T00:00:00.000Z",
+      sharedWithId: viewer.id,
+    })
+  }, 240000)
+
+  afterAll(async () => {
+    await cleanupUsers(candidateAuthorIds.map((id) => ({ id })))
+  }, 240000)
+
+  it("mide consultas y campos para C = 1, 10 y 100 candidatos", async () => {
+    await actAsMeasured(viewer)
+
+    const groups = [
+      { c: 1, slug: groupOneSlug, winner: groupOne[0] },
+      { c: 10, slug: groupTenSlug, winner: groupTen[groupTen.length - 1] },
+      { c: 100, slug: groupHundredSlug, winner: groupHundred[groupHundred.length - 1] },
+    ]
+
+    for (const group of groups) {
+      // Camino slug colisionado: owner miss + summary del candidato legible más
+      // nuevo = 2, sin importar C; ningún body.
+      recorder.reset()
+      await expectRedirect(
+        () => SharedReadingPage(pageParams(group.slug)),
+        `/shared/${group.winner}`,
+      )
+      const summaryQueries = recorder.records.filter((record) => record.client === "session")
+      expect(summaryQueries).toHaveLength(2)
+      expect(summaryQueries.map((record) => record.table)).toEqual(["writings", "writings"])
+      expect(recorder.records.filter((record) => record.table.startsWith("rpc:"))).toHaveLength(0)
+      expect(summaryQueries.filter((record) => record.table === "writing_shares")).toHaveLength(0)
+      expect(recorder.bodySelections()).toHaveLength(0)
+
+      // Camino UUID canónico: + detail, y solo ese detail transfiere body.
+      recorder.reset()
+      const props = readingProps(await SharedReadingPage(pageParams(group.winner)))
+      expect(props.writing.id).toBe(group.winner)
+
+      const detailQueries = recorder.records.filter((record) => record.client === "session")
+      const adminQueries = recorder.records.filter((record) => record.client === "admin")
+      expect(detailQueries).toHaveLength(3)
+      expect(recorder.bodySelections()).toHaveLength(1)
+      expect(recorder.bodySelections()[0].select).toContain("writing_shares!inner")
+      // ≤ 2 queries de secuencia existentes (admin), nunca una por candidato.
+      expect(adminQueries.length).toBeLessThanOrEqual(2)
+      expect(props.writing.bodyText).toBe("ODE-616 harness")
+    }
+  })
+
+  it("generateMetadata con 100 candidatos usa dos summaries sin body", async () => {
+    await actAsMeasured(viewer)
+    recorder.reset()
+
+    const metadata = await generateMetadata(pageParams(groupHundredSlug))
+    expect(metadata.title).toBe(`Collision hundred ${runId} — Artifact Studio`)
+
+    const sessionQueries = recorder.records.filter((record) => record.client === "session")
+    expect(sessionQueries).toHaveLength(2)
+    expect(recorder.bodySelections()).toHaveLength(0)
+  })
+
+  it("el dueño abre su documento con dos consultas y un solo body", async () => {
+    await actAsMeasured(viewer)
+    recorder.reset()
+
+    const props = readingProps(await SharedReadingPage(pageParams(ownerFirstOwnDoc)))
+    expect(props.writing.id).toBe(ownerFirstOwnDoc)
+
+    const sessionQueries = recorder.records.filter((record) => record.client === "session")
+    expect(sessionQueries).toHaveLength(2)
+    expect(recorder.bodySelections()).toHaveLength(1)
+    expect(recorder.records.filter((record) => record.client === "admin")).toHaveLength(0)
+  })
+
+  it("el dueño gana aunque su candidato sea más viejo que el compartido", async () => {
+    await actAs(viewer)
+    await expectRedirect(
+      () => SharedReadingPage(pageParams(ownerFirstOwnSlug)),
+      `/shared/${ownerFirstOwnDoc}`,
+    )
+  })
+
+  it("el candidato legible más nuevo gana y el público ajeno sin share se descarta", async () => {
+    await actAs(viewer)
+    // El público ajeno es más nuevo, pero `/shared` exige grant: gana el
+    // compartido más antiguo.
+    await expectRedirect(
+      () => SharedReadingPage(pageParams(collisionSlug)),
+      `/shared/${olderReadableDoc}`,
+    )
+    // Y el público sin share no se abre ni por su UUID canónico.
+    await expectNotFound(() => SharedReadingPage(pageParams(newerPublicNoShareDoc)))
+  })
+
+  it("un UUID denegado no reintenta como slug", async () => {
+    await actAs(viewer)
+    // El decoy prueba que un fallback por slug encontraría un documento
+    // legible: si el UUID denegado cayera a slug, la página lo abriría.
+    expect(readingProps(await SharedReadingPage(pageParams(decoySlugDoc))).writing.id).toBe(decoySlugDoc)
+    await expectNotFound(() => SharedReadingPage(pageParams(deniedUuidDoc)))
+  })
+
+  it("control positivo — un público con share entrega body", async () => {
+    await actAs(viewer)
+    const props = readingProps(await SharedReadingPage(pageParams(publicShareControlDoc)))
+    expect(props.writing.id).toBe(publicShareControlDoc)
+    expect(props.writing.bodyText).toBe("ODE-616 harness")
+  })
+
+  it("la revocación entre summary y detail niega el body (share vigente → revocado)", async () => {
+    await actAsMeasured(viewer)
+
+    for (const writingId of [revokedSharedDoc, revokedPublicDoc]) {
+      recorder.reset()
+      let hookRuns = 0
+      recorder.setBeforeQuery(async (record) => {
+        if (hookRuns > 0) return
+        if (record.client !== "session" || record.table !== "writings") return
+        if (!record.select?.includes("body_json")) return
+        hookRuns += 1
+        // El summary ya resolvió el candidato; el grant desaparece antes de
+        // que el detail se ejecute.
+        const { error } = await admin
+          .from("writing_shares")
+          .delete()
+          .eq("writing_id", writingId)
+          .eq("shared_with_id", viewer.id)
+        if (error) throw new Error(`[sharing] no se pudo revocar entre etapas: ${error.message}`)
+      })
+
+      await expectNotFound(() => SharedReadingPage(pageParams(writingId)))
+      expect(hookRuns).toBe(1)
+    }
   })
 })
 
