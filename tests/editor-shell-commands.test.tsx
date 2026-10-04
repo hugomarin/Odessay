@@ -1563,6 +1563,13 @@ const MARKDOWN_AVAILABILITY_CASES: MarkdownAvailabilityCase[] = [
       await openFormatToolbarMenu("Text")
       expect(formatToolbarItem("</>"), "Code vuelve a ausentarse en Markdown").toBeNull()
       await closeFormatToolbarMenu()
+      // El caret quedó dentro del bloque insertado en Rich; en Markdown el
+      // trigger no debe etiquetar ese bloque como "Code".
+      const textTrigger = await waitFor(
+        () => document.querySelector<HTMLButtonElement>('button[aria-label="Text"]'),
+        { label: "trigger Text de la toolbar" },
+      )
+      expect(textTrigger.textContent?.trim(), "el trigger no rotula Code en Markdown").not.toContain("Code")
     },
   },
   {
