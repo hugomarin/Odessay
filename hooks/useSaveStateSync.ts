@@ -61,7 +61,6 @@ export function useSaveStateSync(input: SaveStateSyncInput) {
     currentWritingIdRef,
     navigateToWriting,
     reconcileActiveSaveStateRef,
-    routeWritingId,
     router,
     syncStatusRef,
   } = input
@@ -156,7 +155,18 @@ export function useSaveStateSync(input: SaveStateSyncInput) {
         void (async () => {
           const localWriting = await localDB.writings.get(activeWritingId)
 
-          if (!localWriting?.slug || routeWritingId === localWriting.slug) {
+          // ODE-640: el negativo inalcanzable `routeWritingId === slug` se
+          // sustituye por el alcanzable "sin slug". En producción la ruta
+          // entrega un UUID, nunca el slug, así que comparar ambos no
+          // discriminaba ningún caso real.
+          if (!localWriting?.slug) {
+            return
+          }
+
+          // ODE-640: el lookup local es asíncrono y el documento activo puede
+          // cambiar durante el await. Un resultado viejo de otro documento no
+          // aplica metadata ni navega al activo nuevo.
+          if (currentWritingIdRef.current !== activeWritingId) {
             return
           }
 
@@ -245,7 +255,6 @@ export function useSaveStateSync(input: SaveStateSyncInput) {
     currentWritingIdRef,
     navigateToWriting,
     reconcileActiveSaveStateRef,
-    routeWritingId,
     router,
     syncStatusRef,
   ])
