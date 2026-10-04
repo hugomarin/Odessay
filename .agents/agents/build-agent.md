@@ -127,12 +127,12 @@ Incluir un resumen del `Reuse Check` en el body del PR para que REVIEW pueda con
 
 ### Evidencia de discriminación por guard
 
-El PR incluye una sección `Evidencia de discriminación`, con una fila por guard material que protege una transición o una rama de error:
+El PR incluye una sección `Evidencia de discriminación`, con una fila por guard material que protege una transición o una rama de error. Es **la** sección de mutaciones de la Guía de review: no se escribe otra lista de mutaciones aparte.
 
 | Guard | Test | Mutación que lo quita | Salida roja (archivo:línea) | ¿Falla sin el fix? |
 |---|---|---|---|---|
 
-La salida roja debe identificar la aserción que falla y la razón. BUILD ejecuta el test contra la mutación y también sin el fix para demostrar la fase roja. Una mutación verde se corrige o se retira de la guía con una razón escrita; declarar una mutación no construible requiere pegar el intento reproducible.
+La salida roja debe identificar la aserción que falla y la razón. BUILD ejecuta el test contra la mutación y, si el entregable arregla un bug, también sin el fix para demostrar la fase roja; sin bug, la columna "¿Falla sin el fix?" dice `n/a`. Una mutación verde se corrige o se retira de la guía con una razón escrita; declarar una mutación no construible requiere pegar el intento reproducible.
 
 A partir de aquí, `workflow/workflow.md` retoma el protocolo (validación, PR, Linear). Este rol termina su responsabilidad al cerrar la fase de Ejecución.
 
