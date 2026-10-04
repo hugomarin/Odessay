@@ -574,6 +574,75 @@ describe("WritingCollectionsSection — un solo escritor de selectedIds (ODE-643
     15_000,
   )
 
+  it.fails(
+    "descarta el create de B resuelto al volver a B tras visitar A (B→A→B)",
+    async () => {
+      const firstWritingId = uniqueId("writing")
+      const secondWritingId = uniqueId("writing")
+      const alpha = await seedCollection("Alpha")
+      await localDB.writingCollections.replaceForWriting(firstWritingId, [alpha.id])
+      const name = `Eta ${uniqueId("name")}`
+
+      renderSection(firstWritingId)
+      await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "carga de A")
+
+      // B sin snapshot: su carga queda retenida.
+      const loadGate = deferred()
+      probe.loadGate = {
+        writingId: secondWritingId,
+        promise: loadGate.promise,
+        release: loadGate.release,
+      }
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+      })
+      await waitFor(() => findButtonOrNull("New collection"), "picker de B")
+
+      // Create-and-assign iniciado en B antes de su snapshot.
+      const createGate = deferred()
+      probe.createGate = { promise: createGate.promise, release: createGate.release }
+      await clickButton("New collection")
+      const input = await waitFor(
+        () => container.querySelector<HTMLInputElement>("#collection-name"),
+        "campo de nombre",
+      )
+      setNativeInputValue(input, name)
+      await clickButton("Create")
+      await flush(3)
+
+      // B → A → B mientras el create sigue esperando.
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={firstWritingId} />)
+      })
+      await flush(4)
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+      })
+      await flush(4)
+
+      // B hidrata su snapshot real (vacío) con el create aún en vuelo.
+      loadGate.release()
+      probe.loadGate = null
+      await flush(6)
+
+      // El create se resuelve con B otra vez activo: el cambio de documento
+      // ya canceló la intención y B debe quedar vacío.
+      createGate.release()
+      probe.createGate = null
+      await flush(6)
+
+      expect(probe.writeCalls.some((call) => call.writingId === secondWritingId)).toBe(false)
+      const settled = await waitForSettledIds(secondWritingId)
+      expect(settled).toEqual([])
+      await waitFor(
+        () => (triggerText() === "Add to collections" ? true : null),
+        "B sin asignaciones",
+      )
+      expect(await readIds(firstWritingId)).toEqual([alpha.id])
+    },
+    15_000,
+  )
+
   it("termina en A y deja B intacto un toggle iniciado en A que vuelve a A tras visitar B", async () => {
     const firstWritingId = uniqueId("writing")
     const secondWritingId = uniqueId("writing")
