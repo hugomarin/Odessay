@@ -2249,6 +2249,9 @@ export function EditorShell({
     onGetSaveContent: handleGetSaveContent,
     onSaveToDisk: handleSaveToDisk,
     documentKey: currentWritingId,
+    // ODE-632: el modo es del frontend; el adapter nativo recibe la lista de
+    // acciones no disponibles para deshabilitar sus ítems.
+    editorMode: mode,
   })
 
   // ODE-478 case 5 covered the explicit tab-close button; the window itself
@@ -2963,6 +2966,7 @@ export function EditorShell({
       <EditorShortcutsDialog
         open={isShortcutHelpOpen}
         onOpenChange={setIsShortcutHelpOpen}
+        mode={mode}
       />
 
       {correctionToast ? (

@@ -5,7 +5,7 @@ import { open, save } from "@tauri-apps/plugin-dialog"
 import { subscribeMenuAction } from "@/lib/services/desktop/menu-event-bus"
 import { drainPendingOsOpenPaths } from "@/lib/services/desktop/pending-os-open"
 import { preflightOpenFile } from "@/lib/editor/open-file-preflight"
-import type { EditorShortcutAction } from "@/lib/editor/shortcuts"
+import { editorUnavailableActionsForMode, type EditorShortcutAction } from "@/lib/editor/shortcuts"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 
 type Handlers = {
@@ -23,6 +23,13 @@ type Handlers = {
    */
   onSaveToDisk?: (path: string, content: string) => Promise<string | false> | string | false
   documentKey?: string | null
+  /**
+   * ODE-632 — mode the editor is in. Its availability (which actions have no
+   * Markdown branch) is owned by the frontend; this bridge is the only path
+   * that tells the native menu which items to disable. `undefined` (web, or a
+   * consumer that does not own an editor mode) skips the sync.
+   */
+  editorMode?: "rich" | "markdown"
 }
 
 const EDITOR_MENU_ACTION_IDS: EditorShortcutAction[] = [
@@ -65,6 +72,7 @@ export function useTauriMenuEvents({
   onGetSaveContent,
   onSaveToDisk,
   documentKey,
+  editorMode,
 }: Handlers) {
   const onOpenFileRef = useRef(onOpenFile)
   const onNewFileRef = useRef(onNewFile)
@@ -80,6 +88,33 @@ export function useTauriMenuEvents({
   useEffect(() => { onGetSaveContentRef.current = onGetSaveContent }, [onGetSaveContent])
   useEffect(() => { onSaveToDiskRef.current = onSaveToDisk }, [onSaveToDisk])
   useEffect(() => { lastSavePathRef.current = null }, [documentKey])
+
+  // ODE-632 — the native menu is global and persistent while the editor mode
+  // is not: push the current availability on every mode change. The frontend
+  // stays the owner of the mode; if this sync ever fails, a stale (still
+  // enabled) native item is harmless because the Markdown branch of
+  // `handleRunAction` has no case for the six actions and the menu event
+  // becomes a no-op.
+  useEffect(() => {
+    if (!isDesktopRuntime() || !editorMode) return
+
+    let cancelled = false
+    const syncAvailability = async () => {
+      const { invoke } = await import("@tauri-apps/api/core")
+      if (cancelled) return
+      await invoke("set_editor_menu_availability", {
+        unavailableActions: editorUnavailableActionsForMode(editorMode),
+      })
+    }
+
+    void syncAvailability().catch((error) => {
+      console.error("editor menu availability sync failed:", error)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [editorMode])
 
   useEffect(() => {
     if (!isDesktopRuntime()) return

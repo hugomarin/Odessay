@@ -288,6 +288,36 @@ export const getEditorShortcutLabel = (action: EditorShortcutAction): string | n
   return getShortcutForPlatform(EDITOR_SHORTCUT_LABELS[action])
 }
 
+/**
+ * ODE-632 — acciones sin rama Markdown: en vez de ofrecerse muertas (control
+ * visible, despacho inerte) se ocultan en ese modo en todos sus frentes:
+ * toolbar normal y compacta, ayuda de atajos y menú nativo. En Rich siguen
+ * disponibles.
+ */
+export const EDITOR_MARKDOWN_UNAVAILABLE_ACTIONS: ReadonlySet<EditorShortcutAction> = new Set([
+  "codeBlock",
+  "horizontalRule",
+  "clearStyles",
+  "copyAsMarkdown",
+  "copyAsHtml",
+  "date",
+])
+
+/** Disponibilidad de una acción en el modo actual del editor. */
+export const isEditorActionAvailableInMode = (
+  action: EditorShortcutAction,
+  mode: "rich" | "markdown",
+): boolean => mode !== "markdown" || !EDITOR_MARKDOWN_UNAVAILABLE_ACTIONS.has(action)
+
+/**
+ * La lista de acciones no disponibles que el puente envía al adapter nativo.
+ * El dueño de la disponibilidad es el frontend (modo + lista); Tauri solo
+ * habilita/deshabilita los ítems de esta lista.
+ */
+export const editorUnavailableActionsForMode = (
+  mode: "rich" | "markdown",
+): EditorShortcutAction[] => (mode === "markdown" ? [...EDITOR_MARKDOWN_UNAVAILABLE_ACTIONS] : [])
+
 export type ShortcutHelpItem = {
   action: EditorShortcutAction
   availability: "both" | "desktop" | "web"
