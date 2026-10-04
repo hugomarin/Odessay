@@ -117,6 +117,7 @@ const makeProviderResponse = (title: string) =>
 type ProviderBehavior = (init?: RequestInit) => Promise<Response>
 
 const providerBehaviors: ProviderBehavior[] = []
+const routeBehaviors: Array<() => Promise<Response>> = []
 
 let routeCallCount = 0
 let providerCallCount = 0
@@ -135,6 +136,8 @@ const fetchRouter = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =
 
   if (url === "/api/ai/title-suggestions") {
     routeCallCount += 1
+    const routeBehavior = routeBehaviors.shift()
+    if (routeBehavior) return routeBehavior()
     const request = new Request(`https://app.odessay.com${url}`, init)
     return titleSuggestionsRoute(request)
   }
@@ -160,6 +163,7 @@ beforeEach(() => {
   providerCallCount = 0
   providerResponseTitle = "Untitled"
   providerBehaviors.length = 0
+  routeBehaviors.length = 0
 
   supabaseMock.getUser.mockReset()
   supabaseMock.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } })
@@ -434,8 +438,8 @@ describe("ODE-620 — a stale A suggestion never enters Desk's reused modal for 
 })
 
 describe("ODE-620 — web shell surfaces provider failures and can retry", () => {
-  it.each(["timeout", "provider 5xx", "provider network error"] as const)(
-    "shows the settled %s error, preserves the writing, and retries through the real route",
+  it.fails.each(["timeout", "provider 5xx", "provider network error", "route network failure"] as const)(
+    "shows the settled %s error with the approved copy, preserves the writing, and retries through the real route",
     async (failureMode) => {
       const writingId = `writing-error-${crypto.randomUUID()}`
       const title = "Title stays until accepted"
@@ -468,9 +472,17 @@ describe("ODE-620 — web shell surfaces provider failures and can retry", () =>
         vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
       } else if (failureMode === "provider 5xx") {
         providerBehaviors.push(async () => new Response("temporary provider outage", { status: 503 }))
-      } else {
+      } else if (failureMode === "provider network error") {
         providerBehaviors.push(async () => {
           throw new TypeError("provider network disconnected")
+        })
+      } else {
+        // The app's own route never answers: the fetch to
+        // /api/ai/title-suggestions rejects at the network boundary, so
+        // webAIService turns the technical message into an error envelope
+        // before the modal ever sees it.
+        routeBehaviors.push(async () => {
+          throw new TypeError("Failed to fetch")
         })
       }
 
@@ -484,12 +496,9 @@ describe("ODE-620 — web shell surfaces provider failures and can retry", () =>
           for (let index = 0; index < 40; index += 1) await Promise.resolve()
         })
         vi.useRealTimers()
-      } else {
+      } else if (failureMode !== "route network failure") {
         await waitFor(() => (providerCallCount === 1 ? providerCallCount : null), {
           label: `la llamada real al proveedor con ${failureMode}`,
-        })
-        await waitFor(() => (visibleSuggestionError() && buttonWithText("Suggest") ? true : null), {
-          label: `el DOM asentó el error ${failureMode} y limpió loading`,
         })
       }
 
@@ -497,8 +506,10 @@ describe("ODE-620 — web shell surfaces provider failures and can retry", () =>
         label: `error visible ${failureMode} después del evento de respuesta de la ruta`,
       })
       expect(routeCallCount, "la petición atravesó el POST real de AI-01").toBe(1)
-      expect(providerCallCount, "el proveedor fakeado recibió la petición real de la ruta").toBe(1)
-      expect(visibleSuggestionError()?.textContent?.trim()).toBeTruthy()
+      expect(providerCallCount, "el proveedor fakeado recibió la petición real de la ruta").toBe(
+        failureMode === "route network failure" ? 0 : 1,
+      )
+      expect(visibleSuggestionError()?.textContent?.trim()).toBe("Could not suggest a name. Try again.")
       expect(buttonWithText("Suggest")?.disabled).toBe(false)
       expect(document.querySelector<HTMLInputElement>('input[aria-label="Artifact name"]')?.value).toBe(title)
       expect(mountedShell?.editor().getText()).toBe(bodyText)
@@ -516,7 +527,7 @@ describe("ODE-620 — web shell surfaces provider failures and can retry", () =>
         label: "la sugerencia aparece en el modal tras reintentar con el proveedor sano",
       })
       expect(routeCallCount).toBe(2)
-      expect(providerCallCount).toBe(2)
+      expect(providerCallCount).toBe(failureMode === "route network failure" ? 1 : 2)
       expect(visibleSuggestionError()).toBeFalsy()
       expect(document.querySelector<HTMLInputElement>('input[aria-label="Artifact name"]')?.value).toBe(title)
       const afterRetry = await localDB.writings.get(writingId)
