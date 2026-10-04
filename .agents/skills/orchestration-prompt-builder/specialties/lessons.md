@@ -31,8 +31,8 @@ Origen: los prompts `/orchestration` v2 → v7 de P-ODE-43 (Odessay, 2026-09-27 
 | R7 | El mapa de Recon de ODE-605 quedó desactualizado tras el corte | Cada PR actualiza el mapa del área; el reviewer lo exige |
 | R8 | Un commit del Recon con `ODE-###` en el asunto hizo que `drift:strict` exigiera una fila de ledger | Los commits del PR del mapa no nombran ningún `ODE-###` en el asunto |
 | R9 | Desde el paso 2 de un issue, el `git diff` del pack muestra los pasos anteriores, y el builder lo leía como cambio estructural | Prever en el prompt que los cambios de pasos previos del mismo issue son esperados |
-| R11 | Los Recon tardaban de más porque se les aplicaba el tope de 3 agentes, que es de BUILD (Hugo, 2026-10-04) | El Recon no tiene tope de agentes: al menos uno por cluster, y más si un cluster es grande. El tope de 3 (S2) es solo para builders |
 | R10 | La Auditoría profunda encontró problemas que el brief no veía (el 404 de 660, una fuga en 616, un filtro que escondía documentos) | El Recon es una lectura profunda y adversarial del código, nunca un resumen |
+| R11 | Los Recon tardaban de más porque se les aplicaba el tope de 3 agentes, que es de BUILD (Hugo, 2026-10-04) | El Recon no tiene tope de agentes: al menos uno por cluster, y más si un cluster es grande. El tope de 3 (S2) es solo para builders |
 
 ## 3. BUILD
 
