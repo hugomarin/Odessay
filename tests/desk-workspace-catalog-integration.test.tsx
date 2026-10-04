@@ -35,10 +35,24 @@ const catalog = vi.hoisted(() => {
   return {
     state,
     listeners,
-    emit() {
-      listeners.forEach((listener) =>
-        listener({ transactionId: "t", documentIds: [], reason: "bulk", occurredAt: Date.now() }),
-      )
+    /**
+     * Publishes a CatalogChange with the same call forms the real catalog uses:
+     * `emit(documentIds, reason)` for the emitters (cloud snapshots, bindings,
+     * bulk dual writes) and `emit()` for a generic burst. The change shape is
+     * the real one (`lib/services/contracts/document-catalog.ts`), so a
+     * subscriber that inspects `reason`/`documentIds` behaves as in production.
+     */
+    emit(
+      documentIds?: string[],
+      reason?: "upsert" | "detach" | "cloud-snapshot" | "migration" | "bulk" | "excerpt" | "content",
+    ) {
+      const change = {
+        transactionId: "t",
+        documentIds: documentIds ?? [],
+        reason: reason ?? "bulk",
+        occurredAt: Date.now(),
+      }
+      listeners.forEach((listener) => listener(change))
     },
     instance: {
       list: vi.fn(async () => {
@@ -59,7 +73,30 @@ const catalog = vi.hoisted(() => {
       resolvePath: async (path: string) => ({ kind: "unbound", path }),
       registerBinding: vi.fn(),
       detachLocalFile: vi.fn(),
-      applyCloudSnapshot: vi.fn(),
+      /**
+       * Real hydration boundary (ODE-623 P1): production merges the cloud rows
+       * and then publishes ONE `cloud-snapshot` CatalogChange
+       * (`lib/services/desktop/sqlite-document-catalog.ts:136-156`), which Desk
+       * debounces exactly like the membership event. The single-snapshot form
+       * delegates to the batch one, mirroring `applyCloudSnapshot`.
+       */
+      applyCloudSnapshot: vi.fn(async (snapshot: DocumentCatalogRecord) => {
+        await catalog.instance.applyCloudSnapshots([snapshot])
+      }),
+      applyCloudSnapshots: vi.fn(async (snapshots: DocumentCatalogRecord[]) => {
+        for (const snapshot of snapshots) {
+          const index = (state.records as DocumentCatalogRecord[]).findIndex((r) => r.id === snapshot.id)
+          if (index >= 0) {
+            state.records[index] = { ...(state.records[index] as DocumentCatalogRecord), ...snapshot }
+          } else {
+            state.records = [...state.records, snapshot]
+          }
+        }
+        catalog.emit(
+          snapshots.map((snapshot) => snapshot.id),
+          "cloud-snapshot",
+        )
+      }),
       subscribe: (listener: (change: unknown) => void) => {
         listeners.add(listener)
         return () => listeners.delete(listener)
@@ -137,6 +174,13 @@ vi.mock("@/lib/services/sharing-service-factory", () => ({
 const sync = vi.hoisted(() => ({
   blockHydration: false,
   /**
+   * Holds the background hydration pass until the test releases it. Production
+   * hydration is a network roundtrip that lands after the mount-local work has
+   * settled; the gate lets the test pick that same ordering instead of racing
+   * the effect churn of a warm module graph (ODE-623).
+   */
+  hydrationGate: null as Promise<void> | null,
+  /**
    * Remote record the hydration double merges into the catalog when it runs.
    * Production hydration pulls remote rows in and the reload that follows it
    * renders them; a test sets this to observe that reload completed (ODE-623).
@@ -147,13 +191,17 @@ vi.mock("@/lib/sync", () => ({
   getSyncService: () => ({
     // When blocked, cloud hydration never resolves — Desk must still render its
     // local catalog rows (local-first / TTI not gated on the network).
-    hydrateWritings: () => {
+    hydrateWritings: async () => {
       if (sync.blockHydration) return new Promise(() => {})
+      if (sync.hydrationGate) await sync.hydrationGate
       if (sync.hydratedRecord) {
-        catalog.state.records = [...(catalog.state.records as DocumentCatalogRecord[]), sync.hydratedRecord]
+        const record = sync.hydratedRecord
         sync.hydratedRecord = null
+        // Production hydrates through applyCloudSnapshots, which commits the
+        // row THEN publishes the `cloud-snapshot` CatalogChange (ODE-623 P1).
+        await catalog.instance.applyCloudSnapshots([record])
       }
-      return Promise.resolve({ data: null })
+      return { data: null }
     },
     hydrateCollections: () =>
       sync.blockHydration ? new Promise(() => {}) : Promise.resolve({ data: null }),
@@ -317,6 +365,13 @@ const waitPastDebounce = async () => {
 let container: HTMLDivElement
 let root: Root | null = null
 
+// The membership test drives the product debounce with vitest fake timers, so
+// the polling barrier keeps the real timer and clock captured at module load:
+// its short real turns let dynamic imports and microtask chains settle without
+// ever advancing the debounce it is measuring (ODE-623 P1).
+const realSetTimeout = globalThis.setTimeout.bind(globalThis)
+const realDateNow = Date.now.bind(Date)
+
 /**
  * Wait for a condition the mounted Desk surface makes observable, without a
  * fixed sleep. The catalog debounce and the hydration reload are real timers,
@@ -328,16 +383,16 @@ const waitForDesk = async (
   label: string,
   timeoutMs = 2000,
 ): Promise<void> => {
-  const deadline = Date.now() + timeoutMs
+  const deadline = realDateNow() + timeoutMs
   for (;;) {
     if (predicate()) return
-    if (Date.now() >= deadline) {
+    if (realDateNow() >= deadline) {
       throw new Error(
         `waitForDesk agotó ${timeoutMs}ms esperando: ${label} (catalog.list=${catalog.instance.list.mock.calls.length}, collectionStore.load=${collectionStore.load.mock.calls.length}, pendingLists=${catalog.state.pendingLists})`,
       )
     }
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      await new Promise((resolve) => realSetTimeout(resolve, 10))
     })
   }
 }
@@ -363,6 +418,7 @@ beforeEach(() => {
     }))
   })
   sync.blockHydration = false
+  sync.hydrationGate = null
   sync.hydratedRecord = null
   pushMock.mockReset()
 })
@@ -567,79 +623,122 @@ describe("Desk consumes the DocumentCatalog", () => {
   })
 
   it("reloads Desk when desktop collection membership changes", async () => {
-    catalog.state.records = [makeRecord({ id: "cat-1", title: "Collection Doc" })]
-    // Hydration merges a remote row into the catalog, so the reload that follows
-    // the background hydration pass is observable on screen (ODE-623 barrier).
-    sync.hydratedRecord = makeRecord({ id: "hydrated-1", title: "Hydrated Doc" })
-    collectionStore.state.collections = [{
-      id: "collection-1",
-      owner_id: null,
-      name: "Letters",
-      description: null,
-      visibility: "private",
-      sync_status: "synced",
-      lifecycle: "local-only",
-      created_at: "2026-07-18T00:00:00.000Z",
-      updated_at: "2026-07-18T00:00:00.000Z",
-      local_updated_at: 1,
-    }]
+    // The product debounce is the signal under measurement, so it runs on the
+    // controlled clock: the bootstrap `cloud-snapshot` debounce expires
+    // deterministically before the counters reset instead of racing them
+    // (ODE-623 P1). The barrier still polls with the real clock (`waitForDesk`),
+    // so no fixed sleep is added.
+    vi.useFakeTimers()
+    try {
+      catalog.state.records = [makeRecord({ id: "cat-1", title: "Collection Doc" })]
+      // Hydration merges a remote row into the catalog and publishes the real
+      // `cloud-snapshot` CatalogChange, so the reload that follows the
+      // background hydration pass is observable on screen (ODE-623 barrier).
+      sync.hydratedRecord = makeRecord({ id: "hydrated-1", title: "Hydrated Doc" })
+      collectionStore.state.collections = [{
+        id: "collection-1",
+        owner_id: null,
+        name: "Letters",
+        description: null,
+        visibility: "private",
+        sync_status: "synced",
+        lifecycle: "local-only",
+        created_at: "2026-07-18T00:00:00.000Z",
+        updated_at: "2026-07-18T00:00:00.000Z",
+        local_updated_at: 1,
+      }]
 
-    const { default: DeskPage } = await import("@/app/(app)/desk/page")
-    const { setLocalWritingCollections } = await import("@/lib/queries/desk-catalog-source")
-    await act(async () => {
-      root = createRoot(container)
-      root.render(<DeskPage />)
-    })
-    await flush()
-
-    // Group by collection so the applied assignment is observable in Desk's DOM
-    // as the row's group label (the artifact row itself renders no chips).
-    {
-      const groupTrigger = container.querySelector<HTMLButtonElement>('[data-testid="desk-group-trigger"]')
-      await act(async () => {
-        groupTrigger?.click()
+      // The background hydration pass stays held until the mount-local view and
+      // the group control have settled, mirroring the production ordering (the
+      // network pass lands after the mount-local work). This keeps the
+      // `cloud-snapshot` notification on a live subscription instead of racing
+      // the effect churn a warm module graph produces.
+      let releaseHydration!: () => void
+      sync.hydrationGate = new Promise((resolve) => {
+        releaseHydration = resolve
       })
-      const collectionOption = Array.from(document.body.querySelectorAll("button")).find(
-        (button) => button.textContent?.trim() === "Collection",
+
+      const { default: DeskPage } = await import("@/app/(app)/desk/page")
+      const { setLocalWritingCollections } = await import("@/lib/queries/desk-catalog-source")
+      await act(async () => {
+        root = createRoot(container)
+        root.render(<DeskPage />)
+      })
+      await flush()
+
+      // Group by collection so the applied assignment is observable in Desk's DOM
+      // as the row's group label (the artifact row itself renders no chips).
+      {
+        const groupTrigger = container.querySelector<HTMLButtonElement>('[data-testid="desk-group-trigger"]')
+        await act(async () => {
+          groupTrigger?.click()
+        })
+        const collectionOption = Array.from(document.body.querySelectorAll("button")).find(
+          (button) => button.textContent?.trim() === "Collection",
+        )
+        await act(async () => {
+          collectionOption?.click()
+        })
+      }
+      // Local row rendered and the group control re-rendered: release hydration.
+      await waitForDesk(
+        () => (container.textContent ?? "").includes("Collection Doc"),
+        "fila local Collection Doc",
       )
       await act(async () => {
-        collectionOption?.click()
+        releaseHydration()
       })
+
+      // Bootstrap barrier (ODE-623): reset the counters only after the mount load
+      // and EVERY hydration reload have settled. `Hydrated Doc` proves the
+      // `cloud-snapshot` change was published and the post-hydration reload read
+      // the catalog; then the debounced reload of that same change is expired on
+      // the controlled clock, so no bootstrap notification can outlive the reset
+      // and be misattributed to the membership event.
+      await waitForDesk(
+        () => (container.textContent ?? "").includes("Hydrated Doc"),
+        "fila hidratada Hydrated Doc",
+      )
+      // Drain the `.then` tail (recipient-preview ids) so every bootstrap read
+      // has been invoked before the debounced one is measured.
+      await flush()
+      await waitForDesk(() => catalog.state.pendingLists === 0, "lecturas del catálogo en vuelo")
+
+      const bootstrapListCalls = catalog.instance.list.mock.calls.length
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(150)
+      })
+      await waitForDesk(
+        () => catalog.instance.list.mock.calls.length > bootstrapListCalls,
+        "reload post-hidratación",
+      )
+      await waitForDesk(() => catalog.state.pendingLists === 0, "bootstrap asentado")
+
+      // Positive control of attribution: no group label before the event, so the
+      // one that appears below can only come from the membership refresh.
+      expect(container.textContent ?? "").not.toContain("Letters")
+
+      catalog.instance.list.mockClear()
+      collectionStore.load.mockClear()
+
+      await act(async () => {
+        await setLocalWritingCollections("cat-1", ["collection-1"])
+      })
+      // The membership event schedules the same debounce; only its reload can
+      // produce the group label now that the bootstrap notification settled.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(150)
+      })
+      await waitForDesk(() => (container.textContent ?? "").includes("Letters"), "grupo Letters")
+
+      expect(catalog.instance.list).toHaveBeenCalledTimes(1)
+      expect(collectionStore.load).toHaveBeenCalledTimes(1)
+      expect(collectionStore.state.writingCollections).toEqual([
+        expect.objectContaining({ writing_id: "cat-1", collection_id: "collection-1" }),
+      ])
+    } finally {
+      vi.useRealTimers()
     }
-
-    // Bootstrap barrier (ODE-623): reset the counters only after the mount load
-    // and the background hydration reload have been applied. Their reads sit
-    // behind real dynamic imports and a background pass, so a fixed number of
-    // flushes races them under load; the observable completion is the data they
-    // render — the local row and the hydrated one.
-    await waitForDesk(
-      () => (container.textContent ?? "").includes("Collection Doc"),
-      "fila local Collection Doc",
-    )
-    await waitForDesk(
-      () => (container.textContent ?? "").includes("Hydrated Doc"),
-      "fila hidratada Hydrated Doc",
-    )
-    await waitForDesk(() => catalog.state.pendingLists === 0, "lecturas del catálogo en vuelo")
-    // Positive control of attribution: no group label before the event, so the
-    // one that appears below can only come from the membership refresh.
-    expect(container.textContent ?? "").not.toContain("Letters")
-
-    catalog.instance.list.mockClear()
-    collectionStore.load.mockClear()
-
-    await act(async () => {
-      await setLocalWritingCollections("cat-1", ["collection-1"])
-    })
-    // The refresh is attributed to the event only once Desk applied it: the
-    // observable completion is the row's group label.
-    await waitForDesk(() => (container.textContent ?? "").includes("Letters"), "grupo Letters")
-
-    expect(catalog.instance.list).toHaveBeenCalledTimes(1)
-    expect(collectionStore.load).toHaveBeenCalledTimes(1)
-    expect(collectionStore.state.writingCollections).toEqual([
-      expect.objectContaining({ writing_id: "cat-1", collection_id: "collection-1" }),
-    ])
   })
 
   it("renders the local catalog without waiting on cloud hydration (local-first / TTI)", async () => {
