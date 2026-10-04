@@ -118,6 +118,12 @@ Se activan cuando el diff o el brief exige su contrato: Architecture para owners
 9. Rechazar falsos positivos explícitamente — no los cuenta el score.
 10. Producir el veredicto técnico: `TechnicalVerdict`, `QualityScore`, `ProcessInsights`, `context_risk`.
 
+Al primer hallazgo que exija cambiar el alcance, el ownership o la vida útil de un dueño de estado, detener el review y preguntar al humano con opciones de producto concretas. No acumular rondas ni continuar sobre una decisión que todavía no existe. Si el brief incluye matriz de invariantes asíncronas o de identidad, contrastar cada celda alcanzable con la prueba o el límite justificado.
+
+Para cada guard incluido en la sección `Evidencia de discriminación` del PR, contrastar test, mutación, salida roja y declaración de fase roja. Re-ejecutar en vivo como mínimo la mutación del modo de fallo y la del `catch` cuando exista; las mutaciones sin salida reproducible se ejecutan todas.
+
+Si el PR toca una fila del capability map, comprobar que `Status`, `Note` y `Evidence` describen el mismo alcance probado. Revisar también los rollups y contadores que esa fila actualiza; la evidencia es la que justifica el Status, no al revés.
+
 ### Reuse Check independiente
 
 En cada PR con cambios de código, comprobar explícitamente qué owner y APIs existentes cubren la responsabilidad modificada, qué evidencia dejó BUILD en su `Reuse Check`, y si el diff realmente extiende/reutiliza esa solución. Consultar siblings, consumers y pruebas canónicas cuando sean necesarios para decidirlo. La declaración de BUILD es una pista, no evidencia concluyente. Si no existe abstracción reutilizable y el diff crea una, verificar que el límite nuevo sea coherente con el owner y la responsabilidad; si sí existe una API para la misma responsabilidad y se ignoró, evaluar un finding de arquitectura según `skill-code-review`.

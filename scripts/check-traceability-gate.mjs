@@ -9,7 +9,7 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolveTraceabilityRange } from "./lib/traceability-refs.mjs";
+import { hasRef, resolveTraceabilityRange } from "./lib/traceability-refs.mjs";
 
 function fail(message) {
   console.error(`[ops:traceability:gate] ${message}`);
@@ -17,6 +17,16 @@ function fail(message) {
 }
 
 const range = resolveTraceabilityRange();
+
+const comparisonTarget = hasRef("origin/main") ? "origin/main" : range.base;
+let baseRef;
+try {
+  baseRef = execFileSync("git", ["merge-base", range.head, comparisonTarget], {
+    encoding: "utf8",
+  }).trim();
+} catch {
+  fail(`Could not find a merge base between ${range.head} and ${comparisonTarget}.`);
+}
 
 const branch =
   process.env.GITHUB_HEAD_REF?.trim() ||
@@ -96,10 +106,7 @@ const isInfraProcessCategory =
   pullRequestLabels().some((label) => INFRA_PROCESS_LABELS.has(label));
 
 function changedFiles() {
-  const mergeBase = execFileSync("git", ["merge-base", range.head, range.base], {
-    encoding: "utf8",
-  }).trim();
-  return execFileSync("git", ["diff", "--name-only", `${mergeBase}..${range.head}`], {
+  return execFileSync("git", ["diff", "--name-only", `${baseRef}..${range.head}`], {
     encoding: "utf8",
   })
     .split("\n")
@@ -167,7 +174,6 @@ if (issueIds.length === 0) {
     );
   }
 }
-const baseRef = range.base;
 const headRef = range.head;
 console.log(`[ops:traceability:gate] Comparing ${baseRef}..${headRef}.`);
 

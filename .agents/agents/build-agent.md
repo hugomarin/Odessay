@@ -113,7 +113,7 @@ Implementation
 El patrón correcto para `/wf-build` es:
 
 1. Leer el Issue Brief y su `Architecture Contract` si existe.
-2. Si el cambio no es trivial (ver criterios de activación en `architecture-recon/SKILL.md`), ejecutar Architecture Recon antes de tocar código: owner, reusable API/abstraction, canonical reference/sibling, siblings, consumers, contratos, hotspots, tests canónicos, change surface propuesto.
+2. Si el cambio no es trivial (ver criterios de activación en `architecture-recon/SKILL.md`), ejecutar Architecture Recon antes de tocar código: owner, reusable API/abstraction, canonical reference/sibling, siblings, consumers, contratos, hotspots, tests canónicos, change surface propuesto. Si el estado vive en un componente o página, declarar también `Owner`, `Transiciones que lo destruyen`, `Trabajo en vuelo` y `Evidencia requerida`, siguiendo Architecture Recon.
 3. Para un cambio no trivial, declarar `Construction order` (ver abajo) con base en lo que Recon encontró; para uno trivial, conservar el owner local evidente.
 4. Cargar solo los skills de dominio relevantes a la superficie y al owner identificado.
 5. Implementar dentro del change surface declarado.
@@ -123,7 +123,16 @@ El patrón correcto para `/wf-build` es:
 
 Para todo cambio que active Architecture Recon, declarar antes de editar un `Reuse Check` breve: owner canónico, API/abstracción existente a extender o reutilizar, siblings/consumers/tests relevantes y decisión de construcción según `Construction order`. Si se crea una abstracción nueva, explicar qué evidencia muestra que el owner y las APIs existentes no bastan. Si no hay API reutilizable, decirlo explícitamente; no usar un sibling como prueba automática de que su implementación debe copiarse. Para cambios triviales sin Recon, identificar el owner local evidente en una línea.
 
-Incluir un resumen del `Reuse Check` en el body del PR para que REVIEW pueda contrastarlo con el diff. No es un artefacto persistido separado del Recon.
+Incluir un resumen del `Reuse Check` en el body del PR para que REVIEW pueda contrastarlo con el diff. Si el brief tiene matriz de invariantes asíncronas o de identidad, vincular cada celda alcanzable con la prueba o el límite declarado y conservarla en el PR. No es un artefacto persistido separado del Recon.
+
+### Evidencia de discriminación por guard
+
+El PR incluye una sección `Evidencia de discriminación`, con una fila por guard material que protege una transición o una rama de error. Es **la** sección de mutaciones de la Guía de review: no se escribe otra lista de mutaciones aparte.
+
+| Guard | Test | Mutación que lo quita | Salida roja (archivo:línea) | ¿Falla sin el fix? |
+|---|---|---|---|---|
+
+La salida roja debe identificar la aserción que falla y la razón. BUILD ejecuta el test contra la mutación y, si el entregable arregla un bug, también sin el fix para demostrar la fase roja; sin bug, la columna "¿Falla sin el fix?" dice `n/a`. Una mutación verde se corrige o se retira de la guía con una razón escrita; declarar una mutación no construible requiere pegar el intento reproducible.
 
 A partir de aquí, `workflow/workflow.md` retoma el protocolo (validación, PR, Linear). Este rol termina su responsabilidad al cerrar la fase de Ejecución.
 

@@ -82,7 +82,8 @@ Plantillas de spec: más abajo (Target / Change / Constraints / Ownership / Obse
 - **Construcción de la prueba** (capability-proof-contract.md, las 10 reglas): producción como punto de entrada, la secuencia real, solo fronteras externas fakeadas, afirmar después del evento de completitud y sobre el resultado canónico, dobles con todas las formas de llamada.
 - **Bug real:** primero `it.fails` en su propio commit, después el fix sin tocar el cuerpo del test (en Rust, un commit con `cargo test` en rojo). Arreglar solo en el owner que nombran el pack o las Decisiones. Si cambia un contrato, o es pérdida de datos o seguridad no prevista: parar y preguntar.
 - **"No construible":** intentarlo de verdad y dejar el intento en el PR antes de declararlo. Si de verdad no se alcanza, la fila queda en PARTIAL_INTEGRATION con la costura nombrada.
-- **Mutaciones:** antes de abrir el PR, el builder corre **todas** las de la Guía de review (la fase roja del bug real, el modo de fallo, el control positivo si se afirma una ausencia y las demás), cada una contra **solo el archivo de test indicado**, y revierte. La Guía pega por mutación: el cambio exacto, el test y la línea de la aserción que falló. Una mutación que queda en verde no se entrega: se arregla el test o se quita de la Guía con la razón escrita.
+- **Matriz y vida del dueño:** si el pack trae "Matriz", cada celda alcanzable termina en una prueba o en el límite con razón que declaró el brief, y el PR lo enlaza. Si trae "Vida del dueño", el diseño sigue el patrón que nombra (playbook de ownership asíncrono) y la prueba cubre las transiciones que destruyen al dueño.
+- **Mutaciones:** antes de abrir el PR, el builder corre **todas** las de la Guía de review (la fase roja del bug real, el modo de fallo, el control positivo si se afirma una ausencia y las demás), cada una contra **solo el archivo de test indicado**, y revierte. Van en **una sola** tabla `Evidencia de discriminación` (la sección de mutaciones de la Guía): `Guard | Test | Mutación que lo quita | Salida roja (archivo:línea) | ¿Falla sin el fix?` (`n/a` si no hay bug). Una mutación que queda en verde no se entrega: se arregla el test o se quita de la tabla con la razón escrita.
 - **Suite local:** mientras trabajas, solo los archivos afectados; al terminar, `npm test -- --changed origin/main` una vez, más typecheck y lint. La suite completa solo si se tocan `tests/support/**`, `tests/integration/**/support/**`, `vitest.config.ts` o `package.json`. Si falla un test ajeno, correrlo aislado y, si pasa, nombrarlo en el Context Report. Máximo 2 `npm test` completos simultáneos en la máquina.
 - **Antes del PR:** `npm run ops:proof:precheck` (si falla, rebase no interactivo y `git push --force-with-lease`, solo en la rama del issue) y `npm run ops:status:drift:strict`.
 - **Rust:** clonar `target/` (`cp -cR <checkout principal>/src-tauri/target <worktree>/src-tauri/`), `cargo test --manifest-path src-tauri/Cargo.toml` con timeout de 15 min o más, y la salida en el Context Report.
@@ -103,9 +104,11 @@ Plantillas de spec: más abajo (Target / Change / Constraints / Ownership / Obse
 - **Confirmar:** PR contra main, `[ODE-<n>]` en todos los commits, CI required y el preview en verde en el head revisado (`gh pr checks`, con polling de 60 s o más). Un head de solo docs sin preview se acepta por equivalencia.
 - **Checks mecánicos:** con el precheck en verde no se re-verifican a mano el orden de commits, el flip ni las celdas. El foco está en cuatro cosas:
   1. que el rojo sea por la razón declarada;
-  2. que las mutaciones de la Guía se re-corran en vivo: una muestra (como mínimo la del modo de fallo) si el builder pegó su salida; todas si falta alguna;
+  2. que las mutaciones de la tabla `Evidencia de discriminación` se re-corran en vivo: como mínimo la del modo de fallo y la del `catch` cuando exista; todas si falta alguna salida;
   3. que el estado de la fila esté bien juzgado;
-  4. que el Status y la Note de la fila digan lo mismo.
+  4. que Status, Note y Evidence de la fila (y sus rollups y contadores) digan lo mismo. El precheck solo detecta la contradicción explícita "INTEGRATION pero sigue PARTIAL"; el resto lo juzga el reviewer.
+- **Matriz:** si el brief o el pack la traen, cada celda alcanzable tiene su prueba o su límite con razón.
+- **Parar al primer hallazgo que cambie alcance, ownership o vida útil del dueño:** preguntar al humano con opciones de producto (por el `ask` del preámbulo), sin acumular rondas.
 - **Qué revisar:** entrada de producción, dobles solo en fronteras, afirmación tras la completitud, "no construible" intentado, Decisiones ni más ni menos, el diff dentro del Recon Pack y su "Construir con", el mapa y el catálogo actualizados, arreglos solo en el owner nombrado, red intacta y `cargo test` en local si se tocó Rust. Los hallazgos de seguridad bloquean.
 - **Re-review ligera** si el diff posterior solo toca docs, tests o fixtures. Si no, completa. El veredicto dice cuál se hizo.
 - **CI con reintento:** si aparece `(retry x1)` en un test que no es `it.fails`, se anota en ProcessInsights.
@@ -168,7 +171,7 @@ Constraints:
 - Temporales en .cache/. No tocar ledgers ni status.json. No crear issues.
 - <Restricciones de recursos compartidos: lock, comandos prohibidos.>
 Ownership: <owner y archivos que puede tocar; lo que NO toca>.
-Observable acceptance: <el test (archivo) que pasa de rojo a verde o que prueba la costura; las mutaciones de la Guía corridas en rojo, con su salida pegada; el estado esperado de la fila; el PR abierto con body, Context Report y Guía; el issue en In Review o In Progress>.
+Observable acceptance: <el test (archivo) que pasa de rojo a verde o que prueba la costura; la tabla Evidencia de discriminación con cada mutación en rojo y su salida pegada; las celdas de la matriz enlazadas, si la hay; el estado esperado de la fila; el PR abierto con body, Context Report y Guía; el issue en In Review o In Progress>.
 Orca: copia el handle exacto del preámbulo para el heartbeat y el worker_done; lee mensajes solo con el check del preámbulo y su --terminal (nunca check --run); usa el ask del preámbulo si te bloqueas; no empieces otro trabajo después del worker_done.
 ```
 
@@ -179,7 +182,7 @@ Target: review del PR #<pr> (<id del nodo>, ODE-<n>). Construyó: <herramienta>.
 Change: verificar y, con PASS, cerrar.
 Constraints:
 - /wf-review con skill-code-review. Misma rama y worktree del build.
-- CI required y preview en verde en el head revisado. Foco: rojo por la razón declarada, muestra de las mutaciones de la Guía en vivo (todas si falta una salida), estado de la fila, Status y Note coherentes.
+- CI required y preview en verde en el head revisado. Foco: rojo por la razón declarada, mutaciones de la tabla Evidencia de discriminación en vivo (modo de fallo y catch como mínimo; todas si falta una salida), estado de la fila, Status/Note/Evidence coherentes, celdas de la matriz. Al primer hallazgo que cambie alcance, ownership o vida del dueño: parar y preguntar.
 - Re-review ligera solo si el diff posterior es de docs o tests.
 - FAIL: veredicto y vuelta a BUILD; el commit del rechazo lleva review_rejected.
 - PASS: cerrar primero (update-branch, merge --merge, ledger en worktree temporal de main, tracker) y después el comentario.

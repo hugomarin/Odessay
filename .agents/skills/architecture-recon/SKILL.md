@@ -32,6 +32,8 @@ El contrato y las decisiones aceptadas indican qué debe ser verdad. El código 
 5. Revisar instrucciones scoped y módulos de composición que el cambio tocaría. Distinguir el cableado en esos módulos de la responsabilidad que pertenece a otro owner.
 6. Confrontar owner y comportamiento observados con el contrato esperado. Delimitar la superficie mínima coherente del cambio y señalar si requiere una abstracción nueva.
 
+Si el estado vive en un componente o página, el Recon debe declarar además `Owner`, `Transiciones que lo destruyen` (por ejemplo: cierre, focus, cero pestañas, remount o navegación), `Trabajo en vuelo` y `Evidencia requerida`. Identificar qué transición conserva, termina, cancela o deja continuar ese trabajo. Para elegir el orden de protección de una carrera, usar el [playbook de ownership asíncrono](../skill-architecture/references/async-ownership.md), que recoge los patrones y sus límites probados en este repo.
+
 Acotar la búsqueda a la responsabilidad y sus consumidores reales; ampliar el alcance solo cuando una dependencia encontrada lo justifique.
 
 En archivos grandes y hotspots (p. ej. `components/editor/editor-shell.tsx`), localizar por símbolo y leer el rango alrededor; no paginar el archivo de principio a fin. Si el brief ya cita archivo y líneas, empezar por ahí y confirmarlas. Agrupar en una sola llamada las lecturas independientes.
@@ -45,6 +47,7 @@ Architecture Recon
 - Change intent / responsibility:
 - Domain:
 - Canonical owner (según contrato, o candidatos si falta decisión):
+- Owner lifecycle (si el estado vive en componente/página): Owner; Transiciones que lo destruyen; Trabajo en vuelo; Evidencia requerida.
 - Observed implementation / owner (canonical, legacy o candidatos):
 - Reusable API / abstraction:
 - Canonical reference / sibling (si hace falta crear algo):

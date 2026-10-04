@@ -58,7 +58,7 @@ Origen: los prompts `/orchestration` v2 → v7 de P-ODE-43 (Odessay, 2026-09-27 
 | V2 | Mismo caso: alguien tenía que terminar | Fallback de solo cierre: otra herramienta cierra sin revisar, solo si el head es exactamente el SHA del veredicto y el CI está verde |
 | V3 | Re-reviews completas para fixes de solo docs | Re-review ligera si el diff posterior solo toca docs o tests |
 | V4 | El reviewer re-verificaba a mano el orden de commits y el flip | Con el precheck en verde no se re-verifica; el foco es el rojo por la razón declarada, una muestra de las mutaciones en vivo (B4) y el estado de la fila |
-| V5 | Las heurísticas para juzgar el Status y la Note de la fila dejaban pasar otras redacciones (#574) | La coherencia entre Status y Note la juzga el reviewer, no un script |
+| V5 | Las heurísticas para juzgar el Status y la Note de la fila dejaban pasar otras redacciones (#574). Después, el retro de ODE-671 contó 24 de 71 rechazos por evidencia documental que contradecía el estado | La coherencia completa entre Status, Note y Evidence (con rollups y contadores) la juzga el reviewer. El precheck solo detecta la contradicción explícita y acotada "INTEGRATION pero sigue PARTIAL" en filas tocadas (ODE-671); no se amplía a más heurísticas |
 | V6 | El reviewer cambió de rama el checkout principal al escribir el ledger | El ledger se escribe en un worktree temporal de main, nunca en el checkout principal |
 | V7 | Rechazos registrados sin `review_rejected` en el asunto pusieron `drift:strict` en rojo para todos | El asunto del commit de un rechazo lleva `review_rejected` |
 | V8 | El ledger consolidado por issue chocaba con varios PRs (desde #558) | Una fila `append-built` por PR con su `pr_url`; las parciales empiezan con "PARTIAL DELIVERY — paso N de M" |
@@ -111,4 +111,16 @@ Origen: los prompts `/orchestration` v2 → v7 de P-ODE-43 (Odessay, 2026-09-27 
 | P5 | Un PR abierto ajeno a la tanda (#423, parado y en conflicto) tocaba los archivos de un nodo | Los PRs abiertos fuera de la tanda que tocan los mismos archivos entran al grafo como decisión humana (esperar o no) con default y gate |
 | P6 | El Recon tuvo correcciones posteriores (comentario "Recon Pack correction", "segunda pasada" de la auditoría) | En la precedencia de entradas, una corrección o ronda posterior manda sobre la anterior del mismo tipo |
 | P7 | Precondiciones escritas sin comando ("verificar permisos") | Cada precondición lleva su comando y su resultado esperado; si no se puede verificar con un comando, es una pregunta al humano |
+
+## 8. Retro de reviews multi-ronda (ODE-671, 2026-10-04)
+
+Fuente: `workflow/quality/review-multi-round-retro.md` (179 eventos de review, 92 issues, 71 rechazos). Para medir si estas reglas funcionan, comparar contra los rechazos posteriores al 2026-10-02: muchos de los 71 son anteriores a #541 y #596.
+
+| # | Incidente | Regla |
+|---|---|---|
+| Q1 | La prueba no discriminaba la conducta que afirmaba (38 de 71) | **Una sola** tabla `Evidencia de discriminación` por PR (la sección de mutaciones de la Guía): guard, test, mutación, salida roja y fase roja (`n/a` sin bug). REVIEW re-corre como mínimo el modo de fallo y el `catch` |
+| Q2 | Carreras y ciclo de vida del dueño (33 de 71; ODE-652: 6 ciclos) | El Recon declara "Vida del dueño" si el estado vive en un componente o página, y elige el patrón con el playbook de ownership asíncrono (`skill-architecture/references/async-ownership.md`) |
+| Q3 | El brief era más estrecho que la invariante (25 de 71) | Matriz de operaciones × transiciones × éxito/error para invariantes asíncronas o de identidad, desde el brief o el Recon; cada celda alcanzable con prueba o límite |
+| Q4 | Rondas acumuladas sobre una decisión que no existía | REVIEW para al primer hallazgo que cambia alcance, ownership o vida del dueño, y pregunta con opciones de producto |
+| Q5 | Commits de main mezclados en la rama contaban para traceability | El gate compara desde el merge-base con `origin/main` |
 

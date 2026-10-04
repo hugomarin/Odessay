@@ -69,7 +69,7 @@ Un Recon que solo cubre "Despachar" deja al builder sin diseño: lo decide solo 
 | C2 | **Reutilización** | La API, el helper, el hook o el doble del harness que ya cubre el caso; el sibling cuya **forma** seguir si hace falta una pieza nueva | Recon Pack, campo "Construir con" |
 | C3 | **Duplicación** | Una segunda implementación que el brief, tal como está, obligaría a crear | Recon Pack, campo "Construir con" (qué **no** crear) |
 | C4 | **Diseño más simple** | Si el código permite una solución más simple que la del brief, con menos piezas o sin estado nuevo | Corrección en "Auditoría"; si cambia el alcance, decisión humana |
-| C5 | **Invariantes y orden** | Lo que el cambio no puede romper: orden de efectos, refs en callbacks de larga vida, identidad, escritores únicos | Recon Pack, campo "Trampas" |
+| C5 | **Invariantes y orden** | Lo que el cambio no puede romper: orden de efectos, refs en callbacks de larga vida, identidad, escritores únicos. Si la invariante depende de trabajo asíncrono, identidad o estado que puede quedar obsoleto: la **matriz** de operaciones × transiciones de vida × éxito/error (`skill-planning/SKILL.md` § Matriz), con sus celdas alcanzables. Si el estado vive en un componente o página: **vida del dueño** (owner, transiciones que lo destruyen, trabajo en vuelo, evidencia requerida) y el patrón del [playbook de ownership asíncrono](../../skill-architecture/references/async-ownership.md) | Recon Pack, campos "Trampas" y "Matriz" |
 | C6 | **Cómo probarlo** | Test canónico a extender, punto de entrada de producción, helpers del harness, la mutación que discrimina el bug | Recon Pack, campo "Dónde probar" |
 
 **Uso "Despachar": lo que puede frenar la orquestación:**

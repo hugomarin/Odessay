@@ -35,6 +35,18 @@ Cargar las guías de arquitectura, rendimiento, dominio o experiencia cuando el 
 6. Elegir evidencia proporcional: qué prueba, inspección o recorrido podría falsificar cada requisito material y en qué entorno.
 7. Expresar la aceptación del resultado respecto a la intención del dueño, además de la ejecución técnica del brief.
 
+### Matriz de invariantes asíncronas o de identidad
+
+Cuando una invariante dependa de trabajo asíncrono, identidad documental o estado que puede quedar obsoleto, el Issue Brief incluye una matriz de **operaciones × transiciones de vida × resultado (éxito/error)**. No aplica a cambios triviales de copy o estilo aislado. Cada fila representa una celda alcanzable: se cubre con una prueba que observe el resultado, o se declara como límite con su razón concreta. No se dejan celdas relevantes vacías ni se usa un caso feliz como sustituto de su caso de error.
+
+Usar esta tabla como modelo y listar solo las operaciones y transiciones pertinentes al issue; cuando una combinación sea inalcanzable, dejarlo explícito con la razón:
+
+| Operación | Transición de vida durante el trabajo | Resultado | Invariante observable | Prueba requerida o límite con razón |
+|---|---|---|---|---|
+| `<load/save/rename/etc.>` | `<cambio de documento/cierre/focus/cero pestañas/remount/navegación>` | `éxito` o `error` | `<qué permanece atribuido, durable o descartado>` | `<test archivo:línea, o límite y razón>` |
+
+La matriz forma parte de los requisitos y criterios de aceptación; BUILD la conserva en el Recon Pack cuando exista y relaciona sus celdas con la evidencia del PR. REVIEW verifica la cobertura de cada celda alcanzable.
+
 La estructura exacta del tracker se toma de la especialidad del proyecto; el método conserva estas preguntas aunque cambie la herramienta.
 
 ## 5. Resultado y evidencia

@@ -44,6 +44,35 @@ function createRepository(files: Record<string, string> = {}, commitMessage = "f
   return { root, base, head }
 }
 
+function createRepositoryWithMainMerge(): { root: string; base: string; head: string } {
+  const root = mkdtempSync(join(tmpdir(), "odessay-traceability-main-merge-"))
+  temporaryRepos.push(root)
+  git(root, "init", "-b", "main")
+  git(root, "config", "user.email", "traceability@example.com")
+  git(root, "config", "user.name", "Traceability Test")
+
+  writeFileSync(join(root, "baseline.txt"), "base\n")
+  git(root, "add", ".")
+  git(root, "commit", "-m", "chore: baseline")
+  const base = git(root, "rev-parse", "HEAD")
+
+  git(root, "switch", "-c", "feature")
+  writeFileSync(join(root, "feature.txt"), "feature\n")
+  git(root, "add", ".")
+  git(root, "commit", "-m", "fix(feature): implement issue [ODE-500]")
+
+  git(root, "switch", "main")
+  writeFileSync(join(root, "main-only.txt"), "already in main\n")
+  git(root, "add", ".")
+  git(root, "commit", "-m", "docs: already delivered on main")
+  git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+  git(root, "switch", "feature")
+  git(root, "merge", "--no-ff", "main", "-m", "Merge main into feature")
+  const head = git(root, "rev-parse", "HEAD")
+  return { root, base, head }
+}
+
 function writePullRequestEvent(root: string, labels: string[]): string {
   const eventPath = join(root, "pr-event.json")
   writeFileSync(
@@ -191,5 +220,18 @@ describe("infra/process traceability exemption", () => {
 
     expect(result.code).toBe(0)
     expect(result.output).toContain("have branch and commit traceability")
+  })
+
+  it("PASS: excludes commits already present in main from traceability comparison", () => {
+    const fixture = createRepositoryWithMainMerge()
+
+    const result = runGate(fixture, {
+      GITHUB_HEAD_REF: "ODE-500-feature",
+      TRACEABILITY_ISSUE_IDS: "ODE-500",
+    })
+
+    expect(result.code).toBe(0)
+    expect(result.output).toContain("have branch and commit traceability")
+    expect(result.output).not.toContain("already delivered on main")
   })
 })
