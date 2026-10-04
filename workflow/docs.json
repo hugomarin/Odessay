@@ -684,6 +684,11 @@
       "description": "Criterios portables de clasificación por capa y runtime para Architecture: funciones, entradas, salidas, dependencias e invariantes de UI, Application, Domain y Adapter."
     },
     {
+      "path": ".agents/skills/skill-architecture/references/async-ownership.md",
+      "type": "reference",
+      "description": "Playbook cross-cutting para ownership de estado asíncrono: decidir entre generación local, serialización de transiciones, versión durable y mantener vivo al dueño mientras haya trabajo pendiente."
+    },
+    {
       "path": ".agents/skills/skill-code-review/SKILL.md",
       "type": "skill",
       "description": "Skill único de review técnico: investiga el diff, selecciona referencias de corrección, arquitectura, testing y tamaño del cambio, y produce findings y TechnicalVerdict. Workflow posee merge/estados y scoring.md la puntuación."
