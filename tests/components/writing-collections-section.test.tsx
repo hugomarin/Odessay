@@ -574,7 +574,7 @@ describe("WritingCollectionsSection — un solo escritor de selectedIds (ODE-643
     15_000,
   )
 
-  it.fails(
+  it(
     "descarta el create de B resuelto al volver a B tras visitar A (B→A→B)",
     async () => {
       const firstWritingId = uniqueId("writing")

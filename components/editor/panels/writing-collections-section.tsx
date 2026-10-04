@@ -65,8 +65,12 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
   const { selection, selectionRef, setSelection } = useSelectedCollectionIdsState()
   const [collections, setCollections] = useState<LocalCollection[]>([])
   const pendingIntentRef = useRef<PendingAssignmentIntent | null>(null)
-  const activeWritingIdRef = useRef(writingId)
-  activeWritingIdRef.current = writingId
+  const writingGenerationRef = useRef(0)
+  const lastWritingIdRef = useRef(writingId)
+  if (lastWritingIdRef.current !== writingId) {
+    lastWritingIdRef.current = writingId
+    writingGenerationRef.current += 1
+  }
 
   const loadLocalState = async (currentWritingId: string, cancelled?: () => boolean) => {
     const { collections: nextCollections, writingCollections: assignments } =
@@ -126,6 +130,12 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     }
   }, [writingId])
 
+  useEffect(() => {
+    return () => {
+      writingGenerationRef.current += 1
+    }
+  }, [])
+
   const options = useMemo(() => buildCollectionOptions(collections), [collections])
 
   const queuePendingAssignment = (ownerWritingId: string, op: AssignmentOp) => {
@@ -169,21 +179,25 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
 
   const createAndAssign = async (name: string) => {
     const ownerWritingId = writingId
+    const generation = writingGenerationRef.current
     const ownerId = getLocalDBScope()
     const collection = await createLocalCollection({
       ownerId: ownerId === "anonymous" ? null : ownerId,
       name,
     })
-    const current = selectionRef.current
 
-    if (current.writingId === ownerWritingId) {
-      releasePendingIntent(ownerWritingId)
-      const nextIds = [...current.ids, collection.id]
+    if (writingGenerationRef.current === generation) {
+      const current = selectionRef.current
 
-      setSelection({ writingId: ownerWritingId, ids: nextIds })
-      await setLocalWritingCollections(ownerWritingId, nextIds)
-    } else if (activeWritingIdRef.current === ownerWritingId) {
-      queuePendingAssignment(ownerWritingId, { kind: "add", collectionId: collection.id })
+      if (current.writingId === ownerWritingId) {
+        releasePendingIntent(ownerWritingId)
+        const nextIds = [...current.ids, collection.id]
+
+        setSelection({ writingId: ownerWritingId, ids: nextIds })
+        await setLocalWritingCollections(ownerWritingId, nextIds)
+      } else {
+        queuePendingAssignment(ownerWritingId, { kind: "add", collectionId: collection.id })
+      }
     }
 
     setCollections((current) => [collection, ...current])
