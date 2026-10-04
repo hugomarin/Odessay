@@ -493,6 +493,7 @@ export async function tauriWriteFileDouble(
   path: string,
   content: string,
   expectedContentHash?: string | null,
+  expectedInode?: number | null,
 ): Promise<void> {
   writeFileCallCount += 1
   writeFileLog.push({ path, content })
@@ -512,6 +513,18 @@ export async function tauriWriteFileDouble(
     failingWriteFileCallNumber = null
     writeFileFailureFactory = null
     fail()
+  }
+
+  // ODE-635 (review ronda 2): identity guard mirrored from Rust `write_file`
+  // for a write with no content baseline — the resolved file may be replaced
+  // or created, never swapped for a different file that appeared at the path.
+  if (!expectedContentHash && expectedInode != null) {
+    const stat = await fs.stat(path).catch(() => null)
+    if (stat && stat.ino !== expectedInode) {
+      throw new WriteFileConflictError(
+        `CONFLICT: ${path} was replaced on disk since it was resolved (expected file identity ${expectedInode}, found ${stat.ino})`,
+      )
+    }
   }
 
   if (expectedContentHash) {

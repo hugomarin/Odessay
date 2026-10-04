@@ -122,6 +122,7 @@ export async function tauriWriteFile(
   path: string,
   content: string,
   expectedContentHash?: string | null,
+  expectedInode?: number | null,
 ): Promise<void> {
   // `write_file` (Rust) writes to `${path}.tmp` then renames it onto `path` —
   // the watcher reports a `create` and a `rename` for the .tmp sibling before
@@ -131,7 +132,12 @@ export async function tauriWriteFile(
   markOdessaySelfWritePath(path)
   markOdessaySelfWritePath(`${path}.tmp`)
   try {
-    await invoke<void>("write_file", { path, content, expectedContentHash: expectedContentHash ?? null })
+    await invoke<void>("write_file", {
+      path,
+      content,
+      expectedContentHash: expectedContentHash ?? null,
+      expectedInode: expectedInode ?? null,
+    })
   } catch (error) {
     if (typeof error === "string" && error.startsWith(CONFLICT_ERROR_PREFIX)) {
       throw new WriteFileConflictError(error)

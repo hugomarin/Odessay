@@ -1993,11 +1993,27 @@
         },
         {
           "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+          }
+        },
+        {
+          "kind": "invoke",
           "cmd": "write_file",
           "args": {
             "path": "$ROOT_A/notes/letter.md",
             "content": "Versión 3.",
-            "expectedContentHash": null
+            "expectedContentHash": null,
+            "expectedInode": 701
           },
           "response": null
         },
@@ -2181,11 +2197,27 @@
         },
         {
           "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:a204db8382e80f340f418bb53fdc814608ef5ccc2ca71485bef878fcc06069fa"
+          }
+        },
+        {
+          "kind": "invoke",
           "cmd": "write_file",
           "args": {
             "path": "$ROOT_A/notes/letter.md",
             "content": "Versión 4.",
-            "expectedContentHash": null
+            "expectedContentHash": null,
+            "expectedInode": 701
           },
           "response": null
         },
@@ -2579,11 +2611,27 @@
         },
         {
           "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+          }
+        },
+        {
+          "kind": "invoke",
           "cmd": "write_file",
           "args": {
             "path": "$ROOT_A/notes/letter.md",
             "content": "Versión 3.",
-            "expectedContentHash": null
+            "expectedContentHash": null,
+            "expectedInode": 701
           },
           "response": null
         },
@@ -2767,11 +2815,27 @@
         },
         {
           "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:a204db8382e80f340f418bb53fdc814608ef5ccc2ca71485bef878fcc06069fa"
+          }
+        },
+        {
+          "kind": "invoke",
           "cmd": "write_file",
           "args": {
             "path": "$ROOT_A/notes/letter.md",
             "content": "Versión 4.",
-            "expectedContentHash": null
+            "expectedContentHash": null,
+            "expectedInode": 701
           },
           "response": null
         },
@@ -3215,11 +3279,27 @@
         },
         {
           "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+          }
+        },
+        {
+          "kind": "invoke",
           "cmd": "write_file",
           "args": {
             "path": "$ROOT_A/notes/letter.md",
             "content": "Versión 2.",
-            "expectedContentHash": null
+            "expectedContentHash": null,
+            "expectedInode": 901
           },
           "response": null
         },
@@ -3817,11 +3897,27 @@
         },
         {
           "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/letter.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:c10b8ad0d5bdde17df6d833f6bace74963b078f776506fa980e080f0d47ff965"
+          }
+        },
+        {
+          "kind": "invoke",
           "cmd": "write_file",
           "args": {
             "path": "$ROOT_A/notes/letter.md",
             "content": "Versión 2.",
-            "expectedContentHash": null
+            "expectedContentHash": null,
+            "expectedInode": 801
           },
           "response": null
         },
@@ -4084,11 +4180,21 @@
         },
         {
           "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "0de67000-0000-4000-8000-000000067000"
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
           "cmd": "write_file",
           "args": {
             "path": "$ROOT_A/letter.md",
             "content": "Versión 1.",
-            "expectedContentHash": null
+            "expectedContentHash": null,
+            "expectedInode": null
           },
           "response": null
         },
