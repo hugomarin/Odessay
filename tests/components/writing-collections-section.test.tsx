@@ -393,7 +393,7 @@ describe("WritingCollectionsSection — un solo escritor de selectedIds (ODE-643
     await waitFor(() => (triggerText() === "Collections (3)" ? true : null), "UI con las tres")
   }, 15_000)
 
-  it.fails(
+  it(
     "no cruza la selección del documento anterior al nuevo durante su carga",
     async () => {
       const firstWritingId = uniqueId("writing")
@@ -454,7 +454,7 @@ describe("WritingCollectionsSection — un solo escritor de selectedIds (ODE-643
     expect(probe.writeCalls.some((call) => call.writingId === secondWritingId)).toBe(false)
   }, 15_000)
 
-  it.fails(
+  it(
     "no combina los ids del documento anterior al crear una colección durante la carga del nuevo",
     async () => {
       const firstWritingId = uniqueId("writing")
