@@ -48,6 +48,9 @@ const allowedImports = new Set([
   "@/lib/services/desktop/desktop-settings-service",
   // ODE-370 — desktop catalog reconciliation (M2)
   "@/lib/services/desktop/workspace-reconciler",
+  // ODE-645 — shared injectable port factory consumed by production and the
+  // catalog seam recorder's real reconciler wiring.
+  "@/lib/services/desktop/workspace-reconciler-ports",
   "@/lib/services/desktop/runtime-detection",
   "@/lib/services/desktop/sqlite-document-catalog",
   "@/lib/services/desktop/open-document-desktop",
