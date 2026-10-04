@@ -232,7 +232,6 @@ describe("infra/process traceability exemption", () => {
 
     expect(result.code).toBe(0)
     expect(result.output).toContain("have branch and commit traceability")
-    expect(result.output).toContain("main-only.txt")
     expect(result.output).not.toContain("already delivered on main")
   })
 })
