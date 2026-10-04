@@ -15,8 +15,10 @@
  * Guía de review: restaurar el efecto 40-42 pone en rojo el ratchet
  * (`tests/architecture/editor-shell-mirrors-ratchet.test.ts`) y este test.
  *
- * El cruce de escritura al cambiar de documento (Decisión de Hugo) queda como
- * `it.fails` con "follow-up pendiente (ODE-643)": no se arregla aquí.
+ * ODE-662 cierra el cruce de escritura al cambiar de documento que ODE-643
+ * dejó como `it.fails`: la selección se liga al `writingId` que la hidrató,
+ * un toggle (o create) sobre un documento sin snapshot espera a ese snapshot
+ * y un toggle ya iniciado en A termina en A.
  */
 import "fake-indexeddb/auto"
 
@@ -31,10 +33,51 @@ import type { LocalCollection } from "@/lib/local-db/schema"
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
+type PortGate = { writingId: string; promise: Promise<void>; release: () => void }
+
 const probe = vi.hoisted(() => ({
   plan: [] as Array<{ when: string[]; action: () => void }>,
   windowReads: 0,
+  loadGate: null as PortGate | null,
+  writeGate: null as PortGate | null,
+  createGate: null as { promise: Promise<void>; release: () => void } | null,
+  writeCalls: [] as Array<{ writingId: string; ids: string[] }>,
 }))
+
+function deferred(): { promise: Promise<void>; release: () => void } {
+  let release: () => void = () => {}
+  const promise = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  return { promise, release }
+}
+
+// El port de aplicación sigue siendo real; el envoltorio solo permite retener
+// una carga o un write para alcanzar la ventana de carrera desde el producto.
+vi.mock("@/lib/queries/desk-catalog-source", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/queries/desk-catalog-source")>()
+  return {
+    ...actual,
+    createLocalCollection: async (...args: Parameters<typeof actual.createLocalCollection>) => {
+      const gate = probe.createGate
+      if (gate) await gate.promise
+      return actual.createLocalCollection(...args)
+    },
+    loadCollectionState: async (...args: Parameters<typeof actual.loadCollectionState>) => {
+      const gate = probe.loadGate
+      if (gate && gate.writingId === args[0]) await gate.promise
+      return actual.loadCollectionState(...args)
+    },
+    setLocalWritingCollections: async (
+      ...args: Parameters<typeof actual.setLocalWritingCollections>
+    ) => {
+      probe.writeCalls.push({ writingId: args[0], ids: [...args[1]] })
+      const gate = probe.writeGate
+      if (gate && gate.writingId === args[0]) await gate.promise
+      return actual.setLocalWritingCollections(...args)
+    },
+  }
+})
 
 // Mismo mock inline de Popover que tests/components/properties-panel-export.test.tsx.
 vi.mock("@/components/ui/popover", () => ({
@@ -220,6 +263,10 @@ beforeEach(() => {
   root = createRoot(container)
   probe.plan.length = 0
   probe.windowReads = 0
+  probe.loadGate = null
+  probe.writeGate = null
+  probe.createGate = null
+  probe.writeCalls.length = 0
 })
 
 afterEach(() => {
@@ -353,8 +400,8 @@ describe("WritingCollectionsSection — un solo escritor de selectedIds (ODE-643
     await waitFor(() => (triggerText() === "Collections (3)" ? true : null), "UI con las tres")
   }, 15_000)
 
-  it.fails(
-    "no cruza la selección del documento anterior al nuevo durante su carga (follow-up pendiente (ODE-643))",
+  it(
+    "no cruza la selección del documento anterior al nuevo durante su carga",
     async () => {
       const firstWritingId = uniqueId("writing")
       const secondWritingId = uniqueId("writing")
@@ -380,4 +427,284 @@ describe("WritingCollectionsSection — un solo escritor de selectedIds (ODE-643
     },
     15_000,
   )
+
+  it("termina en A un toggle iniciado en A cuando el panel cambia a B durante el write", async () => {
+    const firstWritingId = uniqueId("writing")
+    const secondWritingId = uniqueId("writing")
+    const alpha = await seedCollection("Alpha")
+    const beta = await seedCollection("Beta")
+    await localDB.writingCollections.replaceForWriting(firstWritingId, [alpha.id])
+    await localDB.writingCollections.replaceForWriting(secondWritingId, [beta.id])
+
+    renderSection(firstWritingId)
+    await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "carga del primero")
+
+    const gate = deferred()
+    probe.writeGate = { writingId: firstWritingId, promise: gate.promise, release: gate.release }
+
+    await clickButton(beta.name)
+    expect(probe.writeCalls).toEqual([{ writingId: firstWritingId, ids: [alpha.id, beta.id] }])
+    expect(await readIds(firstWritingId)).toEqual([alpha.id])
+
+    act(() => {
+      root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+    })
+    await flush(4)
+    expect(await readIds(firstWritingId)).toEqual([alpha.id])
+
+    gate.release()
+    probe.writeGate = null
+    await flush(4)
+
+    expect(await waitForSettledIds(firstWritingId)).toEqual([alpha.id, beta.id].sort())
+    expect(await waitForSettledIds(secondWritingId)).toEqual([beta.id])
+    expect(probe.writeCalls.some((call) => call.writingId === secondWritingId)).toBe(false)
+  }, 15_000)
+
+  it(
+    "no combina los ids del documento anterior al crear una colección durante la carga del nuevo",
+    async () => {
+      const firstWritingId = uniqueId("writing")
+      const secondWritingId = uniqueId("writing")
+      const alpha = await seedCollection("Alpha")
+      await localDB.writingCollections.replaceForWriting(firstWritingId, [alpha.id])
+      const name = `Epsilon ${uniqueId("name")}`
+
+      renderSection(firstWritingId)
+      await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "carga del primero")
+
+      const gate = deferred()
+      probe.loadGate = { writingId: secondWritingId, promise: gate.promise, release: gate.release }
+
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+      })
+      await waitFor(() => findButtonOrNull("New collection"), "picker durante la carga")
+
+      await clickButton("New collection")
+      const input = await waitFor(
+        () => container.querySelector<HTMLInputElement>("#collection-name"),
+        "campo de nombre",
+      )
+      setNativeInputValue(input, name)
+      await clickButton("Create")
+      await flush(3)
+
+      const created = (await localDB.collections.getAll()).find(
+        (collection) => collection.name === name,
+      )
+      expect(created).toBeDefined()
+      expect(await readIds(secondWritingId)).toEqual([])
+
+      gate.release()
+      probe.loadGate = null
+      const settled = await waitForSettledIds(secondWritingId)
+      expect(settled).toEqual([created?.id])
+      expect(await readIds(firstWritingId)).toEqual([alpha.id])
+    },
+    15_000,
+  )
+
+  it(
+    "descarta el create de B resuelto cuando B dejó de estar activo y no lo revive al volver",
+    async () => {
+      const firstWritingId = uniqueId("writing")
+      const secondWritingId = uniqueId("writing")
+      const alpha = await seedCollection("Alpha")
+      await localDB.writingCollections.replaceForWriting(firstWritingId, [alpha.id])
+      const name = `Zeta ${uniqueId("name")}`
+
+      // A con su snapshot real.
+      renderSection(firstWritingId)
+      await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "carga de A")
+
+      // B sin snapshot: su carga queda retenida.
+      const loadGate = deferred()
+      probe.loadGate = {
+        writingId: secondWritingId,
+        promise: loadGate.promise,
+        release: loadGate.release,
+      }
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+      })
+      await waitFor(() => findButtonOrNull("New collection"), "picker de B")
+
+      // Create-and-assign iniciado en B antes de su snapshot, con la creación
+      // retenida.
+      const createGate = deferred()
+      probe.createGate = { promise: createGate.promise, release: createGate.release }
+      await clickButton("New collection")
+      const input = await waitFor(
+        () => container.querySelector<HTMLInputElement>("#collection-name"),
+        "campo de nombre",
+      )
+      setNativeInputValue(input, name)
+      await clickButton("Create")
+      await flush(3)
+
+      // El panel vuelve a A mientras el create sigue esperando.
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={firstWritingId} />)
+      })
+      await flush(4)
+      expect(triggerText()).toBe("Collections (1)")
+
+      // El create se resuelve con A activo: no debe reencolar la intención de B.
+      createGate.release()
+      probe.createGate = null
+      await flush(4)
+
+      // Al volver a B se ve su estado real: el clic se descartó.
+      loadGate.release()
+      probe.loadGate = null
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+      })
+      await flush(6)
+
+      const settled = await waitForSettledIds(secondWritingId)
+      expect(settled).toEqual([])
+      await waitFor(
+        () => (triggerText() === "Add to collections" ? true : null),
+        "B sin asignaciones",
+      )
+      expect(await readIds(firstWritingId)).toEqual([alpha.id])
+    },
+    15_000,
+  )
+
+  it(
+    "descarta el create de B resuelto al volver a B tras visitar A (B→A→B)",
+    async () => {
+      const firstWritingId = uniqueId("writing")
+      const secondWritingId = uniqueId("writing")
+      const alpha = await seedCollection("Alpha")
+      await localDB.writingCollections.replaceForWriting(firstWritingId, [alpha.id])
+      const name = `Eta ${uniqueId("name")}`
+
+      renderSection(firstWritingId)
+      await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "carga de A")
+
+      // B sin snapshot: su carga queda retenida.
+      const loadGate = deferred()
+      probe.loadGate = {
+        writingId: secondWritingId,
+        promise: loadGate.promise,
+        release: loadGate.release,
+      }
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+      })
+      await waitFor(() => findButtonOrNull("New collection"), "picker de B")
+
+      // Create-and-assign iniciado en B antes de su snapshot.
+      const createGate = deferred()
+      probe.createGate = { promise: createGate.promise, release: createGate.release }
+      await clickButton("New collection")
+      const input = await waitFor(
+        () => container.querySelector<HTMLInputElement>("#collection-name"),
+        "campo de nombre",
+      )
+      setNativeInputValue(input, name)
+      await clickButton("Create")
+      await flush(3)
+
+      // B → A → B mientras el create sigue esperando.
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={firstWritingId} />)
+      })
+      await flush(4)
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+      })
+      await flush(4)
+
+      // B hidrata su snapshot real (vacío) con el create aún en vuelo.
+      loadGate.release()
+      probe.loadGate = null
+      await flush(6)
+
+      // El create se resuelve con B otra vez activo: el cambio de documento
+      // ya canceló la intención y B debe quedar vacío.
+      createGate.release()
+      probe.createGate = null
+      await flush(6)
+
+      expect(probe.writeCalls.some((call) => call.writingId === secondWritingId)).toBe(false)
+      const settled = await waitForSettledIds(secondWritingId)
+      expect(settled).toEqual([])
+      await waitFor(
+        () => (triggerText() === "Add to collections" ? true : null),
+        "B sin asignaciones",
+      )
+      expect(await readIds(firstWritingId)).toEqual([alpha.id])
+    },
+    15_000,
+  )
+
+  it("termina en A y deja B intacto un toggle iniciado en A que vuelve a A tras visitar B", async () => {
+    const firstWritingId = uniqueId("writing")
+    const secondWritingId = uniqueId("writing")
+    const alpha = await seedCollection("Alpha")
+    const beta = await seedCollection("Beta")
+    await localDB.writingCollections.replaceForWriting(firstWritingId, [alpha.id])
+    await localDB.writingCollections.replaceForWriting(secondWritingId, [beta.id])
+
+    renderSection(firstWritingId)
+    await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "carga de A")
+
+    const gate = deferred()
+    probe.writeGate = { writingId: firstWritingId, promise: gate.promise, release: gate.release }
+
+    await clickButton(beta.name)
+    expect(probe.writeCalls).toEqual([{ writingId: firstWritingId, ids: [alpha.id, beta.id] }])
+
+    // Visita B con el write de A todavía en vuelo.
+    act(() => {
+      root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+    })
+    await flush(4)
+    expect(await readIds(firstWritingId)).toEqual([alpha.id])
+    expect(await readIds(secondWritingId)).toEqual([beta.id])
+
+    // Vuelve a A dentro del mismo montaje; el write sigue dirigido a A.
+    act(() => {
+      root?.render(<WritingCollectionsSection writingId={firstWritingId} />)
+    })
+    await flush(4)
+
+    gate.release()
+    probe.writeGate = null
+    await flush(4)
+
+    expect(await waitForSettledIds(firstWritingId)).toEqual([alpha.id, beta.id].sort())
+    expect(await waitForSettledIds(secondWritingId)).toEqual([beta.id])
+    expect(probe.writeCalls.some((call) => call.writingId === secondWritingId)).toBe(false)
+    await waitFor(() => (triggerText() === "Collections (2)" ? true : null), "A con las dos")
+  }, 15_000)
+
+  it("sigue togglando sobre el snapshot de B después de resolver la intención pendiente", async () => {
+    const firstWritingId = uniqueId("writing")
+    const secondWritingId = uniqueId("writing")
+    const alpha = await seedCollection("Alpha")
+    const beta = await seedCollection("Beta")
+    await localDB.writingCollections.replaceForWriting(firstWritingId, [alpha.id])
+
+    renderSection(firstWritingId)
+    await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "carga del primero")
+
+    probe.plan.push({ when: [alpha.id], action: () => findButton(beta.name).click() })
+    act(() => {
+      root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+    })
+    await flush(4)
+    await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "intención resuelta")
+
+    await clickButton(beta.name)
+    const settled = await waitForSettledIds(secondWritingId)
+    expect(settled).toEqual([])
+    await waitFor(() => (triggerText() === "Add to collections" ? true : null), "UI de B tras quitar")
+    expect(await readIds(firstWritingId)).toEqual([alpha.id])
+  }, 15_000)
 })
