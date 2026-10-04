@@ -118,6 +118,8 @@ Cómo funciona hoy: <3–5 líneas: flujo, orden de efectos, quién llama a qui�
 Construir con: <qué reutilizar (API, helper, hook, doble) con archivo:líneas> · <sibling cuya forma seguir, si hace falta una pieza nueva> · <qué NO crear porque ya tiene owner>
 Dónde probar: <archivos de test a extender o que deben pasar idénticos> + <helpers del harness>
 Trampas: <lo ya pagado que no hay que redescubrir>
+Vida del dueño: <solo si el estado vive en un componente o página: owner · transiciones que lo destruyen · trabajo en vuelo · patrón del playbook de ownership asíncrono>
+Matriz: <solo con invariantes asíncronas o de identidad: operación × transición × éxito/error → prueba o límite con razón, una línea por celda alcanzable>
 No tocar: <lo que queda fuera de alcance aunque esté al lado>
 ```
 

@@ -22,7 +22,7 @@ Lo que este skill necesita saber de Odessay para escribir un prompt ejecutable. 
 | Check | Uso en el prompt |
 |---|---|
 | `npm run ops:brief:lint -- <ids> --require-contract --require-recon` | Precondición de la tanda y paso 1 de cada BUILD. **Los dos flags:** `--require-recon` solo no exige el contrato |
-| `npm run ops:proof:precheck` | Antes de abrir el PR. Verifica el orden de commits, que `it.fails` entre solo y antes del fix, el flip y las celdas de la fila. También corre en CI (`process-checks`) |
+| `npm run ops:proof:precheck` | Antes de abrir el PR. Verifica el orden de commits, que `it.fails` entre solo y antes del fix, el flip, las celdas de la fila y (desde ODE-671) que una fila tocada en INTEGRATION no diga en su Note que sigue PARTIAL. También corre en CI (`process-checks`) |
 | `npm run ops:status:drift:strict` | Antes del PR y después del ledger. Escanea **cualquier** `ODE-\d+` en los asuntos de commit |
 | `npm run ops:workflow:validate` | Después de escribir el ledger |
 | `npm run ops:ledger -- append-review '<json>'` / `append-built '<json>'` | Ledger en main, en un worktree temporal |
