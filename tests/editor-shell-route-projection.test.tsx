@@ -267,7 +267,7 @@ describe("ODE-640 — la navegación por slug del documento activo al sincroniza
   // sigue activo después del `await localDB.writings.get`; el resultado viejo
   // de A navega cuando B ya es el activo. El fix lo convierte en `it` sin
   // tocar este cuerpo.
-  it.fails(
+  it(
     "un lookup de A retenido no navega después de activar B",
     async () => {
       await setSlug(writingA, SLUG_A)
