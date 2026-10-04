@@ -40,6 +40,7 @@ const probe = vi.hoisted(() => ({
   windowReads: 0,
   loadGate: null as PortGate | null,
   writeGate: null as PortGate | null,
+  createGate: null as { promise: Promise<void>; release: () => void } | null,
   writeCalls: [] as Array<{ writingId: string; ids: string[] }>,
 }))
 
@@ -57,6 +58,11 @@ vi.mock("@/lib/queries/desk-catalog-source", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/queries/desk-catalog-source")>()
   return {
     ...actual,
+    createLocalCollection: async (...args: Parameters<typeof actual.createLocalCollection>) => {
+      const gate = probe.createGate
+      if (gate) await gate.promise
+      return actual.createLocalCollection(...args)
+    },
     loadCollectionState: async (...args: Parameters<typeof actual.loadCollectionState>) => {
       const gate = probe.loadGate
       if (gate && gate.writingId === args[0]) await gate.promise
@@ -259,6 +265,7 @@ beforeEach(() => {
   probe.windowReads = 0
   probe.loadGate = null
   probe.writeGate = null
+  probe.createGate = null
   probe.writeCalls.length = 0
 })
 
@@ -493,6 +500,75 @@ describe("WritingCollectionsSection — un solo escritor de selectedIds (ODE-643
       probe.loadGate = null
       const settled = await waitForSettledIds(secondWritingId)
       expect(settled).toEqual([created?.id])
+      expect(await readIds(firstWritingId)).toEqual([alpha.id])
+    },
+    15_000,
+  )
+
+  it.fails(
+    "descarta el create de B resuelto cuando B dejó de estar activo y no lo revive al volver",
+    async () => {
+      const firstWritingId = uniqueId("writing")
+      const secondWritingId = uniqueId("writing")
+      const alpha = await seedCollection("Alpha")
+      await localDB.writingCollections.replaceForWriting(firstWritingId, [alpha.id])
+      const name = `Zeta ${uniqueId("name")}`
+
+      // A con su snapshot real.
+      renderSection(firstWritingId)
+      await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "carga de A")
+
+      // B sin snapshot: su carga queda retenida.
+      const loadGate = deferred()
+      probe.loadGate = {
+        writingId: secondWritingId,
+        promise: loadGate.promise,
+        release: loadGate.release,
+      }
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+      })
+      await waitFor(() => findButtonOrNull("New collection"), "picker de B")
+
+      // Create-and-assign iniciado en B antes de su snapshot, con la creación
+      // retenida.
+      const createGate = deferred()
+      probe.createGate = { promise: createGate.promise, release: createGate.release }
+      await clickButton("New collection")
+      const input = await waitFor(
+        () => container.querySelector<HTMLInputElement>("#collection-name"),
+        "campo de nombre",
+      )
+      setNativeInputValue(input, name)
+      await clickButton("Create")
+      await flush(3)
+
+      // El panel vuelve a A mientras el create sigue esperando.
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={firstWritingId} />)
+      })
+      await flush(4)
+      expect(triggerText()).toBe("Collections (1)")
+
+      // El create se resuelve con A activo: no debe reencolar la intención de B.
+      createGate.release()
+      probe.createGate = null
+      await flush(4)
+
+      // Al volver a B se ve su estado real: el clic se descartó.
+      loadGate.release()
+      probe.loadGate = null
+      act(() => {
+        root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+      })
+      await flush(6)
+
+      const settled = await waitForSettledIds(secondWritingId)
+      expect(settled).toEqual([])
+      await waitFor(
+        () => (triggerText() === "Add to collections" ? true : null),
+        "B sin asignaciones",
+      )
       expect(await readIds(firstWritingId)).toEqual([alpha.id])
     },
     15_000,
