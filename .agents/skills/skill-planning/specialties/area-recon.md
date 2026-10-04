@@ -52,7 +52,7 @@ Un Recon que solo cubre "Despachar" deja al builder sin diseño: lo decide solo 
 
 1. Declarar el commit de `main` contra el que se verifica. Si `main` avanza durante el Recon, revalidar contra el commit nuevo.
 2. Partir la tanda en **clusters**: issues que comparten owner o archivos.
-3. Lanzar **un worker por cluster, en paralelo y en solo lectura**: sin tocar Linear ni el repo. Cada worker:
+3. Lanzar **los workers que haga falta, en paralelo y en solo lectura**: al menos uno por cluster, y más si un cluster es grande. **El Recon no tiene tope de agentes**: el máximo de 3 builders (lección S2 del Orchestration Prompt Builder) es solo para BUILD, porque corre suites de test que compiten por la máquina; el Recon solo lee. Los workers no escriben en Linear ni en el repo; eso lo hace el planner al consolidar. Cada worker:
    - usa el método de `.agents/skills/architecture-recon/SKILL.md` (buscar por símbolo y rango, no paginar hotspots);
    - aplica el núcleo y recorre, por cada issue, las listas de huecos (§ 2) de los usos del modo elegido; en modo completo, las dos;
    - **resuelve desde el código** todo lo que pueda, con evidencia (`archivo:líneas`);
@@ -103,7 +103,7 @@ En modo completo, todo lo de abajo. En "Solo construir", el Recon Pack, el contr
 
 Reglas del PR: solo docs, label `process` y **ningún `ODE-###` en el asunto de los commits** (`ops:status:drift:strict` exigiría una fila de ledger por issue nombrado).
 
-**Cómo publicar en el tracker:** con el CLI o la API del proyecto, no con un MCP que apunte a otro workspace. En Odessay: comentarios y estados con `node scripts/linear-cli.mjs`; editar la descripción por GraphQL (`scripts/lib/linear-client.mjs`), añadiendo la sección sin reescribir el brief y sin duplicarla si ya existe.
+**Cómo publicar en el tracker:** con el MCP del tracker o con el CLI/API del proyecto, lo que sea más rápido. Antes de escribir con el MCP, leer un issue de la tanda y comprobar que es el del workspace correcto (en Odessay, team ODE); si apunta a otro workspace, usar el CLI. En Odessay el CLI es `node scripts/linear-cli.mjs` (comentarios y estados) y la descripción se edita por GraphQL (`scripts/lib/linear-client.mjs`). Con cualquiera de los dos, la sección se añade sin reescribir el brief y sin duplicarla si ya existe.
 
 **Antes de publicar,** pasar el lint en seco sobre el contenido final (descripción + sección, comentarios + pack) con `lintIssueBrief` de `scripts/lib/issue-brief-lint.mjs`. Así se ve qué fallaba antes y qué pasa después.
 
