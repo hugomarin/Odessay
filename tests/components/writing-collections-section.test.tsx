@@ -574,6 +574,47 @@ describe("WritingCollectionsSection — un solo escritor de selectedIds (ODE-643
     15_000,
   )
 
+  it("termina en A y deja B intacto un toggle iniciado en A que vuelve a A tras visitar B", async () => {
+    const firstWritingId = uniqueId("writing")
+    const secondWritingId = uniqueId("writing")
+    const alpha = await seedCollection("Alpha")
+    const beta = await seedCollection("Beta")
+    await localDB.writingCollections.replaceForWriting(firstWritingId, [alpha.id])
+    await localDB.writingCollections.replaceForWriting(secondWritingId, [beta.id])
+
+    renderSection(firstWritingId)
+    await waitFor(() => (triggerText() === "Collections (1)" ? true : null), "carga de A")
+
+    const gate = deferred()
+    probe.writeGate = { writingId: firstWritingId, promise: gate.promise, release: gate.release }
+
+    await clickButton(beta.name)
+    expect(probe.writeCalls).toEqual([{ writingId: firstWritingId, ids: [alpha.id, beta.id] }])
+
+    // Visita B con el write de A todavía en vuelo.
+    act(() => {
+      root?.render(<WritingCollectionsSection writingId={secondWritingId} />)
+    })
+    await flush(4)
+    expect(await readIds(firstWritingId)).toEqual([alpha.id])
+    expect(await readIds(secondWritingId)).toEqual([beta.id])
+
+    // Vuelve a A dentro del mismo montaje; el write sigue dirigido a A.
+    act(() => {
+      root?.render(<WritingCollectionsSection writingId={firstWritingId} />)
+    })
+    await flush(4)
+
+    gate.release()
+    probe.writeGate = null
+    await flush(4)
+
+    expect(await waitForSettledIds(firstWritingId)).toEqual([alpha.id, beta.id].sort())
+    expect(await waitForSettledIds(secondWritingId)).toEqual([beta.id])
+    expect(probe.writeCalls.some((call) => call.writingId === secondWritingId)).toBe(false)
+    await waitFor(() => (triggerText() === "Collections (2)" ? true : null), "A con las dos")
+  }, 15_000)
+
   it("sigue togglando sobre el snapshot de B después de resolver la intención pendiente", async () => {
     const firstWritingId = uniqueId("writing")
     const secondWritingId = uniqueId("writing")
