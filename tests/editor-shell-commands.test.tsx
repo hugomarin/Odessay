@@ -1689,7 +1689,7 @@ describe("ODE-632 — disponibilidad de las acciones sin rama Markdown", () => {
 })
 
 describe("ODE-632 — la ayuda de atajos refleja la disponibilidad por modo", () => {
-  it.fails(
+  it(
     "en Markdown no publica Code block ni Horizontal rule; en Rich vuelven",
     async () => {
       const commandWorld = await mountDesktopCommandWorld("shortcutHelp", COMMAND_CASES.shortcutHelp)
