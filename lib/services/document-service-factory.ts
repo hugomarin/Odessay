@@ -18,6 +18,7 @@ import type {
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import { normalizeArtifactType } from "@/lib/writings/artifact-type"
+import { computeMarkdownContentHash } from "@/lib/content-hash"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { webDocumentService } from "@/lib/services/web-document-service"
 import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-document-service"
@@ -64,6 +65,9 @@ type DesktopDraftOptions = {
 function ok<T>(data: T): ServiceResponse<T> { return { data, error: null } }
 function err<T>(code: ServiceError["code"], message: string): ServiceResponse<T> {
   return { data: null, error: { code, message, retryable: false } }
+}
+function conflict(message: string): ServiceError {
+  return { code: "CONFLICT", message, retryable: false }
 }
 function isConflictError(error: unknown): boolean {
   return (
@@ -185,27 +189,97 @@ class DesktopDocumentService implements DocumentService {
     expectedContentHash?: string | null,
     options: { writeContent?: boolean } = {},
   ): Promise<WritingRecord> {
-    if (operation === "upsert" && options.writeContent !== false) {
+    const wroteContent = operation === "upsert" && options.writeContent !== false
+    let targetPath = canonicalPath
+    let writtenMarkdown = ""
+    if (wroteContent) {
+      // ODE-635 (review ronda 2) — the caller resolved `canonicalPath` before
+      // this save reached the write, and a rename of this document can move
+      // the `.md` in between. Re-read the binding immediately before writing
+      // and re-target when the rename already committed: the bytes must land
+      // on the path the catalog owns, never on a stale one. The re-read does
+      // NOT wait for a rename still in flight: ODE-629 requires a save to land
+      // on the old path while a rename holds its pre-move snapshot, so the
+      // rename transports those bytes instead of overwriting them. Swaps of
+      // that path are refused by the transport's identity guard below (a
+      // different file is never replaced); `null` continues to mean "no
+      // baseline" and is not replaced by any hash.
+      const bound = await this.runtime.catalog.getById(record.id)
+      const boundPath = bound?.binding?.canonicalPath ?? null
+      if (boundPath && boundPath !== targetPath) targetPath = boundPath
+      // With no content baseline the transport still refuses to replace a
+      // different file at the resolved path: the binding's inode identifies
+      // the file this save is allowed to overwrite (ODE-635, review ronda 2).
+      const expectedInode = expectedContentHash == null ? (bound?.binding?.inode ?? null) : null
       const markdown = this.serialize(record)
+      writtenMarkdown = markdown
       const fileResult = await this.runtime.filesystem.saveWriting({
         writing: {
           ...record,
-          id: canonicalPath,
+          id: targetPath,
           content: { markdown, richText: null, plainText: record.content.plainText, canonicalSource: "markdown" },
         },
         expectedContentHash,
+        expectedInode,
       })
       if (fileResult.error) throw fileResult.error
+      // A rename may also start while the write is in flight: wait for it
+      // before reading the catalog so the binding compared below is settled,
+      // never half-committed.
+      await this.renamesInFlight.get(record.id)?.catch(() => undefined)
     }
 
     const catalogBefore = await this.runtime.catalog.getById(record.id)
+    if (
+      wroteContent &&
+      catalogBefore?.binding?.canonicalPath &&
+      catalogBefore.binding.canonicalPath !== targetPath
+    ) {
+      // A rename (or conscious move) committed a different canonical path
+      // while the write was in flight, so the write landed on a path this
+      // document no longer owns. The retire must prove it moves exactly THIS
+      // operation's recreation: another writer may have replaced or updated
+      // that path in the write→retire interval, and the watcher's recent-write
+      // suppression means that edit may not be reconciled yet. Compare the
+      // hash of what is on disk against the markdown this operation wrote; if
+      // they differ (or the path cannot be read), nothing is retired — the
+      // other writer's content stays recoverable at the old path, never in
+      // `.trash` — and the same `CONFLICT` shape routes the bytes to the path
+      // the catalog owns. Only when the recreation is exact is it retired
+      // through the filesystem owner's trash move, and a failure of that move
+      // is propagated so `persistFollowingRename` cannot report success with
+      // the stale recreation still on disk (round 1, P1+P2). `null` keeps
+      // meaning "no baseline": this only routes the bytes to the path the
+      // catalog owns; it never substitutes a hash and never rebinds the stale
+      // path.
+      const writtenHash = await computeMarkdownContentHash(writtenMarkdown)
+      const onDisk = await this.runtime.filesystem.openWriting(targetPath)
+      const diskHash = onDisk.data
+        ? await computeMarkdownContentHash(onDisk.data.content.markdown ?? "")
+        : null
+      if (diskHash === null || diskHash !== writtenHash) {
+        throw conflict(
+          `Writing ${record.id} moved to ${catalogBefore.binding.canonicalPath} while the save was in flight; content at ${targetPath} differs from this save and was kept`,
+        )
+      }
+      const retired = await this.runtime.filesystem.deleteWriting({
+        writingId: targetPath,
+        version: record.version,
+        updatedAt: record.updatedAt,
+        deletedAt: new Date().toISOString(),
+      })
+      if (retired.error) throw retired.error
+      throw conflict(
+        `Writing ${record.id} moved to ${catalogBefore.binding.canonicalPath} while the save was in flight`,
+      )
+    }
     const priorBinding = catalogBefore?.binding
     const rootPath = priorBinding
       ? priorBinding.canonicalPath.slice(0, -(priorBinding.relativePath.length + 1))
-      : dirname(canonicalPath)
-    const relativePath = canonicalPath.startsWith(`${rootPath}/`)
-      ? canonicalPath.slice(rootPath.length + 1)
-      : basename(canonicalPath)
+      : dirname(targetPath)
+    const relativePath = targetPath.startsWith(`${rootPath}/`)
+      ? targetPath.slice(rootPath.length + 1)
+      : basename(targetPath)
     // Steady state (ODE-459): a document that already carries a durable binding
     // only needs its own manifest entry refreshed, so the save path never walks
     // the BindingRoot. Anything unverifiable falls back to the full
@@ -222,7 +296,7 @@ class DesktopDocumentService implements DocumentService {
       // Omit selectedPaths so the durable manifest keeps its existing whole-root
       // or exact-file scope; a save must never narrow a BindingRoot implicitly.
       const snapshot = await tauriWorkspaceSync(rootPath, undefined, { [relativePath]: record.id })
-      const synced = snapshot.files.find((entry) => entry.path === canonicalPath || entry.relativePath === relativePath)
+      const synced = snapshot.files.find((entry) => entry.path === targetPath || entry.relativePath === relativePath)
       if (!synced) throw new Error(`Manifest did not retain ${relativePath}`)
       binding = { bindingRootId: snapshot.bindingRootId, rootPath: snapshot.rootPath, file: synced }
     }

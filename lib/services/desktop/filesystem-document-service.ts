@@ -325,10 +325,10 @@ export class FilesystemDocumentService implements DocumentService {
    * Emits a "saved" event after the file is fully persisted.
    */
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
-    const { writing, expectedContentHash } = input
+    const { writing, expectedContentHash, expectedInode } = input
     const markdown = writing.content.markdown ?? ""
     try {
-      await tauriWriteFile(writing.id, markdown, expectedContentHash)
+      await tauriWriteFile(writing.id, markdown, expectedContentHash, expectedInode)
       const savedRecord: WritingRecord = {
         ...writing,
         updatedAt: isoNow(),

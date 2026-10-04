@@ -125,6 +125,7 @@ describe("FilesystemDocumentService", () => {
       writing.id,
       writing.content.markdown,
       undefined,
+      undefined,
     )
     vi.useFakeTimers()
   })
@@ -138,6 +139,21 @@ describe("FilesystemDocumentService", () => {
       writing.id,
       writing.content.markdown,
       "blake3:baseline",
+      undefined,
+    )
+    vi.useFakeTimers()
+  })
+
+  it("saveWriting passes expectedInode through to tauriWriteFile (ODE-635)", async () => {
+    vi.useRealTimers()
+    const writing = makeWritingRecord()
+    mockFiles.set(writing.id, "")
+    await service.saveWriting({ writing, expectedContentHash: null, expectedInode: 4242 })
+    expect(vi.mocked(tauriCommandsMod.tauriWriteFile)).toHaveBeenCalledWith(
+      writing.id,
+      writing.content.markdown,
+      null,
+      4242,
     )
     vi.useFakeTimers()
   })
@@ -305,6 +321,7 @@ describe("FilesystemDocumentService", () => {
     expect(vi.mocked(tauriCommandsMod.tauriWriteFile)).toHaveBeenCalledWith(
       path,
       "# Save Test\n\nNew content.",
+      undefined,
       undefined,
     )
     vi.useFakeTimers()

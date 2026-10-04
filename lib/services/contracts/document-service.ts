@@ -82,6 +82,17 @@ export type SaveWritingInput = {
    * e.g. a brand-new document).
    */
   expectedContentHash?: string | null
+  /**
+   * ODE-635 (review ronda 2; desktop-only, ignored by the web adapter) —
+   * identity guard for a write with no content baseline. When
+   * `expectedContentHash` is null/undefined the caller may pass the inode of
+   * the canonical file it resolved: the desktop adapter then refuses with
+   * `CONFLICT` instead of replacing a different file that appeared at that
+   * path (e.g. a rename moved the document and another writer created content
+   * at the old path). `null`/`undefined` keeps the previous behavior. It is
+   * not a content baseline — it never substitutes a hash.
+   */
+  expectedInode?: number | null
 }
 
 export type UpdateWritingMetadataInput = {
