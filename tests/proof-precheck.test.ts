@@ -161,4 +161,35 @@ describe("capability map rules", () => {
     expect(checkCapabilityMap(map(broken), new Set())).toEqual([])
   })
 
+  it("rejects an INTEGRATION row whose Note says it stays PARTIAL", () => {
+    const contradicted = row("INTEGRATION", "Proof landed. Scope note — why this stays `PARTIAL_INTEGRATION`: the hop is open.")
+    const violations = checkCapabilityMap(map(contradicted), new Set([contradicted]))
+    expect(violations.map((violation) => violation.rule)).toEqual(["map-status-note-contradiction"])
+  })
+
+  it("accepts historical mentions of PARTIAL in an INTEGRATION row", () => {
+    const historical = row(
+      "INTEGRATION",
+      "Both parts proven. At the time of ODE-593, the row still reported `PARTIAL_INTEGRATION`. Scope note (historical, pre-ODE-599): it stays PARTIAL.",
+    )
+    expect(checkCapabilityMap(map(historical), new Set([historical]))).toEqual([])
+  })
+
+  it("keeps a live contradiction beside historical context in the same sentence", () => {
+    const mixed = row("INTEGRATION", "At the time of ODE-593 the note was outdated, but the current status remains PARTIAL.")
+    const violations = checkCapabilityMap(map(mixed), new Set([mixed]))
+    expect(violations.map((violation) => violation.rule)).toEqual(["map-status-note-contradiction"])
+  })
+
+  it("keeps a clause that asserts the current status, even with a historical marker", () => {
+    const current = row("INTEGRATION", "Historical context: the current status remains PARTIAL.")
+    const violations = checkCapabilityMap(map(current), new Set([current]))
+    expect(violations.map((violation) => violation.rule)).toEqual(["map-status-note-contradiction"])
+  })
+
+  it("does not judge PARTIAL rows by their Note", () => {
+    const partial = row("PARTIAL_INTEGRATION", "The row remains PARTIAL until ODE-622.")
+    expect(checkCapabilityMap(map(partial), new Set([partial]))).toEqual([])
+  })
+
 })
