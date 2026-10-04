@@ -771,16 +771,16 @@ El recorder delega la cola en `real-desktop-doubles.ts` y añade `tauriCatalogLi
 
 | PR / grupo | Issues | Owner y límite confirmado |
 |---|---|---|
-| A | ODE-632 + ODE-633 + ODE-642 | Comandos/toolbar Markdown y oracle de selección. 632 decide disponibilidad por modo; 633 endurece `COMMAND_CASES`; 642 prueba `useSelectionRestore` sin reabrir el owner en `EditorShell`. Default de 632: ocultar acciones Markdown sin implementación; sincronizar el menú Tauri requiere un contrato nuevo frontend→adapter, pendiente de Hugo. |
-| B | ODE-649 + ODE-654 | Un solo PR: `RenameWritingModal` y `suggest-title-lifecycle.test.ts` son owners compartidos. Mantener una generación única; el copy exacto “Could not suggest a name. Try again.” sigue pendiente de confirmación de Hugo. |
+| A | ODE-632 + ODE-633 + ODE-642 | Comandos/toolbar Markdown y oracle de selección. 632 decide disponibilidad por modo; 633 endurece `COMMAND_CASES`; 642 prueba `useSelectionRestore` sin reabrir el owner en `EditorShell`. Hugo aceptó ocultar las acciones Markdown sin implementación; sincronizar el menú Tauri requiere el contrato nuevo frontend→adapter. |
+| B | ODE-649 + ODE-654 | Un solo PR: `RenameWritingModal` y `suggest-title-lifecycle.test.ts` son owners compartidos. Mantener un owner único de invalidación: el cambio de `writingId` incrementa la generación en `useEffect`, y `stillOwnsModal` no ofrece una guarda síncrona por props capturadas. La prueba A→B debe validar el camino del efecto pasivo sin presentar esa invalidación como síncrona. Hugo aprobó el copy exacto “Could not suggest a name. Try again.” |
 | C | ODE-662 | `WritingCollectionsSection` y su test de ventana layout→passive; no crear store alterno. |
 | D | ODE-669 | Resolver web `/shared/[id]`: owner-first, share + RLS, query de summary y body solo por UUID ganador. Añadir Performance Architecture Contract. |
-| E1 | ODE-640 | PR propio: navegación de sync en shell/route. El negativo `routeWritingId === slug` no se alcanza por el caller de producción, que entrega UUID; además existe una ventana stale tras el `await`. Requiere decisión de Hugo sobre alcance y guard. |
+| E1 | ODE-640 | PR propio: navegación de sync en shell/route. El negativo `routeWritingId === slug` no se alcanza por el caller de producción, que entrega UUID; además existe una ventana stale tras el `await`. Hugo aceptó reemplazar el negativo y proteger el resultado frente al cambio de UUID activo. |
 | E2 | ODE-651 | PR propio: `tauriInvokeRouterDouble` y contador WATCH-07. Es test-support, no producción. |
 | E3 | ODE-645 | PR propio: extraer port factory desktop compartida por production y recorder; conservar fixture v4. ODE-670 ya está Done/#607. |
 | F | ODE-655 | Preflight UTF-8 frontend compartido; `openDocumentByPath` sigue siendo el opener por UUID. La prueba de evento Tauri no simula RunEvent real de macOS. |
 | G1 | ODE-623 | Separarlo de EditorShell: las cinco llamadas a `catalog.list` no prueban cinco reloads de membership; primero drenar bootstrap/hydration con señales observables. |
-| G2 | ODE-639 + ODE-641 | Flakes del harness EditorShell. 639 conserva predicate de tab B y amplía su presupuesto; 641 necesita hydration-ready + settle del coordinator real y eliminar todas las esperas fijas, incluido el sibling DOC-01. Propuesta: `G1` aparte y `G2` como PR de EditorShell con timebox 60 min; separar 641 si el harness/validación no cabe. Esto cambia el “un PR G” sugerido y requiere confirmación de Hugo. |
+| G2 | ODE-639 + ODE-641 | Flakes del harness EditorShell. 639 conserva predicate de tab B y amplía su presupuesto; 641 necesita hydration-ready + settle del coordinator real y eliminar todas las esperas fijas, incluido el sibling DOC-01. Hugo aceptó G1/G2 separados, con G2 limitado a 60 min y ODE-641 aparte si el harness/validación no cabe. |
 
 ### Grafo de conflictos y olas
 
@@ -790,10 +790,10 @@ El recorder delega la cola en `real-desktop-doubles.ts` y añade `tauriCatalogLi
 - E2 usa `tests/support/editor-shell-doubles.ts`; E1 puede evitar editar ese helper y quedarse en el test de route projection. E3 no comparte archivos de producción con otros PRs de esta tanda.
 - Los cambios al catálogo de harnesses/mapa y al capability map no se cuentan como conflicto de implementación. No se cambia el capability status en Recon.
 
-**Decisiones humanas antes del dispatch:** (A) 632: ocultar controles incluyendo menú nativo, o implementar equivalentes Markdown; (B) 649: aprobar la frase exacta; (C) 640: reemplazar negativo inalcanzable y proteger contra resultado stale tras cambiar UUID, o mantener test-only y diferir ese guard; (D) G: aceptar G1/G2 con tope 60 min, o insistir en un PR único. Cada decisión debe quedar como `## Decisiones (Hugo, 2026-10-03)` en los issues afectados.
+**Decisiones registradas (Hugo, 2026-10-03, Linear MCP):** (A) ODE-632 oculta las seis acciones sin implementación en Markdown y sincroniza su disponibilidad nativa; (B) ODE-649 usa “Could not suggest a name. Try again.”; (C) ODE-640 reemplaza el negativo inalcanzable y protege frente al cambio de UUID activo; (D) ODE-623 queda en G1 y ODE-639/641 en G2, con tope de 60 min. Los comentarios `## Decisiones` están en los issues afectados.
 
-- **Ola 1 (hasta 7 builders paralelos, tras las decisiones de B/G):** B, C, D, E2, E3, F, G1. El usuario levantó el límite inicial de tres workers; las dependencias de archivos siguen vigentes.
-- **Ola 2:** A y E1, tras sus decisiones humanas; A espera el PR F por el hook compartido.
+- **Ola 1 (hasta 7 builders paralelos, tras PASS de 0R):** B, C, D, E2, E3, F, G1. El usuario levantó el límite inicial de tres workers; las dependencias de archivos siguen vigentes.
+- **Ola 2:** A y E1, tras PASS de 0R; A espera el PR F por el hook compartido.
 - **Ola 3:** G2, solo después de A por `editor-shell-commands.test.tsx`; detener y separar 641 si excede el límite de 60 minutos, sin sustituir condiciones observables por sleeps.
 
 ### Hallazgos que cambian el trabajo
@@ -801,7 +801,7 @@ El recorder delega la cola en `real-desktop-doubles.ts` y añade `tauriCatalogLi
 - 632: la barra solo expone `Code`, pero Tauri instala habilitados `codeBlock`, `horizontalRule`, `clearStyles`, `copyAsMarkdown`, `copyAsHtml` y `date`; no hay sincronización por modo. No esconder acciones Markdown que sí funcionan.
 - 633: además de italic, los substring asserts de bold, strike, highlight e inlineCode aceptan delimitadores más amplios.
 - 642: las guardas, coalescencia last-wins y cleanup ya existen; el hueco es que el test nunca solapa dos RAFs y cuatro mutaciones quedan verdes.
-- 649/654: la comparación captured de `open`/`writingId` no guarda nada; la generación existente basta. AI-03 está en 46/107 después de ODE-663; no se debe llevar a 47. ODE-653 ya está Duplicate con `duplicateOf=ODE-649`.
+- 649/654: los predicados capturados de `open`/`writingId` no guardan la respuesta; la ref de generación es el único owner y el cambio de `writingId` la incrementa desde el efecto pasivo. BUILD debe probar el cambio A→B por ese camino real, sin inferir una invalidación síncrona; si un timing requerido no es alcanzable desde producción, justificarlo y retirar el caso con su comentario. AI-03 está en 46/107 después de ODE-663; no se debe llevar a 47. ODE-653 ya está Duplicate con `duplicateOf=ODE-649`.
 - 662: un callback B puede reemplazar membresías B con ref A entre commit y passive hydration; preservar el writer único y el port durable.
 - 669: hoy se descargan todos los cuerpos y se autoriza secuencialmente; query con sesión/RLS y filtro `writing_shares!inner` puede acotar roundtrips y cargar un solo body, sin RPC por candidato. Revalidar permiso entre summary/detail.
 - 640: el caller real convierte slug a UUID antes del shell; la igualdad UUID/slug pedida no es alcanzable. El callback tampoco vuelve a validar identidad tras el await localDB.
@@ -822,4 +822,4 @@ awk -F'|' '/^# Audit Summary/{exit} /^\| *[A-Z]+-[0-9]+ *\|/{s=$6; gsub(/[ *`]/,
 
 No se crean follow-ups en Recon: colas de RAF anidado/error paths de 642; errores de load/create/write de 662; índice slug-leading solo si un EXPLAIN local lo justifica; RunEvent nativo de macOS no cubierto por el evento simulado; posible expansión de 641 si excede el timebox. No se cambia ODE-653.
 
-Antes de BUILD todos los issues requieren un comentario humano `## Decisiones`; el `ops:brief:lint --require-contract --require-recon` pasó para los 14. Otro agente revisa este mapa en 0R; este PR documental no se mergea desde Recon.
+Los issues con decisiones llevan comentarios humanos `## Decisiones` (ODE-632, 649, 640, 623, 639 y 641); A–D quedaron aceptadas. El `ops:brief:lint --require-contract --require-recon` pasó para los 14. La fase 0R de otro agente es el gate previo a BUILD; este PR documental permanece abierto y sin merge, según instrucción de Hugo.
