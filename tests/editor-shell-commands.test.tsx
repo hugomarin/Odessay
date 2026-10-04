@@ -1673,7 +1673,7 @@ const MARKDOWN_AVAILABILITY_CASES: MarkdownAvailabilityCase[] = [
 ]
 
 describe("ODE-632 — disponibilidad de las acciones sin rama Markdown", () => {
-  it.fails.each(MARKDOWN_AVAILABILITY_CASES)(
+  it.each(MARKDOWN_AVAILABILITY_CASES)(
     "$action",
     async (availabilityCase) => {
       const commandWorld = await mountDesktopCommandWorld(
