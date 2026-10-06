@@ -3,6 +3,7 @@ import { createEntityKey, type LocalDB } from "../lib/local-db";
 import type { LocalWriting, RemoteCollectionPayload, SyncMutation } from "../lib/local-db/schema";
 import { getRetryDelayMs } from "../lib/sync/retry";
 import type { RemoteWritingRecord } from "../lib/sync/remote-bootstrap";
+import { setSyncMetricSink, type SyncFlushMetric } from "../lib/observability/sync-metrics";
 import { SyncWorker } from "../lib/sync/worker";
 
 const createWriting = (): LocalWriting => ({
@@ -158,6 +159,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  setSyncMetricSink(null);
 });
 
 describe("SyncWorker", () => {
@@ -221,6 +223,182 @@ describe("SyncWorker", () => {
       "network",
       now + getRetryDelayMs(1),
     );
+  });
+
+  it("coalesces N overlapping triggers into one trailing wakeup", async () => {
+    const localDb = createLocalDbMock();
+    const upsertMutation = createMutation();
+    const deleteMutation = createMutation({
+      id: "mutation-2",
+      operation: "delete",
+      payload: { ...upsertMutation.payload, version: 2, deleted_at: "2026-03-17T00:00:01.000Z" },
+    });
+    const pendingSnapshots = [[upsertMutation], [deleteMutation]];
+    localDb.syncQueue.getPending = vi.fn(async () => pendingSnapshots.shift() ?? []);
+    const currentMutations: SyncMutation[] = [upsertMutation, deleteMutation];
+    localDb.syncQueue.getCurrentForEntity = vi.fn(
+      async () => currentMutations.shift() ?? deleteMutation,
+    ) as unknown as typeof localDb.syncQueue.getCurrentForEntity;
+
+    let resolveUpsert!: (writing: RemoteWritingRecord) => void;
+    const heldUpsert = new Promise<RemoteWritingRecord>((resolve) => {
+      resolveUpsert = resolve;
+    });
+    const upsertWriting = vi.fn(() => heldUpsert);
+    const deleteWriting = vi.fn(async () => undefined);
+    const metrics: SyncFlushMetric[] = [];
+    setSyncMetricSink((metric) => {
+      if (metric.type === "sync.flush") metrics.push(metric);
+    });
+    const worker = new SyncWorker({
+      localDb,
+      isOnline: () => true,
+      transport: {
+        upsertWriting,
+        deleteWriting,
+        upsertCollection: vi.fn(async () => undefined),
+        deleteCollection: vi.fn(async () => undefined),
+        setWritingCollections: vi.fn(async () => undefined),
+      },
+    });
+
+    const activeFlush = worker.flush();
+    await vi.waitFor(() => expect(upsertWriting).toHaveBeenCalledTimes(1));
+    await Promise.all(Array.from({ length: 8 }, () => worker.flush()));
+
+    resolveUpsert(createRemoteWriting());
+    await activeFlush;
+    await vi.waitFor(() => expect(deleteWriting).toHaveBeenCalledTimes(1));
+
+    expect(localDb.syncQueue.getPending).toHaveBeenCalledTimes(2);
+    expect(deleteWriting).toHaveBeenCalledTimes(1);
+    expect(metrics.filter((metric) => metric.overlapDetected)).toHaveLength(8);
+    expect(metrics.filter((metric) => metric.trigger === "pending_wakeup")).toHaveLength(1);
+    expect(metrics.find((metric) => metric.trigger === "pending_wakeup")).toMatchObject({
+      examined: 1,
+      sent: 1,
+      succeeded: 1,
+      failed: 0,
+    });
+  });
+
+  it("keeps retry backoff after an overlap instead of hot-looping the failed mutation", async () => {
+    const localDb = createLocalDbMock();
+    const mutation = createMutation();
+    let nextRetryAt: number | null = null;
+    let failedAt: number | null = null;
+    localDb.syncQueue.getPending = vi.fn(async () =>
+      nextRetryAt === null || nextRetryAt <= Date.now() ? [mutation] : [],
+    );
+    localDb.syncQueue.getCurrentForEntity = vi.fn(async () => mutation);
+    localDb.syncQueue.markFailed = vi.fn(async (_id: string, _message: string, retryAt: number) => {
+      nextRetryAt = retryAt;
+      failedAt = Date.now();
+    });
+
+    vi.useFakeTimers();
+    const now = 10_000;
+    vi.setSystemTime(now);
+    let retryTimer: (() => void) | null = null;
+    const scheduleTimeout = vi.fn((callback: () => void, _delay: number) => {
+      retryTimer = callback;
+      return 1;
+    });
+    let rejectUpsert!: (error: Error) => void;
+    const failedUpsert = new Promise<RemoteWritingRecord>((_resolve, reject) => {
+      rejectUpsert = reject;
+    });
+    const upsertWriting = vi.fn(async () => createRemoteWriting());
+    upsertWriting.mockImplementationOnce(() => failedUpsert);
+    const metrics: SyncFlushMetric[] = [];
+    setSyncMetricSink((metric) => {
+      if (metric.type === "sync.flush") metrics.push(metric);
+    });
+    const worker = new SyncWorker({
+      localDb,
+      isOnline: () => true,
+      scheduleTimeout,
+      clearScheduledTimeout: vi.fn(),
+      logError: vi.fn(),
+      transport: {
+        upsertWriting,
+        deleteWriting: vi.fn(async () => undefined),
+        upsertCollection: vi.fn(async () => undefined),
+        deleteCollection: vi.fn(async () => undefined),
+        setWritingCollections: vi.fn(async () => undefined),
+      },
+    });
+
+    const activeFlush = worker.flush();
+    await vi.waitFor(() => expect(upsertWriting).toHaveBeenCalledTimes(1));
+    await worker.flush();
+    rejectUpsert(new Error("network"));
+    await activeFlush;
+    await vi.waitFor(() =>
+      expect(metrics.filter((metric) => metric.trigger === "pending_wakeup")).toHaveLength(1),
+    );
+
+    const pendingWakeup = metrics.find((metric) => metric.trigger === "pending_wakeup");
+    expect(pendingWakeup).toMatchObject({ examined: 0, sent: 0, succeeded: 0, failed: 0 });
+    expect(nextRetryAt).toBe(failedAt! + getRetryDelayMs(1));
+    expect(nextRetryAt).toBeGreaterThan(Date.now());
+    expect(scheduleTimeout).toHaveBeenCalledWith(expect.any(Function), 1500);
+    expect(localDb.syncQueue.getPending).toHaveBeenCalledTimes(2);
+    expect(upsertWriting).toHaveBeenCalledTimes(1);
+
+    // El ticker conserva su trigger y solo reintenta cuando la mutación ya
+    // salió de next_retry_at; el wakeup inmediato no consume ese intento.
+    vi.setSystemTime(nextRetryAt!);
+    retryTimer!();
+    await vi.waitFor(() => expect(upsertWriting).toHaveBeenCalledTimes(2));
+    expect(metrics.find((metric) => metric.trigger === "debounce" && !metric.overlapDetected)).toMatchObject({
+      examined: 1,
+      succeeded: 1,
+      failed: 0,
+    });
+  });
+
+  it("stop clears a wakeup queued by an in-flight request", async () => {
+    const localDb = createLocalDbMock();
+    const mutation = createMutation();
+    localDb.syncQueue.getPending = vi.fn(async () => [mutation]);
+    localDb.syncQueue.getCurrentForEntity = vi.fn(async () => mutation);
+
+    let resolveUpsert!: (writing: RemoteWritingRecord) => void;
+    const heldUpsert = new Promise<RemoteWritingRecord>((resolve) => {
+      resolveUpsert = resolve;
+    });
+    const upsertWriting = vi.fn(() => heldUpsert);
+    const clearScheduledTimeout = vi.fn();
+    const removeOnlineListener = vi.fn();
+    const worker = new SyncWorker({
+      localDb,
+      isOnline: () => true,
+      scheduleTimeout: vi.fn(() => 1),
+      clearScheduledTimeout,
+      addOnlineListener: vi.fn(),
+      removeOnlineListener,
+      transport: {
+        upsertWriting,
+        deleteWriting: vi.fn(async () => undefined),
+        upsertCollection: vi.fn(async () => undefined),
+        deleteCollection: vi.fn(async () => undefined),
+        setWritingCollections: vi.fn(async () => undefined),
+      },
+    });
+
+    worker.start();
+    const activeFlush = worker.flush();
+    await vi.waitFor(() => expect(upsertWriting).toHaveBeenCalledTimes(1));
+    await worker.flush();
+    worker.stop();
+    resolveUpsert(createRemoteWriting());
+    await activeFlush;
+
+    expect(clearScheduledTimeout).toHaveBeenCalledWith(1);
+    expect(removeOnlineListener).toHaveBeenCalledTimes(1);
+    expect(localDb.syncQueue.getPending).toHaveBeenCalledTimes(1);
+    expect(upsertWriting).toHaveBeenCalledTimes(1);
   });
 
   it("a scheduled flush that fails logs the error instead of leaving an unhandled rejection", async () => {
