@@ -64,14 +64,47 @@
  * and D3 Desk body content are asserted in separate tests so each it.fails commit
  * names one failure mode without coupling the fixes.
  */
-import { mkdtempSync, rmSync, unlinkSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync, unlinkSync } from "node:fs"
 import { readdir, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { basename, join } from "node:path"
 import JSZip from "jszip"
+import { extractText, getDocumentProxy } from "unpdf"
 import type { ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+
+const pdfRendererFault = vi.hoisted(() => ({ active: false, attempts: 0, exportCalls: 0 }))
+
+// Fault injection only: the exported renderer remains a passthrough, while the
+// negative control makes its underlying PDF renderer reject each fallback.
+vi.mock("@react-pdf/renderer", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@react-pdf/renderer")>()
+  return {
+    ...actual,
+    pdf: (...args: Parameters<typeof actual.pdf>) => {
+      const rendered = actual.pdf(...args)
+      if (pdfRendererFault.active) {
+        rendered.toBlob = async () => {
+          pdfRendererFault.attempts += 1
+          throw new Error("Injected PDF renderer failure")
+        }
+      }
+      return rendered
+    },
+  }
+})
+
+vi.mock("@/lib/export/to-pdf", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/export/to-pdf")>()
+  return {
+    ...actual,
+    renderWritingToPdfBytes: vi.fn(async (...args: Parameters<typeof actual.renderWritingToPdfBytes>) => {
+      if (pdfRendererFault.active) pdfRendererFault.exportCalls += 1
+      return actual.renderWritingToPdfBytes(...args)
+    }),
+  }
+})
 
 vi.mock("@tiptap/react", async (importOriginal) => {
   const { createTiptapCaptureModule } = await import("./support/editor-shell-doubles")
@@ -159,11 +192,15 @@ afterAll(() => {
 })
 
 beforeEach(() => {
+  pdfRendererFault.active = false
+  pdfRendererFault.attempts = 0
+  pdfRendererFault.exportCalls = 0
   resetDesktopWorkspace()
   resetEditorShellWorld({ isDesktop: true })
 })
 
 afterEach(async () => {
+  pdfRendererFault.active = false
   if (pageRoot) {
     await act(async () => pageRoot?.unmount())
     pageRoot = null
@@ -747,21 +784,28 @@ async function assertExportChain(
   format: PanelFormat,
   title: string,
   fileName: string,
-  verifyBytes: (bytes: Buffer) => void,
+  verifyBytes: (bytes: Buffer) => Promise<void> | void,
+  expectedDefaultPath?: string,
 ) {
   // 1. Éxito: el artefacto existe en disco y el toast nombra el origen.
   const successDir = freshDir(`${format}-success`)
   const target = join(successDir, fileName)
   world.saveDialogResult = target
   const options = await exportVia(format)
-  expect(String(options?.defaultPath ?? ""), "el diálogo propone el nombre del export").toMatch(
-    new RegExp(`\\.${format}$`),
-  )
+  const defaultPath = String(options?.defaultPath ?? "")
+  if (expectedDefaultPath) {
+    expect(defaultPath, "el diálogo propone el basename canónico con la extensión PDF").toBe(
+      expectedDefaultPath,
+    )
+  } else {
+    expect(defaultPath, "el diálogo propone el nombre del export").toMatch(new RegExp(`\\.${format}$`))
+  }
   const successToast = await waitForDocumentActionToast("success")
   expect(successToast.textContent, "el toast nombra el documento de origen").toBe(
     panelSuccessMessage(format, title),
   )
-  verifyBytes(await readFile(target))
+  expect(existsSync(target), "el archivo existe cuando aparece el toast de éxito").toBe(true)
+  await verifyBytes(await readFile(target))
   expect(await listExports(successDir), "solo el artefacto, sin `.tmp`").toEqual([fileName])
 
   // 2. Cancelar el diálogo: sin artefacto y sin toast.
@@ -811,12 +855,64 @@ describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
       expect(new TextDecoder().decode(downloaded.data.bytes)).toContain(text)
 
       await confirmInCloud(writingId, text)
+      const otherText = "ODE683-PDF-OTHER-DOCUMENT"
+      const otherWritingId = await createAndOpenSecondDocument(otherText)
+      await confirmInCloud(otherWritingId, otherText)
+      await clickEditorTab(writingId)
+      await waitForMarkdownContaining(text)
 
       // El nombre del toast es el título visible del documento (derivado del
       // cuerpo cuando no hay título explícito), no la fila del catálogo.
-      await assertExportChain("pdf", text, "letter.pdf", (bytes) => {
+      await assertExportChain("pdf", text, "letter.pdf", async (bytes) => {
         expect(bytes.subarray(0, 5).toString("latin1"), "cabecera PDF").toBe("%PDF-")
-      })
+        const pdf = await getDocumentProxy(new Uint8Array(bytes))
+        const extracted = await extractText(pdf, { mergePages: true })
+        expect(extracted.text, "el PDF contiene el cuerpo del documento de origen").toContain(text)
+      }, `${basename(canonicalPath, ".md")}.pdf`)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "renderer failure shows an error and writes no PDF",
+    async () => {
+      const text = "ODE683-RENDERER-FAILURE"
+      const writingId = await createAndOpenDocument(text)
+      await confirmInCloud(writingId, text)
+
+      const failureDir = freshDir("pdf-renderer-failure")
+      world.saveDialogResult = join(failureDir, "letter.pdf")
+      await openExportSection()
+      const trigger = await waitFor(
+        () => findButton(mounted!.container, (button) => button.textContent?.includes("Export as…") ?? false),
+        { label: 'trigger "Export as…"' },
+      )
+      await act(async () => trigger.click())
+      await flush(2)
+      const item = await waitFor(
+        () => findButton(document.body, (button) => button.textContent?.trim() === ITEM_LABEL.pdf),
+        { label: `ítem "${ITEM_LABEL.pdf}"` },
+      )
+      expect(item.disabled, `el ítem "${ITEM_LABEL.pdf}" está habilitado`).toBe(false)
+      const dialogCallsBefore = world.saveDialogCalls.length
+
+      // This control forces pdf().toBlob() to reject so the real to-pdf.tsx
+      // fallback attempts run and ultimately surface the renderer failure.
+      pdfRendererFault.active = true
+      await act(async () => item.click())
+
+      const errorToast = await waitForDocumentActionToast("error")
+      expect(errorToast.textContent, "el error conserva el documento de origen").toContain(
+        panelFailureMessage("pdf", text),
+      )
+      expect(pdfRendererFault.exportCalls, "se llamó al renderer real del export").toBe(1)
+      expect(pdfRendererFault.attempts, "fallaron los intentos de fallback del renderer").toBeGreaterThan(1)
+      expect(world.saveDialogCalls, "el renderer falló antes de abrir el diálogo").toHaveLength(
+        dialogCallsBefore,
+      )
+      expect(await listExports(failureDir), "el fallo del renderer no deja archivo").toEqual([])
+
+      assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
   )
@@ -1827,6 +1923,189 @@ describe("EXP-05 — callers reales de Desk y Collections (ODE-636)", () => {
       expect(world.saveDialogCalls).toHaveLength(dialogCallsBefore + 1)
       expect(await listExports(successDir)).toEqual(["collection-letter.md"])
       expect((await readFile(target)).toString("utf8")).toContain(text)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  for (const surface of ["desk", "collections"] as const) {
+    it(
+      `${surface}: row and preview downloads use the requested writing and canonical filename`,
+      async () => {
+        const textA = "ODE681-MARKDOWN-ROW-DOCUMENT-A"
+        const textB = "ODE681-MARKDOWN-ROW-DOCUMENT-B"
+        const titleA = "ODE681 Markdown A"
+        const titleB = "ODE681 Markdown B"
+        const { a, b } = await openTwoAttributedDocuments(
+          { text: textA, title: titleA },
+          { text: textB, title: titleB },
+        )
+        const idByTitle = new Map([[titleA, a], [titleB, b]])
+
+        await mountProductionSurface(surface)
+        const rowActions = await waitFor(
+          () => {
+            const actions = Array.from(
+              pageContainer!.querySelectorAll<HTMLButtonElement>('button[aria-label^="Actions for "]'),
+            )
+            return actions.length === 2 ? actions : null
+          },
+          { label: `${surface} muestra ambas filas` },
+        )
+        const selectedTitle = rowActions[1]?.getAttribute("aria-label")?.slice("Actions for ".length)
+        if (!selectedTitle) throw new Error(`Missing second row title on ${surface}`)
+        const selectedId = idByTitle.get(selectedTitle)
+        const otherId = selectedId === a ? b : a
+        if (!selectedId) throw new Error(`Unexpected row title on ${surface}: ${selectedTitle}`)
+        const { buildMarkdownDownloadName } = await import("@/lib/export/to-markdown")
+        const { getWritingForEdit } = await import("@/lib/queries/desk-catalog-source")
+        const selectedWriting = await getWritingForEdit(selectedId)
+        if (!selectedWriting) throw new Error(`Missing selected writing ${selectedId}`)
+        const expectedName = buildMarkdownDownloadName({
+          title: selectedWriting.title,
+          bodyText: selectedWriting.body_text,
+          writingId: selectedWriting.id,
+        })
+
+        const rowDir = freshDir(`${surface}-row-markdown-selected-writing`)
+        const rowTarget = join(rowDir, expectedName)
+        world.saveDialogResult = rowTarget
+        const rowDialogCallsBefore = world.saveDialogCalls.length
+        await clickProductionRowDownload(selectedTitle)
+        await waitForSaveDialogCall(rowDialogCallsBefore, `${surface} row downloaded ${selectedTitle}`)
+        await waitForExportNotice("success")
+        expect(world.saveDialogCalls.at(-1)?.defaultPath).toBe(expectedName)
+        const rowMarkdown = await readFile(rowTarget, "utf8")
+        expect(rowMarkdown).toContain(selectedId === a ? textA : textB)
+        expect(rowMarkdown).not.toContain(otherId === a ? textA : textB)
+        expect(await listExports(rowDir)).toEqual([expectedName])
+
+        const previewButton = await waitFor(
+          () =>
+            findButton(
+              pageContainer!,
+              (button) => button.getAttribute("aria-label") === `Preview ${selectedTitle}`,
+            ),
+          { label: `${surface} preview for the selected writing` },
+        )
+        await act(async () => previewButton.click())
+        await flush(3)
+
+        const previewDir = freshDir(`${surface}-preview-markdown-selected-writing`)
+        const previewTarget = join(previewDir, expectedName)
+        world.saveDialogResult = previewTarget
+        const previewDialogCallsBefore = world.saveDialogCalls.length
+        await clickPreviewExport("markdown")
+        await waitFor(() => pageText().includes("Markdown exported."), {
+          label: `${surface} preview reports Markdown delivery`,
+        })
+        expect(world.saveDialogCalls).toHaveLength(previewDialogCallsBefore + 1)
+        expect(world.saveDialogCalls.at(-1)?.defaultPath).toBe(expectedName)
+        const previewMarkdown = await readFile(previewTarget, "utf8")
+        expect(previewMarkdown).toContain(selectedId === a ? textA : textB)
+        expect(previewMarkdown).not.toContain(otherId === a ? textA : textB)
+        expect(await listExports(previewDir)).toEqual([expectedName])
+        assertNoUnhandledErrors()
+      },
+      TEST_TIMEOUT_MS,
+    )
+  }
+
+  it(
+    "Desk row: an absent materialized Markdown source reports an error without a download",
+    async () => {
+      const text = "ODE681-DESK-ROW-MISSING-MARKDOWN"
+      const writingId = await createAndOpenDocument(text)
+      const record = await getCatalogRecord(writingId)
+      const canonicalPath = record.binding?.canonicalPath
+      if (!canonicalPath) throw new Error(`Expected a canonical path for ${writingId}`)
+      if (!record.title) throw new Error(`Expected a title for ${writingId}`)
+      await mountProductionSurface("desk")
+      const failureDir = freshDir("desk-row-markdown-missing-source")
+      const dialogCallsBefore = world.saveDialogCalls.length
+      unlinkSync(canonicalPath)
+
+      await clickProductionRowDownload(record.title)
+      const failureNotice = await waitForExportNotice("error")
+      expect(failureNotice.textContent?.trim()).toBe("Failed to export Markdown.")
+      expect(world.saveDialogCalls).toHaveLength(dialogCallsBefore)
+      expect(await listExports(failureDir)).toEqual([])
+      expect(pageText()).not.toContain("Markdown exported")
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "Collections row: a deleted catalog document reports an error without a download",
+    async () => {
+      const text = "ODE681-COLLECTIONS-ROW-DELETED-DOCUMENT"
+      const writingId = await createAndOpenDocument(text)
+      const record = await getCatalogRecord(writingId)
+      if (!record.title) throw new Error(`Expected a title for ${writingId}`)
+      await mountProductionSurface("collections")
+
+      const trigger = await waitFor(
+        () =>
+          findButton(
+            pageContainer!,
+            (button) => button.getAttribute("aria-label") === `Actions for ${record.title}`,
+          ),
+        { label: `Collections actions for ${record.title}` },
+      )
+      await pointerClick(trigger)
+      const downloadItem = await waitFor(
+        () =>
+          Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+            (item) => item.textContent?.trim() === "Download markdown",
+          ) ?? null,
+        { label: "Collections Download markdown menu item" },
+      )
+      const { deleteWriting } = await import("@/lib/queries/writing-mutations")
+      const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
+      const catalog = await getDocumentCatalog()
+      const originalGetById = catalog.getById.bind(catalog)
+      let releaseLookup: () => void = () => {
+        throw new Error("Expected the held catalog lookup to be installed")
+      }
+      let markLookupStarted: () => void = () => {
+        throw new Error("Expected the catalog lookup signal to be installed")
+      }
+      const heldLookup = new Promise<void>((resolve) => {
+        releaseLookup = resolve
+      })
+      const lookupStarted = new Promise<void>((resolve) => {
+        markLookupStarted = resolve
+      })
+      let holdNextLookup = true
+      const failureDir = freshDir("collections-row-markdown-deleted-source")
+      const dialogCallsBefore = world.saveDialogCalls.length
+
+      catalog.getById = async (id) => {
+        if (holdNextLookup && id === writingId) {
+          holdNextLookup = false
+          markLookupStarted()
+          await heldLookup
+        }
+        return originalGetById(id)
+      }
+      try {
+        await act(async () => downloadItem.click())
+        await lookupStarted
+        await deleteWriting(writingId)
+        expect((await originalGetById(writingId))?.deletedAt).not.toBeNull()
+        releaseLookup()
+        await flush(3)
+        await waitFor(() => pageText().includes("Failed to export Markdown."), {
+          label: "Collections row reports a deleted-source error",
+        })
+        expect(pageText()).not.toContain("Markdown exported")
+        expect(world.saveDialogCalls).toHaveLength(dialogCallsBefore)
+        expect(await listExports(failureDir)).toEqual([])
+        assertNoUnhandledErrors()
+      } finally {
+        releaseLookup()
+        catalog.getById = originalGetById
+      }
     },
     TEST_TIMEOUT_MS,
   )

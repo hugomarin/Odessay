@@ -158,6 +158,7 @@ class SyncWorker {
   private readonly logError: (message: string, context: Record<string, unknown>) => void;
   private timeoutId: number | null = null;
   private isRunning = false;
+  private pendingWakeup = false;
   private started = false;
   private nextTrigger: SyncFlushTrigger = "explicit";
 
@@ -193,6 +194,7 @@ class SyncWorker {
   }
 
   stop() {
+    this.pendingWakeup = false;
     if (typeof window === "undefined" || !this.started) {
       return;
     }
@@ -230,13 +232,18 @@ class SyncWorker {
   }
 
   async flush() {
+    return this.flushWithTrigger();
+  }
+
+  private async flushWithTrigger(triggerOverride?: SyncFlushTrigger) {
     if (typeof window === "undefined") {
       return;
     }
     const startedAt = performance.now();
-    const trigger = this.nextTrigger;
-    this.nextTrigger = "explicit";
+    const trigger = triggerOverride ?? this.nextTrigger;
+    if (triggerOverride === undefined) this.nextTrigger = "explicit";
     if (this.isRunning) {
+      this.pendingWakeup = true;
       emitSyncMetric({ ...metricBase("web", "indexeddb"), type: "sync.flush", trigger, examined: 0, sent: 0, superseded: 0, succeeded: 0, failed: 0, cloudBytes: 0, verifiedWrites: 0, durationMs: 0, overlapDetected: true, queueWaitMs: [] });
       return;
     }
@@ -273,6 +280,12 @@ class SyncWorker {
       emitSyncMetric({ ...metricBase("web", "indexeddb"), type: "sync.flush", trigger, examined: mutations.length, sent: succeeded + failed, superseded, succeeded, failed, cloudBytes: mutations.reduce((sum, mutation) => sum + serializedBytes(mutation.payload), 0), verifiedWrites: succeeded, durationMs: performance.now() - startedAt, overlapDetected: false, queueWaitMs: mutations.map((mutation) => Math.max(0, Date.now() - mutation.created_at)) });
     } finally {
       this.isRunning = false;
+      if (this.pendingWakeup) {
+        this.pendingWakeup = false;
+        void this.flushWithTrigger("pending_wakeup").catch((error: unknown) => {
+          this.logError("[sync:flush]", { error: error instanceof Error ? error.message : String(error) });
+        });
+      }
     }
   }
 

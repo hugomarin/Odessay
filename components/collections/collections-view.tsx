@@ -491,7 +491,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   const downloadWritingMarkdown = useCallback(async (writingId: string) => {
     const writing = await getWritingForEdit(writingId)
     if (!writing || writing.sync_status === "deleted") {
-      return false
+      throw new Error("Failed to export Markdown.")
     }
     let bodyJson: Record<string, unknown> = writing.body_json
     if (isDesktopRuntime()) {
