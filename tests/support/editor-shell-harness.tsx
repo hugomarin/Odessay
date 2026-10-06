@@ -64,6 +64,7 @@ import { getEditorSessionState, resetEditorSessionStoreForTests } from "@/lib/st
 
 import { type EditorHandle, type HarnessWorld, defaultNetwork, tauriEventListeners, world } from "./editor-shell-doubles"
 import { readWorkspaceMarkdown } from "./editor-shell-desktop-doubles"
+import { beginPersistenceCoordinatorCapture } from "./persistence-coordinator-capture"
 
 export {
   aiServiceDouble,
@@ -77,6 +78,14 @@ export {
   world,
 } from "./editor-shell-doubles"
 export type { EditorHandle } from "./editor-shell-doubles"
+
+/**
+ * Activa una captura opt-in de los PersistenceCoordinators reales que se creen
+ * durante el montaje siguiente, para que un test pueda esperar su settle().
+ */
+export function capturePersistenceCoordinators() {
+  return beginPersistenceCoordinatorCapture()
+}
 
 /* ------------------------------------------------------------------ *
  * Mundo: reset y APIs de entorno que happy-dom no trae
