@@ -238,7 +238,7 @@ describe("ODE-680 — export DOCX web a través del servicio y la ruta real", ()
     expect(result.data).toBeNull()
   })
 
-  it.fails("rechaza un DOCX vacío desde la ruta en vez de devolver éxito", async () => {
+  it("rechaza un DOCX vacío desde la ruta en vez de devolver éxito", async () => {
     installRoutedFetch(owner)
     rendererControl.mode = "empty"
 

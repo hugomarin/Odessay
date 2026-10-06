@@ -127,6 +127,10 @@ export async function GET(request: Request, context: RouteContext) {
     document: exportDocument,
   })
 
+  if (buffer.byteLength === 0) {
+    return jsonError(500, "EXPORT_FAILED", "DOCX export produced no bytes.")
+  }
+
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: buildDownloadHeaders({
