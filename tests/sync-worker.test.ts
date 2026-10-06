@@ -294,7 +294,7 @@ describe("SyncWorker", () => {
     localDb.syncQueue.markFailed = vi.fn(async (_id: string, _message: string, retryAt: number) => {
       nextRetryAt = retryAt;
       failedAt = Date.now();
-    });
+    }) as unknown as typeof localDb.syncQueue.markFailed;
 
     vi.useFakeTimers();
     const now = 10_000;
