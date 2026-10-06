@@ -64,14 +64,47 @@
  * and D3 Desk body content are asserted in separate tests so each it.fails commit
  * names one failure mode without coupling the fixes.
  */
-import { mkdtempSync, rmSync, unlinkSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync, unlinkSync } from "node:fs"
 import { readdir, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { basename, join } from "node:path"
 import JSZip from "jszip"
+import { extractText, getDocumentProxy } from "unpdf"
 import type { ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+
+const pdfRendererFault = vi.hoisted(() => ({ active: false, attempts: 0, exportCalls: 0 }))
+
+// Fault injection only: the exported renderer remains a passthrough, while the
+// negative control makes its underlying PDF renderer reject each fallback.
+vi.mock("@react-pdf/renderer", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@react-pdf/renderer")>()
+  return {
+    ...actual,
+    pdf: (...args: Parameters<typeof actual.pdf>) => {
+      const rendered = actual.pdf(...args)
+      if (pdfRendererFault.active) {
+        rendered.toBlob = async () => {
+          pdfRendererFault.attempts += 1
+          throw new Error("Injected PDF renderer failure")
+        }
+      }
+      return rendered
+    },
+  }
+})
+
+vi.mock("@/lib/export/to-pdf", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/export/to-pdf")>()
+  return {
+    ...actual,
+    renderWritingToPdfBytes: vi.fn(async (...args: Parameters<typeof actual.renderWritingToPdfBytes>) => {
+      if (pdfRendererFault.active) pdfRendererFault.exportCalls += 1
+      return actual.renderWritingToPdfBytes(...args)
+    }),
+  }
+})
 
 vi.mock("@tiptap/react", async (importOriginal) => {
   const { createTiptapCaptureModule } = await import("./support/editor-shell-doubles")
@@ -159,11 +192,15 @@ afterAll(() => {
 })
 
 beforeEach(() => {
+  pdfRendererFault.active = false
+  pdfRendererFault.attempts = 0
+  pdfRendererFault.exportCalls = 0
   resetDesktopWorkspace()
   resetEditorShellWorld({ isDesktop: true })
 })
 
 afterEach(async () => {
+  pdfRendererFault.active = false
   if (pageRoot) {
     await act(async () => pageRoot?.unmount())
     pageRoot = null
@@ -747,21 +784,28 @@ async function assertExportChain(
   format: PanelFormat,
   title: string,
   fileName: string,
-  verifyBytes: (bytes: Buffer) => void,
+  verifyBytes: (bytes: Buffer) => Promise<void> | void,
+  expectedDefaultPath?: string,
 ) {
   // 1. Éxito: el artefacto existe en disco y el toast nombra el origen.
   const successDir = freshDir(`${format}-success`)
   const target = join(successDir, fileName)
   world.saveDialogResult = target
   const options = await exportVia(format)
-  expect(String(options?.defaultPath ?? ""), "el diálogo propone el nombre del export").toMatch(
-    new RegExp(`\\.${format}$`),
-  )
+  const defaultPath = String(options?.defaultPath ?? "")
+  if (expectedDefaultPath) {
+    expect(defaultPath, "el diálogo propone el basename canónico con la extensión PDF").toBe(
+      expectedDefaultPath,
+    )
+  } else {
+    expect(defaultPath, "el diálogo propone el nombre del export").toMatch(new RegExp(`\\.${format}$`))
+  }
   const successToast = await waitForDocumentActionToast("success")
   expect(successToast.textContent, "el toast nombra el documento de origen").toBe(
     panelSuccessMessage(format, title),
   )
-  verifyBytes(await readFile(target))
+  expect(existsSync(target), "el archivo existe cuando aparece el toast de éxito").toBe(true)
+  await verifyBytes(await readFile(target))
   expect(await listExports(successDir), "solo el artefacto, sin `.tmp`").toEqual([fileName])
 
   // 2. Cancelar el diálogo: sin artefacto y sin toast.
@@ -811,12 +855,64 @@ describe("EXP-05 — export desde la shell hasta el disco (ODE-601)", () => {
       expect(new TextDecoder().decode(downloaded.data.bytes)).toContain(text)
 
       await confirmInCloud(writingId, text)
+      const otherText = "ODE683-PDF-OTHER-DOCUMENT"
+      const otherWritingId = await createAndOpenSecondDocument(otherText)
+      await confirmInCloud(otherWritingId, otherText)
+      await clickEditorTab(writingId)
+      await waitForMarkdownContaining(text)
 
       // El nombre del toast es el título visible del documento (derivado del
       // cuerpo cuando no hay título explícito), no la fila del catálogo.
-      await assertExportChain("pdf", text, "letter.pdf", (bytes) => {
+      await assertExportChain("pdf", text, "letter.pdf", async (bytes) => {
         expect(bytes.subarray(0, 5).toString("latin1"), "cabecera PDF").toBe("%PDF-")
-      })
+        const pdf = await getDocumentProxy(new Uint8Array(bytes))
+        const extracted = await extractText(pdf, { mergePages: true })
+        expect(extracted.text, "el PDF contiene el cuerpo del documento de origen").toContain(text)
+      }, `${basename(canonicalPath, ".md")}.pdf`)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "renderer failure shows an error and writes no PDF",
+    async () => {
+      const text = "ODE683-RENDERER-FAILURE"
+      const writingId = await createAndOpenDocument(text)
+      await confirmInCloud(writingId, text)
+
+      const failureDir = freshDir("pdf-renderer-failure")
+      world.saveDialogResult = join(failureDir, "letter.pdf")
+      await openExportSection()
+      const trigger = await waitFor(
+        () => findButton(mounted!.container, (button) => button.textContent?.includes("Export as…") ?? false),
+        { label: 'trigger "Export as…"' },
+      )
+      await act(async () => trigger.click())
+      await flush(2)
+      const item = await waitFor(
+        () => findButton(document.body, (button) => button.textContent?.trim() === ITEM_LABEL.pdf),
+        { label: `ítem "${ITEM_LABEL.pdf}"` },
+      )
+      expect(item.disabled, `el ítem "${ITEM_LABEL.pdf}" está habilitado`).toBe(false)
+      const dialogCallsBefore = world.saveDialogCalls.length
+
+      // This control forces pdf().toBlob() to reject so the real to-pdf.tsx
+      // fallback attempts run and ultimately surface the renderer failure.
+      pdfRendererFault.active = true
+      await act(async () => item.click())
+
+      const errorToast = await waitForDocumentActionToast("error")
+      expect(errorToast.textContent, "el error conserva el documento de origen").toContain(
+        panelFailureMessage("pdf", text),
+      )
+      expect(pdfRendererFault.exportCalls, "se llamó al renderer real del export").toBe(1)
+      expect(pdfRendererFault.attempts, "fallaron los intentos de fallback del renderer").toBeGreaterThan(1)
+      expect(world.saveDialogCalls, "el renderer falló antes de abrir el diálogo").toHaveLength(
+        dialogCallsBefore,
+      )
+      expect(await listExports(failureDir), "el fallo del renderer no deja archivo").toEqual([])
+
+      assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
   )
