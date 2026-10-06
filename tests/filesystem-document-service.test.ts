@@ -532,7 +532,7 @@ describe("FilesystemDocumentService", () => {
     vi.useFakeTimers()
   })
 
-  it.fails("exportWriting rejects an empty PDF renderer result", async () => {
+  it("exportWriting rejects an empty PDF renderer result", async () => {
     vi.useRealTimers()
     const path = `${WRITINGS_DIR}/empty-pdf.md`
     mockFiles.set(path, "# Empty PDF\n\nPDF body.")
