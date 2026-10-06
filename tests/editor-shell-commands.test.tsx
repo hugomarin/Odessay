@@ -159,7 +159,9 @@ const {
   resetDesktopWorkspace,
 } = await import("./support/editor-shell-desktop-doubles")
 const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
-const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
+const { getEditorSessionState, resetEditorSessionStoreForTests } = await import(
+  "@/lib/stores/editor-session-store"
+)
 const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 const { EDITOR_DRAFT_TAB_ID, createEditorSessionTab, createEmptyEditorSession } = await import(
   "@/lib/local-db/editor-sessions"
@@ -480,6 +482,7 @@ async function mountWebCommandWorld(action: EditorShortcutAction, testCase: Comm
 async function mountDesktopCommandWorld(
   action: EditorShortcutAction,
   testCase: CommandCase,
+  resetSessionStoreAfterSeeding = false,
 ): Promise<CommandWorld> {
   resetDesktopWorkspace()
   resetEditorShellWorld({ isDesktop: true })
@@ -512,10 +515,25 @@ async function mountDesktopCommandWorld(
     ],
   })
 
+  // ODE-639: a deferred save from the previous row can reload the singleton
+  // while the two desktop drafts are being created. Re-seed it immediately
+  // before this row's mount so it reads the session written above.
+  if (resetSessionStoreAfterSeeding) resetEditorSessionStoreForTests()
+
   mounted = await mountEditorShell({ writingId: writingA })
   await waitFor(() => getEditorSessionState().loaded, { label: "sesión cargada" })
   await waitFor(() => mounted!.editor().getText().includes(TEXT_A), { label: "A hidratado", timeoutMs: 15_000 })
-  await waitFor(() => document.querySelector(`[data-editor-tab-id="${writingB}"]`), { label: "pestaña de B" })
+  try {
+    await waitFor(() => document.querySelector(`[data-editor-tab-id="${writingB}"]`), {
+      label: "pestaña de B",
+      ...(resetSessionStoreAfterSeeding ? { timeoutMs: 15_000 } : {}),
+    })
+  } catch (error) {
+    if (!resetSessionStoreAfterSeeding) throw error
+    const message = error instanceof Error ? error.message : String(error)
+    const tabs = JSON.stringify(getEditorSessionState().session.tabs)
+    throw new Error(`${message}\nPestañas de la sesión al fallar: ${tabs}`)
+  }
 
   return makeWorld(action, testCase, writingA)
 }
@@ -1422,7 +1440,7 @@ describe("ODE-603 — red de comandos de la shell", () => {
           }
           commandWorld =
             testCase.runtime === "desktop"
-              ? await mountDesktopCommandWorld(action, testCase)
+              ? await mountDesktopCommandWorld(action, testCase, action === "copyAsMarkdown")
               : await mountWebCommandWorld(action, testCase)
           if (testCase.setup) {
             await testCase.setup(commandWorld)
