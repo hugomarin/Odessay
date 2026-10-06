@@ -2035,7 +2035,7 @@ describe("EXP-05 — callers reales de Desk y Collections (ODE-636)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "Collections row: a deleted catalog document reports an error without a download",
     async () => {
       const text = "ODE681-COLLECTIONS-ROW-DELETED-DOCUMENT"
