@@ -616,4 +616,98 @@ describe("ODE-677 — wakeup pendiente tras overlap del flush web", () => {
       }
     },
   )
+
+  it(
+    "control: si el PATCH en vuelo falla, el delete converge por el retry ya existente",
+    async () => {
+      const writingId = randomUUID()
+      const saved = await webDocumentService.saveWriting({
+        writing: editorRecord(writingId, "Borrador cuyo PATCH pierde respuesta antes del delete."),
+      })
+      expect(saved.error).toBeNull()
+
+      let notifyPatchStarted!: () => void
+      const patchStarted = new Promise<void>((resolve) => {
+        notifyPatchStarted = resolve
+      })
+      let rejectPatchResponse!: () => void
+      const patchResponseGate = new Promise<void>((resolve) => {
+        rejectPatchResponse = resolve
+      })
+      let patchHasStarted = false
+      const requests: Array<"PATCH" | "DELETE"> = []
+      const capturedDeletes: CapturedResponse[] = []
+      const failedPatchFlush = waitForFlushMetric(
+        "the failed PATCH flush",
+        (metric) => !metric.overlapDetected && metric.trigger === "auth" && metric.failed === 1,
+      )
+      const overlapFlush = waitForFlushMetric(
+        "the overlapping schedule(0) flush",
+        (metric) => metric.overlapDetected,
+      )
+      const deleteFlush = waitForFlushMetric(
+        "the converged delete flush",
+        (metric) => !metric.overlapDetected && metric.examined === 1 && metric.succeeded === 1,
+      )
+
+      installRoutedFetch(
+        {
+          [`/api/writings/${writingId}`]: async (request) => {
+            if (request.method === "PATCH") {
+              requests.push("PATCH")
+              const response = await patchRoute(writingId)(request)
+              patchHasStarted = true
+              notifyPatchStarted()
+              await patchResponseGate
+              throw new Error("PATCH response lost after the local handler committed")
+            }
+            if (request.method === "DELETE") {
+              requests.push("DELETE")
+              return capturingDelete(writingId, capturedDeletes)(request)
+            }
+            return new Response(null, { status: 405 })
+          },
+        },
+        owner,
+      )
+
+      try {
+        await vi.advanceTimersByTimeAsync(0)
+        await patchStarted
+        expect(
+          await readRow<{ deleted_at: string | null }>(admin, "writings", writingId),
+          "el PATCH real confirmó la fila viva antes de perderse la respuesta",
+        ).toMatchObject({ id: writingId, deleted_at: null })
+        expect(flushMetrics).toEqual([])
+
+        const deleted = await deleteWritingLocally(writingId)
+        expect(deleted.error).toBeNull()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(await overlapFlush).toMatchObject({ trigger: "auth", overlapDetected: true, examined: 0 })
+        expect(requests).toEqual(["PATCH"])
+
+        rejectPatchResponse()
+        expect(await failedPatchFlush).toMatchObject({ trigger: "auth", examined: 1, succeeded: 0, failed: 1 })
+
+        // El control conserva la ruta previa: sin depender del nuevo wakeup,
+        // la rama de error ya deja un tick debounce que puede drenar el delete.
+        await vi.advanceTimersByTimeAsync(1500)
+        const deleteMetric = await deleteFlush
+        expect(["pending_wakeup", "debounce"]).toContain(deleteMetric.trigger)
+        expect(requests).toEqual(["PATCH", "DELETE"])
+        expect(capturedDeletes).toHaveLength(1)
+        expect(capturedDeletes[0]?.status).toBe(200)
+
+        const cloudRow = await readRow<{ id: string; deleted_at: string | null }>(admin, "writings", writingId)
+        expect(cloudRow?.id).toBe(writingId)
+        expect(cloudRow?.deleted_at).not.toBeNull()
+        expect(await localDB.syncQueue.getCurrentForWriting(writingId)).toBeNull()
+        expect(await localDB.syncQueue.getPending()).toEqual([])
+      } finally {
+        rejectPatchResponse()
+        if (patchHasStarted) await failedPatchFlush.catch(() => undefined)
+        await deleteFlush.catch(() => undefined)
+      }
+    },
+  )
 })
