@@ -1,5 +1,5 @@
 /**
- * Catalog seam recorder — ODE-613 (vía a), ampliado por ODE-644 PR2.
+ * Catalog seam recorder — ODE-613 (vía a), ampliado por ODE-644 PR2 y ODE-676.
  *
  * Records, from the REAL TS side, the exact sequence of Tauri `invoke` calls a
  * desktop flow produces, so `src-tauri/tests/catalog_seam.rs` can replay that
@@ -10,7 +10,7 @@
  *     + real reconciler (createWorkspaceReconciler over the same injectable
  *       port factory production consumes, createWorkspaceReconcilerPorts:
  *       workspace_sync → listByBindingRoot → applyReconcileTransaction)
- *     +, para SYNC-05, las entradas de producción reales
+ *     +, para SYNC-03/SYNC-05, las entradas de producción reales
  *       (DesktopDocumentService.saveWriting vía getDocumentService y
  *       desktopCatalogSyncService.flushPending)
  *     → mocked `@tauri-apps/api/core` invoke that RECORDS {cmd, args} and
@@ -18,8 +18,8 @@
  *     → tests/fixtures/catalog-seam/catalog-seam-v4.json
  *
  * Only the IPC boundary is doubled (external boundary, capability-proof
- * contract rule 3), plus the Supabase network in the SYNC-05 scenarios
- * (`fake-supabase-server.ts`, retención/fallo del próximo write). The
+ * contract rule 3), plus the Supabase network in the SYNC-03/SYNC-05 scenarios
+ * (`fake-supabase-server.ts`, retención en SYNC-05 y fallo one-shot). The
  * double's responses are NOT throwaway: they decide what the TS side does
  * next (which ids it re-sends, which upserts it commits). So every recorded
  * invoke also stores a projection of the response — the fields that determine
@@ -29,7 +29,7 @@
  * the exact fields and the documented exclusions (`folderCount`, and the
  * machine-dependent fields of `workspace_touch_file`).
  *
- * SYNC-05 (ODE-644 PR2) no escribe una tercera copia del SQL de la cola: el
+ * SYNC-03/05 (ODE-676/644) no escribe una tercera copia del SQL de la cola: el
  * dispatch delega `catalog_*` en los dobles de comportamiento de
  * `real-desktop-doubles.ts` (el mismo espejo que consumen ODE-611/612), y el
  * grabador afirma en cada paso de control que el estado del doble es el
@@ -616,7 +616,7 @@ export class CatalogSeamSession {
      * clase (escenarios SYS-01/SYS-05/WATCH-04/WATCH-07).
      * `queue`: los `catalog_*` se delegan en `real-desktop-doubles.ts`, la
      * única copia TS de la semántica de la cola, y el registro/lecturas van al
-     * mismo modelo (SYNC-05, ODE-644 PR2).
+     * mismo modelo (SYNC-03/05, ODE-676/644 PR2).
      */
     private readonly backend: "session" | "queue" = "session",
   ) {}
@@ -1702,6 +1702,74 @@ async function buildSync05FailureDuringFlush(session: CatalogSeamSession): Promi
   })
 }
 
+/**
+ * SYNC-03: una mutación todavía accionable falla de forma reintentable, queda
+ * `failed` con backoff y vuelve a enviarse con el mismo id cuando vence. El
+ * profile `filesystem` deja que el replay compruebe el .md canónico. Los
+ * fallos del propio recorder (evento mal formado) y de SQLite no son estados
+ * grabables de producto en esta costura.
+ */
+async function buildSync03ActionableRetryableFailure(session: CatalogSeamSession): Promise<void> {
+  await resetQueueHarness()
+  const documentId = await registerSync05Document(session)
+
+  session.advanceClock(1_000)
+  await saveFromEditor(documentId, "Versión 3.", 3)
+  const v3 = mutationByVersion(session, documentId, 3)
+  const expectedRetryAt = session.now() + 2_000
+
+  fakeSupabase.failNextWrite({ message: "network down", code: "503" })
+  const failedFlush = await desktopCatalogSyncService.flushPending()
+  if (failedFlush.error) {
+    throw new Error(`catalog-seam recorder: initial failure flush failed: ${failedFlush.error.message}`)
+  }
+  if (!failedFlush.data?.failedMutations.includes(v3.id)) {
+    throw new Error(`catalog-seam recorder: the first flush did not fail mutation ${v3.id}`)
+  }
+  await session.control(documentId, "sync03-retry-backoff-control", {
+    document: { syncStatus: "failed", cloudPresent: false },
+    mutations: [
+      { id: v3.id, status: "failed", attemptCount: 1, nextRetryAt: expectedRetryAt, lastError: "network down" },
+    ],
+  })
+
+  const beforeBackoffFlush = await desktopCatalogSyncService.flushPending()
+  if (beforeBackoffFlush.error) {
+    throw new Error(`catalog-seam recorder: pre-backoff flush failed: ${beforeBackoffFlush.error.message}`)
+  }
+  const preBackoffListing = [...session.steps].reverse().find(
+    (step): step is Extract<CatalogSeamFixtureStep, { kind: "invoke" }> =>
+      step.kind === "invoke" && step.cmd === "catalog_list_pending_mutations",
+  )
+  if (!preBackoffListing) {
+    throw new Error("catalog-seam recorder: pre-backoff flush did not list pending mutations")
+  }
+  if ((preBackoffListing.response as CatalogSeamMutationProjection[]).some((mutation) => mutation.id === v3.id)) {
+    throw new Error(`catalog-seam recorder: mutation ${v3.id} was listed before its retry backoff`)
+  }
+  await session.control(documentId, "sync03-actionable-failure-before-backoff", {
+    document: { syncStatus: "failed", cloudPresent: false },
+    mutations: [
+      { id: v3.id, status: "failed", attemptCount: 1, nextRetryAt: expectedRetryAt, lastError: "network down" },
+    ],
+  })
+
+  session.advanceClock(2_000)
+  const retryFlush = await desktopCatalogSyncService.flushPending()
+  if (retryFlush.error) {
+    throw new Error(`catalog-seam recorder: retry flush failed: ${retryFlush.error.message}`)
+  }
+  if (retryFlush.data?.failedMutations.includes(v3.id)) {
+    throw new Error(`catalog-seam recorder: retry left mutation ${v3.id} failed`)
+  }
+  await session.control(documentId, "sync03-actionable-failure-after-same-mutation-retry", {
+    document: { syncStatus: "synced", cloudPresent: true },
+    mutations: [
+      { id: v3.id, status: "synced", attemptCount: 1, nextRetryAt: null, lastError: null },
+    ],
+  })
+}
+
 // ─── SYNC-05: retiro de workspace durante un flush (ODE-663) ─────────────────
 
 /**
@@ -2359,6 +2427,13 @@ export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
         "destination scan reports it unbound with inode + content hash, the pass correlates it " +
         "against A's confirmed detach, and the binding moves to B with no detach in A.",
       buildWatch04ExternalMoveAcrossRoots,
+    ),
+    await recordScenario(
+      "sync03-actionable-retryable-failure",
+      "SYNC-03: the real save path creates an actionable mutation; a retryable cloud failure leaves that same mutation failed with a 2 s backoff, an early flush does not list it, and a later explicit flush retries it to synced.",
+      buildSync03ActionableRetryableFailure,
+      "queue",
+      "filesystem",
     ),
     await recordScenario(
       "sync05-save-during-flush-failure",

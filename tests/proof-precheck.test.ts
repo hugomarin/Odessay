@@ -35,6 +35,20 @@ describe("path and subject classification", () => {
     expect(isProductionPath("src-tauri/src/commands/index.rs")).toBe(true)
   })
 
+  it("treats a top-level pgTAP test as non-production", () => {
+    expect(isProductionPath("supabase/tests/writing_shares_permission_enforcement.test.sql")).toBe(false)
+  })
+
+  it("treats a nested pgTAP test as non-production", () => {
+    expect(isProductionPath("supabase/tests/sharing/permission_enforcement.test.sql")).toBe(false)
+  })
+
+  it("keeps SQL helpers, migrations and seeds as production", () => {
+    expect(isProductionPath("supabase/tests/helper.sql")).toBe(true)
+    expect(isProductionPath("supabase/migrations/20261001000000_example.sql")).toBe(true)
+    expect(isProductionPath("supabase/seed/phase-1-staging.sql")).toBe(true)
+  })
+
   it("reads the conventional type with or without a leading issue marker", () => {
     expect(commitType("test(export): cover real Desk callers [ODE-636]")).toBe("test")
     expect(commitType("[ODE-593] test: mirror Rust conflict race outcome")).toBe("test")
@@ -63,6 +77,35 @@ describe("commit rules", () => {
         testPatches: {},
       }),
     ).toEqual([])
+  })
+
+  it("accepts a test(...) commit that only touches pgTAP tests", () => {
+    expect(
+      checkCommit({
+        sha: "682682680000",
+        subject: "test(database): cover sharing permissions [ODE-682]",
+        files: [
+          "supabase/tests/writing_shares_permission_enforcement.test.sql",
+          "supabase/tests/sharing/permission_enforcement.test.sql",
+        ],
+        testPatches: {},
+      }),
+    ).toEqual([])
+  })
+
+  it("rejects a mixed pgTAP and migration commit because of the migration", () => {
+    const violations = checkCommit({
+      sha: "682682680001",
+      subject: "test(database): cover sharing permissions [ODE-682]",
+      files: [
+        "supabase/tests/writing_shares_permission_enforcement.test.sql",
+        "supabase/migrations/20261001000000_example.sql",
+      ],
+      testPatches: {},
+    })
+    expect(violations).toHaveLength(1)
+    expect(violations[0].detail).toContain("supabase/migrations/20261001000000_example.sql")
+    expect(violations[0].detail).not.toContain("supabase/tests/writing_shares_permission_enforcement.test.sql")
   })
 
   it("rejects an it.fails introduced together with its production fix", () => {

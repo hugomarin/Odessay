@@ -11,6 +11,7 @@ export const CAPABILITY_MAP_PATH = "workflow/quality/capability-integration-map.
 const TEST_PATH_PATTERNS = [
   /^tests\//,
   /^src-tauri\/tests\//,
+  /^supabase\/tests\/(?:.+\/)?[^/]+\.test\.sql$/,
   /\.test\.[cm]?[jt]sx?$/,
   /\.spec\.[cm]?[jt]sx?$/,
 ]
