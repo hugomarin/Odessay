@@ -1926,6 +1926,189 @@ describe("EXP-05 — callers reales de Desk y Collections (ODE-636)", () => {
     },
     TEST_TIMEOUT_MS,
   )
+
+  for (const surface of ["desk", "collections"] as const) {
+    it(
+      `${surface}: row and preview downloads use the requested writing and canonical filename`,
+      async () => {
+        const textA = "ODE681-MARKDOWN-ROW-DOCUMENT-A"
+        const textB = "ODE681-MARKDOWN-ROW-DOCUMENT-B"
+        const titleA = "ODE681 Markdown A"
+        const titleB = "ODE681 Markdown B"
+        const { a, b } = await openTwoAttributedDocuments(
+          { text: textA, title: titleA },
+          { text: textB, title: titleB },
+        )
+        const idByTitle = new Map([[titleA, a], [titleB, b]])
+
+        await mountProductionSurface(surface)
+        const rowActions = await waitFor(
+          () => {
+            const actions = Array.from(
+              pageContainer!.querySelectorAll<HTMLButtonElement>('button[aria-label^="Actions for "]'),
+            )
+            return actions.length === 2 ? actions : null
+          },
+          { label: `${surface} muestra ambas filas` },
+        )
+        const selectedTitle = rowActions[1]?.getAttribute("aria-label")?.slice("Actions for ".length)
+        if (!selectedTitle) throw new Error(`Missing second row title on ${surface}`)
+        const selectedId = idByTitle.get(selectedTitle)
+        const otherId = selectedId === a ? b : a
+        if (!selectedId) throw new Error(`Unexpected row title on ${surface}: ${selectedTitle}`)
+        const { buildMarkdownDownloadName } = await import("@/lib/export/to-markdown")
+        const { getWritingForEdit } = await import("@/lib/queries/desk-catalog-source")
+        const selectedWriting = await getWritingForEdit(selectedId)
+        if (!selectedWriting) throw new Error(`Missing selected writing ${selectedId}`)
+        const expectedName = buildMarkdownDownloadName({
+          title: selectedWriting.title,
+          bodyText: selectedWriting.body_text,
+          writingId: selectedWriting.id,
+        })
+
+        const rowDir = freshDir(`${surface}-row-markdown-selected-writing`)
+        const rowTarget = join(rowDir, expectedName)
+        world.saveDialogResult = rowTarget
+        const rowDialogCallsBefore = world.saveDialogCalls.length
+        await clickProductionRowDownload(selectedTitle)
+        await waitForSaveDialogCall(rowDialogCallsBefore, `${surface} row downloaded ${selectedTitle}`)
+        await waitForExportNotice("success")
+        expect(world.saveDialogCalls.at(-1)?.defaultPath).toBe(expectedName)
+        const rowMarkdown = await readFile(rowTarget, "utf8")
+        expect(rowMarkdown).toContain(selectedId === a ? textA : textB)
+        expect(rowMarkdown).not.toContain(otherId === a ? textA : textB)
+        expect(await listExports(rowDir)).toEqual([expectedName])
+
+        const previewButton = await waitFor(
+          () =>
+            findButton(
+              pageContainer!,
+              (button) => button.getAttribute("aria-label") === `Preview ${selectedTitle}`,
+            ),
+          { label: `${surface} preview for the selected writing` },
+        )
+        await act(async () => previewButton.click())
+        await flush(3)
+
+        const previewDir = freshDir(`${surface}-preview-markdown-selected-writing`)
+        const previewTarget = join(previewDir, expectedName)
+        world.saveDialogResult = previewTarget
+        const previewDialogCallsBefore = world.saveDialogCalls.length
+        await clickPreviewExport("markdown")
+        await waitFor(() => pageText().includes("Markdown exported."), {
+          label: `${surface} preview reports Markdown delivery`,
+        })
+        expect(world.saveDialogCalls).toHaveLength(previewDialogCallsBefore + 1)
+        expect(world.saveDialogCalls.at(-1)?.defaultPath).toBe(expectedName)
+        const previewMarkdown = await readFile(previewTarget, "utf8")
+        expect(previewMarkdown).toContain(selectedId === a ? textA : textB)
+        expect(previewMarkdown).not.toContain(otherId === a ? textA : textB)
+        expect(await listExports(previewDir)).toEqual([expectedName])
+        assertNoUnhandledErrors()
+      },
+      TEST_TIMEOUT_MS,
+    )
+  }
+
+  it(
+    "Desk row: an absent materialized Markdown source reports an error without a download",
+    async () => {
+      const text = "ODE681-DESK-ROW-MISSING-MARKDOWN"
+      const writingId = await createAndOpenDocument(text)
+      const record = await getCatalogRecord(writingId)
+      const canonicalPath = record.binding?.canonicalPath
+      if (!canonicalPath) throw new Error(`Expected a canonical path for ${writingId}`)
+      if (!record.title) throw new Error(`Expected a title for ${writingId}`)
+      await mountProductionSurface("desk")
+      const failureDir = freshDir("desk-row-markdown-missing-source")
+      const dialogCallsBefore = world.saveDialogCalls.length
+      unlinkSync(canonicalPath)
+
+      await clickProductionRowDownload(record.title)
+      const failureNotice = await waitForExportNotice("error")
+      expect(failureNotice.textContent?.trim()).toBe("Failed to export Markdown.")
+      expect(world.saveDialogCalls).toHaveLength(dialogCallsBefore)
+      expect(await listExports(failureDir)).toEqual([])
+      expect(pageText()).not.toContain("Markdown exported")
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "Collections row: a deleted catalog document reports an error without a download",
+    async () => {
+      const text = "ODE681-COLLECTIONS-ROW-DELETED-DOCUMENT"
+      const writingId = await createAndOpenDocument(text)
+      const record = await getCatalogRecord(writingId)
+      if (!record.title) throw new Error(`Expected a title for ${writingId}`)
+      await mountProductionSurface("collections")
+
+      const trigger = await waitFor(
+        () =>
+          findButton(
+            pageContainer!,
+            (button) => button.getAttribute("aria-label") === `Actions for ${record.title}`,
+          ),
+        { label: `Collections actions for ${record.title}` },
+      )
+      await pointerClick(trigger)
+      const downloadItem = await waitFor(
+        () =>
+          Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+            (item) => item.textContent?.trim() === "Download markdown",
+          ) ?? null,
+        { label: "Collections Download markdown menu item" },
+      )
+      const { deleteWriting } = await import("@/lib/queries/writing-mutations")
+      const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
+      const catalog = await getDocumentCatalog()
+      const originalGetById = catalog.getById.bind(catalog)
+      let releaseLookup: () => void = () => {
+        throw new Error("Expected the held catalog lookup to be installed")
+      }
+      let markLookupStarted: () => void = () => {
+        throw new Error("Expected the catalog lookup signal to be installed")
+      }
+      const heldLookup = new Promise<void>((resolve) => {
+        releaseLookup = resolve
+      })
+      const lookupStarted = new Promise<void>((resolve) => {
+        markLookupStarted = resolve
+      })
+      let holdNextLookup = true
+      const failureDir = freshDir("collections-row-markdown-deleted-source")
+      const dialogCallsBefore = world.saveDialogCalls.length
+
+      catalog.getById = async (id) => {
+        if (holdNextLookup && id === writingId) {
+          holdNextLookup = false
+          markLookupStarted()
+          await heldLookup
+        }
+        return originalGetById(id)
+      }
+      try {
+        await act(async () => downloadItem.click())
+        await lookupStarted
+        await deleteWriting(writingId)
+        expect((await originalGetById(writingId))?.deletedAt).not.toBeNull()
+        releaseLookup()
+        await flush(3)
+        await waitFor(() => pageText().includes("Failed to export Markdown."), {
+          label: "Collections row reports a deleted-source error",
+        })
+        expect(pageText()).not.toContain("Markdown exported")
+        expect(world.saveDialogCalls).toHaveLength(dialogCallsBefore)
+        expect(await listExports(failureDir)).toEqual([])
+        assertNoUnhandledErrors()
+      } finally {
+        releaseLookup()
+        catalog.getById = originalGetById
+      }
+    },
+    TEST_TIMEOUT_MS,
+  )
 })
 
 describe("Desk desktop Markdown body (ODE-636)", () => {

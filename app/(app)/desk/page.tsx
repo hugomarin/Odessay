@@ -798,7 +798,7 @@ export default function DeskPage() {
   const getWritingMarkdownPayload = useCallback(async (writingId: string) => {
     const writing = writingById.get(writingId)
     if (!writing || writing.sync_status === "deleted") {
-      return null
+      throw new Error("Failed to export Markdown.")
     }
 
     let bodyJson: Record<string, unknown> = writing.body_json
