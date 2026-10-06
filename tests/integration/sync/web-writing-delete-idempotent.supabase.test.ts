@@ -506,7 +506,7 @@ describe("ODE-667 — DELETE remoto ya ausente converge como éxito idempotente"
 })
 
 describe("ODE-677 — wakeup pendiente tras overlap del flush web", () => {
-  it.fails(
+  it(
     "drena el delete encolado mientras el PATCH real sigue retenido, sin un evento ajeno",
     async () => {
       const writingId = randomUUID()
