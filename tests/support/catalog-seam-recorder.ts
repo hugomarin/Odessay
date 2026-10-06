@@ -2393,8 +2393,155 @@ async function buildSync08SettingsBatchMetadata(session: CatalogSeamSession): Pr
   })
 }
 
+/**
+ * SYNC-08, creación y asignación de vocabulario: los ítems nuevos nacen en
+ * el owner real de Settings y sus keys pasan por el productor real de
+ * metadata. La lectura nueva de Settings y el conteo de catálogo son controles
+ * posteriores al commit; el replay Rust contrasta esos invokes y la fila
+ * durable contra el resultado que produjo este recorder.
+ */
+async function buildSync08CustomVocabularyCreateAssign(session: CatalogSeamSession): Promise<void> {
+  await resetQueueHarness()
+  session.defineRoot("rootA", "fixture-root-a")
+  const cloudOwnedTime = 1_700_140_003_000
+  session.fsWrite("rootA", "notes/cloud-owned.md", SYNC08_CLOUD_OWNED_V1, {
+    inode: 806,
+    modifiedAt: cloudOwnedTime,
+  })
+  const reconciler = session.createReconciler(session.createCatalog())
+  await reconciler.start()
+  reconciler.dispose()
+  const documentId = session.registeredDocumentId("rootA", "notes/cloud-owned.md")
+  await fakeSupabaseClient.from("writings").insert(
+    [
+      fakeCloudWriting({
+        id: documentId,
+        status: "draft",
+        version: 1,
+        updatedAt: new Date(cloudOwnedTime).toISOString(),
+        title: "Carta cloud-owned",
+        slug: "carta-cloud",
+        visibility: "public",
+      }),
+    ],
+    { count: "exact" },
+  )
+  await hydrateFromFakeCloud()
+
+  session.advanceClock(1_000)
+  const settings = new DesktopSettingsService("$CONFIG")
+  const status = await settings.createVocabularyItem({
+    kind: "status",
+    name: "Needs review",
+    icon: "eye",
+    color: "#5B5BD6",
+  })
+  if (status.error || !status.data) {
+    throw new Error(`catalog-seam recorder: create status failed: ${status.error?.message}`)
+  }
+  const artifactType = await settings.createVocabularyItem({
+    kind: "type",
+    name: "Field note",
+    icon: "quote",
+    color: "#96532C",
+  })
+  if (artifactType.error || !artifactType.data) {
+    throw new Error(`catalog-seam recorder: create type failed: ${artifactType.error?.message}`)
+  }
+  if (status.data.key !== "needs_review" || artifactType.data.key !== "field_note") {
+    throw new Error(
+      `catalog-seam recorder: unexpected vocabulary keys ${status.data.key}/${artifactType.data.key}`,
+    )
+  }
+
+  session.advanceClock(1_000)
+  const service = await getDocumentService()
+  const updatedAt = new Date(session.now()).toISOString()
+  const updated = await service.updateWritingMetadata({
+    writingId: documentId,
+    status: status.data.key,
+    artifactType: artifactType.data.key,
+    version: 2,
+    updatedAt,
+  })
+  if (updated.error || !updated.data) {
+    throw new Error(`catalog-seam recorder: custom vocabulary metadata update failed: ${updated.error?.message}`)
+  }
+
+  // Fresh owner reads are controls, not direct reads of the recorder's model:
+  // settings_read proves both definitions survived write/reload, while
+  // catalog_list proves each newly created key is queryable after the commit.
+  const rereadSettings = await settings.listVocabulary()
+  if (rereadSettings.error || !rereadSettings.data) {
+    throw new Error(`catalog-seam recorder: vocabulary reload failed: ${rereadSettings.error?.message}`)
+  }
+  const persistedStatus = rereadSettings.data.find(
+    (item) => item.id === status.data!.id && item.kind === "status" && item.key === status.data!.key,
+  )
+  const persistedType = rereadSettings.data.find(
+    (item) => item.id === artifactType.data!.id && item.kind === "type" && item.key === artifactType.data!.key,
+  )
+  if (!persistedStatus || !persistedType) {
+    throw new Error("catalog-seam recorder: created status/type did not survive settings_read")
+  }
+  const usage = await settings.getVocabularyUsage()
+  if (usage.error || !usage.data) {
+    throw new Error(`catalog-seam recorder: catalog vocabulary control failed: ${usage.error?.message}`)
+  }
+  if (usage.data[status.data.id] !== 1 || usage.data[artifactType.data.id] !== 1) {
+    throw new Error(
+      `catalog-seam recorder: catalog_list returned usage ${usage.data[status.data.id]}/${usage.data[artifactType.data.id]}`,
+    )
+  }
+
+  const contentHash = await computeMarkdownContentHash(SYNC08_CLOUD_OWNED_V1)
+  const metadataMutation = mutationByVersion(session, documentId, 2)
+  await session.control(documentId, "sync08-custom-vocabulary-assignment", {
+    document: {
+      syncStatus: "pending",
+      cloudPresent: true,
+      metadata: {
+        status: status.data.key,
+        artifactType: artifactType.data.key,
+        version: 2,
+        title: "Carta cloud-owned",
+        slug: "carta-cloud",
+        visibility: "public",
+        cloudAccountId: "user-1",
+        contentHash,
+      },
+    },
+    mutations: [
+      {
+        id: metadataMutation.id,
+        status: "pending",
+        attemptCount: 0,
+        nextRetryAt: null,
+        lastError: null,
+        payload: {
+          mutationKind: "metadata",
+          version: 2,
+          updatedAt,
+          status: status.data.key,
+          artifactType: artifactType.data.key,
+        },
+      },
+    ],
+  })
+}
+
 export async function buildCatalogSeamFixture(): Promise<CatalogSeamFixture> {
   const scenarios = [
+    await recordScenario(
+      "sync08-custom-vocabulary-create-assign",
+      "SYNC-08 (custom vocabulary): the real Settings owner creates a status and a document type; " +
+        "a real metadata update assigns both keys to a reconciled document. Fresh " +
+        "settings_read/catalog_list controls and the durable queue projection prove both values " +
+        "persist while the canonical .md remains unchanged.",
+      buildSync08CustomVocabularyCreateAssign,
+      "queue",
+      "filesystem",
+    ),
     await recordScenario(
       "sys01-homonyms-distinct-roots",
       "SYS-01: two documents with the same name in two BindingRoots never collide — each canonical " +
