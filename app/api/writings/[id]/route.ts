@@ -272,16 +272,5 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     console.error("[writings:delete:cascade]", { writingId: id, userId, operation: "delete_shares", error: sharesError.message });
   }
 
-  const { error: invitationsError } = await supabase
-    .from("invitations")
-    .update({ status: "expired" })
-    .eq("writing_id", id)
-    .eq("marker", "ux-eval")
-    .eq("status", "pending");
-
-  if (invitationsError) {
-    console.error("[writings:delete:cascade]", { writingId: id, userId, operation: "expire_invitations", error: invitationsError.message });
-  }
-
   return NextResponse.json({ data: deletedWriting, error: null }, { status: 200 });
 }
