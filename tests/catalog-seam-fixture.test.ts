@@ -11,8 +11,8 @@
  * sequence from that code and fails if it no longer matches the committed
  * fixture, so the Rust replay can never test a stale sequence (STALE_PROOF).
  * Every invoke
- * step also carries a projection of the double's response, and the SYNC-05
- * scenarios carry control steps; the Rust replay (catalog_seam.rs) asserts the
+ * step also carries a projection of the double's response, and the SYNC-03 /
+ * SYNC-05 scenarios carry control steps; the Rust replay (catalog_seam.rs) asserts the
  * real Rust response and the canonical SQLite state match step by step
  * (P2-1 fix, ODE-613; Req 4-5, ODE-644 PR2).
  *
@@ -85,7 +85,7 @@ async function generate(): Promise<string> {
   }
 }
 
-describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2)", () => {
+describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2, ODE-676)", () => {
   it("matches the committed recording of the real wrapper sequence", async () => {
     const generated = await generate()
 
@@ -103,7 +103,7 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2)", () => {
     ).toBe(committed)
   })
 
-  it("records the commands SYS-01/SYS-05/WATCH-07/SYNC-05/SYNC-08 depend on, from production code only", async () => {
+  it("records the commands SYS-01/SYS-05/WATCH-07/SYNC-03/SYNC-05/SYNC-08 depend on, from production code only", async () => {
     const fixture = JSON.parse(await generate()) as {
       version: number
       scenarios: {
@@ -115,12 +115,15 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2)", () => {
           args?: Record<string, unknown>
           response?: unknown
           mutations?: unknown[]
+          documentId?: string
+          document?: { syncStatus: string; cloudPresent: boolean }
         }[]
       }[]
     }
 
     expect(fixture.version).toBe(4)
     expect(fixture.scenarios.map((scenario) => scenario.name).sort()).toEqual([
+      "sync03-actionable-retryable-failure",
       "sync05-save-during-flush-failure",
       "sync05-save-during-flush-success",
       "sync05-workspace-removal-not-exists",
@@ -212,6 +215,73 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2)", () => {
         expect(control.mutations!.length).toBeGreaterThan(0)
       }
     }
+
+    // ODE-676: positive controls show the same actionable mutation in the
+    // first and eligible retry listings; a flush before next_retry_at omits it.
+    const sync03 = fixture.scenarios.find(
+      (scenario) => scenario.name === "sync03-actionable-retryable-failure",
+    )!
+    const sync03Controls = sync03.steps.filter((step) => step.kind === "control") as {
+      name: string
+      documentId: string
+      document: { syncStatus: string; cloudPresent: boolean }
+      mutations: {
+        id: string
+        status: string
+        attemptCount: number
+        nextRetryAt: number | null
+        lastError: string | null
+      }[]
+    }[]
+    expect(sync03Controls.map((control) => control.name)).toEqual([
+      "sync03-retry-backoff-control",
+      "sync03-actionable-failure-before-backoff",
+      "sync03-actionable-failure-after-same-mutation-retry",
+    ])
+    const failedMutation = sync03Controls[0]!.mutations[0]!
+    expect(sync03Controls[0]!.document).toEqual({ syncStatus: "failed", cloudPresent: false })
+    expect(failedMutation).toMatchObject({
+      status: "failed",
+      attemptCount: 1,
+      nextRetryAt: expect.any(Number),
+      lastError: "network down",
+    })
+    expect(sync03Controls[1]!.document).toEqual({ syncStatus: "failed", cloudPresent: false })
+    expect(sync03Controls[1]!.mutations).toEqual([
+      expect.objectContaining({
+        id: failedMutation.id,
+        status: "failed",
+        attemptCount: 1,
+        nextRetryAt: failedMutation.nextRetryAt,
+      }),
+    ])
+    expect(sync03Controls[2]!.document).toEqual({ syncStatus: "synced", cloudPresent: true })
+    expect(sync03Controls[2]!.mutations).toEqual([
+      expect.objectContaining({
+        id: failedMutation.id,
+        status: "synced",
+        attemptCount: 1,
+        nextRetryAt: null,
+        lastError: null,
+      }),
+    ])
+    const sync03PendingListings = sync03.steps.filter(
+      (step) => step.cmd === "catalog_list_pending_mutations",
+    )
+    expect(sync03PendingListings).toHaveLength(3)
+    expect(failedMutation.nextRetryAt).toBe(Number(sync03PendingListings[0]!.args!.now) + 2_000)
+    expect(sync03PendingListings[0]!.response).toEqual([
+      expect.objectContaining({ id: failedMutation.id, status: "pending" }),
+    ])
+    expect(sync03PendingListings[1]!.response).toEqual([])
+    expect(sync03PendingListings[2]!.response).toEqual([
+      expect.objectContaining({
+        id: failedMutation.id,
+        status: "failed",
+        attemptCount: 1,
+        nextRetryAt: failedMutation.nextRetryAt,
+      }),
+    ])
 
     // ODE-663: la escena del retiro llega a la rama `NOT EXISTS` por la
     // secuencia real — `catalog_apply_workspace_removal` retira la raíz y encola

@@ -7,12 +7,15 @@
 //! so a second actionable mutation of the same document exists when the first
 //! response lands and the `NOT EXISTS` guard of `catalog_update_mutation_status`
 //! is actually exercised.
+//! ODE-676 adds the SYNC-03 actionable-failure path: a retryable 503 records a
+//! `pending → failed → synced` transition for the same mutation id, including
+//! a pre-backoff listing control, over the real SQLite replay.
 //!
 //! `tests/fixtures/catalog-seam/catalog-seam-v4.json` is recorded by
 //! `tests/support/catalog-seam-recorder.ts` (driven from
 //! `tests/catalog-seam-fixture.test.ts`) executing the REAL TS production code —
 //! `SqliteDocumentCatalog` and the `WorkspaceReconciler` wired like
-//! `desktop-workspace-reconciler.ts`; and, for SYNC-05,
+//! `desktop-workspace-reconciler.ts`; and, for SYNC-03/SYNC-05,
 //! `DesktopDocumentService.saveWriting` + `desktopCatalogSyncService
 //! .flushPending`, with only Supabase doubled — against a recording
 //! `@tauri-apps/api/core` invoke. This test replays that exact `{cmd, args}`
