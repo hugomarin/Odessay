@@ -35,11 +35,11 @@ describe("path and subject classification", () => {
     expect(isProductionPath("src-tauri/src/commands/index.rs")).toBe(true)
   })
 
-  it.fails("treats a top-level pgTAP test as non-production", () => {
+  it("treats a top-level pgTAP test as non-production", () => {
     expect(isProductionPath("supabase/tests/writing_shares_permission_enforcement.test.sql")).toBe(false)
   })
 
-  it.fails("treats a nested pgTAP test as non-production", () => {
+  it("treats a nested pgTAP test as non-production", () => {
     expect(isProductionPath("supabase/tests/sharing/permission_enforcement.test.sql")).toBe(false)
   })
 
@@ -79,7 +79,7 @@ describe("commit rules", () => {
     ).toEqual([])
   })
 
-  it.fails("accepts a test(...) commit that only touches pgTAP tests", () => {
+  it("accepts a test(...) commit that only touches pgTAP tests", () => {
     expect(
       checkCommit({
         sha: "682682680000",
@@ -93,7 +93,7 @@ describe("commit rules", () => {
     ).toEqual([])
   })
 
-  it.fails("rejects a mixed pgTAP and migration commit because of the migration", () => {
+  it("rejects a mixed pgTAP and migration commit because of the migration", () => {
     const violations = checkCommit({
       sha: "682682680001",
       subject: "test(database): cover sharing permissions [ODE-682]",
