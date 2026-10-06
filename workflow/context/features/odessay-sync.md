@@ -210,6 +210,8 @@ Un **sync worker** corre en background. Lee la cola de mutaciones pendientes y l
 
 **Campos que se envían al servidor:** `body_json`, `body_text`, `updated_at`, `version`. Nunca el `id` (ya está en la URL), nunca `sync_status` (es campo local). Esto describe el contrato del runtime web actual, no el futuro sync documental de desktop.
 
+**Wakeups durante un flush web:** `SyncWorker` es el singleton de módulo y procesa una foto de la cola por pasada. Si llega un trigger mientras una request mantiene el flush activo, el worker marca un `pendingWakeup`; al terminar, vuelve a consultar la cola una sola vez con trigger `pending_wakeup`. Varios triggers durante la misma pasada se colapsan en esa única repetición, de modo que un delete encolado durante un PATCH no depende de otro evento de aplicación. La consulta respeta `next_retry_at`, por lo que el wakeup no adelanta reintentos en backoff ni crea un hot-loop. `stop()` descarta la marca pendiente y conserva intacta la cola durable.
+
 ---
 
 ## Indicador visual en statusbar

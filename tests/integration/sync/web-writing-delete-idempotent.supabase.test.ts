@@ -68,6 +68,8 @@ type WritingRecord = import("@/lib/services/contracts/document-service").Writing
 type SyncFlushMetric = import("@/lib/observability/sync-metrics").SyncFlushMetric
 
 const originalFetch = globalThis.fetch
+const originalSetTimeout = globalThis.setTimeout.bind(globalThis)
+const originalClearTimeout = globalThis.clearTimeout.bind(globalThis)
 const runId = randomUUID().replace(/[^a-z0-9]/g, "").slice(0, 8)
 const timestamp = (seconds: number) => `2026-10-03T00:${String(seconds).padStart(2, "0")}:00.000Z`
 const doc = (text: string) => ({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] })
@@ -84,6 +86,43 @@ let stranger!: SeedUser
  */
 const flushMetrics: SyncFlushMetric[] = []
 const flushCompletions: Array<() => void> = []
+const flushMetricWaiters: Array<{
+  description: string
+  predicate: (metric: SyncFlushMetric) => boolean
+  resolve: (metric: SyncFlushMetric) => void
+  reject: (error: Error) => void
+  timeoutId: ReturnType<typeof setTimeout>
+}> = []
+
+function waitForFlushMetric(
+  description: string,
+  predicate: (metric: SyncFlushMetric) => boolean,
+  timeoutMs = 1500,
+): Promise<SyncFlushMetric> {
+  const existing = flushMetrics.find(predicate)
+  if (existing) return Promise.resolve(existing)
+
+  return new Promise<SyncFlushMetric>((resolve, reject) => {
+    const waiter = {
+      description,
+      predicate,
+      resolve,
+      reject,
+      timeoutId: originalSetTimeout(() => {
+        const index = flushMetricWaiters.indexOf(waiter)
+        if (index >= 0) flushMetricWaiters.splice(index, 1)
+        reject(
+          new Error(
+            `[ODE-677] timed out waiting for ${description}; observed ${flushMetrics
+              .map((metric) => `${metric.trigger}/${metric.overlapDetected ? "overlap" : "complete"}`)
+              .join(", ") || "no sync.flush metrics"}`,
+          ),
+        )
+      }, timeoutMs),
+    }
+    flushMetricWaiters.push(waiter)
+  })
+}
 
 /** Avanza el timer que el scheduler real registró y espera el flush completo. */
 async function runScheduledFlush(advanceMs = 0): Promise<void> {
@@ -125,6 +164,13 @@ beforeEach(() => {
     if (metric.type !== "sync.flush") return
     flushMetrics.push(metric)
     flushCompletions.shift()?.()
+    for (let index = flushMetricWaiters.length - 1; index >= 0; index -= 1) {
+      const waiter = flushMetricWaiters[index]
+      if (!waiter?.predicate(metric)) continue
+      flushMetricWaiters.splice(index, 1)
+      originalClearTimeout(waiter.timeoutId)
+      waiter.resolve(metric)
+    }
   })
 })
 
@@ -133,6 +179,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.useRealTimers()
+  flushMetricWaiters.splice(0)
 })
 
 /** Lo que el editor manda a `saveWriting` para un borrador nuevo en web. */
@@ -454,6 +501,213 @@ describe("ODE-667 — DELETE remoto ya ausente converge como éxito idempotente"
         await readRows(admin, "writing_shares", "writing_id", writingId),
         "y su share sí se limpia",
       ).toHaveLength(0)
+    },
+  )
+})
+
+describe("ODE-677 — wakeup pendiente tras overlap del flush web", () => {
+  it(
+    "drena el delete encolado mientras el PATCH real sigue retenido, sin un evento ajeno",
+    async () => {
+      const writingId = randomUUID()
+      const saved = await webDocumentService.saveWriting({
+        writing: editorRecord(writingId, "Borrador que se elimina durante el primer upsert."),
+      })
+      expect(saved.error, "el upsert entra por el servicio real").toBeNull()
+      expect(
+        (await localDB.syncQueue.getCurrentForWriting(writingId))?.operation,
+        "precondición: el upsert está en la cola durable real",
+      ).toBe("upsert")
+
+      let notifyPatchStarted!: () => void
+      const patchStarted = new Promise<void>((resolve) => {
+        notifyPatchStarted = resolve
+      })
+      let releasePatchResponse!: () => void
+      const patchResponseGate = new Promise<void>((resolve) => {
+        releasePatchResponse = resolve
+      })
+      let patchHasStarted = false
+      const requests: Array<"PATCH" | "DELETE"> = []
+      const capturedDeletes: CapturedResponse[] = []
+      const upsertFlush = waitForFlushMetric(
+        "the completed PATCH flush",
+        (metric) => !metric.overlapDetected && metric.trigger === "auth" && metric.examined === 1,
+      )
+      const overlapFlush = waitForFlushMetric(
+        "the overlapping schedule(0) flush",
+        (metric) => metric.overlapDetected,
+      )
+      const deleteFlush = waitForFlushMetric(
+        "the trailing pending_wakeup delete flush",
+        (metric) => !metric.overlapDetected && metric.trigger === "pending_wakeup" && metric.succeeded === 1,
+      )
+
+      installRoutedFetch(
+        {
+          [`/api/writings/${writingId}`]: async (request) => {
+            if (request.method === "PATCH") {
+              requests.push("PATCH")
+              const response = await patchRoute(writingId)(request)
+              patchHasStarted = true
+              notifyPatchStarted()
+              await patchResponseGate
+              return response
+            }
+            if (request.method === "DELETE") {
+              requests.push("DELETE")
+              return capturingDelete(writingId, capturedDeletes)(request)
+            }
+            return new Response(null, { status: 405 })
+          },
+        },
+        owner,
+      )
+
+      try {
+        // El timer pertenece a webSyncService.scheduleFlush() real. El PATCH
+        // real ya hizo commit en Postgres cuando el deferred retiene su
+        // respuesta; el SyncWorker sigue dentro de la request.
+        await vi.advanceTimersByTimeAsync(0)
+        await patchStarted
+        expect(
+          await readRow<{ deleted_at: string | null }>(admin, "writings", writingId),
+          "PATCH real confirmó la fila viva antes de retener la respuesta",
+        ).toMatchObject({ id: writingId, deleted_at: null })
+        expect(flushMetrics, "el flush sigue en vuelo mientras la respuesta está retenida").toEqual([])
+
+        const deleted = await deleteWritingLocally(writingId)
+        expect(deleted.error, "el borrado local entra por el servicio real").toBeNull()
+        expect(
+          (await localDB.syncQueue.getCurrentForWriting(writingId))?.operation,
+          "el delete real sustituye el upsert por entity_key",
+        ).toBe("delete")
+
+        // Solo avanza el schedule(0) que produjo el enqueue del delete. No se
+        // llama flush manualmente ni se produce otro evento de aplicación.
+        await vi.advanceTimersByTimeAsync(0)
+        const overlap = await overlapFlush
+        expect(overlap).toMatchObject({ trigger: "auth", overlapDetected: true, examined: 0 })
+        expect(requests, "el delete aún no pudo adelantarse al PATCH en vuelo").toEqual(["PATCH"])
+
+        releasePatchResponse()
+        const [upsertMetric, trailingMetric] = await Promise.all([upsertFlush, deleteFlush])
+
+        expect(upsertMetric).toMatchObject({ trigger: "auth", examined: 1, succeeded: 1, failed: 0 })
+        expect(trailingMetric).toMatchObject({ trigger: "pending_wakeup", examined: 1, succeeded: 1, failed: 0 })
+        expect(requests, "el único orden remoto es PATCH seguido por un DELETE").toEqual(["PATCH", "DELETE"])
+        expect(capturedDeletes, "se envió exactamente un DELETE al handler real").toHaveLength(1)
+        expect(capturedDeletes[0]?.status, "el DELETE real contra Supabase local fue aceptado").toBe(200)
+
+        const cloudRow = await readRow<{ id: string; deleted_at: string | null }>(admin, "writings", writingId)
+        expect(cloudRow?.id, "la identidad creada por PATCH se conserva").toBe(writingId)
+        expect(cloudRow?.deleted_at, "DELETE dejó el tombstone en Postgres").not.toBeNull()
+        expect(await localDB.syncQueue.getCurrentForWriting(writingId), "la mutación durable se consumió").toBeNull()
+        expect(await localDB.syncQueue.getPending(), "no queda otra mutación pendiente").toEqual([])
+        expect((await localDB.writings.get(writingId))?.sync_status, "la fila local continúa borrada").toBe("deleted")
+        expect(
+          flushMetrics.filter((metric) => metric.overlapDetected),
+          "un trigger solapado solo registra la detección; no dispara una segunda request",
+        ).toHaveLength(1)
+      } finally {
+        releasePatchResponse()
+        if (patchHasStarted) await upsertFlush.catch(() => undefined)
+        await deleteFlush.catch(() => undefined)
+      }
+    },
+  )
+
+  it(
+    "control: si el PATCH en vuelo falla, el delete converge por el retry ya existente",
+    async () => {
+      const writingId = randomUUID()
+      const saved = await webDocumentService.saveWriting({
+        writing: editorRecord(writingId, "Borrador cuyo PATCH pierde respuesta antes del delete."),
+      })
+      expect(saved.error).toBeNull()
+
+      let notifyPatchStarted!: () => void
+      const patchStarted = new Promise<void>((resolve) => {
+        notifyPatchStarted = resolve
+      })
+      let rejectPatchResponse!: () => void
+      const patchResponseGate = new Promise<void>((resolve) => {
+        rejectPatchResponse = resolve
+      })
+      let patchHasStarted = false
+      const requests: Array<"PATCH" | "DELETE"> = []
+      const capturedDeletes: CapturedResponse[] = []
+      const failedPatchFlush = waitForFlushMetric(
+        "the failed PATCH flush",
+        (metric) => !metric.overlapDetected && metric.trigger === "auth" && metric.failed === 1,
+      )
+      const overlapFlush = waitForFlushMetric(
+        "the overlapping schedule(0) flush",
+        (metric) => metric.overlapDetected,
+      )
+      const deleteFlush = waitForFlushMetric(
+        "the converged delete flush",
+        (metric) => !metric.overlapDetected && metric.examined === 1 && metric.succeeded === 1,
+      )
+
+      installRoutedFetch(
+        {
+          [`/api/writings/${writingId}`]: async (request) => {
+            if (request.method === "PATCH") {
+              requests.push("PATCH")
+              const response = await patchRoute(writingId)(request)
+              patchHasStarted = true
+              notifyPatchStarted()
+              await patchResponseGate
+              throw new Error("PATCH response lost after the local handler committed")
+            }
+            if (request.method === "DELETE") {
+              requests.push("DELETE")
+              return capturingDelete(writingId, capturedDeletes)(request)
+            }
+            return new Response(null, { status: 405 })
+          },
+        },
+        owner,
+      )
+
+      try {
+        await vi.advanceTimersByTimeAsync(0)
+        await patchStarted
+        expect(
+          await readRow<{ deleted_at: string | null }>(admin, "writings", writingId),
+          "el PATCH real confirmó la fila viva antes de perderse la respuesta",
+        ).toMatchObject({ id: writingId, deleted_at: null })
+        expect(flushMetrics).toEqual([])
+
+        const deleted = await deleteWritingLocally(writingId)
+        expect(deleted.error).toBeNull()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(await overlapFlush).toMatchObject({ trigger: "auth", overlapDetected: true, examined: 0 })
+        expect(requests).toEqual(["PATCH"])
+
+        rejectPatchResponse()
+        expect(await failedPatchFlush).toMatchObject({ trigger: "auth", examined: 1, succeeded: 0, failed: 1 })
+
+        // El control conserva la ruta previa: sin depender del nuevo wakeup,
+        // la rama de error ya deja un tick debounce que puede drenar el delete.
+        await vi.advanceTimersByTimeAsync(1500)
+        const deleteMetric = await deleteFlush
+        expect(["pending_wakeup", "debounce"]).toContain(deleteMetric.trigger)
+        expect(requests).toEqual(["PATCH", "DELETE"])
+        expect(capturedDeletes).toHaveLength(1)
+        expect(capturedDeletes[0]?.status).toBe(200)
+
+        const cloudRow = await readRow<{ id: string; deleted_at: string | null }>(admin, "writings", writingId)
+        expect(cloudRow?.id).toBe(writingId)
+        expect(cloudRow?.deleted_at).not.toBeNull()
+        expect(await localDB.syncQueue.getCurrentForWriting(writingId)).toBeNull()
+        expect(await localDB.syncQueue.getPending()).toEqual([])
+      } finally {
+        rejectPatchResponse()
+        if (patchHasStarted) await failedPatchFlush.catch(() => undefined)
+        await deleteFlush.catch(() => undefined)
+      }
     },
   )
 })
