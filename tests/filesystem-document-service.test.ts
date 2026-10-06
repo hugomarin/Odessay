@@ -7,6 +7,19 @@ import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-doc
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import { WriteFileConflictError } from "@/lib/services/desktop/write-file-conflict-error"
 
+const pdfRendererControl = vi.hoisted(() => ({ returnEmptyBytes: false }))
+
+vi.mock("@/lib/export/to-pdf", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/export/to-pdf")>()
+  return {
+    ...actual,
+    renderWritingToPdfBytes: vi.fn(async (...args: Parameters<typeof actual.renderWritingToPdfBytes>) => {
+      if (pdfRendererControl.returnEmptyBytes) return new Uint8Array()
+      return actual.renderWritingToPdfBytes(...args)
+    }),
+  }
+})
+
 // ─── Mock Tauri commands (no real filesystem in test env) ─────────────────────
 
 const mockFiles = new Map<string, string>()
@@ -104,6 +117,7 @@ describe("FilesystemDocumentService", () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
+    pdfRendererControl.returnEmptyBytes = false
     mockFiles.clear()
     mockMetadata.length = 0
     service = new FilesystemDocumentService(WRITINGS_DIR, { autoSaveDebounceMs: 300 })
@@ -111,6 +125,7 @@ describe("FilesystemDocumentService", () => {
   })
 
   afterEach(() => {
+    pdfRendererControl.returnEmptyBytes = false
     vi.useRealTimers()
   })
 
@@ -514,6 +529,18 @@ describe("FilesystemDocumentService", () => {
 
     const zip = await JSZip.loadAsync(result.data!.bytes)
     expect(zip.file("word/document.xml")).not.toBeNull()
+    vi.useFakeTimers()
+  })
+
+  it.fails("exportWriting rejects an empty PDF renderer result", async () => {
+    vi.useRealTimers()
+    const path = `${WRITINGS_DIR}/empty-pdf.md`
+    mockFiles.set(path, "# Empty PDF\n\nPDF body.")
+    pdfRendererControl.returnEmptyBytes = true
+
+    const result = await service.exportWriting({ writingId: path, format: "pdf" })
+
+    expect(result.error?.code).toBe("STORAGE_ERROR")
     vi.useFakeTimers()
   })
 
