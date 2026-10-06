@@ -3,6 +3,418 @@
   "generator": "tests/support/catalog-seam-recorder.ts",
   "scenarios": [
     {
+      "name": "sync08-custom-vocabulary-create-assign",
+      "description": "SYNC-08 (custom vocabulary): the real Settings owner creates a status and a document type; a real metadata update assigns both keys to a reconciled document. Fresh settings_read/catalog_list controls and the durable queue projection prove both values persist while the canonical .md remains unchanged.",
+      "profile": "filesystem",
+      "steps": [
+        {
+          "kind": "fs",
+          "op": "seed-manifest",
+          "root": "rootA",
+          "bindingRootId": "fixture-root-a"
+        },
+        {
+          "kind": "fs",
+          "op": "write",
+          "root": "rootA",
+          "relativePath": "notes/cloud-owned.md",
+          "content": "# Cloud owned\n\nlocal body survives metadata\n",
+          "inode": 806,
+          "modifiedAt": 1700140003000
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": null
+          },
+          "response": {
+            "files": [],
+            "unboundPaths": [
+              "notes/cloud-owned.md"
+            ],
+            "unboundFiles": [
+              {
+                "relativePath": "notes/cloud-owned.md",
+                "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec",
+                "size": 44
+              }
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list_binding_root_documents",
+          "args": {
+            "dbPath": "$DB",
+            "bindingRootId": "fixture-root-a"
+          },
+          "response": []
+        },
+        {
+          "kind": "invoke",
+          "cmd": "workspace_sync",
+          "args": {
+            "rootPath": "$ROOT_A",
+            "selectedPaths": null,
+            "documentIds": {
+              "notes/cloud-owned.md": "00000000-0000-4000-8000-000000000002"
+            }
+          },
+          "response": {
+            "files": [
+              {
+                "relativePath": "notes/cloud-owned.md",
+                "id": "00000000-0000-4000-8000-000000000002",
+                "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec"
+              }
+            ],
+            "unboundPaths": [],
+            "unboundFiles": []
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_reconcile",
+          "args": {
+            "dbPath": "$DB",
+            "input": {
+              "upserts": [
+                {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": true,
+                  "documentId": "00000000-0000-4000-8000-000000000002",
+                  "relativePath": "notes/cloud-owned.md",
+                  "canonicalPath": "$ROOT_A/notes/cloud-owned.md",
+                  "inode": 806,
+                  "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec",
+                  "size": 44,
+                  "lastSeenAt": 1700140003000,
+                  "title": "cloud-owned",
+                  "createdAt": 1700140003000,
+                  "modifiedAt": 1700140003000
+                }
+              ],
+              "detached": []
+            }
+          },
+          "response": {
+            "applied": true,
+            "changed": [
+              "00000000-0000-4000-8000-000000000002"
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_apply_cloud_snapshots",
+          "args": {
+            "dbPath": "$DB",
+            "snapshots": [
+              {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "cloudPresent": true,
+                "cloudAccountId": "user-1",
+                "contentHash": "cloud-hash",
+                "title": "Carta cloud-owned",
+                "slug": "carta-cloud",
+                "status": "draft",
+                "artifactType": "general",
+                "visibility": "public",
+                "version": 1,
+                "deletedAt": null,
+                "createdAt": 1700140003000,
+                "modifiedAt": 1700140003000
+              }
+            ]
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "settings_read",
+          "args": {
+            "configDir": "$CONFIG",
+            "key": "desktop_settings_v1"
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "settings_write",
+          "args": {
+            "configDir": "$CONFIG",
+            "key": "desktop_settings_v1",
+            "valueJson": "{\"disabledStatuses\":[],\"vocabularyItems\":[{\"id\":\"00000000-0000-4000-8000-000000000004\",\"kind\":\"status\",\"key\":\"needs_review\",\"name\":\"Needs review\",\"description\":\"\",\"icon\":\"eye\",\"color\":\"#5B5BD6\",\"hidden\":false,\"isBase\":false,\"isRequired\":false,\"position\":8,\"createdAt\":\"2023-11-16T02:00:01.000Z\",\"updatedAt\":\"2023-11-16T02:00:01.000Z\"}]}"
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "settings_read",
+          "args": {
+            "configDir": "$CONFIG",
+            "key": "desktop_settings_v1"
+          },
+          "response": {
+            "disabledStatuses": [],
+            "vocabularyItems": [
+              {
+                "id": "00000000-0000-4000-8000-000000000004",
+                "kind": "status",
+                "key": "needs_review",
+                "name": "Needs review",
+                "description": "",
+                "icon": "eye",
+                "color": "#5B5BD6",
+                "hidden": false,
+                "isBase": false,
+                "isRequired": false,
+                "position": 8,
+                "createdAt": "2023-11-16T02:00:01.000Z",
+                "updatedAt": "2023-11-16T02:00:01.000Z"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "settings_write",
+          "args": {
+            "configDir": "$CONFIG",
+            "key": "desktop_settings_v1",
+            "valueJson": "{\"disabledStatuses\":[],\"vocabularyItems\":[{\"id\":\"00000000-0000-4000-8000-000000000004\",\"kind\":\"status\",\"key\":\"needs_review\",\"name\":\"Needs review\",\"description\":\"\",\"icon\":\"eye\",\"color\":\"#5B5BD6\",\"hidden\":false,\"isBase\":false,\"isRequired\":false,\"position\":8,\"createdAt\":\"2023-11-16T02:00:01.000Z\",\"updatedAt\":\"2023-11-16T02:00:01.000Z\"},{\"id\":\"00000000-0000-4000-8000-000000000005\",\"kind\":\"type\",\"key\":\"field_note\",\"name\":\"Field note\",\"description\":\"\",\"icon\":\"quote\",\"color\":\"#96532C\",\"hidden\":false,\"isBase\":false,\"isRequired\":false,\"position\":6,\"createdAt\":\"2023-11-16T02:00:01.000Z\",\"updatedAt\":\"2023-11-16T02:00:01.000Z\"}]}"
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_get_by_id",
+          "args": {
+            "dbPath": "$DB",
+            "id": "00000000-0000-4000-8000-000000000002"
+          },
+          "response": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "relativePath": "notes/cloud-owned.md",
+            "localPresent": true,
+            "bindingRootId": "fixture-root-a",
+            "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec"
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_bulk_dual_write",
+          "args": {
+            "dbPath": "$DB",
+            "inputs": [
+              {
+                "document": {
+                  "id": "00000000-0000-4000-8000-000000000002",
+                  "localPresent": true,
+                  "cloudPresent": true,
+                  "cloudAccountId": "user-1",
+                  "syncStatus": "pending",
+                  "title": "Carta cloud-owned",
+                  "slug": "carta-cloud",
+                  "status": "needs_review",
+                  "artifactType": "field_note",
+                  "visibility": "public",
+                  "version": 2,
+                  "deletedAt": null,
+                  "createdAt": 1700140003000,
+                  "modifiedAt": 1700100002000
+                },
+                "binding": {
+                  "bindingRootId": "fixture-root-a",
+                  "rootPath": "$ROOT_A",
+                  "manifestVersion": 2,
+                  "visibleAsWorkspace": false,
+                  "relativePath": "notes/cloud-owned.md",
+                  "canonicalPath": "$ROOT_A/notes/cloud-owned.md",
+                  "inode": 806,
+                  "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec",
+                  "size": 44,
+                  "lastSeenAt": 1700140003000
+                },
+                "mutation": {
+                  "id": "00000000-0000-4000-8000-000000000006",
+                  "operation": "upsert",
+                  "payloadJson": "{\"mutationKind\":\"metadata\",\"status\":\"needs_review\",\"artifactType\":\"field_note\",\"version\":2,\"updatedAt\":\"2023-11-16T02:00:02.000Z\"}",
+                  "status": "pending",
+                  "attemptCount": 0,
+                  "nextRetryAt": null,
+                  "createdAt": 1700100002000,
+                  "lastError": null
+                }
+              }
+            ]
+          },
+          "response": [
+            "00000000-0000-4000-8000-000000000002"
+          ]
+        },
+        {
+          "kind": "invoke",
+          "cmd": "settings_read",
+          "args": {
+            "configDir": "$CONFIG",
+            "key": "desktop_settings_v1"
+          },
+          "response": {
+            "disabledStatuses": [],
+            "vocabularyItems": [
+              {
+                "id": "00000000-0000-4000-8000-000000000004",
+                "kind": "status",
+                "key": "needs_review",
+                "name": "Needs review",
+                "description": "",
+                "icon": "eye",
+                "color": "#5B5BD6",
+                "hidden": false,
+                "isBase": false,
+                "isRequired": false,
+                "position": 8,
+                "createdAt": "2023-11-16T02:00:01.000Z",
+                "updatedAt": "2023-11-16T02:00:01.000Z"
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000005",
+                "kind": "type",
+                "key": "field_note",
+                "name": "Field note",
+                "description": "",
+                "icon": "quote",
+                "color": "#96532C",
+                "hidden": false,
+                "isBase": false,
+                "isRequired": false,
+                "position": 6,
+                "createdAt": "2023-11-16T02:00:01.000Z",
+                "updatedAt": "2023-11-16T02:00:01.000Z"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "settings_read",
+          "args": {
+            "configDir": "$CONFIG",
+            "key": "desktop_settings_v1"
+          },
+          "response": {
+            "disabledStatuses": [],
+            "vocabularyItems": [
+              {
+                "id": "00000000-0000-4000-8000-000000000004",
+                "kind": "status",
+                "key": "needs_review",
+                "name": "Needs review",
+                "description": "",
+                "icon": "eye",
+                "color": "#5B5BD6",
+                "hidden": false,
+                "isBase": false,
+                "isRequired": false,
+                "position": 8,
+                "createdAt": "2023-11-16T02:00:01.000Z",
+                "updatedAt": "2023-11-16T02:00:01.000Z"
+              },
+              {
+                "id": "00000000-0000-4000-8000-000000000005",
+                "kind": "type",
+                "key": "field_note",
+                "name": "Field note",
+                "description": "",
+                "icon": "quote",
+                "color": "#96532C",
+                "hidden": false,
+                "isBase": false,
+                "isRequired": false,
+                "position": 6,
+                "createdAt": "2023-11-16T02:00:01.000Z",
+                "updatedAt": "2023-11-16T02:00:01.000Z"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "invoke",
+          "cmd": "catalog_list",
+          "args": {
+            "dbPath": "$DB",
+            "cloudAccountId": null,
+            "includeDeleted": false,
+            "localOnly": false,
+            "limit": 100000
+          },
+          "response": [
+            {
+              "id": "00000000-0000-4000-8000-000000000002",
+              "localPresent": true,
+              "cloudPresent": true,
+              "cloudAccountId": "user-1",
+              "syncStatus": "pending",
+              "title": "Carta cloud-owned",
+              "slug": "carta-cloud",
+              "status": "needs_review",
+              "artifactType": "field_note",
+              "visibility": "public",
+              "version": 2,
+              "deletedAt": null,
+              "createdAt": 1700140003000,
+              "modifiedAt": 1700100002000,
+              "bindingRootId": "fixture-root-a",
+              "relativePath": "notes/cloud-owned.md",
+              "canonicalPath": "$ROOT_A/notes/cloud-owned.md",
+              "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec"
+            }
+          ]
+        },
+        {
+          "kind": "control",
+          "name": "sync08-custom-vocabulary-assignment",
+          "documentId": "00000000-0000-4000-8000-000000000002",
+          "document": {
+            "syncStatus": "pending",
+            "cloudPresent": true,
+            "metadata": {
+              "status": "needs_review",
+              "artifactType": "field_note",
+              "version": 2,
+              "title": "Carta cloud-owned",
+              "slug": "carta-cloud",
+              "visibility": "public",
+              "cloudAccountId": "user-1",
+              "contentHash": "blake3:c93be3229af05e5e25242ec7bad9f7918805ba99e9da247b3397e3264a4d68ec"
+            }
+          },
+          "mutations": [
+            {
+              "id": "00000000-0000-4000-8000-000000000006",
+              "status": "pending",
+              "attemptCount": 0,
+              "nextRetryAt": null,
+              "lastError": null,
+              "payload": {
+                "mutationKind": "metadata",
+                "version": 2,
+                "updatedAt": "2023-11-16T02:00:02.000Z",
+                "status": "needs_review",
+                "artifactType": "field_note"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "sys01-homonyms-distinct-roots",
       "description": "SYS-01: two documents with the same name in two BindingRoots never collide — each canonical path resolves to its own UUID and each UUID keeps its own binding across a rescan.",
       "profile": "filesystem",

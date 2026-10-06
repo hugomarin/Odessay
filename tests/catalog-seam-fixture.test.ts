@@ -116,7 +116,11 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2, ODE-676)", () => 
           response?: unknown
           mutations?: unknown[]
           documentId?: string
-          document?: { syncStatus: string; cloudPresent: boolean }
+          document?: {
+            syncStatus: string
+            cloudPresent: boolean
+            metadata?: { status: string; artifactType: string | null; version: number }
+          }
         }[]
       }[]
     }
@@ -128,6 +132,7 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2, ODE-676)", () => 
       "sync05-save-during-flush-success",
       "sync05-workspace-removal-not-exists",
       "sync08-bound-pending-save-metadata",
+      "sync08-custom-vocabulary-create-assign",
       "sync08-first-upload-metadata-before-flush",
       "sync08-settings-metadata-batch",
       "sys01-homonyms-distinct-roots",
@@ -135,6 +140,40 @@ describe("catalog seam fixture (ODE-613, ODE-637, ODE-644 PR2, ODE-676)", () => 
       "sys05-reconcile-tracks-disk",
       "watch04-external-move-across-roots",
       "watch07-external-edit-same-path",
+    ])
+
+    // ODE-678/679: production Settings and metadata owners create both
+    // vocabulary kinds, persist their keys, and read them back from the owners.
+    const customVocabulary = fixture.scenarios.find(
+      (scenario) => scenario.name === "sync08-custom-vocabulary-create-assign",
+    )
+    expect(customVocabulary).toBeDefined()
+    const customVocabularyCommands = customVocabulary!.steps
+      .filter((step) => step.kind === "invoke")
+      .map((step) => step.cmd)
+    expect(customVocabularyCommands).toContain("settings_write")
+    expect(customVocabularyCommands).toContain("settings_read")
+    expect(customVocabularyCommands).toContain("catalog_bulk_dual_write")
+    expect(customVocabularyCommands).toContain("catalog_list")
+    const customVocabularyControl = customVocabulary!.steps.find(
+      (step) => step.kind === "control" && step.name === "sync08-custom-vocabulary-assignment",
+    )
+    expect(customVocabularyControl).toBeDefined()
+    expect(customVocabularyControl!.document).toMatchObject({
+      syncStatus: "pending",
+      cloudPresent: true,
+      metadata: { status: "needs_review", artifactType: "field_note", version: 2 },
+    })
+    expect(customVocabularyControl!.mutations).toMatchObject([
+      {
+        status: "pending",
+        payload: {
+          mutationKind: "metadata",
+          status: "needs_review",
+          artifactType: "field_note",
+          version: 2,
+        },
+      },
     ])
 
     const commands = new Set(

@@ -124,6 +124,7 @@
     "tailwindcss": "^4.2.1",
     "tsx": "^4.21.0",
     "typescript": "^5.7.2",
+    "unpdf": "^1.8.1",
     "vitest": "^4.1.0"
   }
 }

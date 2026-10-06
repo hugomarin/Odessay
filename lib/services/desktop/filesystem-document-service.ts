@@ -483,6 +483,10 @@ export class FilesystemDocumentService implements DocumentService {
               document,
             })
 
+      if (bytes.byteLength === 0) {
+        throw new Error("Export renderer returned no bytes")
+      }
+
       return ok({
         writingId: input.writingId,
         format: input.format,
