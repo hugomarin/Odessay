@@ -4,7 +4,6 @@ import Bold from "@tiptap/extension-bold"
 import BulletList from "@tiptap/extension-bullet-list"
 import CharacterCount from "@tiptap/extension-character-count"
 import Code from "@tiptap/extension-code"
-import Document from "@tiptap/extension-document"
 import Heading from "@tiptap/extension-heading"
 import History from "@tiptap/extension-history"
 import HorizontalRule from "@tiptap/extension-horizontal-rule"
@@ -40,11 +39,13 @@ import {
 } from "@/lib/editor/semantic-mark-extensions"
 import {
   CardBlock,
+  ControlledDocument,
   DocumentCodeBlock,
   DocumentComponentCommands,
   InfoBlock,
   TipBlock,
 } from "@/lib/editor/document-component-extensions"
+import { OpaqueSourceBlock, OpaqueSourceInline } from "@/lib/editor/opaque-source-extensions"
 import {
   LocalImageExtension,
   type LocalImageBackupRequest,
@@ -57,9 +58,6 @@ export const EMPTY_EDITOR_JSON: JSONContent = {
   content: [{ type: "paragraph" }],
 }
 
-const ControlledDocument = Document.extend({
-  content: "(block | controlledBlock)+",
-})
 
 type CreateEditorExtensionsOptions = {
   onTableOfContentsUpdate?: (items: TableOfContentData) => void
@@ -126,6 +124,8 @@ export const createEditorExtensions = (options: CreateEditorExtensionsOptions = 
     InfoBlock,
     CardBlock,
     DocumentComponentCommands,
+    OpaqueSourceInline,
+    OpaqueSourceBlock,
     Markdown.configure({
       transformPastedText: true,
       transformCopiedText: true,

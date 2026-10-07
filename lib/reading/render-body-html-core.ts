@@ -4,7 +4,6 @@ import Bold from "@tiptap/extension-bold"
 import BulletList from "@tiptap/extension-bullet-list"
 import Code from "@tiptap/extension-code"
 import CodeBlock from "@tiptap/extension-code-block"
-import Document from "@tiptap/extension-document"
 import Heading from "@tiptap/extension-heading"
 import HorizontalRule from "@tiptap/extension-horizontal-rule"
 import Image from "@tiptap/extension-image"
@@ -28,9 +27,12 @@ import {
   EntityMark,
   SemanticHighlightMark,
 } from "@/lib/editor/semantic-mark-extensions"
+import { OpaqueSourceBlock, OpaqueSourceInline } from "@/lib/editor/opaque-source-extensions"
+import { ControlledDocument } from "@/lib/editor/document-component-extensions"
+import { READING_COMPONENT_BLOCK_EXTENSIONS } from "@/lib/reading/component-reading-extensions"
 
 export const WRITING_BODY_EXTENSIONS = [
-  Document,
+  ControlledDocument,
   Paragraph,
   Text,
   Heading.configure({ levels: [1, 2, 3] }),
@@ -56,6 +58,9 @@ export const WRITING_BODY_EXTENSIONS = [
   FrontmatterNode,
   AnnotationReferenceNode,
   FootnoteExtension,
+  OpaqueSourceInline,
+  OpaqueSourceBlock,
+  ...READING_COMPONENT_BLOCK_EXTENSIONS,
 ] satisfies Extensions
 
 export type RenderWritingBodyHtmlOptions = {

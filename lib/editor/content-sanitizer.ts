@@ -65,6 +65,14 @@ const projectCleanReadingValue = (value: unknown): unknown => {
   if (!isPlainObject(value)) return value
 
   const next: Record<string, unknown> = { ...value }
+  if (
+    (value.type === "opaqueSource" || value.type === "opaqueSourceBlock") &&
+    isPlainObject(value.attrs)
+  ) {
+    // Preserved source can carry private attributes (reasons, comments, IDs).
+    // Readers get only its conservative visible text.
+    next.attrs = { text: value.attrs.text ?? "", reason: value.attrs.reason ?? "" }
+  }
   if (Array.isArray(value.marks)) {
     next.marks = value.marks
       .filter((mark) => {

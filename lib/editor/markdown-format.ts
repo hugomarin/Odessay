@@ -8,6 +8,7 @@ import { escapeControlledAttribute } from "@/lib/document-components/entities"
 import { parseControlledMarkdown } from "@/lib/document-components/parser"
 import { DocumentComponentSpecRegistry } from "@/lib/document-components/registry"
 import type { DocumentIrNode } from "@/lib/document-components/types"
+import { materializeOpaqueSourceForRichParser } from "@/lib/editor/opaque-source-extensions"
 
 export type MarkdownInlineToggleResult = {
   markdown: string
@@ -395,7 +396,9 @@ const materializeControlledAnnotations = (markdown: string): string => {
 }
 
 export const materializeMarkdownForRichParser = (markdown: string): string => {
-  const typedLegacy = materializeAnnotationHighlightTypes(markdown)
+  // Opaque and adapter-less spans are lifted first, from the original bytes,
+  // so no later normalization can rewrite what Rich must preserve.
+  const typedLegacy = materializeAnnotationHighlightTypes(materializeOpaqueSourceForRichParser(markdown))
   const normalized = normalizeMarkdownForRoundTrip(typedLegacy, {
     preserveAnnotationMarks: true,
   })

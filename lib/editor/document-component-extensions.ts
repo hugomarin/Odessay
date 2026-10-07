@@ -1,5 +1,14 @@
-import { Extension, Node, mergeAttributes, type CommandProps, type NodeViewRendererProps } from "@tiptap/core"
+import {
+  Extension,
+  Node,
+  getTextBetween,
+  getTextSerializersFromSchema,
+  mergeAttributes,
+  type CommandProps,
+  type NodeViewRendererProps,
+} from "@tiptap/core"
 import CodeBlock from "@tiptap/extension-code-block"
+import Document from "@tiptap/extension-document"
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { findWrapping } from "@tiptap/pm/transform"
 import type { ViewMutationRecord } from "@tiptap/pm/view"
@@ -306,6 +315,17 @@ const createControlledBlockNode = (kind: ControlledBlockKind) => {
       return createControlledBlockNodeView(kind)
     },
 
+    // body_text projection (surface-projections.md): optional title, then
+    // body. The title is an attribute, so the default child walk drops it.
+    renderText({ node }) {
+      const body = getTextBetween(
+        node,
+        { from: 0, to: node.content.size },
+        { blockSeparator: "\n", textSerializers: getTextSerializersFromSchema(node.type.schema) },
+      )
+      return [String(node.attrs.title ?? "").trim(), body].filter(Boolean).join("\n")
+    },
+
     addStorage() {
       return {
         markdown: {
@@ -394,6 +414,11 @@ export const DocumentComponentCommands = Extension.create({
           commands.updateAttributes("codeBlock", { language }),
     }
   },
+})
+
+/** Document root that admits registered blocks next to ordinary blocks. */
+export const ControlledDocument = Document.extend({
+  content: "(block | controlledBlock)+",
 })
 
 export const TipBlock = createControlledBlockNode("Tip")

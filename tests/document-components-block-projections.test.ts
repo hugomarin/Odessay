@@ -1,0 +1,114 @@
+/**
+ * @vitest-environment happy-dom
+ */
+import JSZip from "jszip"
+import { extractText, getDocumentProxy } from "unpdf"
+import { describe, expect, it } from "vitest"
+import { parseMarkdownToSnapshot } from "@/lib/editor/document-serialization"
+import { buildWritingExportDocument } from "@/lib/export/writing-export"
+import { renderWritingToDocxBuffer } from "@/lib/export/to-docx"
+import { renderWritingToPdfBuffer } from "@/lib/export/to-pdf"
+import { renderWritingBodyHtml as renderClient } from "@/lib/reading/render-body-html-client"
+import { renderWritingBodyHtml as renderServer } from "@/lib/reading/render-body-html"
+
+// Fase 12 — Tip/Info/Card projections (surface-projections.md, kind matrix):
+// body_text = optional title then body; reading = shared accessible block with
+// a safe link; clean export = titled structure with safe link, then body. The
+// title and href live in node attributes, so any projection that only walks
+// child text (editor.getText, collectBlocks) silently drops them.
+
+const SOURCE = [
+  "Intro with **bold** text.",
+  '<Card title="ONLY_TITLE" icon="star" href="https://example.com/card">\nONLY_BODY paragraph.\n</Card>',
+  '<Tip title="TIP_TITLE">\nTIP_BODY text.\n</Tip>',
+  "<Info>\nINFO_BODY text.\n</Info>",
+  "Outro.",
+].join("\n\n")
+
+const snapshot = () => parseMarkdownToSnapshot(SOURCE)
+
+describe("Tip/Info/Card projections", () => {
+  it("body_text carries each title before its body, in reading order", () => {
+    const { bodyText } = snapshot()
+    expect(bodyText).toContain("ONLY_TITLE\nONLY_BODY paragraph.")
+    expect(bodyText).toContain("TIP_TITLE\nTIP_BODY text.")
+    expect(bodyText).toContain("INFO_BODY text.")
+    expect(bodyText.indexOf("Intro")).toBeLessThan(bodyText.indexOf("ONLY_TITLE"))
+    expect(bodyText.indexOf("ONLY_BODY")).toBeLessThan(bodyText.indexOf("TIP_TITLE"))
+    expect(bodyText, "the href is an attribute, not visible text").not.toContain("example.com")
+  })
+
+  it.each([
+    ["client", renderClient],
+    ["server", renderServer],
+  ])("%s reader renders components richly instead of falling back for the whole document", (_label, render) => {
+    const { bodyJson, bodyText } = snapshot()
+    const rendered = render(bodyJson, bodyText)
+    expect(rendered.mode).toBe("rich")
+    // The rest of the document keeps its rich rendering.
+    expect(rendered.bodyHtml).toContain("<strong>bold</strong>")
+    expect(rendered.bodyHtml).toContain("ONLY_TITLE")
+    expect(rendered.bodyHtml).toContain("ONLY_BODY paragraph.")
+    expect(rendered.bodyHtml).toContain('href="https://example.com/card"')
+    expect(rendered.bodyHtml).toContain("TIP_TITLE")
+    expect(rendered.bodyHtml).toContain("INFO_BODY text.")
+    expect(rendered.bodyHtml.indexOf("ONLY_TITLE")).toBeLessThan(rendered.bodyHtml.indexOf("ONLY_BODY"))
+    // No authoring chrome reaches readers.
+    expect(rendered.bodyHtml).not.toContain("<input")
+    expect(rendered.bodyHtml).not.toContain("<button")
+  })
+
+  it("never activates an unsafe href that reached body_json", () => {
+    const bodyJson = {
+      type: "doc",
+      content: [
+        {
+          type: "card",
+          attrs: { title: "Unsafe", icon: "", href: "javascript:alert(1)" },
+          content: [{ type: "paragraph", content: [{ type: "text", text: "Body" }] }],
+        },
+      ],
+    }
+    const rendered = renderClient(bodyJson, "Unsafe\nBody")
+    expect(rendered.mode).toBe("rich")
+    expect(rendered.bodyHtml).toContain("Unsafe")
+    expect(rendered.bodyHtml).not.toContain("javascript:")
+  })
+
+  it("export document keeps titles and the safe link ahead of each body", () => {
+    const exported = buildWritingExportDocument(snapshot().bodyJson)
+    const texts = exported.blocks.map((block) =>
+      "inlines" in block ? block.inlines.map((run) => run.text).join("") : block.type,
+    )
+    const cardTitle = exported.blocks.find(
+      (block) => "inlines" in block && block.inlines.some((run) => run.text === "ONLY_TITLE"),
+    )
+    expect(cardTitle).toMatchObject({ type: "heading" })
+    expect(cardTitle && "inlines" in cardTitle ? cardTitle.inlines[0].linkHref : null).toBe(
+      "https://example.com/card",
+    )
+    expect(texts.indexOf("ONLY_TITLE")).toBeLessThan(texts.indexOf("ONLY_BODY paragraph."))
+    expect(texts.indexOf("TIP_TITLE")).toBeLessThan(texts.indexOf("TIP_BODY text."))
+    expect(texts).toContain("INFO_BODY text.")
+  })
+
+  it("real DOCX and PDF artifacts contain titles, bodies and the card link", async () => {
+    const { bodyJson, bodyText } = snapshot()
+    const document = buildWritingExportDocument(bodyJson)
+
+    const docx = await JSZip.loadAsync(await renderWritingToDocxBuffer({ title: "Components", bodyText, document }))
+    const xml = (await docx.file("word/document.xml")?.async("string")) ?? ""
+    const rels = (await docx.file("word/_rels/document.xml.rels")?.async("string")) ?? ""
+    for (const sentinel of ["ONLY_TITLE", "ONLY_BODY paragraph.", "TIP_TITLE", "TIP_BODY text.", "INFO_BODY text."]) {
+      expect(xml, `DOCX: ${sentinel}`).toContain(sentinel)
+    }
+    expect(rels).toContain("https://example.com/card")
+
+    const pdf = await renderWritingToPdfBuffer({ title: "Components", bodyText, document })
+    const { text } = await extractText(await getDocumentProxy(new Uint8Array(pdf)), { mergePages: true })
+    for (const sentinel of ["ONLY_TITLE", "ONLY_BODY", "TIP_TITLE", "TIP_BODY", "INFO_BODY"]) {
+      expect(text, `PDF: ${sentinel}`).toContain(sentinel)
+    }
+    expect(text.indexOf("ONLY_TITLE")).toBeLessThan(text.indexOf("ONLY_BODY"))
+  }, 30_000)
+})

@@ -1,4 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
+import { validateComponentAttribute } from "@/lib/document-components/registry"
 
 export type WritingExportFootnote = {
   index: number
@@ -210,6 +211,13 @@ const collectInlineRuns = (nodes: ExportNode[] | undefined, footnotes: WritingEx
       continue
     }
 
+    if (node.type === "opaqueSource") {
+      // Preserved source exports its visible text, never silently omitted.
+      const text = readString(node.attrs?.text)
+      if (text) runs.push({ text })
+      continue
+    }
+
     if (node.content?.length) {
       runs.push(...collectInlineRuns(node.content, footnotes))
     }
@@ -332,6 +340,34 @@ const collectBlocks = (nodes: ExportNode[] | undefined, footnotes: WritingExport
       }
       case "horizontalRule": {
         blocks.push({ type: "separator" })
+        break
+      }
+      case "card": {
+        // Card projection: titled section with its safe link, then the body.
+        const title = readString(node.attrs?.title)?.trim()
+        const href = readString(node.attrs?.href) ?? ""
+        if (title) {
+          blocks.push({
+            type: "heading",
+            level: 3,
+            inlines: [
+              validateComponentAttribute("Card", "href", href) ? { text: title, linkHref: href } : { text: title },
+            ],
+          })
+        }
+        blocks.push(...collectBlocks(node.content, footnotes))
+        break
+      }
+      case "tip":
+      case "info": {
+        const title = readString(node.attrs?.title)?.trim()
+        if (title) blocks.push({ type: "paragraph", inlines: [{ text: title, bold: true }] })
+        blocks.push(...collectBlocks(node.content, footnotes))
+        break
+      }
+      case "opaqueSourceBlock": {
+        const text = readString(node.attrs?.text)
+        if (text) blocks.push({ type: "paragraph", inlines: [{ text }] })
         break
       }
       case "table": {

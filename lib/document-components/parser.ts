@@ -119,6 +119,26 @@ const findFenceEnd = (source: string, start: number): number | null => {
   return source.length;
 };
 
+// Inline code is pure Markdown: tags inside a code span are literal text, the
+// same way fenced code is opaque to the component scanner. An unmatched
+// backtick run is literal and only skips itself. Spans never cross a blank
+// line (a paragraph boundary).
+const findCodeSpanEnd = (source: string, start: number): number => {
+  let runEnd = start;
+  while (source[runEnd] === "`") runEnd += 1;
+  const length = runEnd - start;
+  let cursor = runEnd;
+  while (cursor < source.length) {
+    const next = source.indexOf("`", cursor);
+    if (next === -1 || /\n[\t ]*\n/.test(source.slice(cursor, next))) break;
+    let closeEnd = next;
+    while (source[closeEnd] === "`") closeEnd += 1;
+    if (closeEnd - next === length) return closeEnd;
+    cursor = closeEnd;
+  }
+  return runEnd;
+};
+
 const findOpaqueEnd = (source: string, tag: ParsedTag): number => {
   const close = source.indexOf(`</${tag.kind}>`, tag.end);
   return close === -1 ? source.length : close + tag.kind.length + 3;
@@ -211,6 +231,11 @@ const parseControlledMarkdownInternal = (
         });
         cursor += raw.length;
         markdownStart = cursor;
+        continue;
+      }
+
+      if (source[cursor] === "`" && source[cursor - 1] !== "\\") {
+        cursor = findCodeSpanEnd(source, cursor);
         continue;
       }
 
@@ -359,3 +384,11 @@ export const parseControlledComponentAt = (source: string, start = 0): Component
     ? first
     : null;
 };
+
+/**
+ * End offset of the PascalCase tag token that starts at `start`, or null when
+ * no tag token starts there. Adapters use it to keep an unclosed unknown tag
+ * as its own literal token instead of re-deriving tag syntax.
+ */
+export const readControlledTagEnd = (source: string, start: number): number | null =>
+  source[start] === "<" ? (parseTag(source, start)?.end ?? null) : null;

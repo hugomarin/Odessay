@@ -174,6 +174,17 @@ export const DOCUMENT_PROJECTION_SURFACES: readonly DocumentProjectionSurface[] 
   "docx",
 ] as const;
 
+/**
+ * Registry validation for one attribute value. Projections use it to decide
+ * whether an attribute (e.g. a Card href) may be activated, so no surface
+ * re-implements the URL policy.
+ */
+export const validateComponentAttribute = (kind: string, name: string, value: string): boolean => {
+  const attribute = specByKind.get(kind as DocumentComponentKind)?.attributes.find((candidate) => candidate.name === name);
+  if (!attribute || value.length === 0) return false;
+  return attribute.validate?.(value) ?? true;
+};
+
 export const DocumentComponentSpecRegistry = Object.freeze({
   get(kind: string): DocumentComponentSpec | undefined {
     return specByKind.get(kind as DocumentComponentKind);

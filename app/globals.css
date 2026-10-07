@@ -635,6 +635,61 @@
     word-break: break-word;
   }
 
+  /* Fase 12: shared reading projection of Tip/Info/Card (no authoring chrome). */
+  .odessay-rich-content .odessay-reading-component,
+  .prose-odessay .odessay-reading-component {
+    border: 0.5px solid hsl(var(--line-soft));
+    border-radius: 10px;
+    margin-block: 1.4em;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    padding: 0.85em 1.1em;
+  }
+
+  .odessay-rich-content .odessay-reading-tip,
+  .prose-odessay .odessay-reading-tip,
+  .odessay-rich-content .odessay-reading-info,
+  .prose-odessay .odessay-reading-info {
+    border-left: 3px solid hsl(var(--accent));
+  }
+
+  .odessay-rich-content .odessay-reading-component-title,
+  .prose-odessay .odessay-reading-component-title {
+    font-weight: 600;
+    margin: 0 0 0.4em;
+  }
+
+  .odessay-rich-content .odessay-reading-component-body > :last-child,
+  .prose-odessay .odessay-reading-component-body > :last-child {
+    margin-bottom: 0;
+  }
+
+  /* ODE-529: preserved (opaque / adapter-less) source is literal and
+     non-editable in Rich; reading shows the same text without authoring cues. */
+  .odessay-editor-content .odessay-opaque-source,
+  .odessay-editor-content .odessay-opaque-source-block {
+    background: hsl(var(--surface-option));
+    border: 0.5px dashed hsl(var(--line-soft));
+    border-radius: 4px;
+    color: hsl(var(--ink-3));
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
+
+  .odessay-editor-content .odessay-opaque-source {
+    padding: 0 0.25em;
+  }
+
+  .odessay-editor-content .odessay-opaque-source-block,
+  .odessay-rich-content .odessay-opaque-source-block,
+  .prose-odessay .odessay-opaque-source-block {
+    margin-block: 1em;
+    max-width: 100%;
+    padding: 0.75em 1em;
+    white-space: pre-wrap;
+  }
+
   /* ODE-533: reading fallback shares the document-width containment contract. */
   .odessay-rich-content .odessay-mermaid-fallback,
   .prose-odessay .odessay-mermaid-fallback {
