@@ -8,6 +8,11 @@ Contratos normativos del perfil:
 - [Semántica inline](./document-components/inline-semantics.md)
 - [Proyecciones por superficie](./document-components/surface-projections.md)
 
+## Recon y pruebas transversales (2026-10-07)
+
+- [Plan de pruebas funcionales de release](./document-components/release-test-plan.md): cobertura existente, recorridos transversales y gates propuestos para cada release.
+- [Recon de los issues de Fase 12](./document-components/phase12-recon.md): estado observado después de integrar main, owners reutilizables y brechas por issue.
+
 ## Estado de planificación
 
 **Revisión:** 2026-09-16 con `skill-performance` y `skill-product-manager`.

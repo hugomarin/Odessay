@@ -824,6 +824,20 @@
       "description": "Matriz normativa de proyección por kind para Rich, Source, lectura, body_text, AI context, Markdown limpio, PDF y DOCX."
     },
     {
+      "path": "docs/design/document-components/release-test-plan.md",
+      "type": "design-reference",
+      "scope": "fase-12-componentes-documentales",
+      "state": "proposed-release-test-plan",
+      "description": "Plan transversal de pruebas funcionales de release: corpus, 16 recorridos, matriz de lifecycle, seams reales, cobertura existente y pendiente, gates web/desktop/DMG y propuesta de wiring para ODE-539. No representa tests implementados ni un release aprobado."
+    },
+    {
+      "path": "docs/design/document-components/phase12-recon.md",
+      "type": "design-reference",
+      "scope": "fase-12-componentes-documentales",
+      "state": "recon-snapshot",
+      "description": "Recon de P-ODE-42 sobre main b42c11d9 y rama integrada: owners, consumers y pruebas por ODE-528–542, defectos reproducidos en adapters/proyecciones y brechas de implementación. No equivale a aceptación ni estado Done."
+    },
+    {
       "path": "prototypes/document-components-playground.html",
       "type": "design-reference",
       "scope": "exploracion-de-componentes-documentales",
