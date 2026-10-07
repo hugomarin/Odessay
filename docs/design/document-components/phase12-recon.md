@@ -141,3 +141,74 @@ Con `f8c4b022`: 366 archivos, 2742 pruebas en verde y 1 expected-fail. Los 2 fal
 ### Siguiente paso propuesto
 
 Dejar de acumular BUILD transversal en esta rama. Convertir los recorridos R01–R16 en issues de pruebas agrupados por owner, hacer Recon por issue (15 de Fase 12 más los nuevos) y orquestarlos. Los hallazgos de esta sección se reparten como evidencia de esos issues.
+
+## Recon de área 2026-10-07 — mapa, conflictos y olas
+
+Verificado en `codex/ode-528-539-document-components@60096f56`, que integra `origin/main@b42c11d9`. Modo completo (construir + despachar), solo lectura. Seis workers Codex GPT-6-Luna max por cluster de owner (Orca `run_aedad19f3891`): core (528/529/538/539/690), blocks (530/533/540/685/691), inline (531/532/534/537/687), reading (535/536/688), persistence (541/542/684/686/692/693) y perf (689). Por issue, el Recon Pack está en el comentario `## Recon Pack` y la corrección del brief en la sección `## Auditoría (2026-10-07)` de Linear. `npm run ops:brief:lint -- <25 issues> --require-contract --require-recon` en verde.
+
+### Estado real por issue
+
+| Issue | Estado | Hallazgo principal |
+|---|---|---|
+| ODE-528 | Parcial | Contratos y fixtures existen; sus writers ya están montados sin el gate que exige su DoD. |
+| ODE-529 | Parcial | Core y preservación opaca hechos. El parser tiene peor caso O(N·D) (Annotation anidada) y O(N²) (muchos `<` sin `>`), que contradicen el O(N) declarado; el adapter opaco reparsea sufijos. |
+| ODE-530 | Parcial | Specs, NodeViews y comandos hechos; falta la aceptación de geometría (ODE-685) y resolver el writer gate. |
+| ODE-531 | Parcial | **P1 (cadena estática):** una Annotation inválida guardada como opaca no aparece en las filas de márgenes y `syncMarginsFromBodyJson` borra filas colaborativas existentes. |
+| ODE-532 | Parcial | Enter/Space no aplican Entity/Highlight; el test "keyboard" usa pointerdown. El snapshot de selección no lleva `writingId`. |
+| ODE-533 | Parcial | El contador de revisión global del coordinador Mermaid cancela renders concurrentes de otros diagramas vigentes. |
+| ODE-534 | Falta | Sin mark, guard ni unlock; los owners reales de Replace All y de correcciones no están en el brief. |
+| ODE-535 | Parcial | Parser y registry de grupos hechos; sin adapters Rich. `Step.title` es requerido. Falta decidir qué pasa al quitar el último hijo. |
+| ODE-536 | Parcial | Tip/Info/Card se renderizan; el fallo de un renderer sigue degradando el documento entero a texto. |
+| ODE-537 | Parcial | No hay catálogo ni slash menu; las listas del toolbar están duplicadas. |
+| ODE-538 | Parcial | Proyección de Tip/Info/Card hecha. **Seguridad:** los links Markdown comunes se exportan sin validar el href (PDF/DOCX). Falta la ruta de Markdown limpio sin tocar el serializer de save/hash. |
+| ODE-539 | Falta | No hay capability gate de producción; `coverage.ts` es declarativo. |
+| ODE-540 | Parcial | El toggle limpio está bien. Source editado aplica antes de que Rich tenga layout. Si `sourceToRich` falla, se hace `setContent` y se persiste: Context Gap (legacy-code). |
+| ODE-541 | Parcial | Fix presente en la rama; falta reproducir sobre main actual y en el paquete. |
+| ODE-542 | Parcial | Implementación completa; falta el smoke en la app empaquetada. |
+| ODE-684 | Parcial | Integración desktop base hecha; faltan fixture maestro, suite web y matriz de fallos. El doble de manifest no es el `index.json` físico. |
+| ODE-685 | Falta | No hay ruta de editor con fixture determinista ni señal observable de fin de toggle/guardado; el slash no existe. |
+| ODE-686 | Parcial | Owners y patrones existen; faltan las 3 suites; riesgos sin reproducir. |
+| ODE-687 | Falta | Suite semántica ausente; el gap de teclado es de ODE-532. |
+| ODE-688 | Parcial | Proyecciones y artefactos básicos hechos; la shell ya no ofrece Markdown (decisión previa). |
+| ODE-689 | Parcial | Sin contadores de runtime. En web, `persistEditorSnapshot` hace `getText`/`getJSON` del documento completo por frame. El capturador de trazas no admite un escenario de componentes. |
+| ODE-690 | Falta | **Integridad de release:** se puede publicar un binario firmado de un SHA distinto del tag; `contents:write` aplica a todo el workflow y no hay dry-run. |
+| ODE-691 | Falta | Sin gapcursor ni trailing node. |
+| ODE-692 | Falta | Si "Switch anyway" hidrata B sobre la única copia en memoria de A, la edición fallida se pierde; el coordinador no guarda ese snapshot. |
+| ODE-693 | Parcial | El relocate no se registra en `renamesInFlight`; sin prueba con el move retenido. |
+
+### Grafo de conflictos de archivos (owner de producción, doble, fixture o test)
+
+| Archivo | Issues |
+|---|---|
+| `lib/editor/extensions.ts` | 530, 532, 534, 535, 539 (gate), 691 |
+| `lib/editor/document-component-extensions.ts` | 530, 533, 535, 537, 540 |
+| `components/editor/editor-shell.tsx` (hotspot) | 540, 692 |
+| `lib/document-components/registry.ts` / `parser.ts` | 529, 535 (+530/533 consumen) |
+| `lib/document-components/coverage.ts` | 539 (owner), 690 (wiring/test) |
+| `components/reading/margins/selection-popup.tsx`, `hooks/useSelectionPopup.ts` | 531, 532, 537 |
+| `lib/editor/semantic-marks.ts`, `semantic-mark-extensions.ts` | 532, 534, 537 |
+| `lib/reading/render-body-html-core.ts`, `component-reading-extensions.ts` | 533, 536 |
+| `lib/export/writing-export.ts`, `to-docx.ts`, `to-pdf.tsx` | 533, 538 |
+| `lib/services/document-service-factory.ts` | 693 |
+| `hooks/useWorkspaceTabs.ts` | 692 |
+| `app/globals.css` | 530, 532, 533, 535, 536 |
+| `tests/fixtures/document-components/catalog.json` | 528, 684 |
+| `tests/document-components-block-projections.test.ts` | 538, 688 |
+| `tests/mermaid-reading-export.test.ts` | 533, 688 |
+| `tests/editor-shell-document-components-desktop.test.tsx` | 684, 691 |
+| `tests/perf/*`, `scripts/capture-editor-trace.mjs` | 689 (533 si mide Mermaid) |
+
+### Olas propuestas (dependencias + conflictos)
+
+0. **Antes de arrancar (humano):** decisiones de la Auditoría, activación de la fase y política del writer gate (528/539).
+1. ODE-684 (corpus y harness), ODE-529 (parser O(N) + consumers), ODE-531 (no-prune P1), ODE-533 (token por owner), ODE-541 (reproducir primero).
+2. ODE-540 (lifecycle), ODE-532 (teclado + selección con dueño), ODE-686 (suite), ODE-693 (relocate en vuelo).
+3. ODE-692 (después de 540 por la shell), ODE-691 (después de 540), ODE-687 (después de 531/532), ODE-689 (después de 684 y 529).
+4. ODE-530 (cierre + aceptación de geometría), ODE-685 (después de 540/530/533), ODE-538 (proyecciones, coordinado con 688).
+5. ODE-534 (después de 532).
+6. ODE-535 (después de 530/532 y de la decisión del último hijo).
+7. ODE-536 (después de 530–535), ODE-537 (después de 530/531/532/534/535).
+8. ODE-688 (matriz completa), ODE-539 (capability gate).
+9. ODE-690 (gate de release + R16 sobre el DMG). ODE-528 y ODE-542 se cierran con la aceptación del dueño y el smoke empaquetado.
+
+`lib/editor/extensions.ts` (composition root) lo tocan 530, 532, 534, 535, 539 y 691; por eso esos issues caen en olas distintas. Ningún par de la misma ola comparte un owner de producción. Los tests y fixtures compartidos se coordinan por orden de merge.
