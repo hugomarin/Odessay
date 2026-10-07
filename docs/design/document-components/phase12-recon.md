@@ -108,3 +108,36 @@ Execution Trace: revisión conducida por Codex con workers de recon y pruebas de
 | Probe de defectos | 4 casos rojos con adapters reales; reproducen pérdida de source y título. Probe temporal retirado; no forman parte de una suite release verde. |
 
 Esta evidencia acredita la actualización y el diagnóstico. No ejecutó Chromium, Supabase local, cargo replay ni DMG, y no implementó la nueva suite transversal ni el wiring de release. Los [16 recorridos](./release-test-plan.md) son el plan de trabajo con oráculos y límites; no se sube coverage_status por existir ese plan.
+
+## Continuación (Claude, 2026-10-07) — pruebas integrales y correcciones
+
+Handoff completo desde Codex sobre `4db20da9`. Node 22.23.3 vía `npx --package=node@22`. Cada prueba nueva se verificó con mutantes en vivo (el defecto reintroducido pone la prueba en rojo por su causa) y, cuando afirma una ausencia, con control positivo en el mismo setup.
+
+### Defectos resueltos
+
+| Issue / escenario | Defecto | Corrección (owner) | Evidencia |
+|---|---|---|---|
+| ODE-529 / R12 | El adapter Rich perdía tags y atributos de Entity inválido, kinds desconocidos y `ProtectedText` (solo conservaba el texto visible). Además: `List<String>` en prosa perdía `<String>` y `Map<String, Int>` se reescribía como `&lt;…&gt;`. | Nodos `opaqueSource`/`opaqueSourceBlock` (`lib/editor/opaque-source-extensions.ts`) alimentados por el parser core. Todo kind sin adapter Rich y todo span opaco serializan sus bytes exactos. El core (`parser.ts`) ahora salta code spans inline. Un tag desconocido sin cierre conserva solo su token y el resto sigue siendo Markdown editable (decisión del adapter; el IR core no cambia). | `tests/document-components-rich-preservation.test.ts` (15) y `tests/editor-shell-document-components-desktop.test.tsx` (2, shell desktop real: Source → Rich → edición → `.md` → reapertura; un toggle limpio no escribe). |
+| ODE-536/538 (kinds habilitados) | El título de Card/Tip/Info no entraba en `body_text`. El lector caía a texto plano en **todo** el documento si contenía un bloque. El export perdía título y href. DOCX nunca emitía hipervínculos nativos (preexistente, todos los links). | `renderText` del nodo (título y luego cuerpo); proyección de lectura compartida `lib/reading/component-reading-extensions.ts` (sin chrome de autoría, href solo si pasa `validateComponentAttribute`); `collectBlocks` emite sección titulada con el link seguro; `ExternalHyperlink` en DOCX. | `tests/document-components-block-projections.test.ts` (6) con inspección real de `word/document.xml` + rels y texto de PDF (unpdf). |
+| Merge 53b7b2e9 (ODE-642) | La rama hacía `return` al re-seleccionar la pestaña activa: se perdía la re-activación de main (nueva generación). Matriz 2/4 fallaban en la rama y pasaban en main. | `useWorkspaceTabs`: re-seleccionar sigue cancelando la petición pendiente y re-activa como en main. | Matriz 2/4 en verde. |
+| Merge + bug preexistente de main (ODE-402/652) | Tras "Guardar como", todo autosave fallaba en silencio con CONFLICT (también en main: `persist` → `false`). La causa es que el relocate reescribía su propia copia del contenido y dejaba obsoleto el hash durable del coordinador. El exit protocol de la rama lo hizo visible: el click en otra pestaña se descartaba. | `handleSaveToDisk` vuelve durable la edición por el camino canónico y mueve exactamente esos bytes. El driver `clickEditorTab` espera el evento de activación. | Caso nuevo en `editor-shell-save-as-relocate.test.tsx`; ODE-652 «sin carrera» en verde. Bajo carga paralela quedaba otra carrera (una edición Rich en cola escribía la ruta vieja durante el move); Save As ahora vacía las colas Rich/Markdown antes (9907edd1): 121 pruebas juntas dos veces, sin CONFLICT. Residual: una tecla dentro de la ventana de milisegundos del move; se cerraría con un relocate exclusivo en el coordinador (owner ODE-402). |
+
+### Hallazgos registrados, sin corregir
+
+- **UX (preexistente; aplica también a `---`)**: si un documento termina en un bloque atómico, no hay posición de texto después y seleccionarlo y teclear lo reemplaza. Hace falta un gapcursor o un trailing node con su owner (ODE-540/537).
+- **Exit protocol**: si `settle` del documento saliente devuelve `false`, el cambio de pestaña se descarta sin feedback más allá del estado de guardado. Se mantiene la política aceptada; revisar con ODE-541/542 si debe ofrecer una salida explícita.
+- **Step.title**: comentado en ODE-535 como incomplete-brief. El contrato aceptado lo exige; el brief debe corregirse antes de BUILD.
+- **Footnote en Source (R05)**: la repro se retiró del árbol sin terminar. El control positivo pasaba; el caso de carrera (selección de A, modal abierto, B activado por ruta) no lograba activar B por ruta en el harness, porque re-renderizar con la misma ruta no navega. No se afirma defecto.
+- **Pendiente**: `acceptedMarkdownForAnnotations` (R03/R08) sin repro aún.
+
+### Readiness
+
+El gate de cierre de fase sigue en **FAIL**: ODE-534/535/537/539 sin implementar, proyecciones de kinds compuestos solo como fallback de texto, wiring de release (R16, DMG, Playwright) pendiente y aceptación del dueño pendiente. Los estados de Linear no se modificaron.
+
+### Corrida completa
+
+Con `f8c4b022`: 366 archivos, 2742 pruebas en verde y 1 expected-fail. Los 2 fallos eran la repro de footnote (retirada) y ODE-652 bajo carga, corregido en `9907edd1`. Después de `9907edd1` no se ha repetido una corrida completa.
+
+### Siguiente paso propuesto
+
+Dejar de acumular BUILD transversal en esta rama. Convertir los recorridos R01–R16 en issues de pruebas agrupados por owner, hacer Recon por issue (15 de Fase 12 más los nuevos) y orquestarlos. Los hallazgos de esta sección se reparten como evidencia de esos issues.
