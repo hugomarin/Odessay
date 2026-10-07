@@ -692,7 +692,7 @@ Referencia: `workflow/define/dod-fase-11.md`, `workflow/context/features/odessay
 Al terminar esta fase: Artifact Studio tiene un único sistema de componentes documentales sobre su Markdown canónico. Markdown puro, semántica editorial propia (`Annotation`, `Highlight`, `ProtectedText`, `Entity`) y bloques MDX-like controlados comparten Document IR, parser, serializer y políticas de proyección. El mismo documento puede editarse, previsualizarse, leerse, publicarse y exportarse a PDF/DOCX sin perder contenido ni introducir JSX arbitrario o una segunda fuente de verdad.
 
 DoD formal: `workflow/define/dod-fase-12.md`.
-Proyecto Linear: [Fase 12 — Artifact Studio: Componentes Documentales](https://linear.app/hugo-marin/project/fase-12-artifact-studio-componentes-documentales-3397e6e8ea2e) (`ODE-528`–`ODE-539`). El proyecto permanece `Planned` mientras Fase 11 está activa.
+Proyecto Linear: [Fase 12 — Artifact Studio: Componentes Documentales](https://linear.app/hugo-marin/project/fase-12-artifact-studio-componentes-documentales-3397e6e8ea2e) (`ODE-528`–`ODE-542`, más las suites `ODE-684`–`ODE-690` y los bugs `ODE-691`–`ODE-693`). **Fase activa desde 2026-10-07** por decisión del dueño; Fase 11 queda en pausa con sus issues abiertos intactos.
 
 ---
 
