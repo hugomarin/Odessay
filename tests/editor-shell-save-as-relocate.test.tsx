@@ -25,6 +25,11 @@
  * Mutation test (ODE-574): adoptar la ruta elegida aunque el traslado falle
  * pone en rojo el caso de fallo; ignorar la ruta final devuelta por el
  * traslado (el sufijo de colisión) pone en rojo el de éxito.
+ *
+ * Fase 12 (R07): que el traslado vuelva a escribir su propia copia del
+ * contenido (en vez de mover los bytes ya guardados por el camino canónico)
+ * deja obsoleto el hash de referencia del coordinador: todo autosave posterior
+ * falla con CONFLICT en silencio. Pone en rojo el caso "después del traslado".
  */
 import { mkdir, stat, writeFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -226,6 +231,32 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
         "ocupado",
       )
       expect(mounted!.container.textContent ?? "").not.toContain(FAILURE_NOTICE)
+    },
+    TEST_TIMEOUT_MS,
+  )
+  it(
+    "después del traslado, una edición pendiente y las siguientes se guardan en la ruta nueva",
+    async () => {
+      await createDocument()
+      const chosenDir = join(desktopWorkspaceRoot(), "destino-autosave")
+      await mkdir(chosenDir, { recursive: true })
+      world.saveDialogResult = join(chosenDir, "Movido.md")
+
+      // Edición todavía en cola cuando el usuario elige "Save As".
+      await typeInEditor(" R07-ANTES-DEL-TRASLADO")
+      await emitTauriEvent("menu:save-as")
+      await waitFor(() => activeTab()?.title === "Movido", { label: "traslado adoptado", timeoutMs: 15_000 })
+      const moved = join(chosenDir, "Movido.md")
+      const movedContents = async () =>
+        (await readWorkspaceMarkdown()).find((entry) => entry.path === moved)?.contents ?? ""
+      expect(await movedContents(), "el traslado lleva la edición en cola").toContain("R07-ANTES-DEL-TRASLADO")
+
+      // Edición posterior: el autosave debe llegar al archivo movido.
+      await typeInEditor(" R07-DESPUES-DEL-TRASLADO")
+      await advance(6_000)
+      await waitForMarkdownContaining("R07-DESPUES-DEL-TRASLADO")
+      expect(await movedContents()).toContain("R07-DESPUES-DEL-TRASLADO")
+      expect(activeTab()?.save_state, "sin estado de error tras el traslado").not.toBe("error")
     },
     TEST_TIMEOUT_MS,
   )

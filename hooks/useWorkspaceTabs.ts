@@ -95,11 +95,10 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
         return
       }
 
-      if (activeEditorTabIdRef.current === tabId) {
-        tabSelectionRequestRef.current += 1
-        return
-      }
-
+      // Re-selecting the active tab supersedes any pending selection and then
+      // re-activates it exactly as main does (a fresh hydration generation);
+      // there is no outgoing document to wait for.
+      const reselectingActiveTab = activeEditorTabIdRef.current === tabId
       const requestId = ++tabSelectionRequestRef.current
       const outgoingTarget = {
         writingId: currentWritingIdRef.current,
@@ -114,7 +113,7 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
       prepareDocumentExit({ flushPendingEdit: true, snapshotDraft: true, saveViewState: true })
       // Keep the outgoing document active until its materialized content is
       // durable. Settlement also bypasses a still-debounced snapshot.
-      if (outgoingTarget.writingId && persistenceCoordinator.hasPending(outgoingTarget)) {
+      if (!reselectingActiveTab && outgoingTarget.writingId && persistenceCoordinator.hasPending(outgoingTarget)) {
         if (outgoingTarget.sourceTabId) {
           updateTabSaveState({ tabId: outgoingTarget.sourceTabId, saveState: "saving", hasPendingSync: true })
         }

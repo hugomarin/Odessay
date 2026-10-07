@@ -2166,6 +2166,7 @@ export function EditorShell({
   const handleSaveToDisk = useCallback(async (path: string, content: string): Promise<string | false> => {
     if (!isDesktopRuntime()) return false
     let writingId = currentWritingIdRef.current
+    const materializedBeforeSave = writingId !== null
 
     if (!writingId) {
       // Save As is itself a deliberate naming action — the filename the user
@@ -2179,11 +2180,24 @@ export function EditorShell({
       if (!writingId) return false
     }
 
+    // The latest edit becomes durable through the canonical save path first,
+    // so the move transports bytes whose hash the persistence coordinator
+    // already knows. Letting the move commit its own copy of the content left
+    // that baseline stale and every later autosave failed with CONFLICT.
+    const durableBeforeMove =
+      materializedBeforeSave && editor
+        ? await persistEditorSnapshot(editor, undefined, { awaitDurability: true })
+        : false
+    if (materializedBeforeSave && editor && !durableBeforeMove) {
+      setExternalFileNotice({ kind: "relocate-failed", path: currentCanonicalPathRef.current })
+      return false
+    }
+
     const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
     // Conscious physical MOVE (ODE-402): content commits to the current
     // canonical file and the rename transports it — no copy is ever written at
     // the destination. The adopted path may carry a collision suffix.
-    const result = await relocateDesktopWriting(writingId, path, content)
+    const result = await relocateDesktopWriting(writingId, path, durableBeforeMove ? undefined : content)
     if (result.status !== "relocated") {
       // Never reflect a move that did not materialize. Title, canonical path
       // and any active external-file notice stay untouched; surface a clear
