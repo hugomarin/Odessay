@@ -146,8 +146,8 @@ export type DocumentHydrationInput = {
   editorSession: { tabs: LocalEditorSessionTab[] }
 
   // Refs espejo que siguen siendo de la shell. Los de metadatos ya no llegan
-  // aquí: se escriben por `applyDocumentMetadata` (ODE-563).
-  modeRef: RefObject<EditorMode>
+  // aquí: se escriben por `applyDocumentMetadata` (ODE-563), y el modo por
+  // `applyEditorMode` (ODE-609), que es el único que escribe `modeRef`.
   isApplyingContentRef: RefObject<boolean>
   hydrationGenerationOwnerRef: RefObject<ReturnType<typeof createHydrationGenerationOwner> | null>
   currentCanonicalPathRef: RefObject<string | null>
@@ -157,7 +157,8 @@ export type DocumentHydrationInput = {
   suppressCorrectionAnalysisUntilRef: RefObject<number>
 
   setHydrationPhase: Setter<HydrationPhase>
-  setMode: Setter<EditorMode>
+  /** Único camino para cambiar el modo del editor (ODE-609). */
+  applyEditorMode: (next: EditorMode) => void
   setMarkdownValue: Setter<string>
   setBodyText: Setter<string>
   setSyncStatus: (next: EditorSaveState) => void
@@ -216,7 +217,6 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     activationSeq,
     routeWritingId,
     editorSession,
-    modeRef,
     isApplyingContentRef,
     hydrationGenerationOwnerRef,
     currentCanonicalPathRef,
@@ -225,7 +225,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
     draftContentSnapshotRef,
     suppressCorrectionAnalysisUntilRef,
     setHydrationPhase,
-    setMode,
+    applyEditorMode,
     setMarkdownValue,
     setBodyText,
     setSyncStatus,
@@ -615,8 +615,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
           } else {
             nextMarkdown = normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)))
           }
-          modeRef.current = "markdown"
-          setMode("markdown")
+          applyEditorMode("markdown")
           setMarkdownValue(nextMarkdown)
 
           window.requestAnimationFrame(() => {
@@ -648,8 +647,7 @@ export function useDocumentHydration(input: DocumentHydrationInput): void {
             })
           })
         } else if (viewState) {
-          modeRef.current = "rich"
-          setMode("rich")
+          applyEditorMode("rich")
           window.requestAnimationFrame(() =>
             generation.run(() => {
               const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')

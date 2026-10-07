@@ -1,8 +1,8 @@
 "use client"
 
 /**
- * Ciclo de vida de las correcciones en el editor: espejos de sugerencias y
- * palabras aprendidas, carga de palabras aprendidas, el análisis manual
+ * Ciclo de vida de las correcciones en el editor: carga de palabras
+ * aprendidas, el análisis manual
  * (`useManualCorrections`), la invalidación de sugerencias cuando el autor
  * edita un bloque, el volcado de bloques pendientes al recuperar la conexión
  * y las acciones en línea desde las decoraciones.
@@ -12,9 +12,10 @@
  * en el mismo orden, y la shell llama a este hook en la posición del primero
  * de ellos, así que el orden de efectos no cambia. Dependencias: las de la
  * shell más los refs y setters que ahora llegan por `input` (identidades
- * estables). La propiedad del estado NO cambia.
+ * estables). ODE-609: los escritores de sugerencias y palabras aprendidas
+ * ahora poseen sus refs de forma síncrona; sus dos espejos se eliminaron.
  */
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react"
 import { useManualCorrections } from "@/hooks/useManualCorrections"
 import { admitSuggestions } from "@/lib/corrections/engine/admission"
 import { createStableFingerprint } from "@/lib/corrections/engine/identity"
@@ -34,6 +35,18 @@ import type { useCorrectionBlocks } from "@/hooks/useCorrectionBlocks"
 
 type CorrectionBlocks = ReturnType<typeof useCorrectionBlocks>
 type CorrectionActions = ReturnType<typeof useCorrectionActions>
+
+/** Learned-word writes and rollback resolve against the same live value. */
+export function useLearnedWordsState() {
+  const [learnedWords, commit] = useState<LearnedWordEntry[]>([])
+  const learnedWordsRef = useRef<LearnedWordEntry[]>([])
+  const setLearnedWords = useCallback((next: SetStateAction<LearnedWordEntry[]>) => {
+    const resolved = typeof next === "function" ? next(learnedWordsRef.current) : next
+    learnedWordsRef.current = resolved
+    commit(resolved)
+  }, [])
+  return { learnedWords, learnedWordsRef, setLearnedWords }
+}
 
 export type CorrectionLifecycleInput = {
   admitCorrectionSuggestions: CorrectionBlocks["admitCorrectionSuggestions"]
@@ -71,7 +84,6 @@ export function useCorrectionLifecycle(input: CorrectionLifecycleInput) {
     admitCorrectionSuggestions,
     applyCorrectionSuggestionUpdate,
     applyCorrectionSuggestions,
-    automaticCorrectionSuggestions,
     automaticCorrectionSuggestionsRef,
     createCorrectionAdmissionContext,
     currentDocumentMarkdownRef,
@@ -83,7 +95,6 @@ export function useCorrectionLifecycle(input: CorrectionLifecycleInput) {
     editorInstanceRef,
     flushPendingCorrectionBlocks,
     handleLearnWord,
-    learnedWords,
     learnedWordsLoadedRef,
     learnedWordsRef,
     modeRef,
@@ -97,14 +108,6 @@ export function useCorrectionLifecycle(input: CorrectionLifecycleInput) {
     titleRef,
     updatePersistedBlocksFromSuggestions,
   } = input
-
-  useEffect(() => {
-    automaticCorrectionSuggestionsRef.current = automaticCorrectionSuggestions
-  }, [automaticCorrectionSuggestions, automaticCorrectionSuggestionsRef])
-
-  useEffect(() => {
-    learnedWordsRef.current = learnedWords
-  }, [learnedWords, learnedWordsRef])
 
   useEffect(() => {
     if (!currentWritingId || learnedWordsLoadedRef.current) {

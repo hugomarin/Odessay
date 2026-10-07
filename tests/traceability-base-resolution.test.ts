@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
@@ -110,5 +110,78 @@ describe("immutable Traceability range", () => {
   it("still rejects real process drift introduced by the PR", () => {
     const fixture = createRepository({ processDrift: true })
     expect(() => runScript(fixture.root, "check-process-sync.mjs", traceabilityEnv(fixture))).toThrow()
+  })
+})
+
+function runStrictDrift(
+  fixture: ReturnType<typeof createRepository>,
+  entries: Record<string, unknown>[],
+  options: { archive?: boolean; stale?: boolean; includeFeature?: boolean } = {},
+) {
+  const ledger = options.archive ? "archive/built-test.jsonl" : "built.jsonl"
+  if (options.archive) mkdirSync(join(fixture.root, "workflow/archive"), { recursive: true })
+  writeFileSync(join(fixture.root, "workflow", ledger), entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n")
+  if (options.stale) {
+    writeFileSync(join(fixture.root, "workflow/status.json"), JSON.stringify({ last_updated: "2026-08-25" }))
+  }
+  const result = spawnSync(process.execPath, [join(repoRoot, "scripts/check-status-drift.mjs"), "--strict"], {
+    cwd: fixture.root,
+    env: {
+      ...traceabilityEnv(fixture),
+      TRACEABILITY_BASE_SHA: options.includeFeature ? fixture.merge : fixture.base,
+      TRACEABILITY_MERGE_BASE_SHA: options.includeFeature ? fixture.merge : fixture.base,
+    },
+    encoding: "utf8",
+  })
+  return { status: result.status, output: result.stdout + result.stderr }
+}
+
+describe("built ledger delivery identity", () => {
+  it("accepts partial and final deliveries of the same issue across active and archived ledgers", () => {
+    const fixture = createRepository()
+    const first = { issue: "ODE-466", pr_url: "https://github.com/hugomarin/Odessay/pull/1", commit: fixture.prHead, date: "2026-08-26" }
+    runStrictDrift(fixture, [first], { archive: true })
+    const result = runStrictDrift(fixture, [{ ...first, pr_url: "https://github.com/hugomarin/Odessay/pull/2", commit: fixture.merge }], { includeFeature: true })
+    expect(result.output).toContain("OK - 1 issues")
+    expect(result.status).toBe(0)
+  })
+
+  it("rejects a repeated delivery even when its date, notes or commit differ", () => {
+    const fixture = createRepository()
+    const first = { issue: "ODE-466", pr_url: "https://github.com/hugomarin/Odessay/pull/1", commit: fixture.prHead, date: "2026-08-26" }
+    const result = runStrictDrift(fixture, [first, { ...first, commit: fixture.merge, notes: "final", date: "2026-08-25" }])
+    expect(result.status).toBe(1)
+    expect(result.output).toContain("Duplicated deliveries")
+  })
+
+  it("rejects duplicate historical deliveries identified only by commit", () => {
+    const fixture = createRepository()
+    const first = { issue: "ODE-466", commit: fixture.prHead, date: "2026-08-26" }
+    runStrictDrift(fixture, [first], { archive: true })
+    expect(runStrictDrift(fixture, [{ ...first, notes: "repeated" }]).status).toBe(1)
+  })
+
+  it("accepts distinct historical commits when PR URLs are absent", () => {
+    const fixture = createRepository()
+    const first = { issue: "ODE-466", commit: fixture.prHead, date: "2026-08-26" }
+    expect(runStrictDrift(fixture, [first, { ...first, commit: fixture.merge }]).status).toBe(0)
+  })
+
+  it("rejects repeated issues without any delivery identifier", () => {
+    const fixture = createRepository()
+    const first = { issue: "ODE-466", date: "2026-08-26" }
+    const result = runStrictDrift(fixture, [first, { ...first, notes: "partial" }])
+    expect(result.status).toBe(1)
+    expect(result.output).toContain("Duplicated deliveries")
+  })
+
+  it.each([
+    { name: "missing issue", entries: [], options: { includeFeature: true }, error: "Missing issues" },
+    { name: "unknown commit", entries: [{ issue: "ODE-466", commit: "deadbeef", date: "2026-08-26" }], options: {}, error: "Commit reference not found" },
+    { name: "stale status", entries: [{ issue: "ODE-466", date: "2026-08-26" }], options: { stale: true }, error: "is older than latest built entry" },
+  ])("still rejects $name", ({ entries, options, error }) => {
+    const result = runStrictDrift(createRepository(), entries, options)
+    expect(result.status).toBe(1)
+    expect(result.output).toContain(error)
   })
 })

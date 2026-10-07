@@ -19,7 +19,23 @@ export type DesktopWorkspaceFile = {
   modifiedAt: number
   size: number
   inode: number
+  /** Volume (`st_dev`) the file lives on. Optional/additive: older recordings
+   *  and mocks omit it; inode numbers are only unique within one volume, so
+   *  cross-root correlation treats a missing device as "volume unknown"
+   *  (ODE-657 review P1). */
+  device?: number
   contentHash: string
+}
+
+export type DesktopWorkspaceUnboundFile = {
+  relativePath: string
+  inode: number
+  /** Volume (`st_dev`) the file lives on, same additive contract as
+   *  `DesktopWorkspaceFile.device`. */
+  device?: number
+  contentHash: string
+  size: number
+  modifiedAt: number
 }
 
 export type DesktopWorkspaceSnapshot = {
@@ -36,6 +52,10 @@ export type DesktopWorkspaceSnapshot = {
    *  for these and calls again; a caller invoking `workspace_sync` directly
    *  gets a snapshot missing exactly these paths. */
   unboundPaths: string[]
+  /** Inode/hash/size/device evidence for each path in `unboundPaths`, in the
+   *  same order — what the cross-root correlation pass needs before minting any
+   *  identity (ODE-657). Optional: older mocks/recordings omit it. */
+  unboundFiles?: DesktopWorkspaceUnboundFile[]
 }
 
 export type DesktopWorkspaceTouchResult =
@@ -102,6 +122,7 @@ export async function tauriWriteFile(
   path: string,
   content: string,
   expectedContentHash?: string | null,
+  expectedInode?: number | null,
 ): Promise<void> {
   // `write_file` (Rust) writes to `${path}.tmp` then renames it onto `path` —
   // the watcher reports a `create` and a `rename` for the .tmp sibling before
@@ -111,7 +132,12 @@ export async function tauriWriteFile(
   markOdessaySelfWritePath(path)
   markOdessaySelfWritePath(`${path}.tmp`)
   try {
-    await invoke<void>("write_file", { path, content, expectedContentHash: expectedContentHash ?? null })
+    await invoke<void>("write_file", {
+      path,
+      content,
+      expectedContentHash: expectedContentHash ?? null,
+      expectedInode: expectedInode ?? null,
+    })
   } catch (error) {
     if (typeof error === "string" && error.startsWith(CONFLICT_ERROR_PREFIX)) {
       throw new WriteFileConflictError(error)
@@ -202,10 +228,22 @@ export async function tauriWorkspaceRepairManifestBindings(
   })
 }
 
+export type DesktopWorkspaceSyncOptions = {
+  /**
+   * When false, exactly one `workspace_sync` call is made and its snapshot
+   * (including `unboundFiles`) is returned as-is: no id is minted and no
+   * second call is issued. The cross-root correlation pass uses this to scan
+   * first and decide identity after comparing evidence across roots (ODE-657);
+   * every other caller keeps the default mint-and-retry behavior.
+   */
+  mintUnbound?: boolean
+}
+
 export async function tauriWorkspaceSync(
   rootPath: string,
   selectedPaths?: string[],
   documentIds?: Record<string, string>,
+  options?: DesktopWorkspaceSyncOptions,
 ): Promise<DesktopWorkspaceSnapshot> {
   // `workspace_sync` scans the durable selected scope; only a root with an
   // empty selection means a recursive whole-root walk. It used to always run
@@ -220,6 +258,7 @@ export async function tauriWorkspaceSync(
     selectedPaths,
     documentIds: documentIds && Object.keys(documentIds).length > 0 ? documentIds : undefined,
   })
+  if (options?.mintUnbound === false) return snapshot
   if (snapshot.unboundPaths.length === 0) return snapshot
 
   const clientIds = { ...documentIds }

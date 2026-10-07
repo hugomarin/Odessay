@@ -78,18 +78,29 @@ pub fn create_file(dir: String, filename: String) -> Result<String, String> {
 /// when it started this save. A mismatch (or the file having disappeared)
 /// means the file changed since the caller last knew about it, and the write
 /// is refused with a `CONFLICT: ` prefixed error instead of silently
-/// clobbering someone else's edit. `None` skips the check entirely — used
-/// for a brand-new file with no prior baseline to compare against. The
+/// clobbering someone else's edit. `None` skips the content check entirely —
+/// used for a brand-new file with no prior baseline to compare against. The
 /// check is made twice: early, before the `.tmp` is written, and again at
 /// the commit itself (`commit_if_unchanged`, ODE-578), so a save that lands
 /// while the `.tmp` is being written is refused too.
+///
+/// `expected_inode` is the ODE-635 identity guard for a write with no content
+/// baseline: the caller resolved the concrete file it was about to overwrite,
+/// and that file's inode travels here. The write may replace that same file,
+/// or create it when it is gone, but it must never replace a different file
+/// that appeared at the path in the meantime (a rename moved the document and
+/// someone else created new content at the old path). The inode is checked
+/// early and revalidated at the commit itself, so the guard holds across the
+/// whole write even when the file is swapped in the window. `None` keeps the
+/// historical behavior (optional guard, not a content baseline).
 #[tauri::command]
 pub fn write_file(
     path: String,
     content: String,
     expected_content_hash: Option<String>,
+    expected_inode: Option<u64>,
 ) -> Result<(), String> {
-    write_file_with_stages(&path, &content, expected_content_hash, &mut |_| {})
+    write_file_with_stages(&path, &content, expected_content_hash, expected_inode, &mut |_| {})
 }
 
 /// Points inside a guarded write where a test can act as an external editor.
@@ -105,6 +116,7 @@ fn write_file_with_stages(
     path: &str,
     content: &str,
     expected_content_hash: Option<String>,
+    expected_inode: Option<u64>,
     at_stage: &mut dyn FnMut(WriteStage),
 ) -> Result<(), String> {
     let target = Path::new(path);
@@ -123,6 +135,20 @@ fn write_file_with_stages(
                 target.display()
             ));
         }
+    } else if let Some(expected) = expected_inode {
+        // No content baseline: the only precondition is the identity of the
+        // file this save resolved. A different file at the path is someone
+        // else's content and must never be replaced.
+        if target.exists() {
+            if let Ok(actual) = file_inode(target) {
+                if actual != expected {
+                    return Err(format!(
+                        "CONFLICT: {} was replaced on disk since it was resolved (expected file identity {expected}, found {actual})",
+                        target.display()
+                    ));
+                }
+            }
+        }
     }
 
     if let Some(parent) = target.parent() {
@@ -133,15 +159,152 @@ fn write_file_with_stages(
     let tmp_path = format!("{}.tmp", path);
     fs::write(&tmp_path, content).map_err(|e| format!("write_file tmp: {e}"))?;
     at_stage(WriteStage::BeforeCommit);
-    match expected_content_hash {
-        Some(expected) => {
+    match (expected_content_hash, expected_inode) {
+        (Some(expected), _) => {
             commit_if_unchanged(target, Path::new(&tmp_path), content, &expected, at_stage)
         }
-        None => fs::rename(&tmp_path, target).map_err(|e| {
+        (None, Some(expected)) => {
+            commit_if_same_file(target, Path::new(&tmp_path), content, expected, at_stage)
+        }
+        (None, None) => fs::rename(&tmp_path, target).map_err(|e| {
             let _ = fs::remove_file(&tmp_path);
             format!("write_file rename: {e}")
         }),
     }
+}
+
+/// Identity of a file for the ODE-635 no-baseline guard: the inode on unix,
+/// which a rename preserves and a replacement does not. Platforms without an
+/// inode report `Unsupported` so the guard degrades to the historical
+/// behavior instead of refusing saves it cannot verify.
+fn file_inode(path: &Path) -> std::io::Result<u64> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        fs::metadata(path).map(|metadata| metadata.ino())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
+    }
+}
+
+/// Commit boundary of an identity-guarded write (ODE-635): same exchange as
+/// `commit_if_unchanged`, but the displaced file is accepted only when its
+/// inode is the one the caller resolved. The target is still the same file
+/// when the write starts and someone swaps it in the window — the swap is
+/// detected and put back instead of being overwritten.
+fn commit_if_same_file(
+    target: &Path,
+    tmp: &Path,
+    content: &str,
+    expected_inode: u64,
+    at_stage: &mut dyn FnMut(WriteStage),
+) -> Result<(), String> {
+    match exchange_paths(tmp, target) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if !target.exists() {
+                // The resolved file was already gone and nothing replaced it:
+                // create the target without ever overwriting (a file that
+                // appears in this very window makes the link fail).
+                return link_into_place(tmp, target);
+            }
+            let _ = fs::remove_file(tmp);
+            return Err(format!(
+                "CONFLICT: {} changed on disk while the save was being written",
+                target.display()
+            ));
+        }
+        Err(error) if exchange_unsupported(&error) => {
+            return commit_by_identity_revalidation(target, tmp, expected_inode);
+        }
+        Err(error) => {
+            let _ = fs::remove_file(tmp);
+            return Err(format!("write_file exchange: {error}"));
+        }
+    }
+
+    let displaced = file_inode(tmp);
+    if matches!(&displaced, Ok(actual) if *actual == expected_inode) {
+        let _ = fs::remove_file(tmp);
+        return Ok(());
+    }
+    let found = match &displaced {
+        Ok(inode) => inode.to_string(),
+        Err(error) => format!("an unreadable identity ({error})"),
+    };
+
+    at_stage(WriteStage::BeforeRestore);
+    if exchange_paths(tmp, target).is_ok() && is_exactly(tmp, content) {
+        let _ = fs::remove_file(tmp);
+        return Err(format!(
+            "CONFLICT: {} was replaced on disk while the save was being written (expected file identity {}, found {found})",
+            target.display(),
+            expected_inode
+        ));
+    }
+    // Restoring did not bring our own content back: the `.tmp` path holds a
+    // version someone else wrote. Keep it beside the target.
+    let kept = keep_beside(target, tmp)?;
+    Err(format!(
+        "CONFLICT: {} was replaced on disk while the save was being written; another version was kept at {}",
+        target.display(),
+        kept.display()
+    ))
+}
+
+/// No-overwrite creation for the identity guard's absent-target branch: the
+/// hard link fails if anything appeared at the target in the window.
+fn link_into_place(tmp: &Path, target: &Path) -> Result<(), String> {
+    match fs::hard_link(tmp, target) {
+        Ok(()) => {
+            let _ = fs::remove_file(tmp);
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let _ = fs::remove_file(tmp);
+            Err(format!(
+                "CONFLICT: {} appeared on disk while the save was being written",
+                target.display()
+            ))
+        }
+        Err(error) => {
+            let _ = fs::remove_file(tmp);
+            Err(format!("write_file link: {error}"))
+        }
+    }
+}
+
+/// Fallback for volumes without an atomic exchange: re-check the identity
+/// right before the replace. This narrows the window to two syscalls instead
+/// of closing it, and preserves the historical behavior on platforms without
+/// an inode.
+fn commit_by_identity_revalidation(target: &Path, tmp: &Path, expected_inode: u64) -> Result<(), String> {
+    if !target.exists() {
+        return link_into_place(tmp, target);
+    }
+    match file_inode(target) {
+        Ok(actual) if actual == expected_inode => {}
+        Err(_) => {
+            return fs::rename(tmp, target).map_err(|e| {
+                let _ = fs::remove_file(tmp);
+                format!("write_file rename: {e}")
+            });
+        }
+        Ok(_) => {
+            let _ = fs::remove_file(tmp);
+            return Err(format!(
+                "CONFLICT: {} was replaced on disk while the save was being written",
+                target.display()
+            ));
+        }
+    }
+    fs::rename(tmp, target).map_err(|e| {
+        let _ = fs::remove_file(tmp);
+        format!("write_file rename: {e}")
+    })
 }
 
 /// The commit boundary of a guarded write (ODE-578). The check above runs
@@ -247,10 +410,30 @@ fn keep_beside(target: &Path, displaced: &Path) -> Result<PathBuf, String> {
 }
 
 /// Atomically swaps two existing paths.
+///
+/// Fail-closed on the volume capability (review ronda 3, P1; Apple
+/// FB24419773): on a volume that does not support swap renaming,
+/// `renamex_np(RENAME_SWAP)` can report success while performing an ordinary
+/// rename that clobbers the destination (reproduced on a FAT volume on macOS
+/// 27). The exchange runs only when the destination's volume declares
+/// `VOL_CAP_INT_RENAME_SWAP` as valid and supported; otherwise, or when the
+/// capability cannot be determined, the callers take their existing
+/// revalidating commit, which never replaces a different file.
 #[cfg(target_os = "macos")]
 fn exchange_paths(a: &Path, b: &Path) -> std::io::Result<()> {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
+    if volume_swap_capability(b) != Some(true) {
+        return Err(std::io::Error::from(std::io::ErrorKind::Unsupported));
+    }
+    #[cfg(test)]
+    if swap_test_volume::lying_swap() {
+        // Test-only model of Apple FB24419773: `renamex_np(RENAME_SWAP)`
+        // reports success while performing an ordinary rename that clobbers
+        // `b`. The capability gate above keeps this unreachable while the
+        // volume does not declare the swap; removing that gate lands here.
+        return fs::rename(a, b);
+    }
     let a = CString::new(a.as_os_str().as_bytes())?;
     let b = CString::new(b.as_os_str().as_bytes())?;
     // SAFETY: both pointers are valid NUL-terminated strings for the call.
@@ -259,6 +442,112 @@ fn exchange_paths(a: &Path, b: &Path) -> std::io::Result<()> {
         Ok(())
     } else {
         Err(std::io::Error::last_os_error())
+    }
+}
+
+/// Whether the volume holding `path` declares `VOL_CAP_INT_RENAME_SWAP` as
+/// valid and supported — what `URLResourceValues.volumeSupportsSwapRenaming`
+/// reads. `None` means it could not be determined (`getattrlist` failed or
+/// the volume does not report the bit as valid), which `exchange_paths`
+/// treats as "do not swap".
+#[cfg(target_os = "macos")]
+fn volume_swap_capability(path: &Path) -> Option<bool> {
+    #[cfg(test)]
+    if let Some(forced) = swap_test_volume::forced_capability() {
+        return Some(forced);
+    }
+    query_volume_swap_capability(path)
+}
+
+/// `getattrlist(ATTR_VOL_CAPABILITIES)` for `path`. The attribute buffer is
+/// the shape from Apple's sample and `sys/attr.h`: a `u32` length (of the
+/// whole buffer, length field included) followed by
+/// `vol_capabilities_attr_t`.
+#[cfg(target_os = "macos")]
+fn query_volume_swap_capability(path: &Path) -> Option<bool> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    #[repr(C)]
+    struct SwapCapabilityBuffer {
+        length: u32,
+        capabilities: libc::vol_capabilities_attr_t,
+    }
+
+    let path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut attr_list = libc::attrlist {
+        bitmapcount: libc::ATTR_BIT_MAP_COUNT,
+        reserved: 0,
+        commonattr: 0,
+        volattr: libc::ATTR_VOL_INFO | libc::ATTR_VOL_CAPABILITIES,
+        dirattr: 0,
+        fileattr: 0,
+        forkattr: 0,
+    };
+    let mut buffer = SwapCapabilityBuffer {
+        length: 0,
+        capabilities: libc::vol_capabilities_attr_t {
+            capabilities: [0; 4],
+            valid: [0; 4],
+        },
+    };
+    // SAFETY: `path` is a NUL-terminated string; `attr_list` and `buffer` are
+    // valid, correctly sized pointers for the duration of the call.
+    let rc = unsafe {
+        libc::getattrlist(
+            path.as_ptr(),
+            &mut attr_list as *mut libc::attrlist as *mut libc::c_void,
+            &mut buffer as *mut SwapCapabilityBuffer as *mut libc::c_void,
+            std::mem::size_of::<SwapCapabilityBuffer>(),
+            0,
+        )
+    };
+    if rc != 0 || (buffer.length as usize) < std::mem::size_of::<SwapCapabilityBuffer>() {
+        return None;
+    }
+    let interfaces = libc::VOL_CAPABILITIES_INTERFACES;
+    if buffer.capabilities.valid[interfaces] & libc::VOL_CAP_INT_RENAME_SWAP == 0 {
+        return None;
+    }
+    Some(buffer.capabilities.capabilities[interfaces] & libc::VOL_CAP_INT_RENAME_SWAP != 0)
+}
+
+/// Test seam for the macOS swap helpers (Apple FB24419773). Compiled out of
+/// production builds: the volume query and `renamex_np` are the real ones.
+#[cfg(all(test, target_os = "macos"))]
+mod swap_test_volume {
+    use std::cell::Cell;
+
+    thread_local! {
+        /// Models a volume that does not declare `VOL_CAP_INT_RENAME_SWAP`
+        /// and whose `RENAME_SWAP` reports success while clobbering the other
+        /// path (FSKit on macOS 27; reproduced on a FAT volume).
+        static LYING: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// Runs `run` while the macOS swap helpers model that lying volume.
+    pub fn with_lying_volume<R>(run: impl FnOnce() -> R) -> R {
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                LYING.with(|cell| cell.set(false));
+            }
+        }
+        LYING.with(|cell| cell.set(true));
+        let reset = Reset;
+        let result = run();
+        drop(reset);
+        result
+    }
+
+    pub fn lying_swap() -> bool {
+        LYING.with(|cell| cell.get())
+    }
+
+    /// `None` = query the real volume; `Some(false)` = the modeled volume
+    /// does not declare the swap capability.
+    pub fn forced_capability() -> Option<bool> {
+        LYING.with(|cell| if cell.get() { Some(false) } else { None })
     }
 }
 
@@ -873,7 +1162,7 @@ mod tests {
         let target = root.join("Letter.md");
         fs::write(&target, "Original\n").expect("write original");
 
-        write_file(target.to_string_lossy().to_string(), "Replaced\n".into(), None)
+        write_file(target.to_string_lossy().to_string(), "Replaced\n".into(), None, None)
             .expect("write with no baseline should never be refused");
 
         assert_eq!(fs::read_to_string(&target).expect("read target"), "Replaced\n");
@@ -892,6 +1181,7 @@ mod tests {
             target.to_string_lossy().to_string(),
             "Updated by me\n".into(),
             Some(baseline),
+            None,
         )
         .expect("write with a correct baseline should succeed");
 
@@ -920,6 +1210,7 @@ mod tests {
             target.to_string_lossy().to_string(),
             "My conflicting edit\n".into(),
             Some(stale_baseline),
+            None,
         );
 
         let error = result.expect_err("a stale baseline must refuse the write");
@@ -932,6 +1223,166 @@ mod tests {
             "Changed by another app\n",
             "the external edit must remain completely untouched"
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    // ODE-635 (review ronda 2, P1) — a save with `expected_content_hash: None`
+    // has no content baseline, but it was resolved against a concrete file.
+    // The optional identity guard carries that file's inode: the write may
+    // replace that same file (or create it when it is gone), but it must never
+    // replace a different file that appeared at the path in the meantime.
+    // These tests are the deterministic external editor for that property.
+    #[cfg(unix)]
+    fn inode_of(path: &Path) -> u64 {
+        use std::os::unix::fs::MetadataExt;
+        fs::metadata(path).expect("stat file").ino()
+    }
+
+    fn identity_guarded_write(
+        target: &Path,
+        content: &str,
+        expected_inode: u64,
+        on_stage: impl FnMut(WriteStage),
+    ) -> (Result<(), String>, Vec<WriteStage>) {
+        let mut on_stage = on_stage;
+        let mut seen = Vec::new();
+        let result = write_file_with_stages(
+            &target.to_string_lossy(),
+            content,
+            None,
+            Some(expected_inode),
+            &mut |stage| {
+                seen.push(stage);
+                on_stage(stage);
+            },
+        );
+        (result, seen)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_with_expected_inode_overwrites_the_same_resolved_file() {
+        let root = temp_dir("identity-same");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+        let expected_inode = inode_of(&target);
+
+        let (result, _) = identity_guarded_write(&target, "Mine\n", expected_inode, |_| {});
+
+        result.expect("the same resolved file must remain overwritable");
+        assert_eq!(fs::read_to_string(&target).expect("read target"), "Mine\n");
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_with_expected_inode_creates_a_missing_target() {
+        let root = temp_dir("identity-create");
+        let target = root.join("New.md");
+
+        let (result, _) = identity_guarded_write(&target, "Fresh\n", 4242, |_| {});
+
+        result.expect("a missing target must be created");
+        assert_eq!(fs::read_to_string(&target).expect("read target"), "Fresh\n");
+        assert_eq!(entries_in(&root), vec!["New.md"], "no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_replaced_before_the_write_is_refused_and_left_untouched() {
+        let root = temp_dir("identity-early");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+        let expected_inode = inode_of(&target);
+
+        // Another writer replaces the resolved file before the write starts.
+        let sibling = target.with_file_name(".Letter.md.sb-external");
+        fs::write(&sibling, "External\n").expect("external sibling");
+        fs::rename(&sibling, &target).expect("external atomic replace");
+
+        let (result, _) = identity_guarded_write(&target, "Mine\n", expected_inode, |_| {});
+
+        let error = result.expect_err("replacing a different file must conflict");
+        assert!(error.starts_with("CONFLICT:"), "got: {error}");
+        assert_eq!(
+            fs::read_to_string(&target).expect("read target"),
+            "External\n",
+            "the external file must remain untouched"
+        );
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_file_replaced_in_the_commit_window_is_refused_and_left_untouched() {
+        let root = temp_dir("identity-window");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+        let expected_inode = inode_of(&target);
+
+        let (result, seen) = identity_guarded_write(&target, "Mine\n", expected_inode, |stage| {
+            if stage == WriteStage::BeforeCommit {
+                let sibling = target.with_file_name(".Letter.md.sb-external");
+                fs::write(&sibling, "External\n").expect("external sibling");
+                fs::rename(&sibling, &target).expect("external atomic replace");
+            }
+        });
+
+        assert!(
+            seen.contains(&WriteStage::BeforeCommit),
+            "positive control: the window was reached"
+        );
+        let error = result.expect_err("a different file in the commit window must conflict");
+        assert!(error.starts_with("CONFLICT:"), "got: {error}");
+        assert_eq!(
+            fs::read_to_string(&target).expect("read target"),
+            "External\n",
+            "the external file must remain untouched"
+        );
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "no temp residue");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    // ODE-635 (review ronda 3, P1) — Apple FB24419773: on a volume that does
+    // not declare `VOL_CAP_INT_RENAME_SWAP` (FSKit on macOS 27), the swap
+    // can report success while performing an ordinary rename that clobbers
+    // the destination. The commit must not trust that success without the
+    // declared capability: it falls back to revalidation and the external
+    // file stays untouched. The test seam injects only the volume behavior;
+    // the rest of the write chain is the real one.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn write_file_without_a_declared_swap_capability_keeps_an_external_file() {
+        let root = temp_dir("identity-no-swap-capability");
+        let target = root.join("Letter.md");
+        fs::write(&target, "Original\n").expect("write original");
+        let expected_inode = inode_of(&target);
+
+        let (result, seen) = swap_test_volume::with_lying_volume(|| {
+            identity_guarded_write(&target, "Mine\n", expected_inode, |stage| {
+                if stage == WriteStage::BeforeCommit {
+                    let sibling = target.with_file_name(".Letter.md.sb-external");
+                    fs::write(&sibling, "External\n").expect("external sibling");
+                    fs::rename(&sibling, &target).expect("external atomic replace");
+                }
+            })
+        });
+
+        assert!(
+            seen.contains(&WriteStage::BeforeCommit),
+            "positive control: the commit window was reached"
+        );
+        let error = result.expect_err("a lying swap must not be trusted");
+        assert!(error.starts_with("CONFLICT:"), "got: {error}");
+        assert_eq!(
+            fs::read_to_string(&target).expect("read target"),
+            "External\n",
+            "the external file must remain untouched"
+        );
+        assert_eq!(entries_in(&root), vec!["Letter.md"], "no temp residue");
         let _ = fs::remove_dir_all(root);
     }
 
@@ -954,6 +1405,7 @@ mod tests {
             &target.to_string_lossy(),
             content,
             Some(baseline),
+            None,
             &mut |stage| {
                 seen.push(stage);
                 on_stage(stage);
@@ -1090,6 +1542,7 @@ mod tests {
             target.to_string_lossy().to_string(),
             "My edit\n".into(),
             Some("blake3:0000000000000000000000000000000000000000000000000000000000000000".into()),
+            None,
         );
 
         let error = result.expect_err("a missing file with an expected baseline must conflict, not silently create");

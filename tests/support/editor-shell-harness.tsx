@@ -64,9 +64,11 @@ import { getEditorSessionState, resetEditorSessionStoreForTests } from "@/lib/st
 
 import { type EditorHandle, type HarnessWorld, defaultNetwork, tauriEventListeners, world } from "./editor-shell-doubles"
 import { readWorkspaceMarkdown } from "./editor-shell-desktop-doubles"
+import { beginPersistenceCoordinatorCapture } from "./persistence-coordinator-capture"
 
 export {
   aiServiceDouble,
+  createCorrectionBlocksCaptureModule,
   createTiptapCaptureModule,
   nextNavigationDouble,
   runtimeDetectionDouble,
@@ -76,6 +78,14 @@ export {
   world,
 } from "./editor-shell-doubles"
 export type { EditorHandle } from "./editor-shell-doubles"
+
+/**
+ * Activa una captura opt-in de los PersistenceCoordinators reales que se creen
+ * durante el montaje siguiente, para que un test pueda esperar su settle().
+ */
+export function capturePersistenceCoordinators() {
+  return beginPersistenceCoordinatorCapture()
+}
 
 /* ------------------------------------------------------------------ *
  * Mundo: reset y APIs de entorno que happy-dom no trae
@@ -180,12 +190,30 @@ export function resetEditorShellWorld(overrides: Partial<HarnessWorld> = {}) {
   world.networkCalls = []
   world.network = defaultNetwork()
   world.editor = null
+  world.shellTableOfContentsInput = null
+  world.shellCorrectionLifecycleInput = null
+  world.shellEditorInstanceRef = null
   world.aiReview = async () => ({ error: null, data: { corrections: [] } })
   world.aiReviewCalls = []
   world.suggestTitleCalls = []
   world.learnedWords = []
   world.learnedWordsCalls = 0
   world.learnWordCalls = []
+  world.getPreviewLink = async () => ({
+    error: null,
+    data: { active: false, token: null, link: null, createdAt: null },
+  })
+  world.rotatePreviewLink = async () => ({
+    error: null,
+    data: { active: false, token: null, link: null, createdAt: null },
+  })
+  world.revokePreviewLink = async (writingId: string) => ({
+    error: null,
+    data: { writingId, revoked: true },
+  })
+  world.sharingGetPreviewLinkCalls = []
+  world.sharingRotatePreviewLinkCalls = []
+  world.sharingRevokePreviewLinkCalls = []
   world.hydrateCorrectionBlocks = async () => ({ error: null, data: [] })
   world.correctionHydrationCalls = []
   world.correctionPersistCalls = []
@@ -592,6 +620,21 @@ export async function waitFor<T>(
     await flush(1)
   }
   throw new Error(`waitFor agotó ${timeoutMs}ms esperando: ${label}`)
+}
+
+/**
+ * La fase de hidratación del documento activo, publicada por la shell en el
+ * DOM (`data-hydration-phase`). Los tests que fijan scroll/selección sobre un
+ * documento o afirman que su salida guardó la vista deben esperarla: con la
+ * fase todavía en "loading", la restauración diferida está pendiente y, desde
+ * ODE-624, la salida ya no guarda esa vista (y la restauración pisaría lo que
+ * el test fije antes).
+ */
+export async function waitForHydrationReady(label = "fase de hidratación en ready") {
+  await waitFor(
+    () => document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") === "ready",
+    { label, timeoutMs: 10_000 },
+  )
 }
 
 /* ------------------------------------------------------------------ *

@@ -9,8 +9,9 @@
  *   1. WATCH-07 limpio: un cambio externo del contenido llega a la shell y el
  *      editor muestra la versión nueva sin intervención y sin escribir al disco.
  *   2. WATCH-07 sucio: con una edición pendiente, aparece el banner de
- *      conflicto; ninguna escritura pisa la edición externa sin elección, y
- *      cada botón deja disco y editor en el estado prometido.
+ *      conflicto; ninguna escritura pisa la edición externa sin elección, ni
+ *      se intenta siquiera mientras el conflicto sigue abierto, y cada botón
+ *      deja disco y editor en el estado prometido.
  *   3. Borrado y movimiento externos: aparece el aviso, una vez por evento, y
  *      la pestaña conserva la identidad del documento.
  *   4. Un cambio de pestaña entre el evento y su resolución no aplica el
@@ -36,6 +37,14 @@
  * `DesktopAppShell` al abrir la app. El opener refresca el watcher tras
  * registrar la carpeta (ODE-628), así que la cadena llega a la shell sin
  * reiniciar el reconciliador.
+ *
+ * ODE-638: el caso de la guarda retiene la lectura del catálogo del evento
+ * externo y el rAF del tecleo, de modo que la decisión de conflicto ve la
+ * edición local antes de su hand-off a `PersistenceCoordinator`; el trabajo
+ * agendado se drena después y la espera cruza el debounce durable completo
+ * (150 ms + 4 s). El observable es el contador de intentos de `write_file`
+ * del doble canónico, más la ausencia de `Saving...`/`Needs attention`; «Keep
+ * my version» es el control positivo.
  *
  * Completion events: el texto del `.md` en el disco real y el DOM (editor,
  * banner, aviso). Nunca "se llamó a X".
@@ -85,6 +94,7 @@ vi.mock("@tauri-apps/plugin-dialog", async () =>
 vi.mock("@/lib/services/desktop/runtime-detection", async () =>
   (await import("./support/editor-shell-doubles")).runtimeDetectionDouble(),
 )
+vi.mock("@tauri-apps/plugin-shell", () => ({ open: vi.fn(async () => {}) }))
 vi.mock("@/lib/services/ai-service-factory", async () =>
   (await import("./support/editor-shell-doubles")).aiServiceDouble(),
 )
@@ -104,6 +114,7 @@ const {
   emitFsWatchEvent,
   emitTauriEvent,
   flush,
+  holdAnimationFrames,
   mountEditorShell,
   pointerClick,
   requestWindowClose,
@@ -114,9 +125,14 @@ const {
 const { world } = await import("./support/editor-shell-doubles")
 const { createDesktopWorkspace, desktopWorkspaceRoot, destroyDesktopWorkspace, resetDesktopWorkspace } =
   await import("./support/editor-shell-desktop-doubles")
-const { holdCatalogReads, holdWriteFile, tauriOpenFileDouble, writeFileCalls } = await import(
-  "./integration/documents/support/real-desktop-doubles"
-)
+const {
+  doubleRaceNextWriteFile,
+  holdCatalogReads,
+  holdWriteFile,
+  tauriOpenFileDouble,
+  writeFileCalls,
+} = await import("./integration/documents/support/real-desktop-doubles")
+const { open: tauriShellOpen } = await import("@tauri-apps/plugin-shell")
 const { disposeWorkspaceReconciler, ensureWorkspaceReconciler } = await import(
   "@/lib/services/desktop/desktop-workspace-reconciler"
 )
@@ -144,6 +160,7 @@ afterAll(() => {
 beforeEach(() => {
   resetDesktopWorkspace()
   resetEditorShellWorld({ isDesktop: true })
+  vi.mocked(tauriShellOpen).mockClear()
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://127.0.0.1:1")
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "harness-anon-key")
   world.tauriInvoke = async (command, args) => {
@@ -286,6 +303,65 @@ async function clickButton(label: string) {
   await flush(3)
 }
 
+/** La etiqueta de guardado que la barra de estado renderiza ahora mismo. */
+function saveStateLabel() {
+  return (
+    mounted!.container
+      .querySelector<HTMLElement>('[data-testid="editor-statusbar"] p[aria-live="polite"]')
+      ?.textContent?.trim() ?? ""
+  )
+}
+
+/**
+ * Registra cada etiqueta de guardado distinta que la shell commitea, para
+ * probar que una ausencia ("nunca apareció Saving/Needs attention") no se
+ * apoya en una lectura que cayó entre dos transiciones.
+ */
+function trackSaveStateLabels() {
+  const seen = new Set<string>()
+  seen.add(saveStateLabel())
+  world.onShellCommit = () => {
+    seen.add(saveStateLabel())
+  }
+  return () => [...seen]
+}
+
+async function beginKeptVersionDoubleRace(input: {
+  fileTitle: string
+  conflictId: string
+  secondExternalContent: string
+  keepBesideFails?: boolean
+}) {
+  const path = writeMarkdownFile(input.fileTitle, "ODE593 base.")
+  await startReconciler()
+  await mountLoaded()
+  await openFromNativeMenu(path, "ODE593 base.")
+  await waitForWatcherOnDocuments()
+
+  const race = doubleRaceNextWriteFile((candidate) => candidate === path, {
+    conflictId: input.conflictId,
+    secondExternalContent: input.secondExternalContent,
+    keepBesideFails: input.keepBesideFails,
+  })
+  await typeInEditor(" ODE593-LOCAL")
+  await race.started
+
+  // The double has verified the baseline hash and is held in Rust's atomic
+  // commit window; deliver the competing filesystem edit before releasing it.
+  writeFileSync(path, "ODE593 external 1.\n")
+  await emitFsWatchEvent([path])
+  await waitForShell(() => bannerText().includes(CONFLICT_BANNER), "banner WATCH-07 durante la carrera")
+  race.release()
+
+  const noticeText = input.keepBesideFails ? "The other version couldn't be saved." : `.conflict-${input.conflictId}`
+  await waitForShell(() => bannerText().includes(noticeText), "aviso ODE-593 en el banner")
+  return {
+    path,
+    keptPath: `${path}.conflict-${input.conflictId}`,
+    tmpPath: `${path}.tmp`,
+  }
+}
+
 /** Cuenta los commits de la shell en que el aviso pasa de ausente a presente. */
 function countNoticeAppearances(text: string) {
   let visible = bannerText().includes(text)
@@ -404,10 +480,18 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
       expect(await readDisk(path), "sin elección, el disco conserva la externa").toBe("ODE599 externa sucia.\n")
       expect(bannerText(), "el conflicto sigue abierto hasta elegir").toContain(CONFLICT_BANNER)
 
-      // Más tecleo mientras el conflicto sigue abierto no guarda.
+      // Más tecleo mientras el conflicto sigue abierto no guarda. La espera
+      // cruza el debounce durable de desktop (150 ms + 4 s): con la guarda de
+      // la shell no hay ni un intento de escritura nuevo que el disco pueda
+      // enmascarar.
+      const writesUnderConflict = writesTo(path).length
       await typeInEditor(" ODE599-MAS")
-      await advance(800)
+      await advance(4_500)
       expect(await readDisk(path), "el autosave queda en pausa").toBe("ODE599 externa sucia.\n")
+      expect(
+        writesTo(path).length,
+        "la guarda de la shell frena el intento, no solo el hash del coordinator",
+      ).toBe(writesUnderConflict)
 
       await clickButton("Keep my version")
       await waitForShellDisk(path, "ODE599-MAS")
@@ -417,6 +501,192 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
       expect(saved).not.toContain("ODE599 externa sucia.")
       expect(bannerText()).not.toContain(CONFLICT_BANNER)
       expect(activeTab()?.writing_id).toBe(writingId)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "WATCH-07 sucio: la guarda no intenta persistir mientras el conflicto está sin decidir",
+    async () => {
+      const path = writeMarkdownFile("Carta guardada", "ODE638 base.")
+      await startReconciler()
+      await mountLoaded()
+      const writingId = await openFromNativeMenu(path, "ODE638 base.")
+      await waitForWatcherOnDocuments()
+
+      const writesBefore = writesTo(path).length
+      const initialSaveState = saveStateLabel()
+      expect(initialSaveState, "control positivo: la barra de estado está montada").not.toBe("")
+      const labels = trackSaveStateLabels()
+
+      // El cambio externo llega y su lectura de la fila queda retenida: la
+      // decisión de conflicto todavía no corrió cuando el usuario teclea.
+      const gate = holdCatalogReads((idOrPath) => idOrPath === writingId)
+      writeFileSync(path, "ODE638 externa.\n")
+      await emitFsWatchEvent([path])
+      await waitForShell(() => gate.hits() > 0, "lectura de la fila retenida")
+
+      // El trabajo diferido del tecleo (rAF → debounce de 150 ms) sigue en
+      // cola: el hand-off a `PersistenceCoordinator` no ocurrió aún, así que
+      // la decisión marca el conflicto con la edición todavía sin persistir.
+      const frames = holdAnimationFrames()
+      await typeInEditor(" ODE638-LOCAL")
+      gate.release()
+      await waitForShell(() => bannerText().includes(CONFLICT_BANNER), "banner de conflicto")
+
+      // Se drena el trabajo agendado. Con la guarda, el hand-off se rechaza;
+      // sin ella, agenda un guardado que dispara en el debounce durable.
+      await frames.flush()
+      frames.restore()
+
+      // Más tecleo y el debounce durable completo (150 ms + 4 s).
+      await typeInEditor(" ODE638-MAS")
+      await advance(4_500)
+
+      expect(writesTo(path).length, "la guarda evita incluso intentar escribir").toBe(writesBefore)
+      expect(await readDisk(path), "el disco conserva la versión externa").toBe("ODE638 externa.\n")
+      expect(editorText(), "el editor conserva su copia local").toContain("ODE638-LOCAL")
+      expect(editorText()).toContain("ODE638-MAS")
+      expect(bannerText(), "el aviso sigue abierto").toContain(CONFLICT_BANNER)
+      expect(findButton("Reload external"), "acción: cargar la externa").toBeTruthy()
+      expect(findButton("Keep my version"), "acción: conservar la mía").toBeTruthy()
+      expect(labels(), "ninguna transición a Saving ni Needs attention").toEqual([initialSaveState])
+      expect(bannerText()).not.toContain("Saving...")
+      expect(bannerText()).not.toContain("Needs attention")
+
+      // Control positivo: la decisión explícita sí recorre el guardado entero.
+      await clickButton("Keep my version")
+      await waitForShellDisk(path, "ODE638-MAS")
+      const saved = await readDisk(path)
+      expect(saved, "«Keep my version» escribe la versión del usuario").toContain("ODE638-LOCAL")
+      expect(saved).toContain("ODE638-MAS")
+      expect(saved).not.toContain("ODE638 externa.")
+      expect(writesTo(path).length, "la elección explícita sí escribe").toBeGreaterThan(writesBefore)
+      expect(bannerText()).not.toContain(CONFLICT_BANNER)
+      expect(activeTab()?.writing_id).toBe(writingId)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "ODE-593: conserva y muestra la segunda versión externa, y Finder abre su carpeta",
+    async () => {
+      const { path, keptPath } = await beginKeptVersionDoubleRace({
+        fileTitle: "Letter; draft",
+        conflictId: "5930cafe",
+        secondExternalContent: "ODE593 external 2.\n",
+      })
+      const keptName = "Letter; draft.md.conflict-5930cafe"
+
+      expect(editorText(), "la edición del usuario permanece en el editor hasta que la elige").toContain("ODE593-LOCAL")
+      expect(await readDisk(path), "el destino conserva la primera versión externa, sin la edición del usuario").toBe(
+        "ODE593 external 1.\n",
+      )
+      expect(await readDisk(keptPath), "el archivo conservado contiene la segunda edición externa").toBe(
+        "ODE593 external 2.\n",
+      )
+      expect(await readDisk(path)).not.toContain("ODE593-LOCAL")
+      expect(bannerText()).toContain(CONFLICT_BANNER)
+      expect(bannerText()).toContain(
+        `This file was changed outside Artifact Studio. The other version was kept as ${keptName}.`,
+      )
+
+      const statusElements = Array.from(mounted!.container.querySelectorAll<HTMLElement>('[role="status"]'))
+      const conflictBanner = statusElements.find((element) => element.textContent?.includes(CONFLICT_BANNER))
+      const statusLine = statusElements.find((element) =>
+        element.textContent?.startsWith("This file was changed outside Artifact Studio."),
+      )
+      expect(conflictBanner?.getAttribute("aria-live"), "el banner actual anuncia el cambio").toBe("polite")
+      expect(statusLine?.getAttribute("aria-live"), "la línea nueva anuncia el archivo conservado").toBe("polite")
+      expect(findButton("Show in Finder"), "control positivo: la ruta conservada tiene acción Finder").toBeTruthy()
+
+      const name = Array.from(mounted!.container.querySelectorAll<HTMLElement>("[title]")).find(
+        (element) => element.textContent === keptName && element.title === keptPath,
+      )
+      expect(name?.classList.contains("font-medium")).toBe(true)
+      expect(name?.title, "la ruta completa queda en title").toBe(keptPath)
+
+      await clickButton("Show in Finder")
+      expect(vi.mocked(tauriShellOpen)).toHaveBeenCalledWith(documentsFolder())
+      expect(bannerText(), "revelar la carpeta no resuelve el conflicto").toContain(keptName)
+
+      await clickButton("Keep my version")
+      await waitForShell(() => !bannerText().includes(CONFLICT_BANNER), "banner y línea retirados al conservar mi versión")
+      expect(bannerText()).not.toContain(keptName)
+      await waitForShellDisk(path, "ODE593-LOCAL")
+      expect(await readDisk(path), "la edición del usuario solo llega al disco después de elegirla").toContain("ODE593-LOCAL")
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "ODE-593: retira el aviso del documento anterior cuando otro documento entra en conflicto",
+    async () => {
+      const { keptPath } = await beginKeptVersionDoubleRace({
+        fileTitle: "Carta A con copia",
+        conflictId: "5930abca",
+        secondExternalContent: "ODE593 A external 2.\n",
+      })
+      const keptName = keptPath.split(/[\\/]/).pop()!
+
+      expect(bannerText(), "control positivo: A muestra su aviso conservado").toContain(keptName)
+
+      const pathB = writeMarkdownFile("Carta B con conflicto propio", "ODE593 B base.")
+      const writingIdB = await openFromNativeMenu(pathB, "ODE593 B base.")
+      await waitForWatcherOnDocuments()
+      expect(activeTab()?.writing_id).toBe(writingIdB)
+
+      const held = holdWriteFile((candidate) => candidate === pathB)
+      await typeInEditor(" ODE593-B-LOCAL")
+      await held.started
+      writeFileSync(pathB, "ODE593 B external.\n")
+      await emitFsWatchEvent([pathB])
+      await waitForShell(() => bannerText().includes(CONFLICT_BANNER), "conflicto propio del documento B")
+
+      held.release()
+      await advance(800)
+      expect(await readDisk(pathB), "el conflicto de B conserva su versión externa").toBe("ODE593 B external.\n")
+      expect(editorText()).toContain("ODE593-B-LOCAL")
+      expect(bannerText()).toContain(CONFLICT_BANNER)
+      expect(bannerText(), "el aviso conservado de A no aparece dentro del conflicto de B").not.toContain(keptName)
+
+      await clickButton("Reload external")
+      await waitForShell(() => !bannerText().includes(CONFLICT_BANNER), "conflicto de B retirado")
+      expect(bannerText()).not.toContain(keptName)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "ODE-593: informa si keep_beside no conserva la otra versión y no ofrece Finder",
+    async () => {
+      const { path, tmpPath } = await beginKeptVersionDoubleRace({
+        fileTitle: "Carta fallo de conservación",
+        conflictId: "5930bad0",
+        secondExternalContent: "ODE593 external 2.\n",
+        keepBesideFails: true,
+      })
+
+      expect(editorText(), "la edición del usuario permanece en el editor tras el rechazo").toContain("ODE593-LOCAL")
+      expect(await readDisk(path), "el destino conserva la primera versión externa tras el fallo").toBe(
+        "ODE593 external 1.\n",
+      )
+      expect(await readDisk(tmpPath), "la segunda versión externa permanece en el temporal tras el fallo de keep_beside").toBe(
+        "ODE593 external 2.\n",
+      )
+      expect(await readDisk(path)).not.toContain("ODE593-LOCAL")
+      expect(bannerText()).toContain(
+        "This file was changed outside Artifact Studio. The other version couldn't be saved.",
+      )
+      expect(findButton("Show in Finder"), "el fallo no proporciona una ruta conservada junto al destino").toBeFalsy()
+
+      await clickButton("Reload external")
+      await waitForShell(() => !bannerText().includes(CONFLICT_BANNER), "banner y línea retirados al recargar")
+      expect(bannerText()).not.toContain("The other version couldn't be saved.")
       assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,

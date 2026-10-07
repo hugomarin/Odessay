@@ -146,6 +146,8 @@ El patrón correcto para `/wf-define` es:
 7. Sintetizar una sola propuesta coherente. La persistencia en Linear (crear/actualizar proyecto e issues) la ejecuta `wf-define` según su protocolo — ver `Relación con otras capas`.
 8. Producir la `Execution Trace`.
 
+Al endurecer un issue cuya invariante dependa de trabajo asíncrono, identidad o estado que pueda quedar obsoleto, exigir la matriz de operaciones × transiciones de vida × éxito/error descrita en `skill-planning/SKILL.md`. Cada celda alcanzable debe tener prueba o límite con razón; no aplicar el requisito a cambios triviales de copy o estilo. Conservar la matriz junto a los criterios de aceptación para que BUILD y REVIEW usen el mismo alcance.
+
 Si roadmap y DoD ya estaban cerrados, el agente no vuelve a hacer diseño estratégico de la fase. Pasa directo a descomposición táctica: topología, dependencias, critical path y briefs ejecutables.
 
 ---
@@ -194,6 +196,7 @@ Este rol tiene disponible `.agents/skills/skill-audit-planning/SKILL.md`. Activa
 - hay overlaps o huecos posibles entre issues
 - la secuencia entre issues es dudosa
 - hace falta revisar la topología completa antes de persistirla en Linear
+- hace falta auditar un issue individual antes de BUILD; usar el prompt reutilizable de `specialties/phase-audit-contract.md`
 
 El audit no reemplaza la creación de issues en Linear ni la síntesis de la topología. Solo endurece la calidad de la salida antes de persistirla — el Planning Agent sigue siendo el owner de la síntesis final.
 

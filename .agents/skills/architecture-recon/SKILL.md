@@ -32,7 +32,11 @@ El contrato y las decisiones aceptadas indican qué debe ser verdad. El código 
 5. Revisar instrucciones scoped y módulos de composición que el cambio tocaría. Distinguir el cableado en esos módulos de la responsabilidad que pertenece a otro owner.
 6. Confrontar owner y comportamiento observados con el contrato esperado. Delimitar la superficie mínima coherente del cambio y señalar si requiere una abstracción nueva.
 
+Si el estado vive en un componente o página, el Recon debe declarar además `Owner`, `Transiciones que lo destruyen` (por ejemplo: cierre, focus, cero pestañas, remount o navegación), `Trabajo en vuelo` y `Evidencia requerida`. Identificar qué transición conserva, termina, cancela o deja continuar ese trabajo. Para elegir el orden de protección de una carrera, usar el [playbook de ownership asíncrono](../skill-architecture/references/async-ownership.md), que recoge los patrones y sus límites probados en este repo.
+
 Acotar la búsqueda a la responsabilidad y sus consumidores reales; ampliar el alcance solo cuando una dependencia encontrada lo justifique.
+
+En archivos grandes y hotspots (p. ej. `components/editor/editor-shell.tsx`), localizar por símbolo y leer el rango alrededor; no paginar el archivo de principio a fin. Si el brief ya cita archivo y líneas, empezar por ahí y confirmarlas. Agrupar en una sola llamada las lecturas independientes.
 
 ## 5. Resultado y evidencia
 
@@ -43,6 +47,7 @@ Architecture Recon
 - Change intent / responsibility:
 - Domain:
 - Canonical owner (según contrato, o candidatos si falta decisión):
+- Owner lifecycle (si el estado vive en componente/página): Owner; Transiciones que lo destruyen; Trabajo en vuelo; Evidencia requerida.
 - Observed implementation / owner (canonical, legacy o candidatos):
 - Reusable API / abstraction:
 - Canonical reference / sibling (si hace falta crear algo):
@@ -59,6 +64,18 @@ Architecture Recon
 ```
 
 El Recon completo es contexto de trabajo de la tarea. Su persistencia y la promoción de hallazgos recurrentes siguen el protocolo del proyecto.
+
+### Modo validación
+
+Si el brief trae un `Recon Pack` (ver `issue-brief-schema.md`), no repetir la exploración: validarlo, en ≤10 minutos.
+
+1. `git diff <sha del pack>..origin/main -- <archivos del pack>`. Sin cambios: el pack vale tal cual; empezar a implementar.
+2. Con cambios: re-verificar solo los símbolos cuyo rango cambió y actualizar sus líneas.
+3. Si el cambio es estructural (el símbolo desapareció, cambió de dueño o de archivo, o el orden de efectos que el pack describe ya no es cierto), detener BUILD con `Context Gap — Recon Pack` y pedir al planner que actualice el mapa. No redescubrir el área por cuenta propia.
+
+El campo "Construir con" del pack es el punto de partida del `Construction order`: reutilizar lo que nombra y no crear lo que excluye. Desviarse exige una `Recon correction` con la evidencia.
+
+El output es un Recon breve que confirma el pack, más una `Recon correction` (qué decía el pack, qué hay en el código, con líneas) por cada diferencia encontrada. Las correcciones van en el Context Report.
 
 ## 6. Manejo de fallos e incertidumbre
 

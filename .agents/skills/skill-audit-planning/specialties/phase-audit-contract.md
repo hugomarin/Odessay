@@ -109,6 +109,38 @@ Por cada issue:
 - ¿Incluye `Architecture Contract` cuando aplica?
 - ¿Incluye `Presentation Contract` cuando aplica?
 - ¿Incluye `Performance Architecture Contract` cuando el issue puede alterar carga o costo de crecimiento?
+- ¿Declara qué owner o abstracción existente debe extenderse o reutilizarse, y qué evidencia respalda esa decisión?
+- Si propone crear una pieza nueva, ¿explica por qué no basta con extender el owner o reutilizar una API existente?
+
+### Auditoría de reutilización
+
+Evaluar la definición del issue, no diseñar una implementación prematuramente. Cuando el brief no aporta evidencia suficiente, inspeccionar de forma dirigida el repositorio: buscar el owner semántico, APIs reutilizables, siblings, consumidores y pruebas canónicas. Distinguir entre reutilizar una API (la misma responsabilidad) y tomar un sibling como referencia de forma (una responsabilidad realmente nueva). No concluir que algo es duplicado solo por compartir nombre o forma.
+
+Marcar `FAIL` si el issue pide crear una solución paralela a un owner existente sin justificarlo, o si el nuevo owner/contrato queda ambiguo y BUILD tendría que decidirlo por inferencia. Marcar `PASS WITH GAPS` si la evidencia de código no está disponible, la reutilización es un detalle menor pendiente de Recon, o falta precisión que no cambia owner ni contrato. Recomendar la edición mínima del brief.
+
+### Prompt reutilizable — auditoría de un issue
+
+```text
+Audita este issue de Odessay y determina si está listo para BUILD. Lee el Issue Brief completo y su schema; contrasta las premisas con las fuentes citadas y con evidencia dirigida del repositorio cuando el owner o la reutilización no estén claros. No implementes ni amplíes el alcance.
+
+Comprueba:
+1. Problema, resultado y límites: ¿se entiende por qué existe y qué resultado observable debe quedar?
+2. Owner y arquitectura: ¿están definidos responsabilidad semántica, Layer, Runtime scope, Owner, contratos, invariantes y documentos requeridos cuando aplican?
+3. Reutilización: ¿qué owner, API o abstracción existente debe extenderse/reutilizarse? ¿Se revisaron siblings, consumidores y pruebas canónicas? Si se propone algo nuevo, ¿está demostrado por qué las opciones existentes no resuelven el concepto? Separa reuso real de usar un sibling solo como referencia.
+4. Dependencias y consumers: ¿están enumerados y secuenciados? ¿Qué asunción concreta cambia para cada consumer?
+5. Alcance y unidad: ¿Files affected es honesto y el issue cabe en una entrega coherente? ¿Hay overlap o falta una migración/issue consumidor?
+6. Requirements, failure modes y validación: ¿son verificables, cubren errores relevantes y nombran evidencia proporcional que podría falsificarlos?
+7. Contratos de dominio: ¿incluye los contratos de arquitectura, performance, visual/UX, seguridad o datos que activa el alcance?
+
+Entrega:
+- GateResult: PASS | PASS WITH GAPS | FAIL.
+- Hallazgos priorizados con severidad, fuente/evidencia y efecto concreto en BUILD.
+- Reuse Check: owner esperado; API/abstracción a extender o reutilizar; siblings/consumers/tests relevantes; justificación requerida si se crea algo nuevo.
+- Ediciones mínimas propuestas al brief, en texto listo para pegar cuando sea posible.
+- Preguntas abiertas solo si una decisión de producto, owner o contrato no puede resolverse con las fuentes autorizadas.
+
+No marques FAIL por falta de una prueba que no existe: registra la ausencia y exige evidencia adecuada en los criterios de validación. No conviertas una preferencia de estructura en hallazgo sin riesgo concreto. Si una fuente normativa contradice otra, aplica el protocolo Context Gap de AGENTS.md y no resuelvas por inferencia.
+```
 
 #### 7. Acumulación sistémica
 

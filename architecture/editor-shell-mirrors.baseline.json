@@ -1,0 +1,14 @@
+{
+  "allowed": {
+    "hooks/useSaveStateSync.ts:reconcileActiveSaveStateRef": { "count": 1, "kind": "latest-callback", "reason": "ODE-609: hydration and the sync subscription call the latest reconciliation callback without resubscribing." },
+    "hooks/useEditorPersistence.ts:flushPendingEditOnUnmountRef": { "count": 1, "kind": "latest-callback", "reason": "ODE-573: unmount flushes the latest rich and markdown queues without recreating the coordinator cleanup." },
+    "hooks/useTauriCloseGuard.ts:onBeforeCloseRef": { "count": 1, "kind": "latest-callback", "reason": "Native close listener invokes the current settle callback while retaining one subscription." },
+    "hooks/useTauriEditorMenuEvents.ts:onRunActionRef": { "count": 1, "kind": "latest-callback", "reason": "Native editor menu retains subscriptions and dispatches through the current action callback." },
+    "hooks/useTauriMenuEvents.ts:onOpenFileRef": { "count": 1, "kind": "latest-callback", "reason": "Native file menu retains its subscription and invokes the current open handler." },
+    "hooks/useTauriMenuEvents.ts:onNewFileRef": { "count": 1, "kind": "latest-callback", "reason": "Native file menu retains its subscription and invokes the current new-file handler." },
+    "hooks/useTauriMenuEvents.ts:onEditorActionRef": { "count": 1, "kind": "latest-callback", "reason": "Native menu dispatch retains one subscription and invokes the current editor action." },
+    "hooks/useTauriMenuEvents.ts:onGetSaveContentRef": { "count": 1, "kind": "latest-callback", "reason": "Native save menu reads current content via the latest callback rather than a captured snapshot." },
+    "hooks/useTauriMenuEvents.ts:onSaveToDiskRef": { "count": 1, "kind": "latest-callback", "reason": "Native save menu invokes the current disk-save callback without listener churn." },
+    "hooks/useTauriMenuEvents.ts:lastSavePathRef": { "count": 1, "kind": "lifecycle-reset", "reason": "Resets the last Save As path when documentKey changes; copies no React state and avoids saving another document to that path." }
+  }
+}

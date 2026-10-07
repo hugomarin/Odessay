@@ -28,10 +28,24 @@ Cargar las guías de arquitectura, rendimiento, dominio o experiencia cuando el 
 1. Formular el resultado observable y la responsabilidad que cambia.
 2. Contrastar la definición con producto, contratos, código y trabajo ya planificado. Registrar las contradicciones con su fuente y efecto antes de basar el brief en ellas.
 3. Identificar owner, consumidores, interfaces y dependencias. Dividir el trabajo si dos resultados independientes requieren owners, gates o secuencias distintos.
+   - **Recon de área:** cuando varios issues tocan la misma área de código, o una tanda va a orquestarse, hacer un Recon profundo una sola vez al planificar, según [area-recon.md](specialties/area-recon.md). Tiene dos objetivos: **mejor código** (owner correcto, qué reutilizar, qué no crear, el diseño más simple, cómo probarlo) y que nada frene la orquestación. Incluye workers en paralelo y en solo lectura, la lista de huecos que pueden frenar la orquestación, la definición de hecho (Recon Pack y "Auditoría" en Linear, PR del mapa abierto, lint) y el reporte al humano con decisiones por defecto. El mapa vive en el documento existente del área, con el commit de `main` contra el que se verificó. De ese mapa sale el `Recon Pack` de cada brief; las correcciones que BUILD reporte se aplican al mapa. Una pregunta puntual sobre el código es un análisis, no un Recon de área: no abre PR.
+   - **El Recon también llena el `Architecture Contract`** de cada issue que lo activa (todo Capability Proof lo activa): `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants` y `Required docs`, a partir de lo comprobado en el código. Antes de despachar, `npm run ops:brief:lint -- ODE-<n> --require-contract` debe pasar, con `--require-recon` cuando el planner hizo el Recon del área y el brief debe llevar `Recon Pack` (mismo criterio que `/wf-define` paso 12 y que `issue-brief-schema.md` § Recon Pack). Un brief de un solo issue sin Recon de área no lleva el flag. Un brief sin contrato frena el BUILD a mitad del trabajo (ODE-593), así que el hueco se cierra aquí y no allí.
 4. Escribir requisitos verificables: entrada, comportamiento, resultado y límites. Incluir estados de error, interrupción, retry o degradación cuando el flujo los tenga.
 5. Declarar los contratos de arquitectura, costo al crecer y experiencia que el cambio activa. Pedir a los skills de dominio pertinentes una revisión de las decisiones que les pertenecen.
 6. Elegir evidencia proporcional: qué prueba, inspección o recorrido podría falsificar cada requisito material y en qué entorno.
 7. Expresar la aceptación del resultado respecto a la intención del dueño, además de la ejecución técnica del brief.
+
+### Matriz de invariantes asíncronas o de identidad
+
+Cuando una invariante dependa de trabajo asíncrono, identidad documental o estado que puede quedar obsoleto, el Issue Brief incluye una matriz de **operaciones × transiciones de vida × resultado (éxito/error)**. No aplica a cambios triviales de copy o estilo aislado. Cada fila representa una celda alcanzable: se cubre con una prueba que observe el resultado, o se declara como límite con su razón concreta. No se dejan celdas relevantes vacías ni se usa un caso feliz como sustituto de su caso de error.
+
+Usar esta tabla como modelo y listar solo las operaciones y transiciones pertinentes al issue; cuando una combinación sea inalcanzable, dejarlo explícito con la razón:
+
+| Operación | Transición de vida durante el trabajo | Resultado | Invariante observable | Prueba requerida o límite con razón |
+|---|---|---|---|---|
+| `<load/save/rename/etc.>` | `<cambio de documento/cierre/focus/cero pestañas/remount/navegación>` | `éxito` o `error` | `<qué permanece atribuido, durable o descartado>` | `<test archivo:línea, o límite y razón>` |
+
+La matriz forma parte de los requisitos y criterios de aceptación; BUILD la conserva en el Recon Pack cuando exista y relaciona sus celdas con la evidencia del PR. REVIEW verifica la cobertura de cada celda alcanzable.
 
 La estructura exacta del tracker se toma de la especialidad del proyecto; el método conserva estas preguntas aunque cambie la herramienta.
 
@@ -54,7 +68,8 @@ El rol de planificación diseña la topología y secuencia de la fase. Planning 
 ## 8. Recursos asociados
 
 - **Definición y fuentes:** cargar [definition-and-sources.md](specialties/definition-and-sources.md) al preparar o revisar un brief de Odessay; usarlo para comprobar premisas, seleccionar fuentes y pedir revisión a los skills del dominio.
-- **Schema de salida:** cargar [issue-brief-schema.md](specialties/issue-brief-schema.md) al redactar o validar el Issue Brief y la Execution Trace; aplicar sus campos y criterios de evidencia.
+- **Schema de salida:** cargar [issue-brief-schema.md](specialties/issue-brief-schema.md) al redactar o validar el Issue Brief y la Execution Trace; aplicar sus campos y criterios de evidencia, incluido el `Reuse Check` requerido para cambios de código no triviales. Cuando el planner ya exploró el código, el `Reuse Check` cita archivo y rango de líneas del owner y del test canónico, verificados contra un commit de `main` que se nombra: el Recon de BUILD empieza por esas líneas y las confirma en vez de volver a buscarlas.
+- **Recon de área:** cargar [area-recon.md](specialties/area-recon.md) antes de investigar el código de una tanda de issues: método, lista de huecos, qué deja y plantilla del reporte al humano.
 - **Publicación en Linear:** cargar [linear-conventions.md](specialties/linear-conventions.md) al crear o actualizar proyectos e issues mediante `wf-define`; usar su jerarquía, labels y asignación sin cargarlo para una revisión local del brief.
 - **Fuentes del repo:** roadmap, DoD, contratos y registro documental nombrados por la especialidad.
 - **Mecanismos:** usar checks y validación existentes; sus rutas y umbrales pertenecen al proyecto.

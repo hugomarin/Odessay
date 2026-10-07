@@ -1,10 +1,10 @@
 "use client"
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { getMarkRange } from "@tiptap/core"
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react"
 import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents"
 import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
+import { dirname } from "@tauri-apps/api/path"
 import { useRouter } from "next/navigation"
 import {
   activationHydrates,
@@ -14,13 +14,17 @@ import {
   type HydrationPhase,
 } from "@/hooks/useDocumentHydration"
 import { useCorrectionActions, type CorrectionToastState } from "@/hooks/useCorrectionActions"
-import { useCorrectionBlocks } from "@/hooks/useCorrectionBlocks"
-import { useCorrectionLifecycle } from "@/hooks/useCorrectionLifecycle"
+import { useCorrectionBlocks, useCorrectionSuggestionsState } from "@/hooks/useCorrectionBlocks"
+import { useCorrectionLifecycle, useLearnedWordsState } from "@/hooks/useCorrectionLifecycle"
 import {
   useEditorCommands,
   type PendingAnnotationSnapshot,
   type PendingRichSelectionSnapshot,
 } from "@/hooks/useEditorCommands"
+import { useActiveEditorTabIdRef } from "@/hooks/useActiveEditorTabIdRef"
+import { useEditorPersistence, type KeptVersionConflictNotice } from "@/hooks/useEditorPersistence"
+import { useDocumentExit, type PendingMarkdownSelection } from "@/hooks/useDocumentExit"
+import { useSaveStateSync } from "@/hooks/useSaveStateSync"
 import {
   useExternalDocumentChanges,
   type ExternalContentConflict,
@@ -28,19 +32,21 @@ import {
 } from "@/hooks/useExternalDocumentChanges"
 import { type EditorCursorSnapshot, useFindReplace } from "@/hooks/useFindReplace"
 import { type FocusModeRestoration, useFocusMode } from "@/hooks/useFocusMode"
+import { useFootnotes } from "@/hooks/useFootnotes"
 import { useSessionRestore } from "@/hooks/useSessionRestore"
-import { useTableOfContents } from "@/hooks/useTableOfContents"
+import {
+  markdownSelectionOwnerId,
+  readMarkdownSelectionForActiveDocument,
+  useSelectionRestore,
+  type OwnedMarkdownSelectionSnapshot,
+} from "@/hooks/useSelectionRestore"
+import { useSelectionPopup } from "@/hooks/useSelectionPopup"
+import { useTableOfContents, useTableOfContentsState } from "@/hooks/useTableOfContents"
 import { useWorkspaceTabOpening } from "@/hooks/useWorkspaceTabOpening"
 import { useWorkspaceTabs } from "@/hooks/useWorkspaceTabs"
-import {
-  formatSaveStateDiagnostic,
-  mapLocalSyncStatusToSaveState,
-  mapSyncLifecycleToSaveState,
-  reconcileSaveStateFromDurable,
-  saveStateToHasPendingSync,
-  type EditorSaveState,
-} from "@/components/editor/save-state"
+import type { EditorSaveState } from "@/components/editor/save-state"
 import { Button } from "@/components/ui/button"
+import { revealWorkspacePath } from "@/lib/workspace/reveal-path"
 import { WritingEditorContent } from "@/components/editor/editor-content"
 import { ImagePresentationViewer } from "@/components/editor/image-presentation-viewer"
 import { EditorEmptyState } from "@/components/editor/editor-empty-state"
@@ -52,12 +58,8 @@ import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { EditorRightPanel } from "@/components/editor/editor-right-panel"
 import { EditorRightPanelTabs } from "@/components/editor/panels/editor-right-panel-tabs"
 import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
-import {
-  AnnotationBubble,
-  nextAnnotationSessionId,
-} from "@/components/reading/margins/annotation-bubble"
-import { SelectionPopup, type SemanticMarkApplyResult } from "@/components/reading/margins/selection-popup"
-import { applyEntityMark, applySemanticHighlight, type EntityTypeName, type HighlightColorName } from "@/lib/editor/semantic-marks"
+import { AnnotationBubble } from "@/components/reading/margins/annotation-bubble"
+import { SelectionPopup } from "@/components/reading/margins/selection-popup"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { BackupImageModal } from "@/components/editor/modals/backup-image-modal"
 import { InsertImageModal } from "@/components/editor/modals/insert-image-modal"
@@ -66,10 +68,7 @@ import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import {
   annotateMarkdownStandaloneHighlight,
-  appendMarkdownFootnote,
   changeMarkdownAnnotationType,
-  extractRichEditorAnnotations,
-  getMarkdownFootnotes,
   removeMarkdownAnnotation,
   removeMarkdownStandaloneHighlight,
   updateMarkdownAnnotation,
@@ -80,12 +79,11 @@ import {
   materializeMarkdownForRichParser,
   normalizeMarkdownForRoundTrip,
 } from "@/lib/editor/markdown-format"
-import { FOOTNOTE_REF_EVENT, getEditorFootnotes, getMarkdownWithFootnoteDefinitions, type AnnotationType } from "@/lib/editor/footnote-node"
+import { getEditorFootnotes, getMarkdownWithFootnoteDefinitions, type AnnotationType } from "@/lib/editor/footnote-node"
 import {
   deleteStandaloneHighlight,
   resolveStandaloneHighlightRange,
 } from "@/lib/editor/annotation-highlight"
-import { areFloatingOverlayAnchorsEqual } from "@/lib/reading/floating-overlay-position"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
 import {
@@ -100,12 +98,9 @@ import {
 } from "@/lib/editor/suggestion-engine"
 import type { DeferredCorrectionBlocksState } from "@/lib/corrections/engine/lifecycle"
 import {
-  createBlankDraftIdentity,
-  createNewWritingSessionState,
   createRouteHydrationSessionState,
   resolveExternalWritingLoad,
 } from "@/lib/editor/hydration-session"
-import { EDITOR_DRAFT_TAB_ID } from "@/lib/local-db/editor-sessions"
 import { getExportFileBaseName } from "@/lib/export/writing-export"
 import {
   buildEditorSpellcheckConfig,
@@ -125,7 +120,7 @@ import {
   deleteLocalCorrectionBlocks,
   readLocalCorrectionBlocks,
 } from "@/lib/corrections/persistence"
-import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
+import { getLocalDBScope, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
   ArtifactType,
   LocalCorrectionBlock,
@@ -134,13 +129,10 @@ import type {
   WritingStatus,
   WritingVisibility,
 } from "@/lib/local-db/schema"
-import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { getAssetService } from "@/lib/services/asset-service-factory"
-import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 import {
   createDesktopDraft as createProductionDesktopDraft,
   getDocumentService,
-  importDesktopWritingFile,
 } from "@/lib/services/document-service-factory"
 import {
   filenameToTitle,
@@ -158,22 +150,11 @@ import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
 import { useTauriCloseGuard } from "@/hooks/useTauriCloseGuard"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
-import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import { createHydrationGenerationOwner } from "@/lib/editor/hydration-generation"
 import {
-  createPersistenceCoordinator,
-  type PersistenceCommitEvent,
-  type PersistenceSnapshotOverrides,
-  type PersistenceStateEvent,
-} from "@/lib/editor/persistence-coordinator"
-import {
-  getEditorSessionState,
   initializeEditorSessionStore,
   openWritingTab,
   publishTabState,
-  reconcileMaterializedDraftTab,
-  saveTabViewState,
-  updateTabSaveState,
   useEditorSessionStore,
 } from "@/lib/stores/editor-session-store"
 import { setSidebarMode } from "@/lib/stores/ui-shell-store"
@@ -194,44 +175,6 @@ type SelectionSnapshot = {
   from: number
   to: number
   text: string
-}
-
-type OwnedMarkdownSelectionSnapshot = MarkdownSelectionSnapshot & {
-  writingId: string
-}
-
-type MarkdownSelectionRead = {
-  selection: MarkdownSelectionSnapshot | null
-  belongsToOtherDocument: boolean
-}
-
-const markdownSelectionOwnerId = (writingId: string | null) => writingId ?? EDITOR_DRAFT_TAB_ID
-
-function readMarkdownSelectionForActiveDocument(
-  cached: OwnedMarkdownSelectionSnapshot | null,
-  activeWritingId: string | null,
-  source?: string,
-): MarkdownSelectionRead {
-  const ownerId = markdownSelectionOwnerId(activeWritingId)
-  if (!cached || cached.writingId === ownerId) {
-    return { selection: cached, belongsToOtherDocument: false }
-  }
-
-  // A cached selection belongs to a different document. Use the active tab's
-  // own saved selection while its deferred restore is pending; never fall back
-  // to the shared textarea's selection, which can still hold the prior tab's
-  // range.
-  const viewState = getEditorSessionState().session.tabs.find((tab) => tab.id === ownerId)?.view_state
-  const start = viewState?.markdownSelectionStart
-  const end = viewState?.markdownSelectionEnd
-  if (typeof start === "number" && typeof end === "number") {
-    return {
-      selection: { start, end, text: source?.slice(start, end) ?? "" },
-      belongsToOtherDocument: true,
-    }
-  }
-
-  return { selection: null, belongsToOtherDocument: true }
 }
 
 type EditorPanel = "notes" | "properties" | "grammar" | "share" | null
@@ -287,19 +230,10 @@ const TableOfContentsPanel = lazy(() =>
   })),
 )
 
-const MARKDOWN_SAVE_DEBOUNCE_MS = 800
-// Building the persistence snapshot calls getText/getJSON over the full TipTap
-// document and updates shell-level metrics. On desktop, do that work only after
-// a short quiet window so the keystroke stays inside ProseMirror. The actual
-// local commit starts immediately once the snapshot exists; cloud sync retains
-// its separate 1500 ms trailing debounce.
-const DESKTOP_EDITOR_OUTPUT_DEBOUNCE_MS = 150
-// The durable commit itself (write_file, catalog_dual_write, cloud sync
-// enqueue, and the catalog-change event every mounted view reacts to) does not
-// need to track keystrokes in near-real-time — content lives in TipTap's
-// in-memory state regardless. Coalescing it to once per 4s of typing pause
-// keeps that pipeline from running once per pause during sustained typing.
-export const DESKTOP_PERSISTENCE_DEBOUNCE_MS = 4_000
+// ODE-605: el debounce durable vive con su único consumidor, el hook de
+// persistencia; se re-exporta aquí porque los tests de la shell lo importan
+// desde este módulo.
+export { DESKTOP_PERSISTENCE_DEBOUNCE_MS } from "@/hooks/useEditorPersistence"
 
 const AUTO_TITLE_MAX_CHARS = 48
 const UNTITLED_WRITING_TITLE = "Untitled artifact"
@@ -460,6 +394,26 @@ export function EditorShell({
   const [hydrationPhase, setHydrationPhase] = useState<HydrationPhase>(
     initialHydrationSession.hydrationWritingId ? "loading" : "ready",
   )
+  // ODE-624: espejo de la fase para los callbacks de larga vida. Se escribe
+  // junto al estado en `applyHydrationPhase` (mismo patrón que
+  // `setActiveWritingId`/`applySyncStatus`), no en un efecto espejo: el
+  // cleanup de unmount lee la fase vigente, y una escritura de fase en el
+  // mismo tick que una salida no puede quedar por detrás.
+  const hydrationPhaseRef = useRef<HydrationPhase>(
+    initialHydrationSession.hydrationWritingId ? "loading" : "ready",
+  )
+  /**
+   * Único escritor de la fase de hidratación: estado y ref en el mismo paso.
+   * Los callbacks de larga vida — `persistCurrentWorkspaceViewState`, y el
+   * cleanup de unmount que lo llama — no pueden depender de `hydrationPhase`
+   * sin recrearse en cada transición (eso volvería a correr el cleanup, que
+   * guarda la vista, en cada cambio de fase); leen el ref.
+   */
+  const applyHydrationPhase = useCallback((next: SetStateAction<HydrationPhase>) => {
+    const resolved = typeof next === "function" ? next(hydrationPhaseRef.current) : next
+    hydrationPhaseRef.current = resolved
+    setHydrationPhase(resolved)
+  }, [])
   const [title, setTitle] = useState(UNTITLED_WRITING_TITLE)
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
@@ -489,18 +443,21 @@ export function EditorShell({
   const lifecycleRef = useRef<WritingLifecycle>("local-only")
   const [isBodyHydrating, setIsBodyHydrating] = useState(false)
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
+  /** Una acción de compartir en vuelo mantiene vivo el panel al cerrarlo. */
+  const [isShareActionPending, setIsShareActionPending] = useState(false)
   // Studio opens with both side panels closed: the ghost rail at the sheet's
   // left edge is the way in (docs/design/views/studio.md).
   const [navigationMode, setNavigationMode] = useState<EditorNavigationMode>(null)
-  const [tableOfContentsItems, setTableOfContentsItems] = useState<TableOfContentDataItem[]>([])
-  const [selectedTableOfContentsItemId, setSelectedTableOfContentsItemId] = useState<string | null>(null)
+  const { tableOfContentsItems, setTableOfContentsItems, selectedTableOfContentsItemId,
+    setSelectedTableOfContentsItemId, tableOfContentsItemsRef, activeTableOfContentsItemIdRef } = useTableOfContentsState()
   const [spellcheckScope, setSpellcheckScope] = useState(() => getLocalDBScope())
   const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
-  const [automaticCorrectionSuggestions, setAutomaticCorrectionSuggestions] = useState<PublicationSuggestion[]>([])
+  const { automaticCorrectionSuggestions, automaticCorrectionSuggestionsRef, setAutomaticCorrectionSuggestions } = useCorrectionSuggestionsState()
   const [correctionToast, setCorrectionToast] = useState<CorrectionToastState | null>(null)
   const [externalFileNotice, setExternalFileNotice] = useState<ExternalFileNotice | null>(null)
   const [externalContentConflict, setExternalContentConflict] = useState<ExternalContentConflict | null>(null)
   const externalContentConflictRef = useRef<ExternalContentConflict | null>(null)
+  const [keptVersionConflictNotice, setKeptVersionConflictNotice] = useState<KeptVersionConflictNotice | null>(null)
   /** WATCH-07 — has this document's durable-content-hash baseline been seeded into the coordinator yet, for the currently watched writingId? */
   const hasSeededBaselineRef = useRef(false)
   /**
@@ -514,7 +471,7 @@ export function EditorShell({
    */
   const hasUnconfirmedLocalEditRef = useRef(false)
   const [showCorrections, setShowCorrections] = useState(true)
-  const [learnedWords, setLearnedWords] = useState<LearnedWordEntry[]>([])
+  const { learnedWords, learnedWordsRef, setLearnedWords } = useLearnedWordsState()
   const [learnedWordsLoading, setLearnedWordsLoading] = useState(false)
 
   const [renameModalOpen, setRenameModalOpen] = useState(false)
@@ -598,31 +555,34 @@ export function EditorShell({
       setLifecycle(patch.lifecycle)
     }
   }, [])
+  /**
+   * Único dueño de `mode` (estado) y `modeRef` (lo que leen los callbacks de
+   * larga vida y los manejadores): se escriben en el mismo paso, así el ref
+   * nunca devuelve el modo anterior entre el render y un efecto (ODE-609).
+   * Antes, un efecto espejo copiaba el estado al ref tras el commit, además
+   * de las escrituras manuales de cada transición.
+   *
+   * El ref se escribe primero: `handleToggleMode` → rich lo necesita en
+   * "rich" antes de `setContent` (el orden ref-primero es un contrato del
+   * pack, sin lector observable hoy). El único lector síncrono es
+   * `handleEditorUpdate` (`useEditorPersistence.ts:546`), que sale antes por
+   * `isApplyingContentRef`; `persistEditorSnapshot` no lee `modeRef`. El ref
+   * se inicializa con el valor inicial del estado (`useRef(mode)`); ya no hay
+   * efecto espejo que lo cubra.
+   */
+  const applyEditorMode = useCallback((next: "rich" | "markdown") => {
+    modeRef.current = next
+    setMode(next)
+  }, [])
   const markdownSaveTimeoutRef = useRef<number | null>(null)
   // El guardado de markdown pendiente (ODE-573): se guarda junto al timer para
   // poder ejecutarlo al desmontar en vez de perderlo.
   const pendingMarkdownSaveRef = useRef<(() => void) | null>(null)
-  const scheduleMarkdownSave = useCallback((run: () => void) => {
-    pendingMarkdownSaveRef.current = run
-    return window.setTimeout(() => {
-      pendingMarkdownSaveRef.current = null
-      run()
-    }, MARKDOWN_SAVE_DEBOUNCE_MS)
-  }, [])
-  /** Ejecuta ya el guardado de markdown pendiente, si su timer sigue vivo. */
-  const flushPendingMarkdownSave = useCallback(() => {
-    const run = pendingMarkdownSaveRef.current
-    pendingMarkdownSaveRef.current = null
-    if (markdownSaveTimeoutRef.current === null || !run) {
-      return
-    }
-    window.clearTimeout(markdownSaveTimeoutRef.current)
-    markdownSaveTimeoutRef.current = null
-    run()
-  }, [])
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
-  const activeEditorTabIdRef = useRef<string | null>(editorSession.active_tab_id)
+  // Único escritor: la suscripción síncrona al store (ODE-609, opción B de
+  // ODE-608). Antes era un espejo por efecto más cuatro escrituras manuales.
+  const activeEditorTabIdRef = useActiveEditorTabIdRef()
   /**
    * Único dueño de la identidad del documento activo (ODE-564).
    *
@@ -658,67 +618,20 @@ export function EditorShell({
       reason: ActivationReason,
     ) => {
       setActiveWritingId(target.writingId)
-      setHydrationPhase(activationHydrates(target.writingId, reason) ? "loading" : "ready")
+      applyHydrationPhase(activationHydrates(target.writingId, reason) ? "loading" : "ready")
       setActivationSeq((current) => current + 1)
       if (target.href !== undefined) {
         replaceEditorHistory(target.href)
       }
     },
-    [setActiveWritingId],
-  )
-  /**
-   * ODE-542: reconcilia el estado de guardado del documento activo (status bar
-   * y su pestaña) desde el catálogo durable. Los eventos de sync son solo
-   * invalidaciones: disparan esta lectura O(1), nunca fijan un estado terminal
-   * por sí mismos. Un evento perdido no deja la UI atascada en "Saving…",
-   * porque terminar de hidratar (también tras materializar un borrador) y el
-   * `cloud-snapshot` del catálogo convergen por la misma lectura. Solo cura hacia un terminal durable, y
-   * nunca borra un `error` local (ODE-461).
-   */
-  const reconcileActiveSaveState = useCallback(
-    async (reason: string) => {
-      const writingId = currentWritingIdRef.current
-      if (!writingId) {
-        return
-      }
-
-      try {
-        const { getCatalogRecord } = await import("@/lib/queries/document-catalog")
-        const record = await getCatalogRecord(writingId)
-        if (!record || currentWritingIdRef.current !== writingId) {
-          return
-        }
-
-        const current = syncStatusRef.current
-        const next = reconcileSaveStateFromDurable({
-          current,
-          durable: { syncStatus: record.syncStatus, cloudPresent: record.cloudPresent },
-          isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
-        })
-        if (!next) {
-          return
-        }
-
-        console.info(formatSaveStateDiagnostic({ writingId, durableSyncStatus: record.syncStatus, current, next, reason }))
-        applySyncStatus(next)
-        updateTabSaveState({ tabId: writingId, saveState: next, hasPendingSync: saveStateToHasPendingSync(next) })
-      } catch (error) {
-        // El contenido sigue abierto; el siguiente evento de sync, cambio del
-        // catálogo o activación reintenta.
-        console.error("[editor:save-state] reconcile read failed", {
-          writingId,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    },
-    [applySyncStatus],
+    [applyHydrationPhase, setActiveWritingId],
   )
   // Los callbacks del coordinador de persistencia se crean una vez; leen la
-  // versión vigente por ref.
-  const reconcileActiveSaveStateRef = useRef(reconcileActiveSaveState)
-  useEffect(() => {
-    reconcileActiveSaveStateRef.current = reconcileActiveSaveState
-  }, [reconcileActiveSaveState])
+  // versión vigente por ref. La reconciliación vive en `useSaveStateSync` (paso
+  // 3) y este espejo lo asigna su efecto; hasta entonces el valor es un no-op y
+  // ningún llamador corre antes: la hidratación lo invoca al terminar, de forma
+  // asíncrona, y la suscripción se registra en el mismo efecto del hook.
+  const reconcileActiveSaveStateRef = useRef<(reason: string) => Promise<void>>(async () => {})
   const hydrationGenerationOwnerRef = useRef<ReturnType<typeof createHydrationGenerationOwner> | null>(null)
   if (hydrationGenerationOwnerRef.current === null) {
     hydrationGenerationOwnerRef.current = createHydrationGenerationOwner()
@@ -763,39 +676,22 @@ export function EditorShell({
   const richUpdateRafRef = useRef<number | null>(null)
   const richUpdateDebounceRef = useRef<number | null>(null)
   const richUpdateEditorRef = useRef<Editor | null>(null)
-  const tableOfContentsItemsRef = useRef<TableOfContentDataItem[]>([])
-  const activeTableOfContentsItemIdRef = useRef<string | null>(null)
   const tableOfContentsScrollRafRef = useRef<number | null>(null)
   const tableOfContentsDebounceRef = useRef<number | null>(null)
   const markdownSelectionRafRef = useRef<number | null>(null)
-  const pendingMarkdownSelectionRef = useRef<{
-    start: number
-    end: number
-    writingId: string
-    scrollTop?: number
-    scrollLeft?: number
-    editorScrollTop?: number
-    editorScrollLeft?: number
-    shellScrollTop?: number
-    shellScrollLeft?: number
-    windowScrollX?: number
-    windowScrollY?: number
-    // Cross-document-leak guard (ODE-555 follow-up): this queue is shared by
-    // every caller (typing, hydration, ...), and its deferred rAF has no
-    // built-in notion of "which document this was for" — without a guard, a
-    // hydration restore queued for A that hasn't fired yet would apply to
-    // whatever document/DOM is current by the time the frame runs, even a
-    // different one the user already switched to. Callers that care (only
-    // hydration does today) pass `isStillValid`; callers that don't (plain
-    // typing, always operating on the currently-active document) omit it and
-    // get the prior, unguarded behavior.
-    isStillValid?: () => boolean
-    onSettled?: () => void
-  } | null>(null)
+  // Cross-document-leak guard (ODE-555 follow-up): this queue is shared by
+  // every caller (typing, hydration, ...), and its deferred rAF has no
+  // built-in notion of "which document this was for" — without a guard, a
+  // hydration restore queued for A that hasn't fired yet would apply to
+  // whatever document/DOM is current by the time the frame runs, even a
+  // different one the user already switched to. Callers that care (only
+  // hydration does today) pass `isStillValid`; callers that don't (plain
+  // typing, always operating on the currently-active document) omit it and
+  // get the prior, unguarded behavior. El tipo vive en `useDocumentExit`,
+  // que consume este ref por `input`.
+  const pendingMarkdownSelectionRef = useRef<PendingMarkdownSelection | null>(null)
   const suppressNextSelectionPopupRef = useRef(false)
   const currentDocumentMarkdownRef = useRef("")
-  const automaticCorrectionSuggestionsRef = useRef<PublicationSuggestion[]>([])
-  const learnedWordsRef = useRef<LearnedWordEntry[]>([])
   const learnedWordsLoadedRef = useRef(false)
   const persistedCorrectionBlocksRef = useRef(new Map<string, LocalCorrectionBlock>())
   const correctionToastDismissRef = useRef<number | null>(null)
@@ -807,211 +703,9 @@ export function EditorShell({
   const suppressedCorrectionFlushTimerRef = useRef<number | null>(null)
   const editorInstanceRef = useRef<Editor | null>(null)
 
-  const persistenceCoordinator = useMemo(
-    () => {
-      const applyCommittedTabState = ({ record, snapshot }: PersistenceCommitEvent) => {
-        const sourceTabId = snapshot.sourceTabId ?? record.id
-        // Same OR-fallback as onStateChange below: right after a draft
-        // materializes, currentWritingIdRef updates synchronously but
-        // activeEditorTabIdRef only catches up on a later render, so a
-        // commit landing in that window must still recognize the genuinely
-        // active document (ODE-478 follow-up).
-        const isSourceTabActive =
-          activeEditorTabIdRef.current === sourceTabId || currentWritingIdRef.current === record.id
-        const lifecycle = record.lifecycle ?? snapshot.lifecycle
-        const saveState = mapLocalSyncStatusToSaveState(
-          "pending",
-          lifecycle,
-          typeof navigator === "undefined" ? true : navigator.onLine,
-        )
-
-        if (!isSourceTabActive) {
-          updateTabSaveState({
-            tabId: sourceTabId,
-            saveState,
-            hasPendingSync: lifecycle !== "local-only",
-          })
-        }
-
-        // A stale completion can still belong to the tab the author has
-        // returned to. Only update the active editor when its identity
-        // matches; never let another document overwrite these refs.
-        if (isSourceTabActive && currentWritingIdRef.current === record.id) {
-          applyDocumentMetadata({ version: record.version, createdAt: record.createdAt })
-        }
-      }
-
-      return createPersistenceCoordinator(
-        {
-          runtime: isDesktopRuntime() ? "desktop" : "web",
-          // Desktop's durable commit (write_file + catalog_dual_write + cloud
-          // sync enqueue + the catalog-change fan-out every mounted view
-          // reacts to) is expensive enough that near-real-time persistence
-          // makes typing itself the bottleneck. Coalescing it to fire once per
-          // quiet window — rather than ~150ms after every pause — cuts how
-          // often that whole pipeline runs during sustained typing, without
-          // changing what the editor shows: TipTap stays the source of truth
-          // in memory, and settle() below still flushes immediately on tab
-          // close/switch so a deliberate action never waits out this window.
-          persistenceDebounceMs: isDesktopRuntime() ? DESKTOP_PERSISTENCE_DEBOUNCE_MS : 0,
-          documentService: {
-            saveWriting: async (input) => (await getDocumentService()).saveWriting(input),
-          },
-          createDesktopDraft: (options) => createDesktopDraftFn(options),
-          createWritingId,
-          now: () => new Date().toISOString(),
-        },
-        {
-        onStateChange: (event: PersistenceStateEvent) => {
-          const sourceTabId = event.snapshot.sourceTabId ?? (event.writingId ?? null)
-          const isSourceTabActive = sourceTabId
-            ? activeEditorTabIdRef.current === sourceTabId ||
-              Boolean(event.writingId && currentWritingIdRef.current === event.writingId)
-            : event.writingId === currentWritingIdRef.current
-
-          if (sourceTabId && !isSourceTabActive) {
-            if (event.state === "persisting_local" || event.state === "dirty") {
-              updateTabSaveState({ tabId: sourceTabId, saveState: "saving", hasPendingSync: true })
-            } else if (event.state === "failed") {
-              updateTabSaveState({ tabId: sourceTabId, saveState: "error", hasPendingSync: true })
-            }
-          }
-
-          if (!isSourceTabActive) {
-            return
-          }
-
-          if (event.state === "persisting_local" || event.state === "dirty") {
-            applySyncStatus("saving")
-            return
-          }
-
-          if (event.state === "failed") {
-            applySyncStatus("error")
-            return
-          }
-
-          if (event.state === "queued_remote") {
-            applySyncStatus(
-              event.created
-                ? "saved-local"
-                : mapLocalSyncStatusToSaveState(
-                    "pending",
-                    event.snapshot.lifecycle,
-                    typeof navigator === "undefined" ? true : navigator.onLine,
-                  ),
-            )
-          }
-        },
-        onMaterialized: ({ record, snapshot }) => {
-          const materializedTitle = record.title?.trim() || DESKTOP_UNTITLED_WRITING_TITLE
-          const sourceTabId = snapshot.sourceTabId ?? EDITOR_DRAFT_TAB_ID
-          const isSourceDraftActive =
-            currentWritingIdRef.current === null &&
-            activeEditorTabIdRef.current === sourceTabId &&
-            ephemeralDraftWritingIdRef.current === snapshot.draftWritingId
-
-          if (snapshot.draftWritingId) {
-            materializedDraftIdsRef.current.set(snapshot.draftWritingId, record.id)
-          }
-
-          // Reconcile the exact source tab even when this completion is stale;
-          // a generation only describes UI ownership, never document identity.
-          // draftWritingId lets the store tell this draft's own tab apart from
-          // a different draft session that has since reused the same tab id
-          // (ODE-478 follow-up).
-          reconcileMaterializedDraftTab({
-            writingId: record.id,
-            draftTabId: sourceTabId,
-            draftWritingId: snapshot.draftWritingId,
-            title: materializedTitle,
-            saveState: "saved-local",
-            hasPendingSync: false,
-          })
-
-          if (ephemeralDraftWritingIdRef.current === snapshot.draftWritingId) {
-            ephemeralDraftWritingIdRef.current = null
-            draftContentSnapshotRef.current = null
-          }
-
-          if (!isSourceDraftActive) {
-            // The author is looking at another document (or this completion
-            // belongs to an older draft instance). Reconciliation above keeps
-            // the file owned without stealing focus or editor state.
-            return
-          }
-
-          activateDocument({ writingId: record.id }, "materialize")
-          ephemeralDraftWritingIdRef.current = null
-          applyDocumentMetadata({
-            createdAt: record.createdAt,
-            title: materializedTitle,
-            hasExplicitTitle: false,
-            version: record.version,
-            slug: null,
-            status: "draft",
-            artifactType: "general",
-            visibility: "private",
-            lifecycle: "local-only",
-          })
-          navigatedToDraftRef.current = true
-          // ODE-542: no hace falta reconciliar aquí. Materializar hidrata el
-          // documento (ODE-570) y la hidratación relee el estado durable.
-        },
-        onIdentityCreated: (writingId) => {
-          const nextWritingSession = createNewWritingSessionState(writingId)
-          // La ruta de esta transición es una navegación real de Next, no una
-          // proyección: va por `navigateToWriting`, aquí abajo.
-          activateDocument(
-            {
-              writingId: nextWritingSession.activeWritingId,
-            },
-            "identity",
-          )
-
-          if (!routeWritingIdRef.current) {
-            navigatedToDraftRef.current = true
-            navigateToWriting(routerRef.current, `/write/${writingId}`, { mode: "replace", skipOnDesktop: false })
-          }
-        },
-        onCommitted: applyCommittedTabState,
-        onBackgroundCommitted: applyCommittedTabState,
-        onError: (event) => {
-          if (event.operation !== "schedule") {
-            const sourceTabId = event.snapshot.sourceTabId ?? (event.writingId ?? null)
-            if (sourceTabId) {
-              updateTabSaveState({ tabId: sourceTabId, saveState: "error", hasPendingSync: true })
-            }
-
-            const isSourceTabActive = sourceTabId
-              ? activeEditorTabIdRef.current === sourceTabId
-              : event.writingId === currentWritingIdRef.current
-            if (isSourceTabActive) {
-              applySyncStatus("error")
-            }
-          }
-
-          console.error(
-            event.operation === "draft-materialization"
-              ? "[editor:save] desktop draft materialization failed"
-              : event.operation === "schedule"
-                ? "[editor:sync] schedule failed after local commit"
-                : "[editor:save] local save failed",
-            {
-              writingId: event.writingId,
-              error: event.error?.message ?? "Unknown persistence error",
-            },
-          )
-        },
-        },
-      )
-    },
-    [applySyncStatus, activateDocument, applyDocumentMetadata, createDesktopDraftFn],
-  )
-
-  useEffect(() => {
-    persistenceCoordinator.activateDocument(currentWritingId)
-  }, [currentWritingId, persistenceCoordinator])
+  const updateDerivedEditorState = useCallback((editorInstance: Editor) => {
+    setBodyText(editorInstance.getText())
+  }, [])
 
   // Lo que la shell tenga en cola hacia el coordinador al desmontarse: la
   // edición rich en su debounce de desktop (150 ms) y el guardado de markdown
@@ -1019,18 +713,60 @@ export function EditorShell({
   // donde vive la función; se lee aquí, al cerrar el coordinador.
   const flushPendingEditOnUnmountRef = useRef<(() => void) | null>(null)
 
-  useEffect(
-    () => () => {
-      // ODE-573: volcar ANTES de cerrar el coordinador. Este efecto está
-      // declarado antes que la limpieza que cancela las colas de la shell, y
-      // React ejecuta las limpiezas en ese orden: si el volcado fuera después,
-      // el coordinador ya cerrado rechazaría el guardado y se perdería lo
-      // escrito en los últimos 150 ms (rich) u 800 ms (markdown).
-      flushPendingEditOnUnmountRef.current?.()
-      persistenceCoordinator.dispose()
-    },
-    [persistenceCoordinator],
-  )
+  // ODE-605 — corte 5, paso 1: el cluster de guardado vive en su hook (mudanza
+  // mecánica; el estado y los refs siguen siendo de la shell). Se llama aquí,
+  // donde estaba el `useMemo` del coordinador, así que el orden de efectos
+  // (activar → volcar + dispose → asignar el volcado) no cambia.
+  const {
+    persistenceCoordinator,
+    persistEditorSnapshot,
+    flushQueuedRichModeUpdate,
+    flushPendingMarkdownSave,
+    scheduleMarkdownSave,
+    handleEditorUpdate,
+  } = useEditorPersistence({
+    currentWritingId,
+    currentWritingIdRef,
+    activeEditorTabIdRef,
+    ephemeralDraftWritingIdRef,
+    draftContentSnapshotRef,
+    materializedDraftIdsRef,
+    navigatedToDraftRef,
+    routeWritingIdRef,
+    routerRef,
+    externalContentConflictRef,
+    onKeptVersionConflict: setKeptVersionConflictNotice,
+    hasUnconfirmedLocalEditRef,
+    isApplyingContentRef,
+    modeRef,
+    createdAtRef,
+    titleRef,
+    hasExplicitTitleRef,
+    versionRef,
+    statusRef,
+    artifactTypeRef,
+    visibilityRef,
+    lifecycleRef,
+    richUpdateRafRef,
+    richUpdateDebounceRef,
+    richUpdateEditorRef,
+    markdownSaveTimeoutRef,
+    pendingMarkdownSaveRef,
+    flushPendingEditOnUnmountRef,
+    applySyncStatus,
+    activateDocument,
+    applyDocumentMetadata,
+    updateDerivedEditorState,
+    createDesktopDraftFn,
+    createWritingId,
+    deriveAutoTitle,
+    navigateToWriting,
+    untitledWritingTitle: UNTITLED_WRITING_TITLE,
+  })
+
+  useEffect(() => {
+    setKeptVersionConflictNotice(null)
+  }, [currentWritingId])
 
   /**
    * Al cambiar de documento se descarta el trabajo de correcciones pendiente
@@ -1100,7 +836,7 @@ export function EditorShell({
       tableOfContentsDebounceRef.current = null
       setTableOfContentsItems(snapshot)
     }, TABLE_OF_CONTENTS_DEBOUNCE_MS)
-  }, [])
+  }, [setTableOfContentsItems])
 
   const editorExtensions = useMemo(
     () =>
@@ -1118,7 +854,7 @@ export function EditorShell({
     [spellcheckPreference],
   )
   // ODE-586: estado de sugerencias, admisión y caché de bloques de corrección.
-  // Mudanza mecánica; el estado y los refs siguen siendo de la shell.
+  // ODE-609: el estado y su ref vivo pertenecen a useCorrectionSuggestionsState.
   const {
     correctionSuggestionBatcher,
     applyCorrectionSuggestionUpdate,
@@ -1152,331 +888,24 @@ export function EditorShell({
     }
   }, [])
 
-  const updateDerivedEditorState = useCallback((editorInstance: Editor) => {
-    setBodyText(editorInstance.getText())
-  }, [])
-
+  // ODE-607 — corte 6, paso 3: se queda en la shell (no cabe en `useFootnotes`:
+  // sus consumidores, `useExternalDocumentChanges` y `useDocumentHydration`,
+  // están declarados antes del punto de llamada del hook).
   const refreshRichFootnotes = useCallback(() => {
     setRichFootnoteRevision((revision) => revision + 1)
   }, [])
 
-  const persistEditorSnapshot = useCallback(
-    async (
-      editorInstance: Editor,
-      overrides?: PersistenceSnapshotOverrides,
-      options?: { awaitDurability?: boolean; forceMaterialize?: boolean },
-    ) => {
-      const activeId = currentWritingIdRef.current
-
-      // WATCH-07 DIRTY — a known external content conflict for this document
-      // blocks every autosave (never silently overwrite the external edit
-      // the debounce would otherwise write over) until the user explicitly
-      // resolves it via the conflict banner's actions, both of which clear
-      // this ref themselves before calling back in here.
-      if (externalContentConflictRef.current) {
-        return false
-      }
-
-      const baseCreatedAt = createdAtRef.current
-      const nextBodyText = editorInstance.getText()
-      const nextDerivedTitle = deriveAutoTitle(nextBodyText, baseCreatedAt)
-      const overrideTitle = overrides?.title?.trim()
-      const nextTitle =
-        overrideTitle && overrideTitle.length > 0
-          ? overrideTitle
-          : isDesktopRuntime()
-            ? titleRef.current.trim() || DESKTOP_UNTITLED_WRITING_TITLE
-            : hasExplicitTitleRef.current
-            ? titleRef.current.trim() || UNTITLED_WRITING_TITLE
-            : nextDerivedTitle
-
-      if (!activeId && isDesktopRuntime() && !ephemeralDraftWritingIdRef.current) {
-        ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
-      }
-
-      const draftWritingId = ephemeralDraftWritingIdRef.current
-      const sourceTabId = activeEditorTabIdRef.current ?? (activeId ?? EDITOR_DRAFT_TAB_ID)
-      const nextBodyJson = editorInstance.getJSON() as Record<string, unknown>
-
-      // WATCH-07 write-side guard: PersistenceCoordinator itself now owns
-      // resolving and advancing the durable baseline (see its own doc
-      // comment on getDurableContentHash for why — a caller-frozen baseline
-      // races a second save queued behind a first one). Nothing to pass
-      // through here any more.
-      //
-      // End the shell's pre-handoff lifecycle and begin the coordinator's
-      // post-handoff lifecycle in the same tick. `persist()` records its
-      // unconfirmed-content marker synchronously before returning.
-      hasUnconfirmedLocalEditRef.current = false
-      const persistence = persistenceCoordinator.persist(
-        {
-          writingId: activeId,
-          createdAt: baseCreatedAt,
-          version: versionRef.current,
-          title: nextTitle,
-          bodyJson: nextBodyJson,
-          bodyText: nextBodyText,
-          status: statusRef.current,
-          artifactType: artifactTypeRef.current,
-          visibility: visibilityRef.current,
-          lifecycle: activeId ? lifecycleRef.current : "local-only",
-          draftWritingId,
-          sourceTabId,
-          // getText() misses atomic non-text content (an image, etc.) — use
-          // TipTap's own structural emptiness check instead. forceMaterialize
-          // lets a caller that's about to add non-text content (e.g. an
-          // image upload that needs a real writingId to attach to) claim
-          // non-blank a beat early, rather than waiting for content that
-          // can't land until materialization already happened (ODE-478
-          // follow-up).
-          bodyIsEmpty: options?.forceMaterialize ? false : editorInstance.isEmpty,
-        },
-        overrides,
-      )
-
-      if (!options?.awaitDurability) {
-        return persistence
-      }
-
-      // Enqueue first, then settle immediately. Waiting for persist() before
-      // calling settle() leaves a fresh request parked behind desktop's quiet
-      // window, which is exactly what explicit structural mutations (marks,
-      // annotations, rename) must not do: their plain text can remain
-      // unchanged while their serialized Markdown is already different.
-      // settle() also covers the optimistic in-flight branch, while awaiting
-      // `persistence` preserves the caller's generation-scoped result.
-      const settled = await persistenceCoordinator.settle({ writingId: activeId, draftWritingId, sourceTabId })
-      const persisted = await persistence
-      return settled && persisted
-    },
-    [persistenceCoordinator],
-  )
-
-  const persistExplicitStructuralMutation = useCallback(
-    (editorInstance: Editor) => {
-      void persistEditorSnapshot(editorInstance, undefined, { awaitDurability: true })
-    },
-    [persistEditorSnapshot],
-  )
-
-  const runRichModeUpdateSideEffects = useCallback(
-    (editorInstance: Editor) => {
-      updateDerivedEditorState(editorInstance)
-      void persistEditorSnapshot(editorInstance)
-    },
-    [persistEditorSnapshot, updateDerivedEditorState],
-  )
-
-  const flushQueuedRichModeUpdate = useCallback(() => {
-    if (richUpdateRafRef.current !== null) {
-      window.cancelAnimationFrame(richUpdateRafRef.current)
-      richUpdateRafRef.current = null
-    }
-    if (richUpdateDebounceRef.current !== null) {
-      window.clearTimeout(richUpdateDebounceRef.current)
-      richUpdateDebounceRef.current = null
-    }
-    const queuedEditor = richUpdateEditorRef.current
-    richUpdateEditorRef.current = null
-
-    if (!queuedEditor) {
-      return
-    }
-
-    runRichModeUpdateSideEffects(queuedEditor)
-  }, [runRichModeUpdateSideEffects])
-
-  useEffect(() => {
-    flushPendingEditOnUnmountRef.current = () => {
-      flushQueuedRichModeUpdate()
-      flushPendingMarkdownSave()
-    }
-  }, [flushPendingMarkdownSave, flushQueuedRichModeUpdate])
-
-  const scheduleQueuedRichModeUpdate = useCallback(() => {
-    richUpdateRafRef.current = null
-    if (!isDesktopRuntime()) {
-      flushQueuedRichModeUpdate()
-      return
-    }
-    if (richUpdateDebounceRef.current !== null) {
-      window.clearTimeout(richUpdateDebounceRef.current)
-    }
-    richUpdateDebounceRef.current = window.setTimeout(() => {
-      richUpdateDebounceRef.current = null
-      flushQueuedRichModeUpdate()
-    }, DESKTOP_EDITOR_OUTPUT_DEBOUNCE_MS)
-  }, [flushQueuedRichModeUpdate])
-
-  const queueMarkdownSelectionRestore = useCallback(
-    (
-      start: number,
-      end: number,
-      options?: {
-        scrollTop?: number
-        scrollLeft?: number
-        editorScrollTop?: number
-        editorScrollLeft?: number
-        shellScrollTop?: number
-        shellScrollLeft?: number
-        windowScrollX?: number
-        windowScrollY?: number
-        isStillValid?: () => boolean
-        onSettled?: () => void
-      },
-    ) => {
-      const writingId = markdownSelectionOwnerId(currentWritingIdRef.current)
-      const requestedIsStillValid = options?.isStillValid
-      const isStillValid = () =>
-        markdownSelectionOwnerId(currentWritingIdRef.current) === writingId &&
-        (!requestedIsStillValid || requestedIsStillValid())
-
-      // The latest selection wins, but a pending completion callback is never
-      // dropped with the request it came with: hydration finishes through
-      // this queue (`onSettled: finishHydration`), and a plain restore
-      // coalescing over it used to leave the phase on "loading" (ODE-582).
-      // Only callbacks carry over; each request keeps its own validity check.
-      const supersededOnSettled = pendingMarkdownSelectionRef.current?.onSettled
-      const onSettled =
-        supersededOnSettled && options?.onSettled
-          ? () => {
-              supersededOnSettled()
-              options.onSettled?.()
-            }
-          : supersededOnSettled ?? options?.onSettled
-      pendingMarkdownSelectionRef.current = { start, end, ...options, writingId, isStillValid, onSettled }
-
-      if (markdownSelectionRafRef.current !== null) {
-        return
-      }
-
-      markdownSelectionRafRef.current = window.requestAnimationFrame(() => {
-        markdownSelectionRafRef.current = null
-
-        const pendingSelection = pendingMarkdownSelectionRef.current
-        pendingMarkdownSelectionRef.current = null
-
-        if (!pendingSelection) {
-          return
-        }
-
-        // Checked at fire time, not schedule time: the document this
-        // restore was queued for may no longer be current by the time this
-        // frame actually runs (see the ref's own comment above).
-        if (pendingSelection.isStillValid && !pendingSelection.isStillValid()) {
-          pendingSelection.onSettled?.()
-          return
-        }
-
-        const nextTextarea = markdownTextareaRef.current
-
-        if (!nextTextarea) {
-          pendingSelection.onSettled?.()
-          return
-        }
-
-        if (document.activeElement !== nextTextarea) {
-          nextTextarea.focus()
-        }
-
-        if (nextTextarea.selectionStart !== pendingSelection.start || nextTextarea.selectionEnd !== pendingSelection.end) {
-          nextTextarea.setSelectionRange(pendingSelection.start, pendingSelection.end)
-        }
-
-        if (typeof pendingSelection.scrollTop === "number") {
-          nextTextarea.scrollTop = pendingSelection.scrollTop
-        }
-
-        if (typeof pendingSelection.scrollLeft === "number") {
-          nextTextarea.scrollLeft = pendingSelection.scrollLeft
-        }
-
-        // Each scroll target re-applies itself a second frame later (layout
-        // can still settle after the first write) — that second write is
-        // the true "last write wins" moment, so it needs the same validity
-        // re-check (time has passed since the outer frame ran) and is what
-        // onSettled must actually wait for, not the outer frame itself.
-        let pendingNestedFrames = 0
-        const scheduleNestedApply = (apply: () => void) => {
-          pendingNestedFrames += 1
-          window.requestAnimationFrame(() => {
-            if (!pendingSelection.isStillValid || pendingSelection.isStillValid()) {
-              apply()
-            }
-            pendingNestedFrames -= 1
-            if (pendingNestedFrames === 0) {
-              pendingSelection.onSettled?.()
-            }
-          })
-        }
-
-        const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-
-        if (
-          editorViewport &&
-          (typeof pendingSelection.editorScrollTop === "number" || typeof pendingSelection.editorScrollLeft === "number")
-        ) {
-          const applyViewportScroll = () => {
-            if (typeof pendingSelection.editorScrollTop === "number") {
-              editorViewport.scrollTop = pendingSelection.editorScrollTop
-            }
-
-            if (typeof pendingSelection.editorScrollLeft === "number") {
-              editorViewport.scrollLeft = pendingSelection.editorScrollLeft
-            }
-          }
-
-          applyViewportScroll()
-          scheduleNestedApply(applyViewportScroll)
-        }
-
-        const shellViewport = document.querySelector<HTMLElement>("main")
-        if (
-          shellViewport &&
-          (typeof pendingSelection.shellScrollTop === "number" || typeof pendingSelection.shellScrollLeft === "number")
-        ) {
-          const applyShellScroll = () => {
-            if (typeof pendingSelection.shellScrollTop === "number") {
-              shellViewport.scrollTop = pendingSelection.shellScrollTop
-            }
-
-            if (typeof pendingSelection.shellScrollLeft === "number") {
-              shellViewport.scrollLeft = pendingSelection.shellScrollLeft
-            }
-          }
-
-          applyShellScroll()
-          scheduleNestedApply(applyShellScroll)
-        }
-
-        if (typeof pendingSelection.windowScrollX === "number" || typeof pendingSelection.windowScrollY === "number") {
-          const applyWindowScroll = () => {
-            window.scrollTo(
-              typeof pendingSelection.windowScrollX === "number" ? pendingSelection.windowScrollX : window.scrollX,
-              typeof pendingSelection.windowScrollY === "number" ? pendingSelection.windowScrollY : window.scrollY,
-            )
-          }
-
-          applyWindowScroll()
-          scheduleNestedApply(applyWindowScroll)
-        }
-
-        markdownSelectionRef.current = {
-          start: pendingSelection.start,
-          end: pendingSelection.end,
-          text: nextTextarea.value.slice(pendingSelection.start, pendingSelection.end),
-          writingId: pendingSelection.writingId,
-        }
-
-        // No scroll target was scheduled (a plain selection-only restore) —
-        // this frame's write was the last one, so settle now.
-        if (pendingNestedFrames === 0) {
-          pendingSelection.onSettled?.()
-        }
-      })
-    },
-    [],
-  )
+  // ODE-607 — corte 6, paso 1: la restauración de selección markdown vive en
+  // su hook (mudanza mecánica; el estado y los refs siguen siendo de la
+  // shell). Se llama aquí, donde estaba el `useCallback` de la cola, así que
+  // el orden de efectos no cambia y los consumidores de más abajo no se mueven.
+  const { queueMarkdownSelectionRestore } = useSelectionRestore({
+    currentWritingIdRef,
+    markdownSelectionRafRef,
+    markdownSelectionRef,
+    markdownTextareaRef,
+    pendingMarkdownSelectionRef,
+  })
 
   const editor = useEditor(
     {
@@ -1492,46 +921,20 @@ export function EditorShell({
           lang: DEFAULT_EDITOR_SPELLCHECK_LANGUAGE,
         },
       },
-      onUpdate: ({ editor: nextEditor }) => {
-        if (isApplyingContentRef.current || modeRef.current === "markdown") {
-          return
-        }
-
-        // WATCH-07 — real edit, marked dirty immediately, well before the
-        // debounce below even schedules a persist() call.
-        hasUnconfirmedLocalEditRef.current = true
-        richUpdateEditorRef.current = nextEditor
-
-        if (richUpdateRafRef.current !== null) {
-          return
-        }
-
-        richUpdateRafRef.current = window.requestAnimationFrame(() => {
-          scheduleQueuedRichModeUpdate()
-        })
-      },
+      onUpdate: handleEditorUpdate,
     },
-    [editorExtensions, scheduleQueuedRichModeUpdate],
+    [editorExtensions, handleEditorUpdate],
   )
 
-  // Keep an imperative handle to the latest TipTap instance so persistence remaps
-  // can read the current block graph even when callbacks outlive a render.
-  useEffect(() => {
-    editorInstanceRef.current = editor ?? null
-  }, [editor])
-
-  // Captures the still-blank draft's live content right before leaving it, so
-  // the "no active document" effect can restore it on return instead of
-  // wiping it (ODE-478 case 4). No-op when the outgoing tab isn't the draft.
-  const snapshotOutgoingDraftContent = useCallback(() => {
-    if (currentWritingIdRef.current || !editor || !ephemeralDraftWritingIdRef.current) {
-      return
-    }
-    draftContentSnapshotRef.current = {
-      draftId: ephemeralDraftWritingIdRef.current,
-      bodyJson: editor.getJSON() as Record<string, unknown>,
-    }
-  }, [editor])
+  // ODE-609 — corte 7: `editorInstanceRef` tiene un solo escritor, aquí, en el
+  // render que adopta la instancia devuelta por `useEditor` (el mismo patrón
+  // que `routerRef`), no en un efecto espejo. El efecto pasivo dejaba el ref un
+  // render por detrás: entre el commit que adopta el editor y el efecto, una
+  // creación lo dejaba en `null` y una recreación lo dejaba apuntando al
+  // editor viejo —ya destruido por `useEditor`— mientras los lectores de
+  // correcciones y cambios externos seguían corriendo. El render cubre los dos
+  // casos (null → instancia, vieja → nueva) antes de cualquier efecto.
+  editorInstanceRef.current = editor ?? null
 
   // Uploading an image needs a real writingId to attach the asset to
   // (server-side storage path + RLS), so a still-blank draft must
@@ -1550,8 +953,7 @@ export function EditorShell({
     setImageModalOpen(true)
   }, [editor, persistEditorSnapshot])
 
-  // ODE-602: tabla de contenidos (mudanza mecánica; mismos efectos, en el
-  // mismo orden y en esta posición).
+  // ODE-602/609: TOC wiring; state and live refs belong to its state hook.
   const { navigateToTableOfContentsItem } = useTableOfContents({
     activeTableOfContentsItemIdRef,
     editor,
@@ -1561,79 +963,6 @@ export function EditorShell({
     tableOfContentsItemsRef,
     tableOfContentsScrollRafRef,
   })
-
-  const persistCurrentWorkspaceViewState = useCallback(() => {
-    const tabId = currentWritingIdRef.current ?? EDITOR_DRAFT_TAB_ID
-    const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-    const shellViewport = document.querySelector<HTMLElement>("main")
-    const currentTab = getEditorSessionState().session.tabs.find((tab) => tab.id === tabId)
-    const markdownSelection = readMarkdownSelectionForActiveDocument(
-      markdownSelectionRef.current,
-      currentWritingIdRef.current,
-    )
-
-    saveTabViewState({
-      tabId,
-      viewState: {
-        mode: modeRef.current,
-        scrollTop: editorViewport?.scrollTop ?? 0,
-        scrollLeft: editorViewport?.scrollLeft ?? 0,
-        windowScrollX: window.scrollX,
-        windowScrollY: window.scrollY,
-        shellScrollTop: shellViewport?.scrollTop ?? 0,
-        shellScrollLeft: shellViewport?.scrollLeft ?? 0,
-        selectionFrom: modeRef.current === "rich" && editor ? editor.state.selection.from : null,
-        selectionTo: modeRef.current === "rich" && editor ? editor.state.selection.to : null,
-        markdownSelectionStart:
-          modeRef.current === "markdown"
-            ? markdownSelection.selection?.start ??
-              (markdownSelection.belongsToOtherDocument
-                ? currentTab?.view_state?.markdownSelectionStart ?? null
-                : markdownTextareaRef.current?.selectionStart ?? null)
-            : null,
-        markdownSelectionEnd:
-          modeRef.current === "markdown"
-            ? markdownSelection.selection?.end ??
-              (markdownSelection.belongsToOtherDocument
-                ? currentTab?.view_state?.markdownSelectionEnd ?? null
-                : markdownTextareaRef.current?.selectionEnd ?? null)
-            : null,
-      },
-    })
-  }, [editor])
-
-  /**
-   * Protocolo de salida del documento activo (ADR documento activo, Hecho 4;
-   * Fase 1 — ODE-567). Antes estaba copiado en cada handler de transición.
-   *
-   * Los tres pasos son explícitos porque hoy NO todas las transiciones hacen
-   * los mismos, y la Fase 1 es una mudanza, no un cambio de comportamiento:
-   * cada sitio declara lo que ya hacía. Uniformizarlos es una decisión aparte.
-   * Va separado de `activateDocument` porque algunas transiciones (cerrar,
-   * abrir) salen ANTES de un `await` y activan DESPUÉS.
-   */
-  const prepareDocumentExit = useCallback(
-    (steps: { flushPendingEdit: boolean; snapshotDraft: boolean; saveViewState: boolean }) => {
-      // La edición en cola todavía apunta al editor del documento saliente:
-      // volcarla antes de que cambie la identidad (ODE-478 caso 2).
-      if (steps.flushPendingEdit) {
-        flushQueuedRichModeUpdate()
-        flushPendingMarkdownSave()
-      }
-      if (steps.snapshotDraft) {
-        snapshotOutgoingDraftContent()
-      }
-      if (steps.saveViewState) {
-        persistCurrentWorkspaceViewState()
-      }
-    },
-    [
-      flushPendingMarkdownSave,
-      flushQueuedRichModeUpdate,
-      persistCurrentWorkspaceViewState,
-      snapshotOutgoingDraftContent,
-    ],
-  )
 
   useEffect(() => {
     void initializeEditorSessionStore()
@@ -1668,10 +997,6 @@ export function EditorShell({
       },
     })
   }, [editor, spellcheckConfig])
-
-  useEffect(() => {
-    modeRef.current = mode
-  }, [mode])
 
   useEffect(() => () => correctionSuggestionBatcher.clear(), [correctionSuggestionBatcher])
 
@@ -1738,10 +1063,6 @@ export function EditorShell({
   }, [activateDocument, routeWritingId])
 
   useEffect(() => {
-    activeEditorTabIdRef.current = editorSession.active_tab_id
-  }, [editorSession.active_tab_id])
-
-  useEffect(() => {
     setImageViewerSource(null)
   }, [currentWritingId])
 
@@ -1792,6 +1113,24 @@ export function EditorShell({
     updateDerivedEditorState,
   })
 
+  const resolveConflictByKeepingMyVersion = useCallback(() => {
+    setKeptVersionConflictNotice(null)
+    keepMyVersion()
+  }, [keepMyVersion])
+
+  const resolveConflictByReloadingExternal = useCallback(() => {
+    setKeptVersionConflictNotice(null)
+    reloadExternalVersion()
+  }, [reloadExternalVersion])
+
+  const showKeptVersionFolder = useCallback(async (keptPath: string) => {
+    try {
+      await revealWorkspacePath(await dirname(keptPath))
+    } catch (error) {
+      console.error("[editor:conflict] failed to open kept version folder", error)
+    }
+  }, [])
+
   useEffect(() => {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
 
@@ -1818,7 +1157,7 @@ export function EditorShell({
     }
 
     setTableOfContentsItems([])
-  }, [currentWritingId])
+  }, [currentWritingId, setTableOfContentsItems])
 
   // Studio opens with the rail collapsed to 52px (docs/design/views/studio.md
    // anatomy). It is a default, not a lock: expanding it afterwards sticks.
@@ -1837,7 +1176,6 @@ export function EditorShell({
     activationSeq,
     routeWritingId,
     editorSession,
-    modeRef,
     isApplyingContentRef,
     hydrationGenerationOwnerRef,
     currentCanonicalPathRef,
@@ -1845,8 +1183,8 @@ export function EditorShell({
     ephemeralDraftWritingIdRef,
     draftContentSnapshotRef,
     suppressCorrectionAnalysisUntilRef,
-    setHydrationPhase,
-    setMode,
+    setHydrationPhase: applyHydrationPhase,
+    applyEditorMode,
     setMarkdownValue,
     setBodyText,
     setSyncStatus: applySyncStatus,
@@ -1872,106 +1210,49 @@ export function EditorShell({
     isExplicitWritingTitle,
   })
 
-  // ODE-542: una sola suscripción global a los eventos de sync. La identidad
-  // se resuelve por ref en el momento del evento, nunca con un
-  // `currentWritingId` capturado: un `synced` que llega durante la
-  // materialización o la hidratación no se pierde en la ventana de
-  // re-suscripción. Los eventos son invalidaciones: el documento activo
-  // relee su estado durable (O(1)); los de fondo solo actualizan su pestaña.
-  useEffect(() => {
-    return subscribeToSyncStatusChanges((event) => {
-      const activeWritingId = currentWritingIdRef.current
+  // ODE-605 — corte 5, paso 3: el estado de guardado (reconciliación contra el
+  // catálogo durable) y la suscripción única a sync viven en su hook (mudanza
+  // mecánica; el estado, sus refs y `applySyncStatus` siguen siendo de la
+  // shell). Se llama aquí, donde estaba la suscripción, así que el orden de
+  // efectos no cambia: después del volcado de `useEditorPersistence` (ODE-573)
+  // y antes del cleanup de `useDocumentExit`, y sigue habiendo una sola
+  // suscripción por shell (ODE-542/ODE-590).
+  useSaveStateSync({
+    applyDocumentMetadata,
+    applySyncStatus,
+    currentWritingIdRef,
+    navigateToWriting,
+    reconcileActiveSaveStateRef,
+    routeWritingId,
+    router,
+    syncStatusRef,
+  })
 
-      if (activeWritingId && event.writingId === activeWritingId) {
-        // Sin conexión no hay transición durable que releer: el commit local
-        // ya es durable y la nube no está disponible. Se proyecta "Saved
-        // locally" directamente, salvo que un fallo local sea dueño del
-        // indicador.
-        if (event.status === "offline") {
-          if (syncStatusRef.current !== "error") {
-            applySyncStatus("saved-local")
-            updateTabSaveState({
-              tabId: activeWritingId,
-              saveState: "saved-local",
-              hasPendingSync: saveStateToHasPendingSync("saved-local"),
-            })
-          }
-          return
-        }
-
-        void reconcileActiveSaveStateRef.current(`sync-${event.status}`)
-
-        if (event.status !== "synced") {
-          return
-        }
-
-        void (async () => {
-          const localWriting = await localDB.writings.get(activeWritingId)
-
-          if (!localWriting?.slug || routeWritingId === localWriting.slug) {
-            return
-          }
-
-          applyDocumentMetadata({ slug: localWriting.slug })
-          navigateToWriting(router, `/write/${localWriting.slug}`, { mode: "replace", skipOnDesktop: true })
-        })()
-        return
-      }
-
-      // Documento de fondo: converge su pestaña sin tocar la status bar
-      // activa. Un evento perdido se cura al activarlo (relectura durable tras
-      // hidratar); un `error` local nunca lo borra un evento de la nube.
-      const tab = getEditorSessionState().session.tabs.find(
-        (candidate) => candidate.writing_id === event.writingId || candidate.id === event.writingId,
-      )
-      if (!tab || tab.save_state === "error") {
-        return
-      }
-      const nextTabState = mapSyncLifecycleToSaveState(event.status)
-      if (tab.save_state === nextTabState) {
-        return
-      }
-      updateTabSaveState({
-        tabId: tab.id,
-        saveState: nextTabState,
-        hasPendingSync: saveStateToHasPendingSync(nextTabState),
-      })
-    })
-  }, [applyDocumentMetadata, applySyncStatus, routeWritingId, router])
-
-  useEffect(() => {
-    return () => {
-      // Flush rather than drop: a Source-mode edit typed <800ms before an
-      // unmount (web route change) still belongs to the current document.
-      flushPendingMarkdownSave()
-
-      if (richUpdateRafRef.current !== null) {
-        window.cancelAnimationFrame(richUpdateRafRef.current)
-      }
-
-      if (richUpdateDebounceRef.current !== null) {
-        window.clearTimeout(richUpdateDebounceRef.current)
-      }
-
-      if (markdownSelectionRafRef.current !== null) {
-        window.cancelAnimationFrame(markdownSelectionRafRef.current)
-      }
-
-      // El timer del toast lo arma `showCorrectionToast` (useCorrectionActions)
-      // en cualquier momento; hay que leer su valor al desmontar, no al montar.
-      if (correctionToastDismissRef.current !== null) {
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        window.clearTimeout(correctionToastDismissRef.current)
-      }
-
-      richUpdateRafRef.current = null
-      richUpdateDebounceRef.current = null
-      richUpdateEditorRef.current = null
-      markdownSelectionRafRef.current = null
-      pendingMarkdownSelectionRef.current = null
-      persistCurrentWorkspaceViewState()
-    }
-  }, [flushPendingMarkdownSave, persistCurrentWorkspaceViewState])
+  // ODE-605 — corte 5, paso 2: la salida del documento (snapshot, vista) y el
+  // cleanup de desmontaje viven en su hook (mudanza mecánica; el estado y los
+  // refs siguen siendo de la shell). Se llama aquí, donde estaba el efecto de
+  // unmount, así que su cleanup sigue declarado después del volcado de
+  // `useEditorPersistence` (ODE-573) y de la suscripción a sync.
+  const { prepareDocumentExit } = useDocumentExit({
+    correctionToastDismissRef,
+    currentWritingIdRef,
+    draftContentSnapshotRef,
+    editor,
+    ephemeralDraftWritingIdRef,
+    flushQueuedRichModeUpdate,
+    flushPendingMarkdownSave,
+    hydrationPhaseRef,
+    markdownSaveTimeoutRef,
+    markdownSelectionRafRef,
+    markdownSelectionRef,
+    markdownTextareaRef,
+    modeRef,
+    pendingMarkdownSelectionRef,
+    readMarkdownSelectionForActiveDocument,
+    richUpdateDebounceRef,
+    richUpdateEditorRef,
+    richUpdateRafRef,
+  })
 
   const applyMarkdownFromPanel = useCallback(
     (nextMarkdown: string) => {
@@ -2145,293 +1426,33 @@ export function EditorShell({
     toggleFocusMode,
   })
 
-  const dismissSelectionPopup = useCallback(() => {
-    suppressNextSelectionPopupRef.current = true
-    setPendingRichSelection(null)
-  }, [])
-
-  const handleMarkSelection = useCallback(() => {
-    if (!editor || !pendingRichSelection) {
-      return
-    }
-
-    suppressNextSelectionPopupRef.current = true
-    editor
-      .chain()
-      .focus()
-      .setTextSelection({ from: pendingRichSelection.from, to: pendingRichSelection.to })
-      .setHighlight()
-      .addAnnotation("highlight", "")
-      .setTextSelection(pendingRichSelection.to)
-      .run()
-
-    setPendingRichSelection(null)
-    updateDerivedEditorState(editor)
-    persistExplicitStructuralMutation(editor)
-  }, [editor, pendingRichSelection, persistExplicitStructuralMutation, updateDerivedEditorState])
-
-  const convertStandaloneHighlight = useCallback(
-    (anchorText: string, type: AnnotationType, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => {
-      if (!editor || !anchorText) return false
-      const highlightMark = editor.schema.marks.highlight
-      if (!highlightMark) return false
-
-      let converted = false
-
-      editor.state.doc.descendants((node, pos) => {
-        if (node.type.name !== "text") return
-        if (!node.marks.some((m) => m.type.name === "highlight")) return
-        const $pos = editor.state.doc.resolve(pos)
-        const range = getMarkRange($pos, highlightMark)
-        if (!range) return
-        const highlightedText = editor.state.doc.textBetween(range.from, range.to)
-        if (highlightedText === anchorText) {
-          if (anchorStart !== undefined && anchorEnd !== undefined) {
-            if (range.from !== anchorStart || range.to !== anchorEnd) return
-          }
-          converted = editor
-            .chain()
-            .focus()
-            .setTextSelection({ from: range.from, to: range.to })
-            .unsetHighlight()
-            .setHighlight()
-            .addAnnotation(type, text, id)
-            .setTextSelection(range.to)
-            .run()
-          return false
-        }
-      })
-      return converted
-    },
-    [editor],
-  )
-
-  const handleAnnotateSelection = useCallback(
-    (annotationType: "personal" | "ai" | "footnote" = "footnote") => {
-      if (!pendingRichSelection) return
-      setPendingAnnotation({
-        from: pendingRichSelection.from,
-        to: pendingRichSelection.to,
-        text: pendingRichSelection.text,
-        position: pendingRichSelection.bubblePosition,
-        sessionId: nextAnnotationSessionId(),
-        annotationType,
-      })
-      setPendingRichSelection(null)
-    },
-    [pendingRichSelection],
-  )
-
-  const handleFootnoteSelection = useCallback(() => {
-    if (!pendingRichSelection) {
-      return
-    }
-
-    if (modeRef.current === "markdown") {
-      setPendingRichSelection(null)
-      setFootnoteModalOpen(true)
-      return
-    }
-
-    selectionRef.current = {
-      from: pendingRichSelection.from,
-      to: pendingRichSelection.to,
-      text: pendingRichSelection.text,
-    }
-    setPendingRichSelection(null)
-    setFootnoteModalOpen(true)
-  }, [pendingRichSelection])
-
-  const handleEditorSelectType = useCallback(
-    (type: "personal" | "ai" | "footnote") => {
-      if (type === "personal") {
-        handleMarkSelection()
-        return
-      }
-      if (type === "footnote") {
-        handleFootnoteSelection()
-        return
-      }
-      handleAnnotateSelection(type)
-    },
-    [handleAnnotateSelection, handleFootnoteSelection, handleMarkSelection],
-  )
-
-  const applySemanticEntityAtSelection = useCallback(
-    (type: EntityTypeName): SemanticMarkApplyResult => {
-      if (!editor || !pendingRichSelection) {
-        return "Select some text first."
-      }
-      suppressNextSelectionPopupRef.current = true
-      editor.commands.focus()
-      const decision = applyEntityMark(editor, {
-        from: pendingRichSelection.from,
-        to: pendingRichSelection.to,
-        type,
-      })
-      if (!decision.ok) {
-        suppressNextSelectionPopupRef.current = false
-        return decision.message
-      }
-      setPendingRichSelection(null)
-      updateDerivedEditorState(editor)
-      persistExplicitStructuralMutation(editor)
-      return null
-    },
-    [editor, pendingRichSelection, persistExplicitStructuralMutation, updateDerivedEditorState],
-  )
-
-  const applySemanticHighlightAtSelection = useCallback(
-    (color: HighlightColorName): SemanticMarkApplyResult => {
-      if (!editor || !pendingRichSelection) {
-        return "Select some text first."
-      }
-      suppressNextSelectionPopupRef.current = true
-      editor.commands.focus()
-      const decision = applySemanticHighlight(editor, {
-        from: pendingRichSelection.from,
-        to: pendingRichSelection.to,
-        color,
-      })
-      if (!decision.ok) {
-        suppressNextSelectionPopupRef.current = false
-        return decision.message
-      }
-      setPendingRichSelection(null)
-      updateDerivedEditorState(editor)
-      persistExplicitStructuralMutation(editor)
-      return null
-    },
-    [editor, pendingRichSelection, persistExplicitStructuralMutation, updateDerivedEditorState],
-  )
-
-  const handleConfirmAnnotation = useCallback(
-    (note: string) => {
-      if (!editor || !pendingAnnotation) return
-      const trimmedNote = note.trim()
-      if (!trimmedNote) return
-
-      const annotationType = pendingAnnotation.annotationType ?? "footnote"
-      suppressNextSelectionPopupRef.current = true
-
-      if (annotationType === "footnote" || annotationType === "personal") {
-        editor
-          .chain()
-          .focus()
-          .setTextSelection({ from: pendingAnnotation.from, to: pendingAnnotation.to })
-          .setHighlight()
-          .addFootnote(trimmedNote)
-          .setTextSelection(pendingAnnotation.to)
-          .run()
-        setActivePanel("notes")
-      } else {
-        editor
-          .chain()
-          .focus()
-          .setTextSelection({ from: pendingAnnotation.from, to: pendingAnnotation.to })
-          .setHighlight()
-          .addAnnotation(annotationType, trimmedNote)
-          .setTextSelection(pendingAnnotation.to)
-          .run()
-      }
-
-      setPendingAnnotation(null)
-      updateDerivedEditorState(editor)
-      persistExplicitStructuralMutation(editor)
-    },
-    [editor, pendingAnnotation, persistExplicitStructuralMutation, updateDerivedEditorState],
-  )
-
-  useEffect(() => {
-    if (!editor) {
-      return
-    }
-
-    const handleSelectionUpdate = () => {
-      if (suppressNextSelectionPopupRef.current) {
-        suppressNextSelectionPopupRef.current = false
-        setPendingRichSelection(null)
-        return
-      }
-
-      if (modeRef.current !== "rich" || pendingAnnotation) {
-        return
-      }
-
-      const snapshot = captureRichSelectionSnapshot()
-      if (!snapshot) {
-        setPendingRichSelection(null)
-        return
-      }
-
-      setPendingRichSelection((current) => {
-        if (current && current.from === snapshot.from && current.to === snapshot.to) {
-          return current
-        }
-        return snapshot
-      })
-    }
-
-    editor.on("selectionUpdate", handleSelectionUpdate)
-
-    return () => {
-      editor.off("selectionUpdate", handleSelectionUpdate)
-    }
-  }, [captureRichSelectionSnapshot, editor, pendingAnnotation])
-
-  useEffect(() => {
-    if (!editor || (!pendingRichSelection && !pendingAnnotation)) return
-
-    const syncOpenOverlayPosition = (event?: Event) => {
-      // ODE-409: `scroll` is listened to in the capture phase, so scrolling the
-      // bubble's own textarea reaches this handler. The document geometry has
-      // not moved in that case — recomputing it is pure churn.
-      const eventTarget = event?.target
-      if (
-        eventTarget instanceof Element &&
-        eventTarget.closest(".AnnotationBubble, .SelectionPopup")
-      ) {
-        return
-      }
-
-      if (pendingRichSelection) {
-        const positions = getRichSelectionOverlayPositions(pendingRichSelection.from, pendingRichSelection.to)
-        if (positions) {
-          setPendingRichSelection((current) => {
-            if (!current) return current
-            if (
-              areFloatingOverlayAnchorsEqual(current.popupPosition, positions.popupPosition) &&
-              areFloatingOverlayAnchorsEqual(current.bubblePosition, positions.bubblePosition)
-            ) {
-              return current
-            }
-            return { ...current, ...positions }
-          })
-        }
-      }
-
-      if (pendingAnnotation) {
-        const positions = getRichSelectionOverlayPositions(pendingAnnotation.from, pendingAnnotation.to)
-        if (positions) {
-          setPendingAnnotation((current) => {
-            if (!current) return current
-            if (areFloatingOverlayAnchorsEqual(current.position, positions.bubblePosition)) {
-              return current
-            }
-            return { ...current, position: positions.bubblePosition }
-          })
-        }
-      }
-    }
-
-    window.addEventListener("resize", syncOpenOverlayPosition)
-    window.addEventListener("scroll", syncOpenOverlayPosition, { capture: true, passive: true })
-
-    return () => {
-      window.removeEventListener("resize", syncOpenOverlayPosition)
-      window.removeEventListener("scroll", syncOpenOverlayPosition, { capture: true })
-    }
-  }, [editor, getRichSelectionOverlayPositions, pendingAnnotation, pendingRichSelection])
+  // ODE-607 — corte 6, paso 2: el popup de selección, sus manejadores y sus
+  // dos efectos viven en su hook (mudanza mecánica; el estado y los refs siguen
+  // siendo de la shell). Se llama donde estaba `dismissSelectionPopup`, así que
+  // el orden de efectos no cambia.
+  const {
+    applySemanticEntityAtSelection,
+    applySemanticHighlightAtSelection,
+    convertStandaloneHighlight,
+    dismissSelectionPopup,
+    handleConfirmAnnotation,
+    handleEditorSelectType,
+  } = useSelectionPopup({
+    captureRichSelectionSnapshot,
+    editor,
+    getRichSelectionOverlayPositions,
+    modeRef,
+    pendingAnnotation,
+    pendingRichSelection,
+    persistEditorSnapshot,
+    selectionRef,
+    setActivePanel,
+    setFootnoteModalOpen,
+    setPendingAnnotation,
+    setPendingRichSelection,
+    suppressNextSelectionPopupRef,
+    updateDerivedEditorState,
+  })
 
   const handleToggleMode = useCallback(
     (nextMode: "rich" | "markdown") => {
@@ -2445,8 +1466,7 @@ export function EditorShell({
       }
 
       if (nextMode === "markdown") {
-        modeRef.current = "markdown"
-        setMode("markdown")
+        applyEditorMode("markdown")
         let bodyMarkdown: string
         if (isDesktopRuntime()) {
           const result = desktopDocumentEngine.richToSource(editor)
@@ -2473,7 +1493,6 @@ export function EditorShell({
       const normalizedMarkdown = isDesktopRuntime()
         ? markdownValue
         : normalizeMarkdownForRoundTrip(markdownValue)
-
       let currentRichMarkdown: string
       if (isDesktopRuntime()) {
         const result = desktopDocumentEngine.richToSource(editor)
@@ -2484,16 +1503,9 @@ export function EditorShell({
         )
       }
 
-      modeRef.current = "rich"
-      setMode("rich")
+      applyEditorMode("rich")
       setMarkdownValue(normalizedMarkdown)
-
-      // Source is another presentation of the same EditorState. A clean
-      // Rich -> Source -> Rich transition must not replace that state: doing
-      // so destroys/recreates every custom NodeView, resets editor-owned
-      // history/selection, and schedules a durable write for unchanged
-      // content. Markdown edits that already passed the Source autosave have
-      // also been applied to TipTap, so they take this same no-op path.
+      // Preserve EditorState and custom NodeViews for a clean mode round trip.
       if (currentRichMarkdown === normalizedMarkdown) {
         return
       }
@@ -2514,7 +1526,7 @@ export function EditorShell({
       updateDerivedEditorState(editor)
       void persistEditorSnapshot(editor)
     },
-    [editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState],
+    [editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState, applyEditorMode],
   )
 
   const handleMarkdownChange = useCallback(
@@ -2642,18 +1654,6 @@ export function EditorShell({
     },
     [applySyncStatus, editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, scheduleMarkdownSave],
   )
-
-  useEffect(() => {
-    const onFootnoteClick = () => {
-      setActivePanel("notes")
-    }
-
-    window.addEventListener(FOOTNOTE_REF_EVENT, onFootnoteClick)
-
-    return () => {
-      window.removeEventListener(FOOTNOTE_REF_EVENT, onFootnoteClick)
-    }
-  }, [])
 
   const handleInsertTable = useCallback(
     (rows: number, cols: number) => {
@@ -2795,47 +1795,27 @@ export function EditorShell({
     }
   }, [editor, localImageBackup, persistEditorSnapshot])
 
-  const handleInsertFootnote = useCallback(
-    (note: string) => {
-      if (modeRef.current === "markdown") {
-        const selection = markdownSelectionRef.current
-        const nextMarkdown = appendMarkdownFootnote(
-          markdownValue,
-          note,
-          selection?.start,
-          selection?.end,
-        )
-        if (nextMarkdown === markdownValue) return
-        applyMarkdownFromPanel(nextMarkdown)
-        setActivePanel("notes")
-        return
-      }
-
-      if (!editor) {
-        return
-      }
-
-      editor.commands.addFootnote(note)
-      setRichFootnoteRevision((r) => r + 1)
-      updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
-      setActivePanel("notes")
-    },
-    [applyMarkdownFromPanel, editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState],
-  )
-
-  // In Rich mode, derive footnotes from editor nodes only when content version changes.
-  // In Markdown mode, parse from the raw markdown value.
-  const footnotes = useMemo(() => {
-    if (mode === "rich") {
-      const contentRevision = version || richFootnoteRevision
-      void contentRevision
-      if (!editor) return []
-      return extractRichEditorAnnotations(editor)
-    }
-
-    return getMarkdownFootnotes(acceptedMarkdownForAnnotations)
-  }, [acceptedMarkdownForAnnotations, editor, mode, richFootnoteRevision, version])
+  // ODE-607 — corte 6, paso 3: el alta de footnotes, el memo del panel y el
+  // efecto de FOOTNOTE_REF_EVENT viven en su hook (mudanza mecánica; el estado
+  // y los refs siguen siendo de la shell). Se llama donde estaba
+  // `handleInsertFootnote`, así que el orden de efectos no cambia: el efecto
+  // solo pasa por detrás de manejadores sin efectos. `refreshRichFootnotes` se
+  // queda en la shell porque sus consumidores están declarados antes.
+  const { footnotes, handleInsertFootnote } = useFootnotes({
+    applyMarkdownFromPanel,
+    editor,
+    markdownValue,
+    acceptedMarkdownForAnnotations,
+    markdownSelectionRef,
+    mode,
+    modeRef,
+    persistEditorSnapshot,
+    richFootnoteRevision,
+    setActivePanel,
+    setRichFootnoteRevision,
+    updateDerivedEditorState,
+    version,
+  })
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const selectionMetrics = useEditorSelection(editor, mode, markdownSelectionState)
   const displayTitle = useMemo(
@@ -2859,6 +1839,9 @@ export function EditorShell({
     )
   }, [editor, markdownValue, mode, version])
 
+  // ODE-609: adopt the derived memo in its render, before commit consumers.
+  currentDocumentMarkdownRef.current = currentDocumentMarkdown
+
   // The Grammar tab's badge counts exactly what its panel would list, so it
   // filters through the same helper rather than the raw suggestion array.
   const visibleCorrectionCount = useMemo(
@@ -2869,9 +1852,6 @@ export function EditorShell({
   )
 
 
-  useEffect(() => {
-    currentDocumentMarkdownRef.current = currentDocumentMarkdown
-  }, [currentDocumentMarkdown])
 
   // ODE-586: ciclo de vida de las correcciones (mudanza mecánica; mismos
   // efectos, en el mismo orden y en esta posición).
@@ -3113,7 +2093,6 @@ export function EditorShell({
     handleOpenWorkspaceDocument,
   } = useWorkspaceTabOpening({
     activateDocument,
-    activeEditorTabIdRef,
     createWorkspaceTabRef,
     currentWritingIdRef,
     editor,
@@ -3135,7 +2114,7 @@ export function EditorShell({
   })
 
   const handleMenuOpenFile = useCallback(
-    async (_path: string, content: string) => {
+    async (_path: string) => {
       // Same reasoning as the other document-switching handlers: the OS
       // "Open File" menu also detaches from whatever is currently active
       // (ODE-478 follow-up).
@@ -3176,66 +2155,8 @@ export function EditorShell({
         })
         return
       }
-
-      const nowIso = new Date().toISOString()
-      const nextWritingId = createWritingId()
-      const parseResult = desktopDocumentEngine.sourceToRich(content)
-      const bodyJson = parseResult.success ? parseResult.snapshot.bodyJson : EMPTY_EDITOR_JSON
-      const bodyText = parseResult.success ? parseResult.snapshot.bodyText : ""
-      const nextTitle = isDesktopRuntime()
-        ? filenameToTitle(_path) || DESKTOP_UNTITLED_WRITING_TITLE
-        : deriveAutoTitle(bodyText, nowIso)
-
-      const record: WritingRecord = {
-        id: nextWritingId,
-        authorId: null,
-        title: nextTitle,
-        content: {
-          richText: bodyJson as Record<string, unknown>,
-          markdown: null,
-          plainText: bodyText,
-          canonicalSource: "rich-text",
-        },
-        slug: null,
-        status: "draft",
-        artifactType: "general",
-        visibility: "private",
-        parentId: null,
-        correspondenceId: null,
-        version: 1,
-        deletedAt: null,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        contentUpdatedAt: nowIso,
-        metadataUpdatedAt: nowIso,
-      }
-
-      try {
-        if (isDesktopRuntime()) {
-          const result = await importDesktopWritingFile(_path, content)
-          if (result.error || !result.data) {
-            throw new Error(result.error?.message ?? "Failed to import desktop file")
-          }
-          activateDocument({ writingId: result.data.id }, "open")
-          applyDocumentMetadata({ title: result.data.title ?? nextTitle })
-        } else {
-          await (await getDocumentService()).saveWriting({ writing: record })
-        }
-      } catch {
-        return
-      }
-
-      const openedWritingId = currentWritingIdRef.current ?? nextWritingId
-      activateDocument({ writingId: openedWritingId }, "open")
-      openWritingTab({
-        writingId: openedWritingId,
-        title: isDesktopRuntime() ? titleRef.current || nextTitle : nextTitle,
-        saveState: "saved-local",
-        hasPendingSync: false,
-      })
-      navigateToWriting(router, `/write/${nextWritingId}`, { mode: "push", skipOnDesktop: true })
     },
-    [activateDocument, applyDocumentMetadata, prepareDocumentExit, router],
+    [activateDocument, applyDocumentMetadata, prepareDocumentExit],
   )
 
   const handleMenuNewFile = useCallback(() => {
@@ -3334,6 +2255,9 @@ export function EditorShell({
     onGetSaveContent: handleGetSaveContent,
     onSaveToDisk: handleSaveToDisk,
     documentKey: currentWritingId,
+    // ODE-632: el modo es del frontend; el adapter nativo recibe la lista de
+    // acciones no disponibles para deshabilitar sus ítems.
+    editorMode: mode,
   })
 
   // ODE-478 case 5 covered the explicit tab-close button; the window itself
@@ -3351,7 +2275,7 @@ export function EditorShell({
     if (!sessionLoaded || !isDesktopRuntime()) return
     const pending = consumePendingOpenFile()
     if (!pending) return
-    void handleMenuOpenFile(pending.path, pending.content)
+    void handleMenuOpenFile(pending.path)
   }, [sessionLoaded, handleMenuOpenFile])
 
   const exportMarkdown = useCallback(async () => {
@@ -3531,28 +2455,63 @@ export function EditorShell({
         ) : null}
 
         {!isFocusMode && externalContentConflict ? (
-          <div className="flex items-center justify-between gap-4 border-b-[0.5px] border-border bg-amber-50 px-6 py-3 text-sm text-ink dark:bg-amber-950/30">
-            <span>
-              This file changed outside Artifact Studio while you had unsaved edits here. Choose which version to
-              keep — saving is paused until you do.
-            </span>
-            <div className="flex shrink-0 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={reloadExternalVersion}
-              >
-                Reload external
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={keepMyVersion}
-              >
-                Keep my version
-              </Button>
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex flex-col gap-3 border-b-[0.5px] border-border bg-amber-50 px-6 py-3 text-sm text-ink dark:bg-amber-950/30"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <span>
+                This file changed outside Artifact Studio while you had unsaved edits here. Choose which version to
+                keep — saving is paused until you do.
+              </span>
+              <div className="flex shrink-0 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={resolveConflictByReloadingExternal}
+                >
+                  Reload external
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={resolveConflictByKeepingMyVersion}
+                >
+                  Keep my version
+                </Button>
+              </div>
             </div>
+            {keptVersionConflictNotice?.writingId === currentWritingId ? (
+              <div role="status" aria-live="polite" className="flex flex-wrap items-center gap-2">
+                <span>
+                  {keptVersionConflictNotice.preservationFailed ? (
+                    "This file was changed outside Artifact Studio. The other version couldn't be saved."
+                  ) : keptVersionConflictNotice.keptPath ? (
+                    <>
+                      This file was changed outside Artifact Studio. The other version was kept as{" "}
+                      <span
+                        className="font-medium"
+                        title={keptVersionConflictNotice.keptPath}
+                      >
+                        {keptVersionConflictNotice.keptPath.split(/[\\/]/).pop()}
+                      </span>.
+                    </>
+                  ) : null}
+                </span>
+                {keptVersionConflictNotice.keptPath ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void showKeptVersionFolder(keptVersionConflictNotice.keptPath!)}
+                  >
+                    Show in Finder
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -3709,17 +2668,23 @@ export function EditorShell({
             )}
           </div>
 
-        {!isFocusMode && activePanel && editorSession.tabs.length > 0 ? (
+        {(!isFocusMode || isShareActionPending) && (activePanel || isShareActionPending) && (editorSession.tabs.length > 0 || isShareActionPending) ? (
+          <div
+            className={activePanel && !isFocusMode && editorSession.tabs.length > 0 ? "contents" : "hidden"}
+            hidden={!(activePanel && !isFocusMode && editorSession.tabs.length > 0)}
+          >
           <EditorRightPanel>
           {/* One header for the four surfaces. Each of them used to carry a
               header and a close button of its own, and Share was a section
               buried inside Properties (owner review). */}
-          <EditorRightPanelTabs
-            active={activePanel}
-            onSelect={setActivePanel}
-            onClose={closeActivePanel}
-            badges={{ grammar: visibleCorrectionCount }}
-          />
+          {activePanel ? (
+            <EditorRightPanelTabs
+              active={activePanel}
+              onSelect={setActivePanel}
+              onClose={closeActivePanel}
+              badges={{ grammar: visibleCorrectionCount }}
+            />
+          ) : null}
           <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={null}>
             {activePanel === "notes" ? (
@@ -3905,17 +2870,45 @@ export function EditorShell({
                   return true
                 }}
               />
-            ) : activePanel === "properties" || activePanel === "share" ? (
+            ) : activePanel === "grammar" ? (
+              <CorrectionsPanel
+                suggestions={automaticCorrectionSuggestions}
+                markdown={currentDocumentMarkdown}
+                showCorrections={showCorrections}
+                analysisStatus={{
+                  runState: correctionAnalysisRunState,
+                  progress: correctionAnalysisProgress,
+                }}
+                onAcceptSuggestion={handleAcceptCorrection}
+                onRejectSuggestion={handleRejectCorrection}
+                onLearnWord={handleLearnWord}
+                onAcceptAll={handleAcceptAllCorrections}
+                onRejectAll={handleRejectAllCorrections}
+                learnedWords={learnedWords}
+                learnedWordsLoading={learnedWordsLoading}
+                onRemoveLearnedWord={handleRemoveLearnedWord}
+                onAnalyze={startCorrectionAnalysis}
+                onRetryFailed={retryFailedCorrectionPackages}
+                onCancel={cancelCorrectionAnalysis}
+                onShowCorrectionsChange={setShowCorrections}
+              />
+            ) : null}
+            {activePanel === "properties" || activePanel === "share" || isShareActionPending ? (
+              <div
+                className={activePanel === "properties" || activePanel === "share" ? "h-full" : "hidden"}
+                aria-hidden={activePanel !== "properties" && activePanel !== "share"}
+              >
               <PropertiesPanel
-                tab={activePanel}
+                tab={activePanel === "share" ? "share" : "properties"}
                 writingId={currentWritingId}
+                writingTitle={displayTitle}
                 lifecycle={lifecycle}
                 status={writingStatus}
                 artifactType={artifactType}
                 visibility={writingVisibility}
                 metrics={textMetrics}
                 canonicalPath={canonicalPath}
-                onExportMarkdown={exportMarkdown}
+                onShareActionPendingChange={setIsShareActionPending}
                 onExportPdf={() => exportBinary("pdf")}
                 onExportDocx={() => exportBinary("docx")}
                 onStatusChange={(nextStatus) => {
@@ -3967,32 +2960,12 @@ export function EditorShell({
                   })
                 }}
               />
-            ) : (
-              <CorrectionsPanel
-                suggestions={automaticCorrectionSuggestions}
-                markdown={currentDocumentMarkdown}
-                showCorrections={showCorrections}
-                analysisStatus={{
-                  runState: correctionAnalysisRunState,
-                  progress: correctionAnalysisProgress,
-                }}
-                onAcceptSuggestion={handleAcceptCorrection}
-                onRejectSuggestion={handleRejectCorrection}
-                onLearnWord={handleLearnWord}
-                onAcceptAll={handleAcceptAllCorrections}
-                onRejectAll={handleRejectAllCorrections}
-                learnedWords={learnedWords}
-                learnedWordsLoading={learnedWordsLoading}
-                onRemoveLearnedWord={handleRemoveLearnedWord}
-                onAnalyze={startCorrectionAnalysis}
-                onRetryFailed={retryFailedCorrectionPackages}
-                onCancel={cancelCorrectionAnalysis}
-                onShowCorrectionsChange={setShowCorrections}
-              />
-            )}
+              </div>
+            ) : null}
           </Suspense>
           </div>
           </EditorRightPanel>
+          </div>
         ) : null}
         </div>
       </div>
@@ -4000,6 +2973,7 @@ export function EditorShell({
       <EditorShortcutsDialog
         open={isShortcutHelpOpen}
         onOpenChange={setIsShortcutHelpOpen}
+        mode={mode}
       />
 
       {correctionToast ? (

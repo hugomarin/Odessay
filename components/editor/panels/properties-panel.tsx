@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   Check,
   ChevronDown,
@@ -30,6 +30,7 @@ import { useVocabulary } from "@/hooks/useVocabulary"
 import { listVisibleVocabulary } from "@/lib/vocabulary/resolve"
 import { WritingCollectionsSection } from "./writing-collections-section"
 import { WritingSharesSection } from "./writing-shares-section"
+import { DocumentActionToast } from "./document-action-toast"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
 
 type PropertiesPanelProps = {
@@ -41,6 +42,11 @@ type PropertiesPanelProps = {
    */
   tab: "properties" | "share"
   writingId: string | null
+  /**
+   * Title of the document the panel is showing. Captured when an export
+   * starts so a late result keeps naming its source document (ODE-652).
+   */
+  writingTitle: string
   lifecycle: WritingLifecycle
   status: WritingStatus
   artifactType: ArtifactType
@@ -51,12 +57,38 @@ type PropertiesPanelProps = {
   onStatusChange: (next: WritingStatus) => void
   onArtifactTypeChange: (next: ArtifactType) => void
   onVisibilityChange: (next: WritingVisibility) => void
-  onExportMarkdown: () => Promise<boolean | void> | boolean | void
   onExportPdf: () => Promise<boolean | void> | boolean | void
   onExportDocx: () => Promise<boolean | void> | boolean | void
+  /**
+   * Informa al shell que hay una generación/revocación de enlace en vuelo:
+   * mientras exista, cerrar el panel debe ocultarlo sin desmontarlo para que
+   * la mutación y su época sobrevivan al cierre (SHARE-03, ODE-652).
+   */
+  onShareActionPendingChange?: (pending: boolean) => void
 }
 
-type ExportFormat = "markdown" | "pdf" | "docx"
+type ExportFormat = "pdf" | "docx"
+
+type ShareLinkByDocument = {
+  writingId: string | null
+  link: PreviewLinkState
+}
+
+const EXPORT_LABEL: Record<ExportFormat, string> = {
+  pdf: "PDF",
+  docx: "Word",
+}
+
+const exportSuccessMessage = (format: ExportFormat, title: string) =>
+  `${EXPORT_LABEL[format]} export for ‘${title}’ is ready`
+
+const exportFailureMessage = (format: ExportFormat, title: string, detail: string | null) =>
+  `${EXPORT_LABEL[format]} export for ‘${title}’ failed${detail ? `: ${detail}` : ""}`
+
+const shareSuccessMessage = (title: string) => `Share link for ‘${title}’ is ready`
+
+const shareFailureMessage = (title: string, detail: string | null) =>
+  `Share link for ‘${title}’ failed${detail ? `: ${detail}` : ""}`
 
 function DropdownTrigger({
   open,
@@ -124,32 +156,63 @@ function MetricRow({ label, value }: { label: string; value: string }) {
 export function PropertiesPanel({
   tab,
   writingId,
+  writingTitle,
   lifecycle,
   status,
   artifactType,
   visibility,
   metrics,
   canonicalPath = null,
-  onExportMarkdown,
   onExportPdf,
   onExportDocx,
+  onShareActionPendingChange,
   onStatusChange,
   onArtifactTypeChange,
   onVisibilityChange,
 }: PropertiesPanelProps) {
-  const [shareLink, setShareLink] = useState<PreviewLinkState>(DEFAULT_PREVIEW_LINK_STATE)
+  const [shareLinkState, setShareLinkState] = useState<ShareLinkByDocument>({
+    writingId: null,
+    link: DEFAULT_PREVIEW_LINK_STATE,
+  })
   const [isLoadingShareLink, setIsLoadingShareLink] = useState(false)
   const [isSavingShareLink, setIsSavingShareLink] = useState(false)
   const [shareError, setShareError] = useState<string | null>(null)
-  const [exportFeedback, setExportFeedback] = useState<string | null>(null)
-  const [exportError, setExportError] = useState<string | null>(null)
+  const [actionNotice, setActionNotice] = useState<{
+    kind: "success" | "error"
+    message: string
+  } | null>(null)
   const [externalLinkError, setExternalLinkError] = useState<string | null>(null)
   const [openingExternalAction, setOpeningExternalAction] = useState<WebWritingAction | null>(null)
-  const [isExportingMarkdown, setIsExportingMarkdown] = useState(false)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingDocx, setIsExportingDocx] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [pathCopied, setPathCopied] = useState(false)
+  /** Fuerza una relectura del enlace del documento actual. */
+  const [shareLinkRevision, setShareLinkRevision] = useState(0)
+  /**
+   * Identidad del documento: sube al cambiar de writingId e invalida cualquier
+   * respuesta en vuelo del documento anterior (SHARE-03, ODE-652).
+   */
+  const shareLinkGenerationRef = useRef(0)
+  /**
+   * Época de escritura del enlace: sube al iniciar y al terminar una
+   * generación o revocación. Una carga que empezó antes o durante la mutación
+   * queda con una época vieja y no puede pisar su resultado.
+   */
+  const shareLinkWriteEpochRef = useRef(0)
+  /**
+   * Identifica la última carga: solo ella escribe el enlace y apaga el
+   * indicador, para que una respuesta vieja no habilite las acciones del
+   * documento actual mientras su carga sigue viva.
+   */
+  const shareLinkLoadRef = useRef(0)
+  /**
+   * El enlace activo pertenece a su documento: el de A nunca se renderiza ni
+   * se copia bajo B, ni siquiera mientras B todavía está cargando el suyo
+   * (SHARE-03, ODE-652).
+   */
+  const shareLink =
+    shareLinkState.writingId === writingId ? shareLinkState.link : DEFAULT_PREVIEW_LINK_STATE
   const catalog = useVocabulary()
   const sharingService = useMemo(() => createSharingService(), [])
   const enabledStatuses = useMemo(
@@ -166,13 +229,26 @@ export function PropertiesPanel({
 
   const loadShareLink = useCallback(async () => {
     if (!hasRemoteWriting || !writingId) {
-      setShareLink(DEFAULT_PREVIEW_LINK_STATE)
+      // Sin escritura remota no hay carga que esperar: invalida la anterior y
+      // apaga el indicador para no heredarlo en el documento actual.
+      shareLinkWriteEpochRef.current += 1
+      shareLinkLoadRef.current += 1
+      setIsLoadingShareLink(false)
+      setShareLinkState({ writingId, link: DEFAULT_PREVIEW_LINK_STATE })
       setShareError(null)
       return
     }
 
+    const requestGeneration = shareLinkGenerationRef.current
+    const requestWriteEpoch = shareLinkWriteEpochRef.current
+    const requestLoad = ++shareLinkLoadRef.current
     setIsLoadingShareLink(true)
     setShareError(null)
+
+    const stillOwnsWrite = () =>
+      shareLinkGenerationRef.current === requestGeneration &&
+      shareLinkWriteEpochRef.current === requestWriteEpoch &&
+      shareLinkLoadRef.current === requestLoad
 
     try {
       const result = await sharingService.getPreviewLink(writingId)
@@ -180,24 +256,44 @@ export function PropertiesPanel({
         throw new Error(result.error?.message ?? "Failed to load preview link.")
       }
 
-      setShareLink(result.data)
+      if (!stillOwnsWrite()) return
+      setShareLinkState({ writingId, link: result.data })
     } catch (error) {
-      setShareLink(DEFAULT_PREVIEW_LINK_STATE)
+      if (!stillOwnsWrite()) return
+      setShareLinkState({ writingId, link: DEFAULT_PREVIEW_LINK_STATE })
       setShareError(error instanceof Error ? error.message : "Failed to load preview link.")
     } finally {
-      setIsLoadingShareLink(false)
+      // Solo la última carga apaga el indicador: una respuesta vieja no debe
+      // habilitar acciones del documento actual mientras su carga sigue viva.
+      if (shareLinkLoadRef.current === requestLoad) {
+        setIsLoadingShareLink(false)
+      }
     }
   }, [hasRemoteWriting, sharingService, writingId])
 
   useEffect(() => {
+    // Invalida cualquier respuesta en vuelo del documento anterior.
+    shareLinkGenerationRef.current += 1
+    shareLinkWriteEpochRef.current += 1
+  }, [writingId])
+
+  useEffect(() => {
+    onShareActionPendingChange?.(isSavingShareLink)
+    return () => onShareActionPendingChange?.(false)
+  }, [isSavingShareLink, onShareActionPendingChange])
+
+  useEffect(() => {
     void loadShareLink()
-  }, [loadShareLink])
+  }, [loadShareLink, shareLinkRevision])
 
   const handleGenerateShareLink = useCallback(async () => {
     if (!hasRemoteWriting || !writingId) {
       return
     }
 
+    const requestGeneration = shareLinkGenerationRef.current
+    const sourceTitle = writingTitle
+    shareLinkWriteEpochRef.current += 1
     setIsSavingShareLink(true)
     setShareError(null)
 
@@ -207,19 +303,36 @@ export function PropertiesPanel({
         throw new Error(result.error?.message ?? "Failed to generate preview link.")
       }
 
-      setShareLink(result.data)
+      if (shareLinkGenerationRef.current === requestGeneration) {
+        setShareLinkState({ writingId, link: result.data })
+      }
+      setActionNotice({ kind: "success", message: shareSuccessMessage(sourceTitle) })
     } catch (error) {
-      setShareError(error instanceof Error ? error.message : "Failed to generate preview link.")
+      setActionNotice({
+        kind: "error",
+        message: shareFailureMessage(
+          sourceTitle,
+          error instanceof Error ? error.message : null,
+        ),
+      })
     } finally {
+      // Cualquier carga que empezó antes o durante la mutación queda vieja, y
+      // si la navegación invalidó la respuesta se relee el documento actual.
+      shareLinkWriteEpochRef.current += 1
       setIsSavingShareLink(false)
+      if (shareLinkGenerationRef.current !== requestGeneration) {
+        setShareLinkRevision((revision) => revision + 1)
+      }
     }
-  }, [hasRemoteWriting, sharingService, writingId])
+  }, [hasRemoteWriting, sharingService, writingId, writingTitle])
 
   const handleRevokeShareLink = useCallback(async () => {
     if (!hasRemoteWriting || !writingId) {
       return
     }
 
+    const requestGeneration = shareLinkGenerationRef.current
+    shareLinkWriteEpochRef.current += 1
     setIsSavingShareLink(true)
     setShareError(null)
 
@@ -229,11 +342,17 @@ export function PropertiesPanel({
         throw new Error(result.error?.message ?? "Failed to revoke preview link.")
       }
 
-      setShareLink(DEFAULT_PREVIEW_LINK_STATE)
+      if (shareLinkGenerationRef.current !== requestGeneration) return
+      setShareLinkState({ writingId, link: DEFAULT_PREVIEW_LINK_STATE })
     } catch (error) {
+      if (shareLinkGenerationRef.current !== requestGeneration) return
       setShareError(error instanceof Error ? error.message : "Failed to revoke preview link.")
     } finally {
+      shareLinkWriteEpochRef.current += 1
       setIsSavingShareLink(false)
+      if (shareLinkGenerationRef.current !== requestGeneration) {
+        setShareLinkRevision((revision) => revision + 1)
+      }
     }
   }, [hasRemoteWriting, sharingService, writingId])
 
@@ -310,41 +429,37 @@ export function PropertiesPanel({
   const handleExport = useCallback(
     async (format: ExportFormat) => {
       setExportOpen(false)
-      setExportFeedback(null)
-      setExportError(null)
+      setActionNotice(null)
 
-      if (format === "markdown") {
-        setIsExportingMarkdown(true)
-      } else if (format === "pdf") {
+      const sourceTitle = writingTitle
+      if (format === "pdf") {
         setIsExportingPdf(true)
       } else {
         setIsExportingDocx(true)
       }
 
       try {
-        if (format === "markdown") {
-          const exported = await onExportMarkdown()
-          if (exported !== true) return
-          setExportFeedback("Markdown export generated.")
-        } else if (format === "pdf") {
-          const exported = await onExportPdf()
-          if (exported !== true) return
-          setExportFeedback("PDF export generated.")
-        } else {
-          const exported = await onExportDocx()
-          if (exported !== true) return
-          setExportFeedback("Word export generated.")
-        }
+        const exported = format === "pdf" ? await onExportPdf() : await onExportDocx()
+        if (exported !== true) return
+        setActionNotice({ kind: "success", message: exportSuccessMessage(format, sourceTitle) })
       } catch (error) {
-        const fallback = format === "markdown" ? "Markdown" : format === "pdf" ? "PDF" : "Word"
-        setExportError(error instanceof Error ? error.message : `Failed to export ${fallback}.`)
+        setActionNotice({
+          kind: "error",
+          message: exportFailureMessage(
+            format,
+            sourceTitle,
+            error instanceof Error ? error.message : null,
+          ),
+        })
       } finally {
-        setIsExportingMarkdown(false)
-        setIsExportingPdf(false)
-        setIsExportingDocx(false)
+        if (format === "pdf") {
+          setIsExportingPdf(false)
+        } else {
+          setIsExportingDocx(false)
+        }
       }
     },
-    [onExportDocx, onExportMarkdown, onExportPdf],
+    [onExportDocx, onExportPdf, writingTitle],
   )
 
   return (
@@ -514,12 +629,6 @@ export function PropertiesPanel({
             </PopoverTrigger>
             <PopoverContent align="start" className="w-[216px] p-[5px]">
               <PopoverItem
-                label={isExportingMarkdown ? "Exporting Markdown..." : "Markdown (.md)"}
-                icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />}
-                onSelect={() => void handleExport("markdown")}
-                disabled={isExportingMarkdown}
-              />
-              <PopoverItem
                 label={isExportingPdf ? "Exporting PDF..." : "PDF (.pdf)"}
                 icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />}
                 onSelect={() => void handleExport("pdf")}
@@ -533,16 +642,17 @@ export function PropertiesPanel({
               />
               <div className="my-1 h-px bg-border" />
               <p className="px-[10px] pb-1 pt-1.5 text-[10px] leading-[1.4] text-ink-4">
-                Markdown is local. PDF and Word require a saved artifact.
+                PDF and Word require a saved artifact.
               </p>
             </PopoverContent>
           </Popover>
-          {exportFeedback ? <p className="text-[11px] text-ink-3">{exportFeedback}</p> : null}
-          {exportError ? <p className="text-[11px] text-[hsl(0,72%,45%)]">{exportError}</p> : null}
         </section>
           </>
         )}
       </div>
+      {actionNotice ? (
+        <DocumentActionToast kind={actionNotice.kind} message={actionNotice.message} />
+      ) : null}
     </aside>
   )
 }

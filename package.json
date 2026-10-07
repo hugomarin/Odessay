@@ -26,12 +26,16 @@
     "ops:workflow:validate": "node scripts/validate-workflow-json.mjs",
     "ops:ledger": "node scripts/workflow-ledger.mjs",
     "ops:delivery:gate": "node scripts/check-delivery-gate.mjs",
+    "ops:proof:precheck": "node scripts/check-proof-precheck.mjs",
+    "ops:brief:lint": "node scripts/check-issue-brief.mjs",
     "ops:documents:audit": "node scripts/document-cleanup/audit-desktop-documents.mjs",
     "ops:documents:cleanup": "node scripts/document-cleanup/apply-desktop-cleanup.mjs",
     "test:parity": "node scripts/run-parity-tests.mjs",
     "test:desktop:draft-lifecycle": "node scripts/check-desktop-draft-lifecycle.mjs",
     "seed:phase1": "npx tsx scripts/seed-phase-1.ts",
     "test": "vitest run",
+    "test:supabase": "node scripts/run-supabase-tests.mjs",
+    "supabase:locked": "node scripts/supabase-locked.mjs",
     "test:architecture": "vitest run tests/architecture",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
@@ -121,6 +125,7 @@
     "tailwindcss": "^4.2.1",
     "tsx": "^4.21.0",
     "typescript": "^5.7.2",
+    "unpdf": "^1.8.1",
     "vitest": "^4.1.0"
   }
 }

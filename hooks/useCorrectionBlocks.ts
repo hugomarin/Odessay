@@ -1,28 +1,14 @@
 "use client"
 
 /**
- * Estado de sugerencias de corrección, su admisión y la caché de bloques de
- * corrección del documento activo del editor.
- *
- * ODE-586 — corte 2 de `components/editor/editor-shell.tsx`, primera mitad.
- * Es una MUDANZA MECÁNICA, como ODE-562 con la hidratación: los cuerpos son
- * los que vivían en la shell, con las mismas dependencias. La propiedad del
- * estado NO cambia: `automaticCorrectionSuggestions` y los refs
- * (`persistedCorrectionBlocksRef`, `editorInstanceRef`, `learnedWordsRef`)
- * siguen siendo de la shell y llegan aquí por `input`.
- *
- * Reglas del corte:
- * - Los refs llegan como `RefObject`, nunca como snapshot de `.current`: los
- *   callbacks diferidos (promesas) leen el valor vivo por ellos.
- * - Las dependencias son las de la shell más esos refs y el setter, que
- *   ahora llegan por `input`. Son identidades estables (`useRef` y el setter
- *   de `useState` de la shell), así que la memoización no cambia.
- * - Sin efectos: aquí solo hay `useMemo`/`useCallback`, así que moverlo no
- *   cambia el orden de los efectos de la shell.
- * - La caché local de bloques se lee y escribe por su dueño canónico,
- *   `lib/corrections/persistence.ts` (regla `ui-no-direct-persistence`).
+ * Suggestion state, admission and correction-block cache (ODE-586/609).
+ * `useCorrectionSuggestionsState` owns both state and its live ref. Stable
+ * writers are shared by the existing batcher, hydration and user actions.
+ * Editor, learned-word and persisted-block refs arrive live by input;
+ * deferred callbacks never take a snapshot of their `.current` values.
+ * Persistence remains owned by `lib/corrections/persistence.ts`.
  */
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useRef, useState, type SetStateAction } from "react"
 import type { Editor } from "@tiptap/react"
 
 import { admitSuggestions, type AdmissionContext } from "@/lib/corrections/engine/admission"
@@ -44,6 +30,18 @@ import { collectCorrectionBlocks, type CorrectionTriggerBlock } from "@/lib/edit
 import type { HydrationGeneration } from "@/lib/editor/hydration-generation"
 import type { LocalCorrectionBlock, PublicationSuggestion } from "@/lib/local-db/schema"
 import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
+
+/** Sole suggestion writer, shared by batching, hydration and user actions. */
+export function useCorrectionSuggestionsState() {
+  const [automaticCorrectionSuggestions, commit] = useState<PublicationSuggestion[]>([])
+  const automaticCorrectionSuggestionsRef = useRef<PublicationSuggestion[]>([])
+  const setAutomaticCorrectionSuggestions = useCallback((next: SetStateAction<PublicationSuggestion[]>) => {
+    const resolved = typeof next === "function" ? next(automaticCorrectionSuggestionsRef.current) : next
+    automaticCorrectionSuggestionsRef.current = resolved
+    commit(resolved)
+  }, [])
+  return { automaticCorrectionSuggestions, automaticCorrectionSuggestionsRef, setAutomaticCorrectionSuggestions }
+}
 
 export type CorrectionBlocksInput = {
   setAutomaticCorrectionSuggestions: React.Dispatch<React.SetStateAction<PublicationSuggestion[]>>

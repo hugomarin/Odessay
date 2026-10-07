@@ -7,12 +7,13 @@ name: blocking-ci
 #
 # Estrategia de costo: `CI required` solo agrega checks baratos y
 # deterministas (traceability, process sync, ledgers/drift, architecture
-# ratchets, typecheck/lint/unit/build). Playwright/E2E y performance capture
-# quedan fuera del blocking universal — ver scoped-ci.yml (reusable/manual,
-# ya no referenciado aquí) y workflow/testing/critical-capabilities-testing.md
-# para el principio ("test at the lowest-cost boundary that can falsify the
-# failure mode we care about") y cuándo sí conviene escalar a esas
-# herramientas.
+# ratchets, typecheck/lint/unit/build) más el cargo test del crate desktop
+# cuando el diff toca Rust o la secuencia grabada que ese test reproduce.
+# Playwright/E2E y performance capture quedan fuera del blocking universal —
+# ver scoped-ci.yml (reusable/manual, ya no referenciado aquí) y
+# workflow/testing/critical-capabilities-testing.md para el principio ("test
+# at the lowest-cost boundary that can falsify the failure mode we care
+# about") y cuándo sí conviene escalar a esas herramientas.
 #
 # Pre-flight real: `process-checks` corre primero (falla en segundos si falta
 # ODE-XX o hay drift de proceso). `quality` y `repo-checks` solo arrancan si
@@ -38,6 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       app_changed: ${{ steps.detect.outputs.app_changed }}
+      rust_changed: ${{ steps.detect.outputs.rust_changed }}
+      supabase_changed: ${{ steps.detect.outputs.supabase_changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,6 +80,35 @@ jobs:
             echo "Solo cambiaron docs/skills/roles sin acoplamiento a process-sync — se salta quality/process-checks/repo-checks."
           fi
 
+          # cargo test solo se paga cuando el crate o la secuencia grabada que
+          # reproduce cambian. El fixture vive en tests/fixtures/catalog-seam/
+          # y lo embebe el test Rust (include_str!), así que sus cambios —y los
+          # del grabador— también disparan el job. La factory de ports que el
+          # grabador y producción comparten (ODE-645) entra aquí: un cambio a
+          # esa glue mueve la secuencia grabada, y el replay Rust debe correr
+          # con la nueva.
+          RUST_PATTERN='^(src-tauri/|lib/services/desktop/workspace-reconciler-ports\.ts$|tests/fixtures/catalog-seam/|tests/support/catalog-seam-recorder\.ts$|tests/catalog-seam-fixture\.test\.ts$|\.github/workflows/desktop-rust\.yml$)'
+          if echo "${CHANGED}" | grep -qE "${RUST_PATTERN}"; then
+            echo "rust_changed=true" >> "${GITHUB_OUTPUT}"
+            echo "Cambios que el crate o su seam grabado tocan — corre cargo test."
+          else
+            echo "rust_changed=false" >> "${GITHUB_OUTPUT}"
+            echo "Sin cambios de Rust/seam — se salta cargo test."
+          fi
+
+          # El harness de Supabase local (pgTAP + Vitest, ODE-658) solo se paga
+          # cuando el diff puede cambiar RLS, migraciones, los caminos
+          # service-role o la propia infraestructura del harness. Un cambio puro
+          # de UI/editor no levanta el stack.
+          SUPABASE_PATTERN='^(supabase/|lib/supabase/|lib/sharing/|lib/services/web-sharing-service\.ts$|lib/collections/|app/api/|app/\(reading\)/shared/|app/\[username\]/|tests/.*\.supabase\.test\.|tests/support/supabase-local/|vitest\.supabase\.config\.ts$|scripts/run-supabase-tests\.mjs$|package\.json$|package-lock\.json$|\.github/workflows/supabase-local\.yml$|\.github/workflows/blocking-ci\.yml$)'
+          if echo "${CHANGED}" | grep -qE "${SUPABASE_PATTERN}"; then
+            echo "supabase_changed=true" >> "${GITHUB_OUTPUT}"
+            echo "Cambios de Supabase/RLS/harness — corre el job supabase-local."
+          else
+            echo "supabase_changed=false" >> "${GITHUB_OUTPUT}"
+            echo "Sin cambios de Supabase — se salta el job supabase-local."
+          fi
+
   process-checks:
     needs: detect-changes
     if: needs.detect-changes.outputs.app_changed == 'true'
@@ -95,6 +127,27 @@ jobs:
     uses: ./.github/workflows/repo-checks.yml
     secrets: inherit
 
+  # cargo test del crate de src-tauri, incluido el replay del seam TS→Rust
+  # (ODE-613). Solo se ejecuta cuando el crate o la secuencia grabada cambian,
+  # para no pagar un runner macOS en cada PR de frontend. Sin `secrets: inherit`:
+  # desktop-rust.yml no referencia ningún secreto y este job compila y ejecuta
+  # código del PR, así que no debe recibir ninguno (mínimo privilegio; review
+  # P3-2 de ODE-613).
+  desktop-rust:
+    needs: [detect-changes, process-checks]
+    if: needs.detect-changes.outputs.rust_changed == 'true' && needs.process-checks.result == 'success'
+    uses: ./.github/workflows/desktop-rust.yml
+
+  # pgTAP + harness Vitest contra Supabase local (ODE-658). Deliberadamente
+  # fuera de `required.needs`: hoy no es required, así que un fallo aquí no
+  # bloquea `CI required` (dos semanas en verde lo deciden). Sin
+  # `secrets: inherit` — el reusable no referencia ningún secreto y los del
+  # repo incluyen la URL y la publishable key de PRODUCCIÓN.
+  supabase-local:
+    needs: [detect-changes, process-checks]
+    if: needs.detect-changes.outputs.supabase_changed == 'true' && needs.process-checks.result == 'success'
+    uses: ./.github/workflows/supabase-local.yml
+
   # scoped-ci.yml (Playwright E2E) ya no es parte de la composición blocking:
   # ver el comentario de costo arriba. Sigue existiendo como workflow reusable
   # (`workflow_dispatch` + `workflow_call`) para invocación manual/futura.
@@ -102,7 +155,7 @@ jobs:
   required:
     name: CI required
     if: always()
-    needs: [detect-changes, process-checks, quality, repo-checks]
+    needs: [detect-changes, process-checks, quality, repo-checks, desktop-rust]
     runs-on: ubuntu-latest
     steps:
       - name: Check all required jobs passed or were skipped

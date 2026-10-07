@@ -163,7 +163,7 @@
       "type": "feature",
       "scope": "desktop-document-catalog-and-identity",
       "state": "accepted-normative-target",
-      "description": "Spec normativo para una sola personalidad documental desktop: ledger `.odessay`, SQLite operacional, bus único de CatalogChange, BindingRoots resueltos por root_path, reconciliador/apertura unificados, gate M5 same-channel y semántica confirmada de borrado local/cloud con Archivados fuera de Desk/Workspace."
+      "description": "Spec normativo para una sola personalidad documental desktop: ledger `.odessay`, SQLite operacional, bus único de CatalogChange, BindingRoots resueltos por root_path, reconciliador/apertura unificados, gate M5 same-channel, semántica confirmada de borrado local/cloud con Archivados fuera de Desk/Workspace y correlación entre raíces sin límite temporal entre avisos (enmienda ODE-661)."
     },
     {
       "path": "workflow/context/features/odessay-desktop-migration-plan.md",
@@ -445,6 +445,16 @@
       "description": "Instrumento de auditoría de red/runtime: requests, bytes, duplicados y listener churn evaluados con scripts/check-network-budget.mjs cuando el contrato identifica ese riesgo."
     },
     {
+      "path": "scripts/check-proof-precheck.mjs",
+      "type": "ops",
+      "description": "ops:proof:precheck (ODE-656): gate mecánico sobre los commits de la rama y las filas tocadas del capability map — commit test(...) sin producción, it.fails que entra antes que su fix, fix que solo convierte it.fails → it, filas tocadas del capability map con tantas celdas como su cabecera. Corre en /wf-build paso 7 y en process-checks. Reglas en scripts/lib/proof-precheck.mjs."
+    },
+    {
+      "path": "scripts/check-issue-brief.mjs",
+      "type": "ops",
+      "description": "ops:brief:lint (ODE-656): comprueba en Linear que un issue es despachable a BUILD — Architecture Contract con Layer, Runtime scope, Owner, Contracts touched, Invariants y Required docs; con --require-recon, también el comentario de Recon Pack. Se usa en /wf-define y en el paso 1 de /wf-build. Reglas en scripts/lib/issue-brief-lint.mjs."
+    },
+    {
       "path": "scripts/check-network-budget.mjs",
       "type": "ops",
       "description": "CLI de gate de red/runtime: evalua un HAR contra workflow/perf-budgets-network.json, escribe metrics/report JSON y falla ante duplicados de arranque, exceso de requests/bytes o churn de listeners Tauri."
@@ -470,6 +480,11 @@
       "description": "Propuesta conceptual para productizar los 12 skills operativos de .agents: método reusable, conocimiento técnico condicionado, especialidades locales, estructura editorial común y criterios de portabilidad."
     },
     {
+      "path": ".orca-coordinator-brief.md",
+      "type": "ops",
+      "description": "Brief operativo para coordinar en Orca el Quality Harness de P-ODE-43: despacho supervisado de workers por waves, gates de dependencias mergeadas y reporte de PRs a Hugo."
+    },
+    {
       "path": ".agents/skills/skill-architecture/specialties/ownership-and-sources.md",
       "type": "architecture",
       "description": "Binding local de los skills Architecture y Architecture Recon: taxonomía, routing de fuentes aceptadas, protocolo BUILD, hotspots y formato operativo en Odessay."
@@ -483,6 +498,11 @@
       "path": ".agents/skills/skill-planning/specialties/definition-and-sources.md",
       "type": "skill-reference",
       "description": "Fuentes, verificación de definición, revisión por skills de dominio, secuenciación y criterios de calidad de issues en Odessay."
+    },
+    {
+      "path": ".agents/skills/skill-planning/specialties/area-recon.md",
+      "type": "skill-reference",
+      "description": "Recon de área de Planning con dos objetivos (mejor código y que nada frene la orquestación): workers en paralelo y en solo lectura, listas de huecos de calidad (owner, reutilización, duplicación, diseño más simple, invariantes, pruebas) y de bloqueos, definición de hecho (Recon Pack, Auditoría, PR del mapa abierto, lint) y plantilla del reporte al humano con decisiones por defecto."
     },
     {
       "path": ".agents/skills/skill-planning/specialties/linear-conventions.md",
@@ -617,6 +637,36 @@
       "description": "Reglas del subsistema de correcciones AI: identidad de sugerencias separada de ubicación, admisión única, estados con salida garantizada, matching con límites de token, degradación por item, learned words, memoria de decisiones y checklist de review."
     },
     {
+      "path": ".agents/skills/orchestration-prompt-builder/SKILL.md",
+      "type": "skill",
+      "description": "Orchestration Prompt Builder: convierte un conjunto de issues en el prompt /orchestration completo para el coordinador de Orca (no es el skill orchestration de Orca): DAG por PR con olas, roles y modelos comprobados, gates humanos, reglas de BUILD/REVIEW, cierre y ledger, control de tiempo y paradas; versionado con su delta."
+    },
+    {
+      "path": ".agents/skills/orchestration-prompt-builder/specialties/prompt-template.md",
+      "type": "skill-reference",
+      "description": "Esqueleto del prompt de orquestación con bloques fijos y de tanda, y plantillas de spec de worker (build y review)."
+    },
+    {
+      "path": ".agents/skills/orchestration-prompt-builder/specialties/dag-and-waves.md",
+      "type": "skill-reference",
+      "description": "Método para el DAG de una tanda: nodos por PR, aristas duras, olas, concurrencia, orden de merge y gates humanos."
+    },
+    {
+      "path": ".agents/skills/orchestration-prompt-builder/specialties/roles-and-models.md",
+      "type": "skill-reference",
+      "description": "Roles y modelos de la orquestación, detalles de lanzamiento en Orca por herramienta, independencia, fallback y recordatorios por spec."
+    },
+    {
+      "path": ".agents/skills/orchestration-prompt-builder/specialties/lessons.md",
+      "type": "skill-reference",
+      "description": "Catálogo incidente → regla de los prompts de orquestación v2–v7 (secuencia, Recon, BUILD, REVIEW, herramientas, coordinador)."
+    },
+    {
+      "path": ".agents/skills/orchestration-prompt-builder/specialties/odessay-binding.md",
+      "type": "skill-reference",
+      "description": "Hechos de Odessay para la orquestación: repo, Linear ODE y CLI, checks mecánicos, ledger y traceability, Supabase local, producción y configuración de herramientas."
+    },
+    {
       "path": ".agents/skills/skill-audit-planning/SKILL.md",
       "type": "skill",
       "description": "Método de auditoría para cobertura, solapamientos, dependencias, owners, contratos y evidencia de una fase; fuentes, severidad y formato de Odessay viven en su especialidad local."
@@ -632,6 +682,11 @@
       "path": ".agents/skills/skill-architecture/references/layers-and-boundaries.md",
       "type": "reference",
       "description": "Criterios portables de clasificación por capa y runtime para Architecture: funciones, entradas, salidas, dependencias e invariantes de UI, Application, Domain y Adapter."
+    },
+    {
+      "path": ".agents/skills/skill-architecture/references/async-ownership.md",
+      "type": "reference",
+      "description": "Playbook cross-cutting para ownership de estado asíncrono: decidir entre generación local, serialización de transiciones, versión durable y mantener vivo al dueño mientras haya trabajo pendiente."
     },
     {
       "path": ".agents/skills/skill-code-review/SKILL.md",

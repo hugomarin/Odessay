@@ -2,17 +2,22 @@ import { promises as fs } from "node:fs"
 import { randomUUID } from "node:crypto"
 import { dirname, join } from "node:path"
 import type {
+  DesktopCatalogCollection,
   DesktopCatalogCollectionSnapshot,
   DesktopCatalogDualWriteInput,
+  DesktopCatalogMetadataMutation,
+  DesktopCatalogMutationRow,
   DesktopCatalogReconcileInput,
   DesktopCatalogReconcileResult,
   DesktopCatalogRow,
+  DesktopCatalogWritingCollection,
   DesktopCloudSnapshotInput,
   DesktopFileMetadata,
   DesktopRetiredBindingRoot,
   DesktopWorkspaceFile,
   DesktopWorkspaceSnapshot,
   DesktopWorkspaceTouchResult,
+  DesktopWorkspaceUnboundFile,
 } from "@/lib/services/desktop/tauri-commands"
 import { WriteFileConflictError } from "@/lib/services/desktop/write-file-conflict-error"
 import { computeMarkdownContentHash } from "@/lib/content-hash"
@@ -36,6 +41,45 @@ let configDir = ""
 let dataDir = ""
 
 const catalogsByDb = new Map<string, Map<string, DesktopCatalogRow>>()
+// Collection state (`collections` + `writing_collections`), real enough for a
+// proof that drives production's own collection create/assign calls and then
+// reads the view's join back. Mirrors the SQL of `upsert_collection`,
+// `catalog_replace_writing_collections`, `catalog_apply_collection_snapshot` and
+// `catalog_list_collection_snapshot` (`index.rs:1520-1730`), read by hand; the
+// TS → real SQLite seam is the same deliberately-open native gap as the rest of
+// this file.
+const collectionsByDb = new Map<string, Map<string, DesktopCatalogCollection>>()
+const writingCollectionsByDb = new Map<string, Map<string, DesktopCatalogWritingCollection>>()
+// Cola durable de metadata (`metadata_sync_mutations`), en memoria. La alimenta
+// `tauriCatalogDeleteCollectionDouble`, espejo del SQL de
+// `catalog_delete_collection` post ODE-618 PR1b (soft-delete + DELETE de las
+// relaciones en la misma transacción); los dobles de save/replace de colecciones
+// siguen ignorando su `mutation` porque ninguna prueba lee la cola después de
+// ellos.
+type MetadataMutationRow = {
+  id: string
+  entityKind: DesktopCatalogMetadataMutation["entityKind"]
+  entityId: string
+  operation: DesktopCatalogMetadataMutation["operation"]
+  payloadJson: string
+  // Sin `processing`: ningún doble escribe ese estado (el real lo admite en el
+  // CHECK, pero solo el worker lo usa).
+  status: "pending" | "synced" | "failed"
+  attemptCount: number
+  nextRetryAt: number | null
+  createdAt: number
+  lastError: string | null
+}
+const metadataMutationsByDb = new Map<string, Map<string, MetadataMutationRow>>()
+
+function metadataMutationsFor(dbPath: string): Map<string, MetadataMutationRow> {
+  let store = metadataMutationsByDb.get(dbPath)
+  if (!store) {
+    store = new Map()
+    metadataMutationsByDb.set(dbPath, store)
+  }
+  return store
+}
 const bindingRootIdsByRoot = new Map<string, string>()
 // Per-root durable manifest state (relativePath -> document id), real enough
 // to prove Workspace-manifest convergence (WS-02): an explicit-IDs call binds
@@ -54,6 +98,46 @@ const manifestInodesByRoot = new Map<string, Map<string, number>>()
 // a call with `selectedPaths` replaces it, a call without one reuses it
 // (`workspace.rs` `uses_persisted_selection`). Empty means the whole root.
 const selectedPathsByRoot = new Map<string, string[]>()
+// Valla durable de retirada (`binding_roots.retired_at`, index.rs:876-912):
+// `catalog_apply_workspace_removal` la levanta por id y por path, y solo el
+// consentimiento explícito (`catalog_activate_binding_root`) la retira. Con la
+// valla puesta, `catalog_apply_reconcile` no proyecta nada (index.rs:1250-1271).
+const retiredRootKeys = new Set<string>()
+
+/**
+ * Cola durable de sync (`sync_mutations`), en memoria. Espeja las tres reglas
+ * de Rust que `desktopCatalogSyncService` usa por IPC:
+ *
+ * - supersede al escribir un snapshot nuevo (`index.rs:700-716` en dual-write,
+ *   `:1455-1462` en enqueue): las mutaciones `pending`/`failed` anteriores del
+ *   mismo documento pasan a `synced` con `last_error` "superseded…", y solo
+ *   queda accionable la última;
+ * - listado de pendientes (`:1482-1518`): `pending` siempre, `failed` solo con
+ *   `include_failed` y `attempt_count < MAX_SYNC_ATTEMPTS`, filtrado por
+ *   `next_retry_at <= now` y ordenado por `created_at ASC`;
+ * - proyección de estado del documento (`:1409-1443`), reproducida tal cual
+ *   —incluida la ausencia de guarda de estado previo de `:1422-1424`— porque
+ *   es el comportamiento bajo prueba en ODE-611/614.
+ *
+ * No es SQLite real: el transporte Tauri se dobla, como en el resto del
+ * archivo. La fidelidad con Rust sale de leer el SQL citado.
+ */
+type SyncMutationRow = {
+  id: string
+  documentId: string
+  operation: "upsert" | "delete"
+  payloadJson: string
+  status: "pending" | "processing" | "synced" | "failed"
+  attemptCount: number
+  nextRetryAt: number | null
+  createdAt: number
+  lastError: string | null
+}
+
+/** Igual que `MAX_SYNC_ATTEMPTS` en `src-tauri/src/commands/index.rs:7`. */
+const MAX_SYNC_ATTEMPTS = 10
+
+const mutationsByDb = new Map<string, Map<string, SyncMutationRow>>()
 
 /** Point the `@tauri-apps/api/path` double at a real temp directory. Call once per test file, before the first production call that resolves desktop runtime services. */
 export function configureRealDesktopDoubles(baseDir: string): void {
@@ -64,10 +148,15 @@ export function configureRealDesktopDoubles(baseDir: string): void {
 /** Clears all in-memory catalog state. Does not touch the real filesystem. */
 export function resetCatalogDoubles(): void {
   catalogsByDb.clear()
+  collectionsByDb.clear()
+  writingCollectionsByDb.clear()
+  metadataMutationsByDb.clear()
   bindingRootIdsByRoot.clear()
   manifestsByRoot.clear()
   manifestInodesByRoot.clear()
   selectedPathsByRoot.clear()
+  retiredRootKeys.clear()
+  mutationsByDb.clear()
   for (const gate of [...catalogReadGates]) gate.release()
 }
 
@@ -126,6 +215,38 @@ function rowsFor(dbPath: string): Map<string, DesktopCatalogRow> {
   return rows
 }
 
+function mutationsFor(dbPath: string): Map<string, SyncMutationRow> {
+  let mutations = mutationsByDb.get(dbPath)
+  if (!mutations) {
+    mutations = new Map()
+    mutationsByDb.set(dbPath, mutations)
+  }
+  return mutations
+}
+
+/**
+ * Espejo del `UPDATE sync_mutations … WHERE document_id=?1 AND id<>?2 AND
+ * status IN ('pending','failed')` de `apply_dual_write` (`index.rs:704-711`).
+ */
+function supersedeOlderMutations(
+  mutations: Map<string, SyncMutationRow>,
+  documentId: string,
+  exceptId: string,
+  lastError: string,
+): void {
+  for (const mutation of mutations.values()) {
+    if (
+      mutation.documentId === documentId &&
+      mutation.id !== exceptId &&
+      (mutation.status === "pending" || mutation.status === "failed")
+    ) {
+      mutation.status = "synced"
+      mutation.nextRetryAt = null
+      mutation.lastError = lastError
+    }
+  }
+}
+
 function bindingRootFor(rootPath: string): string {
   let id = bindingRootIdsByRoot.get(rootPath)
   if (!id) {
@@ -163,6 +284,7 @@ async function statAsWorkspaceFile(rootPath: string, relativePath: string, docum
     modifiedAt: stat.mtimeMs,
     size: stat.size,
     inode: stat.ino,
+    device: stat.dev,
     contentHash,
   }
 }
@@ -173,6 +295,7 @@ export const tauriPathModuleDouble = {
   appConfigDir: async () => configDir,
   appDataDir: async () => dataDir,
   join: async (...parts: string[]) => join(...parts),
+  dirname: async (path: string) => dirname(path),
 }
 
 // ─── filesystem tauri-commands doubles (real fs) ───────────────────────────
@@ -188,6 +311,16 @@ export const tauriPathModuleDouble = {
 let writeFileCallCount = 0
 let failingWriteFileCallNumber: number | null = null
 let writeFileFailureFactory: (() => never) | null = null
+type DoubleWriteRace = {
+  matches: (path: string) => boolean
+  conflictId: string
+  secondExternalContent: string
+  keepBesideFails: boolean
+  gate: Promise<void>
+  arrived: () => void
+}
+let doubleWriteRace: DoubleWriteRace | null = null
+
 export function failWriteFileOnCall(callNumber: number, makeError: () => never): void {
   failingWriteFileCallNumber = callNumber
   writeFileFailureFactory = makeError
@@ -198,9 +331,49 @@ export function resetWriteFileFailureState(): void {
   failingWriteFileCallNumber = null
   writeFileFailureFactory = null
   heldWriteFile = null
+  heldWriteFileAfterDiskWrite = null
+  heldOpenFile = null
   failingWriteFileMatching = null
+  doubleWriteRace = null
   writeFileLog.length = 0
   failingCatalogGetById.clear()
+}
+
+/**
+ * Holds a guarded write just after its initial disk-hash check. The test can
+ * make the first external edit and deliver the watcher event before releasing
+ * the commit window. The double then simulates a second external save during
+ * Rust's restore exchange: the target returns to external version 1 and
+ * external version 2 is kept beside it (or left at `.tmp` when `keep_beside`
+ * fails). The app's content is never written to disk, and Rust's literal
+ * CONFLICT message is rejected.
+ */
+export function doubleRaceNextWriteFile(
+  matches: (path: string) => boolean,
+  options: { conflictId?: string; secondExternalContent: string; keepBesideFails?: boolean },
+): { release: () => void; started: Promise<void> } {
+  const conflictId = options.conflictId ?? "5930cafe"
+  if (!/^[0-9a-f]{8}$/.test(conflictId)) {
+    throw new Error("doubleRaceNextWriteFile requires an 8-character lowercase hex conflictId")
+  }
+
+  let release!: () => void
+  let arrived!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  doubleWriteRace = {
+    matches,
+    conflictId,
+    secondExternalContent: options.secondExternalContent,
+    keepBesideFails: options.keepBesideFails ?? false,
+    gate,
+    arrived,
+  }
+  return { release, started }
 }
 
 /**
@@ -247,6 +420,46 @@ export function holdWriteFile(matches: (path: string) => boolean): { release: ()
   return { release, started }
 }
 
+/** Retains a file write after the real `.md` is on disk but before `invoke` resolves. */
+let heldWriteFileAfterDiskWrite: { matches: (path: string) => boolean; gate: Promise<void>; arrived: () => void } | null = null
+export function holdWriteFileAfterDiskWrite(
+  matches: (path: string) => boolean,
+): { release: () => void; started: Promise<void> } {
+  let release!: () => void
+  let arrived!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  heldWriteFileAfterDiskWrite = { matches, gate, arrived }
+  return { release, started }
+}
+
+/**
+ * Retiene la próxima lectura (`tauriOpenFile`) cuya ruta cumpla `matches`,
+ * capturando el contenido en el momento en que la lectura llegó y
+ * entregándolo cuando `release()` la suelta — aunque el archivo cambie
+ * mientras está retenida. Modela una lectura en vuelo que aterriza tarde: la
+ * ventana exacta en la que un snapshot leído antes de mover un archivo puede
+ * pisar contenido más nuevo (ODE-629). `started()` resuelve cuando la lectura
+ * llegó. Se limpia con `resetWriteFileFailureState`.
+ */
+let heldOpenFile: { matches: (path: string) => boolean; gate: Promise<void>; arrived: () => void } | null = null
+export function holdOpenFile(matches: (path: string) => boolean): { release: () => void; started: Promise<void> } {
+  let release!: () => void
+  let arrived!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  heldOpenFile = { matches, gate, arrived }
+  return { release, started }
+}
+
 /**
  * Hace fallar la lectura del catálogo SQLite (`catalog_get_by_id`) para un
  * documento concreto, como un error de la base de datos nativa. Abrir ese
@@ -273,12 +486,14 @@ export async function tauriCreateFileDouble(dir: string, filename: string): Prom
  * baselines, so this double agrees with production code on what "changed"
  * means) must match it, or the write is refused exactly like the real
  * command refuses it — same error shape (`WriteFileConflictError`), same
- * "disk stays untouched" guarantee.
+ * "disk stays untouched" guarantee. `doubleRaceNextWriteFile` separately
+ * models the much narrower atomic-commit race after this initial check.
  */
 export async function tauriWriteFileDouble(
   path: string,
   content: string,
   expectedContentHash?: string | null,
+  expectedInode?: number | null,
 ): Promise<void> {
   writeFileCallCount += 1
   writeFileLog.push({ path, content })
@@ -300,6 +515,18 @@ export async function tauriWriteFileDouble(
     fail()
   }
 
+  // ODE-635 (review ronda 2): identity guard mirrored from Rust `write_file`
+  // for a write with no content baseline — the resolved file may be replaced
+  // or created, never swapped for a different file that appeared at the path.
+  if (!expectedContentHash && expectedInode != null) {
+    const stat = await fs.stat(path).catch(() => null)
+    if (stat && stat.ino !== expectedInode) {
+      throw new WriteFileConflictError(
+        `CONFLICT: ${path} was replaced on disk since it was resolved (expected file identity ${expectedInode}, found ${stat.ino})`,
+      )
+    }
+  }
+
   if (expectedContentHash) {
     let actual: string
     try {
@@ -313,10 +540,43 @@ export async function tauriWriteFileDouble(
         `CONFLICT: ${path} changed on disk since it was last read (expected ${expectedContentHash}, found ${actual})`,
       )
     }
+
+    if (doubleWriteRace?.matches(path)) {
+      const race = doubleWriteRace
+      doubleWriteRace = null
+      race.arrived()
+      await race.gate
+
+      const firstExternalContent = await fs.readFile(path, "utf8")
+      // Rust's second exchange restores the displaced first external version
+      // and leaves the second external save in the temporary path.
+      await fs.writeFile(path, race.secondExternalContent, "utf8")
+      await fs.writeFile(path, firstExternalContent, "utf8")
+
+      if (race.keepBesideFails) {
+        const tmpPath = `${path}.tmp`
+        await fs.writeFile(tmpPath, race.secondExternalContent, "utf8")
+        throw new WriteFileConflictError(
+          `CONFLICT: ${path} changed on disk while the save was being written, and the version found there could not be kept (Permission denied); it remains at ${tmpPath}`,
+        )
+      }
+
+      const keptPath = `${path}.conflict-${race.conflictId}`
+      await fs.writeFile(keptPath, race.secondExternalContent, "utf8")
+      throw new WriteFileConflictError(
+        `CONFLICT: ${path} changed on disk while the save was being written; another version was kept at ${keptPath}`,
+      )
+    }
   }
 
   await fs.mkdir(dirname(path), { recursive: true })
   await fs.writeFile(path, content, "utf8")
+  if (heldWriteFileAfterDiskWrite?.matches(path)) {
+    const held = heldWriteFileAfterDiskWrite
+    heldWriteFileAfterDiskWrite = null
+    held.arrived()
+    await held.gate
+  }
 }
 
 /**
@@ -381,6 +641,16 @@ export async function tauriRenameFileDouble(oldPath: string, newPath: string): P
 }
 
 export async function tauriOpenFileDouble(path: string): Promise<string> {
+  if (heldOpenFile?.matches(path)) {
+    const held = heldOpenFile
+    heldOpenFile = null
+    // Capture at arrival, deliver on release: the caller reads the file as it
+    // was when the read was issued, even if it changes while held.
+    const captured = await fs.readFile(path, "utf8")
+    held.arrived()
+    await held.gate
+    return captured
+  }
   return fs.readFile(path, "utf8")
 }
 
@@ -461,6 +731,24 @@ export async function tauriWorkspaceSyncDouble(
   selectedPaths: string[] | undefined,
   documentIds?: Record<string, string>,
 ): Promise<DesktopWorkspaceSnapshot> {
+  return tauriWorkspaceSyncDoubleWithMode(rootPath, selectedPaths, documentIds, "api")
+}
+
+/** Raw `workspace_sync` response for the real `tauri-commands` wrapper to adapt. */
+export async function tauriWorkspaceSyncInvokeDouble(
+  rootPath: string,
+  selectedPaths: string[] | undefined,
+  documentIds?: Record<string, string>,
+): Promise<DesktopWorkspaceSnapshot> {
+  return tauriWorkspaceSyncDoubleWithMode(rootPath, selectedPaths, documentIds, "invoke")
+}
+
+async function tauriWorkspaceSyncDoubleWithMode(
+  rootPath: string,
+  selectedPaths: string[] | undefined,
+  documentIds: Record<string, string> | undefined,
+  mode: "api" | "invoke",
+): Promise<DesktopWorkspaceSnapshot> {
   const manifest = manifestFor(rootPath)
   if (selectedPaths) selectedPathsByRoot.set(rootPath, [...new Set(selectedPaths)])
   const effectiveSelectedPaths = selectedPathsByRoot.get(rootPath) ?? []
@@ -472,13 +760,15 @@ export async function tauriWorkspaceSyncDouble(
   // every BindingRoot is opened (`openDocumentByPath`, ODE-581). Only exact
   // file paths are adopted; unselected files stay out of the manifest, so
   // callers that never select anything see the same snapshot as before.
-  for (const relativePath of selectedPaths ?? []) {
-    if (!relativePath.endsWith(".md") || manifest.has(relativePath)) continue
-    const isFile = await fs
-      .stat(join(rootPath, relativePath))
-      .then((stat) => stat.isFile())
-      .catch(() => false)
-    if (isFile) manifest.set(relativePath, randomUUID())
+  if (mode === "api") {
+    for (const relativePath of selectedPaths ?? []) {
+      if (!relativePath.endsWith(".md") || manifest.has(relativePath)) continue
+      const isFile = await fs
+        .stat(join(rootPath, relativePath))
+        .then((stat) => stat.isFile())
+        .catch(() => false)
+      if (isFile) manifest.set(relativePath, randomUUID())
+    }
   }
 
   // Explicit-IDs form (the destination bind: relocateDesktopWriting passes
@@ -534,6 +824,33 @@ export async function tauriWorkspaceSyncDouble(
   const files = await Promise.all(
     [...manifest.entries()].map(([relativePath, id]) => statAsWorkspaceFile(rootPath, relativePath, id)),
   )
+  const unboundEntries =
+    mode === "invoke"
+      ? (await listUnmanifestedMarkdown(rootPath, manifest)).filter(({ relativePath }) => {
+          if (effectiveSelectedPaths.length === 0) return true
+          return effectiveSelectedPaths.some((selectedPath) => {
+            const normalized = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "")
+            return relativePath === normalized || relativePath.startsWith(`${normalized}/`)
+          })
+        })
+      : []
+  const unboundPaths = unboundEntries.map(({ relativePath }) => relativePath)
+  // Additive evidence (ODE-657), same order as `unboundPaths`: the real scan
+  // already computed inode/hash/size while deciding the file was unbound.
+  const unboundFiles: DesktopWorkspaceUnboundFile[] = await Promise.all(
+    unboundEntries.map(async ({ relativePath, inode }) => {
+      const fullPath = join(rootPath, relativePath)
+      const stat = await fs.stat(fullPath)
+      return {
+        relativePath,
+        inode,
+        device: stat.dev,
+        contentHash: await hashFile(fullPath),
+        size: stat.size,
+        modifiedAt: stat.mtimeMs,
+      }
+    }),
+  )
   const inodes = new Map<string, number>()
   for (const file of files) inodes.set(file.relativePath, file.inode)
   manifestInodesByRoot.set(rootPath, inodes)
@@ -547,7 +864,8 @@ export async function tauriWorkspaceSyncDouble(
     updatedAt: Date.now(),
     selectedPaths: effectiveSelectedPaths,
     files,
-    unboundPaths: [],
+    unboundPaths,
+    unboundFiles,
   }
 }
 
@@ -581,7 +899,11 @@ async function listUnmanifestedMarkdown(
 
 // ─── catalog tauri-commands doubles (real in-memory row store) ────────────
 
-function applyDualWrite(rows: Map<string, DesktopCatalogRow>, input: DesktopCatalogDualWriteInput): void {
+function applyDualWrite(
+  rows: Map<string, DesktopCatalogRow>,
+  mutations: Map<string, SyncMutationRow>,
+  input: DesktopCatalogDualWriteInput,
+): void {
   const prior = rows.get(input.document.id)
   const row: DesktopCatalogRow = {
     ...input.document,
@@ -596,10 +918,34 @@ function applyDualWrite(rows: Map<string, DesktopCatalogRow>, input: DesktopCata
     excerptContentHash: prior?.excerptContentHash ?? null,
   }
   rows.set(row.id, row)
+  if (input.mutation) {
+    const mutation = input.mutation
+    supersedeOlderMutations(mutations, input.document.id, mutation.id, "superseded by later snapshot mutation")
+    const existing = mutations.get(mutation.id)
+    if (existing) {
+      // ON CONFLICT(id) DO UPDATE SET status,attempt_count,next_retry_at,last_error
+      existing.status = mutation.status as SyncMutationRow["status"]
+      existing.attemptCount = mutation.attemptCount
+      existing.nextRetryAt = mutation.nextRetryAt
+      existing.lastError = mutation.lastError
+    } else {
+      mutations.set(mutation.id, {
+        id: mutation.id,
+        documentId: input.document.id,
+        operation: mutation.operation as SyncMutationRow["operation"],
+        payloadJson: mutation.payloadJson,
+        status: mutation.status as SyncMutationRow["status"],
+        attemptCount: mutation.attemptCount,
+        nextRetryAt: mutation.nextRetryAt,
+        createdAt: mutation.createdAt,
+        lastError: mutation.lastError,
+      })
+    }
+  }
 }
 
 export async function tauriCatalogDualWriteDouble(dbPath: string, input: DesktopCatalogDualWriteInput): Promise<void> {
-  applyDualWrite(rowsFor(dbPath), input)
+  applyDualWrite(rowsFor(dbPath), mutationsFor(dbPath), input)
 }
 
 /** Set to make the next tauriCatalogBulkDualWrite reject before applying any row — a real bulk write is one transaction, so a failure must not partially land. Auto-clears after firing once. */
@@ -615,7 +961,8 @@ export async function tauriCatalogBulkDualWriteDouble(dbPath: string, inputs: De
     fail()
   }
   const rows = rowsFor(dbPath)
-  for (const input of inputs) applyDualWrite(rows, input)
+  const mutations = mutationsFor(dbPath)
+  for (const input of inputs) applyDualWrite(rows, mutations, input)
   return inputs.map((input) => input.document.id)
 }
 
@@ -624,7 +971,9 @@ export async function tauriCatalogBulkDualWriteDouble(dbPath: string, inputs: De
  * Un snapshot de la nube actualiza los campos cloud, pero **no** mueve una
  * fila `pending`/`failed`/`conflict` a `synced`: eso lo hace la confirmación
  * de su mutación. Una fila sin estado pendiente pasa a `synced` si la nube la
- * tiene. Una fila que no existía entra como solo-nube.
+ * tiene. Una fila que no existía entra como solo-nube. Y una fila con trabajo
+ * pendiente conserva **todas** sus cachés de metadata (ODE-617, D-4): el
+ * snapshot no revierte un cambio local que todavía no subió.
  */
 export async function tauriCatalogApplyCloudSnapshotsDouble(
   dbPath: string,
@@ -633,8 +982,31 @@ export async function tauriCatalogApplyCloudSnapshotsDouble(
   const rows = rowsFor(dbPath)
   for (const snapshot of snapshots) {
     const prior = rows.get(snapshot.id)
-    const keepsPending = prior && ["pending", "failed", "conflict"].includes(prior.syncStatus)
+    const keepsPending = prior !== undefined && ["pending", "failed", "conflict"].includes(prior.syncStatus)
     const syncStatus = keepsPending ? prior.syncStatus : snapshot.cloudPresent ? "synced" : (prior?.syncStatus ?? "local-only")
+    // ODE-617 (D-4): espejo de la guarda del SQL real
+    // (`catalog_apply_cloud_snapshots`): con trabajo local pendiente, el
+    // snapshot no proyecta NINGUNA caché de metadata — ni title/slug/status
+    // ni artifactType/visibility/version. Sin trabajo pendiente sí las aplica
+    // (la hidratación normal no se congela). Antes usaba `??` y omitía
+    // visibility/artifactType/version, así que ocultaba la hipótesis.
+    const metadata = keepsPending
+      ? {
+          title: prior.title,
+          slug: prior.slug,
+          status: prior.status,
+          artifactType: prior.artifactType,
+          visibility: prior.visibility,
+          version: prior.version,
+        }
+      : {
+          title: snapshot.title ?? null,
+          slug: snapshot.slug ?? null,
+          status: snapshot.status ?? null,
+          artifactType: snapshot.artifactType ?? null,
+          visibility: snapshot.visibility ?? null,
+          version: snapshot.version ?? null,
+        }
     rows.set(snapshot.id, {
       ...(prior ?? {
         id: snapshot.id,
@@ -651,9 +1023,7 @@ export async function tauriCatalogApplyCloudSnapshotsDouble(
       }),
       cloudPresent: snapshot.cloudPresent,
       cloudAccountId: snapshot.cloudAccountId,
-      title: snapshot.title ?? prior?.title ?? null,
-      slug: snapshot.slug ?? prior?.slug ?? null,
-      status: snapshot.status ?? prior?.status ?? null,
+      ...metadata,
       syncStatus,
     } as DesktopCatalogRow)
   }
@@ -690,13 +1060,18 @@ export async function tauriCatalogGetByIdDouble(dbPath: string, id: string): Pro
  * ids cuyo binding guardado difería de verdad (ruta, inode o hash) o que
  * perdieron presencia: un rescan que reconfirma lo mismo no emite nada.
  *
- * Sin raíces retiradas en ningún test que use este doble, la valla de
- * retirada nunca aplica (mismo premisa que `tauriCatalogListRetiredBindingRootsDouble`).
+ * La valla de retirada se consulta como el SQL real (index.rs:1250-1271): una
+ * ráfaga sobre una raíz retirada no proyecta nada (`applied:false`) hasta que
+ * el consentimiento explícito (`catalog_activate_binding_root`) la levante.
  */
 export async function tauriCatalogApplyReconcileDouble(
   dbPath: string,
   input: DesktopCatalogReconcileInput,
 ): Promise<DesktopCatalogReconcileResult> {
+  const first = input.upserts[0]
+  if (first && (retiredRootKeys.has(first.bindingRootId) || retiredRootKeys.has(first.rootPath))) {
+    return { applied: false, changed: [] }
+  }
   const rows = rowsFor(dbPath)
   const changed: string[] = []
   for (const binding of input.upserts) {
@@ -782,6 +1157,35 @@ export async function tauriCatalogListDouble(dbPath: string): Promise<DesktopCat
 }
 
 /**
+ * Espejo fiel de `catalog_list` (`index.rs:1166-1187`): aplica los mismos
+ * filtros y el mismo `ORDER BY modified_at DESC` del SQL. El seam de ODE-670 lo
+ * necesita para grabar la ruta real de Settings; `tauriCatalogListDouble` de
+ * arriba es un atajo deliberado "todas las filas" que no aplica la query, y por
+ * eso ODE-648 no vio que una fila solo-nube con cuenta queda fuera cuando el
+ * productor pasa `cloudAccountId:null` (seguimiento en
+ * `tests/catalog-seam-fixture.test.ts`, `it.fails` ODE-670). Aquí no se cambia
+ * ese atajo: los consumidores existentes conservan su semántica.
+ */
+export async function tauriCatalogListQueryDouble(
+  dbPath: string,
+  query: { cloudAccountId?: string | null; includeDeleted?: boolean; localOnly?: boolean; limit?: number } = {},
+): Promise<DesktopCatalogRow[]> {
+  const cloudAccountId = query.cloudAccountId ?? null
+  const includeDeleted = query.includeDeleted ?? false
+  const localOnly = query.localOnly ?? false
+  const limit = query.limit ?? 200
+  return [...rowsFor(dbPath).values()]
+    .filter((row) => includeDeleted || (row.deletedAt === null && row.syncStatus !== "deleted"))
+    .filter((row) => !localOnly || row.localPresent)
+    .filter(
+      (row) =>
+        row.localPresent || row.cloudAccountId === null || row.cloudAccountId === cloudAccountId,
+    )
+    .sort((left, right) => (right.modifiedAt ?? 0) - (left.modifiedAt ?? 0))
+    .slice(0, limit)
+}
+
+/**
  * No test using this double ever retires a BindingRoot, so this always
  * returns empty — a real, minimal shape of "nothing to recover," not a
  * shortcut around the property under test. `DesktopWorkspaceService.
@@ -793,13 +1197,88 @@ export async function tauriCatalogListRetiredBindingRootsDouble(_dbPath: string)
 }
 
 /**
- * Same premise as `tauriCatalogListRetiredBindingRootsDouble`: no test using
- * this double retires a BindingRoot, so there is never a retirement fence to
- * lift and activating one is a real no-op. Registering a Workspace
- * (`DesktopWorkspaceService.registerWorkspace`) calls it before writing
- * Settings.
+ * Espejo de `catalog_activate_binding_root` (index.rs:835-850): el único
+ * consentimiento explícito que levanta la valla durable de retirada, por id o
+ * por path. Registrar un Workspace (`DesktopWorkspaceService.registerWorkspace`)
+ * lo invoca antes de escribir Settings; sin valla, es un no-op real.
  */
-export async function tauriCatalogActivateBindingRootDouble(): Promise<void> {}
+export async function tauriCatalogActivateBindingRootDouble(
+  _dbPath: string,
+  bindingRootId: string,
+  rootPath: string,
+): Promise<void> {
+  retiredRootKeys.delete(bindingRootId)
+  retiredRootKeys.delete(rootPath)
+}
+
+/**
+ * Espejo de `catalog_apply_workspace_removal` (index.rs:852-991): retira la
+ * raíz (valla durable por id y path), desata sus bindings y archiva sus
+ * documentos. Un documento cloud-owned (`cloud_present` o `cloud_account_id`)
+ * encola UNA mutación `delete` —sin superseder ninguna previa, como el INSERT
+ * real— y queda `pending` con `deleted_at_cache`; uno solo local queda
+ * `deleted` sin tocar la nube. Devuelve los ids afectados. El `.md` y el
+ * manifiesto en disco no se tocan: retirar un root no borra su directorio.
+ *
+ * El UUID de la mutación lo acuña este doble, igual que Rust
+ * (`uuid::Uuid::new_v4()`, index.rs:957); el recorder lo normaliza con un
+ * alias estable porque los dos runtimes no pueden compartir el valor.
+ */
+export async function tauriCatalogApplyWorkspaceRemovalDouble(
+  dbPath: string,
+  bindingRootId: string,
+  rootPath: string,
+  deletedAt: string,
+  updatedAt: string,
+  nowMillis: number,
+): Promise<string[]> {
+  retiredRootKeys.add(bindingRootId)
+  retiredRootKeys.add(rootPath)
+  const rows = rowsFor(dbPath)
+  const mutations = mutationsFor(dbPath)
+  const affected: string[] = []
+  for (const [id, row] of [...rows.entries()]) {
+    if (row.bindingRootId !== bindingRootId) continue
+    affected.push(id)
+    const detached = {
+      ...row,
+      bindingRootId: null,
+      relativePath: null,
+      canonicalPath: null,
+      inode: null,
+      contentHash: null,
+      size: null,
+      lastSeenAt: null,
+      excerpt: null,
+      excerptContentHash: null,
+    }
+    if (row.cloudPresent || row.cloudAccountId !== null) {
+      const version = row.version ?? 1
+      const mutationId = globalThis.crypto.randomUUID()
+      mutations.set(mutationId, {
+        id: mutationId,
+        documentId: id,
+        operation: "delete",
+        payloadJson: JSON.stringify({ version, deletedAt, updatedAt }),
+        status: "pending",
+        attemptCount: 0,
+        nextRetryAt: null,
+        createdAt: nowMillis,
+        lastError: null,
+      })
+      rows.set(id, {
+        ...detached,
+        localPresent: false,
+        syncStatus: "pending",
+        deletedAt,
+        modifiedAt: nowMillis,
+      })
+    } else {
+      rows.set(id, { ...detached, localPresent: false, syncStatus: "deleted", deletedAt: null })
+    }
+  }
+  return affected
+}
 
 /**
  * Same premise: with no retired BindingRoot there is nothing archived to
@@ -810,14 +1289,193 @@ export async function tauriCatalogReactivateBindingRootDouble(): Promise<Desktop
 }
 
 /**
- * Same premise, for collections: no test using this double creates a
- * collection (there is no double for `catalog_save_collection`), so the
- * catalog's collection snapshot is really empty. The editor's Properties panel
- * reads it on open (`WritingCollectionsSection` → `loadDesktopCollections`),
- * which is on the path to Export (EXP-05, ODE-601).
+ * Stateful collection snapshot: real in-memory `collections` +
+ * `writing_collections` stores seeded through production's own
+ * `catalog_save_collection` / `catalog_replace_writing_collections` doubles.
+ * With no collection created (every proof before ODE-614) it returns the same
+ * genuinely-empty snapshot as before — an empty store is the real shape of
+ * "nothing created", not a shortcut. The editor's Properties panel reads it on
+ * open (`WritingCollectionsSection` → `loadDesktopCollections`), which is on
+ * the path to Export (EXP-05, ODE-601); ODE-614's workspace-isolation proof
+ * reads it to assert per-root collection chips.
+ *
+ * Espeja el snapshot real post ODE-618 PR1b: las colecciones soft-deleted no
+ * entran (ya lo hacía) y las relaciones solo entran si su colección sigue
+ * viva, así que los huérfanos que dejó el build anterior no vuelven.
  */
-export async function tauriCatalogListCollectionSnapshotDouble(_dbPath: string): Promise<DesktopCatalogCollectionSnapshot> {
-  return { collections: [], writingCollections: [] }
+export async function tauriCatalogListCollectionSnapshotDouble(dbPath: string): Promise<DesktopCatalogCollectionSnapshot> {
+  const collections = [...(collectionsByDb.get(dbPath)?.values() ?? [])]
+    .filter((collection) => collection.deletedAt === null)
+    .sort((left, right) => right.localUpdatedAt - left.localUpdatedAt)
+  const liveCollectionIds = new Set(collections.map((collection) => collection.id))
+  const writingCollections = [...(writingCollectionsByDb.get(dbPath)?.values() ?? [])]
+    .filter((row) => liveCollectionIds.has(row.collectionId))
+    .sort(
+      (left, right) =>
+        left.writingId.localeCompare(right.writingId) ||
+        left.collectionId.localeCompare(right.collectionId),
+    )
+  return { collections, writingCollections }
+}
+
+/** Mirror of `catalog_save_collection` → `upsert_collection` (`index.rs:1639,1520`). */
+export async function tauriCatalogSaveCollectionDouble(
+  dbPath: string,
+  collection: DesktopCatalogCollection,
+  _mutation: DesktopCatalogMetadataMutation | null,
+): Promise<void> {
+  let store = collectionsByDb.get(dbPath)
+  if (!store) {
+    store = new Map()
+    collectionsByDb.set(dbPath, store)
+  }
+  // ON CONFLICT(id) DO UPDATE SET <every column> — the mutation queue the real
+  // command also writes is out of scope here (no proof reads it).
+  store.set(collection.id, { ...collection })
+}
+
+/**
+ * Mirror of `catalog_replace_writing_collections` (`index.rs:1677`): clears
+ * the writing's rows, then inserts one per collection id (`added_at` /
+ * `local_updated_at` stamped on every row).
+ */
+export async function tauriCatalogReplaceWritingCollectionsDouble(
+  dbPath: string,
+  writingId: string,
+  collectionIds: string[],
+  addedAt: string,
+  localUpdatedAt: number,
+  _mutation: DesktopCatalogMetadataMutation | null,
+): Promise<void> {
+  let store = writingCollectionsByDb.get(dbPath)
+  if (!store) {
+    store = new Map()
+    writingCollectionsByDb.set(dbPath, store)
+  }
+  for (const [key, row] of [...store.entries()]) {
+    if (row.writingId === writingId) store.delete(key)
+  }
+  for (const collectionId of new Set(collectionIds)) {
+    store.set(`${writingId}:${collectionId}`, { writingId, collectionId, addedAt, localUpdatedAt })
+  }
+}
+
+/**
+ * Espejo del SQL de `catalog_delete_collection` (`index.rs`) desde ODE-618
+ * PR1b: marca la colección como borrada (`deleted_at`, `sync_status='deleted'`,
+ * `local_updated_at`), borra en la misma transacción las filas de
+ * `writing_collections` de esa colección y encola la mutación de metadata
+ * (`supersede` de las accionables anteriores de la entidad +
+ * `INSERT … ON CONFLICT DO NOTHING`). Es la paridad con web que cierra F6: un
+ * documento cuya única colección se borró vuelve a estar sin clasificar. La
+ * verdad de SQLite la da `collection_delete_keeps_documents.rs`; este doble
+ * espeja el comportamiento vigente para el caso TS.
+ */
+export async function tauriCatalogDeleteCollectionDouble(
+  dbPath: string,
+  collectionId: string,
+  deletedAt: string,
+  localUpdatedAt: number,
+  mutation: DesktopCatalogMetadataMutation,
+): Promise<void> {
+  const collections = collectionsByDb.get(dbPath)
+  const collection = collections?.get(collectionId)
+  if (collections && collection) {
+    // UPDATE … WHERE id=?1: sin fila, no hay nada que marcar; la mutación se
+    // encola igual, como el comando real.
+    collections.set(collectionId, {
+      ...collection,
+      deletedAt,
+      syncStatus: "deleted",
+      localUpdatedAt,
+    })
+  }
+  const writingCollections = writingCollectionsByDb.get(dbPath)
+  if (writingCollections) {
+    // DELETE FROM writing_collections WHERE collection_id=?1, en la misma
+    // transacción del UPDATE de arriba.
+    for (const [key, row] of [...writingCollections.entries()]) {
+      if (row.collectionId === collectionId) writingCollections.delete(key)
+    }
+  }
+  enqueueMetadataMutationDouble(dbPath, mutation)
+}
+
+/**
+ * Espejo del merge transaccional de `catalog_apply_collection_snapshot` desde
+ * ODE-666 (`index.rs`): cada colección del snapshot se upsertea salvo que su
+ * fila local conserve un tombstone (`deletedAt`), y las relaciones de una
+ * colección tombstoned se omiten. No poda filas ausentes del snapshot ni toca
+ * writings o archivos. La verdad de SQLite la da
+ * `src-tauri/tests/collection_delete_keeps_documents.rs`; este doble espeja el
+ * SQL vigente para el caso TS.
+ */
+export async function tauriCatalogApplyCollectionSnapshotDouble(
+  dbPath: string,
+  snapshot: DesktopCatalogCollectionSnapshot,
+): Promise<void> {
+  let collections = collectionsByDb.get(dbPath)
+  if (!collections) {
+    collections = new Map()
+    collectionsByDb.set(dbPath, collections)
+  }
+  for (const collection of snapshot.collections) {
+    const local = collections.get(collection.id)
+    if (local && local.deletedAt != null) continue
+    collections.set(collection.id, { ...collection })
+  }
+  let writingCollections = writingCollectionsByDb.get(dbPath)
+  if (!writingCollections) {
+    writingCollections = new Map()
+    writingCollectionsByDb.set(dbPath, writingCollections)
+  }
+  for (const relation of snapshot.writingCollections) {
+    const collection = collections.get(relation.collectionId)
+    if (collection && collection.deletedAt != null) continue
+    writingCollections.set(`${relation.writingId}:${relation.collectionId}`, { ...relation })
+  }
+}
+
+/**
+ * Espejo de `enqueue_metadata_mutation` (`index.rs`): supersede las mutaciones
+ * accionables anteriores de la misma entidad (`pending`/`failed` → `synced`
+ * con `last_error` "superseded…") e inserta la nueva con
+ * `ON CONFLICT(id) DO NOTHING`.
+ */
+function enqueueMetadataMutationDouble(
+  dbPath: string,
+  mutation: DesktopCatalogMetadataMutation,
+): void {
+  const store = metadataMutationsFor(dbPath)
+  for (const [id, row] of [...store.entries()]) {
+    if (
+      row.entityKind === mutation.entityKind &&
+      row.entityId === mutation.entityId &&
+      id !== mutation.id &&
+      (row.status === "pending" || row.status === "failed")
+    ) {
+      store.set(id, {
+        ...row,
+        status: "synced",
+        nextRetryAt: null,
+        lastError: "superseded by later metadata mutation",
+      })
+    }
+  }
+  if (!store.has(mutation.id)) {
+    store.set(mutation.id, {
+      id: mutation.id,
+      entityKind: mutation.entityKind,
+      entityId: mutation.entityId,
+      operation: mutation.operation,
+      payloadJson: mutation.payloadJson,
+      status: mutation.status,
+      attemptCount: mutation.attemptCount,
+      nextRetryAt: mutation.nextRetryAt,
+      createdAt: mutation.createdAt,
+      lastError: mutation.lastError,
+    })
+  }
 }
 
 export async function tauriCatalogDetachLocalFileDouble(dbPath: string, id: string): Promise<void> {
@@ -825,6 +1483,216 @@ export async function tauriCatalogDetachLocalFileDouble(dbPath: string, id: stri
   const row = rows.get(id)
   if (!row) return
   rows.set(id, { ...row, bindingRootId: null, relativePath: null, canonicalPath: null, inode: null, contentHash: null, size: null, lastSeenAt: null })
+}
+
+// ─── sync queue tauri-commands doubles (in-memory `sync_mutations`) ────────
+// Espejos de comportamiento (no spies) de los comandos que usa
+// `desktopCatalogSyncService`: leen el SQL real de `index.rs` y reproducen su
+// semántica, incluidos los efectos sobre `documents.sync_status`. Comparten
+// los mismos row stores del catálogo que el resto del archivo, así que una
+// prueba puede montar el servicio real, el catálogo real y solo el transporte
+// IPC doblado.
+
+/**
+ * Espejo de `catalog_enqueue_mutation` (`index.rs:1445-1479`): supersede las
+ * mutaciones anteriores del documento, inserta la nueva con
+ * `ON CONFLICT(id) DO NOTHING` y marca el documento `pending`.
+ */
+export async function tauriCatalogEnqueueMutationDouble(
+  dbPath: string,
+  documentId: string,
+  mutation: NonNullable<DesktopCatalogDualWriteInput["mutation"]>,
+): Promise<void> {
+  const mutations = mutationsFor(dbPath)
+  supersedeOlderMutations(mutations, documentId, mutation.id, "superseded by later snapshot mutation")
+  if (!mutations.has(mutation.id)) {
+    mutations.set(mutation.id, {
+      id: mutation.id,
+      documentId,
+      operation: mutation.operation as SyncMutationRow["operation"],
+      payloadJson: mutation.payloadJson,
+      status: mutation.status as SyncMutationRow["status"],
+      attemptCount: mutation.attemptCount,
+      nextRetryAt: mutation.nextRetryAt,
+      createdAt: mutation.createdAt,
+      lastError: mutation.lastError,
+    })
+  }
+  const rows = rowsFor(dbPath)
+  const row = rows.get(documentId)
+  if (row) rows.set(documentId, { ...row, syncStatus: "pending" })
+}
+
+/**
+ * Espejo de `catalog_list_pending_mutations` (`index.rs:1481-1518`):
+ * `WHERE (status='pending' OR (?3=1 AND status='failed' AND attempt_count<?4))
+ * AND (next_retry_at IS NULL OR next_retry_at<=?1) ORDER BY created_at ASC
+ * LIMIT ?2`.
+ */
+export async function tauriCatalogListPendingMutationsDouble(
+  dbPath: string,
+  now = Date.now(),
+  limit = 200,
+  includeFailed = true,
+): Promise<DesktopCatalogMutationRow[]> {
+  return [...mutationsFor(dbPath).values()]
+    .filter(
+      (mutation) =>
+        (mutation.status === "pending" ||
+          (includeFailed && mutation.status === "failed" && mutation.attemptCount < MAX_SYNC_ATTEMPTS)) &&
+        (mutation.nextRetryAt === null || mutation.nextRetryAt <= now),
+    )
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .slice(0, limit)
+    .map((mutation) => ({
+      id: mutation.id,
+      documentId: mutation.documentId,
+      operation: mutation.operation,
+      payloadJson: mutation.payloadJson,
+      status: mutation.status as DesktopCatalogMutationRow["status"],
+      attemptCount: mutation.attemptCount,
+      nextRetryAt: mutation.nextRetryAt,
+      createdAt: mutation.createdAt,
+      lastError: mutation.lastError,
+    }))
+}
+
+/**
+ * Espejo de `catalog_update_mutation_status` (`index.rs`): el UPDATE solo toca
+ * filas accionables (`WHERE id=?1 AND status IN ('pending','failed')`) y la
+ * proyección de `documents.sync_status`/`cloud_present` solo se aplica cuando
+ * no queda otra mutación accionable del documento (`NOT EXISTS … id<>?1`).
+ * Una respuesta tardía de una mutación superada o ya resuelta no toca nada.
+ */
+export async function tauriCatalogUpdateMutationStatusDouble(
+  dbPath: string,
+  mutationId: string,
+  status: "pending" | "synced" | "failed",
+  attemptCount: number,
+  nextRetryAt: number | null,
+  lastError: string | null,
+): Promise<void> {
+  const mutations = mutationsFor(dbPath)
+  const mutation = mutations.get(mutationId)
+  // Guard del UPDATE: la fila debe seguir accionable.
+  if (!mutation || (mutation.status !== "pending" && mutation.status !== "failed")) return
+  mutation.status = status
+  mutation.attemptCount = attemptCount
+  mutation.nextRetryAt = nextRetryAt
+  mutation.lastError = lastError
+  // `NOT EXISTS`: con otra accionable del documento, la proyección no corre.
+  const hasOtherActionable = [...mutations.values()].some(
+    (other) =>
+      other.documentId === mutation.documentId &&
+      other.id !== mutation.id &&
+      (other.status === "pending" || other.status === "failed"),
+  )
+  if (hasOtherActionable) return
+  const rows = rowsFor(dbPath)
+  const document = rows.get(mutation.documentId)
+  if (!document) return
+  const deleteOperation = mutation.operation === "delete"
+  const syncStatus =
+    status === "failed"
+      ? "failed"
+      : status === "pending"
+        ? "pending"
+        : deleteOperation && document.localPresent
+          ? "local-only"
+          : deleteOperation
+            ? "deleted"
+            : "synced"
+  const cloudPresent =
+    status === "synced" ? (deleteOperation ? false : true) : document.cloudPresent
+  rows.set(document.id, { ...document, syncStatus, cloudPresent })
+}
+
+/**
+ * Espejo de `catalog_list_pending_metadata_mutations` (mismo `WHERE` que la cola
+ * de contenido: `pending` siempre, `failed` solo con `include_failed` y
+ * `attempt_count < MAX_SYNC_ATTEMPTS`, filtrado por `next_retry_at <= now` y
+ * ordenado por `created_at ASC`). La cola la alimenta
+ * `tauriCatalogDeleteCollectionDouble`; con las pruebas que no borran
+ * colecciones sigue vacía, que es la forma real de "nada que hacer".
+ */
+export async function tauriCatalogListPendingMetadataMutationsDouble(
+  dbPath: string,
+  now = Date.now(),
+  limit = 200,
+  includeFailed = true,
+): Promise<DesktopCatalogMetadataMutation[]> {
+  return [...metadataMutationsFor(dbPath).values()]
+    .filter(
+      (mutation) =>
+        (mutation.status === "pending" ||
+          (includeFailed &&
+            mutation.status === "failed" &&
+            mutation.attemptCount < MAX_SYNC_ATTEMPTS)) &&
+        (mutation.nextRetryAt === null || mutation.nextRetryAt <= now),
+    )
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .slice(0, limit)
+    .map((mutation) => ({ ...mutation }))
+}
+
+/**
+ * Espejo de `catalog_update_metadata_mutation_status` post ODE-644: el UPDATE
+ * solo toca filas accionables (`WHERE id=?1 AND status IN ('pending','failed')`).
+ * Una respuesta tardía de una mutación superada o ya resuelta no revive.
+ */
+export async function tauriCatalogUpdateMetadataMutationStatusDouble(
+  dbPath: string,
+  mutationId: string,
+  status: "pending" | "synced" | "failed",
+  attemptCount: number,
+  nextRetryAt: number | null,
+  lastError: string | null,
+): Promise<void> {
+  const store = metadataMutationsFor(dbPath)
+  const mutation = store.get(mutationId)
+  if (!mutation || (mutation.status !== "pending" && mutation.status !== "failed")) return
+  store.set(mutationId, { ...mutation, status, attemptCount, nextRetryAt, lastError })
+}
+
+/** Espejo de `catalog_prune_synced_mutations` (`index.rs:1394-1407`): borra las filas `synced` de las dos colas. */
+export async function tauriCatalogPruneSyncedMutationsDouble(dbPath: string): Promise<number> {
+  const mutations = mutationsFor(dbPath)
+  let removed = 0
+  for (const [id, mutation] of [...mutations.entries()]) {
+    if (mutation.status === "synced") {
+      mutations.delete(id)
+      removed += 1
+    }
+  }
+  return removed
+}
+
+/** Espejo de `catalog_purge_document` (`index.rs:1372-1387`): `ON DELETE CASCADE` se lleva bindings y mutaciones. */
+export async function tauriCatalogPurgeDocumentDouble(dbPath: string, id: string): Promise<void> {
+  rowsFor(dbPath).delete(id)
+  const mutations = mutationsFor(dbPath)
+  for (const [mutationId, mutation] of [...mutations.entries()]) {
+    if (mutation.documentId === id) mutations.delete(mutationId)
+  }
+}
+
+/**
+ * Lectura de la cola durable para las aserciones de las pruebas. Devuelve una
+ * copia de las filas (mutación de un test jamás altera el estado del doble).
+ */
+export function catalogMutationsDouble(dbPath: string): ReadonlyArray<SyncMutationRow> {
+  return [...mutationsFor(dbPath).values()].map((mutation) => ({ ...mutation }))
+}
+
+/**
+ * Lectura de la cola durable de metadata para las aserciones de las pruebas.
+ * Devuelve una copia de las filas (mutación de un test jamás altera el estado
+ * del doble).
+ */
+export function catalogMetadataMutationsDouble(
+  dbPath: string,
+): ReadonlyArray<DesktopCatalogMetadataMutation> {
+  return [...metadataMutationsFor(dbPath).values()].map((mutation) => ({ ...mutation }))
 }
 
 // ─── settings tauri-commands doubles (real in-memory key/value store) ─────

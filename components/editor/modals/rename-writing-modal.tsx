@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FormModal } from "@/components/ui/dialog"
@@ -17,6 +17,10 @@ type RenameWritingModalProps = {
   onConfirm: (title: string) => Promise<boolean>
 }
 
+// ODE-649: the only text the suggestion-error region may render. Provider,
+// HTTP and network messages stay in the service envelope and never reach the UI.
+const SUGGESTION_FAILURE_MESSAGE = "Could not suggest a name. Try again."
+
 export function RenameWritingModal({
   open,
   title,
@@ -31,9 +35,13 @@ export function RenameWritingModal({
   const [isSuggesting, setIsSuggesting] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const suggestionRequestGenerationRef = useRef(0)
   const canSuggestTitle = hasEnoughTitleSuggestionContent(bodyText)
 
   useEffect(() => {
+    // A closed Desk/Collections/Workspace modal stays mounted. Invalidate any
+    // request from its previous opening or document before resetting UI state.
+    suggestionRequestGenerationRef.current += 1
     if (open) {
       setNextTitle(title)
       setSuggestedTitle(null)
@@ -42,12 +50,28 @@ export function RenameWritingModal({
       setIsSubmitting(false)
       setSubmitError(null)
     }
-  }, [open, title])
+  }, [open, title, writingId])
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      // Invalidate synchronously on Cancel/close; a response can settle before
+      // the passive effect for `open=false` runs.
+      suggestionRequestGenerationRef.current += 1
+    }
+    onOpenChange(nextOpen)
+  }
 
   const requestSuggestion = async () => {
     if (!canSuggestTitle || isSuggesting) {
       return
     }
+
+    const requestGeneration = ++suggestionRequestGenerationRef.current
+    // The generation ref is the only ownership guard: `open`/`writingId` read
+    // here would be the same render's captured props, so comparing them could
+    // never invalidate the in-flight request. Cancel bumps synchronously and
+    // prop changes bump from the passive effect.
+    const stillOwnsModal = () => suggestionRequestGenerationRef.current === requestGeneration
 
     setIsSuggesting(true)
     setSuggestionError(null)
@@ -60,14 +84,18 @@ export function RenameWritingModal({
       })
 
       if (result.error || !result.data) {
-        throw new Error(result.error?.message ?? "Could not suggest a name.")
+        throw new Error(result.error?.message ?? SUGGESTION_FAILURE_MESSAGE)
       }
 
+      if (!stillOwnsModal()) return
       setSuggestedTitle(result.data.title)
-    } catch (error) {
-      setSuggestionError(error instanceof Error ? error.message : "Could not suggest a name.")
+    } catch {
+      if (!stillOwnsModal()) return
+      setSuggestionError(SUGGESTION_FAILURE_MESSAGE)
     } finally {
-      setIsSuggesting(false)
+      if (stillOwnsModal()) {
+        setIsSuggesting(false)
+      }
     }
   }
 
@@ -83,7 +111,7 @@ export function RenameWritingModal({
         setSubmitError("Could not save this name. Try again.")
         return
       }
-      onOpenChange(false)
+      handleOpenChange(false)
     } catch (error) {
       // A rejection (not just a resolved `false`) must not strand the modal
       // showing "Saving…" forever with no way out but Cancel (ODE-478 follow-up).
@@ -96,7 +124,7 @@ export function RenameWritingModal({
   return (
     <FormModal
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title="Rename artifact"
       overline="Artifact name"
       width={440}
@@ -104,7 +132,7 @@ export function RenameWritingModal({
       discardMessage="This artifact has a new name that has not been saved. Discard it?"
       footer={
         <>
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
           <Button type="button" onClick={submit} disabled={isSubmitting}>

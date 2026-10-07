@@ -75,9 +75,11 @@ El toggle **Rich / Markdown** en la topbar (zona izquierda, junto a los botones 
 - La isla `EditorContent` permanece montada e inerte mientras Markdown está activo. Esto conserva ownership de ProseMirror/NodeViews; la vista Source no crea una segunda fuente de verdad.
 - El switch es instantáneo — sin animación, sin loading state.
 
-### Botones de formato en modo Markdown
+### Acciones de formato en modo Markdown
 
-Los botones de la topbar (Bold, Italic, etc.) permanecen visibles pero con `opacity: 0.35` y `pointer-events: none`. No se ocultan — el toggle no cambia el layout de la topbar. El usuario ve que están inactivos, no que desaparecieron.
+En Markdown se ocultan las seis acciones sin implementación — `codeBlock`, `horizontalRule`, `clearStyles`, `copyAsMarkdown`, `copyAsHtml` y `date` — en la toolbar (normal y compacta), en los atajos, en la ayuda de atajos y en el menú nativo. Las acciones que sí funcionan en Markdown (Bold, Italic, Strike, Highlight, Inline code, Link, Table, Image y los bloques con rama) siguen visibles y activas: no todos los botones quedan inactivos, solo desaparecen las seis sin rama.
+
+La disponibilidad por modo tiene un solo dueño frontend (`EDITOR_MARKDOWN_UNAVAILABLE_ACTIONS` / `editorUnavailableActionsForMode` en `lib/editor/shortcuts.ts`). En desktop, el frontend empuja esa lista al menú nativo con el contrato `set_editor_menu_availability` (`{ unavailableActions: string[] }`; adapter en `src-tauri/src/menu_availability.rs`), que deshabilita exactamente los ítems recibidos y rehabilita el resto — el adapter no decide por su cuenta. Un ítem nativo obsoleto que emita su evento en Markdown es inofensivo: la rama Markdown del despacho no tiene caso para las seis y el evento queda en no-op.
 
 ### Auto-save en modo Markdown
 

@@ -9,10 +9,16 @@ values
   ('52100000-0000-4000-8000-000000000001', 'ode521-owner-a@example.test', '{"username":"ode521_owner_a"}'::jsonb),
   ('52100000-0000-4000-8000-000000000002', 'ode521-attacker-b@example.test', '{"username":"ode521_attacker_b"}'::jsonb);
 
-insert into public.profiles (id, username)
+-- El trigger `on_auth_user_created` ya creó los profiles al insertar en
+-- auth.users; el upsert mantiene el test robusto a ese orden y fija
+-- display_name (not null) cuando no lo trae el metadata.
+insert into public.profiles (id, username, display_name)
 values
-  ('52100000-0000-4000-8000-000000000001', 'ode521_owner_a'),
-  ('52100000-0000-4000-8000-000000000002', 'ode521_attacker_b');
+  ('52100000-0000-4000-8000-000000000001', 'ode521_owner_a', 'Owner A'),
+  ('52100000-0000-4000-8000-000000000002', 'ode521_attacker_b', 'Attacker B')
+on conflict (id) do update
+  set username = excluded.username,
+      display_name = excluded.display_name;
 
 insert into public.writings (id, author_id, title, version)
 values

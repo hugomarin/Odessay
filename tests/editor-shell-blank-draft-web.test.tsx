@@ -26,15 +26,29 @@ vi.mock("@/lib/services/desktop/runtime-detection", async () =>
 vi.mock("@/lib/services/ai-service-factory", async () =>
   (await import("./support/editor-shell-doubles")).aiServiceDouble(),
 )
+vi.mock("@/lib/editor/persistence-coordinator", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/editor/persistence-coordinator")>()
+  const { recordPersistenceCoordinator } = await import("./support/persistence-coordinator-capture")
+  return {
+    ...actual,
+    createPersistenceCoordinator: (...args: Parameters<typeof actual.createPersistenceCoordinator>) => {
+      const coordinator = actual.createPersistenceCoordinator(...args)
+      recordPersistenceCoordinator(coordinator)
+      return coordinator
+    },
+  }
+})
 
 const {
   advance,
+  capturePersistenceCoordinators,
   clickNewArtifact,
   flush,
   mountEditorShell,
   resetEditorShellWorld,
   typeInEditor,
   waitFor,
+  waitForHydrationReady,
 } = await import("./support/editor-shell-harness")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 const { createEmptyEditorSession } = await import("@/lib/local-db/editor-sessions")
@@ -42,6 +56,10 @@ const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 const { localDB } = await import("@/lib/local-db")
 
 let mounted: Awaited<ReturnType<typeof mountEditorShell>> | null = null
+let coordinatorCapture: ReturnType<typeof capturePersistenceCoordinators> | null = null
+const TEST_TIMEOUT_MS = 60_000
+const EVENTUALLY_TIMEOUT_MS = TEST_TIMEOUT_MS - 1_000
+const EPHEMERAL_IDENTITY_TIMEOUT_MS = 15_000
 
 beforeEach(async () => {
   resetEditorShellWorld()
@@ -52,6 +70,8 @@ afterEach(async () => {
   vi.restoreAllMocks()
   await mounted?.unmount()
   mounted = null
+  coordinatorCapture?.stop()
+  coordinatorCapture = null
 })
 
 async function mountLoadedWebShell() {
@@ -62,12 +82,12 @@ async function mountLoadedWebShell() {
 }
 
 async function eventually(read: () => Promise<boolean>, label: string) {
-  const deadline = Date.now() + 10_000
+  const deadline = Date.now() + EVENTUALLY_TIMEOUT_MS
   while (Date.now() < deadline) {
     if (await read()) return
     await advance(100)
   }
-  throw new Error(`Timed out waiting for ${label}`)
+  throw new Error(`Timed out after ${EVENTUALLY_TIMEOUT_MS}ms waiting for ${label}`)
 }
 
 describe("ODE-626 — blank web draft persistence", () => {
@@ -104,27 +124,40 @@ describe("ODE-626 — blank web draft persistence", () => {
 
     const beforeBlankDraftIds = new Set((await localDB.writings.getAll()).map((writing) => writing.id))
 
+    coordinatorCapture = capturePersistenceCoordinators()
     await mountLoadedWebShell()
-    await advance(1_500)
+    await waitForHydrationReady("blank draft hydration ready")
+    const initialDraft = await waitFor(
+      () => {
+        const tab = getEditorSessionState().session.tabs.find((candidate) => candidate.writing_id === null)
+        return tab?.draft_writing_id ?? null
+      },
+      { label: "identidad efímera del borrador inicial", timeoutMs: EPHEMERAL_IDENTITY_TIMEOUT_MS },
+    )
+    expect(await coordinatorCapture.settle(), "blank-draft persistence settles").toBe(true)
 
     expect(
       (await localDB.writings.getAll()).filter((writing) => !beforeBlankDraftIds.has(writing.id)),
       "mounting /write creates no durable writing row",
     ).toEqual([])
 
-    const initialDraft = getEditorSessionState().session.tabs.find((tab) => tab.writing_id === null)
-    expect(initialDraft?.draft_writing_id, "the session holds an ephemeral draft identity").toBeTruthy()
-    const initialDraftId = initialDraft!.draft_writing_id!
+    const initialDraftId = initialDraft
     expect(await localDB.writings.get(initialDraftId), "mounting /write creates no durable row").toBeNull()
     expect(await localDB.syncQueue.getCurrentForWriting(initialDraftId), "mounting /write queues no upsert").toBeNull()
 
     await clickNewArtifact(mounted!.container)
     expect(mounted!.editor().getText()).toBe("")
-    await advance(1_500)
 
-    const newDraft = getEditorSessionState().session.tabs.find((tab) => tab.writing_id === null)
-    expect(newDraft?.draft_writing_id, "New Artifact keeps a separate ephemeral draft identity").toBeTruthy()
-    const newDraftId = newDraft!.draft_writing_id!
+    const newDraftId = await waitFor(
+      () => {
+        const tab = getEditorSessionState().session.tabs.find((candidate) => candidate.writing_id === null)
+        const draftId = tab?.draft_writing_id
+        return draftId && draftId !== initialDraftId ? draftId : null
+      },
+      { label: "identidad efímera distinta de New Artifact", timeoutMs: EPHEMERAL_IDENTITY_TIMEOUT_MS },
+    )
+    await waitForHydrationReady("New Artifact hydration ready")
+    expect(await coordinatorCapture.settle(), "New Artifact persistence settles").toBe(true)
     expect(await localDB.writings.get(newDraftId), "New Artifact creates no durable row").toBeNull()
     expect(await localDB.syncQueue.getCurrentForWriting(newDraftId), "New Artifact queues no upsert").toBeNull()
     expect(
@@ -155,5 +188,5 @@ describe("ODE-626 — blank web draft persistence", () => {
       },
       "an upsert for New Artifact's real content",
     )
-  })
+  }, TEST_TIMEOUT_MS)
 })

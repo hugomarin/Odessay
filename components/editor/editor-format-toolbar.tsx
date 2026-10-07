@@ -28,7 +28,11 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { getEditorShortcutLabel, type EditorShortcutAction } from "@/lib/editor/shortcuts"
+import {
+  getEditorShortcutLabel,
+  isEditorActionAvailableInMode,
+  type EditorShortcutAction,
+} from "@/lib/editor/shortcuts"
 import {
   EDITOR_TOPBAR_COMPACT_FORMAT_CLASS,
   EDITOR_TOPBAR_COMPACT_TRIGGER_ID,
@@ -240,7 +244,11 @@ export function EditorFormatToolbar({ editor, mode, onRunAction }: EditorFormatT
     )
   })
 
-  const compactListButtons = COMPACT_LIST_ACTIONS.map((actionItem) => {
+  // ODE-632: en Markdown, la toolbar (normal y compacta) no ofrece las
+  // acciones sin rama — Code desaparece del menú Text y de la lista compacta.
+  const compactListButtons = COMPACT_LIST_ACTIONS.filter((actionItem) =>
+    isEditorActionAvailableInMode(actionItem.action, mode),
+  ).map((actionItem) => {
     const active = isActionActive(actionState, actionItem.action)
     const shortcut = getEditorShortcutLabel(actionItem.action)
     const displayText = actionItem.text ?? actionItem.label
@@ -262,7 +270,9 @@ export function EditorFormatToolbar({ editor, mode, onRunAction }: EditorFormatT
     )
   })
 
-  const textMenuItems = TEXT_MENU_ACTIONS.map((actionItem) => {
+  const textMenuItems = TEXT_MENU_ACTIONS.filter((actionItem) =>
+    isEditorActionAvailableInMode(actionItem.action, mode),
+  ).map((actionItem) => {
     const active = isActionActive(actionState, actionItem.action)
     const shortcut = getEditorShortcutLabel(actionItem.action)
 
@@ -318,7 +328,7 @@ export function EditorFormatToolbar({ editor, mode, onRunAction }: EditorFormatT
         ? "H3"
         : actionState.blockquote
           ? "Quote"
-          : actionState.codeBlock
+          : isEditorActionAvailableInMode("codeBlock", mode) && actionState.codeBlock
             ? "Code"
             : "Text"
   const listMenuLabel = actionState.orderedList ? "# List" : actionState.bulletList ? "• List" : "List"

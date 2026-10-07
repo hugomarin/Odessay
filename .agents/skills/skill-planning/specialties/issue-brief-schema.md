@@ -93,6 +93,40 @@ Formato — siempre texto plano, nunca Markdown links:
 
 Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados.
 
+## Reuse Check *(required para cambios de código no triviales)*
+
+Declarar la responsabilidad semántica y el owner esperado, además de la hipótesis de reutilización que BUILD debe comprobar contra el repositorio:
+
+```text
+Responsabilidad / owner esperado: [qué responsabilidad cambia y dónde debe vivir]
+Extender o reutilizar: [owner/API existente y cómo cubre el caso | no se conoce una API que lo cubra]
+Referencia sibling: [si hace falta una pieza nueva, sibling canónico que aporta forma | ninguna]
+Consumers / pruebas a revisar: [consumidores y pruebas canónicas conocidos]
+```
+
+No presentar como hecho una exploración de código que aún no se realizó: marcar la API como desconocida y hacer que BUILD la confirme con Architecture Recon. `Reuse Check` no sustituye `Architecture Contract`; cuando el issue cambia ownership, contratos, fuente de verdad, runtime o boundaries, ambos campos aplican.
+
+## Recon Pack *(required cuando el planner ya hizo el Recon del área)*
+
+Cuando el planner exploró el código del área, el brief lleva lo comprobado para que BUILD lo valide en vez de volver a buscarlo. Extiende el `Reuse Check`; no lo repite:
+
+```text
+Verificado en: main@<sha corto> (<fecha>)
+Mapa del área: <documento y sección donde vive el mapa completo>
+Qué cambiar: <símbolo> — <archivo>:<desde>-<hasta>   (una línea por símbolo)
+Cómo funciona hoy: <3–5 líneas: flujo, orden de efectos, quién llama a quién>
+Construir con: <qué reutilizar (API, helper, hook, doble) con archivo:líneas> · <sibling cuya forma seguir, si hace falta una pieza nueva> · <qué NO crear porque ya tiene owner>
+Dónde probar: <archivos de test a extender o que deben pasar idénticos> + <helpers del harness>
+Trampas: <lo ya pagado que no hay que redescubrir>
+Vida del dueño: <solo si el estado vive en un componente o página: owner · transiciones que lo destruyen · trabajo en vuelo · patrón del playbook de ownership asíncrono>
+Matriz: <solo con invariantes asíncronas o de identidad: operación × transición × éxito/error → prueba o límite con razón, una línea por celda alcanzable>
+No tocar: <lo que queda fuera de alcance aunque esté al lado>
+```
+
+- Citar solo lo comprobado en ese commit. Si una parte no se exploró, decirlo; BUILD la resuelve con Recon normal.
+- El pack no sustituye `Architecture Contract`: dice **dónde** está el código hoy, no **qué** debe cumplir.
+- Cómo se produce (método, lista de huecos, qué deja y reporte al humano): `area-recon.md`. Resultado del piloto en ODE-605: el Recon de BUILD con pack bajó a 8–13 min (antes 7–26 min).
+
 ## Handoff *(solo si el issue requiere acción humana)*
 
 Omitir esta sección si el issue es código puro. Incluirla cuando el agente llega a un punto que no puede resolver solo — crear un servicio externo, aprobar un acceso, llenar credenciales.
@@ -257,6 +291,8 @@ Regla:
   - `Invariants`
   - `Required docs`
 - Si falta cualquiera de esos campos, el issue no está listo para DEFINE ni para BUILD.
+- Todo Capability Proof (el entregable mueve una fila de `workflow/quality/capability-integration-map.md`) activa este bloque: cruza adapters, servicios y la shell, y su prueba depende de quién es owner de cada costura. Cuando hay `Recon Pack`, el Recon llena el contrato con lo que comprobó en el código.
+- El bloque va bajo un encabezado `## Architecture Contract`, con un campo por línea (`* **Layer:** …`). Ese es el formato que verifica `npm run ops:brief:lint -- ODE-<n> --require-contract` (`scripts/check-issue-brief.mjs`). Sin `--require-contract`, un brief que no activa Architecture puede no tener el bloque, pero si lo tiene debe estar completo. Un brief que no pasa el lint no se despacha.
 
 **External references — obligatorias cuando el issue depende de un servicio o protocolo externo:**
 

@@ -78,3 +78,9 @@ jobs:
 
       - name: Check status drift
         run: npm run ops:status:drift:strict
+
+      # ODE-656: commit order and capability-map row rules (capability-proof
+      # contract rule 8). Reads the pinned TRACEABILITY_BASE_SHA and
+      # TRACEABILITY_PR_HEAD_SHA from the env set above; node builtins only.
+      - name: Check proof commit hygiene
+        run: npm run ops:proof:precheck

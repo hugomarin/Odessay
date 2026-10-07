@@ -21,6 +21,7 @@ Los **roles de agente** viven en `.agents/agents/`.
 - Para `/wf-define`, usar `.agents/agents/planning-agent.md` como rol de orquestación. Resuelve la topología de ejecución (capabilities, dependencias, critical path) antes de escribir briefs, y usa `.agents/skills/skill-planning/SKILL.md` para endurecer cada issue de esa topología.
 - Para `/wf-build`, usar `.agents/agents/build-agent.md` como rol de orquestación. Ejecuta `.agents/skills/architecture-recon/SKILL.md` antes de implementar cualquier cambio no trivial, para localizar owner/siblings/consumers/tests reales antes de escribir código.
 - Para `/wf-review`, usar `.agents/agents/review-agent.md` como rol de orquestación. Usa `.agents/skills/skill-code-review/SKILL.md` y sus referencias de corrección, arquitectura, testing y tamaño del cambio según el scope real del diff.
+- Para preparar una tanda de issues para Orca, usar `.agents/skills/orchestration-prompt-builder/SKILL.md`. Produce el prompt `/orchestration` completo (`orchestration-v<N>.md` + delta) que ejecuta el coordinador de Orca. **No es** el skill `orchestration` de Orca (`orca skills get orchestration`), que es el que usa el coordinador para ejecutar ese prompt. Antes, el Recon de área de la tanda va según `.agents/skills/skill-planning/specialties/area-recon.md`.
 - La convención de formato para roles vive en `.agents/agents/README.md`.
 - Los skills en `.agents/skills/` complementan al rol; no lo reemplazan.
 
@@ -42,6 +43,7 @@ Los documentos de apoyo se seleccionan por la pregunta concreta y conservan la p
 - Antes de cualquier `git commit`, verificar la rama actual con `git branch --show-current`.
 - Si la rama actual es `main`, crear y cambiar a una rama `codex/<issue-o-tarea>` antes de editar o commitear.
 - Si el trabajo ya quedó en `main` por error, corregirlo moviendo los commits a la rama de feat y restaurando `main` al commit previo.
+- Un cambio formado solo por documentos y evidencia documental puede omitir el ID de issue y usar el flujo documental ligero; el gate de trazabilidad lo determina por las rutas del diff. Si el diff incluye código de producto, vuelve a aplicar la rama y los commits con ID de issue. Los cambios de infraestructura/proceso siguen usando la categoría `infra` o `process` y su allowlist.
 
 ## Regla de transición a In Review
 

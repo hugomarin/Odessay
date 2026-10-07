@@ -39,8 +39,12 @@ function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
 }
 
-function err<T>(code: ServiceError["code"], message: string): ServiceResponse<T> {
-  return { data: null, error: { code, message, retryable: false } }
+function err<T>(
+  code: ServiceError["code"],
+  message: string,
+  details?: ServiceError["details"],
+): ServiceResponse<T> {
+  return { data: null, error: { code, message, retryable: false, ...(details ? { details } : {}) } }
 }
 
 function isoNow(): string {
@@ -321,10 +325,10 @@ export class FilesystemDocumentService implements DocumentService {
    * Emits a "saved" event after the file is fully persisted.
    */
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
-    const { writing, expectedContentHash } = input
+    const { writing, expectedContentHash, expectedInode } = input
     const markdown = writing.content.markdown ?? ""
     try {
-      await tauriWriteFile(writing.id, markdown, expectedContentHash)
+      await tauriWriteFile(writing.id, markdown, expectedContentHash, expectedInode)
       const savedRecord: WritingRecord = {
         ...writing,
         updatedAt: isoNow(),
@@ -334,7 +338,12 @@ export class FilesystemDocumentService implements DocumentService {
       return ok(savedRecord)
     } catch (e) {
       if (e instanceof WriteFileConflictError) {
-        return err("CONFLICT", e.message)
+        const details = e.preservationFailed
+          ? { preservationFailed: true }
+          : e.keptPath
+            ? { keptPath: e.keptPath }
+            : undefined
+        return err("CONFLICT", e.message, details)
       }
       return err("STORAGE_ERROR", e instanceof Error ? e.message : "Failed to save writing")
     }
@@ -473,6 +482,10 @@ export class FilesystemDocumentService implements DocumentService {
               bodyText: parsed.snapshot.bodyText,
               document,
             })
+
+      if (bytes.byteLength === 0) {
+        throw new Error("Export renderer returned no bytes")
+      }
 
       return ok({
         writingId: input.writingId,

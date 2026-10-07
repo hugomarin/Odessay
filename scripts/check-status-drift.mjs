@@ -31,9 +31,21 @@ const builtIssues = built
   .filter((issue) => typeof issue === "string");
 const builtIssueSet = new Set(builtIssues);
 
-const duplicates = builtIssues.filter(
-  (issue, index) => builtIssues.indexOf(issue) !== index,
-);
+// The append-only ledger records deliveries, including partial PRs of one
+// issue. A PR identifies a delivery; historical rows without a PR fall back
+// to their commit, then to the issue when neither identifier is available.
+const seenDeliveries = new Set();
+const duplicates = built.filter((entry) => {
+  if (typeof entry.issue !== "string") return false;
+  const identity = JSON.stringify([
+    entry.issue,
+    entry.pr_url ? "pr" : entry.commit ? "commit" : "issue",
+    entry.pr_url || entry.commit || entry.issue,
+  ]);
+  if (seenDeliveries.has(identity)) return true;
+  seenDeliveries.add(identity);
+  return false;
+});
 
 // Drift describes the accepted baseline, not the mutable branch currently
 // named main and not the unmerged PR changes. CI pins this SHA at preflight.
@@ -95,9 +107,11 @@ if (!hasProblems) {
 }
 
 if (duplicates.length > 0) {
-  const formatted = [...new Set(duplicates)].sort(compareIssueId).join(", ");
+  const formatted = duplicates
+    .map((entry) => `${entry.issue} (${entry.pr_url || entry.commit || "no delivery identifier"})`)
+    .join(", ");
   console.error(
-    `[ops:status:drift] Duplicated issues in the built ledger: ${formatted}`,
+    `[ops:status:drift] Duplicated deliveries in the built ledger: ${formatted}`,
   );
 }
 

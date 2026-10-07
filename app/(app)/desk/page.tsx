@@ -26,6 +26,10 @@ import { useDeskFilters } from "@/hooks/useDeskFilters"
 import { useVocabulary } from "@/hooks/useVocabulary"
 import { useWritingSelection } from "@/hooks/useWritingSelection"
 import { BulkActionBar } from "@/components/desk/bulk-action-bar"
+import {
+  MarkdownExportNotice,
+  useMarkdownExportNotice,
+} from "@/components/shared/markdown-export-notice"
 import { buildCollectionOptions } from "@/lib/collections/collections"
 import { debounce } from "@/lib/utils/debounce"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
@@ -74,7 +78,7 @@ import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
 import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
 import { copyTextWithFallback } from "@/lib/utils/clipboard"
-import { downloadBlob, saveBinaryArtifact } from "@/lib/utils/download"
+import { saveBinaryArtifact } from "@/lib/utils/download"
 import { buildWebWritingActionUrl, openExternalUrl, type WebWritingAction } from "@/lib/runtime/external-link"
 
 
@@ -791,13 +795,22 @@ export default function DeskPage() {
     [loadDeskActivity, loadRecipientPreviewsAsync],
   )
 
-  const getWritingMarkdownPayload = useCallback((writingId: string) => {
+  const getWritingMarkdownPayload = useCallback(async (writingId: string) => {
     const writing = writingById.get(writingId)
     if (!writing || writing.sync_status === "deleted") {
-      return null
+      throw new Error("Failed to export Markdown.")
     }
 
-    const markdown = serializeWritingToMarkdown(writing.body_json).trimEnd()
+    let bodyJson: Record<string, unknown> = writing.body_json
+    if (isTauriRuntime()) {
+      const result = await (await getDocumentService()).openWriting(writingId)
+      if (result.error || !result.data) {
+        throw new Error("Failed to export Markdown.")
+      }
+      bodyJson = (result.data.content.richText as Record<string, unknown> | null) ?? {}
+    }
+
+    const markdown = serializeWritingToMarkdown(bodyJson).trimEnd()
     return {
       markdown: `${markdown}\n`,
       filename: buildMarkdownDownloadName({
@@ -809,26 +822,39 @@ export default function DeskPage() {
   }, [writingById])
 
   const copyWritingMarkdown = useCallback(async (writingId: string) => {
-    const payload = getWritingMarkdownPayload(writingId)
+    try {
+      const payload = await getWritingMarkdownPayload(writingId)
 
-    if (!payload) {
+      if (!payload) {
+        return
+      }
+
+      await copyTextWithFallback(payload.markdown)
+    } catch {
+      // Row menu callers are intentionally fire-and-forget; keep a failed read
+      // or clipboard write from becoming an unhandled rejection.
       return
     }
-
-    await copyTextWithFallback(payload.markdown)
   }, [getWritingMarkdownPayload])
 
-  const downloadWritingMarkdown = useCallback((writingId: string) => {
-    const payload = getWritingMarkdownPayload(writingId)
+  const downloadWritingMarkdown = useCallback(async (writingId: string) => {
+    const payload = await getWritingMarkdownPayload(writingId)
 
     if (!payload) {
       return false
     }
 
-    const blob = new Blob([payload.markdown], { type: "text/markdown;charset=utf-8" })
-    downloadBlob(blob, payload.filename)
-    return true
+    return saveBinaryArtifact({
+      bytes: new TextEncoder().encode(payload.markdown),
+      fileName: payload.filename,
+      mimeType: "text/markdown;charset=utf-8",
+    })
   }, [getWritingMarkdownPayload])
+
+  const {
+    notice: markdownExportNotice,
+    runExport: downloadWritingMarkdownFromRow,
+  } = useMarkdownExportNotice(downloadWritingMarkdown)
 
   const exportWritingDocument = useCallback(async (writingId: string, format: "pdf" | "docx") => {
     const service = await getDocumentService()
@@ -969,7 +995,7 @@ export default function DeskPage() {
                 onRenameWriting={openRenameWriting}
                 onPreviewWriting={openWritingPreview}
                 onCopyMarkdown={copyWritingMarkdown}
-                onDownloadMarkdown={downloadWritingMarkdown}
+                onDownloadMarkdown={downloadWritingMarkdownFromRow}
                 onDeleteRequest={async (id) => {
                   await deleteWriting(id)
                   await loadDeskActivity()
@@ -1009,6 +1035,11 @@ export default function DeskPage() {
                 }}
               />
             )}
+            <MarkdownExportNotice
+              notice={markdownExportNotice}
+              placement="absolute"
+              raised={hasSelection}
+            />
           </div>
 
           <DeleteWritingDialog

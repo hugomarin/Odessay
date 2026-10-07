@@ -7,6 +7,19 @@ import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-doc
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import { WriteFileConflictError } from "@/lib/services/desktop/write-file-conflict-error"
 
+const pdfRendererControl = vi.hoisted(() => ({ returnEmptyBytes: false }))
+
+vi.mock("@/lib/export/to-pdf", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/export/to-pdf")>()
+  return {
+    ...actual,
+    renderWritingToPdfBytes: vi.fn(async (...args: Parameters<typeof actual.renderWritingToPdfBytes>) => {
+      if (pdfRendererControl.returnEmptyBytes) return new Uint8Array()
+      return actual.renderWritingToPdfBytes(...args)
+    }),
+  }
+})
+
 // ─── Mock Tauri commands (no real filesystem in test env) ─────────────────────
 
 const mockFiles = new Map<string, string>()
@@ -104,6 +117,7 @@ describe("FilesystemDocumentService", () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
+    pdfRendererControl.returnEmptyBytes = false
     mockFiles.clear()
     mockMetadata.length = 0
     service = new FilesystemDocumentService(WRITINGS_DIR, { autoSaveDebounceMs: 300 })
@@ -111,6 +125,7 @@ describe("FilesystemDocumentService", () => {
   })
 
   afterEach(() => {
+    pdfRendererControl.returnEmptyBytes = false
     vi.useRealTimers()
   })
 
@@ -125,6 +140,7 @@ describe("FilesystemDocumentService", () => {
       writing.id,
       writing.content.markdown,
       undefined,
+      undefined,
     )
     vi.useFakeTimers()
   })
@@ -138,6 +154,21 @@ describe("FilesystemDocumentService", () => {
       writing.id,
       writing.content.markdown,
       "blake3:baseline",
+      undefined,
+    )
+    vi.useFakeTimers()
+  })
+
+  it("saveWriting passes expectedInode through to tauriWriteFile (ODE-635)", async () => {
+    vi.useRealTimers()
+    const writing = makeWritingRecord()
+    mockFiles.set(writing.id, "")
+    await service.saveWriting({ writing, expectedContentHash: null, expectedInode: 4242 })
+    expect(vi.mocked(tauriCommandsMod.tauriWriteFile)).toHaveBeenCalledWith(
+      writing.id,
+      writing.content.markdown,
+      null,
+      4242,
     )
     vi.useFakeTimers()
   })
@@ -156,6 +187,43 @@ describe("FilesystemDocumentService", () => {
       code: "CONFLICT",
       message: "CONFLICT: changed on disk since it was last read",
       retryable: false,
+    })
+    vi.useFakeTimers()
+  })
+
+  it("saveWriting carries the kept conflict path in ServiceError.details (ODE-593)", async () => {
+    vi.useRealTimers()
+    const writing = makeWritingRecord()
+    const keptPath = "/tmp/Letter.md.conflict-1a2b3c4d"
+    vi.mocked(tauriCommandsMod.tauriWriteFile).mockRejectedValueOnce(
+      new WriteFileConflictError(
+        `CONFLICT: /tmp/Letter.md changed on disk while the save was being written; another version was kept at ${keptPath}`,
+      ),
+    )
+
+    const result = await service.saveWriting({ writing, expectedContentHash: "blake3:stale" })
+
+    expect(result.error).toMatchObject({
+      code: "CONFLICT",
+      details: { keptPath },
+    })
+    vi.useFakeTimers()
+  })
+
+  it("saveWriting carries a keep_beside failure marker in ServiceError.details (ODE-593)", async () => {
+    vi.useRealTimers()
+    const writing = makeWritingRecord()
+    vi.mocked(tauriCommandsMod.tauriWriteFile).mockRejectedValueOnce(
+      new WriteFileConflictError(
+        "CONFLICT: /tmp/Letter.md changed on disk while the save was being written, and the version found there could not be kept (Permission denied); it remains at /tmp/Letter.md.tmp",
+      ),
+    )
+
+    const result = await service.saveWriting({ writing, expectedContentHash: "blake3:stale" })
+
+    expect(result.error).toMatchObject({
+      code: "CONFLICT",
+      details: { preservationFailed: true },
     })
     vi.useFakeTimers()
   })
@@ -268,6 +336,7 @@ describe("FilesystemDocumentService", () => {
     expect(vi.mocked(tauriCommandsMod.tauriWriteFile)).toHaveBeenCalledWith(
       path,
       "# Save Test\n\nNew content.",
+      undefined,
       undefined,
     )
     vi.useFakeTimers()
@@ -460,6 +529,18 @@ describe("FilesystemDocumentService", () => {
 
     const zip = await JSZip.loadAsync(result.data!.bytes)
     expect(zip.file("word/document.xml")).not.toBeNull()
+    vi.useFakeTimers()
+  })
+
+  it("exportWriting rejects an empty PDF renderer result", async () => {
+    vi.useRealTimers()
+    const path = `${WRITINGS_DIR}/empty-pdf.md`
+    mockFiles.set(path, "# Empty PDF\n\nPDF body.")
+    pdfRendererControl.returnEmptyBytes = true
+
+    const result = await service.exportWriting({ writingId: path, format: "pdf" })
+
+    expect(result.error?.code).toBe("STORAGE_ERROR")
     vi.useFakeTimers()
   })
 

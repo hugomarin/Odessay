@@ -4,10 +4,9 @@ import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
-// Focused regression coverage for the infra/process exemption in
-// scripts/check-traceability-gate.mjs: branch prefix vs PR label detection,
-// and the allowlist boundary that puts ODE-XX right back the moment the
-// diff touches product code (app/**, components/**, lib/**, src-tauri/**).
+// Focused regression coverage for documentation and infra/process exemptions
+// in scripts/check-traceability-gate.mjs, including the allowlist boundary that
+// puts ODE-XX right back when a diff touches product code.
 
 const repoRoot = resolve(import.meta.dirname, "..")
 const gateScript = join(repoRoot, "scripts", "check-traceability-gate.mjs")
@@ -42,6 +41,35 @@ function createRepository(files: Record<string, string> = {}, commitMessage = "f
   git(root, "commit", "-m", commitMessage)
   const head = git(root, "rev-parse", "HEAD")
 
+  return { root, base, head }
+}
+
+function createRepositoryWithMainMerge(): { root: string; base: string; head: string } {
+  const root = mkdtempSync(join(tmpdir(), "odessay-traceability-main-merge-"))
+  temporaryRepos.push(root)
+  git(root, "init", "-b", "main")
+  git(root, "config", "user.email", "traceability@example.com")
+  git(root, "config", "user.name", "Traceability Test")
+
+  writeFileSync(join(root, "baseline.txt"), "base\n")
+  git(root, "add", ".")
+  git(root, "commit", "-m", "chore: baseline")
+  const base = git(root, "rev-parse", "HEAD")
+
+  git(root, "switch", "-c", "feature")
+  writeFileSync(join(root, "feature.txt"), "feature\n")
+  git(root, "add", ".")
+  git(root, "commit", "-m", "fix(feature): implement issue [ODE-500]")
+
+  git(root, "switch", "main")
+  writeFileSync(join(root, "main-only.txt"), "already in main\n")
+  git(root, "add", ".")
+  git(root, "commit", "-m", "docs: already delivered on main")
+  git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+  git(root, "switch", "feature")
+  git(root, "merge", "--no-ff", "main", "-m", "Merge main into feature")
+  const head = git(root, "rev-parse", "HEAD")
   return { root, base, head }
 }
 
@@ -105,6 +133,7 @@ describe("infra/process traceability exemption", () => {
   it("PASS: PR label 'process' with diff limited to allowed paths", () => {
     const fixture = createRepository({
       "docs/some-note.md": "# note\n",
+      ".github/workflows/example.yml": "name: example\non:\n  workflow_call: {}\n",
     })
     const eventPath = writePullRequestEvent(fixture.root, ["process", "some-other-label"])
 
@@ -115,6 +144,34 @@ describe("infra/process traceability exemption", () => {
 
     expect(result.code).toBe(0)
     expect(result.output).toContain("infra/process category")
+  })
+
+  it("PASS: documentation-only changes need no issue ID, branch prefix, or label", () => {
+    const fixture = createRepository({
+      ".agents/agents/example.md": "# Agent\n",
+      ".claude/launch.json": "{}\n",
+      ".orca-coordinator-brief.md": "# Coordinator\n",
+      "artifacts/example/screenshot.png": "image evidence\n",
+      "workflow/docs.json": "{}\n",
+      "workflow/workflow.md": "# Workflow\n",
+    })
+
+    const result = runGate(fixture, { GITHUB_HEAD_REF: "codex/docs-update" })
+
+    expect(result.code).toBe(0)
+    expect(result.output).toContain("documentation-only diff")
+  })
+
+  it("FAIL: documentation change plus product code still needs an issue ID", () => {
+    const fixture = createRepository({
+      "docs/some-note.md": "# note\n",
+      "components/foo.tsx": "export default function Foo() { return null }\n",
+    })
+
+    const result = runGate(fixture, { GITHUB_HEAD_REF: "codex/docs-update" })
+
+    expect(result.code).toBe(1)
+    expect(result.output).toContain("does not include an issue ID")
   })
 
   it("FAIL: process category but diff touches components/**", () => {
@@ -163,5 +220,18 @@ describe("infra/process traceability exemption", () => {
 
     expect(result.code).toBe(0)
     expect(result.output).toContain("have branch and commit traceability")
+  })
+
+  it("PASS: excludes commits already present in main from traceability comparison", () => {
+    const fixture = createRepositoryWithMainMerge()
+
+    const result = runGate(fixture, {
+      GITHUB_HEAD_REF: "ODE-500-feature",
+      TRACEABILITY_ISSUE_IDS: "ODE-500",
+    })
+
+    expect(result.code).toBe(0)
+    expect(result.output).toContain("have branch and commit traceability")
+    expect(result.output).not.toContain("already delivered on main")
   })
 })

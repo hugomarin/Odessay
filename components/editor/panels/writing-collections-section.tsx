@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react"
 import { Tags } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { buildCollectionOptions } from "@/lib/collections/collections"
@@ -18,10 +18,59 @@ type WritingCollectionsSectionProps = {
   writingId: string
 }
 
+type CollectionSelection = {
+  writingId: string | null
+  ids: string[]
+}
+
+type AssignmentOp = { kind: "toggle" | "add"; collectionId: string }
+
+type PendingAssignmentIntent = {
+  writingId: string
+  ops: AssignmentOp[]
+  resolvedIds: string[] | null
+}
+
+/** Sole synchronous writer for the collection selection and its live ref (ODE-643). */
+function useSelectedCollectionIdsState() {
+  const [selection, commitSelection] = useState<CollectionSelection>({
+    writingId: null,
+    ids: [],
+  })
+  const selectionRef = useRef<CollectionSelection>({ writingId: null, ids: [] })
+  const setSelection = useCallback((next: SetStateAction<CollectionSelection>) => {
+    const resolved = typeof next === "function" ? next(selectionRef.current) : next
+    selectionRef.current = resolved
+    commitSelection(resolved)
+  }, [])
+  return { selection, selectionRef, setSelection }
+}
+
+function applyAssignmentOps(baseIds: string[], ops: AssignmentOp[]): string[] {
+  const next = [...baseIds]
+  for (const op of ops) {
+    const index = next.indexOf(op.collectionId)
+    if (op.kind === "add") {
+      if (index === -1) next.push(op.collectionId)
+    } else if (index === -1) {
+      next.push(op.collectionId)
+    } else {
+      next.splice(index, 1)
+    }
+  }
+  return next
+}
+
 export function WritingCollectionsSection({ writingId }: WritingCollectionsSectionProps) {
+  const { selection, selectionRef, setSelection } = useSelectedCollectionIdsState()
   const [collections, setCollections] = useState<LocalCollection[]>([])
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const selectedIdsRef = useRef<string[]>([])
+  const pendingIntentRef = useRef<PendingAssignmentIntent | null>(null)
+  const writingGenerationRef = useRef(0)
+  const lastWritingIdRef = useRef(writingId)
+  if (lastWritingIdRef.current !== writingId) {
+    lastWritingIdRef.current = writingId
+    writingGenerationRef.current += 1
+  }
 
   const loadLocalState = async (currentWritingId: string, cancelled?: () => boolean) => {
     const { collections: nextCollections, writingCollections: assignments } =
@@ -31,15 +80,23 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
       return
     }
 
-    const nextSelectedIds = assignments.map((assignment) => assignment.collection_id)
-    selectedIdsRef.current = nextSelectedIds
+    const baseIds = assignments.map((assignment) => assignment.collection_id)
+    const pending =
+      pendingIntentRef.current?.writingId === currentWritingId ? pendingIntentRef.current : null
+    let shouldPersistPending = false
+    if (pending && pending.resolvedIds === null) {
+      pending.resolvedIds = applyAssignmentOps(baseIds, pending.ops)
+      shouldPersistPending = true
+    }
+    const nextSelectedIds = pending?.resolvedIds ?? baseIds
     setCollections(nextCollections)
-    setSelectedIds(nextSelectedIds)
-  }
+    setSelection({ writingId: currentWritingId, ids: nextSelectedIds })
 
-  useEffect(() => {
-    selectedIdsRef.current = selectedIds
-  }, [selectedIds])
+    if (pending && shouldPersistPending) {
+      await setLocalWritingCollections(currentWritingId, nextSelectedIds)
+      void getSyncService().scheduleFlush()
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -67,31 +124,82 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     }
   }, [writingId])
 
+  useEffect(() => {
+    if (pendingIntentRef.current && pendingIntentRef.current.writingId !== writingId) {
+      pendingIntentRef.current = null
+    }
+  }, [writingId])
+
+  useEffect(() => {
+    return () => {
+      writingGenerationRef.current += 1
+    }
+  }, [])
+
   const options = useMemo(() => buildCollectionOptions(collections), [collections])
 
-  const toggleCollection = async (collectionId: string) => {
-    const currentIds = selectedIdsRef.current
-    const nextIds = currentIds.includes(collectionId)
-      ? currentIds.filter((id) => id !== collectionId)
-      : [...currentIds, collectionId]
+  const queuePendingAssignment = (ownerWritingId: string, op: AssignmentOp) => {
+    const existing = pendingIntentRef.current
+    const pending =
+      existing && existing.writingId === ownerWritingId
+        ? existing
+        : { writingId: ownerWritingId, ops: [], resolvedIds: null }
+    if (pending.resolvedIds !== null) {
+      pending.resolvedIds = applyAssignmentOps(pending.resolvedIds, [op])
+    } else {
+      pending.ops.push(op)
+    }
+    pendingIntentRef.current = pending
+  }
 
-    selectedIdsRef.current = nextIds
-    setSelectedIds(nextIds)
-    await setLocalWritingCollections(writingId, nextIds)
+  const releasePendingIntent = (ownerWritingId: string) => {
+    if (pendingIntentRef.current?.writingId === ownerWritingId) {
+      pendingIntentRef.current = null
+    }
+  }
+
+  const toggleCollection = async (collectionId: string) => {
+    const ownerWritingId = writingId
+    const current = selectionRef.current
+
+    if (current.writingId !== ownerWritingId) {
+      queuePendingAssignment(ownerWritingId, { kind: "toggle", collectionId })
+      return
+    }
+
+    releasePendingIntent(ownerWritingId)
+    const nextIds = current.ids.includes(collectionId)
+      ? current.ids.filter((id) => id !== collectionId)
+      : [...current.ids, collectionId]
+
+    setSelection({ writingId: ownerWritingId, ids: nextIds })
+    await setLocalWritingCollections(ownerWritingId, nextIds)
     void getSyncService().scheduleFlush()
   }
 
   const createAndAssign = async (name: string) => {
+    const ownerWritingId = writingId
+    const generation = writingGenerationRef.current
     const ownerId = getLocalDBScope()
     const collection = await createLocalCollection({
       ownerId: ownerId === "anonymous" ? null : ownerId,
       name,
     })
-    const nextIds = [...selectedIdsRef.current, collection.id]
 
-    selectedIdsRef.current = nextIds
-    setSelectedIds(nextIds)
-    await setLocalWritingCollections(writingId, nextIds)
+    if (writingGenerationRef.current === generation) {
+      const current = selectionRef.current
+
+      if (current.writingId === ownerWritingId) {
+        releasePendingIntent(ownerWritingId)
+        const nextIds = [...current.ids, collection.id]
+
+        setSelection({ writingId: ownerWritingId, ids: nextIds })
+        await setLocalWritingCollections(ownerWritingId, nextIds)
+      } else {
+        queuePendingAssignment(ownerWritingId, { kind: "add", collectionId: collection.id })
+      }
+    }
+
     setCollections((current) => [collection, ...current])
     void getSyncService().scheduleFlush()
   }
@@ -102,7 +210,7 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
       <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
         <CollectionAssignmentMenu
           collections={options}
-          selectedIds={selectedIds}
+          selectedIds={selection.ids}
           align="start"
           title="Collections"
           description="Use the same picker used in Desk and Collections."
@@ -114,16 +222,16 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
               className="flex h-[37px] w-full items-center gap-2 border-b-[0.5px] border-border px-3 text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted"
             >
               <Tags className="h-3.5 w-3.5" strokeWidth={1.5} />
-              {selectedIds.length > 0 ? `Collections (${selectedIds.length})` : "Add to collections"}
+              {selection.ids.length > 0 ? `Collections (${selection.ids.length})` : "Add to collections"}
             </button>
           }
         />
 
         <div className="px-3 py-[9px]">
-          {selectedIds.length > 0 ? (
+          {selection.ids.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
               {options
-                .filter((collection) => selectedIds.includes(collection.id))
+                .filter((collection) => selection.ids.includes(collection.id))
                 .map((collection) => (
                   <span
                     key={collection.id}

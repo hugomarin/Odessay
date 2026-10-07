@@ -1,31 +1,30 @@
 "use client"
 
-/**
- * El cableado de la tabla de contenidos (TOC) del editor: los dos espejos de
- * sus items y del item activo, descartar el activo cuando desaparece, seguir
- * el scroll para marcar el encabezado a la vista, y llevar el cursor al
- * encabezado pulsado.
- *
- * ODE-602 — corte 4a de `components/editor/editor-shell.tsx`, entrega 2.
- * MUDANZA MECÁNICA, como ODE-587: los cuerpos y los cuatro efectos son los que
- * vivían en la shell, en el mismo orden, y la shell llama a este hook donde
- * empezaba ese bloque (entre su primer efecto y el último no había ningún
- * otro). `navigateToTableOfContentsItem` vivía más abajo; es un callback sin
- * efectos, así que traerlo aquí no cambia ningún orden. El estado y los refs
- * siguen siendo de la shell y llegan por `input`; las dependencias son las de
- * la shell más esos refs y setters (identidades estables).
- *
- * Los dos espejos (`tableOfContentsItemsRef`, `activeTableOfContentsItemIdRef`)
- * se mueven tal cual: quién es su dueño lo decide el corte 7 (ODE-609).
- * Siguen en la shell, en su sitio, los dos callbacks que necesita la
- * extensión TableOfContents al crearse (`getTableOfContentsScrollParent` y
- * `scheduleTableOfContentsUpdate`, con su debounce) y los dos efectos de
- * limpieza del debounce: son triviales y moverlos cambiaría el orden.
- * Red: `tests/editor-shell-chrome-toc.test.tsx`.
- */
-import { useCallback, useEffect } from "react"
+/** TOC state/ref ownership and its scroll/navigation wiring (ODE-602/609).
+ * State writers update their live refs in the same synchronous step. */
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react"
 import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents"
 import { type Editor } from "@tiptap/react"
+
+/** Called before the editor extensions are created; introduces no effects. */
+export function useTableOfContentsState() {
+  const [tableOfContentsItems, commitItems] = useState<TableOfContentDataItem[]>([])
+  const [selectedTableOfContentsItemId, commitActive] = useState<string | null>(null)
+  const tableOfContentsItemsRef = useRef<TableOfContentDataItem[]>([])
+  const activeTableOfContentsItemIdRef = useRef<string | null>(null)
+  const setTableOfContentsItems = useCallback((next: SetStateAction<TableOfContentDataItem[]>) => {
+    const resolved = typeof next === "function" ? next(tableOfContentsItemsRef.current) : next
+    tableOfContentsItemsRef.current = resolved
+    commitItems(resolved)
+  }, [])
+  const setSelectedTableOfContentsItemId = useCallback((next: SetStateAction<string | null>) => {
+    const resolved = typeof next === "function" ? next(activeTableOfContentsItemIdRef.current) : next
+    activeTableOfContentsItemIdRef.current = resolved
+    commitActive(resolved)
+  }, [])
+  return { tableOfContentsItems, selectedTableOfContentsItemId, tableOfContentsItemsRef,
+    activeTableOfContentsItemIdRef, setTableOfContentsItems, setSelectedTableOfContentsItemId }
+}
 
 export type TableOfContentsInput = {
   activeTableOfContentsItemIdRef: React.RefObject<string | null>
@@ -47,14 +46,6 @@ export function useTableOfContents(input: TableOfContentsInput) {
     tableOfContentsItemsRef,
     tableOfContentsScrollRafRef,
   } = input
-
-  useEffect(() => {
-    tableOfContentsItemsRef.current = tableOfContentsItems
-  }, [tableOfContentsItems, tableOfContentsItemsRef])
-
-  useEffect(() => {
-    activeTableOfContentsItemIdRef.current = selectedTableOfContentsItemId
-  }, [activeTableOfContentsItemIdRef, selectedTableOfContentsItemId])
 
   useEffect(() => {
     if (
@@ -96,7 +87,6 @@ export function useTableOfContents(input: TableOfContentsInput) {
     }, null)
 
     if (nextActiveItem && nextActiveItem.id !== activeTableOfContentsItemIdRef.current) {
-      activeTableOfContentsItemIdRef.current = nextActiveItem.id
       setSelectedTableOfContentsItemId(nextActiveItem.id)
     }
   }, [activeTableOfContentsItemIdRef, setSelectedTableOfContentsItemId, tableOfContentsItemsRef])

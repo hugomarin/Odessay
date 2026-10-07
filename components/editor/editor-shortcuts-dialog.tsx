@@ -4,6 +4,7 @@ import { DisplayModal } from "@/components/ui/display-modal"
 import {
   EDITOR_SHORTCUT_HELP_SECTIONS,
   getEditorShortcutLabel,
+  isEditorActionAvailableInMode,
   type ShortcutHelpItem,
 } from "@/lib/editor/shortcuts"
 
@@ -27,10 +28,19 @@ function availabilityLabel(item: ShortcutHelpItem) {
 export function EditorShortcutsDialog({
   open,
   onOpenChange,
+  mode,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  mode: "rich" | "markdown"
 }) {
+  // ODE-632: la ayuda refleja la disponibilidad del modo — en Markdown no
+  // publica los atajos de las acciones sin rama (Code block, Horizontal rule).
+  const visibleSections = EDITOR_SHORTCUT_HELP_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => isEditorActionAvailableInMode(item.action, mode)),
+  })).filter((section) => section.items.length > 0)
+
   return (
     <DisplayModal
       open={open}
@@ -39,7 +49,7 @@ export function EditorShortcutsDialog({
       description="The desktop app exposes native menu shortcuts where available. The editor keeps the same core formatting map across runtimes and adapts only where the browser or OS would intercept the command first."
     >
       <div className="grid gap-6 md:grid-cols-3">
-        {EDITOR_SHORTCUT_HELP_SECTIONS.map((section) => (
+        {visibleSections.map((section) => (
           <section key={section.title} className="rounded-xl border-[0.5px] border-border bg-bg px-3.5 py-3.5">
             <h2 className="text-[10px] font-semibold uppercase tracking-[0.13em] text-ink-4">
               {section.title}

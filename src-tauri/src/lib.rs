@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod menu_availability;
 
 use std::sync::Mutex;
 use tauri::menu::{AboutMetadata, MenuBuilder, MenuItem, SubmenuBuilder};
@@ -290,6 +291,17 @@ pub fn run() {
                 ])
                 .build()?;
 
+            // ODE-632: el menú nativo es global y persistente; el frontend
+            // empuja la disponibilidad por modo sobre estos seis ítems.
+            app.manage(menu_availability::EditorMenuItems(vec![
+                code_block.clone(),
+                horizontal_rule.clone(),
+                clear_styles.clone(),
+                copy_md.clone(),
+                copy_html.clone(),
+                date.clone(),
+            ]));
+
             app.set_menu(menu)?;
 
             app.on_menu_event(|app, event| {
@@ -359,6 +371,7 @@ pub fn run() {
             commands::workspace::workspace_sync,
             commands::workspace::workspace_touch_file,
             commands::workspace::workspace_compute_content_hash,
+            menu_availability::set_editor_menu_availability,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
