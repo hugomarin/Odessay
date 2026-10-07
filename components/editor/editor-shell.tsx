@@ -2184,6 +2184,12 @@ export function EditorShell({
     // so the move transports bytes whose hash the persistence coordinator
     // already knows. Letting the move commit its own copy of the content left
     // that baseline stale and every later autosave failed with CONFLICT.
+    // An edit still queued for its frame/debounce would otherwise start a
+    // write mid-move against the old path; drain it into this save first.
+    if (materializedBeforeSave) {
+      flushQueuedRichModeUpdate()
+      flushPendingMarkdownSave()
+    }
     const durableBeforeMove =
       materializedBeforeSave && editor
         ? await persistEditorSnapshot(editor, undefined, { awaitDurability: true })
@@ -2214,7 +2220,7 @@ export function EditorShell({
     setCanonicalPath(result.path)
     setExternalFileNotice(null)
     return result.path
-  }, [applyDocumentMetadata, editor, persistEditorSnapshot])
+  }, [applyDocumentMetadata, editor, flushPendingMarkdownSave, flushQueuedRichModeUpdate, persistEditorSnapshot])
 
   useTauriEditorMenuEvents(handleRunAction)
 
