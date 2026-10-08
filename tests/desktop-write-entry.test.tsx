@@ -15,6 +15,9 @@
  *
  * Completion event: el id esperado está activo, el editor real muestra su
  * contenido y `data-hydration-phase="ready"` después de la notificación.
+ * Un control de creación materializa documentos reales en el catálogo y el
+ * filesystem; una ruta a un UUID inexistente termina en unavailable sin añadir
+ * draft/tab ni una fila o archivo de fallback.
  * Mutaciones discriminantes: diferir el URL, notificar dentro del insertion
  * effect, quitar la coalescencia, observar `replaceState` o dejar una key
  * constante cuando cambia el id de la ruta.
@@ -80,13 +83,18 @@ const { world } = await import("./support/editor-shell-doubles")
 const {
   createDesktopWorkspace,
   destroyDesktopWorkspace,
+  readWorkspaceMarkdown,
   resetDesktopWorkspace,
 } = await import("./support/editor-shell-desktop-doubles")
-const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
-const { writeEditorSession } = await import("@/lib/editor/session-persistence")
+const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
+const { closeTab, getEditorSessionState, openWritingTab } = await import(
+  "@/lib/stores/editor-session-store"
+)
+const { readEditorSession, writeEditorSession } = await import("@/lib/editor/session-persistence")
 const { createEmptyEditorSession, EDITOR_DRAFT_TAB_ID } = await import(
   "@/lib/local-db/editor-sessions"
 )
+const { localDB } = await import("@/lib/local-db")
 const { getSyncWorker } = await import("@/lib/sync/worker")
 
 const LOCATION_CHANGE_EVENT = "odessay:locationchange"
@@ -163,6 +171,10 @@ function activeTab() {
 
 function sessionWritingIds() {
   return getEditorSessionState().session.tabs.map((tab) => tab.writing_id)
+}
+
+async function catalogRows() {
+  return (await getDocumentCatalog()).list()
 }
 
 function expectOnlyDocuments(documentIds: string[]) {
@@ -244,10 +256,24 @@ describe("ODE-541 — desktop tab history entry", () => {
 
       const documentA = await createDocument(mounted.container, TEXT_A)
       const documentB = await createDocument(mounted.container, TEXT_B)
+      const expectedDocumentIds = [documentA.writingId, documentB.writingId].sort()
       expect(locationChangeCount, "crear pestañas no publica replaceState al entry").toBe(
         notificationsBeforeTabCreation,
       )
-      expectOnlyDocuments([documentA.writingId, documentB.writingId])
+      expectOnlyDocuments(expectedDocumentIds)
+
+      const positiveControlRows = await catalogRows()
+      expect(
+        positiveControlRows.map((row) => row.id).sort(),
+        "control positivo: crear documentos reales sí registra ambos writings en el catálogo desktop",
+      ).toEqual(expectedDocumentIds)
+      const positiveControlFiles = await readWorkspaceMarkdown()
+      expect(
+        positiveControlFiles.map((file) => file.path).sort(),
+        "control positivo: las dos creaciones reales materializan sus .md",
+      ).toEqual([documentA.file.path, documentB.file.path].sort())
+      expect(positiveControlFiles.find((file) => file.path === documentA.file.path)?.contents).toContain(TEXT_A)
+      expect(positiveControlFiles.find((file) => file.path === documentB.file.path)?.contents).toContain(TEXT_B)
 
       const routeNotificationsBeforeTabSwitch = locationChangeCount
       await clickTab(mounted.container, documentA.writingId)
@@ -338,12 +364,91 @@ describe("ODE-541 — desktop tab history entry", () => {
         afterIdNotifications,
       )
       expect(mounted.container.querySelector('[data-page="editor"]')).toBe(replaceStateShell)
-      expectOnlyDocuments([documentA.writingId, documentB.writingId])
+      expectOnlyDocuments(expectedDocumentIds)
 
       const routeInfo = consoleInfo.mock.calls.slice(idNavigationInfoStart).flat().join(" ")
       expect(routeInfo).not.toContain("no-restorable-tab")
       const reactWarnings = [...consoleError.mock.calls, ...consoleWarn.mock.calls].flat().join(" ")
       expect(reactWarnings).not.toContain("useInsertionEffect must not schedule updates")
+
+      const sessionBeforeFailureSetup = await readEditorSession()
+      expect(sessionBeforeFailureSetup.tabs.map((tab) => tab.writing_id).sort()).toEqual(expectedDocumentIds)
+      const localWritingIdsBeforeFailedOpen = (await localDB.writings.getAll())
+        .map((writing) => writing.id)
+        .sort()
+      const filesBeforeFailedOpen = await readWorkspaceMarkdown()
+      const missingWritingId = "54100000-0000-4000-8000-000000000541"
+      for (const writingId of expectedDocumentIds) closeTab(writingId)
+      openWritingTab({ writingId: missingWritingId, title: "Missing ODE-541 target" })
+      await writeEditorSession(getEditorSessionState().session)
+      const missingTargetSession = await readEditorSession()
+      expect(missingTargetSession.tabs.map((tab) => tab.writing_id)).toEqual([missingWritingId])
+
+      const infoBeforeFailedOpen = consoleInfo.mock.calls.length
+      const missingHref = `/write?id=${encodeURIComponent(missingWritingId)}`
+
+      await mounted.render(
+        <>
+          <DesktopWriteEntry />
+          <PushStateDuringInsertion hrefs={[missingHref]} onPushReturn={() => {}} />
+        </>,
+      )
+      await waitFor(
+        () => {
+          const failureInfo = consoleInfo.mock.calls.slice(infoBeforeFailedOpen).flat().join(" ")
+          return (
+            failureInfo.includes(
+              `[editor] unified-open unavailable documentId=${missingWritingId} status=orphaned`,
+            ) && failureInfo.includes(`[editor] unavailable writing ${missingWritingId}`)
+          )
+        },
+        { label: "la ruta por UUID inexistente llega a la recuperación de orphaned", timeoutMs: 15_000 },
+      )
+      await waitForHydrationReady()
+
+      await waitFor(async () => (await readEditorSession()).tabs.length === 0, {
+        label: "la recuperación del tab unavailable persiste una sesión vacía",
+      })
+      expect(sessionWritingIds(), "la recuperación no crea un tab draft en el store de sesión").toEqual([])
+      expect(getEditorSessionState().session.active_tab_id).toBeNull()
+      const persistedSessionAfterFailedOpen = await readEditorSession()
+      expect(
+        persistedSessionAfterFailedOpen.tabs.map((tab) => tab.id).sort(),
+        "orphaned no persiste una pestaña de fallback",
+      ).toEqual([])
+      expect(
+        persistedSessionAfterFailedOpen.tabs.map((tab) => tab.writing_id).sort(),
+        "orphaned no persiste un draft ni otro writing",
+      ).toEqual([])
+      expect(
+        persistedSessionAfterFailedOpen.tabs.some(
+          (tab) => tab.id === EDITOR_DRAFT_TAB_ID || tab.writing_id === null,
+        ),
+        "orphaned no persiste una pestaña de borrador",
+      ).toBe(false)
+
+      expect(
+        (await catalogRows()).map((row) => row.id).sort(),
+        "orphaned no añade un writing al catálogo desktop",
+      ).toEqual(expectedDocumentIds)
+      expect(
+        (await localDB.writings.getAll()).map((writing) => writing.id).sort(),
+        "orphaned no añade una fila al almacén IndexedDB de compatibilidad",
+      ).toEqual(localWritingIdsBeforeFailedOpen)
+      const filesAfterFailedOpen = await readWorkspaceMarkdown()
+      expect(
+        filesAfterFailedOpen.map((file) => file.path).sort(),
+        "orphaned no materializa un .md de fallback",
+      ).toEqual(filesBeforeFailedOpen.map((file) => file.path).sort())
+      expect(
+        filesAfterFailedOpen.map((file) => ({ path: file.path, contents: file.contents })).sort((a, b) =>
+          a.path.localeCompare(b.path),
+        ),
+      ).toEqual(
+        filesBeforeFailedOpen.map((file) => ({ path: file.path, contents: file.contents })).sort((a, b) =>
+          a.path.localeCompare(b.path),
+        ),
+      )
     },
     TEST_TIMEOUT_MS,
   )
