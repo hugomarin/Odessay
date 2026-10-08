@@ -184,28 +184,28 @@ describe("ODE-532 entity and highlight semantic marks", () => {
       }
     }
 
-    it.fails("falls back to text when pasted Entity has an empty id", () => {
+    it("falls back to text when pasted Entity has an empty id", () => {
       assertInvalidEntityPasteFallsBackToText(
         '<p><mark data-entity-id="" data-entity-type="company" data-entity-source-writing-id="writing-source">Aplyca</mark></p>',
         "Aplyca",
       )
     })
 
-    it.fails("falls back to text when pasted Entity has an empty type", () => {
+    it("falls back to text when pasted Entity has an empty type", () => {
       assertInvalidEntityPasteFallsBackToText(
         '<p><mark data-entity-id="entity-source" data-entity-type="" data-entity-source-writing-id="writing-source">Acme</mark></p>',
         "Acme",
       )
     })
 
-    it.fails("falls back to text when pasted Entity has no id", () => {
+    it("falls back to text when pasted Entity has no id", () => {
       assertInvalidEntityPasteFallsBackToText(
         '<p><mark data-entity-type="company">Northstar</mark></p>',
         "Northstar",
       )
     })
 
-    it.fails("falls back to text when pasted Entity has no type", () => {
+    it("falls back to text when pasted Entity has no type", () => {
       assertInvalidEntityPasteFallsBackToText(
         '<p><mark data-entity-id="entity-source" data-entity-source-writing-id="writing-source">Person</mark></p>',
         "Person",

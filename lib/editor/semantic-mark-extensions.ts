@@ -8,6 +8,7 @@ import {
   applySemanticHighlight,
   createSemanticEntityId,
   ENTITY_MARK_NAME,
+  isValidEntityAttributes,
   removeEntityMark,
   removeSemanticHighlight,
   SEMANTIC_HIGHLIGHT_MARK_NAME,
@@ -83,17 +84,26 @@ export const EntityMark = Mark.create({
             },
           },
           transformPastedHTML: (html) => {
-            if (!html.includes("data-entity-id")) return html
+            if (!/data-entity-(?:id|type)\b/i.test(html)) return html
 
             const destinationWritingId = getWritingId()
             const pasteDocument = new DOMParser().parseFromString(html, "text/html")
             const remappedIds = new Map<string, string>()
 
-            for (const entity of pasteDocument.querySelectorAll<HTMLElement>("mark[data-entity-id]")) {
+            for (const entity of pasteDocument.querySelectorAll<HTMLElement>(
+              "mark[data-entity-id], mark[data-entity-type]",
+            )) {
               const sourceWritingId = entity.getAttribute(ENTITY_SOURCE_WRITING_ID_ATTRIBUTE)
               entity.removeAttribute(ENTITY_SOURCE_WRITING_ID_ATTRIBUTE)
 
               const entityId = decodeDataAttribute(entity.getAttribute("data-entity-id"))
+              const entityType = decodeDataAttribute(entity.getAttribute("data-entity-type"))
+              const entityRef = decodeDataAttribute(entity.getAttribute("data-entity-ref"))
+              if (!isValidEntityAttributes({ id: entityId, type: entityType, ref: entityRef || undefined })) {
+                entity.replaceWith(...Array.from(entity.childNodes))
+                continue
+              }
+
               if (!entityId || (sourceWritingId && sourceWritingId === destinationWritingId)) continue
 
               const identityKey = `${sourceWritingId ?? "external"}\u0000${entityId}`

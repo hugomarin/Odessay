@@ -191,7 +191,7 @@ export type HighlightApplyInput = {
   color: string
 }
 
-const isValidEntityAttributes = ({ id, type, ref }: { id: string; type: string; ref?: string }) => {
+export const isValidEntityAttributes = ({ id, type, ref }: { id: string; type: string; ref?: string }) => {
   const spec = DocumentComponentSpecRegistry.get("Entity")
   if (!spec) return false
   if (id.length === 0 || type.length === 0) return false
