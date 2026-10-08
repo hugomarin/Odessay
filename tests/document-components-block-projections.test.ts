@@ -66,6 +66,12 @@ const UNSAFE_LINKS = [
   { label: "FILE_LINK", scheme: "file:" },
 ]
 
+const MARKDOWN_LINK_DESTINATION_INJECTION_VECTORS = [
+  "https://a.com) [x](javascript:alert(1))",
+  "#frag) [x](javascript:alert(1))",
+  "rel/path) [x](javascript:alert(1))",
+] as const
+
 const ENCODED_UNSAFE_LINKS = [
   { label: "HTML_COLON_LINK", href: "javascript&colon;alert(1)" },
   { label: "PERCENT_COLON_LINK", href: "javascript%3Aalert(1)" },
@@ -185,6 +191,45 @@ describe("Tip/Info/Card projections", () => {
 })
 
 describe("inline link export safety", () => {
+  it.fails.each(MARKDOWN_LINK_DESTINATION_INJECTION_VECTORS)(
+    "keeps accepted inline mark destinations as one Markdown link: %s",
+    (href) => {
+      const bodyJson: JSONContent = {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "SAFE_MARK", marks: [{ type: "link", attrs: { href } }] }],
+          },
+        ],
+      }
+      const markdown = buildWritingMarkdown(bodyJson)
+
+      expect.soft(markdown).not.toContain("](javascript:")
+      expect.soft(markdown.match(/\]\([^)]*\)/g) ?? []).toHaveLength(1)
+    },
+  )
+
+  it.fails.each(MARKDOWN_LINK_DESTINATION_INJECTION_VECTORS)(
+    "keeps accepted Card destinations as one Markdown link: %s",
+    (href) => {
+      const bodyJson: JSONContent = {
+        type: "doc",
+        content: [
+          {
+            type: "card",
+            attrs: { title: "SAFE_CARD", icon: "", href },
+            content: [{ type: "paragraph", content: [{ type: "text", text: "Card body" }] }],
+          },
+        ],
+      }
+      const markdown = buildWritingMarkdown(bodyJson)
+
+      expect.soft(markdown).not.toContain("](javascript:")
+      expect.soft(markdown.match(/\]\([^)]*\)/g) ?? []).toHaveLength(1)
+    },
+  )
+
   it("keeps a percent-encoded relative destination valid for Card", () => {
     expect(validateComponentAttribute("Card", "href", "notes%20v2.md")).toBe(true)
   })
