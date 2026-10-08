@@ -242,6 +242,27 @@ describe("inline link export safety", () => {
     expect(markdown).toContain(`[Relative](${href})`)
   })
 
+  it("percent-encodes Markdown destination delimiters for inline marks and Cards", () => {
+    const href = "https://example.com/<chapter>(draft) copy"
+    const bodyJson: JSONContent = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "MARK", marks: [{ type: "link", attrs: { href } }] }],
+        },
+        { type: "card", attrs: { title: "CARD", icon: "", href } },
+      ],
+    }
+
+    const markdown = buildWritingMarkdown(bodyJson)
+    const encodedHref = "https://example.com/%3Cchapter%3E%28draft%29%20copy"
+
+    expect(markdown).toContain(`[MARK](${encodedHref})`)
+    expect(markdown).toContain(`[CARD](${encodedHref})`)
+    expect(markdown.match(/\]\([^)]*\)/g) ?? []).toHaveLength(2)
+  })
+
   it("keeps unsafe Card hrefs inert in clean Markdown and a real DOCX artifact", async () => {
     const cardLinks = [
       { title: "Safe Card", href: "https://example.com/card-safe" },
