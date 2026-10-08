@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DOCUMENT_PROJECTION_SURFACES,
   DocumentComponentSpecRegistry,
@@ -14,9 +14,64 @@ import {
   parseMarkdownToDocumentIr,
   serializeDocumentIrToMarkdown,
 } from "@/lib/editor/document-serialization";
+import { materializeOpaqueSourceForRichParser } from "@/lib/editor/opaque-source-extensions";
 
 const fixtures = join(process.cwd(), "tests/fixtures/document-components");
 const fixture = (path: string) => readFileSync(join(fixtures, path), "utf8");
+
+const measureStringWork = <T>(run: () => T) => {
+  let searchedTagCharacters = 0;
+  let copiedCharacters = 0;
+  let newlineScanCharacters = 0;
+  const nativeIndexOf = String.prototype.indexOf;
+  const nativeSlice = String.prototype.slice;
+  const nativeIncludes = String.prototype.includes;
+  const indexOfSpy = vi.spyOn(String.prototype, "indexOf").mockImplementation(function (
+    this: string,
+    search: string,
+    fromIndex?: number,
+  ) {
+    const foundAt = nativeIndexOf.call(this, search, fromIndex);
+    if (search === ">" || search.startsWith("</")) {
+      const start = Math.min(this.length, Math.max(0, fromIndex ?? 0));
+      searchedTagCharacters += foundAt === -1 ? this.length - start : foundAt - start + search.length;
+    }
+    return foundAt;
+  });
+  const sliceSpy = vi.spyOn(String.prototype, "slice").mockImplementation(function (
+    this: string,
+    start?: number,
+    end?: number,
+  ) {
+    const normalize = (value: number | undefined, fallback: number) => {
+      if (value === undefined) return fallback;
+      return value < 0 ? Math.max(this.length + Math.trunc(value), 0) : Math.min(Math.trunc(value), this.length);
+    };
+    copiedCharacters += Math.max(0, normalize(end, this.length) - normalize(start, 0));
+    return nativeSlice.call(this, start, end);
+  });
+  const includesSpy = vi.spyOn(String.prototype, "includes").mockImplementation(function (
+    this: string,
+    search: string,
+    position?: number,
+  ) {
+    if (search === "\n") newlineScanCharacters += Math.max(0, this.length - Math.max(0, position ?? 0));
+    return nativeIncludes.call(this, search, position);
+  });
+
+  try {
+    return {
+      value: run(),
+      searchedTagCharacters,
+      copiedCharacters,
+      newlineScanCharacters,
+    };
+  } finally {
+    indexOfSpy.mockRestore();
+    sliceSpy.mockRestore();
+    includesSpy.mockRestore();
+  }
+};
 
 describe("ODE-529 controlled document engine", () => {
   it("offers static O(1) registry lookup with canonical attribute order", () => {
@@ -190,5 +245,53 @@ describe("ODE-529 controlled document engine", () => {
       kind: "Card",
       missing: DOCUMENT_PROJECTION_SURFACES.filter((surface) => surface !== "source"),
     });
+  });
+
+  it.fails("scans 10,000 malformed angle brackets with linear search work", () => {
+    const source = "<".repeat(10_000);
+    const measured = measureStringWork(() => parseControlledMarkdown(source));
+
+    expect(measured.value.document.source).toBe(source);
+    expect(measured.searchedTagCharacters).toBeLessThanOrEqual(source.length * 2);
+  });
+
+  it.fails("checks block crossing once for 500 nested inline components", () => {
+    const depth = 500;
+    const openingTags = Array.from(
+      { length: depth },
+      (_, index) => `<Annotation id="a${index}" type="ai" comment="note">`,
+    ).join("");
+    const closingTags = Array.from({ length: depth }, (_, index) => `</Annotation>`)
+      .reverse()
+      .join("");
+    const source = `${openingTags}x${closingTags}`;
+    const measured = measureStringWork(() => parseControlledMarkdown(source));
+
+    expect(measured.value.diagnostics).toEqual([]);
+    expect(measured.newlineScanCharacters).toBeLessThanOrEqual(source.length * 2);
+  });
+
+  it.fails("materializes many unterminated unknown tags without reparsing suffixes", () => {
+    const count = 300;
+    const source = Array.from(
+      { length: count },
+      (_, index) => `before <FutureKind${index}> text-${index}`,
+    ).join(" ");
+    const measured = measureStringWork(() => materializeOpaqueSourceForRichParser(source));
+
+    expect(measured.value.match(/<odessay-opaque(?:-block)? data-raw=/g)).toHaveLength(count);
+    expect(measured.searchedTagCharacters).toBeLessThanOrEqual(source.length * 8);
+  });
+
+  it.fails("copies the source once when replacing many opaque spans", () => {
+    const count = 300;
+    const source = Array.from(
+      { length: count },
+      (_, index) => `before <FutureKind${index}> text-${index}`,
+    ).join(" ");
+    const measured = measureStringWork(() => materializeOpaqueSourceForRichParser(source));
+
+    expect(measured.value.match(/<odessay-opaque(?:-block)? data-raw=/g)).toHaveLength(count);
+    expect(measured.copiedCharacters).toBeLessThanOrEqual(source.length * 8);
   });
 });
