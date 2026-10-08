@@ -154,6 +154,24 @@ describe("ODE-529 controlled document engine", () => {
     expect(elapsedMs).toBeLessThan(250);
   });
 
+  it("keeps a deep 125 KB scheme prefix within the normalization budget", () => {
+    const encodedScheme = `javascript%25${"25".repeat(9_999)}3A/`;
+    const href = `${encodedScheme}${"x".repeat(125 * 1024 - encodedScheme.length)}`;
+    const startedAt = performance.now();
+    const accepted = safeUrl(href);
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(Buffer.byteLength(href)).toBe(125 * 1024);
+    expect(accepted).toBe(false);
+    expect(elapsedMs).toBeLessThan(150);
+  });
+
+  it("uses the ASCII fallback for percent groups containing invalid UTF-8", () => {
+    expect(safeUrl("https%3A%E0")).toBe(true);
+    expect(safeUrl("javascript%3A%2F%2A%E0%2A%2Falert(1)")).toBe(false);
+    expect(safeUrl("javascript%3A%2F%2A%E0alert(1)")).toBe(false);
+  });
+
   it.each([
     ["invalid/unbalanced.md", "unbalanced-component"],
     ["invalid/unknown-tag.md", "unknown-component"],

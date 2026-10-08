@@ -73,6 +73,8 @@ const ENCODED_UNSAFE_LINKS = [
   { label: "NUMERIC_LETTER_LINK", href: "&#106;avascript:alert(1)" },
   { label: "FILE_PERCENT_LINK", href: "file%3A///etc/passwd" },
   { label: "DATA_HTML_COLON_LINK", href: "data&colon;text/html,x" },
+  { label: "INVALID_UTF8_SCHEME_LINK", href: "javascript%3A%2F%2A%E0%2A%2Falert(1)" },
+  { label: "INVALID_UTF8_SCHEME_SHORT_LINK", href: "javascript%3A%2F%2A%E0alert(1)" },
 ] as const
 
 const ENCODED_LINK_EXPORT_BODY: JSONContent = {
@@ -185,6 +187,41 @@ describe("Tip/Info/Card projections", () => {
 describe("inline link export safety", () => {
   it("keeps a percent-encoded relative destination valid for Card", () => {
     expect(validateComponentAttribute("Card", "href", "notes%20v2.md")).toBe(true)
+  })
+
+  it("keeps unsafe Card hrefs inert in clean Markdown and a real DOCX artifact", async () => {
+    const cardLinks = [
+      { title: "Safe Card", href: "https://example.com/card-safe" },
+      { title: "Unsafe Literal Card", href: "javascript:alert(1)" },
+      { title: "Unsafe Encoded Card", href: "javascript&colon;alert(1)" },
+    ]
+    const bodyJson: JSONContent = {
+      type: "doc",
+      content: cardLinks.map(({ title, href }) => ({
+        type: "card",
+        attrs: { title, href },
+        content: [{ type: "paragraph", content: [{ type: "text", text: `${title} body` }] }],
+      })),
+    }
+    const markdown = buildWritingMarkdown(bodyJson)
+    expect(markdown).toContain("[Safe Card](https://example.com/card-safe)")
+    for (const card of cardLinks.slice(1)) {
+      expect(markdown).toContain(card.title)
+      expect(markdown).not.toContain(`](${card.href})`)
+    }
+
+    const document = buildWritingExportDocument(bodyJson)
+    const docx = await JSZip.loadAsync(await renderWritingToDocxBuffer({ title: "Card links", document }))
+    const xml = (await docx.file("word/document.xml")?.async("string")) ?? ""
+    const rels = (await docx.file("word/_rels/document.xml.rels")?.async("string")) ?? ""
+    const hyperlinks = xml.match(/<w:hyperlink\b/g) ?? []
+
+    expect(xml).toContain("Safe Card")
+    expect(xml).toContain("Unsafe Literal Card")
+    expect(xml).toContain("Unsafe Encoded Card")
+    expect(hyperlinks).toHaveLength(1)
+    expect(rels).toContain("https://example.com/card-safe")
+    for (const card of cardLinks.slice(1)) expect(rels).not.toContain(card.href)
   })
 
   it("normalizes encoded schemes before projecting clean Markdown and real DOCX links", async () => {
