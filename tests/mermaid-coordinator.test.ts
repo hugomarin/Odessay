@@ -6,6 +6,15 @@ import { clearMermaidCache } from "@/lib/mermaid/mermaid-cache";
 import { mermaidRenderCoordinator } from "@/lib/mermaid/mermaid-coordinator";
 import { resetMermaidLoaderForTests, setMermaidLoaderForTests } from "@/lib/mermaid/mermaid-loader";
 
+const requestForOwner = (owner: object, source: string): Promise<string> => {
+  const revisionApi = mermaidRenderCoordinator as unknown as {
+    nextRevision(owner: object): unknown;
+    requestRender(source: string, revision: unknown): Promise<string>;
+  };
+  const revision = revisionApi.nextRevision(owner);
+  return revisionApi.requestRender(source, revision);
+};
+
 describe("mermaid coordinator (ODE-533)", () => {
   beforeEach(() => {
     clearMermaidCache();
@@ -14,29 +23,54 @@ describe("mermaid coordinator (ODE-533)", () => {
     setMermaidLoaderForTests(null);
   });
 
-  it("single-flights concurrent renders for the same source", async () => {
+  it("single-flights concurrent renders and discards the older request for one owner", async () => {
     const render = vi.fn(async (_id: string, _text: string) => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       return { svg: "<svg><g>shared</g></svg>" };
     });
     setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
-    const firstRevision = mermaidRenderCoordinator.nextRevision();
-    const secondRevision = mermaidRenderCoordinator.nextRevision();
+    const owner = {};
     // Both callers share the in-flight render; the older revision is stale
     // once a newer revision exists, so only the latest may commit.
-    const first = mermaidRenderCoordinator.requestRender("graph TD; A-->B", firstRevision);
-    const second = mermaidRenderCoordinator.requestRender("graph TD; A-->B", secondRevision);
+    const first = requestForOwner(owner, "graph TD; A-->B");
+    const second = requestForOwner(owner, "graph TD; A-->B");
     await expect(second).resolves.toBe("<svg><g>shared</g></svg>");
     await expect(first).rejects.toMatchObject({ code: "invalid" });
     expect(render).toHaveBeenCalledTimes(1);
     setMermaidLoaderForTests(null);
   });
 
+  it("allows concurrent renders for different owners and sources", async () => {
+    let releaseRenders!: () => void;
+    const renderGate = new Promise<void>((resolve) => {
+      releaseRenders = resolve;
+    });
+    const render = vi.fn(async (_id: string, source: string) => {
+      await renderGate;
+      return {
+        svg: source.includes("A-->B") ? "<svg><g>owner-a</g></svg>" : "<svg><g>owner-b</g></svg>",
+      };
+    });
+    setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
+
+    const first = requestForOwner({}, "graph TD; A-->B");
+    const second = requestForOwner({}, "graph TD; C-->D");
+    await vi.waitFor(() => expect(render).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    releaseRenders();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      "<svg><g>owner-a</g></svg>",
+      "<svg><g>owner-b</g></svg>",
+    ]);
+    expect(render).toHaveBeenCalledTimes(2);
+    setMermaidLoaderForTests(null);
+  });
+
   it("serves cached renders without touching the loader", async () => {
     const render = vi.fn(async () => ({ svg: "<svg><g>cached</g></svg>" }));
     setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
-    const firstRevision = mermaidRenderCoordinator.nextRevision();
-    await expect(mermaidRenderCoordinator.requestRender("graph TD; A-->B", firstRevision)).resolves.toBe(
+    const owner = {};
+    await expect(requestForOwner(owner, "graph TD; A-->B")).resolves.toBe(
       "<svg><g>cached</g></svg>",
     );
     expect(render).toHaveBeenCalledTimes(1);
@@ -44,8 +78,7 @@ describe("mermaid coordinator (ODE-533)", () => {
       throw new Error("must not load");
     });
     setMermaidLoaderForTests(failingLoader);
-    const secondRevision = mermaidRenderCoordinator.nextRevision();
-    await expect(mermaidRenderCoordinator.requestRender("graph TD; A-->B", secondRevision)).resolves.toBe(
+    await expect(requestForOwner(owner, "graph TD; A-->B")).resolves.toBe(
       "<svg><g>cached</g></svg>",
     );
     expect(failingLoader).not.toHaveBeenCalled();
