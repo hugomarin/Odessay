@@ -82,15 +82,14 @@ export const EntityMark = Mark.create({
               return true
             },
           },
-          transformPastedHTML: (html, view) => {
+          transformPastedHTML: (html) => {
             if (!html.includes("data-entity-id")) return html
 
             const destinationWritingId = getWritingId()
-            const pasteRoot = view.dom.ownerDocument.createElement("div")
-            pasteRoot.innerHTML = html
+            const pasteDocument = new DOMParser().parseFromString(html, "text/html")
             const remappedIds = new Map<string, string>()
 
-            for (const entity of pasteRoot.querySelectorAll<HTMLElement>("mark[data-entity-id]")) {
+            for (const entity of pasteDocument.querySelectorAll<HTMLElement>("mark[data-entity-id]")) {
               const sourceWritingId = entity.getAttribute(ENTITY_SOURCE_WRITING_ID_ATTRIBUTE)
               entity.removeAttribute(ENTITY_SOURCE_WRITING_ID_ATTRIBUTE)
 
@@ -106,7 +105,7 @@ export const EntityMark = Mark.create({
               entity.setAttribute("data-entity-id", encodeURIComponent(nextEntityId))
             }
 
-            return pasteRoot.innerHTML
+            return pasteDocument.body.innerHTML
           },
         },
       }),

@@ -210,6 +210,83 @@ function entityRanges(editor: Editor) {
   return ranges
 }
 
+async function prepareRealShellStaleActionAtoB() {
+  shellHarness.resetEditorShellWorld()
+  shellHarness.world.network = async () => new Response("[]", { status: 200 })
+  await localDB.writings.save(makeLocalWriting(REAL_SHELL_WRITING_A, "same document A", "Document A"))
+  await localDB.writings.save(makeLocalWriting(REAL_SHELL_WRITING_B, "same document B", "Document B"))
+
+  mountedShell = await shellHarness.mountEditorShell({ writingId: REAL_SHELL_WRITING_B })
+  await shellHarness.waitFor(() => mountedShell!.editor().getText().includes("same document B"), {
+    label: "documento B hidratado en EditorShell real",
+    timeoutMs: 10_000,
+  })
+  await shellHarness.selectEditorText("same")
+  await shellHarness.waitFor(() => popupButton("More mark options"), {
+    label: "popup de B como control positivo real",
+  })
+  await applyPopupEntityByKeyboard("Company")
+
+  const editorMarksBeforeStaleAction = semanticMarks(mountedShell.editor().getJSON()).filter(
+    (mark) => mark.kind === "entity",
+  )
+  expect(editorMarksBeforeStaleAction).toEqual([
+    expect.objectContaining({ kind: "entity", text: "same", type: "company" }),
+  ])
+
+  const persistedBeforeStaleAction = await shellHarness.waitForAsync(
+    async () => {
+      const writing = await localDB.writings.get(REAL_SHELL_WRITING_B)
+      return semanticMarks(writing?.body_json).some(
+        (mark) => mark.kind === "entity" && mark.text === "same" && mark.type === "company",
+      )
+        ? writing
+        : null
+    },
+    { label: "control positivo de B guardado en body_json" },
+  )
+  expect(semanticMarks(persistedBeforeStaleAction.body_json)).toEqual(editorMarksBeforeStaleAction)
+
+  await mountedShell.render({ writingId: REAL_SHELL_WRITING_A })
+  await shellHarness.waitFor(() => mountedShell!.editor().getText().includes("same document A"), {
+    label: "A vuelve a ser el documento activo",
+    timeoutMs: 10_000,
+  })
+  await shellHarness.selectEditorText("same")
+  await shellHarness.waitFor(() => popupButton("More mark options"), {
+    label: "popup pendiente sobre A",
+  })
+  await pressPopupButton("More mark options", "Enter")
+  await pressPopupButton("Entity", "Enter")
+  const stalePersonButton = popupButton("Person")
+  if (!stalePersonButton) throw new Error("Person action was not rendered for A.")
+  const stalePersonAction = renderedClickHandler(stalePersonButton)
+
+  await mountedShell.render({ writingId: REAL_SHELL_WRITING_B })
+  await shellHarness.waitFor(() => mountedShell!.editor().getText().includes("same document B"), {
+    label: "el shell vuelve a activar B",
+    timeoutMs: 10_000,
+  })
+  await shellHarness.selectEditorText("same")
+  await shellHarness.waitFor(() => popupButton("More mark options"), {
+    label: "selección actual de B disponible para revalidar",
+  })
+
+  await act(async () => {
+    stalePersonAction({ detail: 0, stopPropagation: vi.fn() })
+  })
+  await shellHarness.flush(3)
+
+  return {
+    editorMarksBeforeStaleAction,
+    editorMarksAfterStaleAction: semanticMarks(mountedShell.editor().getJSON()).filter(
+      (mark) => mark.kind === "entity",
+    ),
+    persistedBeforeStaleAction,
+    persistedAfterStaleAction: await localDB.writings.get(REAL_SHELL_WRITING_B),
+  }
+}
+
 let container: HTMLDivElement
 let root: Root | null
 let editors: Editor[] = []
@@ -329,62 +406,21 @@ afterEach(async () => {
 
 describe("ODE-532 pending semantic mark ownership", () => {
   it("uses the real shell writingId producer across A→B", async () => {
-    shellHarness.resetEditorShellWorld()
-    shellHarness.world.network = async () => new Response("[]", { status: 200 })
-    await localDB.writings.save(makeLocalWriting(REAL_SHELL_WRITING_A, "same document A", "Document A"))
-    await localDB.writings.save(makeLocalWriting(REAL_SHELL_WRITING_B, "same document B", "Document B"))
-
-    mountedShell = await shellHarness.mountEditorShell({ writingId: REAL_SHELL_WRITING_B })
-    await shellHarness.waitFor(() => mountedShell!.editor().getText().includes("same document B"), {
-      label: "documento B hidratado en EditorShell real",
-      timeoutMs: 10_000,
-    })
-    await shellHarness.selectEditorText("same")
-    await shellHarness.waitFor(() => popupButton("More mark options"), {
-      label: "popup de B como control positivo real",
-    })
-    await applyPopupEntityByKeyboard("Company")
-
-    const bBeforeStaleAction = semanticMarks(mountedShell.editor().getJSON()).filter(
-      (mark) => mark.kind === "entity",
-    )
-    expect(bBeforeStaleAction).toEqual([
-      expect.objectContaining({ kind: "entity", text: "same", type: "company" }),
-    ])
-
-    await mountedShell.render({ writingId: REAL_SHELL_WRITING_A })
-    await shellHarness.waitFor(() => mountedShell!.editor().getText().includes("same document A"), {
-      label: "A vuelve a ser el documento activo",
-      timeoutMs: 10_000,
-    })
-    await shellHarness.selectEditorText("same")
-    await shellHarness.waitFor(() => popupButton("More mark options"), {
-      label: "popup pendiente sobre A",
-    })
-    await pressPopupButton("More mark options", "Enter")
-    await pressPopupButton("Entity", "Enter")
-    const stalePersonButton = popupButton("Person")
-    if (!stalePersonButton) throw new Error("Person action was not rendered for A.")
-    const stalePersonAction = renderedClickHandler(stalePersonButton)
-
-    await mountedShell.render({ writingId: REAL_SHELL_WRITING_B })
-    await shellHarness.waitFor(() => mountedShell!.editor().getText().includes("same document B"), {
-      label: "el shell vuelve a activar B",
-      timeoutMs: 10_000,
-    })
-    await shellHarness.selectEditorText("same")
-    await shellHarness.waitFor(() => popupButton("More mark options"), {
-      label: "selección actual de B disponible para revalidar",
-    })
-
-    await act(async () => {
-      stalePersonAction({ detail: 0, stopPropagation: vi.fn() })
-    })
+    const { editorMarksBeforeStaleAction, editorMarksAfterStaleAction } = await prepareRealShellStaleActionAtoB()
 
     expect(
-      semanticMarks(mountedShell.editor().getJSON()).filter((mark) => mark.kind === "entity"),
+      editorMarksAfterStaleAction,
       "la acción pendiente de A no cambia la Entity positiva de B",
-    ).toEqual(bBeforeStaleAction)
+    ).toEqual(editorMarksBeforeStaleAction)
+  }, 60_000)
+
+  it("keeps B's persisted semantic state unchanged after A's stale action", async () => {
+    const { persistedBeforeStaleAction, persistedAfterStaleAction } = await prepareRealShellStaleActionAtoB()
+
+    expect(
+      persistedAfterStaleAction?.body_json,
+      "la fila guardada de B no incluye la acción Person capturada en A",
+    ).toEqual(persistedBeforeStaleAction.body_json)
   }, 60_000)
 
   it("discards an A action after B becomes active at the same range", async () => {

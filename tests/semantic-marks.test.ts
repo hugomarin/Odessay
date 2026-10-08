@@ -159,11 +159,10 @@ describe("ODE-532 entity and highlight semantic marks", () => {
   describe("controlled rich paste identity", () => {
     it("does not execute clipboard handlers while remapping Entity IDs in Chromium", async () => {
       const editor = createTestEditor("<p></p>", "writing-source")
-      const entityExtension = editor.extensionManager.extensions.find((extension) => extension.name === "entity")
-      const createEntityPlugins = entityExtension?.config.addProseMirrorPlugins
-      if (!entityExtension || !createEntityPlugins) throw new Error("Entity mark plugin was not installed.")
-      const entityPlugin = createEntityPlugins.call(entityExtension)[0]
-      const transformPastedHTML = entityPlugin.spec.props?.transformPastedHTML
+      const entityPlugin = editor.state.plugins.find(
+        (plugin) => typeof plugin.spec.props?.transformPastedHTML === "function",
+      )
+      const transformPastedHTML = entityPlugin?.spec.props?.transformPastedHTML
       if (!transformPastedHTML) throw new Error("Entity transformPastedHTML plugin was not installed.")
 
       const clipboardHtml = [
