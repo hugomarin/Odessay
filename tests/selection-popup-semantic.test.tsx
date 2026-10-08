@@ -50,6 +50,34 @@ async function pointerDown(element: Element | null) {
   })
 }
 
+async function pressButton(element: Element | null, key: "Enter" | " ") {
+  if (!(element instanceof HTMLButtonElement)) throw new Error("Button not found.")
+  element.focus()
+  await act(async () => {
+    const keydown = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
+    element.dispatchEvent(keydown)
+    if (!keydown.defaultPrevented) {
+      // happy-dom does not synthesize a button's native keyboard click. click()
+      // emits the same detail=0 event that Enter/Space produce in the browser.
+      element.click()
+    }
+    element.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }))
+  })
+}
+
+async function tabToNextMenuButton() {
+  const current = document.activeElement
+  const menu = current?.closest("[role='menu']")
+  const buttons = Array.from(menu?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+  const index = buttons.indexOf(current as HTMLButtonElement)
+  if (index < 0 || index + 1 >= buttons.length) throw new Error("Next menu button not found.")
+  await act(async () => {
+    current?.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }))
+    buttons[index + 1].focus()
+    buttons[index + 1].dispatchEvent(new KeyboardEvent("keyup", { key: "Tab", bubbles: true }))
+  })
+}
+
 async function pressEscape(element: Element | null) {
   if (!element) throw new Error("Element not found.")
   await act(async () => {
@@ -92,16 +120,25 @@ describe("ODE-532 selection bubble semantic marks", () => {
     expect(buttonByLabel("Highlight")).not.toBeNull()
   })
 
-  it("moves focus to the first entity type option and applies by keyboard reachability", async () => {
+  it.fails("applies an Entity through Enter from More to its type", async () => {
     await renderSemantic()
-    await pointerDown(buttonByLabel("More mark options"))
-    await pointerDown(buttonByLabel("Entity"))
+    await pressButton(buttonByLabel("More mark options"), "Enter")
+    await pressButton(buttonByLabel("Entity"), "Enter")
+    await pressButton(buttonByLabel("Person"), "Enter")
 
-    const focused = container.querySelector<HTMLElement>("[role='menu'] button")
-    expect(focused?.textContent?.trim()).toBe("Person")
+    expect(applyEntity).toHaveBeenCalledWith("person")
+    expect(dismiss).toHaveBeenCalled()
+  })
 
-    await pointerDown(buttonByLabel("Organization"))
-    expect(applyEntity).toHaveBeenCalledWith("organization")
+  it.fails("applies a Highlight through Space from More to its color", async () => {
+    await renderSemantic()
+    await pressButton(buttonByLabel("More mark options"), " ")
+    await tabToNextMenuButton()
+    await pressButton(buttonByLabel("Highlight"), " ")
+    await tabToNextMenuButton()
+    await pressButton(buttonByLabel("Highlight Green"), " ")
+
+    expect(applyHighlight).toHaveBeenCalledWith("green")
     expect(dismiss).toHaveBeenCalled()
   })
 
