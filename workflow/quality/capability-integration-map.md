@@ -242,9 +242,18 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 
 ---
 
+# O. Document Component Export Projections
+
+| ID | Capability | Chain | Invariant | Status | Priority | Evidence | Note |
+|---|---|---|---|---|---|---|---|
+| COMP-01 | Reject unsafe inline link destinations | JSONContent link marks → shared export projection → clean Markdown / DOCX artifact | `javascript:`, `data:`, and `file:` hrefs retain visible text and create no Markdown destination or DOCX hyperlink relationship. | CONTRACT | CRITICAL | `tests/document-components-block-projections.test.ts` (Markdown and real DOCX artifact cases; red characterization `e0848b6b`, fix `d3aa978e`) | The proof enters at the production-reachable projection boundary that owns href activation, waits for the Markdown result or awaited DOCX buffer, and inspects DOCX XML + relationships with JSZip. Safe `https:` is a positive control in both cases. Removing the `safeUrl` guard makes lines 161 and 176 fail; the web/desktop caller and delivery path are outside this partial slice. |
+| COMP-02 | Preserve valid https inline links | JSONContent `https:` mark → shared export projection → clean Markdown / DOCX artifact | A valid `https:` href remains an active Markdown link and a native DOCX hyperlink. | CONTRACT | HIGH | `tests/document-components-block-projections.test.ts` (same real output cases; fix `d3aa978e`) | The positive control asserts the Markdown destination and DOCX hyperlink relationship after output generation. It protects the projection contract only; it does not claim web/desktop invocation or delivery coverage. |
+
+**ODE-538 partial delivery (2026-10-07, evidence commit `d3aa978e`):** COMP-01 and COMP-02 are `CONTRACT` because the proof exercises the shared writer and real DOCX serializer at their output boundary, while the web route and desktop delivery chain remain outside this slice. The red test commit `e0848b6b` preserves the real bug as `it.fails`; removing the `safeUrl` check makes the clean Markdown and DOCX assertions fail for unsafe destinations, while safe `https:` remains the positive control. This delivery covers href safety only; full IR projection and the clean Markdown caller remain open.
+
 # Audit Summary (Phase 1 + Phase 2 complete)
 
-**107 scenarios inventoried** across 14 capability categories (A–N, sections above). This is the full sweep from the specification, not a subset.
+**109 scenarios inventoried** across 15 capability categories (A–O, sections above). This is the full sweep from the specification, not a subset.
 
 ## Coverage breakdown
 
@@ -252,9 +261,9 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 |---|---|---|
 | NONE | 1 | 1% |
 | UNIT_ONLY | 5 | 5% |
-| CONTRACT | 6 | 6% |
+| CONTRACT | 8 | 7% |
 | PARTIAL_INTEGRATION | 41 | 38% |
-| INTEGRATION | 53 | 50% |
+| INTEGRATION | 53 | 49% |
 | RUNTIME | 0 | 0% |
 | RELEASE | 1 | 1% |
 
