@@ -4,7 +4,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearMermaidCache,
+  getMermaidCacheSize,
   hashMermaidSource,
+  MERMAID_RENDER_CACHE_MAX_ENTRIES,
 } from "@/lib/mermaid/mermaid-cache";
 import { mermaidRenderCoordinator } from "@/lib/mermaid/mermaid-coordinator";
 import { resetMermaidLoaderForTests, setMermaidLoaderForTests } from "@/lib/mermaid/mermaid-loader";
@@ -101,6 +103,29 @@ describe("mermaid coordinator (ODE-533)", () => {
 
     await expect(requestForOwner({}, sourceA)).resolves.toContain("source-a");
     await expect(requestForOwner({}, sourceB)).resolves.toContain("source-b");
+  });
+
+  it("bounds successful renders and evicts the least recently used cache entry", async () => {
+    const render = vi.fn(async () => ({ svg: "<svg><g>rendered</g></svg>" }));
+    setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
+    const sourceFor = (index: number) => `graph TD; N${index}-->M${index}`;
+    const owner = {};
+
+    for (let index = 0; index < MERMAID_RENDER_CACHE_MAX_ENTRIES; index += 1) {
+      await requestForOwner(owner, sourceFor(index));
+    }
+    expect(getMermaidCacheSize()).toBe(MERMAID_RENDER_CACHE_MAX_ENTRIES);
+
+    // A hit refreshes source 0, so source 1 becomes the least recently used entry.
+    await requestForOwner(owner, sourceFor(0));
+    await requestForOwner(owner, sourceFor(MERMAID_RENDER_CACHE_MAX_ENTRIES));
+
+    expect(getMermaidCacheSize()).toBe(MERMAID_RENDER_CACHE_MAX_ENTRIES);
+    await requestForOwner(owner, sourceFor(0));
+    expect(render).toHaveBeenCalledTimes(MERMAID_RENDER_CACHE_MAX_ENTRIES + 1);
+
+    await requestForOwner(owner, sourceFor(1));
+    expect(render).toHaveBeenCalledTimes(MERMAID_RENDER_CACHE_MAX_ENTRIES + 2);
   });
 
   it("owns a single shared observer instead of one per block", () => {
