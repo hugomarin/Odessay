@@ -88,6 +88,7 @@ const measureStringWork = <T>(run: () => T) => {
     }
     return nativeIncludes.call(this, search, position);
   });
+  // Count direct parser character reads used by the shared line summary.
   const charAtSpy = vi.spyOn(String.prototype, "charAt").mockImplementation(function (
     this: string,
     position?: number,
@@ -95,7 +96,7 @@ const measureStringWork = <T>(run: () => T) => {
     const index = Math.trunc(position ?? 0);
     const normalizedIndex = Number.isFinite(index) ? index : 0;
     if (normalizedIndex >= 0 && normalizedIndex < this.length) searchedTagCharacters += 1;
-    return nativeCharAt.call(this, position);
+    return nativeCharAt.call(this, position ?? 0);
   });
 
   try {
