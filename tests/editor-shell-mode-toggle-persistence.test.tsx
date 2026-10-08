@@ -432,7 +432,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "conserva Rich y el archivo cuando el parser de Source no puede crear su DOM",
     async () => {
       const file = await createDocument("ODE540-PARSE-BASE")
@@ -498,7 +498,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "el debounce de Source conserva el texto ante un fallo de conversión y permite reintentar el guardado",
     async () => {
       const file = await createDocument("ODE540-DEBOUNCE-BASE")
@@ -577,7 +577,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "volver a Source antes de que Rich esté listo vuelve a programar el guardado del Source",
     async () => {
       const file = await createDocument("ODE540-QUICK-BASE")

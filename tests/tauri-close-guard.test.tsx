@@ -41,12 +41,12 @@ vi.mock("@tauri-apps/api/window", () => ({
 let container: HTMLDivElement
 let root: Root | null = null
 
-function Harness({ onBeforeClose }: { onBeforeClose: () => Promise<unknown> }) {
+function Harness({ onBeforeClose }: { onBeforeClose: () => Promise<void | boolean> }) {
   useTauriCloseGuard(onBeforeClose)
   return null
 }
 
-async function mount(onBeforeClose: () => Promise<unknown>) {
+async function mount(onBeforeClose: () => Promise<void | boolean>) {
   container = document.createElement("div")
   document.body.appendChild(container)
   root = createRoot(container)
@@ -98,6 +98,24 @@ describe("useTauriCloseGuard — ODE-478 follow-up", () => {
       await closeEventPromise
     })
 
+    expect(mockWindow.destroy).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the window open when the callback cancels and accepts a later close request", async () => {
+    const onBeforeClose = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    await mount(onBeforeClose)
+
+    await act(async () => {
+      await mockWindow.handler?.({ preventDefault: vi.fn() })
+    })
+
+    expect(mockWindow.destroy).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await mockWindow.handler?.({ preventDefault: vi.fn() })
+    })
+
+    expect(onBeforeClose).toHaveBeenCalledTimes(2)
     expect(mockWindow.destroy).toHaveBeenCalledTimes(1)
   })
 

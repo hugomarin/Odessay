@@ -10,12 +10,12 @@ import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
  * tab wait for its save; nothing previously covered the window itself
  * (verified: no beforeunload/CloseRequested handler existed anywhere).
  *
- * `onBeforeClose` should flush any not-yet-submitted edit (e.g. a queued
- * rich-mode update) and then settle every pending write before resolving.
- * Uses Tauri v2's window.destroy() to close without re-triggering
- * onCloseRequested a second time.
+ * `onBeforeClose` flushes any not-yet-submitted edit (e.g. a queued rich-mode
+ * update), settles pending writes, then returns false when the user cancels a
+ * data-loss confirmation. Uses Tauri v2's window.destroy() to close without
+ * re-triggering onCloseRequested a second time.
  */
-export function useTauriCloseGuard(onBeforeClose: () => Promise<unknown>) {
+export function useTauriCloseGuard(onBeforeClose: () => Promise<void | boolean>) {
   const onBeforeCloseRef = useRef(onBeforeClose)
   useEffect(() => {
     onBeforeCloseRef.current = onBeforeClose
@@ -42,7 +42,11 @@ export function useTauriCloseGuard(onBeforeClose: () => Promise<unknown>) {
           event.preventDefault()
           closing = true
           try {
-            await onBeforeCloseRef.current()
+            const mayClose = await onBeforeCloseRef.current()
+            if (mayClose === false) {
+              closing = false
+              return
+            }
             await appWindow.destroy()
           } catch (error) {
             // A failed destroy() (e.g. a missing ACL grant) must not leave

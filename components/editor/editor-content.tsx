@@ -17,6 +17,8 @@ type EditorContentProps = {
   topSlot?: ReactNode
   markdownOverlayHtml?: string
   sourceTransitionError?: string | null
+  onRetrySourceConversion?: () => void
+  onKeepEditingInSource?: () => void
   onRichLayoutReady?: () => void
 }
 
@@ -30,6 +32,8 @@ export function WritingEditorContent({
   topSlot,
   markdownOverlayHtml,
   sourceTransitionError,
+  onRetrySourceConversion,
+  onKeepEditingInSource,
   onRichLayoutReady,
 }: EditorContentProps) {
   const markdownSemanticRef = useRef<HTMLPreElement | null>(null)
@@ -105,9 +109,29 @@ export function WritingEditorContent({
           {mode === "markdown" ? (
             <div className="odessay-markdown-shell relative min-h-[55vh] w-full">
               {sourceTransitionError ? (
-                <p role="alert" className="relative z-20 mx-3 mb-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                  {sourceTransitionError}
-                </p>
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="relative z-20 mx-3 mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+                >
+                  <span>{sourceTransitionError}</span>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <button
+                      type="button"
+                      onClick={onRetrySourceConversion}
+                      className="rounded-sm font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      Try again
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onKeepEditingInSource}
+                      className="rounded-sm font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      Keep editing in Source
+                    </button>
+                  </div>
+                </div>
               ) : null}
               <pre
                 ref={markdownSemanticRef}

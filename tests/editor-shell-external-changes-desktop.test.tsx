@@ -966,7 +966,7 @@ describe("ODE-540 — el cierre advierte cuando Source no se pudo convertir", ()
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "cancela el cierre por defecto y permite cerrar solo tras confirmar la pérdida de Source",
     async () => {
       const path = writeMarkdownFile("Source failed close", "ODE540-EXIT-BASE.")

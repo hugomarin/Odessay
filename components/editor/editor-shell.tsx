@@ -117,6 +117,14 @@ import { saveBinaryArtifact } from "@/lib/utils/download"
 import { cn } from "@/lib/utils"
 import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   deleteLocalCorrectionBlocks,
   readLocalCorrectionBlocks,
 } from "@/lib/corrections/persistence"
@@ -429,6 +437,12 @@ export function EditorShell({
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
   const [sourceTransitionError, setSourceTransitionError] = useState<string | null>(null)
+  const [sourceExitWarningOpen, setSourceExitWarningOpen] = useState(false)
+  const sourceConversionRetryRef = useRef<(() => void) | null>(null)
+  const handleToggleModeRef = useRef<(nextMode: "rich" | "markdown") => void>(() => {})
+  const saveMarkdownSnapshotToRichRef = useRef<(source: string) => void>(() => {})
+  const sourceExitWarningResolverRef = useRef<((closeAnyway: boolean) => void) | null>(null)
+  const sourceExitKeepEditingButtonRef = useRef<HTMLButtonElement | null>(null)
   const [acceptedMarkdownForAnnotations, setAcceptedMarkdownForAnnotations] = useState("")
 
   const [bodyText, setBodyText] = useState("")
@@ -1467,6 +1481,126 @@ export function EditorShell({
     updateDerivedEditorState,
   })
 
+  const clearSourceTransitionNotice = useCallback(() => {
+    sourceConversionRetryRef.current = null
+    setSourceTransitionError(null)
+  }, [])
+
+  const showSourceConversionFailure = useCallback((error: unknown, retry: () => void) => {
+    console.error("[ODE-209] DesktopDocumentEngine.sourceToRich failed:", error)
+    sourceConversionRetryRef.current = retry
+    setSourceTransitionError(
+      "Could not apply this source to Rich. Your Source text is still here and remains unsaved.",
+    )
+  }, [])
+
+  const convertDesktopSourceToRich = useCallback(
+    (source: string, retry: () => void) => {
+      try {
+        const result = desktopDocumentEngine.sourceToRich(source)
+        if (!result.success) {
+          showSourceConversionFailure(result.error, retry)
+          return null
+        }
+
+        clearSourceTransitionNotice()
+        return result.snapshot.bodyJson
+      } catch (error) {
+        showSourceConversionFailure(error, retry)
+        return null
+      }
+    },
+    [clearSourceTransitionNotice, showSourceConversionFailure],
+  )
+
+  const createSourceConversionRetry = useCallback(
+    (retry: () => void) => {
+      const retryEditor = editor
+      const retryWritingId = currentWritingIdRef.current
+      const retryEditorTabId = activeEditorTabIdRef.current
+      const retrySourceRevision = sourceMarkdownRevisionRef.current
+
+      return () => {
+        if (
+          !retryEditor ||
+          retryEditor.isDestroyed ||
+          editorInstanceRef.current !== retryEditor ||
+          currentWritingIdRef.current !== retryWritingId ||
+          activeEditorTabIdRef.current !== retryEditorTabId ||
+          sourceMarkdownRevisionRef.current !== retrySourceRevision ||
+          modeRef.current !== "markdown"
+        ) {
+          return
+        }
+
+        retry()
+      }
+    },
+    [activeEditorTabIdRef, currentWritingIdRef, editor, editorInstanceRef, modeRef, sourceMarkdownRevisionRef],
+  )
+
+  const handleRetrySourceConversion = useCallback(() => {
+    const retry = sourceConversionRetryRef.current
+    clearSourceTransitionNotice()
+    retry?.()
+  }, [clearSourceTransitionNotice])
+
+  const saveMarkdownSnapshotToRich = useCallback(
+    (source: string) => {
+      if (!editor) return
+
+      if (isDesktopRuntime()) {
+        const sourceContent = convertDesktopSourceToRich(
+          source,
+          createSourceConversionRetry(() => saveMarkdownSnapshotToRichRef.current(source)),
+        )
+        if (!sourceContent) return
+
+        isApplyingContentRef.current = true
+        try {
+          editor.commands.setContent(sourceContent)
+        } finally {
+          isApplyingContentRef.current = false
+        }
+      } else {
+        // Web has no `sourceToRich` branch; retain its existing adapter path.
+        isApplyingContentRef.current = true
+        editor.commands.setContent(materializeMarkdownForRichParser(source))
+        isApplyingContentRef.current = false
+      }
+
+      // In Markdown mode the textarea is the source of truth; do not derive
+      // markdownValue from TipTap, which serializes tables as HTML.
+      setBodyText(editor.getText())
+      void persistEditorSnapshot(editor)
+    },
+    [convertDesktopSourceToRich, createSourceConversionRetry, editor, isApplyingContentRef, persistEditorSnapshot],
+  )
+
+  useEffect(() => {
+    saveMarkdownSnapshotToRichRef.current = saveMarkdownSnapshotToRich
+  }, [saveMarkdownSnapshotToRich])
+
+  const scheduleSourceMarkdownSave = useCallback(
+    (source: string) => {
+      if (markdownSaveTimeoutRef.current) {
+        window.clearTimeout(markdownSaveTimeoutRef.current)
+      }
+
+      applySyncStatus("saving")
+      markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
+        if (modeRef.current !== "markdown") {
+          markdownSaveTimeoutRef.current = null
+          return
+        }
+
+        saveMarkdownSnapshotToRich(source)
+        markdownSaveTimeoutRef.current = null
+      })
+    },
+    [applySyncStatus, markdownSaveTimeoutRef, modeRef, saveMarkdownSnapshotToRich, scheduleMarkdownSave],
+  )
+
   const handleToggleMode = useCallback(
     (nextMode: "rich" | "markdown") => {
       if (!editor || nextMode === modeRef.current) {
@@ -1475,9 +1609,20 @@ export function EditorShell({
 
       if (nextMode === "markdown" && pendingSourceRichApplicationRef.current) {
         // The previous Rich surface never received its layout-ready signal.
-        // Keep the user's latest Source text and let them retry the transition.
+        // Discard that layout-bound snapshot, then keep the existing Source
+        // autosave contract for the latest text.
+        const pending = pendingSourceRichApplicationRef.current
         pendingSourceRichApplicationRef.current = null
         applyEditorMode("markdown")
+        if (
+          pending.editor === editor &&
+          pending.writingId === currentWritingIdRef.current &&
+          pending.editorTabId === activeEditorTabIdRef.current &&
+          pending.sourceRevision === sourceMarkdownRevisionRef.current &&
+          pending.sourceMarkdown === markdownValue
+        ) {
+          scheduleSourceMarkdownSave(pending.sourceMarkdown)
+        }
         return
       }
 
@@ -1527,28 +1672,23 @@ export function EditorShell({
       setMarkdownValue(normalizedMarkdown)
       // Preserve EditorState and custom NodeViews for a clean mode round trip.
       if (currentRichMarkdown === normalizedMarkdown) {
-        setSourceTransitionError(null)
+        clearSourceTransitionNotice()
         applyEditorMode("rich")
         return
       }
 
       let sourceContent: Parameters<typeof editor.commands.setContent>[0]
       if (isDesktopRuntime()) {
-        const result = desktopDocumentEngine.sourceToRich(normalizedMarkdown)
-        if (result.success) {
-          sourceContent = result.snapshot.bodyJson
-        } else {
-          console.error("[ODE-209] DesktopDocumentEngine.sourceToRich failed:", result.error)
-          setSourceTransitionError(
-            "Could not apply this source to Rich. Your previous Rich content is still intact. Fix the source and try again.",
-          )
-          return
-        }
+        sourceContent = convertDesktopSourceToRich(
+          normalizedMarkdown,
+          createSourceConversionRetry(() => handleToggleModeRef.current("rich")),
+        )
+        if (!sourceContent) return
       } else {
         sourceContent = materializeMarkdownForRichParser(normalizedMarkdown)
       }
 
-      setSourceTransitionError(null)
+      clearSourceTransitionNotice()
       setMarkdownValue(normalizedMarkdown)
       pendingSourceRichApplicationRef.current = {
         editor,
@@ -1561,8 +1701,21 @@ export function EditorShell({
       }
       applyEditorMode("rich")
     },
-    [editor, markdownValue, activeEditorTabIdRef, applyEditorMode],
+    [
+      activeEditorTabIdRef,
+      applyEditorMode,
+      clearSourceTransitionNotice,
+      convertDesktopSourceToRich,
+      createSourceConversionRetry,
+      editor,
+      markdownValue,
+      scheduleSourceMarkdownSave,
+    ],
   )
+
+  useEffect(() => {
+    handleToggleModeRef.current = handleToggleMode
+  }, [handleToggleMode])
 
   const handleRichLayoutReady = useCallback(() => {
     const pending = pendingSourceRichApplicationRef.current
@@ -1595,7 +1748,7 @@ export function EditorShell({
     (nextMarkdown: string) => {
       const normalizedMarkdown = convertHtmlTablesToMarkdown(nextMarkdown)
       sourceMarkdownRevisionRef.current += 1
-      setSourceTransitionError(null)
+      clearSourceTransitionNotice()
       setMarkdownValue(normalizedMarkdown)
       // WATCH-07 — the markdown textarea's own onChange; see
       // hasUnconfirmedLocalEditRef's doc comment.
@@ -1604,34 +1757,9 @@ export function EditorShell({
       if (!editor) {
         return
       }
-
-      if (markdownSaveTimeoutRef.current) {
-        window.clearTimeout(markdownSaveTimeoutRef.current)
-      }
-
-      applySyncStatus("saving")
-
-      markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
-        if (modeRef.current !== "markdown") {
-          markdownSaveTimeoutRef.current = null
-          return
-        }
-
-        isApplyingContentRef.current = true
-        const parsed = isDesktopRuntime() ? desktopDocumentEngine.sourceToRich(normalizedMarkdown) : null
-        editor.commands.setContent(
-          parsed?.success ? parsed.snapshot.bodyJson : materializeMarkdownForRichParser(normalizedMarkdown),
-        )
-        isApplyingContentRef.current = false
-        // Update metrics from TipTap but do NOT derive markdownValue from it —
-        // TipTap serializes table nodes as HTML, which would overwrite GFM textarea content.
-        // In Markdown mode the textarea is the source of truth; markdownValue is already correct.
-        setBodyText(editor.getText())
-        void persistEditorSnapshot(editor)
-        markdownSaveTimeoutRef.current = null
-      })
+      scheduleSourceMarkdownSave(normalizedMarkdown)
     },
-    [applySyncStatus, editor, persistEditorSnapshot, scheduleMarkdownSave],
+    [clearSourceTransitionNotice, editor, scheduleSourceMarkdownSave],
   )
 
   const handleInsertLink = useCallback(
@@ -2347,11 +2475,38 @@ export function EditorShell({
   // ODE-478 case 5 covered the explicit tab-close button; the window itself
   // had no equivalent guard, so quitting the app or closing the window mid
   // save abandoned it the same way (ODE-478 follow-up).
+  const resolveSourceExitWarning = useCallback((closeAnyway: boolean) => {
+    const resolve = sourceExitWarningResolverRef.current
+    if (!resolve) return
+
+    sourceExitWarningResolverRef.current = null
+    setSourceExitWarningOpen(false)
+    resolve(closeAnyway)
+  }, [])
+
   const settleBeforeClose = useCallback(async () => {
     flushQueuedRichModeUpdate()
     flushPendingMarkdownSave()
     await persistenceCoordinator.settle()
-  }, [flushPendingMarkdownSave, flushQueuedRichModeUpdate, persistenceCoordinator])
+
+    if (modeRef.current !== "markdown" || !hasUnconfirmedLocalEditRef.current) {
+      return true
+    }
+
+    return new Promise<boolean>((resolve) => {
+      sourceExitWarningResolverRef.current = resolve
+      setSourceExitWarningOpen(true)
+    })
+  }, [flushPendingMarkdownSave, flushQueuedRichModeUpdate, hasUnconfirmedLocalEditRef, modeRef, persistenceCoordinator])
+
+  useEffect(() => {
+    return () => {
+      const resolve = sourceExitWarningResolverRef.current
+      sourceExitWarningResolverRef.current = null
+      resolve?.(false)
+    }
+  }, [])
+
   useTauriCloseGuard(settleBeforeClose)
 
   // Picks up a file opened via Cmd+O from outside Write (see useGlobalOpenFileMenu).
@@ -2697,6 +2852,8 @@ export function EditorShell({
                     mode={mode}
                     markdownValue={markdownValue}
                     sourceTransitionError={sourceTransitionError}
+                    onRetrySourceConversion={handleRetrySourceConversion}
+                    onKeepEditingInSource={clearSourceTransitionNotice}
                     onRichLayoutReady={handleRichLayoutReady}
                     onMarkdownChange={handleMarkdownChange}
                     onMarkdownSelectionChange={(selection) => {
@@ -3159,6 +3316,39 @@ export function EditorShell({
         onConfirm={handleConfirmAnnotation}
         onCancel={() => setPendingAnnotation(null)}
       />
+
+      <Dialog open={sourceExitWarningOpen} onOpenChange={(open) => !open && resolveSourceExitWarning(false)}>
+        <DialogContent
+          role="alertdialog"
+          aria-label="Unsaved Source changes"
+          hideClose
+          className="max-w-[440px]"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            sourceExitKeepEditingButtonRef.current?.focus()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Unsaved Source changes</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes in Source that couldn&apos;t be converted. Close anyway?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-row gap-2 sm:space-x-0">
+            <Button
+              ref={sourceExitKeepEditingButtonRef}
+              type="button"
+              variant="outline"
+              onClick={() => resolveSourceExitWarning(false)}
+            >
+              Keep editing
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => resolveSourceExitWarning(true)}>
+              Close anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }
