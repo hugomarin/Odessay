@@ -7,8 +7,9 @@ import { MERMAID_CONFIG_ID } from "@/lib/mermaid/mermaid-language";
  * frontend/export adapter capability, so the cache lives here (adapter layer),
  * never in `lib/document-components/**`.
  *
- * Key = FNV-1a(source + config). Lookup is O(1) by hash. Only successful,
- * sanitized renders are cached; failures never populate the cache.
+ * Key = FNV-1a(source + config), with the original source checked on every hit.
+ * Only successful, sanitized renders are cached in a small LRU; failures never
+ * populate the cache.
  */
 
 export const hashMermaidSource = (source: string, configId: string = MERMAID_CONFIG_ID): string => {
@@ -24,21 +25,44 @@ export const hashMermaidSource = (source: string, configId: string = MERMAID_CON
 export const mermaidCacheKey = (source: string, configId: string = MERMAID_CONFIG_ID): string =>
   `${configId}:${hashMermaidSource(source, configId)}`;
 
-const successfulRenders = new Map<string, string>();
+export const MERMAID_RENDER_CACHE_MAX_ENTRIES = 32;
 
-export const getCachedMermaidSvg = (source: string, configId: string = MERMAID_CONFIG_ID): string | undefined =>
-  successfulRenders.get(mermaidCacheKey(source, configId));
+type SuccessfulRender = {
+  source: string;
+  svg: string;
+};
+
+const successfulRenders = new Map<string, SuccessfulRender>();
+
+export const getCachedMermaidSvg = (source: string, configId: string = MERMAID_CONFIG_ID): string | undefined => {
+  const key = mermaidCacheKey(source, configId);
+  const cached = successfulRenders.get(key);
+  if (!cached || cached.source !== source) return undefined;
+
+  // Map insertion order tracks LRU order: hits move to the newest position.
+  successfulRenders.delete(key);
+  successfulRenders.set(key, cached);
+  return cached.svg;
+};
 
 export const setCachedMermaidSvg = (
   source: string,
   svg: string,
   configId: string = MERMAID_CONFIG_ID,
 ): void => {
-  successfulRenders.set(mermaidCacheKey(source, configId), svg);
+  const key = mermaidCacheKey(source, configId);
+  successfulRenders.delete(key);
+  successfulRenders.set(key, { source, svg });
+
+  while (successfulRenders.size > MERMAID_RENDER_CACHE_MAX_ENTRIES) {
+    const leastRecentlyUsedKey = successfulRenders.keys().next().value;
+    if (leastRecentlyUsedKey === undefined) break;
+    successfulRenders.delete(leastRecentlyUsedKey);
+  }
 };
 
 export const hasCachedMermaidSvg = (source: string, configId: string = MERMAID_CONFIG_ID): boolean =>
-  successfulRenders.has(mermaidCacheKey(source, configId));
+  getCachedMermaidSvg(source, configId) !== undefined;
 
 export const clearMermaidCache = (): void => {
   successfulRenders.clear();
