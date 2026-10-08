@@ -4,6 +4,7 @@
 import { describe, expect, it, beforeEach, vi } from "vitest"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { chromium } from "playwright"
 import { Editor, getMarkRange } from "@tiptap/core"
 import { canonicalizeControlledMarkdown } from "@/lib/document-components"
 import { parseMarkdownToSnapshot, serializeDocumentToMarkdown } from "@/lib/editor/document-serialization"
@@ -156,6 +157,107 @@ describe("ODE-532 entity and highlight semantic marks", () => {
   })
 
   describe("controlled rich paste identity", () => {
+    it.fails("does not execute clipboard handlers while remapping Entity IDs in Chromium", async () => {
+      const editor = createTestEditor("<p></p>", "writing-source")
+      const entityExtension = editor.extensionManager.extensions.find((extension) => extension.name === "entity")
+      const createEntityPlugins = entityExtension?.config.addProseMirrorPlugins
+      if (!entityExtension || !createEntityPlugins) throw new Error("Entity mark plugin was not installed.")
+      const entityPlugin = createEntityPlugins.call(entityExtension)[0]
+      const transformPastedHTML = entityPlugin.spec.props?.transformPastedHTML
+      if (!transformPastedHTML) throw new Error("Entity transformPastedHTML plugin was not installed.")
+
+      const clipboardHtml = [
+        "<p>",
+        '<img src=x onerror="window.__entityPasteHandlerSpy()">',
+        '<mark data-entity-id="entity-source" data-entity-type="company" data-entity-source-writing-id="writing-source">Aplyca</mark>',
+        "</p>",
+      ].join("")
+
+      const browser = await chromium.launch({ headless: true })
+      try {
+        const page = await browser.newPage()
+        await page.setContent("<!doctype html><html><body></body></html>")
+
+        const liveSinkControl = await page.evaluate(async () => {
+          const testWindow = window as typeof window & {
+            __entityPasteHandlerCalls: number
+            __entityPasteHandlerSpy: () => void
+          }
+          testWindow.__entityPasteHandlerCalls = 0
+          testWindow.__entityPasteHandlerSpy = () => {
+            testWindow.__entityPasteHandlerCalls += 1
+          }
+
+          const image = document.createElement("img")
+          image.setAttribute("src", "x")
+          image.setAttribute("onerror", "window.__entityPasteHandlerSpy()")
+
+          await new Promise<void>((resolve, reject) => {
+            const timeout = window.setTimeout(() => reject(new Error("Live-DOM image error did not fire.")), 2_000)
+            image.addEventListener(
+              "error",
+              () => {
+                window.clearTimeout(timeout)
+                resolve()
+              },
+              { once: true },
+            )
+            document.body.append(image)
+          })
+
+          image.remove()
+          return testWindow.__entityPasteHandlerCalls
+        })
+        expect(liveSinkControl, "positive control: Chromium executes inline image error handlers in the live document").toBe(1)
+
+        const callbackSource = transformPastedHTML
+          .toString()
+          .replace(/__vite_ssr_import_\d+__\.createSemanticEntityId/g, "createSemanticEntityId")
+        await page.addScriptTag({
+          content: `window.__entityTransformPastedHTML = (() => {
+            const getWritingId = () => "writing-destination";
+            const createSemanticEntityId = () => "entity-destination";
+            const decodeDataAttribute = (value) => {
+              if (!value) return "";
+              try { return decodeURIComponent(value); } catch { return value; }
+            };
+            const ENTITY_SOURCE_WRITING_ID_ATTRIBUTE = "data-entity-source-writing-id";
+            return (${callbackSource});
+          })();`,
+        })
+
+        const transformed = await page.evaluate(
+          async ({ html }) => {
+            const testWindow = window as typeof window & {
+              __entityPasteHandlerCalls: number
+              __entityTransformPastedHTML: (html: string, view: { dom: { ownerDocument: Document } }) => string
+            }
+            testWindow.__entityPasteHandlerCalls = 0
+            const transform = testWindow.__entityTransformPastedHTML(html, { dom: { ownerDocument: document } })
+
+            await new Promise<void>((resolve) => {
+              requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+            })
+
+            const parsed = new DOMParser().parseFromString(transform, "text/html")
+            return {
+              handlerCalls: testWindow.__entityPasteHandlerCalls,
+              entityIds: Array.from(parsed.querySelectorAll("mark[data-entity-id]"), (entity) =>
+                entity.getAttribute("data-entity-id"),
+              ),
+            }
+          },
+          { html: clipboardHtml },
+        )
+
+        expect(transformed.handlerCalls, "clipboard event handlers never run during rich paste transformation").toBe(0)
+        expect(transformed.entityIds, "cross-document Entity IDs are still remapped").toEqual(["entity-destination"])
+      } finally {
+        editor.destroy()
+        await browser.close()
+      }
+    }, 30_000)
+
     it("mints one new Entity ID per copied identity across documents", () => {
       const sourceWritingId = "writing-source"
       const destinationWritingId = "writing-destination"
