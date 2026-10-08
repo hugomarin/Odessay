@@ -157,7 +157,7 @@ describe("ODE-532 entity and highlight semantic marks", () => {
   })
 
   describe("controlled rich paste identity", () => {
-    it.fails("does not execute clipboard handlers while remapping Entity IDs in Chromium", async () => {
+    it("does not execute clipboard handlers while remapping Entity IDs in Chromium", async () => {
       const editor = createTestEditor("<p></p>", "writing-source")
       const entityExtension = editor.extensionManager.extensions.find((extension) => extension.name === "entity")
       const createEntityPlugins = entityExtension?.config.addProseMirrorPlugins
