@@ -29,6 +29,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { scanControlledAnnotations } from "@/lib/editor/annotation-markdown"
+import { OPAQUE_SOURCE_BLOCK_NODE, OPAQUE_SOURCE_INLINE_NODE } from "@/lib/editor/opaque-source-extensions"
 
 vi.mock("@tiptap/react", async (importOriginal) => {
   const { createTiptapCaptureModule } = await import("./support/editor-shell-doubles")
@@ -73,6 +74,7 @@ const {
   waitFor,
   waitForMarkdownContaining,
 } = await import("./support/editor-shell-harness")
+const { act } = await import("react")
 const { createDesktopWorkspace, destroyDesktopWorkspace, resetDesktopWorkspace } = await import(
   "./support/editor-shell-desktop-doubles"
 )
@@ -136,6 +138,49 @@ function reopenedEditorState(writingId: string) {
   }
 }
 
+async function switchMode(label: "Rich" | "Markdown") {
+  const button = await waitFor(
+    () =>
+      Array.from(
+        mounted!.container.querySelectorAll<HTMLButtonElement>('[data-testid="editor-statusbar"] button'),
+      ).find((candidate) => (candidate.textContent ?? "").trim() === label),
+    { label: `botón "${label}" de la status bar` },
+  )
+  await act(async () => button.click())
+  await flush(2)
+  await waitFor(
+    () => (label === "Markdown" ? markdownSource() : !markdownSource() && mounted!.prosemirror()),
+    { label: `editor en modo ${label}` },
+  )
+}
+
+function markdownSource() {
+  return mounted!.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]')
+}
+
+async function replaceMarkdownSource(value: string) {
+  const textarea = markdownSource()
+  if (!textarea) throw new Error("El editor no está en modo Markdown")
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, value)
+    textarea.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  await flush(1)
+}
+
+function opaqueSourceNodes() {
+  type JsonNode = { type?: string; attrs?: Record<string, unknown>; content?: JsonNode[] }
+  const found: Array<{ type: string; raw: unknown; reason: unknown }> = []
+  const visit = (node: JsonNode) => {
+    if (node.type === OPAQUE_SOURCE_INLINE_NODE || node.type === OPAQUE_SOURCE_BLOCK_NODE) {
+      found.push({ type: node.type, raw: node.attrs?.raw, reason: node.attrs?.reason })
+    }
+    for (const child of node.content ?? []) visit(child)
+  }
+  visit(mounted!.editor().getJSON() as JsonNode)
+  return found
+}
+
 describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", () => {
   it("la anotación del popup llega al .md y vuelve intacta al reabrir desde disco", async () => {
     mounted = await mountEditorShell()
@@ -143,6 +188,9 @@ describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", 
     await typeInEditor(TEXT)
     await waitForMarkdownContaining(TEXT)
     const writingId = await waitForMaterializedWritingId()
+    await waitFor(() => mounted!.editor().getText().includes(TEXT), {
+      label: "editor desktop con el texto guardado e hidratado",
+    })
 
     const target = await selectEditorText(TARGET)
     await clickSelectionPopupAction("Annotate passage")
@@ -216,5 +264,49 @@ describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", 
     expect(await openNotesSidebar(), "ANN-03: el sidebar la lista").toEqual([
       { anchor: `“${TARGET}”`, body: NOTE, badge: "AI · 1" },
     ])
+  }, TEST_TIMEOUT_MS)
+
+  it("preserves invalid Annotation source bytes through Rich save and desktop reopen", async () => {
+    const invalidAnnotation =
+      '<Annotation id="desktop-opaque-531" type="personal" comment="Keep this source" extra="invalid">Anchor desktop</Annotation>'
+    const source = `ODE531 source before\n\n${invalidAnnotation}\n\nODE531 source after`
+    mounted = await mountEditorShell()
+    await clickNewArtifact(mounted.container)
+    await typeInEditor("ODE531 initial")
+    const initialFile = await waitForMarkdownContaining("ODE531 initial")
+    const writingId = await waitForMaterializedWritingId()
+
+    await switchMode("Markdown")
+    await replaceMarkdownSource(source)
+    await switchMode("Rich")
+
+    expect(opaqueSourceNodes(), "Rich conserva el tag inválido como source opaco").toEqual([
+      expect.objectContaining({ type: OPAQUE_SOURCE_INLINE_NODE, raw: invalidAnnotation, reason: "invalid-attributes" }),
+    ])
+
+    const editor = mounted.editor()
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1)
+    await typeInEditor(" after-opaque")
+    const savedFile = await waitForMarkdownContaining("after-opaque")
+    expect(savedFile.path, "el Rich edit guarda sobre el mismo documento").toBe(initialFile.path)
+    const invalidStart = savedFile.contents.indexOf(invalidAnnotation)
+    expect(invalidStart, "el .md materializado conserva el tag inválido").toBeGreaterThanOrEqual(0)
+    expect(savedFile.contents.slice(invalidStart, invalidStart + invalidAnnotation.length)).toBe(invalidAnnotation)
+
+    await mounted.unmount()
+    await writeEditorSession(createEmptyEditorSession())
+    resetEditorShellWorld({ isDesktop: true })
+    mounted = await mountEditorShell({ writingId })
+    await waitFor(() => mounted!.editor().getText().includes("ODE531 source before"), {
+      label: "source desktop reabierto desde el .md",
+      timeoutMs: 15_000,
+    })
+    await flush(3)
+
+    expect(opaqueSourceNodes(), "la reapertura reconstruye el mismo source opaco").toEqual([
+      expect.objectContaining({ type: OPAQUE_SOURCE_INLINE_NODE, raw: invalidAnnotation, reason: "invalid-attributes" }),
+    ])
+    const reopenedFile = await waitForMarkdownContaining("after-opaque")
+    expect(reopenedFile.contents, "el .md en disco mantiene exactamente los bytes guardados").toBe(savedFile.contents)
   }, TEST_TIMEOUT_MS)
 })

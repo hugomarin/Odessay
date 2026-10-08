@@ -20,12 +20,18 @@ vi.mock("@/lib/supabase/admin", () => ({
 }))
 
 type Row = Record<string, unknown>
-type QueryResult = { data: Row[] | Row | null; error: null }
+type DatabaseError = { code?: string; message: string }
+type QueryResult = { data: Row[] | Row | null; error: DatabaseError | null }
 type QueryKind = "select" | "update" | "insert" | "upsert" | "delete"
 type Filter = (row: Row) => boolean
 
 class MemorySupabase {
   private readonly tables = new Map<string, Map<string, Row>>()
+  private readonly failures = new Map<string, DatabaseError>()
+  private marginUpsertHold: {
+    started: () => void
+    released: Promise<void>
+  } | null = null
 
   seed(table: string, row: Row) {
     this.table(table).set(String(row.id), structuredClone(row))
@@ -36,12 +42,29 @@ class MemorySupabase {
     return row ? structuredClone(row) : null
   }
 
+  failNext(table: string, kind: QueryKind, error: DatabaseError) {
+    this.failures.set(`${table}:${kind}`, error)
+  }
+
+  holdNextMarginUpsert() {
+    let markStarted!: () => void
+    let release!: () => void
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve
+    })
+    const released = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    this.marginUpsertHold = { started: markStarted, released }
+    return { started, release }
+  }
+
   from(table: string) {
     return {
       select: () => this.query(table, "select"),
       update: (payload: Row) => this.query(table, "update", payload),
       insert: (payload: Row | Row[]) => this.query(table, "insert", payload),
-      upsert: (payload: Row | Row[]) => this.query(table, "upsert", payload),
+      upsert: (payload: Row | Row[], _options?: { onConflict?: string }) => this.query(table, "upsert", payload),
       delete: () => this.query(table, "delete"),
     }
   }
@@ -59,7 +82,26 @@ class MemorySupabase {
     return table
   }
 
-  execute(tableName: string, kind: QueryKind, payload: Row | Row[] | undefined, filters: Filter[], single: boolean): QueryResult {
+  async execute(
+    tableName: string,
+    kind: QueryKind,
+    payload: Row | Row[] | undefined,
+    filters: Filter[],
+    single: boolean,
+  ): Promise<QueryResult> {
+    if (tableName === "margins" && kind === "upsert" && this.marginUpsertHold) {
+      const hold = this.marginUpsertHold
+      this.marginUpsertHold = null
+      hold.started()
+      await hold.released
+    }
+
+    const failure = this.failures.get(`${tableName}:${kind}`)
+    if (failure) {
+      this.failures.delete(`${tableName}:${kind}`)
+      return { data: null, error: failure }
+    }
+
     const table = this.table(tableName)
     const rows = Array.from(table.values()).filter((row) => filters.every((filter) => filter(row)))
     let affected: Row[] = rows
@@ -120,14 +162,14 @@ class MemoryQuery implements PromiseLike<QueryResult> {
   }
 
   maybeSingle() {
-    return Promise.resolve(this.run(true))
+    return this.run(true)
   }
 
   single() {
-    return Promise.resolve(this.run(true))
+    return this.run(true)
   }
 
-  private run(single = this.singleResult) {
+  private run(single = this.singleResult): Promise<QueryResult> {
     return this.database.execute(this.table, this.kind, this.payload, this.filters, single)
   }
 
@@ -180,8 +222,12 @@ function seedMargin(row: Row) {
 }
 
 async function saveBody(bodyJson: JSONContent, bodyText: string) {
+  return saveBodyFor(WRITING_ID, bodyJson, bodyText)
+}
+
+async function saveBodyFor(writingId: string, bodyJson: JSONContent, bodyText: string) {
   return PATCH(
-    new Request(`http://localhost/api/writings/${WRITING_ID}`, {
+    new Request(`http://localhost/api/writings/${writingId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -191,7 +237,7 @@ async function saveBody(bodyJson: JSONContent, bodyText: string) {
         updated_at: "2026-10-07T12:00:00.000Z",
       }),
     }),
-    { params: Promise.resolve({ id: WRITING_ID }) },
+    { params: Promise.resolve({ id: writingId }) },
   )
 }
 
@@ -249,4 +295,116 @@ describe("PATCH /api/writings/[id] annotation projection", () => {
       editor.destroy()
     }
   })
+
+  it("keeps the writing content after an annotation upsert fails and leaves margins unconfirmed", async () => {
+    const markdown = '<Annotation id="annotation-upsert-failure-531" type="personal" comment="Keep source">Anchor</Annotation>'
+    const snapshot = parseMarkdownToSnapshot(markdown)
+    const sentinel = collaborativeMargin(SENTINEL_ID)
+    seedMargin(sentinel)
+    database.failNext("margins", "upsert", { message: "margin upsert unavailable" })
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    try {
+      const response = await saveBody(snapshot.bodyJson, snapshot.bodyText)
+      const payload = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(payload.data.body_json).toEqual(snapshot.bodyJson)
+      expect(database.row("writings", WRITING_ID)?.body_json).toEqual(snapshot.bodyJson)
+      expect(database.row("margins", SENTINEL_ID)).toEqual(sentinel)
+      expect(database.row("margins", "annotation-upsert-failure-531")).toBeNull()
+      expect(payload.data).not.toHaveProperty("margins")
+      expect(errors).toHaveBeenCalledWith(
+        "[writings:patch:sync-margins]",
+        expect.objectContaining({ writingId: WRITING_ID, userId: READER_ID, error: "Unknown error" }),
+      )
+    } finally {
+      errors.mockRestore()
+    }
+  })
+
+  it("keeps the writing content and existing row after a margin delete fails", async () => {
+    const markdown = '<Annotation id="annotation-delete-failure-531" type="personal" comment="Remove me">Anchor</Annotation>'
+    const snapshot = parseMarkdownToSnapshot(markdown)
+    const editor = new Editor({ extensions: createEditorExtensions(), content: snapshot.bodyJson })
+    const margin = { ...collaborativeMargin("annotation-delete-failure-531"), type: "personal" }
+    seedMargin(margin)
+    expect(editor.commands.deleteAnnotation("personal", 1, "annotation-delete-failure-531")).toBe(true)
+    const savedBody = editor.getJSON()
+    const savedText = editor.getText({ blockSeparator: "\n" })
+    database.failNext("margins", "delete", { message: "margin delete unavailable" })
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    try {
+      const response = await saveBody(savedBody, savedText)
+      const payload = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(payload.data.body_json).toEqual(savedBody)
+      expect(database.row("writings", WRITING_ID)?.body_json).toEqual(savedBody)
+      expect(database.row("margins", "annotation-delete-failure-531")).toEqual(margin)
+      expect(payload.data).not.toHaveProperty("margins")
+      expect(errors).toHaveBeenCalledWith(
+        "[writings:patch:sync-margins]",
+        expect.objectContaining({ writingId: WRITING_ID, userId: READER_ID, error: "Unknown error" }),
+      )
+    } finally {
+      errors.mockRestore()
+      editor.destroy()
+    }
+  })
+
+  it("keeps A's late margin projection scoped to A while B saves", async () => {
+    const writingA = "writing-531-a"
+    const writingB = "writing-531-b"
+    const snapshotA = parseMarkdownToSnapshot(
+      '<Annotation id="annotation-a-531" type="personal" comment="A">Anchor A</Annotation>',
+    )
+    const snapshotB = parseMarkdownToSnapshot(
+      '<Annotation id="annotation-b-531" type="personal" comment="B">Anchor B</Annotation>',
+    )
+    seedWritingFor(writingA)
+    seedWritingFor(writingB)
+    const hold = database.holdNextMarginUpsert()
+    const saveA = saveBodyFor(writingA, snapshotA.bodyJson, snapshotA.bodyText)
+
+    try {
+      await hold.started
+      expect(database.row("writings", writingA)?.body_json).toEqual(snapshotA.bodyJson)
+
+      const responseB = await saveBodyFor(writingB, snapshotB.bodyJson, snapshotB.bodyText)
+      const payloadB = await responseB.json()
+      const marginB = database.row("margins", "annotation-b-531")
+
+      expect(responseB.status).toBe(200)
+      expect(payloadB.data.body_json).toEqual(snapshotB.bodyJson)
+      expect(marginB).toEqual(expect.objectContaining({ id: "annotation-b-531", writing_id: writingB }))
+
+      hold.release()
+      const responseA = await saveA
+      const payloadA = await responseA.json()
+
+      expect(responseA.status).toBe(200)
+      expect(payloadA.data.body_json).toEqual(snapshotA.bodyJson)
+      expect(database.row("margins", "annotation-a-531")).toEqual(
+        expect.objectContaining({ id: "annotation-a-531", writing_id: writingA }),
+      )
+      expect(database.row("margins", "annotation-b-531")).toEqual(marginB)
+    } finally {
+      hold.release()
+      await saveA.catch(() => undefined)
+    }
+  })
 })
+
+function seedWritingFor(writingId: string) {
+  database.seed("writings", {
+    id: writingId,
+    author_id: READER_ID,
+    title: "Annotation projection",
+    status: "draft",
+    artifact_type: "general",
+    visibility: "private",
+    version: 1,
+  })
+}
