@@ -38,3 +38,4 @@ Tail after opaque source: TAIL_MASTER remains editable.
 
 <OpenPanel mode="future">
 OPAQUE_UNCLOSED_MASTER
+<Annotation id="ann-master-after-invalid" type="personal" comment="after opaque">ANNOTATION_AFTER_INVALID_MASTER</Annotation>

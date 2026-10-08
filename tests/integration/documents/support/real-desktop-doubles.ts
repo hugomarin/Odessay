@@ -138,6 +138,8 @@ type SyncMutationRow = {
 const MAX_SYNC_ATTEMPTS = 10
 
 const mutationsByDb = new Map<string, Map<string, SyncMutationRow>>()
+let nextDualWriteFailure: (() => never) | null = null
+let nextBulkDualWriteFailure: (() => never) | null = null
 
 /** Point the `@tauri-apps/api/path` double at a real temp directory. Call once per test file, before the first production call that resolves desktop runtime services. */
 export function configureRealDesktopDoubles(baseDir: string): void {
@@ -157,6 +159,8 @@ export function resetCatalogDoubles(): void {
   selectedPathsByRoot.clear()
   retiredRootKeys.clear()
   mutationsByDb.clear()
+  nextDualWriteFailure = null
+  nextBulkDualWriteFailure = null
   for (const gate of [...catalogReadGates]) gate.release()
 }
 
@@ -945,11 +949,20 @@ function applyDualWrite(
 }
 
 export async function tauriCatalogDualWriteDouble(dbPath: string, input: DesktopCatalogDualWriteInput): Promise<void> {
+  if (nextDualWriteFailure) {
+    const fail = nextDualWriteFailure
+    nextDualWriteFailure = null
+    fail()
+  }
   applyDualWrite(rowsFor(dbPath), mutationsFor(dbPath), input)
 }
 
+/** Fail the next real single-row catalog projection, before either the row or its enqueue mutation lands. */
+export function failNextDualWrite(makeError: () => never): void {
+  nextDualWriteFailure = makeError
+}
+
 /** Set to make the next tauriCatalogBulkDualWrite reject before applying any row — a real bulk write is one transaction, so a failure must not partially land. Auto-clears after firing once. */
-let nextBulkDualWriteFailure: (() => never) | null = null
 export function failNextBulkDualWrite(makeError: () => never): void {
   nextBulkDualWriteFailure = makeError
 }
