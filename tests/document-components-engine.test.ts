@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
+import { performance } from "node:perf_hooks";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { safeUrl } from "@/lib/document-components/registry";
 import {
   DOCUMENT_PROJECTION_SURFACES,
   DocumentComponentSpecRegistry,
@@ -235,6 +237,49 @@ describe("ODE-529 controlled document engine", () => {
     expect(href?.validate?.(" javascript:alert(1)")).toBe(false);
     expect(href?.validate?.("data:text/html,bad")).toBe(false);
     expect(href?.validate?.("file:///tmp/private")).toBe(false);
+  });
+
+  it("fails closed when repeated percent escapes still hide a scheme after the decode budget", () => {
+    const href = `javascript%25${"25".repeat(10)}3A/x`;
+
+    expect(safeUrl(href)).toBe(false);
+  });
+
+  it("fails closed when a scheme boundary falls beyond the normalization prefix", () => {
+    const href = `javascript${"%09".repeat(500)}:alert(1)`;
+
+    expect(href).toHaveLength(1519);
+    expect(safeUrl(href)).toBe(false);
+  });
+
+  it("keeps URL validation bounded for a 125 KB multiply encoded scheme", () => {
+    const encodedScheme = `javascript%25${"25".repeat(1_999)}3A/`;
+    const href = `${encodedScheme}${"x".repeat(125 * 1024 - encodedScheme.length)}`;
+    const startedAt = performance.now();
+    const accepted = safeUrl(href);
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(Buffer.byteLength(href)).toBe(125 * 1024);
+    expect(accepted).toBe(false);
+    expect(elapsedMs).toBeLessThan(250);
+  });
+
+  it("keeps a deep 125 KB scheme prefix within the normalization budget", () => {
+    const encodedScheme = `javascript%25${"25".repeat(9_999)}3A/`;
+    const href = `${encodedScheme}${"x".repeat(125 * 1024 - encodedScheme.length)}`;
+    const startedAt = performance.now();
+    const accepted = safeUrl(href);
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(Buffer.byteLength(href)).toBe(125 * 1024);
+    expect(accepted).toBe(false);
+    expect(elapsedMs).toBeLessThan(150);
+  });
+
+  it("uses the ASCII fallback for percent groups containing invalid UTF-8", () => {
+    expect(safeUrl("https%3A%E0")).toBe(true);
+    expect(safeUrl("javascript%3A%2F%2A%E0%2A%2Falert(1)")).toBe(false);
+    expect(safeUrl("javascript%3A%2F%2A%E0alert(1)")).toBe(false);
   });
 
   it.each([

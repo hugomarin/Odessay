@@ -1,5 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
-import { validateComponentAttribute } from "@/lib/document-components/registry"
+import { safeUrl, validateComponentAttribute } from "@/lib/document-components/registry"
 
 export type WritingExportFootnote = {
   index: number
@@ -82,6 +82,15 @@ const MARKDOWN_ESCAPE_RE = /[\\`*_{}\[\]()#+\-.!|>~=:]/g
 
 const escapeMarkdownText = (value: string) =>
   value.replace(MARKDOWN_ESCAPE_RE, (match) => `\\${match}`)
+
+const encodeMarkdownLinkDestination = (href: string) => {
+  // In a bare Markdown destination these delimiters can change link syntax. Encode only them so
+  // ordinary URLs and existing percent-encoded paths keep their original bytes.
+  const encoder = new TextEncoder()
+  return href.replace(/[()\u0000-\u0020<>\u007F-\u009F\\]/g, (character) =>
+    Array.from(encoder.encode(character), (byte) => `%${byte.toString(16).toUpperCase().padStart(2, "0")}`).join(""),
+  )
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null
@@ -188,7 +197,10 @@ const collectInlineRuns = (nodes: ExportNode[] | undefined, footnotes: WritingEx
             }
             break
           case "link":
-            run.linkHref = readString(mark.attrs?.href) ?? undefined
+            {
+              const href = readString(mark.attrs?.href)
+              run.linkHref = href && safeUrl(href) ? href : undefined
+            }
             break
           default:
             break
@@ -397,7 +409,7 @@ const renderInlineRunToMarkdown = (run: WritingExportInline) => {
   const escaped = escapeMarkdownText(run.text)
 
   if (run.linkHref) {
-    return `[${escaped}](${run.linkHref})`
+    return `[${escaped}](${encodeMarkdownLinkDestination(run.linkHref)})`
   }
 
   if (run.code) {

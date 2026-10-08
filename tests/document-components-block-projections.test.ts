@@ -4,8 +4,10 @@
 import JSZip from "jszip"
 import { extractText, getDocumentProxy } from "unpdf"
 import { describe, expect, it } from "vitest"
+import type { JSONContent } from "@tiptap/core"
 import { parseMarkdownToSnapshot } from "@/lib/editor/document-serialization"
-import { buildWritingExportDocument } from "@/lib/export/writing-export"
+import { validateComponentAttribute } from "@/lib/document-components/registry"
+import { buildWritingExportDocument, buildWritingMarkdown } from "@/lib/export/writing-export"
 import { renderWritingToDocxBuffer } from "@/lib/export/to-docx"
 import { renderWritingToPdfBuffer } from "@/lib/export/to-pdf"
 import { renderWritingBodyHtml as renderClient } from "@/lib/reading/render-body-html-client"
@@ -26,6 +28,81 @@ const SOURCE = [
 ].join("\n\n")
 
 const snapshot = () => parseMarkdownToSnapshot(SOURCE)
+
+const INLINE_LINK_EXPORT_BODY: JSONContent = {
+  type: "doc",
+  content: [
+    {
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          text: "SAFE_LINK",
+          marks: [{ type: "link", attrs: { href: "https://example.com/safe" } }],
+        },
+        {
+          type: "text",
+          text: " JAVASCRIPT_LINK",
+          marks: [{ type: "link", attrs: { href: "javascript:alert(1)" } }],
+        },
+        {
+          type: "text",
+          text: " DATA_LINK",
+          marks: [{ type: "link", attrs: { href: "data:text/html,unsafe" } }],
+        },
+        {
+          type: "text",
+          text: " FILE_LINK",
+          marks: [{ type: "link", attrs: { href: "file:///private/unsafe" } }],
+        },
+      ],
+    },
+  ],
+}
+
+const UNSAFE_LINKS = [
+  { label: "JAVASCRIPT_LINK", scheme: "javascript:" },
+  { label: "DATA_LINK", scheme: "data:" },
+  { label: "FILE_LINK", scheme: "file:" },
+]
+
+const MARKDOWN_LINK_DESTINATION_INJECTION_VECTORS = [
+  "https://a.com) [x](javascript:alert(1))",
+  "#frag) [x](javascript:alert(1))",
+  "rel/path) [x](javascript:alert(1))",
+] as const
+
+const ENCODED_UNSAFE_LINKS = [
+  { label: "HTML_COLON_LINK", href: "javascript&colon;alert(1)" },
+  { label: "PERCENT_COLON_LINK", href: "javascript%3Aalert(1)" },
+  { label: "ENTITY_TAB_LINK", href: "java&#x09;script:alert(1)" },
+  { label: "NUMERIC_LETTER_LINK", href: "&#106;avascript:alert(1)" },
+  { label: "FILE_PERCENT_LINK", href: "file%3A///etc/passwd" },
+  { label: "DATA_HTML_COLON_LINK", href: "data&colon;text/html,x" },
+  { label: "INVALID_UTF8_SCHEME_LINK", href: "javascript%3A%2F%2A%E0%2A%2Falert(1)" },
+  { label: "INVALID_UTF8_SCHEME_SHORT_LINK", href: "javascript%3A%2F%2A%E0alert(1)" },
+] as const
+
+const ENCODED_LINK_EXPORT_BODY: JSONContent = {
+  type: "doc",
+  content: [
+    {
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          text: "SAFE_ENCODED_CONTROL",
+          marks: [{ type: "link", attrs: { href: "https://example.com/safe-encoded" } }],
+        },
+        ...ENCODED_UNSAFE_LINKS.map(({ label, href }) => ({
+          type: "text" as const,
+          text: ` ${label}`,
+          marks: [{ type: "link", attrs: { href } }],
+        })),
+      ],
+    },
+  ],
+}
 
 describe("Tip/Info/Card projections", () => {
   it("body_text carries each title before its body, in reading order", () => {
@@ -111,4 +188,163 @@ describe("Tip/Info/Card projections", () => {
     }
     expect(text.indexOf("ONLY_TITLE")).toBeLessThan(text.indexOf("ONLY_BODY"))
   }, 30_000)
+})
+
+describe("inline link export safety", () => {
+  it.each(MARKDOWN_LINK_DESTINATION_INJECTION_VECTORS)(
+    "keeps accepted inline mark destinations as one Markdown link: %s",
+    (href) => {
+      const bodyJson: JSONContent = {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "SAFE_MARK", marks: [{ type: "link", attrs: { href } }] }],
+          },
+        ],
+      }
+      const markdown = buildWritingMarkdown(bodyJson)
+
+      expect.soft(markdown).not.toContain("](javascript:")
+      expect.soft(markdown.match(/\]\([^)]*\)/g) ?? []).toHaveLength(1)
+    },
+  )
+
+  it.each(MARKDOWN_LINK_DESTINATION_INJECTION_VECTORS)(
+    "keeps accepted Card destinations as one Markdown link: %s",
+    (href) => {
+      const bodyJson: JSONContent = {
+        type: "doc",
+        content: [
+          {
+            type: "card",
+            attrs: { title: "SAFE_CARD", icon: "", href },
+            content: [{ type: "paragraph", content: [{ type: "text", text: "Card body" }] }],
+          },
+        ],
+      }
+      const markdown = buildWritingMarkdown(bodyJson)
+
+      expect.soft(markdown).not.toContain("](javascript:")
+      expect.soft(markdown.match(/\]\([^)]*\)/g) ?? []).toHaveLength(1)
+    },
+  )
+
+  it("keeps a percent-encoded relative destination byte-for-byte in Card Markdown", () => {
+    const href = "notes%20v2.md"
+    expect(validateComponentAttribute("Card", "href", href)).toBe(true)
+
+    const markdown = buildWritingMarkdown({
+      type: "doc",
+      content: [{ type: "card", attrs: { title: "Relative", icon: "", href } }],
+    })
+
+    expect(markdown).toContain(`[Relative](${href})`)
+  })
+
+  it("percent-encodes Markdown destination delimiters for inline marks and Cards", () => {
+    const href = "https://example.com/<chapter>(draft) copy"
+    const bodyJson: JSONContent = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "MARK", marks: [{ type: "link", attrs: { href } }] }],
+        },
+        { type: "card", attrs: { title: "CARD", icon: "", href } },
+      ],
+    }
+
+    const markdown = buildWritingMarkdown(bodyJson)
+    const encodedHref = "https://example.com/%3Cchapter%3E%28draft%29%20copy"
+
+    expect(markdown).toContain(`[MARK](${encodedHref})`)
+    expect(markdown).toContain(`[CARD](${encodedHref})`)
+    expect(markdown.match(/\]\([^)]*\)/g) ?? []).toHaveLength(2)
+  })
+
+  it("keeps unsafe Card hrefs inert in clean Markdown and a real DOCX artifact", async () => {
+    const cardLinks = [
+      { title: "Safe Card", href: "https://example.com/card-safe" },
+      { title: "Unsafe Literal Card", href: "javascript:alert(1)" },
+      { title: "Unsafe Encoded Card", href: "javascript&colon;alert(1)" },
+    ]
+    const bodyJson: JSONContent = {
+      type: "doc",
+      content: cardLinks.map(({ title, href }) => ({
+        type: "card",
+        attrs: { title, href },
+        content: [{ type: "paragraph", content: [{ type: "text", text: `${title} body` }] }],
+      })),
+    }
+    const markdown = buildWritingMarkdown(bodyJson)
+    expect(markdown).toContain("[Safe Card](https://example.com/card-safe)")
+    for (const card of cardLinks.slice(1)) {
+      expect(markdown).toContain(card.title)
+      expect(markdown).not.toContain(`](${card.href})`)
+    }
+
+    const document = buildWritingExportDocument(bodyJson)
+    const docx = await JSZip.loadAsync(await renderWritingToDocxBuffer({ title: "Card links", document }))
+    const xml = (await docx.file("word/document.xml")?.async("string")) ?? ""
+    const rels = (await docx.file("word/_rels/document.xml.rels")?.async("string")) ?? ""
+    const hyperlinks = xml.match(/<w:hyperlink\b/g) ?? []
+
+    expect(xml).toContain("Safe Card")
+    expect(xml).toContain("Unsafe Literal Card")
+    expect(xml).toContain("Unsafe Encoded Card")
+    expect(hyperlinks).toHaveLength(1)
+    expect(rels).toContain("https://example.com/card-safe")
+    for (const card of cardLinks.slice(1)) expect(rels).not.toContain(card.href)
+  })
+
+  it("normalizes encoded schemes before projecting clean Markdown and real DOCX links", async () => {
+    const markdown = buildWritingMarkdown(ENCODED_LINK_EXPORT_BODY)
+
+    expect(markdown).toContain("[SAFE\\_ENCODED\\_CONTROL](https://example.com/safe-encoded)")
+    for (const link of ENCODED_UNSAFE_LINKS) {
+      expect(markdown).toContain(link.label.replaceAll("_", "\\_"))
+      expect(markdown).not.toContain(link.href)
+    }
+
+    const document = buildWritingExportDocument(ENCODED_LINK_EXPORT_BODY)
+    const docx = await JSZip.loadAsync(await renderWritingToDocxBuffer({ title: "Encoded links", document }))
+    const xml = (await docx.file("word/document.xml")?.async("string")) ?? ""
+    const rels = (await docx.file("word/_rels/document.xml.rels")?.async("string")) ?? ""
+    const hyperlinks = xml.match(/<w:hyperlink\b/g) ?? []
+
+    expect(xml).toContain("SAFE_ENCODED_CONTROL")
+    for (const link of ENCODED_UNSAFE_LINKS) expect(xml).toContain(link.label)
+    expect(hyperlinks).toHaveLength(1)
+    expect(rels).toContain("https://example.com/safe-encoded")
+    for (const link of ENCODED_UNSAFE_LINKS) expect(rels).not.toContain(link.href)
+  })
+
+  it("keeps unsafe links inert in clean Markdown while preserving their labels", () => {
+    const markdown = buildWritingMarkdown(INLINE_LINK_EXPORT_BODY)
+
+    expect(markdown).toContain("[SAFE\\_LINK](https://example.com/safe)")
+    for (const link of UNSAFE_LINKS) {
+      expect(markdown).toContain(link.label.replaceAll("_", "\\_"))
+      expect(markdown).not.toContain(`](${link.scheme}`)
+    }
+  })
+
+  it("keeps unsafe links inert in the real DOCX artifact while preserving their labels", async () => {
+    const document = buildWritingExportDocument(INLINE_LINK_EXPORT_BODY)
+    const docx = await JSZip.loadAsync(await renderWritingToDocxBuffer({ title: "Links", document }))
+    const xml = (await docx.file("word/document.xml")?.async("string")) ?? ""
+    const rels = (await docx.file("word/_rels/document.xml.rels")?.async("string")) ?? ""
+    const hyperlinks = xml.match(/<w:hyperlink\b/g) ?? []
+
+    expect(xml).toContain("SAFE_LINK")
+    expect(xml).toContain("JAVASCRIPT_LINK")
+    expect(xml).toContain("DATA_LINK")
+    expect(xml).toContain("FILE_LINK")
+    expect(hyperlinks).toHaveLength(1)
+    expect(rels).toContain("https://example.com/safe")
+    for (const link of UNSAFE_LINKS) {
+      expect(rels).not.toContain(link.scheme)
+    }
+  })
 })
