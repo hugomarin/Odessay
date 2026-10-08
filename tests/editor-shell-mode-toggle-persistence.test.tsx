@@ -480,6 +480,123 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     TEST_TIMEOUT_MS,
   )
 
+  it.fails(
+    "el debounce de Source conserva el texto ante un fallo de conversión y permite reintentar el guardado",
+    async () => {
+      const file = await createDocument("ODE540-DEBOUNCE-BASE")
+      const originalRich = mounted!.editor().getText()
+      const originalFile = await contentsOf(file.path)
+      const baselineWrites = writeFileCalls().filter((call) => call.path === file.path).length
+      await switchMode("Markdown")
+      await advance(SAVE_WINDOW_MS)
+      await typeInMarkdown(" ODE540-DEBOUNCE-EDITED")
+
+      const realEditor = mounted!.editor() as unknown as Editor
+      let editorUpdates = 0
+      const onUpdate = () => {
+        editorUpdates += 1
+      }
+      realEditor.on("update", onUpdate)
+
+      // Instalar la falla junto al límite de 800 ms para que el camino real de
+      // desktopDocumentEngine.sourceToRich reciba una excepción del DOM.
+      await advance(700)
+      const domFailure = installOneShotDomAllocationFailure()
+      await advance(SAVE_WINDOW_MS)
+      domFailure.restore()
+      await flush(2)
+
+      const beforeRetry = {
+        parserFailureReached: domFailure.didFail(),
+        sourceVisible: Boolean(markdownSource()),
+        sourceRetainsEdit: markdownSource()?.value.includes("ODE540-DEBOUNCE-EDITED") ?? false,
+        richIsUntouched: mounted!.editor().getText() === originalRich,
+        notice: mounted!.container.querySelector('[role="status"]')?.textContent?.includes(
+          "Your Source text is still here and remains unsaved",
+        ) ?? false,
+        retryAction: Array.from(mounted!.container.querySelectorAll("button")).some(
+          (button) => button.textContent?.trim() === "Try again",
+        ),
+        keepEditingAction: Array.from(mounted!.container.querySelectorAll("button")).some(
+          (button) => button.textContent?.trim() === "Keep editing in Source",
+        ),
+        editorUpdates,
+        writes: writeFileCalls().filter((call) => call.path === file.path).slice(baselineWrites).length,
+        fileIsUntouched: (await contentsOf(file.path)) === originalFile,
+        documentCount: (await readWorkspaceMarkdown()).length,
+      }
+
+      expect(beforeRetry).toEqual({
+        parserFailureReached: true,
+        sourceVisible: true,
+        sourceRetainsEdit: true,
+        richIsUntouched: true,
+        notice: true,
+        retryAction: true,
+        keepEditingAction: true,
+        editorUpdates: 0,
+        writes: 0,
+        fileIsUntouched: true,
+        documentCount: 1,
+      })
+
+      const retryButton = Array.from(mounted!.container.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Try again",
+      )
+      if (!retryButton) throw new Error('No está la acción "Try again"')
+      await act(async () => retryButton.click())
+      await flush(2)
+      await advance(SAVE_WINDOW_MS)
+      await waitForMarkdownContaining("ODE540-DEBOUNCE-EDITED")
+
+      expect(mounted!.editor().getText(), "Retry aplica la conversión a Rich").toContain("ODE540-DEBOUNCE-EDITED")
+      expect(editorUpdates, "Retry aplica un solo snapshot").toBe(1)
+      expect(writeFileCalls().filter((call) => call.path === file.path).slice(baselineWrites)).toHaveLength(1)
+      expect(await contentsOf(file.path)).toContain("ODE540-DEBOUNCE-EDITED")
+      expect(markdownSource(), "el autosave no cambia el modo elegido por la persona").toBeTruthy()
+      realEditor.off("update", onUpdate)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "volver a Source antes de que Rich esté listo vuelve a programar el guardado del Source",
+    async () => {
+      const file = await createDocument("ODE540-QUICK-BASE")
+      const originalRich = mounted!.editor().getText()
+      const baselineWrites = writeFileCalls().filter((call) => call.path === file.path).length
+      await switchMode("Markdown")
+      await advance(SAVE_WINDOW_MS)
+      await typeInMarkdown(" ODE540-QUICK-SOURCE")
+
+      const layout = { rect: new DOMRect(0, 0, 0, 0) }
+      vi.stubGlobal("ResizeObserver", ControlledResizeObserver)
+      const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains("EditorRichContent")
+          ? layout.rect
+          : originalGetBoundingClientRect.call(this)
+      })
+
+      await switchMode("Rich")
+      expect(markdownSource(), "el Source queda pendiente mientras Rich no tiene layout").toBeNull()
+      expect(mounted!.editor().getText()).toBe(originalRich)
+
+      await switchMode("Markdown")
+      expect(markdownSource()?.value).toContain("ODE540-QUICK-SOURCE")
+      expect(mounted!.editor().getText(), "la transición pendiente se descarta").toBe(originalRich)
+      await advance(SAVE_WINDOW_MS)
+      await waitForMarkdownContaining("ODE540-QUICK-SOURCE")
+
+      expect(writeFileCalls().filter((call) => call.path === file.path).slice(baselineWrites).length).toBeGreaterThan(0)
+      expect(await contentsOf(file.path)).toContain("ODE540-QUICK-SOURCE")
+      expect(mounted!.editor().getText(), "el guardado de Source actualiza el Rich oculto").toContain(
+        "ODE540-QUICK-SOURCE",
+      )
+    },
+    TEST_TIMEOUT_MS,
+  )
+
   it(
     "descarta el Source pendiente cuando el documento cambia antes de medir Rich",
     async () => {
