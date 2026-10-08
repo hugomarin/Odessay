@@ -366,7 +366,7 @@ describe("image source safety in clean Markdown", () => {
     expect(imageMarkdown(src)).toBe(`![IMAGEALT](${src})`)
   })
 
-  it.fails("keeps an image URL containing Markdown delimiters as one destination", () => {
+  it("keeps an image URL containing Markdown delimiters as one destination", () => {
     const markdown = imageMarkdown("https://a.com/x.png) [x](javascript:alert(1))")
 
     expect(markdown).not.toContain("[x](")
@@ -374,7 +374,7 @@ describe("image source safety in clean Markdown", () => {
     expect(markdown.match(/\]\([^)]*\)/g) ?? []).toHaveLength(1)
   })
 
-  it.fails("rejects a literal javascript image source and keeps plain alt text", () => {
+  it("rejects a literal javascript image source and keeps plain alt text", () => {
     const markdown = imageMarkdown("javascript:alert(1)")
 
     expect(markdown).toContain("IMAGEALT")
@@ -382,7 +382,7 @@ describe("image source safety in clean Markdown", () => {
     expect(markdown).not.toContain("](javascript:")
   })
 
-  it.fails("rejects a non-image data URL and keeps plain alt text", () => {
+  it("rejects a non-image data URL and keeps plain alt text", () => {
     const markdown = imageMarkdown("data:text/html,<script>alert(1)</script>")
 
     expect(markdown).toContain("IMAGEALT")
@@ -390,7 +390,7 @@ describe("image source safety in clean Markdown", () => {
     expect(markdown).not.toContain("](data:text/html")
   })
 
-  it.fails("rejects an entity-obfuscated javascript image source", () => {
+  it("rejects an entity-obfuscated javascript image source", () => {
     const markdown = imageMarkdown("java&#x09;script:alert(1)")
 
     expect(markdown).toContain("IMAGEALT")
@@ -398,7 +398,7 @@ describe("image source safety in clean Markdown", () => {
     expect(markdown).not.toContain("](javascript:")
   })
 
-  it.fails("rejects a percent-encoded javascript image source", () => {
+  it("rejects a percent-encoded javascript image source", () => {
     const markdown = imageMarkdown("javascript%3Aalert(1)")
 
     expect(markdown).toContain("IMAGEALT")
@@ -406,7 +406,7 @@ describe("image source safety in clean Markdown", () => {
     expect(markdown).not.toContain("](javascript:")
   })
 
-  it.fails("preserves the complete alt as plain text when an image source is rejected", () => {
+  it("preserves the complete alt as plain text when an image source is rejected", () => {
     const markdown = imageMarkdown("file:///private/image.png", "Alt (safe) [label]")
 
     expect(markdown).toBe("Alt \\(safe\\) \\[label\\]")
@@ -414,7 +414,7 @@ describe("image source safety in clean Markdown", () => {
     expect(markdown).not.toContain("](file:")
   })
 
-  it.fails("emits no active javascript or HTML-data image destination for the attack vectors", () => {
+  it("emits no active javascript or HTML-data image destination for the attack vectors", () => {
     const sources = [
       "https://a.com/x.png) [x](javascript:alert(1))",
       "javascript:alert(1)",

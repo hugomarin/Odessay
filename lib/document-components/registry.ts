@@ -121,6 +121,30 @@ export const safeUrl = (value: string) => {
   if (scheme) return /^(?:https?|mailto)$/i.test(scheme[1]);
   return true;
 };
+
+/**
+ * Image sources have a narrower policy than links: HTTPS/HTTP or a
+ * document-relative path only. Reuse safeUrl's bounded normalization so
+ * entity/percent-encoded and control-obfuscated schemes cannot look relative.
+ */
+export const safeImageSrc = (value: string) => {
+  if (!safeUrl(value)) return false;
+
+  const normalized = normalizeUrlForValidation(value);
+  if (normalized === null || normalized.length === 0 || normalized.startsWith("//") || normalized.startsWith("#")) {
+    return false;
+  }
+
+  const normalizedScheme = normalized.match(/^([A-Za-z][A-Za-z0-9+.-]*):/)?.[1]?.toLowerCase();
+  if (!normalizedScheme) return true;
+
+  // A scheme is accepted only when it appeared literally in the source. This
+  // keeps encoded spellings such as https%3A from relying on another consumer
+  // to decode the destination before loading it.
+  const literalScheme = value.match(/^([A-Za-z][A-Za-z0-9+.-]*):/)?.[1]?.toLowerCase();
+  if (literalScheme !== normalizedScheme) return false;
+  return /^https?$/i.test(literalScheme);
+};
 const columns = (value: string) => /^[1-4]$/.test(value);
 
 const specs: readonly DocumentComponentSpec[] = [
