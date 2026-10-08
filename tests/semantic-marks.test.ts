@@ -267,10 +267,13 @@ describe("ODE-532 entity and highlight semantic marks", () => {
         const callbackSource = transformPastedHTML
           .toString()
           .replace(/__vite_ssr_import_\d+__\.createSemanticEntityId/g, "createSemanticEntityId")
+          .replace(/__vite_ssr_import_\d+__\.isValidEntityAttributes/g, "isValidEntityAttributes")
         await page.addScriptTag({
           content: `window.__entityTransformPastedHTML = (() => {
             const getWritingId = () => "writing-destination";
             const createSemanticEntityId = () => "entity-destination";
+            // This browser probe isolates inert DOM parsing; direct editor tests exercise the canonical registry validator.
+            const isValidEntityAttributes = ({ id, type }) => Boolean(id && type);
             const decodeDataAttribute = (value) => {
               if (!value) return "";
               try { return decodeURIComponent(value); } catch { return value; }
