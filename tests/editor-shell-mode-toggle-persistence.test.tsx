@@ -62,6 +62,9 @@ vi.mock("next/navigation", async () =>
 vi.mock("@tauri-apps/api/event", async () =>
   (await import("./support/editor-shell-doubles")).tauriEventDouble(),
 )
+vi.mock("@tauri-apps/api/window", async () =>
+  (await import("./support/editor-shell-doubles")).tauriWindowDouble(),
+)
 vi.mock("@tauri-apps/plugin-dialog", async () =>
   (await import("./support/editor-shell-doubles")).tauriDialogDouble(),
 )
@@ -89,6 +92,7 @@ const {
   mountEditorShell,
   resetEditorShellWorld,
   pointerClick,
+  requestWindowClose,
   typeInEditor,
   waitFor,
   waitForMarkdownContaining,
@@ -98,6 +102,7 @@ const { createDesktopWorkspace, destroyDesktopWorkspace, readWorkspaceMarkdown, 
 const { holdWriteFile, writeFileCalls } = await import("./integration/documents/support/real-desktop-doubles")
 const { DESKTOP_PERSISTENCE_DEBOUNCE_MS } = await import("@/components/editor/editor-shell")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
+const { world } = await import("./support/editor-shell-doubles")
 const { EDITOR_DRAFT_TAB_ID, createEditorSessionTab, createEmptyEditorSession } = await import(
   "@/lib/local-db/editor-sessions"
 )
@@ -435,6 +440,59 @@ describe("ODE-604 — STATE-10: cambiar de modo no pierde ni duplica lo escrito 
 })
 
 describe("ODE-540 — aplicar Source editado en Rich", () => {
+  it.fails(
+    "advierte al cerrar la ventana mientras Rich espera su señal de layout",
+    async () => {
+      await createDocument("ODE540-CLOSE-WAITING-LAYOUT")
+      const originalRich = mounted!.editor().getText()
+
+      vi.stubGlobal("ResizeObserver", ControlledResizeObserver)
+      const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains("EditorRichContent")
+          ? new DOMRect(0, 0, 0, 0)
+          : originalGetBoundingClientRect.call(this)
+      })
+
+      await switchMode("Markdown")
+      await typeInMarkdown(" ODE540-CLOSE-WAITING-LAYOUT-SOURCE")
+      const expectedSource = markdownSource()?.value ?? ""
+      await switchMode("Rich")
+      expect(markdownSource(), "Rich desmonta Source antes de aplicar el snapshot").toBeNull()
+      expect(mounted!.editor().getText(), "Rich aún espera la medición del browser").toBe(originalRich)
+      expect(
+        [...resizeObservations].some(
+          (entry) => !entry.disconnected && entry.target?.classList.contains("EditorRichContent"),
+        ),
+        "la señal de layout continúa pendiente",
+      ).toBe(true)
+
+      await waitFor(() => world.windowCloseHandler, { label: "guardia Tauri de cierre de ventana" })
+      const close = requestWindowClose()
+      expect(close.prevented(), "la guardia intercepta el cierre de ventana").toBe(true)
+      const warning = await waitFor(
+        () => document.body.querySelector<HTMLElement>('[role="alertdialog"][aria-label="Unsaved Source changes"]'),
+        { label: "aviso de cierre mientras falta la señal de layout", timeoutMs: 2_000 },
+      )
+      if (!warning) throw new Error("No apareció el aviso para el Source aún no aplicado")
+
+      const keepEditing = Array.from(warning.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Keep editing",
+      )
+      if (!keepEditing) throw new Error('No está la opción "Keep editing"')
+      expect(document.activeElement, "Keep editing es la acción predeterminada").toBe(keepEditing)
+      await act(async () => keepEditing.click())
+      await act(async () => {
+        await close.settled
+      })
+      expect(world.windowDestroyCalls, "Keep editing cancela el cierre").toBe(0)
+
+      await switchMode("Markdown")
+      expect(markdownSource()?.value, "el Source retenido sigue disponible").toBe(expectedSource)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
   it(
     "espera a que Rich esté conectado y medido antes de aplicar y persistir el Source editado",
     async () => {
