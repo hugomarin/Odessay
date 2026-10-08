@@ -35,7 +35,7 @@ type ParsedRange = {
   closingTagHasLineBreak?: boolean;
 };
 
-const TAG_NAME = /^[A-Z][A-Za-z0-9]*$/;
+const TAG_NAME_PREFIX = /[A-Z][A-Za-z0-9]*/y;
 const ATTRIBUTE_NAME = /^[A-Za-z][A-Za-z0-9-]*$/;
 const LEGACY_ANNOTATION =
   /==([^=\n]+)==[\t ]*(?:\[\^(\d+)(?:\|([^\]:|]+))?:\s*((?:\\.|[^\]])*)\]|\[@([pchn]?)(\d*)(?:\|([^\]:|]+))?:\s*((?:\\.|[^\]])*)\])/y;
@@ -60,17 +60,18 @@ const annotationType = (prefix: string) => {
 };
 
 const parseTag = (source: string, start: number, knownClose?: number): ParsedTag | null => {
+  const closing = source[start + 1] === "/";
+  const nameStart = start + (closing ? 2 : 1);
+  TAG_NAME_PREFIX.lastIndex = nameStart;
+  const nameMatch = TAG_NAME_PREFIX.exec(source);
+  if (!nameMatch) return null;
+
   const close = knownClose ?? source.indexOf(">", start + 1);
-  if (close === -1) return null;
+  if (close === -1 || nameStart + nameMatch[0].length > close) return null;
   const raw = source.slice(start + 1, close);
   const hasLineBreak = raw.includes("\n");
-  const closing = raw.startsWith("/");
-  const body = closing ? raw.slice(1) : raw;
-  const nameMatch = body.match(/^([A-Za-z][A-Za-z0-9]*)([\s\S]*)$/);
-  if (!nameMatch || !TAG_NAME.test(nameMatch[1])) return null;
-
-  const kind = nameMatch[1];
-  const rest = nameMatch[2];
+  const kind = nameMatch[0];
+  const rest = source.slice(nameStart + kind.length, close);
   if (closing) {
     return {
       kind,
@@ -262,8 +263,7 @@ const parseControlledMarkdownInternal = (
 
   const rangeHasLineBreak = (start: number, end: number) => {
     if (start >= end) return false;
-    const lineBreak = source.indexOf("\n", start);
-    return lineBreak !== -1 && lineBreak < end;
+    return source.slice(start, end).includes("\n");
   };
 
   const parseRange = (
@@ -507,11 +507,3 @@ export const parseControlledComponentAt = (source: string, start = 0): Component
     ? first
     : null;
 };
-
-/**
- * End offset of the PascalCase tag token that starts at `start`, or null when
- * no tag token starts there. Adapters use it to keep an unclosed unknown tag
- * as its own literal token instead of re-deriving tag syntax.
- */
-export const readControlledTagEnd = (source: string, start: number): number | null =>
-  source[start] === "<" ? (parseTag(source, start)?.end ?? null) : null;

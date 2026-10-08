@@ -285,7 +285,7 @@ describe("ODE-529 controlled document engine", () => {
     expect(measured.searchedTagCharacters).toBeLessThanOrEqual(source.length * 2);
   });
 
-  it.fails("checks the tag name before copying a distant malformed suffix", () => {
+  it("checks the tag name before copying a distant malformed suffix", () => {
     const source = `${"<".repeat(10_000)}>`;
     const measured = measureStringWork(() => parseControlledMarkdown(source));
 
@@ -293,7 +293,7 @@ describe("ODE-529 controlled document engine", () => {
     expect(measured.copiedCharacters).toBeLessThanOrEqual(source.length * 2);
   });
 
-  it.fails("bounds line-break work for many code spans and closed unknown tags on one line", () => {
+  it("bounds line-break work for many code spans and closed unknown tags on one line", () => {
     const count = 300;
     const sources = [
       ["code spans", Array.from({ length: count }, () => "`x`").join("")],
