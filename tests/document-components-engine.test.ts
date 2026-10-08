@@ -305,7 +305,7 @@ describe("ODE-529 controlled document engine", () => {
     expect(measured.copiedCharacters).toBeLessThanOrEqual(source.length * 2);
   });
 
-  it.fails("keeps valid tag-name prefixes with one distant > linear", () => {
+  it("keeps valid tag-name prefixes with one distant > linear", () => {
     const sizes = [2_500, 5_000, 10_000, 20_000];
     const work = sizes.map((count) => {
       const source = `a ${"<Card ".repeat(count)}>`;
