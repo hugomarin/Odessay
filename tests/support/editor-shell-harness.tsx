@@ -284,23 +284,47 @@ export type EditorShellTestProps = {
 }
 
 let richLayoutHarnessUsers = 0
-let richLayoutOriginalGetBoundingClientRect: typeof HTMLElement.prototype.getBoundingClientRect | null = null
-let richLayoutPatchedGetBoundingClientRect: typeof HTMLElement.prototype.getBoundingClientRect | null = null
+let richLayoutOriginalResizeObserver: PropertyDescriptor | undefined
+let richLayoutHarnessResizeObserver: typeof ResizeObserver | null = null
 
 /**
  * happy-dom has no layout engine, so EditorShell's normal mounted-surface
- * tests provide a stable positive Rich box. Tests that exercise a pending or
- * zero-size surface can override this at the browser boundary.
+ * tests receive a stable positive Rich measurement. Tests that exercise a
+ * pending or zero-size surface can override this at the browser boundary.
  */
 function installRichLayoutHarness(): () => void {
-  const prototype = HTMLElement.prototype
   if (richLayoutHarnessUsers === 0) {
-    richLayoutOriginalGetBoundingClientRect = prototype.getBoundingClientRect
-    richLayoutPatchedGetBoundingClientRect = function (this: HTMLElement) {
-      if (this.classList.contains("EditorRichContent")) return new DOMRect(0, 0, 800, 600)
-      return richLayoutOriginalGetBoundingClientRect!.call(this)
+    richLayoutOriginalResizeObserver = Object.getOwnPropertyDescriptor(globalThis, "ResizeObserver")
+    richLayoutHarnessResizeObserver = class implements ResizeObserver {
+      private readonly observed = new Set<Element>()
+
+      constructor(private readonly callback: ResizeObserverCallback) {}
+
+      observe(target: Element) {
+        this.observed.add(target)
+        queueMicrotask(() => {
+          if (!this.observed.has(target)) return
+          const entry = {
+            target,
+            contentRect: new DOMRect(0, 0, 800, 600),
+          } as ResizeObserverEntry
+          this.callback([entry], this)
+        })
+      }
+
+      unobserve(target: Element) {
+        this.observed.delete(target)
+      }
+
+      disconnect() {
+        this.observed.clear()
+      }
     }
-    prototype.getBoundingClientRect = richLayoutPatchedGetBoundingClientRect
+    Object.defineProperty(globalThis, "ResizeObserver", {
+      configurable: true,
+      writable: true,
+      value: richLayoutHarnessResizeObserver,
+    })
   }
   richLayoutHarnessUsers += 1
 
@@ -310,11 +334,13 @@ function installRichLayoutHarness(): () => void {
     released = true
     richLayoutHarnessUsers = Math.max(0, richLayoutHarnessUsers - 1)
     if (richLayoutHarnessUsers !== 0) return
-    if (prototype.getBoundingClientRect === richLayoutPatchedGetBoundingClientRect) {
-      prototype.getBoundingClientRect = richLayoutOriginalGetBoundingClientRect!
+    if (richLayoutOriginalResizeObserver) {
+      Object.defineProperty(globalThis, "ResizeObserver", richLayoutOriginalResizeObserver)
+    } else {
+      Reflect.deleteProperty(globalThis, "ResizeObserver")
     }
-    richLayoutOriginalGetBoundingClientRect = null
-    richLayoutPatchedGetBoundingClientRect = null
+    richLayoutOriginalResizeObserver = undefined
+    richLayoutHarnessResizeObserver = null
   }
 }
 

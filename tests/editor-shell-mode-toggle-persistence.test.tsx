@@ -165,10 +165,10 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await mounted?.unmount()
-  mounted = null
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  await mounted?.unmount()
+  mounted = null
   resizeObservations.length = 0
 })
 
