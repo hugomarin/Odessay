@@ -187,7 +187,7 @@ describe("inline link export safety", () => {
     expect(validateComponentAttribute("Card", "href", "notes%20v2.md")).toBe(true)
   })
 
-  it.fails("normalizes encoded schemes before projecting clean Markdown and real DOCX links", async () => {
+  it("normalizes encoded schemes before projecting clean Markdown and real DOCX links", async () => {
     const markdown = buildWritingMarkdown(ENCODED_LINK_EXPORT_BODY)
 
     expect(markdown).toContain("[SAFE\\_ENCODED\\_CONTROL](https://example.com/safe-encoded)")

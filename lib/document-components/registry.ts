@@ -5,13 +5,63 @@ import type {
 } from "@/lib/document-components/types";
 
 const anyString = (value: string) => value.length > 0;
+
+const URL_HTML_ENTITIES: Readonly<Record<string, string>> = {
+  amp: "&",
+  colon: ":",
+  tab: "\t",
+  newline: "\n",
+  nbsp: "\u00a0",
+  sol: "/",
+  bsol: "\\",
+};
+
+const decodeUrlHtmlEntities = (value: string): string =>
+  value.replace(/&(?:#x([\da-f]+)|#(\d+)|([a-z][\da-z]*));?/gi, (entity, hex, decimal, named) => {
+    if (hex !== undefined || decimal !== undefined) {
+      const codePoint = Number.parseInt(hex ?? decimal, hex !== undefined ? 16 : 10);
+      return Number.isFinite(codePoint) && codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : entity;
+    }
+
+    return URL_HTML_ENTITIES[String(named).toLowerCase()] ?? entity;
+  });
+
+const decodeUrlPercentEncoding = (value: string): string =>
+  value.replace(/(?:%[\da-f]{2})+/gi, (encoded) => {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      // Invalid UTF-8 must not hide valid ASCII escapes such as `%3A`.
+      return encoded.replace(/%([\da-f]{2})/gi, (byte, hex) => {
+        const codePoint = Number.parseInt(hex, 16);
+        return codePoint < 0x80 ? String.fromCharCode(codePoint) : byte;
+      });
+    }
+  });
+
+const normalizeUrlForValidation = (value: string): string => {
+  let normalized = value;
+
+  while (true) {
+    const decoded = decodeUrlPercentEncoding(decodeUrlHtmlEntities(normalized));
+    if (decoded === normalized) break;
+    normalized = decoded;
+  }
+
+  return normalized.replace(/[\u0000-\u0020\u007f-\u009f\s]/gu, "");
+};
+
 export const safeUrl = (value: string) => {
   if (value.length === 0 || value !== value.trim() || /[\u0000-\u001F\u007F]/.test(value)) {
     return false;
   }
-  if (value.startsWith("//") || value.includes("\\")) return false;
-  if (value.startsWith("#")) return true;
-  const scheme = value.match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
+
+  const normalized = normalizeUrlForValidation(value);
+  if (normalized.length === 0 || normalized.startsWith("//") || normalized.includes("\\")) return false;
+  if (normalized.startsWith("#")) return true;
+  const scheme = normalized.match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
   if (scheme) return /^(?:https?|mailto)$/i.test(scheme[1]);
   return true;
 };
