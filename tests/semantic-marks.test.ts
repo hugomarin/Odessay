@@ -16,9 +16,11 @@ import { createEditorExtensions } from "@/lib/editor/extensions"
 const fixtures = join(process.cwd(), "tests/fixtures/document-components")
 const fixture = (path: string) => readFileSync(join(fixtures, path), "utf8")
 
-const createTestEditor = (content: string = "", _writingId?: string) =>
+const createTestEditor = (content: string = "", writingId?: string) =>
   new Editor({
-    extensions: createEditorExtensions(),
+    extensions: createEditorExtensions({
+      getEntityPasteWritingId: writingId ? () => writingId : undefined,
+    }),
     content,
   })
 
@@ -183,6 +185,42 @@ describe("ODE-532 entity and highlight semantic marks", () => {
       expect(pastedIds, "pegar en B acuña una sola identidad nueva para las dos menciones").toHaveLength(2)
       expect(pastedIds[0]).not.toBe("entity-source")
       expect(pastedIds[1]).toBe(pastedIds[0])
+    })
+
+    it("carries the source writingId in copied Entity HTML", () => {
+      const sourceWritingId = "writing-source"
+      const source = createTestEditor(
+        '<p><mark data-entity-id="entity-source" data-entity-type="company">Aplyca</mark> tail</p>',
+        sourceWritingId,
+      )
+      source.commands.setTextSelection({ from: 1, to: 7 })
+
+      const clipboardValues = new Map<string, string>()
+      const copyEvent = new Event("copy", { bubbles: true, cancelable: true }) as ClipboardEvent
+      Object.defineProperty(copyEvent, "clipboardData", {
+        value: {
+          setData: (format: string, value: string) => clipboardValues.set(format, value),
+        },
+      })
+      source.view.dom.dispatchEvent(copyEvent)
+
+      const clipboardHtml = clipboardValues.get("text/html") ?? ""
+      expect(clipboardHtml).toContain('data-entity-source-writing-id="writing-source"')
+
+      source.commands.setTextSelection(source.state.doc.content.size - 1)
+      source.view.pasteHTML(clipboardHtml)
+      expect(
+        collectMarks(source.getJSON(), (mark) => mark.type === "entity").map((attrs) => attrs.entityId),
+        "la duplicación dentro de A conserva la identidad",
+      ).toEqual(["entity-source", "entity-source"])
+
+      const destination = createTestEditor("<p></p>", "writing-destination")
+      destination.view.pasteHTML(clipboardHtml)
+      const pastedIds = collectMarks(destination.getJSON(), (mark) => mark.type === "entity").map(
+        (attrs) => attrs.entityId,
+      )
+      expect(pastedIds).toHaveLength(1)
+      expect(pastedIds[0]).not.toBe("entity-source")
     })
   })
 

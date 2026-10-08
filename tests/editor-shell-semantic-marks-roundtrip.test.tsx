@@ -52,6 +52,8 @@ const shellHarness = await import("./support/editor-shell-harness")
 
 const WRITING_A = "writing-a"
 const WRITING_B = "writing-b"
+const REAL_SHELL_WRITING_A = "75111111-1111-4111-8111-111111111111"
+const REAL_SHELL_WRITING_B = "75222222-2222-4222-8222-222222222222"
 const TEXT = "same control"
 const ROUNDTRIP_WRITING_ID = "85111111-1111-4111-8111-111111111111"
 const ROUNDTRIP_TEXT = "A company wrote a memorable letter."
@@ -140,7 +142,6 @@ function PopupOwnerHarness({
   const [, setPendingAnnotation] = useState<PendingAnnotationSnapshot | null>(null)
   const callbacks = useSelectionPopup({
     captureRichSelectionSnapshot: () => {
-      if (modeRef.current !== "rich") return null
       const { from, to } = editor.state.selection
       const text = editor.state.doc.textBetween(from, to, " ").trim()
       return {
@@ -267,6 +268,16 @@ function popupButton(label: string) {
   ) ?? null
 }
 
+function renderedClickHandler(element: HTMLButtonElement) {
+  const propsKey = Object.keys(element).find((key) => key.startsWith("__reactProps$"))
+  if (!propsKey) throw new Error("React click props not found on rendered popup button.")
+  const props = (element as unknown as Record<string, unknown>)[propsKey] as {
+    onClick?: (event: { detail: number; stopPropagation: () => void }) => void
+  }
+  if (!props.onClick) throw new Error("Rendered popup button has no click handler.")
+  return props.onClick
+}
+
 async function applyPopupEntityByKeyboard(label: string) {
   await pressPopupButton("More mark options", "Enter")
   await pressPopupButton("Entity", "Enter")
@@ -317,6 +328,65 @@ afterEach(async () => {
 })
 
 describe("ODE-532 pending semantic mark ownership", () => {
+  it("uses the real shell writingId producer across A→B", async () => {
+    shellHarness.resetEditorShellWorld()
+    shellHarness.world.network = async () => new Response("[]", { status: 200 })
+    await localDB.writings.save(makeLocalWriting(REAL_SHELL_WRITING_A, "same document A", "Document A"))
+    await localDB.writings.save(makeLocalWriting(REAL_SHELL_WRITING_B, "same document B", "Document B"))
+
+    mountedShell = await shellHarness.mountEditorShell({ writingId: REAL_SHELL_WRITING_B })
+    await shellHarness.waitFor(() => mountedShell!.editor().getText().includes("same document B"), {
+      label: "documento B hidratado en EditorShell real",
+      timeoutMs: 10_000,
+    })
+    await shellHarness.selectEditorText("same")
+    await shellHarness.waitFor(() => popupButton("More mark options"), {
+      label: "popup de B como control positivo real",
+    })
+    await applyPopupEntityByKeyboard("Company")
+
+    const bBeforeStaleAction = semanticMarks(mountedShell.editor().getJSON()).filter(
+      (mark) => mark.kind === "entity",
+    )
+    expect(bBeforeStaleAction).toEqual([
+      expect.objectContaining({ kind: "entity", text: "same", type: "company" }),
+    ])
+
+    await mountedShell.render({ writingId: REAL_SHELL_WRITING_A })
+    await shellHarness.waitFor(() => mountedShell!.editor().getText().includes("same document A"), {
+      label: "A vuelve a ser el documento activo",
+      timeoutMs: 10_000,
+    })
+    await shellHarness.selectEditorText("same")
+    await shellHarness.waitFor(() => popupButton("More mark options"), {
+      label: "popup pendiente sobre A",
+    })
+    await pressPopupButton("More mark options", "Enter")
+    await pressPopupButton("Entity", "Enter")
+    const stalePersonButton = popupButton("Person")
+    if (!stalePersonButton) throw new Error("Person action was not rendered for A.")
+    const stalePersonAction = renderedClickHandler(stalePersonButton)
+
+    await mountedShell.render({ writingId: REAL_SHELL_WRITING_B })
+    await shellHarness.waitFor(() => mountedShell!.editor().getText().includes("same document B"), {
+      label: "el shell vuelve a activar B",
+      timeoutMs: 10_000,
+    })
+    await shellHarness.selectEditorText("same")
+    await shellHarness.waitFor(() => popupButton("More mark options"), {
+      label: "selección actual de B disponible para revalidar",
+    })
+
+    await act(async () => {
+      stalePersonAction({ detail: 0, stopPropagation: vi.fn() })
+    })
+
+    expect(
+      semanticMarks(mountedShell.editor().getJSON()).filter((mark) => mark.kind === "entity"),
+      "la acción pendiente de A no cambia la Entity positiva de B",
+    ).toEqual(bBeforeStaleAction)
+  }, 60_000)
+
   it("discards an A action after B becomes active at the same range", async () => {
     const editorA = createEditor()
     editorA.commands.setTextSelection({ from: 1, to: 5 })
@@ -388,8 +458,8 @@ describe("ODE-532 pending semantic mark ownership", () => {
     await renderHarness(props)
     await renderHarness({ ...props, mode: "markdown" })
 
-    expect(clearPending).toHaveBeenCalled()
     expect(applyCallbacks.at(-1)?.("person")).toBe("Semantic marks can only be applied in Rich mode.")
+    expect(clearPending).toHaveBeenCalled()
     expect(entityRanges(editor)).toEqual([])
   })
 

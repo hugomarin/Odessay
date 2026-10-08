@@ -1,13 +1,19 @@
 import { Extension, Mark, getMarkRange, type Editor } from "@tiptap/core"
+import type { Slice } from "@tiptap/pm/model"
+import { Plugin } from "@tiptap/pm/state"
+import type { EditorView } from "@tiptap/pm/view"
 import { escapeControlledAttribute } from "@/lib/document-components/entities"
 import {
   applyEntityMark,
   applySemanticHighlight,
+  createSemanticEntityId,
   ENTITY_MARK_NAME,
   removeEntityMark,
   removeSemanticHighlight,
   SEMANTIC_HIGHLIGHT_MARK_NAME,
 } from "@/lib/editor/semantic-marks"
+
+const ENTITY_SOURCE_WRITING_ID_ATTRIBUTE = "data-entity-source-writing-id"
 
 const decodeDataAttribute = (value: string | null) => {
   if (!value) return ""
@@ -16,6 +22,35 @@ const decodeDataAttribute = (value: string | null) => {
   } catch {
     return value
   }
+}
+
+function selectionContainsEntity(slice: Slice): boolean {
+  let containsEntity = false
+  slice.content.descendants((node) => {
+    if (node.isText && node.marks.some((mark) => mark.type.name === ENTITY_MARK_NAME)) {
+      containsEntity = true
+    }
+  })
+  return containsEntity
+}
+
+function copyEntityClipboard(view: EditorView, event: ClipboardEvent, writingId: string | null): boolean {
+  if (!writingId || !event.clipboardData) return false
+
+  const slice = view.state.selection.content()
+  if (!selectionContainsEntity(slice)) return false
+
+  const serialized = view.serializeForClipboard(slice)
+  const clipboardRoot = view.dom.ownerDocument.createElement("div")
+  clipboardRoot.append(serialized.dom)
+  for (const entity of clipboardRoot.querySelectorAll<HTMLElement>("mark[data-entity-id]")) {
+    entity.setAttribute(ENTITY_SOURCE_WRITING_ID_ATTRIBUTE, writingId)
+  }
+
+  event.clipboardData.setData("text/html", clipboardRoot.innerHTML)
+  event.clipboardData.setData("text/plain", serialized.text)
+  event.preventDefault()
+  return true
 }
 
 export const EntityMark = Mark.create({
@@ -30,7 +65,52 @@ export const EntityMark = Mark.create({
       // Reading renderers project the type only: stable IDs and internal refs
       // never reach shared/public surfaces (surface-projections.md).
       exposeIdentity: true,
+      getEntityPasteWritingId: () => null as string | null,
     }
+  },
+
+  addProseMirrorPlugins() {
+    const getWritingId = this.options.getEntityPasteWritingId
+    return [
+      new Plugin({
+        props: {
+          handleDOMEvents: {
+            copy: (view, event) => copyEntityClipboard(view, event, getWritingId()),
+            cut: (view, event) => {
+              if (!copyEntityClipboard(view, event, getWritingId())) return false
+              view.dispatch(view.state.tr.deleteSelection())
+              return true
+            },
+          },
+          transformPastedHTML: (html, view) => {
+            if (!html.includes("data-entity-id")) return html
+
+            const destinationWritingId = getWritingId()
+            const pasteRoot = view.dom.ownerDocument.createElement("div")
+            pasteRoot.innerHTML = html
+            const remappedIds = new Map<string, string>()
+
+            for (const entity of pasteRoot.querySelectorAll<HTMLElement>("mark[data-entity-id]")) {
+              const sourceWritingId = entity.getAttribute(ENTITY_SOURCE_WRITING_ID_ATTRIBUTE)
+              entity.removeAttribute(ENTITY_SOURCE_WRITING_ID_ATTRIBUTE)
+
+              const entityId = decodeDataAttribute(entity.getAttribute("data-entity-id"))
+              if (!entityId || (sourceWritingId && sourceWritingId === destinationWritingId)) continue
+
+              const identityKey = `${sourceWritingId ?? "external"}\u0000${entityId}`
+              let nextEntityId = remappedIds.get(identityKey)
+              if (!nextEntityId) {
+                nextEntityId = createSemanticEntityId()
+                remappedIds.set(identityKey, nextEntityId)
+              }
+              entity.setAttribute("data-entity-id", encodeURIComponent(nextEntityId))
+            }
+
+            return pasteRoot.innerHTML
+          },
+        },
+      }),
+    ]
   },
 
   addAttributes() {

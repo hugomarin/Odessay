@@ -23,6 +23,9 @@ export type HighlightColorName = (typeof HIGHLIGHT_COLORS)[number]
 
 export const DEFAULT_HIGHLIGHT_COLOR: HighlightColorName = "amber"
 
+/** Mints the document-scoped identity used by Entity commands and rich paste. */
+export const createSemanticEntityId = (): string => crypto.randomUUID()
+
 /**
  * Canonical nesting order, outermost to innermost. ProtectedText ships with
  * ODE-534 and reserves slot 0. The `highlight` entry is the annotation mark,
@@ -207,7 +210,7 @@ export const applyEntityMark = (
   if (from >= to) return { ok: false, message: MESSAGES.emptySelection }
   if (!validOneBlockRange(editor, from, to)) return { ok: false, message: MESSAGES.crossingBlocks }
 
-  const id = input.id?.trim() || crypto.randomUUID()
+  const id = input.id?.trim() || createSemanticEntityId()
   const ref = input.ref?.trim() ?? ""
   if (!isValidEntityAttributes({ id, type, ref: ref || undefined })) {
     return { ok: false, message: MESSAGES.invalidEntity }
