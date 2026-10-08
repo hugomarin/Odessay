@@ -440,7 +440,7 @@ describe("ODE-604 — STATE-10: cambiar de modo no pierde ni duplica lo escrito 
 })
 
 describe("ODE-540 — aplicar Source editado en Rich", () => {
-  it.fails(
+  it(
     "advierte al cerrar la ventana mientras Rich espera su señal de layout",
     async () => {
       await createDocument("ODE540-CLOSE-WAITING-LAYOUT")
@@ -817,7 +817,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "restaura Source fallido al volver a su pestaña y no filtra el aviso ni el texto a B",
     async () => {
       const firstFile = await createDocument("ODE540-TAB-A")
@@ -899,7 +899,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "oculta el aviso de conversión fallida al activar otra pestaña en Source",
     async () => {
       await createDocument("ODE540-NOTICE-A")
@@ -941,7 +941,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "pide confirmación antes de cerrar una pestaña con Source sin convertir",
     async () => {
       await createDocument("ODE540-TAB-CLOSE")

@@ -39,6 +39,8 @@ export type WorkspaceTabsInput = {
   editor: Editor | null
   editorSession: LocalEditorSession
   ephemeralDraftWritingIdRef: React.RefObject<string | null>
+  hasRetainedSourceForTab: (tab: LocalEditorSession["tabs"][number]) => boolean
+  discardRetainedSourceForTab: (tab: LocalEditorSession["tabs"][number]) => void
   /**
    * Fase de hidratación del documento activo (ODE-570, ADR documento activo).
    * El renombrado de una pestaña de fondo espera a que esté "ready" para que
@@ -50,6 +52,7 @@ export type WorkspaceTabsInput = {
   navigatedToDraftRef: React.RefObject<boolean>
   persistenceCoordinator: PersistenceCoordinator
   prepareDocumentExit: (steps: { flushPendingEdit: boolean; snapshotDraft: boolean; saveViewState: boolean }) => void
+  requestSourceExitConfirmation: () => Promise<boolean>
   setRenameModalOpen: React.Dispatch<React.SetStateAction<boolean>>
   setRenameModalSnapshot: React.Dispatch<React.SetStateAction<{ title: string; bodyText: string } | null>>
   titleRef: React.RefObject<string>
@@ -66,11 +69,14 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
     editor,
     editorSession,
     ephemeralDraftWritingIdRef,
+    hasRetainedSourceForTab,
+    discardRetainedSourceForTab,
     hydrationPhase,
     materializedDraftIdsRef,
     navigatedToDraftRef,
     persistenceCoordinator,
     prepareDocumentExit,
+    requestSourceExitConfirmation,
     setRenameModalOpen,
     setRenameModalSnapshot,
     titleRef,
@@ -160,6 +166,14 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
         return
       }
 
+      // A failed Source conversion is retained in memory with its tab. Closing
+      // that tab is the one tab action that can discard it, so use the same
+      // confirmation and default as the native window-close guard.
+      if (hasRetainedSourceForTab(targetTab)) {
+        const closeAnyway = await requestSourceExitConfirmation()
+        if (!closeAnyway) return
+      }
+
       // Same reasoning as handleSelectWorkspaceTab: flush before this tab's
       // identity can change under a still-queued update (ODE-478 case 2).
       // The view state is only worth saving for the tab being left.
@@ -199,6 +213,10 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
             ? materializedDraftIdsRef.current.get(persistenceTarget.draftWritingId)
             : undefined) ?? tabId
 
+      const resolvedTab = tabsAfterSettle.find((tab) => tab.id === resolvedTabId)
+      if (resolvedTab) discardRetainedSourceForTab(resolvedTab)
+      else discardRetainedSourceForTab(targetTab)
+
       const nextActiveTabId = closeTab(resolvedTabId)
 
       if (!isClosingActiveTab) {
@@ -230,8 +248,11 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
       prepareDocumentExit,
       activeEditorTabIdRef,
       ephemeralDraftWritingIdRef,
+      hasRetainedSourceForTab,
+      discardRetainedSourceForTab,
       materializedDraftIdsRef,
       navigatedToDraftRef,
+      requestSourceExitConfirmation,
     ],
   )
 
