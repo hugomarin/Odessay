@@ -155,7 +155,7 @@ afterEach(async () => {
 })
 
 describe("ODE-532 pending semantic mark ownership", () => {
-  it.fails("discards an A action after B becomes active at the same range", async () => {
+  it("discards an A action after B becomes active at the same range", async () => {
     const editorA = createEditor()
     editorA.commands.setTextSelection({ from: 1, to: 5 })
     const editorB = createEditor()

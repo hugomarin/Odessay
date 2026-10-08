@@ -138,6 +138,12 @@ export function SelectionPopup({
     onDismiss()
   }
 
+  const handleKeyboardClick = (action: () => void) => (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (event.detail !== 0) return
+    event.stopPropagation()
+    action()
+  }
+
   const returnToMain = () => {
     pendingTriggerFocusRef.current = true
     setFailure(null)
@@ -209,6 +215,10 @@ export function SelectionPopup({
           <span className="h-4 w-px bg-bg/25" />
           <button
             ref={moreTriggerRef}
+            onClick={handleKeyboardClick(() => {
+              setFailure(null)
+              setView((current) => (current === "menu" ? "main" : "menu"))
+            })}
             onPointerDown={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -252,6 +262,7 @@ export function SelectionPopup({
             <button
               key={type}
               role="menuitem"
+              onClick={handleKeyboardClick(() => applyEntity(type))}
               onPointerDown={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -266,6 +277,7 @@ export function SelectionPopup({
             <button
               key={color}
               role="menuitem"
+              onClick={handleKeyboardClick(() => applyHighlight(color))}
               onPointerDown={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -300,6 +312,7 @@ export function SelectionPopup({
     >
       <button
         role="menuitem"
+        onClick={handleKeyboardClick(() => setView("entity"))}
         onPointerDown={(e) => {
           e.preventDefault()
           e.stopPropagation()
@@ -311,6 +324,7 @@ export function SelectionPopup({
       </button>
       <button
         role="menuitem"
+        onClick={handleKeyboardClick(() => setView("highlight"))}
         onPointerDown={(e) => {
           e.preventDefault()
           e.stopPropagation()
@@ -323,6 +337,7 @@ export function SelectionPopup({
       <span className="mx-1 my-0.5 h-px bg-bg/25" />
       <button
         role="menuitem"
+        onClick={handleKeyboardClick(returnToMain)}
         onPointerDown={(e) => {
           e.preventDefault()
           e.stopPropagation()

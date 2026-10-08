@@ -120,7 +120,7 @@ describe("ODE-532 selection bubble semantic marks", () => {
     expect(buttonByLabel("Highlight")).not.toBeNull()
   })
 
-  it.fails("applies an Entity through Enter from More to its type", async () => {
+  it("applies an Entity through Enter from More to its type", async () => {
     await renderSemantic()
     await pressButton(buttonByLabel("More mark options"), "Enter")
     await pressButton(buttonByLabel("Entity"), "Enter")
@@ -130,7 +130,7 @@ describe("ODE-532 selection bubble semantic marks", () => {
     expect(dismiss).toHaveBeenCalled()
   })
 
-  it.fails("applies a Highlight through Space from More to its color", async () => {
+  it("applies a Highlight through Space from More to its color", async () => {
     await renderSemantic()
     await pressButton(buttonByLabel("More mark options"), " ")
     await tabToNextMenuButton()

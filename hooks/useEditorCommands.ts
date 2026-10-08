@@ -55,6 +55,7 @@ export type PendingRichSelectionSnapshot = {
   from: number
   to: number
   text: string
+  writingId: string | null
   popupPosition: SelectionPopupPosition
   bubblePosition: AnnotationBubblePosition
 }

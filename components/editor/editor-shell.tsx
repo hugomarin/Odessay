@@ -1360,7 +1360,7 @@ export function EditorShell({
   }, [editor])
 
   const captureRichSelectionSnapshot = useCallback((): PendingRichSelectionSnapshot | null => {
-    if (!editor || modeRef.current !== "rich") {
+    if (!editor || mode !== "rich" || modeRef.current !== "rich") {
       return null
     }
 
@@ -1376,14 +1376,17 @@ export function EditorShell({
 
     const positions = getRichSelectionOverlayPositions(from, to)
     if (!positions) return null
+    const writingId = currentWritingIdRef.current
+    if (writingId !== currentWritingId) return null
 
     return {
       from,
       to,
       text: selectedText,
+      writingId,
       ...positions,
     }
-  }, [editor, getRichSelectionOverlayPositions])
+  }, [currentWritingId, currentWritingIdRef, editor, getRichSelectionOverlayPositions, mode])
 
   // ODE-603 — corte 4b, entrega 2: el despachador vive en su hook (mudanza
   // mecánica; el estado y los refs siguen siendo de la shell).
