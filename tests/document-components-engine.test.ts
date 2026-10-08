@@ -293,6 +293,29 @@ describe("ODE-529 controlled document engine", () => {
     expect(measured.copiedCharacters).toBeLessThanOrEqual(source.length * 2);
   });
 
+  it.fails("keeps valid tag-name prefixes with one distant > linear", () => {
+    const sizes = [2_500, 5_000, 10_000, 20_000];
+    const work = sizes.map((count) => {
+      const source = `a ${"<Card ".repeat(count)}>`;
+      const measured = measureStringWork(() => parseControlledMarkdown(source));
+
+      expect(measured.value.diagnostics).toEqual([]);
+      expect(measured.value.document.source).toBe(source);
+      expect(measured.value.document.children).toEqual([
+        { type: "markdown", raw: source, start: 0, end: source.length },
+      ]);
+      return (
+        measured.searchedTagCharacters +
+        measured.copiedCharacters +
+        measured.newlineScanCharacters
+      );
+    });
+
+    for (let index = 1; index < work.length; index += 1) {
+      expect(work[index]).toBeLessThanOrEqual(work[index - 1] * 2.5);
+    }
+  });
+
   it("bounds line-break work for many code spans and closed unknown tags on one line", () => {
     const count = 300;
     const sources = [
