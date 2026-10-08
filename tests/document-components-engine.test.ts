@@ -27,6 +27,7 @@ const measureStringWork = <T>(run: () => T) => {
   const nativeLastIndexOf = String.prototype.lastIndexOf;
   const nativeSlice = String.prototype.slice;
   const nativeIncludes = String.prototype.includes;
+  const nativeCharAt = String.prototype.charAt;
   const countForwardSearch = (length: number, searchLength: number, fromIndex: number, foundAt: number) => {
     const start = Math.min(length, Math.max(0, Math.trunc(fromIndex)));
     return foundAt === -1 ? length - start : foundAt - start + searchLength;
@@ -87,6 +88,15 @@ const measureStringWork = <T>(run: () => T) => {
     }
     return nativeIncludes.call(this, search, position);
   });
+  const charAtSpy = vi.spyOn(String.prototype, "charAt").mockImplementation(function (
+    this: string,
+    position?: number,
+  ) {
+    const index = Math.trunc(position ?? 0);
+    const normalizedIndex = Number.isFinite(index) ? index : 0;
+    if (normalizedIndex >= 0 && normalizedIndex < this.length) searchedTagCharacters += 1;
+    return nativeCharAt.call(this, position);
+  });
 
   try {
     return {
@@ -100,6 +110,7 @@ const measureStringWork = <T>(run: () => T) => {
     lastIndexOfSpy.mockRestore();
     sliceSpy.mockRestore();
     includesSpy.mockRestore();
+    charAtSpy.mockRestore();
   }
 };
 
