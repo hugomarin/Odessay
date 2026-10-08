@@ -165,6 +165,7 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "harness-anon-key")
   world.tauriInvoke = async (command, args) => {
     if (command === "open_file") return tauriOpenFileDouble(String(args?.path))
+    if (command === "set_editor_menu_availability") return undefined
     throw new Error(`Comando nativo no previsto en esta prueba: ${command}`)
   }
   // Una carpeta fuera de todo BindingRoot pide consentimiento (ODE-375): se
@@ -214,6 +215,51 @@ function editorText() {
 
 function bannerText() {
   return mounted!.container.textContent ?? ""
+}
+
+function markdownSource() {
+  return mounted!.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]')
+}
+
+async function typeInMarkdown(text: string) {
+  const textarea = markdownSource()
+  if (!textarea) throw new Error("El editor no está en modo Markdown")
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+      textarea,
+      `${textarea.value}${text}`,
+    )
+    textarea.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  await flush(1)
+}
+
+function installOneShotDomAllocationFailure() {
+  const ownDescriptor = Object.getOwnPropertyDescriptor(document, "createElement")
+  const createElement = document.createElement.bind(document)
+  let failed = false
+  const restore = () => {
+    if (ownDescriptor) {
+      Object.defineProperty(document, "createElement", ownDescriptor)
+    } else {
+      Reflect.deleteProperty(document, "createElement")
+    }
+  }
+
+  Object.defineProperty(document, "createElement", {
+    configurable: true,
+    writable: true,
+    value: ((localName: string, options?: ElementCreationOptions) => {
+      if (!failed) {
+        failed = true
+        restore()
+        throw new Error("DOM allocation failed while creating the source parser")
+      }
+      return createElement(localName, options)
+    }) as typeof document.createElement,
+  })
+
+  return { didFail: () => failed, restore }
 }
 
 async function mountLoaded() {
@@ -842,6 +888,146 @@ describe("ODE-599 — la shell reacciona a cambios externos del documento abiert
       // Control positivo: al volver a A, la shell muestra la versión externa.
       await pointerClick(document.querySelector<HTMLElement>(`[data-editor-tab-id="${tabA.id}"]`)!)
       await waitForShell(() => editorText().includes("ODE599 externa A."), "A muestra la externa al volver")
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+describe("ODE-540 — Source conserva su señal dirty cuando falla el autosave", () => {
+  it(
+    "no recarga sobre Source pendiente después de fallar la conversión de debounce",
+    async () => {
+      const path = writeMarkdownFile("Source dirty", "ODE540-DIRTY-BASE.")
+      await startReconciler()
+      await mountLoaded()
+      await openFromNativeMenu(path, "ODE540-DIRTY-BASE.")
+      await waitForWatcherOnDocuments()
+
+      const writingId = activeTab()?.writing_id
+      if (!writingId) throw new Error("El documento Source no tiene identidad")
+      await clickButton("Markdown")
+      await typeInMarkdown(" ODE540-DIRTY-SOURCE")
+      const writesBefore = writesTo(path).length
+
+      // Dejar 100 ms hasta el debounce real de 800 ms; la falla única cae
+      // dentro del parser desktop y el resto del flujo conserva sus seams.
+      await advance(700)
+      const domFailure = installOneShotDomAllocationFailure()
+      await advance(1_000)
+      domFailure.restore()
+      expect(domFailure.didFail(), "la conversión desktop alcanzó el boundary DOM").toBe(true)
+      expect(markdownSource()?.value).toContain("ODE540-DIRTY-SOURCE")
+      expect(editorText()).not.toContain("ODE540-DIRTY-SOURCE")
+      expect(bannerText()).toContain("Your Source text is still here and remains unsaved")
+
+      // El intento fallido no envió snapshot al owner. Esperar más que el
+      // debounce durable detecta cualquier fallback que consiguiera escribir.
+      await advance(4_500)
+      expect(writesTo(path).length, "no hay persistencia del respaldo").toBe(writesBefore)
+      expect(await readDisk(path)).toBe("ODE540-DIRTY-BASE.\n")
+
+      writeFileSync(path, "ODE540-EXTERNAL-AFTER-FAILURE.\n")
+      await emitFsWatchEvent([path])
+      await waitForShell(() => bannerText().includes(CONFLICT_BANNER), "la señal dirty protege el Source local")
+
+      expect(activeTab()?.writing_id).toBe(writingId)
+      expect(markdownSource()?.value, "el evento externo no reemplaza Source").toContain("ODE540-DIRTY-SOURCE")
+      expect(editorText(), "Rich conserva el último snapshot confirmado").not.toContain("ODE540-EXTERNAL-AFTER-FAILURE")
+      expect(await readDisk(path), "no se escribe encima de la versión externa").toBe(
+        "ODE540-EXTERNAL-AFTER-FAILURE.\n",
+      )
+      expect(writesTo(path).length).toBe(writesBefore)
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+})
+
+describe("ODE-540 — el cierre advierte cuando Source no se pudo convertir", () => {
+  it(
+    "cierra sin preguntar cuando no hay cambios Source sin guardar",
+    async () => {
+      const path = writeMarkdownFile("Source clean close", "ODE540-CLEAN-CLOSE.")
+      await startReconciler()
+      await mountLoaded()
+      await openFromNativeMenu(path, "ODE540-CLEAN-CLOSE.")
+
+      const close = requestWindowClose()
+      expect(close.prevented(), "el guard sigue siendo dueño del cierre").toBe(true)
+      await act(async () => {
+        await close.settled
+      })
+
+      expect(world.windowDestroyCalls, "el documento limpio cierra normalmente").toBe(1)
+      expect(document.body.querySelector('[role="alertdialog"]'), "sin dirty no aparece una confirmación").toBeNull()
+      assertNoUnhandledErrors()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "cancela el cierre por defecto y permite cerrar solo tras confirmar la pérdida de Source",
+    async () => {
+      const path = writeMarkdownFile("Source failed close", "ODE540-EXIT-BASE.")
+      await startReconciler()
+      await mountLoaded()
+      await openFromNativeMenu(path, "ODE540-EXIT-BASE.")
+      await waitForWatcherOnDocuments()
+      await clickButton("Markdown")
+      await typeInMarkdown(" ODE540-EXIT-SOURCE")
+
+      await advance(700)
+      const domFailure = installOneShotDomAllocationFailure()
+      await advance(1_000)
+      domFailure.restore()
+      expect(domFailure.didFail(), "la conversión falló en el parser desktop real").toBe(true)
+      expect(markdownSource()?.value).toContain("ODE540-EXIT-SOURCE")
+      expect(bannerText()).toContain("Your Source text is still here and remains unsaved")
+
+      const firstClose = requestWindowClose()
+      expect(firstClose.prevented()).toBe(true)
+      const firstWarning = await waitFor(
+        () => document.body.querySelector<HTMLElement>('[role="alertdialog"][aria-label="Unsaved Source changes"]'),
+        { label: "confirmación de cierre para Source sin guardar", timeoutMs: 1_000 },
+      )
+      if (!firstWarning) throw new Error("No apareció la confirmación de cierre de Source")
+      expect(firstWarning.textContent).toContain(
+        "You have unsaved changes in Source that couldn't be converted. Close anyway?",
+      )
+      const keepEditing = Array.from(firstWarning.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Keep editing",
+      )
+      const closeAnyway = Array.from(firstWarning.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Close anyway",
+      )
+      expect(keepEditing, "Keep editing está disponible").toBeTruthy()
+      expect(closeAnyway, "Close anyway está disponible").toBeTruthy()
+      expect(document.activeElement, "Keep editing es la acción predeterminada").toBe(keepEditing)
+
+      await act(async () => keepEditing!.click())
+      await act(async () => {
+        await firstClose.settled
+      })
+      expect(world.windowDestroyCalls, "Keep editing cancela el cierre").toBe(0)
+      expect(markdownSource()?.value).toContain("ODE540-EXIT-SOURCE")
+
+      const secondClose = requestWindowClose()
+      const secondWarning = await waitFor(
+        () => document.body.querySelector<HTMLElement>('[role="alertdialog"][aria-label="Unsaved Source changes"]'),
+        { label: "segunda confirmación de cierre de Source", timeoutMs: 1_000 },
+      )
+      if (!secondWarning) throw new Error("No volvió a aparecer la confirmación de cierre")
+      const confirmClose = Array.from(secondWarning.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Close anyway",
+      )
+      if (!confirmClose) throw new Error('No está la acción "Close anyway"')
+      await act(async () => confirmClose.click())
+      await act(async () => {
+        await secondClose.settled
+      })
+
+      expect(world.windowDestroyCalls, "Close anyway permite salir tras aviso explícito").toBe(1)
       assertNoUnhandledErrors()
     },
     TEST_TIMEOUT_MS,
