@@ -40,7 +40,7 @@ describe("mermaid coordinator (ODE-533)", () => {
     setMermaidLoaderForTests(null);
   });
 
-  it.fails("allows concurrent renders for different owners and sources", async () => {
+  it("allows concurrent renders for different owners and sources", async () => {
     let releaseRenders!: () => void;
     const renderGate = new Promise<void>((resolve) => {
       releaseRenders = resolve;

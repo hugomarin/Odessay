@@ -106,7 +106,7 @@ describe("mermaid previews in the editor (ODE-533)", () => {
     setMermaidLoaderForTests(null);
   });
 
-  it.fails("renders concurrent Mermaid blocks independently through their NodeViews", async () => {
+  it("renders concurrent Mermaid blocks independently through their NodeViews", async () => {
     let releaseRenders!: () => void;
     const renderGate = new Promise<void>((resolve) => {
       releaseRenders = resolve;
