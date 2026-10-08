@@ -6,6 +6,7 @@ import { extractText, getDocumentProxy } from "unpdf"
 import { describe, expect, it } from "vitest"
 import type { JSONContent } from "@tiptap/core"
 import { parseMarkdownToSnapshot } from "@/lib/editor/document-serialization"
+import { validateComponentAttribute } from "@/lib/document-components/registry"
 import { buildWritingExportDocument, buildWritingMarkdown } from "@/lib/export/writing-export"
 import { renderWritingToDocxBuffer } from "@/lib/export/to-docx"
 import { renderWritingToPdfBuffer } from "@/lib/export/to-pdf"
@@ -64,6 +65,36 @@ const UNSAFE_LINKS = [
   { label: "DATA_LINK", scheme: "data:" },
   { label: "FILE_LINK", scheme: "file:" },
 ]
+
+const ENCODED_UNSAFE_LINKS = [
+  { label: "HTML_COLON_LINK", href: "javascript&colon;alert(1)" },
+  { label: "PERCENT_COLON_LINK", href: "javascript%3Aalert(1)" },
+  { label: "ENTITY_TAB_LINK", href: "java&#x09;script:alert(1)" },
+  { label: "NUMERIC_LETTER_LINK", href: "&#106;avascript:alert(1)" },
+  { label: "FILE_PERCENT_LINK", href: "file%3A///etc/passwd" },
+  { label: "DATA_HTML_COLON_LINK", href: "data&colon;text/html,x" },
+] as const
+
+const ENCODED_LINK_EXPORT_BODY: JSONContent = {
+  type: "doc",
+  content: [
+    {
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          text: "SAFE_ENCODED_CONTROL",
+          marks: [{ type: "link", attrs: { href: "https://example.com/safe-encoded" } }],
+        },
+        ...ENCODED_UNSAFE_LINKS.map(({ label, href }) => ({
+          type: "text" as const,
+          text: ` ${label}`,
+          marks: [{ type: "link", attrs: { href } }],
+        })),
+      ],
+    },
+  ],
+}
 
 describe("Tip/Info/Card projections", () => {
   it("body_text carries each title before its body, in reading order", () => {
@@ -152,6 +183,32 @@ describe("Tip/Info/Card projections", () => {
 })
 
 describe("inline link export safety", () => {
+  it("keeps a percent-encoded relative destination valid for Card", () => {
+    expect(validateComponentAttribute("Card", "href", "notes%20v2.md")).toBe(true)
+  })
+
+  it.fails("normalizes encoded schemes before projecting clean Markdown and real DOCX links", async () => {
+    const markdown = buildWritingMarkdown(ENCODED_LINK_EXPORT_BODY)
+
+    expect(markdown).toContain("[SAFE\\_ENCODED\\_CONTROL](https://example.com/safe-encoded)")
+    for (const link of ENCODED_UNSAFE_LINKS) {
+      expect(markdown).toContain(link.label.replaceAll("_", "\\_"))
+      expect(markdown).not.toContain(link.href)
+    }
+
+    const document = buildWritingExportDocument(ENCODED_LINK_EXPORT_BODY)
+    const docx = await JSZip.loadAsync(await renderWritingToDocxBuffer({ title: "Encoded links", document }))
+    const xml = (await docx.file("word/document.xml")?.async("string")) ?? ""
+    const rels = (await docx.file("word/_rels/document.xml.rels")?.async("string")) ?? ""
+    const hyperlinks = xml.match(/<w:hyperlink\b/g) ?? []
+
+    expect(xml).toContain("SAFE_ENCODED_CONTROL")
+    for (const link of ENCODED_UNSAFE_LINKS) expect(xml).toContain(link.label)
+    expect(hyperlinks).toHaveLength(1)
+    expect(rels).toContain("https://example.com/safe-encoded")
+    for (const link of ENCODED_UNSAFE_LINKS) expect(rels).not.toContain(link.href)
+  })
+
   it("keeps unsafe links inert in clean Markdown while preserving their labels", () => {
     const markdown = buildWritingMarkdown(INLINE_LINK_EXPORT_BODY)
 
