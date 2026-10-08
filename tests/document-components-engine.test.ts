@@ -312,6 +312,14 @@ describe("ODE-529 controlled document engine", () => {
     expect(violations).toEqual([]);
   });
 
+  it("checks only each span range for many single-line code spans", () => {
+    const source = Array.from({ length: 300 }, () => "`x`").join(" ");
+    const measured = measureStringWork(() => parseControlledMarkdown(source));
+
+    expect(measured.value.document.source).toBe(source);
+    expect(measured.newlineScanCharacters).toBeLessThanOrEqual(source.length * 6);
+  });
+
   it("checks block crossing once for 500 nested inline components", () => {
     const depth = 500;
     const openingTags = Array.from(
