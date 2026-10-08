@@ -16,7 +16,7 @@ import { createEditorExtensions } from "@/lib/editor/extensions"
 const fixtures = join(process.cwd(), "tests/fixtures/document-components")
 const fixture = (path: string) => readFileSync(join(fixtures, path), "utf8")
 
-const createTestEditor = (content: string = "") =>
+const createTestEditor = (content: string = "", _writingId?: string) =>
   new Editor({
     extensions: createEditorExtensions(),
     content,
@@ -150,6 +150,39 @@ describe("ODE-532 entity and highlight semantic marks", () => {
     it("preserves invalid Entity source as opaque and never rewrites it", () => {
       const source = '<Entity type="person">missing id</Entity>'
       expect(canonicalizeControlledMarkdown(source)).toBe(source)
+    })
+  })
+
+  describe("controlled rich paste identity", () => {
+    it.fails("mints one new Entity ID per copied identity across documents", () => {
+      const sourceWritingId = "writing-source"
+      const destinationWritingId = "writing-destination"
+      const clipboardHtml = [
+        "<p>",
+        '<mark data-entity-id="entity-source" data-entity-type="company" data-entity-source-writing-id="writing-source">Aplyca</mark>',
+        " and ",
+        '<mark data-entity-id="entity-source" data-entity-type="company" data-entity-source-writing-id="writing-source">Acme</mark>',
+        "</p>",
+      ].join("")
+
+      const sameDocument = createTestEditor("<p></p>", sourceWritingId)
+      sameDocument.view.pasteHTML(clipboardHtml)
+      expect(
+        collectMarks(sameDocument.getJSON(), (mark) => mark.type === "entity").map(
+          (attrs) => attrs.entityId,
+        ),
+        "duplicar dos menciones compatibles dentro de A conserva la identidad",
+      ).toEqual(["entity-source", "entity-source"])
+
+      const otherDocument = createTestEditor("<p></p>", destinationWritingId)
+      otherDocument.view.pasteHTML(clipboardHtml)
+      const pastedIds = collectMarks(otherDocument.getJSON(), (mark) => mark.type === "entity").map(
+        (attrs) => attrs.entityId,
+      )
+
+      expect(pastedIds, "pegar en B acuña una sola identidad nueva para las dos menciones").toHaveLength(2)
+      expect(pastedIds[0]).not.toBe("entity-source")
+      expect(pastedIds[1]).toBe(pastedIds[0])
     })
   })
 
