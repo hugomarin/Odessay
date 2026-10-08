@@ -900,6 +900,48 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
   )
 
   it.fails(
+    "oculta el aviso de conversión fallida al activar otra pestaña en Source",
+    async () => {
+      await createDocument("ODE540-NOTICE-A")
+      const firstWritingId = activeTab()?.writing_id
+      if (!firstWritingId) throw new Error("A no tiene identidad documental")
+
+      await clickNewArtifact(mounted!.container)
+      await typeInEditor("ODE540-NOTICE-B")
+      await advance(SAVE_WINDOW_MS)
+      const secondFile = await waitForMarkdownContaining("ODE540-NOTICE-B")
+      const secondWritingId = activeTab()?.writing_id
+      if (!secondWritingId) throw new Error("B no tiene identidad documental")
+
+      await clickTabForWritingId(firstWritingId)
+      await waitFor(() => mounted!.editor().getText().includes("ODE540-NOTICE-A"), {
+        label: "A activo antes de provocar el fallo",
+      })
+      await switchMode("Markdown")
+      await typeInMarkdown(" ODE540-NOTICE-UNCONVERTED-A")
+      expect(await failCurrentSourceConversion()).toBe(true)
+      expect(mounted!.container.querySelector('[role="status"]')?.textContent).toContain(
+        "Could not apply this source to Rich",
+      )
+
+      await clickTabForWritingId(secondWritingId)
+      await waitFor(() => mounted!.editor().getText().includes("ODE540-NOTICE-B"), {
+        label: "B hidratado después del cambio de pestaña",
+      })
+      await switchMode("Markdown")
+      await flush(2)
+
+      const sourceOnB = markdownSource()?.value ?? ""
+      const noticeOnB = mounted!.container.querySelector('[role="status"]')?.textContent ?? ""
+      expect(sourceOnB, "B conserva su propio Source").toContain("ODE540-NOTICE-B")
+      expect(sourceOnB, "el texto fallido de A no aparece en B").not.toContain("ODE540-NOTICE-UNCONVERTED-A")
+      expect(noticeOnB, "el aviso queda oculto en B").not.toContain("Could not apply this source to Rich")
+      expect(await contentsOf(secondFile.path)).toContain("ODE540-NOTICE-B")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
     "pide confirmación antes de cerrar una pestaña con Source sin convertir",
     async () => {
       await createDocument("ODE540-TAB-CLOSE")
