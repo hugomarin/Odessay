@@ -4,6 +4,7 @@ import type { JSONContent } from "@tiptap/core"
 import type { MarkType } from "@tiptap/pm/model"
 import type { Transaction } from "@tiptap/pm/state"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
+import { OPAQUE_SOURCE_BLOCK_NODE, OPAQUE_SOURCE_INLINE_NODE } from "@/lib/editor/opaque-source-extensions"
 import {
   escapeInlineAnnotationText,
   formatCanonicalAnnotation,
@@ -503,6 +504,12 @@ export type WritingAnnotationNode = {
   anchor_end: number
 }
 
+export type WritingAnnotationProjection = {
+  annotations: WritingAnnotationNode[]
+  accepted: boolean
+  diagnostics: string[]
+}
+
 type TextCursor = {
   offset: number
 }
@@ -512,7 +519,13 @@ const collectAnnotationNodes = (
   cursor: TextCursor,
   result: WritingAnnotationNode[],
   activeHighlightAnchor: string | null,
+  diagnostics: Set<string>,
 ) => {
+  if (node.type === OPAQUE_SOURCE_INLINE_NODE || node.type === OPAQUE_SOURCE_BLOCK_NODE) {
+    diagnostics.add(String(node.attrs?.reason || "opaque-source"))
+    return
+  }
+
   if (node.type === "text") {
     cursor.offset += node.text?.length ?? 0
     return
@@ -549,12 +562,12 @@ const collectAnnotationNodes = (
     for (const child of node.content) {
       if (child.type === "text" && child.marks?.some((mark) => mark.type === "highlight")) {
         pendingAnchor = (pendingAnchor ?? "") + (child.text ?? "")
-        collectAnnotationNodes(child, cursor, result, pendingAnchor)
+        collectAnnotationNodes(child, cursor, result, pendingAnchor, diagnostics)
         continue
       }
 
       const isAnnotation = child.type === "annotationReference" || child.type === "footnoteReference"
-      collectAnnotationNodes(child, cursor, result, isAnnotation ? pendingAnchor : nextHighlightAnchor)
+      collectAnnotationNodes(child, cursor, result, isAnnotation ? pendingAnchor : nextHighlightAnchor, diagnostics)
       pendingAnchor = null
     }
   }
@@ -564,15 +577,32 @@ const collectAnnotationNodes = (
   }
 }
 
-export const extractWritingAnnotationNodes = (bodyJson: JSONContent | null | undefined) => {
+export const extractWritingAnnotationProjection = (
+  bodyJson: JSONContent | null | undefined,
+): WritingAnnotationProjection => {
   if (!bodyJson || typeof bodyJson !== "object") {
-    return [] as WritingAnnotationNode[]
+    return {
+      annotations: [],
+      accepted: false,
+      diagnostics: ["invalid-document-json"],
+    }
   }
 
-  const result: WritingAnnotationNode[] = []
-  collectAnnotationNodes(bodyJson, { offset: 0 }, result, null)
-  return result
+  const annotations: WritingAnnotationNode[] = []
+  const diagnostics = new Set<string>()
+  if (bodyJson.type !== "doc") diagnostics.add("invalid-document-root")
+  collectAnnotationNodes(bodyJson, { offset: 0 }, annotations, null, diagnostics)
+
+  const diagnosticList = [...diagnostics]
+  return {
+    annotations,
+    accepted: diagnosticList.length === 0,
+    diagnostics: diagnosticList,
+  }
 }
+
+export const extractWritingAnnotationNodes = (bodyJson: JSONContent | null | undefined) =>
+  extractWritingAnnotationProjection(bodyJson).annotations
 
 export type StandaloneHighlight = {
   type: "highlight"
