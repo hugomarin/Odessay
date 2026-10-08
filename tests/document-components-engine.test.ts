@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { safeUrl } from "@/lib/document-components/registry";
+import { safeImageSrc, safeUrl } from "@/lib/document-components/registry";
 import {
   DOCUMENT_PROJECTION_SURFACES,
   DocumentComponentSpecRegistry,
@@ -280,6 +280,32 @@ describe("ODE-529 controlled document engine", () => {
     expect(safeUrl("https%3A%E0")).toBe(true);
     expect(safeUrl("javascript%3A%2F%2A%E0%2A%2Falert(1)")).toBe(false);
     expect(safeUrl("javascript%3A%2F%2A%E0alert(1)")).toBe(false);
+  });
+
+  it.each([
+    ["web upload asset API path", "/api/writing-assets/123e4567-e89b-12d3-a456-426614174000"],
+    ["desktop upload asset API URL", "https://app.odessay.test/api/writing-assets/123e4567-e89b-12d3-a456-426614174000"],
+    ["relative desktop asset path", "images/photo.png"],
+    ["case-sensitive relative desktop asset path", "images/Photo.PNG"],
+    ["remote HTTPS image URL", "https://example.com/photo.png?size=original"],
+  ])("accepts the %s image source", (_form, src) => {
+    expect(safeImageSrc(src)).toBe(true);
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "vbscript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "data:image/png;base64,aGVsbG8=",
+    "file:///private/image.png",
+    "unknown:image.png",
+    "mailto:images@example.com",
+    "#image-anchor",
+    "javascript%3Aalert(1)",
+    "java&#x09;script:alert(1)",
+    "https%3A//example.com/photo.png",
+  ])("rejects the unsafe or unsupported image source %s", (src) => {
+    expect(safeImageSrc(src)).toBe(false);
   });
 
   it.each([

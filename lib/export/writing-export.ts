@@ -1,5 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
-import { safeUrl, validateComponentAttribute } from "@/lib/document-components/registry"
+import { safeImageSrc, safeUrl, validateComponentAttribute } from "@/lib/document-components/registry"
 
 export type WritingExportFootnote = {
   index: number
@@ -495,7 +495,8 @@ const renderBlockToMarkdown = (block: WritingExportBlock) => {
       return [formatRow(rows[0]), separator, ...rows.slice(1).map(formatRow)].join("\n")
     }
     case "image":
-      return `![${escapeMarkdownText(block.image.alt ?? "")}](${block.image.src})`
+      if (!safeImageSrc(block.image.src)) return escapeMarkdownText(block.image.alt ?? "")
+      return `![${escapeMarkdownText(block.image.alt ?? "")}](${encodeMarkdownLinkDestination(block.image.src)})`
     default:
       return ""
   }
