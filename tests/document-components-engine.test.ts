@@ -247,7 +247,7 @@ describe("ODE-529 controlled document engine", () => {
     });
   });
 
-  it.fails("scans 10,000 malformed angle brackets with linear search work", () => {
+  it("scans 10,000 malformed angle brackets with linear search work", () => {
     const source = "<".repeat(10_000);
     const measured = measureStringWork(() => parseControlledMarkdown(source));
 
@@ -255,7 +255,7 @@ describe("ODE-529 controlled document engine", () => {
     expect(measured.searchedTagCharacters).toBeLessThanOrEqual(source.length * 2);
   });
 
-  it.fails("checks block crossing once for 500 nested inline components", () => {
+  it("checks block crossing once for 500 nested inline components", () => {
     const depth = 500;
     const openingTags = Array.from(
       { length: depth },
@@ -271,7 +271,7 @@ describe("ODE-529 controlled document engine", () => {
     expect(measured.newlineScanCharacters).toBeLessThanOrEqual(source.length * 2);
   });
 
-  it.fails("materializes many unterminated unknown tags without reparsing suffixes", () => {
+  it("materializes many unterminated unknown tags without reparsing suffixes", () => {
     const count = 300;
     const source = Array.from(
       { length: count },
@@ -283,7 +283,7 @@ describe("ODE-529 controlled document engine", () => {
     expect(measured.searchedTagCharacters).toBeLessThanOrEqual(source.length * 8);
   });
 
-  it.fails("copies the source once when replacing many opaque spans", () => {
+  it("copies the source once when replacing many opaque spans", () => {
     const count = 300;
     const source = Array.from(
       { length: count },
