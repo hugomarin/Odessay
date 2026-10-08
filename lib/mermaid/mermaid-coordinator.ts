@@ -11,15 +11,18 @@ import { MermaidRenderError, renderMermaidSvg } from "@/lib/mermaid/mermaid-load
  *
  * - Work scales with visible/requested Mermaid blocks M, not every fence C.
  * - Cache lookup is O(1) by hash; in-flight renders are single-flighted.
- * - Stale renders (source/document/revision changed mid-render) are discarded
- *   by revision token: only the latest requested revision may commit.
+ * - Each caller carries a revision token owned by its Mermaid NodeView.
+ *   A newer request invalidates only earlier work from that same owner.
  */
 
-export type MermaidRevision = number;
+export type MermaidRevisionOwner = object;
+export type MermaidRevision = Readonly<{
+  owner: MermaidRevisionOwner;
+  sequence: number;
+}>;
 
 type PendingRender = {
   promise: Promise<string>;
-  revision: MermaidRevision;
 };
 
 type VisibilityCallback = () => void;
@@ -28,15 +31,16 @@ class MermaidRenderCoordinator {
   private pending = new Map<string, PendingRender>();
   private observed = new Map<Element, VisibilityCallback>();
   private observer: IntersectionObserver | null = null;
-  private revisionCounter = 0;
+  private revisions = new WeakMap<MermaidRevisionOwner, number>();
 
-  nextRevision(): MermaidRevision {
-    this.revisionCounter += 1;
-    return this.revisionCounter;
+  nextRevision(owner: MermaidRevisionOwner): MermaidRevision {
+    const sequence = this.currentRevision(owner) + 1;
+    this.revisions.set(owner, sequence);
+    return { owner, sequence };
   }
 
-  currentRevision(): MermaidRevision {
-    return this.revisionCounter;
+  currentRevision(owner: MermaidRevisionOwner): number {
+    return this.revisions.get(owner) ?? 0;
   }
 
   getPendingCountForTests(): number {
@@ -96,22 +100,23 @@ class MermaidRenderCoordinator {
     this.observed.clear();
     this.observer?.disconnect();
     this.observer = null;
-    this.revisionCounter = 0;
+    this.revisions = new WeakMap();
   }
 
   requestRender(source: string, revision: MermaidRevision, configId: string = MERMAID_CONFIG_ID): Promise<string> {
-    const cached = getCachedMermaidSvg(source, configId);
-    if (cached) return Promise.resolve(cached);
-
-    const key = `${configId}:${source}`;
-    const inFlight = this.pending.get(key);
     const withRevisionCheck = (raw: Promise<string>): Promise<string> =>
       raw.then((svg) => {
-        if (revision < this.revisionCounter) {
+        if (revision.sequence !== this.currentRevision(revision.owner)) {
           throw new MermaidRenderError("invalid", "Stale diagram render discarded.");
         }
         return svg;
       });
+
+    const cached = getCachedMermaidSvg(source, configId);
+    if (cached) return withRevisionCheck(Promise.resolve(cached));
+
+    const key = `${configId}:${source}`;
+    const inFlight = this.pending.get(key);
     if (inFlight) {
       // Single-flight: share the raw in-flight render. Each caller applies
       // its own revision check so an older caller goes stale without
@@ -131,7 +136,7 @@ class MermaidRenderCoordinator {
       },
     );
     const promise = raw;
-    this.pending.set(key, { promise, revision });
+    this.pending.set(key, { promise });
     return withRevisionCheck(promise);
   }
 }

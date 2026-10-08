@@ -44,9 +44,14 @@ describe("mermaid performance contract (ODE-533)", () => {
     setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
 
     const sources = ["graph TD; A-->B", "graph TD; A-->C", "graph TD; A-->B", "graph TD; A-->B"];
+    const owner = {};
+    const revisionApi = mermaidRenderCoordinator as unknown as {
+      nextRevision(owner: object): unknown;
+      requestRender(source: string, revision: unknown): Promise<string>;
+    };
     for (const source of sources) {
-      const revision = mermaidRenderCoordinator.nextRevision();
-      await mermaidRenderCoordinator.requestRender(source, revision);
+      const revision = revisionApi.nextRevision(owner);
+      await revisionApi.requestRender(source, revision);
     }
     // Two distinct sources rendered once each; repeats served from cache.
     expect(render).toHaveBeenCalledTimes(2);
