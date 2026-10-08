@@ -142,6 +142,20 @@ describe("ODE-532 selection bubble semantic marks", () => {
     expect(dismiss).toHaveBeenCalled()
   })
 
+  it("keeps the bubble open and the menu focused when keyboard application fails", async () => {
+    applyEntity.mockImplementation(() => "This selection would cross an existing semantic mark.")
+    await renderSemantic()
+    await pressButton(buttonByLabel("More mark options"), "Enter")
+    await pressButton(buttonByLabel("Entity"), "Enter")
+    await pressButton(buttonByLabel("Person"), "Enter")
+
+    expect(container.querySelector("[role='status']")?.textContent).toBe(
+      "This selection would cross an existing semantic mark.",
+    )
+    expect(document.activeElement?.textContent?.trim()).toBe("Person")
+    expect(dismiss).not.toHaveBeenCalled()
+  })
+
   it("shows the invalid-selection message without dismissing the popup", async () => {
     applyEntity.mockImplementation(() => "This selection would cross an existing semantic mark.")
     await renderSemantic()

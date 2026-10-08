@@ -208,19 +208,60 @@ describe("ODE-532 entity and highlight semantic marks", () => {
       expect(marks).toEqual([{ highlightColor: "green" }])
     })
 
-    it("rejects a conflicting entity id and accepts a compatible duplicate", () => {
+    it("preserves compatible duplicate identity and rejects conflicting type or ref atomically", () => {
       const editor = createTestEditor("<p>one two</p>")
       editor.commands.setTextSelection({ from: 1, to: 4 })
-      applyEntityMark(editor, { from: 1, to: 4, id: "ent-9", type: "company" })
+      applyEntityMark(editor, {
+        from: 1,
+        to: 4,
+        id: "ent-9",
+        type: "company",
+        ref: "https://example.com/company",
+      })
+      const original = editor.getJSON()
 
-      const conflicting = applyEntityMark(editor, { from: 5, to: 8, id: "ent-9", type: "person" })
-      expect(conflicting.ok).toBe(false)
+      const conflictingType = applyEntityMark(editor, {
+        from: 5,
+        to: 8,
+        id: "ent-9",
+        type: "person",
+        ref: "https://example.com/company",
+      })
+      expect(conflictingType.ok).toBe(false)
+      expect(editor.getJSON()).toEqual(original)
 
-      const compatible = applyEntityMark(editor, { from: 5, to: 8, id: "ent-9", type: "company" })
+      const conflictingRef = applyEntityMark(editor, {
+        from: 5,
+        to: 8,
+        id: "ent-9",
+        type: "company",
+        ref: "https://example.com/other-company",
+      })
+      expect(conflictingRef.ok).toBe(false)
+      expect(editor.getJSON()).toEqual(original)
+
+      const compatible = applyEntityMark(editor, {
+        from: 5,
+        to: 8,
+        id: "ent-9",
+        type: "company",
+        ref: "https://example.com/company",
+      })
       expect(compatible.ok).toBe(true)
       const marks = collectMarks(editor.getJSON(), (mark) => mark.type === "entity")
       expect(marks).toHaveLength(2)
-      expect(marks.every((attrs) => attrs.entityType === "company")).toBe(true)
+      expect(marks).toEqual([
+        {
+          entityId: "ent-9",
+          entityType: "company",
+          entityRef: "https://example.com/company",
+        },
+        {
+          entityId: "ent-9",
+          entityType: "company",
+          entityRef: "https://example.com/company",
+        },
+      ])
     })
 
     it("enforces the canonical nesting order between Entity and Highlight", () => {
