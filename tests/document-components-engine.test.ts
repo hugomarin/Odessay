@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
+import { performance } from "node:perf_hooks";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { safeUrl } from "@/lib/document-components/registry";
 import {
   DOCUMENT_PROJECTION_SURFACES,
   DocumentComponentSpecRegistry,
@@ -138,6 +140,18 @@ describe("ODE-529 controlled document engine", () => {
     expect(href?.validate?.(" javascript:alert(1)")).toBe(false);
     expect(href?.validate?.("data:text/html,bad")).toBe(false);
     expect(href?.validate?.("file:///tmp/private")).toBe(false);
+  });
+
+  it.fails("keeps URL validation bounded for a 125 KB multiply encoded scheme", () => {
+    const encodedScheme = `javascript%25${"25".repeat(1_999)}3A/`;
+    const href = `${encodedScheme}${"x".repeat(125 * 1024 - encodedScheme.length)}`;
+    const startedAt = performance.now();
+    const accepted = safeUrl(href);
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(Buffer.byteLength(href)).toBe(125 * 1024);
+    expect(accepted).toBe(false);
+    expect(elapsedMs).toBeLessThan(250);
   });
 
   it.each([
