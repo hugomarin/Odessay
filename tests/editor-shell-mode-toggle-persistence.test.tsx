@@ -192,6 +192,75 @@ async function clickTabForWritingId(writingId: string) {
   })
 }
 
+async function waitForFileMarkdownContaining(path: string, needle: string, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if ((await contentsOf(path)).includes(needle)) return
+    await flush(1)
+  }
+  throw new Error(`${path} no contiene ${JSON.stringify(needle)}`)
+}
+
+async function failCurrentSourceConversion() {
+  const domFailure = installOneShotDomAllocationFailure()
+  const richButton = Array.from(
+    mounted!.container.querySelectorAll<HTMLButtonElement>('[data-testid="editor-statusbar"] button'),
+  ).find((candidate) => (candidate.textContent ?? "").trim() === "Rich")
+  if (!richButton) throw new Error('No está el botón "Rich" de la status bar')
+  await act(async () => richButton.click())
+  domFailure.restore()
+  await flush(2)
+  return domFailure.didFail()
+}
+
+async function closeTabForWritingId(writingId: string) {
+  const tab = tabForWritingId(writingId)
+  if (!tab) throw new Error(`No hay pestaña abierta para ${writingId}`)
+  const closeButton = mounted!.container.querySelector<HTMLButtonElement>(
+    `[data-editor-tab-id="${tab.id}"] button[aria-label="Close ${tab.title}"]`,
+  )
+  if (!closeButton) throw new Error(`No está el cierre de la pestaña de ${writingId}`)
+  await pointerClick(closeButton)
+}
+
+function holdMarkdownSaveDebounce() {
+  const originalSetTimeout = window.setTimeout.bind(window)
+  const originalClearTimeout = window.clearTimeout.bind(window)
+  const pending = new Map<number, { handler: TimerHandler; args: unknown[] }>()
+  let nextTimerId = 90_000_000
+
+  vi.spyOn(window, "setTimeout").mockImplementation(
+    ((handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+      if (delay === 800) {
+        const timerId = nextTimerId++
+        pending.set(timerId, { handler, args })
+        return timerId
+      }
+      return originalSetTimeout(handler, delay, ...args)
+    }) as typeof window.setTimeout,
+  )
+  vi.spyOn(window, "clearTimeout").mockImplementation(((timerId: number) => {
+    pending.delete(timerId)
+    originalClearTimeout(timerId)
+  }) as typeof window.clearTimeout)
+
+  return {
+    get pendingCount() {
+      return pending.size
+    },
+    async fireLatest() {
+      const entry = [...pending.entries()].at(-1)
+      if (!entry) throw new Error("No hay debounce de Source pendiente")
+      const [timerId, { handler, args }] = entry
+      pending.delete(timerId)
+      if (typeof handler !== "function") throw new Error("El debounce de Source no es invocable")
+      await act(async () => {
+        ;(handler as (...callbackArgs: unknown[]) => void)(...args)
+      })
+    },
+  }
+}
+
 /** Crea un documento real, guardado en disco, y lo deja activo en Rich. */
 async function createDocument(text: string) {
   mounted = await mountEditorShell()
@@ -583,8 +652,8 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
       const file = await createDocument("ODE540-QUICK-BASE")
       const originalRich = mounted!.editor().getText()
       const baselineWrites = writeFileCalls().filter((call) => call.path === file.path).length
+      const sourceDebounce = holdMarkdownSaveDebounce()
       await switchMode("Markdown")
-      await advance(SAVE_WINDOW_MS)
       await typeInMarkdown(" ODE540-QUICK-SOURCE")
 
       const layout = { rect: new DOMRect(0, 0, 0, 0) }
@@ -599,12 +668,14 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
       await switchMode("Rich")
       expect(markdownSource(), "el Source queda pendiente mientras Rich no tiene layout").toBeNull()
       expect(mounted!.editor().getText()).toBe(originalRich)
+      expect(sourceDebounce.pendingCount, "cambiar a Rich cancela el debounce de Source").toBe(0)
 
       await switchMode("Markdown")
       expect(markdownSource()?.value).toContain("ODE540-QUICK-SOURCE")
       expect(mounted!.editor().getText(), "la transición pendiente se descarta").toBe(originalRich)
-      await advance(SAVE_WINDOW_MS)
-      await waitForMarkdownContaining("ODE540-QUICK-SOURCE")
+      expect(sourceDebounce.pendingCount, "volver a Source programa un debounce nuevo").toBe(1)
+      await sourceDebounce.fireLatest()
+      await waitForFileMarkdownContaining(file.path, "ODE540-QUICK-SOURCE")
 
       expect(writeFileCalls().filter((call) => call.path === file.path).slice(baselineWrites).length).toBeGreaterThan(0)
       expect(await contentsOf(file.path)).toContain("ODE540-QUICK-SOURCE")
@@ -634,7 +705,6 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
         label: "Rich de A después de volver a su pestaña",
       })
       await switchMode("Markdown")
-      await advance(SAVE_WINDOW_MS)
 
       const layout = { rect: new DOMRect(0, 0, 800, 500) }
       vi.stubGlobal("ResizeObserver", ControlledResizeObserver)
@@ -645,6 +715,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
           : originalGetBoundingClientRect.call(this)
       })
 
+      const sourceDebounce = holdMarkdownSaveDebounce()
       await typeInMarkdown(" ODE540-STALE-SOURCE")
       const firstBaselineWrites = writeFileCalls().filter((call) => call.path === firstFile.path).length
       const secondBaselineWrites = writeFileCalls().filter((call) => call.path === secondFile.path).length
@@ -655,6 +726,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
       if (!richButton) throw new Error('No está el botón "Rich" de la status bar')
       await act(async () => richButton.click())
       await flush(2)
+      expect(sourceDebounce.pendingCount, "cambiar a Rich cancela el debounce de Source").toBe(0)
 
       expect(mounted!.editor().getText()).toContain("ODE540-STALE-A")
       expect(mounted!.editor().getText()).not.toContain("ODE540-STALE-SOURCE")
@@ -669,7 +741,8 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
       expect(observation, "la superficie Rich de B espera su medición").toBeDefined()
       layout.rect = new DOMRect(0, 0, 800, 500)
       await act(async () => observation?.notify(800, 500))
-      await advance(SAVE_WINDOW_MS)
+      await typeInEditor(" ODE540-STALE-B-CONTROL")
+      await waitForFileMarkdownContaining(secondFile.path, "ODE540-STALE-B-CONTROL")
 
       expect(activeTab()?.writing_id).toBe(secondWritingId)
       expect(mounted!.editor().getText()).toContain("ODE540-STALE-B")
@@ -682,6 +755,156 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
       ]
       expect(laterWrites.some((write) => write.content.includes("ODE540-STALE-SOURCE"))).toBe(false)
       expect(await readWorkspaceMarkdown()).toHaveLength(2)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "restaura Source fallido al volver a su pestaña y no filtra el aviso ni el texto a B",
+    async () => {
+      const firstFile = await createDocument("ODE540-TAB-A")
+      const firstWritingId = activeTab()?.writing_id
+      if (!firstWritingId) throw new Error("A no tiene identidad documental")
+
+      await clickNewArtifact(mounted!.container)
+      await typeInEditor("ODE540-TAB-B")
+      await advance(SAVE_WINDOW_MS)
+      const secondFile = await waitForMarkdownContaining("ODE540-TAB-B")
+      const secondWritingId = activeTab()?.writing_id
+      if (!secondWritingId) throw new Error("B no tiene identidad documental")
+
+      await clickTabForWritingId(firstWritingId)
+      await waitFor(() => mounted!.editor().getText().includes("ODE540-TAB-A"), {
+        label: "Rich de A antes de editar Source",
+        timeoutMs: 10_000,
+      })
+      await switchMode("Markdown")
+      await typeInMarkdown("\nODE540-UNCONVERTED-A")
+      const exactSource = markdownSource()?.value
+      expect(exactSource, "el Source editable está presente antes del fallo").toContain("ODE540-UNCONVERTED-A")
+      expect(await failCurrentSourceConversion(), "sourceToRich falla en la entrada real del toggle").toBe(true)
+      expect(mounted!.container.querySelector('[role="status"]')?.textContent).toContain(
+        "Could not apply this source to Rich",
+      )
+
+      await clickTabForWritingId(secondWritingId)
+      await waitFor(() => mounted!.editor().getText().includes("ODE540-TAB-B"), {
+        label: "Rich de B tras cambiar de pestaña",
+        timeoutMs: 10_000,
+      })
+      expect(document.body.querySelector('[role="alertdialog"]'), "cambiar de documento no pregunta").toBeNull()
+
+      const sourceOnB = markdownSource()?.value ?? null
+      const noticeOnB = mounted!.container.querySelector('[role="status"]')?.textContent ?? ""
+      const richTextOnB = mounted!.editor().getText()
+
+      await clickTabForWritingId(firstWritingId)
+      await waitFor(
+        () =>
+          mounted!.editor().getText().includes("ODE540-TAB-A") &&
+          document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") === "ready",
+        { label: "hidratación de A al volver", timeoutMs: 10_000 },
+      )
+      await flush(2)
+
+      const restoredSource = markdownSource()?.value ?? null
+      const noticeOnA = mounted!.container.querySelector('[role="status"]')?.textContent ?? ""
+      if (restoredSource === exactSource) {
+        const retryButton = Array.from(mounted!.container.querySelectorAll<HTMLButtonElement>("button")).find(
+          (button) => button.textContent?.trim() === "Try again",
+        )
+        if (!retryButton) throw new Error('No está la acción "Try again" al volver a A')
+        await act(async () => retryButton.click())
+        await waitForFileMarkdownContaining(firstFile.path, "ODE540-UNCONVERTED-A")
+      }
+
+      expect({
+        sourceOnB,
+        noticeOnB: noticeOnB.includes("Could not apply this source to Rich"),
+        richTextOnB,
+        restoredSource,
+        noticeOnA: noticeOnA.includes("Could not apply this source to Rich"),
+        retrySavedA: (await contentsOf(firstFile.path)).includes("ODE540-UNCONVERTED-A"),
+        bStillOwnsItsContent: (await contentsOf(secondFile.path)).includes("ODE540-TAB-B"),
+      }).toEqual({
+        sourceOnB: null,
+        noticeOnB: false,
+        richTextOnB: expect.stringContaining("ODE540-TAB-B"),
+        restoredSource: exactSource,
+        noticeOnA: true,
+        retrySavedA: true,
+        bStillOwnsItsContent: true,
+      })
+      expect(richTextOnB).not.toContain("ODE540-UNCONVERTED-A")
+      expect((await contentsOf(secondFile.path))).not.toContain("ODE540-UNCONVERTED-A")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "pide confirmación antes de cerrar una pestaña con Source sin convertir",
+    async () => {
+      await createDocument("ODE540-TAB-CLOSE")
+      const writingId = activeTab()?.writing_id
+      if (!writingId) throw new Error("La pestaña no tiene identidad documental")
+      await switchMode("Markdown")
+      await typeInMarkdown("\nODE540-TAB-CLOSE-UNCONVERTED")
+      expect(await failCurrentSourceConversion()).toBe(true)
+
+      await closeTabForWritingId(writingId)
+      const warning = await waitFor(
+        () => document.body.querySelector<HTMLElement>('[role="alertdialog"][aria-label="Unsaved Source changes"]'),
+        { label: "confirmación para cerrar la pestaña con Source sin convertir", timeoutMs: 2_000 },
+      )
+      if (!warning) throw new Error("No apareció la confirmación para cerrar la pestaña")
+      expect(warning.textContent).toContain("You have unsaved changes in Source that couldn't be converted")
+      const keepEditing = Array.from(warning.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Keep editing",
+      )
+      const closeAnyway = Array.from(warning.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Close anyway",
+      )
+      expect(keepEditing).toBeTruthy()
+      expect(closeAnyway).toBeTruthy()
+      expect(document.activeElement, "Keep editing es la opción predeterminada").toBe(keepEditing)
+
+      await act(async () => keepEditing!.click())
+      await waitFor(() => document.body.querySelector('[role="alertdialog"]') === null, {
+        label: "Keep editing cancela el cierre de pestaña",
+      })
+      expect(tabForWritingId(writingId), "la pestaña y su Source siguen abiertos").toBeTruthy()
+      expect(markdownSource()?.value).toContain("ODE540-TAB-CLOSE-UNCONVERTED")
+
+      await closeTabForWritingId(writingId)
+      const secondWarning = await waitFor(
+        () => document.body.querySelector<HTMLElement>('[role="alertdialog"][aria-label="Unsaved Source changes"]'),
+        { label: "segunda confirmación para descartar Source", timeoutMs: 2_000 },
+      )
+      if (!secondWarning) throw new Error("No volvió a aparecer la confirmación de cierre")
+      const confirmClose = Array.from(secondWarning.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Close anyway",
+      )
+      if (!confirmClose) throw new Error('No está la acción "Close anyway"')
+      await act(async () => confirmClose.click())
+      await waitFor(() => !tabForWritingId(writingId), { label: "pestaña cerrada tras confirmar" })
+      expect(await contentsOf((await readWorkspaceMarkdown())[0]!.path)).not.toContain("ODE540-TAB-CLOSE-UNCONVERTED")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "cierra una pestaña limpia sin pedir confirmación",
+    async () => {
+      await createDocument("ODE540-TAB-CLEAN-CLOSE")
+      const writingId = activeTab()?.writing_id
+      if (!writingId) throw new Error("La pestaña no tiene identidad documental")
+      await closeTabForWritingId(writingId)
+      await waitFor(() => !tabForWritingId(writingId), { label: "pestaña limpia cerrada" })
+
+      expect(document.body.querySelector('[role="alertdialog"]'), "el control limpio no pregunta").toBeNull()
+      expect((await readWorkspaceMarkdown()).map((file) => file.contents)).toEqual([
+        expect.stringContaining("ODE540-TAB-CLEAN-CLOSE"),
+      ])
     },
     TEST_TIMEOUT_MS,
   )
