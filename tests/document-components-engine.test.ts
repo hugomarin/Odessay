@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { safeUrl } from "@/lib/document-components/registry";
 import {
   DOCUMENT_PROJECTION_SURFACES,
@@ -16,9 +16,106 @@ import {
   parseMarkdownToDocumentIr,
   serializeDocumentIrToMarkdown,
 } from "@/lib/editor/document-serialization";
+import { materializeOpaqueSourceForRichParser } from "@/lib/editor/opaque-source-extensions";
 
 const fixtures = join(process.cwd(), "tests/fixtures/document-components");
 const fixture = (path: string) => readFileSync(join(fixtures, path), "utf8");
+
+const measureStringWork = <T>(run: () => T) => {
+  let searchedTagCharacters = 0;
+  let copiedCharacters = 0;
+  let newlineScanCharacters = 0;
+  const nativeIndexOf = String.prototype.indexOf;
+  const nativeLastIndexOf = String.prototype.lastIndexOf;
+  const nativeSlice = String.prototype.slice;
+  const nativeIncludes = String.prototype.includes;
+  const nativeCharAt = String.prototype.charAt;
+  const countForwardSearch = (length: number, searchLength: number, fromIndex: number, foundAt: number) => {
+    const start = Math.min(length, Math.max(0, Math.trunc(fromIndex)));
+    return foundAt === -1 ? length - start : foundAt - start + searchLength;
+  };
+  const countReverseSearch = (length: number, searchLength: number, position: number | undefined, foundAt: number) => {
+    const start = Math.min(length - searchLength, Math.trunc(position ?? length));
+    if (start < 0) return 0;
+    return foundAt === -1 ? start + searchLength : start - foundAt + searchLength;
+  };
+  const indexOfSpy = vi.spyOn(String.prototype, "indexOf").mockImplementation(function (
+    this: string,
+    search: string,
+    fromIndex?: number,
+  ) {
+    const foundAt = nativeIndexOf.call(this, search, fromIndex);
+    if (search === "\n") {
+      newlineScanCharacters += countForwardSearch(this.length, search.length, fromIndex ?? 0, foundAt);
+    }
+    if (search === ">" || search.startsWith("</")) {
+      searchedTagCharacters += countForwardSearch(this.length, search.length, fromIndex ?? 0, foundAt);
+    }
+    return foundAt;
+  });
+  const lastIndexOfSpy = vi.spyOn(String.prototype, "lastIndexOf").mockImplementation(function (
+    this: string,
+    search: string,
+    position?: number,
+  ) {
+    const foundAt = nativeLastIndexOf.call(this, search, position);
+    if (search === "\n") {
+      newlineScanCharacters += countReverseSearch(this.length, search.length, position, foundAt);
+    }
+    if (search === ">" || search.startsWith("</")) {
+      searchedTagCharacters += countReverseSearch(this.length, search.length, position, foundAt);
+    }
+    return foundAt;
+  });
+  const sliceSpy = vi.spyOn(String.prototype, "slice").mockImplementation(function (
+    this: string,
+    start?: number,
+    end?: number,
+  ) {
+    const normalize = (value: number | undefined, fallback: number) => {
+      if (value === undefined) return fallback;
+      return value < 0 ? Math.max(this.length + Math.trunc(value), 0) : Math.min(Math.trunc(value), this.length);
+    };
+    copiedCharacters += Math.max(0, normalize(end, this.length) - normalize(start, 0));
+    return nativeSlice.call(this, start, end);
+  });
+  const includesSpy = vi.spyOn(String.prototype, "includes").mockImplementation(function (
+    this: string,
+    search: string,
+    position?: number,
+  ) {
+    if (search === "\n") {
+      const foundAt = nativeIndexOf.call(this, search, position);
+      newlineScanCharacters += countForwardSearch(this.length, search.length, position ?? 0, foundAt);
+    }
+    return nativeIncludes.call(this, search, position);
+  });
+  // Count direct parser character reads used by the shared line summary.
+  const charAtSpy = vi.spyOn(String.prototype, "charAt").mockImplementation(function (
+    this: string,
+    position?: number,
+  ) {
+    const index = Math.trunc(position ?? 0);
+    const normalizedIndex = Number.isFinite(index) ? index : 0;
+    if (normalizedIndex >= 0 && normalizedIndex < this.length) searchedTagCharacters += 1;
+    return nativeCharAt.call(this, position ?? 0);
+  });
+
+  try {
+    return {
+      value: run(),
+      searchedTagCharacters,
+      copiedCharacters,
+      newlineScanCharacters,
+    };
+  } finally {
+    indexOfSpy.mockRestore();
+    lastIndexOfSpy.mockRestore();
+    sliceSpy.mockRestore();
+    includesSpy.mockRestore();
+    charAtSpy.mockRestore();
+  }
+};
 
 describe("ODE-529 controlled document engine", () => {
   it("offers static O(1) registry lookup with canonical attribute order", () => {
@@ -222,5 +319,111 @@ describe("ODE-529 controlled document engine", () => {
       kind: "Card",
       missing: DOCUMENT_PROJECTION_SURFACES.filter((surface) => surface !== "source"),
     });
+  });
+
+  it("scans 10,000 malformed angle brackets with linear search work", () => {
+    const source = "<".repeat(10_000);
+    const measured = measureStringWork(() => parseControlledMarkdown(source));
+
+    expect(measured.value.document.source).toBe(source);
+    expect(measured.searchedTagCharacters).toBeLessThanOrEqual(source.length * 2);
+  });
+
+  it("checks the tag name before copying a distant malformed suffix", () => {
+    const source = `${"<".repeat(10_000)}>`;
+    const measured = measureStringWork(() => parseControlledMarkdown(source));
+
+    expect(measured.value.document.source).toBe(source);
+    expect(measured.copiedCharacters).toBeLessThanOrEqual(source.length * 2);
+  });
+
+  it("keeps valid tag-name prefixes with one distant > linear", () => {
+    const sizes = [2_500, 5_000, 10_000, 20_000];
+    const work = sizes.map((count) => {
+      const source = `a ${"<Card ".repeat(count)}>`;
+      const measured = measureStringWork(() => parseControlledMarkdown(source));
+
+      expect(measured.value.diagnostics).toEqual([]);
+      expect(measured.value.document.source).toBe(source);
+      expect(measured.value.document.children).toEqual([
+        { type: "markdown", raw: source, start: 0, end: source.length },
+      ]);
+      return (
+        measured.searchedTagCharacters +
+        measured.copiedCharacters +
+        measured.newlineScanCharacters
+      );
+    });
+
+    for (let index = 1; index < work.length; index += 1) {
+      expect(work[index]).toBeLessThanOrEqual(work[index - 1] * 2.5);
+    }
+  });
+
+  it("bounds line-break work for many code spans and closed unknown tags on one line", () => {
+    const count = 300;
+    const sources = [
+      ["code spans", Array.from({ length: count }, () => "`x`").join("")],
+      ["closed unknown tags", Array.from({ length: count }, () => "<Future></Future>").join("")],
+    ] as const;
+    const violations: string[] = [];
+
+    for (const [label, source] of sources) {
+      const measured = measureStringWork(() => parseControlledMarkdown(source));
+      expect(measured.value.document.source).toBe(source);
+      if (measured.newlineScanCharacters > source.length * 6) {
+        violations.push(`${label}: ${measured.newlineScanCharacters} scans for ${source.length} characters`);
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("checks only each span range for many single-line code spans", () => {
+    const source = Array.from({ length: 300 }, () => "`x`").join(" ");
+    const measured = measureStringWork(() => parseControlledMarkdown(source));
+
+    expect(measured.value.document.source).toBe(source);
+    expect(measured.newlineScanCharacters).toBeLessThanOrEqual(source.length * 6);
+  });
+
+  it("checks block crossing once for 500 nested inline components", () => {
+    const depth = 500;
+    const openingTags = Array.from(
+      { length: depth },
+      (_, index) => `<Annotation id="a${index}" type="ai" comment="note">`,
+    ).join("");
+    const closingTags = Array.from({ length: depth }, (_, index) => `</Annotation>`)
+      .reverse()
+      .join("");
+    const source = `${openingTags}x${closingTags}`;
+    const measured = measureStringWork(() => parseControlledMarkdown(source));
+
+    expect(measured.value.diagnostics).toEqual([]);
+    expect(measured.newlineScanCharacters).toBeLessThanOrEqual(source.length * 2);
+  });
+
+  it("materializes many unterminated unknown tags without reparsing suffixes", () => {
+    const count = 300;
+    const source = Array.from(
+      { length: count },
+      (_, index) => `before <FutureKind${index}> text-${index}`,
+    ).join(" ");
+    const measured = measureStringWork(() => materializeOpaqueSourceForRichParser(source));
+
+    expect(measured.value.match(/<odessay-opaque(?:-block)? data-raw=/g)).toHaveLength(count);
+    expect(measured.searchedTagCharacters).toBeLessThanOrEqual(source.length * 8);
+  });
+
+  it("copies the source once when replacing many opaque spans", () => {
+    const count = 300;
+    const source = Array.from(
+      { length: count },
+      (_, index) => `before <FutureKind${index}> text-${index}`,
+    ).join(" ");
+    const measured = measureStringWork(() => materializeOpaqueSourceForRichParser(source));
+
+    expect(measured.value.match(/<odessay-opaque(?:-block)? data-raw=/g)).toHaveLength(count);
+    expect(measured.copiedCharacters).toBeLessThanOrEqual(source.length * 8);
   });
 });
