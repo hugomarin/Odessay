@@ -223,7 +223,7 @@ async function createMasterDocument() {
 
 describe("Fase 12 — R01/R12: componentes por Source, Rich, disco y reapertura (desktop)", () => {
   it(
-    "Card y Tip conservan atributos y cuerpo, y el source no editable en Rich llega intacto al .md",
+    "Card y Tip conservan atributos/cuerpo y una edición Rich no altera el source ya canonicalizado",
     async () => {
       const { file, canonicalized } = await createMasterDocument()
 

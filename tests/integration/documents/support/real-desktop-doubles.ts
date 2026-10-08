@@ -138,8 +138,10 @@ type SyncMutationRow = {
 const MAX_SYNC_ATTEMPTS = 10
 
 const mutationsByDb = new Map<string, Map<string, SyncMutationRow>>()
-let nextDualWriteFailure: (() => never) | null = null
-let nextBulkDualWriteFailure: (() => never) | null = null
+type InjectedNativeRejection = () => never | Promise<never>
+
+let nextDualWriteFailure: InjectedNativeRejection | null = null
+let nextBulkDualWriteFailure: InjectedNativeRejection | null = null
 
 /** Point the `@tauri-apps/api/path` double at a real temp directory. Call once per test file, before the first production call that resolves desktop runtime services. */
 export function configureRealDesktopDoubles(baseDir: string): void {
@@ -394,13 +396,14 @@ export function writeFileCalls(): ReadonlyArray<{ path: string; content: string 
 
 /**
  * Hace fallar el próximo `tauriWriteFile` cuya ruta cumpla `matches`, como un
- * error del disco o de la base nativa. A diferencia de `failWriteFileOnCall`,
- * no depende de cuántas escrituras hubo antes. Se limpia con
- * `resetWriteFileFailureState`.
+ * error del disco o de la base nativa. El callback puede lanzar o devolver un
+ * rechazo; usa `Promise.reject("...")` para conservar `Err(String)` de Rust.
+ * A diferencia de `failWriteFileOnCall`, no depende del número de escrituras
+ * previas. Se limpia con `resetWriteFileFailureState`.
  */
-let failingWriteFileMatching: { matches: (path: string) => boolean; makeError: () => never } | null = null
-export function failNextWriteFile(matches: (path: string) => boolean, makeError: () => never): void {
-  failingWriteFileMatching = { matches, makeError }
+let failingWriteFileMatching: { matches: (path: string) => boolean; reject: InjectedNativeRejection } | null = null
+export function failNextWriteFile(matches: (path: string) => boolean, reject: InjectedNativeRejection): void {
+  failingWriteFileMatching = { matches, reject }
 }
 
 /**
@@ -508,9 +511,9 @@ export async function tauriWriteFileDouble(
     await held.gate
   }
   if (failingWriteFileMatching?.matches(path)) {
-    const { makeError } = failingWriteFileMatching
+    const { reject } = failingWriteFileMatching
     failingWriteFileMatching = null
-    makeError()
+    await reject()
   }
   if (failingWriteFileCallNumber === writeFileCallCount) {
     const fail = writeFileFailureFactory!
@@ -950,28 +953,28 @@ function applyDualWrite(
 
 export async function tauriCatalogDualWriteDouble(dbPath: string, input: DesktopCatalogDualWriteInput): Promise<void> {
   if (nextDualWriteFailure) {
-    const fail = nextDualWriteFailure
+    const reject = nextDualWriteFailure
     nextDualWriteFailure = null
-    fail()
+    await reject()
   }
   applyDualWrite(rowsFor(dbPath), mutationsFor(dbPath), input)
 }
 
-/** Fail the next real single-row catalog projection, before either the row or its enqueue mutation lands. */
-export function failNextDualWrite(makeError: () => never): void {
-  nextDualWriteFailure = makeError
+/** Fail the next real single-row catalog projection before either row or enqueue lands; Promise rejection is forwarded unchanged. */
+export function failNextDualWrite(reject: InjectedNativeRejection): void {
+  nextDualWriteFailure = reject
 }
 
-/** Set to make the next tauriCatalogBulkDualWrite reject before applying any row — a real bulk write is one transaction, so a failure must not partially land. Auto-clears after firing once. */
-export function failNextBulkDualWrite(makeError: () => never): void {
-  nextBulkDualWriteFailure = makeError
+/** Set to make the next bulk projection reject before applying rows; Promise rejection is forwarded unchanged and the fault auto-clears. */
+export function failNextBulkDualWrite(reject: InjectedNativeRejection): void {
+  nextBulkDualWriteFailure = reject
 }
 
 export async function tauriCatalogBulkDualWriteDouble(dbPath: string, inputs: DesktopCatalogDualWriteInput[]): Promise<string[]> {
   if (nextBulkDualWriteFailure) {
-    const fail = nextBulkDualWriteFailure
+    const reject = nextBulkDualWriteFailure
     nextBulkDualWriteFailure = null
-    fail()
+    await reject()
   }
   const rows = rowsFor(dbPath)
   const mutations = mutationsFor(dbPath)

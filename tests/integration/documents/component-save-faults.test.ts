@@ -229,12 +229,11 @@ describe("ODE-684 — fallos de guardado de documentos con componentes", () => {
     "un fallo de .md queda en Needs attention, conserva la edición y no crea un draft",
     async () => {
       const { file, writingId, canonical } = await createMasterDocument()
-      const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const fileFailure = vi.fn(() => Promise.reject("disk full"))
       failNextWriteFile(
         (path) => path === file.path,
-        () => {
-          throw new Error("disk full")
-        },
+        fileFailure,
       )
 
       await placeCaretAfter(MASTER_SEED)
@@ -242,20 +241,60 @@ describe("ODE-684 — fallos de guardado de documentos con componentes", () => {
       await advance(SAVE_WINDOW_MS)
       await waitForVisibleError()
 
-      expect(
-        errors.mock.calls.some(
-          ([message, detail]) =>
-            message === "[editor:save] local save failed" &&
-            (detail as { error?: string } | undefined)?.error === "disk full",
-        ),
-        "control positivo: falló la escritura nativa del .md",
-      ).toBe(true)
+      expect(fileFailure, "control positivo: falló la escritura nativa del .md").toHaveBeenCalledOnce()
       expect(await contentsOf(file.path), "el archivo conserva el último snapshot confirmado").toBe(canonical)
       expect(mounted!.editor().getText()).toContain("FS_WRITE_FAILURE_COMPONENT")
       expect(activeWritingId(), "la identidad fallida sigue asociada a la misma pestaña").toBe(writingId)
       expect(await readWorkspaceMarkdown(), "no se abre un archivo draft de fallback").toHaveLength(1)
       expect(await (await getDocumentCatalog()).getById(writingId)).toMatchObject({ id: writingId })
       expect(barSaveState(), "no hay Saved falso").toBe("error")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "reintentar un fallo transitorio de .md converge en el mismo UUID y no duplica archivo ni enqueue",
+    async () => {
+      const coordinator = capturePersistenceCoordinators()
+      coordinatorCapture = coordinator
+      const { file, writingId, canonical } = await createMasterDocument()
+      const catalog = await getDocumentCatalog()
+      const rowBefore = await catalog.getById(writingId)
+      if (!rowBefore) throw new Error("El maestro no tiene fila de catálogo")
+      const mutationsBefore = catalogMutationsDouble(dbPath()).filter((mutation) => mutation.documentId === writingId)
+      const writesBefore = writeFileCalls().filter((call) => call.path === file.path).length
+      const fileFailure = vi.fn(() => Promise.reject("disk full"))
+      failNextWriteFile((path) => path === file.path, fileFailure)
+
+      await placeCaretAfter(MASTER_SEED)
+      await typeInEditor(" RETRY_FIRST_COMPONENT_EDIT")
+      await advance(SAVE_WINDOW_MS)
+      await waitForVisibleError()
+
+      expect(fileFailure).toHaveBeenCalledOnce()
+      expect(await contentsOf(file.path), "el primer fallo deja el .md confirmado intacto").toBe(canonical)
+      expect((await catalog.getById(writingId))?.version).toBe(rowBefore.version)
+      expect(catalogMutationsDouble(dbPath()).filter((mutation) => mutation.documentId === writingId)).toEqual(
+        mutationsBefore,
+      )
+      expect(activeWritingId()).toBe(writingId)
+      expect(await readWorkspaceMarkdown(), "el primer fallo no crea otro archivo").toHaveLength(1)
+
+      await placeCaretAfter("RETRY_FIRST_COMPONENT_EDIT")
+      await typeInEditor(" RETRY_SECOND_COMPONENT_EDIT")
+      await advance(SAVE_WINDOW_MS)
+      expect(await coordinator.settle(), "el retry completa la escritura durable").toBe(true)
+
+      const durable = await contentsOf(file.path)
+      expect(durable).toContain("RETRY_FIRST_COMPONENT_EDIT")
+      expect(durable).toContain("RETRY_SECOND_COMPONENT_EDIT")
+      expect((await catalog.getById(writingId))?.version).toBe((rowBefore.version ?? 0) + 1)
+      expect(catalogMutationsDouble(dbPath()).filter((mutation) => mutation.documentId === writingId)).toHaveLength(
+        mutationsBefore.length + 1,
+      )
+      expect(writeFileCalls().filter((call) => call.path === file.path)).toHaveLength(writesBefore + 2)
+      expect(activeWritingId()).toBe(writingId)
+      expect(await readWorkspaceMarkdown(), "el retry conserva un único archivo bajo el mismo UUID").toHaveLength(1)
     },
     TEST_TIMEOUT_MS,
   )
@@ -268,24 +307,16 @@ describe("ODE-684 — fallos de guardado de documentos con componentes", () => {
       const rowBefore = await catalog.getById(writingId)
       if (!rowBefore) throw new Error("El maestro no tiene fila de catálogo")
       const mutationsBefore = catalogMutationsDouble(dbPath()).filter((mutation) => mutation.documentId === writingId)
-      const errors = vi.spyOn(console, "error").mockImplementation(() => {})
-      failNextDualWrite(() => {
-        throw new Error("catalog transaction failed")
-      })
+      vi.spyOn(console, "error").mockImplementation(() => {})
+      const catalogFailure = vi.fn(() => Promise.reject("catalog transaction failed"))
+      failNextDualWrite(catalogFailure)
 
       await placeCaretAfter(MASTER_SEED)
       await typeInEditor(" CATALOG_COMMIT_FAILURE_COMPONENT")
       await advance(SAVE_WINDOW_MS)
       await waitForVisibleError()
 
-      expect(
-        errors.mock.calls.some(
-          ([message, detail]) =>
-            message === "[editor:save] local save failed" &&
-            (detail as { error?: string } | undefined)?.error === "catalog transaction failed",
-        ),
-        "control positivo: falló el commit de catálogo/enqueue",
-      ).toBe(true)
+      expect(catalogFailure, "control positivo: falló el commit de catálogo/enqueue").toHaveBeenCalledOnce()
       expect(await contentsOf(file.path)).toContain("CATALOG_COMMIT_FAILURE_COMPONENT")
       expect((await catalog.getById(writingId))?.version, "la proyección SQL no avanzó").toBe(rowBefore.version)
       expect(
@@ -347,9 +378,8 @@ describe("ODE-684 — fallos de guardado de documentos con componentes", () => {
       const rowBefore = await catalog.getById(writingId)
       if (!rowBefore) throw new Error("El maestro no tiene fila de catálogo")
       const mutationsBefore = catalogMutationsDouble(dbPath()).filter((mutation) => mutation.documentId === writingId)
-      failNextBulkDualWrite(() => {
-        throw new Error("bulk catalog transaction failed")
-      })
+      const bulkFailure = vi.fn(() => Promise.reject("bulk catalog transaction failed"))
+      failNextBulkDualWrite(bulkFailure)
 
       const result = await (await getDocumentService()).updateWritingMetadata({
         writingId,
@@ -359,7 +389,8 @@ describe("ODE-684 — fallos de guardado de documentos con componentes", () => {
       })
 
       expect(result.data).toBeNull()
-      expect(result.error?.message).toContain("bulk catalog transaction failed")
+      expect(bulkFailure, "control positivo: falló el seam nativo de batch metadata").toHaveBeenCalledOnce()
+      expect(result.error).not.toBeNull()
       expect(await contentsOf(file.path), "metadata no toca el archivo de contenido").toBe(contentsBefore)
       expect((await catalog.getById(writingId))?.status).toBe(rowBefore.status)
       expect((await catalog.getById(writingId))?.version).toBe(rowBefore.version)

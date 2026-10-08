@@ -22,6 +22,18 @@ vi.mock("@tauri-apps/api/event", async () =>
 vi.mock("@tauri-apps/plugin-dialog", async () =>
   (await import("./support/editor-shell-doubles")).tauriDialogDouble(),
 )
+vi.mock("@/lib/editor/persistence-coordinator", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/editor/persistence-coordinator")>()
+  const { recordPersistenceCoordinator } = await import("./support/persistence-coordinator-capture")
+  return {
+    ...actual,
+    createPersistenceCoordinator: (...args: Parameters<typeof actual.createPersistenceCoordinator>) => {
+      const coordinator = actual.createPersistenceCoordinator(...args)
+      recordPersistenceCoordinator(coordinator)
+      return coordinator
+    },
+  }
+})
 vi.mock("@/lib/services/desktop/runtime-detection", async () =>
   (await import("./support/editor-shell-doubles")).runtimeDetectionDouble(),
 )
@@ -32,6 +44,7 @@ vi.mock("@/lib/services/ai-service-factory", async () =>
 const { act } = await import("react")
 const {
   advance,
+  capturePersistenceCoordinators,
   clickNewArtifact,
   flush,
   mountEditorShell,
@@ -53,13 +66,17 @@ const MASTER_SEED = "DOC_COMPONENT_MASTER_SEED"
 type JsonNode = { type?: string; attrs?: Record<string, unknown>; content?: JsonNode[] }
 
 let mounted: Awaited<ReturnType<typeof mountEditorShell>> | null = null
+let coordinatorCapture: ReturnType<typeof capturePersistenceCoordinators> | null = null
 
 beforeEach(async () => {
+  coordinatorCapture = capturePersistenceCoordinators()
   resetEditorShellWorld()
   await writeEditorSession(createEmptyEditorSession())
 })
 
 afterEach(async () => {
+  coordinatorCapture?.stop()
+  coordinatorCapture = null
   vi.restoreAllMocks()
   await mounted?.unmount()
   mounted = null
@@ -111,13 +128,12 @@ async function waitForLocalWriting(
   predicate: (row: Awaited<ReturnType<typeof localDB.writings.get>>) => boolean,
   label: string,
 ) {
-  const deadline = Date.now() + 15_000
-  while (Date.now() < deadline) {
-    const row = await localDB.writings.get(writingId)
-    if (predicate(row)) return row
-    await advance(100)
-  }
-  throw new Error(`No llegó el evento durable de ${label} para ${writingId}`)
+  const capture = coordinatorCapture
+  if (!capture) throw new Error("No se capturó el PersistenceCoordinator del test web")
+  if (!(await capture.settle())) throw new Error(`El coordinator no llegó al completion event de ${label}`)
+  const row = await localDB.writings.get(writingId)
+  if (!predicate(row)) throw new Error(`El completion event no dejó ${label} durable para ${writingId}`)
+  return row
 }
 
 async function placeCaretAfter(needle: string) {
@@ -167,6 +183,7 @@ async function createMasterDocument() {
   await switchMode("Markdown")
   await replaceMarkdownSource(MASTER_SOURCE)
   await switchMode("Rich")
+  await advance(SOURCE_DEBOUNCE_MS)
   const canonicalRow = await waitForLocalWriting(
     writingId,
     (row) => Boolean(row?.body_text?.includes("TAIL_MASTER remains editable")),
@@ -208,6 +225,7 @@ describe("ODE-684 — componentes documentales en la shell web", () => {
       expect(firstCanonicalSource).toContain("LITERAL_FENCE_MASTER")
       expect(firstCanonicalSource).toContain("OPAQUE_FUTURE_MASTER")
       await switchMode("Rich")
+      await advance(SOURCE_DEBOUNCE_MS)
       await waitForLocalWriting(writingId, (row) => row?.body_text === canonicalRow?.body_text, "primer ciclo")
 
       // Una shell nueva hidratea del IndexedDB real del runtime web.
