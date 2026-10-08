@@ -242,19 +242,31 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 
 ---
 
-# Audit Summary (Phase 1 + Phase 2 complete)
+# O. Mermaid Preview Ownership
 
-**107 scenarios inventoried** across 14 capability categories (A–N, sections above). This is the full sweep from the specification, not a subset.
+Added by ODE-533 on 2026-10-07 against fix commit `d7dd9e23`; these rows extend the Phase 1 + Phase 2 inventory with evidence from the Mermaid owner-revision fix.
+
+| ID | Capability | Chain | Invariant | Status | Priority | Evidence | Note |
+|---|---|---|---|---|---|---|---|
+| COMP-30 | Independent concurrent Mermaid previews | CodeBlock NodeViews → per-owner revision tokens → shared coordinator → sanitized SVG → editor DOM | Concurrent distinct sources from live owners both complete in their own previews; one owner cannot invalidate another. | INTEGRATION | HIGH | `tests/lib/editor/document-component-mermaid.test.ts`; `tests/mermaid-coordinator.test.ts` | The production `Editor`/NodeView, coordinator and loader are real; only the third-party Mermaid API is injected. The DOM is asserted after both renderer calls settle, and Markdown remains the original pair of fences. Returning to a global revision counter makes the owner-isolation case red. Happy-dom proves the frontend chain, not packaged WKWebView. |
+| COMP-31 | Same-owner stale Mermaid request rejection | owner revision 1 → owner revision 2 → shared in-flight render → per-caller result check | The earlier request for one owner is rejected while the latest request resolves, without duplicating raw render work. | CONTRACT | HIGH | `tests/mermaid-coordinator.test.ts` | This row isolates the coordinator's public request contract at its lowest useful boundary; the production NodeView lifecycle is separately exercised by COMP-32. The coordinator/cache/loader are real and only the external Mermaid API is injected. Removing the owner-current comparison makes the stale assertion red. |
+| COMP-32 | Mermaid preview stays local through edit, document replacement, and unmount | CodeBlock NodeView → source/owner lifecycle transition → delayed renderer completion → preview DOM | An older source or destroyed NodeView cannot publish SVG over current editor content; the current source remains serializable. | INTEGRATION | HIGH | `tests/lib/editor/document-component-mermaid.test.ts` | The test enters through real TipTap `Editor` and CodeBlock NodeViews; coordinator and loader stay real, with only the third-party renderer injected. It covers an in-place source edit, replacement of the editor's full content, and NodeView destruction. The replacement uses `Editor.commands.setContent`, not an `EditorShell` A→B writing-identity route; that shell transition and final PDF/DOCX artifacts are outside this issue. |
+
+# Audit Summary (Phase 1 + Phase 2 and ODE-533 addendum)
+
+**110 scenarios inventoried** across 15 capability categories (A–O, sections above). This is the Phase 1 + Phase 2 sweep plus the ODE-533 component addendum.
 
 ## Coverage breakdown
+
+**ODE-533 status derivation (2026-10-07, fix commit `d7dd9e23`):** COMP-30 and COMP-32 are `INTEGRATION` because the production Editor/NodeView/coordinator/loader path runs together; only the third-party Mermaid API is injected. COMP-31 remains `CONTRACT` because it isolates the coordinator's public token contract at its lowest useful boundary, while the production NodeView lifecycle is covered separately. A mechanical recount of the scenario rows in sections A–O gives `NONE=1, UNIT_ONLY=5, CONTRACT=7, PARTIAL_INTEGRATION=41, INTEGRATION=55, RELEASE=1` (110 total).
 
 | Status | Count | % |
 |---|---|---|
 | NONE | 1 | 1% |
 | UNIT_ONLY | 5 | 5% |
-| CONTRACT | 6 | 6% |
-| PARTIAL_INTEGRATION | 41 | 38% |
-| INTEGRATION | 53 | 50% |
+| CONTRACT | 7 | 6% |
+| PARTIAL_INTEGRATION | 41 | 37% |
+| INTEGRATION | 55 | 50% |
 | RUNTIME | 0 | 0% |
 | RELEASE | 1 | 1% |
 
