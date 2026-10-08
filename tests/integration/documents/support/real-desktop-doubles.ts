@@ -339,6 +339,7 @@ export function resetWriteFileFailureState(): void {
   heldWriteFile = null
   heldWriteFileAfterDiskWrite = null
   heldOpenFile = null
+  heldRelocateFile = null
   failingWriteFileMatching = null
   doubleWriteRace = null
   writeFileLog.length = 0
@@ -465,6 +466,44 @@ export function holdOpenFile(matches: (path: string) => boolean): { release: () 
   })
   heldOpenFile = { matches, gate, arrived }
   return { release, started }
+}
+
+type RelocateFileHold = {
+  matches: (sourcePath: string, requestedPath: string) => boolean
+  stage: "before-move" | "after-move"
+  error?: Error
+  gate: Promise<void>
+  arrived: () => void
+}
+
+let heldRelocateFile: RelocateFileHold | null = null
+export function holdRelocateFile(
+  matches: (sourcePath: string, requestedPath: string) => boolean,
+  options: { stage: RelocateFileHold["stage"]; error?: Error },
+): { release: () => void; started: Promise<void> } {
+  let releaseGate!: () => void
+  let arrived!: () => void
+  const gate = new Promise<void>((resolve) => {
+    releaseGate = resolve
+  })
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  const hold: RelocateFileHold = {
+    matches,
+    stage: options.stage,
+    error: options.error,
+    gate,
+    arrived,
+  }
+  heldRelocateFile = hold
+  return {
+    release: () => {
+      if (heldRelocateFile === hold) heldRelocateFile = null
+      releaseGate()
+    },
+    started,
+  }
 }
 
 /**
@@ -675,6 +714,16 @@ export async function tauriRelocateFileDouble(oldPath: string, newPath: string):
     throw new Error(`relocate_file: source not found: ${oldPath}`)
   }
 
+  const hold = heldRelocateFile?.matches(oldPath, newPath) ? heldRelocateFile : null
+  if (hold) heldRelocateFile = null
+  const waitAtHold = async () => {
+    if (!hold) return
+    hold.arrived()
+    await hold.gate
+    if (hold.error) throw hold.error
+  }
+  if (hold?.stage === "before-move") await waitAtHold()
+
   await fs.mkdir(dirname(newPath), { recursive: true })
 
   const [canonicalSource, canonicalRequested] = await Promise.all([
@@ -699,6 +748,7 @@ export async function tauriRelocateFileDouble(oldPath: string, newPath: string):
   }
 
   await fs.rename(oldPath, target)
+  if (hold?.stage === "after-move") await waitAtHold()
   return target
 }
 

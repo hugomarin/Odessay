@@ -78,6 +78,7 @@ const {
 } = await import("./support/editor-shell-harness")
 const { createDesktopWorkspace, desktopWorkspaceRoot, destroyDesktopWorkspace, readWorkspaceMarkdown, resetDesktopWorkspace } =
   await import("./support/editor-shell-desktop-doubles")
+const { holdRelocateFile, writeFileCalls } = await import("./integration/documents/support/real-desktop-doubles")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 const { EDITOR_DRAFT_TAB_ID, createEmptyEditorSession } = await import("@/lib/local-db/editor-sessions")
 const { localDB } = await import("@/lib/local-db")
@@ -257,6 +258,52 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
       await waitForMarkdownContaining("R07-DESPUES-DEL-TRASLADO")
       expect(await movedContents()).toContain("R07-DESPUES-DEL-TRASLADO")
       expect(activeTab()?.save_state, "sin estado de error tras el traslado").not.toBe("error")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "ODE-693: una edición durante el relocate espera el commit y solo se escribe en el destino",
+    async () => {
+      const { file } = await createDocument()
+      const moved = join(desktopWorkspaceRoot(), "destino-en-vuelo", "Movido.md")
+      world.saveDialogResult = moved
+      const heldMove = holdRelocateFile(
+        (source, requested) => source === file.path && requested === moved,
+        { stage: "after-move" },
+      )
+      let writesBeforeRelease = 0
+      const saveAs = emitTauriEvent("menu:save-as")
+
+      try {
+        await heldMove.started
+        writesBeforeRelease = writeFileCalls().length
+        expect(await exists(file.path), "el move físico ya ocurrió mientras el catálogo sigue pendiente").toBe(false)
+
+        await typeInEditor(" ODE693-DURANTE-RELOCATE")
+        await advance(6_000)
+        expect(
+          writeFileCalls().slice(writesBeforeRelease),
+          "ningún save empieza contra la ruta anterior mientras el catálogo está en commit",
+        ).toHaveLength(0)
+      } finally {
+        heldMove.release()
+        await saveAs
+        await waitFor(() => activeTab()?.title === "Movido", {
+          label: "Save As termina de confirmar el relocate",
+          timeoutMs: 15_000,
+        })
+      }
+
+      await advance(6_000)
+      const saved = await waitForMarkdownContaining("ODE693-DURANTE-RELOCATE")
+      const writes = writeFileCalls().slice(writesBeforeRelease)
+      expect(saved.path, "los bytes nuevos están en el archivo canónico de destino").toBe(moved)
+      expect(await exists(file.path), "la ruta vieja no reaparece").toBe(false)
+      expect(writes.length, "el save alcanzó el filesystem").toBeGreaterThan(0)
+      expect(writes.length, "el retry del save permanece acotado").toBeLessThanOrEqual(3)
+      expect(writes.every((write) => write.path === moved), "el UUID se resuelve a la ruta canónica").toBe(true)
+      expect(activeTab()?.save_state, "la pestaña conserva un estado recuperable").not.toBe("error")
     },
     TEST_TIMEOUT_MS,
   )
