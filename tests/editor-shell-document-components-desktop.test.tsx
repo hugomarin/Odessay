@@ -129,12 +129,6 @@ afterAll(() => {
 beforeEach(async () => {
   resetDesktopWorkspace()
   resetEditorShellWorld({ isDesktop: true })
-  const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-    return this.classList.contains("EditorRichContent")
-      ? new DOMRect(0, 0, 800, 500)
-      : originalGetBoundingClientRect.call(this)
-  })
   await writeEditorSession(createEmptyEditorSession())
 })
 

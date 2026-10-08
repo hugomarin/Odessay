@@ -283,6 +283,41 @@ export type EditorShellTestProps = {
   withAppMain?: boolean
 }
 
+let richLayoutHarnessUsers = 0
+let richLayoutOriginalGetBoundingClientRect: typeof HTMLElement.prototype.getBoundingClientRect | null = null
+let richLayoutPatchedGetBoundingClientRect: typeof HTMLElement.prototype.getBoundingClientRect | null = null
+
+/**
+ * happy-dom has no layout engine, so EditorShell's normal mounted-surface
+ * tests provide a stable positive Rich box. Tests that exercise a pending or
+ * zero-size surface can override this at the browser boundary.
+ */
+function installRichLayoutHarness(): () => void {
+  const prototype = HTMLElement.prototype
+  if (richLayoutHarnessUsers === 0) {
+    richLayoutOriginalGetBoundingClientRect = prototype.getBoundingClientRect
+    richLayoutPatchedGetBoundingClientRect = function (this: HTMLElement) {
+      if (this.classList.contains("EditorRichContent")) return new DOMRect(0, 0, 800, 600)
+      return richLayoutOriginalGetBoundingClientRect!.call(this)
+    }
+    prototype.getBoundingClientRect = richLayoutPatchedGetBoundingClientRect
+  }
+  richLayoutHarnessUsers += 1
+
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    richLayoutHarnessUsers = Math.max(0, richLayoutHarnessUsers - 1)
+    if (richLayoutHarnessUsers !== 0) return
+    if (prototype.getBoundingClientRect === richLayoutPatchedGetBoundingClientRect) {
+      prototype.getBoundingClientRect = richLayoutOriginalGetBoundingClientRect!
+    }
+    richLayoutOriginalGetBoundingClientRect = null
+    richLayoutPatchedGetBoundingClientRect = null
+  }
+}
+
 /**
  * Monta `EditorShell` de verdad, con React DOM y `act`. Devuelve drivers en
  * vez de obligar a cada test a reconstruir el andamiaje.
@@ -291,6 +326,7 @@ export async function mountEditorShell(
   props: EditorShellTestProps = {},
 ): Promise<MountedEditorShell> {
   ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  const releaseRichLayoutHarness = installRichLayoutHarness()
 
   const container = document.createElement("div")
   const appMain = props.withAppMain ? document.createElement("main") : null
@@ -324,6 +360,7 @@ export async function mountEditorShell(
       await act(async () => {
         root.unmount()
       })
+      releaseRichLayoutHarness()
       container.remove()
       appMain?.remove()
       await quiesceSyncWorker()

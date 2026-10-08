@@ -46,7 +46,8 @@ export function WritingEditorContent({
     if (!surface) return
 
     const reportReadyLayout = (width: number, height: number) => {
-      const editorElement = editor.view.dom
+      const editorElement = editor.view?.dom
+      if (!editorElement) return
       if (
         !surface.isConnected ||
         !editorElement.isConnected ||
