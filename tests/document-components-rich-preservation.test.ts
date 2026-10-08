@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { canonicalizeControlledMarkdown } from "@/lib/document-components"
+import { parseControlledMarkdown } from "@/lib/document-components/parser"
 import {
   parseMarkdownToSnapshot,
   serializeDocumentToMarkdown,
@@ -40,6 +41,46 @@ const PRESERVED_SOURCE: Array<[string, string]> = [
 ]
 
 describe("Rich adapter preserves source it cannot author", () => {
+  it("master corpus canonicalizes once, then round-trips byte-identically with opaque source intact", () => {
+    const source = fixture("valid/master.md")
+    expect(source).toContain("\r\n")
+    expect(source).toContain("東京")
+    expect(source).toContain("LITERAL_FENCE_MASTER")
+
+    const once = richRoundTrip(source)
+    const twice = richRoundTrip(once)
+    const snapshot = parseMarkdownToSnapshot(source)
+    const opaque: string[] = []
+    type OpaqueNode = { type?: string; attrs?: Record<string, unknown>; content?: OpaqueNode[] }
+    const visit = (node: OpaqueNode) => {
+      if (node.type === "opaqueSource" || node.type === "opaqueSourceBlock") {
+        const raw = node.attrs?.raw
+        if (typeof raw === "string") opaque.push(raw)
+      }
+      for (const child of node.content ?? []) visit(child)
+    }
+    visit(snapshot.bodyJson as OpaqueNode)
+
+    expect(Buffer.from(twice, "utf8")).toEqual(Buffer.from(once, "utf8"))
+    expect(once).toContain("LITERAL_FENCE_MASTER")
+    expect(once).toContain('<Card title="Fence literal">LITERAL_FENCE_MASTER</Card>')
+    expect(opaque).toContain(
+      '<ProtectedText id="lock-master-1" reason="source only — no Rich writer">OPAQUE_PROTECTED_MASTER 🔒</ProtectedText>',
+    )
+    expect(opaque).toContain(
+      '<FuturePanel version="v9" token="keep-exact">OPAQUE_FUTURE_MASTER 東京</FuturePanel>',
+    )
+    expect(opaque).toContain(
+      '<Card title={unsafe()} onClick="steal()" unknown="reject">\r\nOPAQUE_INVALID_ATTRS_MASTER — preserve this complete span.\r\n</Card>',
+    )
+    expect(opaque).toContain('<Widget mode="future" />')
+  })
+
+  it.fails("follow-up pendiente (ODE-684): unclosed component tags keep their source bytes through Rich", () => {
+    const source = fixture("valid/master.md")
+    expect(richRoundTrip(source)).toContain('<OpenPanel mode="future">\r\nOPAQUE_UNCLOSED_MASTER')
+  })
+
   it.each(PRESERVED_SOURCE)("%s survives the Rich round-trip byte for byte", (_label, source) => {
     expect(richRoundTrip(source)).toBe(source)
   })

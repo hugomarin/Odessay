@@ -15,10 +15,29 @@ type ParsedTag = {
   end: number;
   closing: boolean;
   valid: boolean;
+  hasLineBreak: boolean;
 };
 
-const TAG_NAME = /^[A-Z][A-Za-z0-9]*$/;
+export type ControlledMarkdownParseOptions = {
+  /**
+   * Rich projection treats an unclosed unknown root tag as a literal token so
+   * the rest of the Markdown remains editable. The default core parse keeps
+   * the complete suffix opaque.
+   */
+  recoverUnclosedUnknownTags?: boolean;
+};
+
+type ParsedRange = {
+  nodes: DocumentIrNode[];
+  cursor: number;
+  closed: boolean;
+  hasLineBreak: boolean;
+  closingTagHasLineBreak?: boolean;
+};
+
+const TAG_NAME_PREFIX = /[A-Z][A-Za-z0-9]*/y;
 const ATTRIBUTE_NAME = /^[A-Za-z][A-Za-z0-9-]*$/;
+const WHITESPACE_CHARACTER = /\s/;
 const LEGACY_ANNOTATION =
   /==([^=\n]+)==[\t ]*(?:\[\^(\d+)(?:\|([^\]:|]+))?:\s*((?:\\.|[^\]])*)\]|\[@([pchn]?)(\d*)(?:\|([^\]:|]+))?:\s*((?:\\.|[^\]])*)\])/y;
 
@@ -41,62 +60,80 @@ const annotationType = (prefix: string) => {
   return "ai";
 };
 
-const parseTag = (source: string, start: number): ParsedTag | null => {
-  const close = source.indexOf(">", start + 1);
-  if (close === -1) return null;
-  const raw = source.slice(start + 1, close);
-  const closing = raw.startsWith("/");
-  const body = closing ? raw.slice(1) : raw;
-  const nameMatch = body.match(/^([A-Za-z][A-Za-z0-9]*)([\s\S]*)$/);
-  if (!nameMatch || !TAG_NAME.test(nameMatch[1])) return null;
+const isWhitespaceAt = (source: string, index: number) =>
+  WHITESPACE_CHARACTER.test(source.charAt(index));
 
-  const kind = nameMatch[1];
-  const rest = nameMatch[2];
+const parseTag = (
+  source: string,
+  start: number,
+  close: number,
+  hasLineBreakForClose: (close: number) => boolean,
+  lastNonWhitespaceBeforeClose: (end: number) => number,
+): ParsedTag | null => {
+  const closing = source.charAt(start + 1) === "/";
+  const nameStart = start + (closing ? 2 : 1);
+  TAG_NAME_PREFIX.lastIndex = nameStart;
+  const nameMatch = TAG_NAME_PREFIX.exec(source);
+  if (!nameMatch) return null;
+
+  if (close === -1 || nameStart + nameMatch[0].length > close) return null;
+  const hasLineBreak = hasLineBreakForClose(close);
+  const kind = nameMatch[0];
+  const restStart = nameStart + kind.length;
   if (closing) {
+    let valid = true;
+    for (let index = restStart; index < close; index += 1) {
+      if (!isWhitespaceAt(source, index)) {
+        valid = false;
+        break;
+      }
+    }
     return {
       kind,
       attributes: {},
       end: close + 1,
       closing: true,
-      valid: rest.trim().length === 0,
+      valid,
+      hasLineBreak,
     };
   }
 
-  if (rest.trimEnd().endsWith("/")) {
-    return { kind, attributes: {}, end: close + 1, closing: false, valid: false };
+  const lastNonWhitespace = lastNonWhitespaceBeforeClose(close);
+  if (lastNonWhitespace >= restStart && source.charAt(lastNonWhitespace) === "/") {
+    return { kind, attributes: {}, end: close + 1, closing: false, valid: false, hasLineBreak };
   }
 
   const attributes: Record<string, string> = {};
-  let cursor = 0;
-  while (cursor < rest.length) {
-    while (/\s/.test(rest[cursor] ?? "")) cursor += 1;
-    if (cursor >= rest.length) break;
+  let cursor = restStart;
+  while (cursor < close) {
+    while (cursor < close && isWhitespaceAt(source, cursor)) cursor += 1;
+    if (cursor >= close) break;
     const nameStart = cursor;
-    while (/[-A-Za-z0-9]/.test(rest[cursor] ?? "")) cursor += 1;
-    const name = rest.slice(nameStart, cursor);
+    while (cursor < close && /[-A-Za-z0-9]/.test(source.charAt(cursor))) cursor += 1;
+    const name = source.slice(nameStart, cursor);
     if (!ATTRIBUTE_NAME.test(name) || Object.hasOwn(attributes, name)) {
-      return { kind, attributes, end: close + 1, closing: false, valid: false };
+      return { kind, attributes, end: close + 1, closing: false, valid: false, hasLineBreak };
     }
-    while (/\s/.test(rest[cursor] ?? "")) cursor += 1;
-    if (rest[cursor] !== "=") {
-      return { kind, attributes, end: close + 1, closing: false, valid: false };
+    while (cursor < close && isWhitespaceAt(source, cursor)) cursor += 1;
+    if (source.charAt(cursor) !== "=") {
+      return { kind, attributes, end: close + 1, closing: false, valid: false, hasLineBreak };
     }
     cursor += 1;
-    while (/\s/.test(rest[cursor] ?? "")) cursor += 1;
-    if (rest[cursor] !== '"') {
-      return { kind, attributes, end: close + 1, closing: false, valid: false };
+    while (cursor < close && isWhitespaceAt(source, cursor)) cursor += 1;
+    if (source.charAt(cursor) !== '"') {
+      return { kind, attributes, end: close + 1, closing: false, valid: false, hasLineBreak };
     }
     cursor += 1;
     const valueStart = cursor;
-    while (cursor < rest.length && rest[cursor] !== '"') cursor += 1;
-    if (cursor >= rest.length) {
-      return { kind, attributes, end: close + 1, closing: false, valid: false };
+    while (cursor < close && source.charAt(cursor) !== '"') cursor += 1;
+    if (cursor >= close) {
+      return { kind, attributes, end: close + 1, closing: false, valid: false, hasLineBreak };
     }
-    attributes[name] = decodeControlledAttribute(rest.slice(valueStart, cursor));
+    attributes[name] = decodeControlledAttribute(source.slice(valueStart, cursor));
     cursor += 1;
   }
 
-  return { kind, attributes, end: close + 1, closing: false, valid: true };
+  return { kind, attributes, end: close + 1, closing: false, valid: true, hasLineBreak };
 };
 
 const findFenceEnd = (source: string, start: number): number | null => {
@@ -139,9 +176,57 @@ const findCodeSpanEnd = (source: string, start: number): number => {
   return runEnd;
 };
 
-const findOpaqueEnd = (source: string, tag: ParsedTag): number => {
-  const close = source.indexOf(`</${tag.kind}>`, tag.end);
-  return close === -1 ? source.length : close + tag.kind.length + 3;
+type ClosingTagIndex = {
+  next: (kind: string, from: number) => number | null;
+};
+
+const isTagNameCharacter = (character: string | undefined) =>
+  character !== undefined &&
+  ((character >= "A" && character <= "Z") ||
+    (character >= "a" && character <= "z") ||
+    (character >= "0" && character <= "9"));
+
+const indexClosingTags = (source: string): ClosingTagIndex => {
+  const positionsByKind = new Map<string, number[]>();
+  const nextPositionByKind = new Map<string, number>();
+
+  for (let cursor = 0; cursor < source.length - 2; cursor += 1) {
+    if (source[cursor] !== "<" || source[cursor + 1] !== "/") continue;
+    const nameStart = cursor + 2;
+    let nameEnd = nameStart;
+    while (isTagNameCharacter(source[nameEnd])) nameEnd += 1;
+    if (nameEnd === nameStart || source[nameEnd] !== ">") continue;
+
+    const kind = source.slice(nameStart, nameEnd);
+    const positions = positionsByKind.get(kind) ?? [];
+    positions.push(cursor);
+    positionsByKind.set(kind, positions);
+    cursor = nameEnd;
+  }
+
+  return {
+    next(kind, from) {
+      const positions = positionsByKind.get(kind);
+      if (!positions) return null;
+      let position = nextPositionByKind.get(kind) ?? 0;
+      while (position < positions.length && positions[position] < from) position += 1;
+      nextPositionByKind.set(kind, position);
+      return positions[position] ?? null;
+    },
+  };
+};
+
+const findOpaqueEnd = (
+  source: string,
+  tag: ParsedTag,
+  closingTagIndex?: ClosingTagIndex,
+): { end: number; hasClosingTag: boolean } => {
+  const close = closingTagIndex
+    ? closingTagIndex.next(tag.kind, tag.end)
+    : source.indexOf(`</${tag.kind}>`, tag.end);
+  return close === -1 || close === null
+    ? { end: source.length, hasClosingTag: false }
+    : { end: close + tag.kind.length + 3, hasClosingTag: true };
 };
 
 const diagnostic = (
@@ -156,30 +241,114 @@ const diagnostic = (
 const isWhitespaceMarkdown = (node: DocumentIrNode) =>
   node.type === "markdown" && node.raw.trim().length === 0;
 
-const occupiesOwnLine = (source: string, start: number, end: number) => {
-  const lineStart = source.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
-  const nextLineBreak = source.indexOf("\n", end);
-  const lineEnd = nextLineBreak === -1 ? source.length : nextLineBreak;
-  return (
-    source.slice(lineStart, start).trim().length === 0 &&
-    source.slice(end, lineEnd).trim().length === 0
-  );
-};
-
 const parseControlledMarkdownInternal = (
   source: string,
   stopAfterFirstTopLevelComponent: boolean,
   topLevelStart = 0,
+  options: ControlledMarkdownParseOptions = {},
 ): DocumentParseResult => {
   const diagnostics: DocumentDiagnostic[] = [];
+  let nextGreaterThan: number | undefined;
+  let closingTagIndex: ClosingTagIndex | undefined;
+  let trailingScanEnd = 0;
+  let trailingLastNonWhitespace = -1;
+  // Tag close offsets advance with the shared `>` cursor, so scan only new text.
+  const lastNonWhitespaceBeforeClose = (end: number) => {
+    for (let index = end - 1; index >= trailingScanEnd; index -= 1) {
+      if (!isWhitespaceAt(source, index)) {
+        trailingLastNonWhitespace = index;
+        break;
+      }
+    }
+    trailingScanEnd = end;
+    return trailingLastNonWhitespace;
+  };
+
+  type LineSummary = {
+    end: number;
+    firstNonWhitespace: number;
+    lastNonWhitespace: number;
+  };
+  type LineCursor = { start: number };
+  const tagStartLineCursor: LineCursor = { start: 0 };
+  const tagEndLineCursor: LineCursor = { start: 0 };
+  const lineSummaries = new Map<number, LineSummary>();
+  // Reuse one summary for every tag on the same line instead of trimming overlapping slices.
+  const scanLine = (start: number): LineSummary => {
+    let end = start;
+    let firstNonWhitespace = -1;
+    let lastNonWhitespace = -1;
+    while (end < source.length) {
+      const character = source.charAt(end);
+      if (character === "\n") break;
+      if (!WHITESPACE_CHARACTER.test(character)) {
+        if (firstNonWhitespace === -1) firstNonWhitespace = end;
+        lastNonWhitespace = end;
+      }
+      end += 1;
+    }
+    return { end, firstNonWhitespace, lastNonWhitespace };
+  };
+  const getLineSummary = (position: number, cursor: LineCursor): LineSummary => {
+    let summary = lineSummaries.get(cursor.start);
+    if (!summary) {
+      summary = scanLine(cursor.start);
+      lineSummaries.set(cursor.start, summary);
+    }
+    while (position > summary.end && summary.end < source.length) {
+      cursor.start = summary.end + 1;
+      summary = lineSummaries.get(cursor.start) ?? scanLine(cursor.start);
+      lineSummaries.set(cursor.start, summary);
+    }
+    return summary;
+  };
+  const occupiesOwnLine = (start: number, end: number) => {
+    const startLine = getLineSummary(start, tagStartLineCursor);
+    if (startLine.firstNonWhitespace !== -1 && startLine.firstNonWhitespace < start) return false;
+    const endLine = getLineSummary(end, tagEndLineCursor);
+    return endLine.lastNonWhitespace < end;
+  };
+
+  // Parsing advances through the source; each `>` is crossed once and reused by later candidates.
+  const parseTagAt = (start: number) => {
+    if (nextGreaterThan === undefined) {
+      nextGreaterThan = source.indexOf(">", start + 1);
+    } else {
+      while (nextGreaterThan !== -1 && nextGreaterThan < start) {
+        nextGreaterThan = source.indexOf(">", nextGreaterThan + 1);
+      }
+    }
+    return parseTag(
+      source,
+      start,
+      nextGreaterThan,
+      (close) => close > getLineSummary(start, tagStartLineCursor).end,
+      lastNonWhitespaceBeforeClose,
+    );
+  };
+
+  const resolveOpaqueEnd = (tag: ParsedTag) => {
+    let opaqueEnd = findOpaqueEnd(source, tag, closingTagIndex);
+    if (options.recoverUnclosedUnknownTags && !opaqueEnd.hasClosingTag && !closingTagIndex) {
+      closingTagIndex = indexClosingTags(source);
+      opaqueEnd = findOpaqueEnd(source, tag, closingTagIndex);
+    }
+    return opaqueEnd;
+  };
+
+  const rangeHasLineBreak = (start: number, end: number) => {
+    if (start >= end) return false;
+    return source.slice(start, end).includes("\n");
+  };
 
   const parseRange = (
     start: number,
     expectedClose?: DocumentComponentKind,
-  ): { nodes: DocumentIrNode[]; cursor: number; closed: boolean } => {
+  ): ParsedRange => {
     const nodes: DocumentIrNode[] = [];
     let cursor = start;
     let markdownStart = start;
+    let hasLineBreak = false;
 
     const flushMarkdown = (end: number) => {
       if (end > markdownStart) {
@@ -193,6 +362,7 @@ const parseControlledMarkdownInternal = (
         const fenceEnd = findFenceEnd(source, cursor);
         if (fenceEnd !== null) {
           flushMarkdown(cursor);
+          hasLineBreak ||= rangeHasLineBreak(cursor, fenceEnd);
           const firstLineEnd = source.indexOf("\n", cursor);
           const firstLine = source.slice(cursor, firstLineEnd === -1 ? source.length : firstLineEnd);
           const language = firstLine.replace(/^ {0,3}(?:`{3,}|~{3,})/, "").trim();
@@ -215,6 +385,7 @@ const parseControlledMarkdownInternal = (
       if (legacy) {
         flushMarkdown(cursor);
         const raw = legacy[0];
+        hasLineBreak ||= raw.includes("\n");
         const isFootnote = legacy[2] !== undefined;
         const id = (isFootnote ? legacy[3] : legacy[7]) || compatibilityId(raw);
         const comment = unescapeLegacyComment((isFootnote ? legacy[4] : legacy[8]) ?? "");
@@ -235,16 +406,19 @@ const parseControlledMarkdownInternal = (
       }
 
       if (source[cursor] === "`" && source[cursor - 1] !== "\\") {
-        cursor = findCodeSpanEnd(source, cursor);
+        const codeSpanEnd = findCodeSpanEnd(source, cursor);
+        hasLineBreak ||= rangeHasLineBreak(cursor, codeSpanEnd);
+        cursor = codeSpanEnd;
         continue;
       }
 
       if (source[cursor] !== "<") {
+        if (source[cursor] === "\n") hasLineBreak = true;
         cursor += 1;
         continue;
       }
 
-      const tag = parseTag(source, cursor);
+      const tag = parseTagAt(cursor);
       if (!tag) {
         cursor += 1;
         continue;
@@ -255,26 +429,43 @@ const parseControlledMarkdownInternal = (
           ? DocumentComponentSpecRegistry.get(expectedClose)
           : undefined;
         const closingPositionValid =
-          expectedSpec?.form === "inline" || occupiesOwnLine(source, cursor, tag.end);
+          expectedSpec?.form === "inline" || occupiesOwnLine(cursor, tag.end);
         if (expectedClose === tag.kind && tag.valid && closingPositionValid) {
           flushMarkdown(cursor);
-          return { nodes, cursor: tag.end, closed: true };
+          return {
+            nodes,
+            cursor: tag.end,
+            closed: true,
+            hasLineBreak,
+            closingTagHasLineBreak: tag.hasLineBreak,
+          };
         }
         cursor += 1;
         continue;
       }
 
       const spec = DocumentComponentSpecRegistry.get(tag.kind);
-      if (spec && tag.kind !== "CodeBlock" && spec.form !== "inline" && !occupiesOwnLine(source, cursor, tag.end)) {
+      if (spec && tag.kind !== "CodeBlock" && spec.form !== "inline" && !occupiesOwnLine(cursor, tag.end)) {
         cursor += 1;
         continue;
       }
 
       flushMarkdown(cursor);
       if (!spec || tag.kind === "CodeBlock") {
-        const end = findOpaqueEnd(source, tag);
+        const opaqueEnd = resolveOpaqueEnd(tag);
+        if (options.recoverUnclosedUnknownTags && !expectedClose && !opaqueEnd.hasClosingTag) {
+          diagnostic(diagnostics, "unknown-component", `Unknown component ${tag.kind}.`, cursor, tag.end, tag.kind);
+          nodes.push({ type: "opaque", raw: source.slice(cursor, tag.end), reason: "unknown-component", start: cursor, end: tag.end });
+          hasLineBreak ||= tag.hasLineBreak;
+          cursor = tag.end;
+          markdownStart = cursor;
+          continue;
+        }
+
+        const end = opaqueEnd.end;
         diagnostic(diagnostics, "unknown-component", `Unknown component ${tag.kind}.`, cursor, end, tag.kind);
         nodes.push({ type: "opaque", raw: source.slice(cursor, end), reason: "unknown-component", start: cursor, end });
+        hasLineBreak ||= rangeHasLineBreak(cursor, end);
         cursor = end;
         markdownStart = cursor;
         continue;
@@ -290,9 +481,10 @@ const parseControlledMarkdownInternal = (
             (!Object.hasOwn(tag.attributes, attribute.name) || !attribute.validate || attribute.validate(tag.attributes[attribute.name])),
         );
       if (!attributesValid) {
-        const end = findOpaqueEnd(source, tag);
+        const end = resolveOpaqueEnd(tag).end;
         diagnostic(diagnostics, "invalid-attributes", `Invalid attributes for ${tag.kind}.`, cursor, end, tag.kind);
         nodes.push({ type: "opaque", raw: source.slice(cursor, end), reason: "invalid-attributes", start: cursor, end });
+        hasLineBreak ||= rangeHasLineBreak(cursor, end);
         cursor = end;
         markdownStart = cursor;
         continue;
@@ -302,7 +494,8 @@ const parseControlledMarkdownInternal = (
       if (!parsedChildren.closed) {
         diagnostic(diagnostics, "unbalanced-component", `Unbalanced component ${tag.kind}.`, cursor, source.length, tag.kind);
         nodes.push({ type: "opaque", raw: source.slice(cursor), reason: "unbalanced-component", start: cursor, end: source.length });
-        return { nodes, cursor: source.length, closed: false };
+        hasLineBreak ||= rangeHasLineBreak(cursor, source.length);
+        return { nodes, cursor: source.length, closed: false, hasLineBreak };
       }
 
       const expectedSpec = expectedClose
@@ -322,16 +515,17 @@ const parseControlledMarkdownInternal = (
           parsedChildren.nodes.every((node) => isWhitespaceMarkdown(node) || node.type === "component" || node.type === "code-block"));
       const inlineHasBlock =
         spec.form === "inline" &&
-        (source.slice(tag.end, parsedChildren.cursor - tag.kind.length - 3).includes("\n") ||
+        (parsedChildren.hasLineBreak ||
           componentChildren.some((node) => DocumentComponentSpecRegistry.get(node.kind)?.form !== "inline"));
       const inlineContentIsEmpty =
         spec.form === "inline" &&
-        source.slice(tag.end, parsedChildren.cursor - tag.kind.length - 3).trim().length === 0;
+        parsedChildren.nodes.every(isWhitespaceMarkdown);
 
       if (inlineContentIsEmpty) {
         const opaqueEnd = parsedChildren.cursor;
         diagnostic(diagnostics, "invalid-content", `Empty content for ${tag.kind}.`, cursor, opaqueEnd, tag.kind);
         nodes.push({ type: "opaque", raw: source.slice(cursor, opaqueEnd), reason: "invalid-content", start: cursor, end: opaqueEnd });
+        hasLineBreak ||= rangeHasLineBreak(cursor, opaqueEnd);
         cursor = opaqueEnd;
         markdownStart = cursor;
         continue;
@@ -341,6 +535,7 @@ const parseControlledMarkdownInternal = (
         const opaqueEnd = parsedChildren.cursor;
         diagnostic(diagnostics, "invalid-nesting", `Invalid nesting for ${tag.kind}.`, cursor, opaqueEnd, tag.kind);
         nodes.push({ type: "opaque", raw: source.slice(cursor, opaqueEnd), reason: "invalid-nesting", start: cursor, end: opaqueEnd });
+        hasLineBreak ||= rangeHasLineBreak(cursor, opaqueEnd);
         cursor = opaqueEnd;
         markdownStart = cursor;
         continue;
@@ -355,15 +550,16 @@ const parseControlledMarkdownInternal = (
         end: parsedChildren.cursor,
       };
       nodes.push(node);
+      hasLineBreak ||= tag.hasLineBreak || parsedChildren.hasLineBreak || parsedChildren.closingTagHasLineBreak === true;
       cursor = parsedChildren.cursor;
       markdownStart = cursor;
       if (!expectedClose && stopAfterFirstTopLevelComponent) {
-        return { nodes, cursor, closed: false };
+        return { nodes, cursor, closed: false, hasLineBreak };
       }
     }
 
     flushMarkdown(source.length);
-    return { nodes, cursor: source.length, closed: false };
+    return { nodes, cursor: source.length, closed: false, hasLineBreak };
   };
 
   const parsed = parseRange(topLevelStart);
@@ -374,8 +570,10 @@ const parseControlledMarkdownInternal = (
   };
 };
 
-export const parseControlledMarkdown = (source: string): DocumentParseResult =>
-  parseControlledMarkdownInternal(source, false);
+export const parseControlledMarkdown = (
+  source: string,
+  options: ControlledMarkdownParseOptions = {},
+): DocumentParseResult => parseControlledMarkdownInternal(source, false, 0, options);
 
 export const parseControlledComponentAt = (source: string, start = 0): ComponentNode | null => {
   const parsed = parseControlledMarkdownInternal(source, true, start);
@@ -384,11 +582,3 @@ export const parseControlledComponentAt = (source: string, start = 0): Component
     ? first
     : null;
 };
-
-/**
- * End offset of the PascalCase tag token that starts at `start`, or null when
- * no tag token starts there. Adapters use it to keep an unclosed unknown tag
- * as its own literal token instead of re-deriving tag syntax.
- */
-export const readControlledTagEnd = (source: string, start: number): number | null =>
-  source[start] === "<" ? (parseTag(source, start)?.end ?? null) : null;
