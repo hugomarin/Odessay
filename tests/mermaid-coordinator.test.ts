@@ -2,7 +2,10 @@
  * @vitest-environment happy-dom
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { clearMermaidCache } from "@/lib/mermaid/mermaid-cache";
+import {
+  clearMermaidCache,
+  hashMermaidSource,
+} from "@/lib/mermaid/mermaid-cache";
 import { mermaidRenderCoordinator } from "@/lib/mermaid/mermaid-coordinator";
 import { resetMermaidLoaderForTests, setMermaidLoaderForTests } from "@/lib/mermaid/mermaid-loader";
 
@@ -83,6 +86,21 @@ describe("mermaid coordinator (ODE-533)", () => {
     );
     expect(failingLoader).not.toHaveBeenCalled();
     setMermaidLoaderForTests(null);
+  });
+
+  it.fails("does not reuse an SVG when distinct sources collide in the FNV cache key", async () => {
+    const sourceA = "graph TD; N45193-->M45193";
+    const sourceB = "graph TD; N59615-->M59615";
+    expect(sourceA).not.toBe(sourceB);
+    expect(hashMermaidSource(sourceA)).toBe(hashMermaidSource(sourceB));
+
+    const render = vi.fn(async (_id: string, source: string) => ({
+      svg: source.includes("N45193") ? "<svg><g>source-a</g></svg>" : "<svg><g>source-b</g></svg>",
+    }));
+    setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
+
+    await expect(requestForOwner({}, sourceA)).resolves.toContain("source-a");
+    await expect(requestForOwner({}, sourceB)).resolves.toContain("source-b");
   });
 
   it("owns a single shared observer instead of one per block", () => {
