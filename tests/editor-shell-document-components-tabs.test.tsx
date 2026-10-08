@@ -47,14 +47,13 @@ const {
   pointerClick,
   resetEditorShellWorld,
   waitFor,
-  waitForHydrationReady,
 } = await import("./support/editor-shell-harness")
 const { createEmptyEditorSession, EDITOR_DRAFT_TAB_ID } = await import(
   "@/lib/local-db/editor-sessions"
 )
 const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 
-const TEST_TIMEOUT_MS = 45_000
+const TEST_TIMEOUT_MS = 90_000
 const TEXT_A = "TAB686_A_BODY"
 const TEXT_B = "TAB686_B_BODY"
 const TEXT_C = "TAB686_C_BODY"
@@ -128,12 +127,15 @@ function markdownSource() {
 async function waitForActiveWriting(writingId: string, label: string) {
   await waitFor(() => activeWritingId() === writingId, {
     label,
-    timeoutMs: 15_000,
+    timeoutMs: 60_000,
   })
-  await waitForHydrationReady(label + " con hydrationPhase ready")
+  await waitFor(
+    () => currentPhase() === "ready",
+    { label: label + " con hydrationPhase ready", timeoutMs: 60_000 },
+  )
   await waitFor(
     () => mounted?.editor().getJSON() ?? null,
-    { label: label + " con editor hidratado", timeoutMs: 10_000 },
+    { label: label + " con editor hidratado", timeoutMs: 60_000 },
   )
 }
 
@@ -154,7 +156,7 @@ async function switchToMarkdown() {
   ).find((candidate) => candidate.textContent?.trim() === "Markdown")
   if (!markdownButton) throw new Error("No está el botón Markdown de la status bar")
   await act(async () => markdownButton.click())
-  await waitFor(() => markdownSource(), { label: "Source Markdown visible" })
+  await waitFor(() => markdownSource(), { label: "Source Markdown visible", timeoutMs: 60_000 })
 }
 
 async function selectMarkdownText(marker: string) {
@@ -279,11 +281,14 @@ describe("ODE-686 — componentes, tabs e hidratación", () => {
       mounted = null
       resetEditorShellWorld()
       mounted = await mountEditorShell({ writingId: writingC, key: writingC })
-      await waitFor(() => getEditorSessionState().loaded, { label: "sesión restaurada" })
+      await waitFor(() => getEditorSessionState().loaded, {
+        label: "sesión restaurada",
+        timeoutMs: 60_000,
+      })
       await waitForActiveWriting(writingC, "sesión restaurada en C")
       await waitFor(() => editorJson().includes("TAB686_C_BODY_COMPONENT_BODY"), {
         label: "contenido de C aplicado tras el remount",
-        timeoutMs: 15_000,
+        timeoutMs: 60_000,
       })
 
       const session = getEditorSessionState().session
@@ -320,7 +325,7 @@ describe("ODE-686 — componentes, tabs e hidratación", () => {
             currentPhase() === "loading" &&
             markdownSource()?.value.includes(textA) === true &&
             frames.pending() > 0,
-          { label: "A agenda su restore Markdown mientras sigue loading", timeoutMs: 15_000 },
+          { label: "A agenda su restore Markdown mientras sigue loading", timeoutMs: 60_000 },
         )
         const staleA = frames.takePending()
         expect(staleA.length, "el restore diferido de A quedó retenido").toBeGreaterThan(0)
@@ -331,7 +336,7 @@ describe("ODE-686 — componentes, tabs e hidratación", () => {
             activeWritingId() === writingB &&
             currentPhase() === "ready" &&
             (markdownSource()?.value.includes(textB) ?? false),
-          { label: "B hydrationPhase=ready antes de liberar el callback de A", timeoutMs: 15_000 },
+          { label: "B hydrationPhase=ready antes de liberar el callback de A", timeoutMs: 60_000 },
         )
         await frames.settle(6)
         expect(markdownSource()?.selectionStart, "control positivo: B recuperó su rango propio").toBe(

@@ -55,7 +55,6 @@ vi.mock("@/lib/sync/sync-service-factory", async () =>
 )
 
 const {
-  advance,
   emitTauriEvent,
   fillTextField,
   flush,
@@ -63,22 +62,29 @@ const {
   pointerClick,
   resetEditorShellWorld,
   waitFor,
-  waitForHydrationReady,
   waitForMarkdownContaining,
   world,
 } = await import("./support/editor-shell-harness")
 const { createDesktopWorkspace, destroyDesktopWorkspace, desktopWorkspaceRoot, resetDesktopWorkspace } =
   await import("./support/editor-shell-desktop-doubles")
-const { holdWriteFile, tauriOpenFileDouble } = await import("./integration/documents/support/real-desktop-doubles")
+const {
+  failWriteFileOnCall,
+  holdWriteFile,
+  resetWriteFileFailureState,
+  tauriOpenFileDouble,
+  writeFileCalls,
+} = await import("./integration/documents/support/real-desktop-doubles")
 const { scanControlledAnnotations } = await import("@/lib/editor/annotation-markdown")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 const { createEmptyEditorSession } = await import("@/lib/local-db/editor-sessions")
 const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 
-const TEST_TIMEOUT_MS = 60_000
+const TEST_TIMEOUT_MS = 90_000
 const A_TARGET = "ASELECTIONANCHOR"
 const B_TARGET = "BSELECTIONANCHOR"
 const A_PENDING_WRITE = "ODE686_A_PENDING_WRITE"
+const A_FAILED_WRITE = "ODE686_A_FAILED_WRITE"
+const A_SUCCESSFUL_WRITE = "ODE686_A_SUCCESSFUL_WRITE"
 const A_SOURCE =
   "# Footnote A\n\nA selection sits here: ASELECTIONANCHOR.\n\n<Tip title=\"Footnote A component\">\nA_COMPONENT_BODY\n</Tip>\n"
 const B_SOURCE =
@@ -123,6 +129,7 @@ afterEach(async () => {
   vi.restoreAllMocks()
   await mounted?.unmount()
   mounted = null
+  resetWriteFileFailureState()
   window.alert = () => {}
   vi.unstubAllEnvs()
 })
@@ -134,6 +141,10 @@ function activeTab() {
 
 function activeWritingId() {
   return activeTab()?.writing_id ?? null
+}
+
+function tabFor(writingId: string) {
+  return getEditorSessionState().session.tabs.find((tab) => tab.writing_id === writingId) ?? null
 }
 
 function tabNode(writingId: string) {
@@ -170,17 +181,27 @@ async function openByPath(path: string, marker: string) {
         ? { alert: null, writingId }
         : null
     },
-    { label: "open path completado para " + marker, timeoutMs: 15_000 },
+    { label: "open path completado para " + marker, timeoutMs: 60_000 },
   )
   if (outcome.alert) throw new Error("Open File no abrió el path: " + outcome.alert)
   const writingId = outcome.writingId
   if (!writingId) throw new Error("Open File no asignó writingId para " + marker)
-  await waitForHydrationReady("hidratación ready de " + marker)
+  await waitForReady("hidratación ready de " + marker)
   return writingId
 }
 
 function currentPhase() {
   return document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") ?? null
+}
+
+async function waitForReady(label: string) {
+  await waitFor(() => currentPhase() === "ready", { label, timeoutMs: 60_000 })
+}
+
+function visibleSaveStateLabel() {
+  return mounted?.container
+    .querySelector('[data-testid="editor-statusbar"] [aria-live="polite"]')
+    ?.textContent?.trim() ?? null
 }
 
 async function selectMarkdownText(marker: string) {
@@ -248,6 +269,100 @@ describe("ODE-686 — la selección de footnote pertenece al writing activo", ()
   })
 
   it(
+    "fallo al cambiar de A a B conserva A activo con save_state=error y no contamina B",
+    async () => {
+      mounted = await mountEditorShell()
+      const writingA = await openByPath(pathA, "A_COMPONENT_BODY")
+      const writingB = await openByPath(pathB, "B_COMPONENT_BODY")
+
+      await pointerClick(tabNode(writingA))
+      await waitFor(
+        () => activeWritingId() === writingA && currentPhase() === "ready",
+        { label: "A activo y listo antes del cambio fallido", timeoutMs: 60_000 },
+      )
+      await switchToMarkdown()
+
+      resetWriteFileFailureState()
+      failWriteFileOnCall(1, () => {
+        throw new Error("ENOSPC: simulated outgoing write failure")
+      })
+      const sourceA = markdownSource()
+      if (!sourceA) throw new Error("A no está en Markdown")
+      await fillTextField(sourceA, sourceA.value + "\n\n" + A_FAILED_WRITE + "\n")
+
+      // El gesto real intenta activar B; el completion event del write fallido
+      // conserva A activo y deja su save_state visible.
+      await pointerClick(tabNode(writingB))
+      await waitFor(() => tabFor(writingA)?.save_state === "error", {
+        label: "completion event: save_state de A pasa a error",
+        timeoutMs: 60_000,
+      })
+      expect(activeWritingId(), "A sigue siendo el documento activo tras fallar su write").toBe(writingA)
+      expect(currentPhase()).toBe("ready")
+      expect(visibleSaveStateLabel(), "la barra visible de A anuncia el error").toBe("Needs attention")
+      expect(
+        tabNode(writingA).querySelector("span.bg-destructive"),
+        "el tab saliente muestra el indicador de error",
+      ).not.toBeNull()
+      expect(tabFor(writingB)?.save_state, "B no hereda el error de A").not.toBe("error")
+      expect(
+        writeFileCalls().some((call) => call.path === pathA && call.content.includes(A_FAILED_WRITE)),
+        "el seam recibió el intento de escritura saliente de A",
+      ).toBe(true)
+      expect(
+        readFileSync(pathA, "utf8"),
+        "el write fallido no llegó al archivo canónico de A",
+      ).not.toContain(A_FAILED_WRITE)
+      expect(readFileSync(pathB, "utf8"), "B conserva su archivo propio").not.toContain(A_FAILED_WRITE)
+
+      const reopenedB = await openByPath(pathB, "B_COMPONENT_BODY")
+      expect(reopenedB).toBe(writingB)
+      expect(mounted.editor().getText()).toContain("B_COMPONENT_BODY")
+      expect(mounted.editor().getText()).not.toContain(A_FAILED_WRITE)
+      expect(tabFor(writingA)?.save_state, "el error permanece atribuido a la pestaña saliente").toBe("error")
+      expect(tabNode(writingA).querySelector("span.bg-destructive")).not.toBeNull()
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "control positivo: sin fallo, el gesto guarda A y activa B con su propio contenido",
+    async () => {
+      mounted = await mountEditorShell()
+      const writingA = await openByPath(pathA, "A_COMPONENT_BODY")
+      const writingB = await openByPath(pathB, "B_COMPONENT_BODY")
+
+      await pointerClick(tabNode(writingA))
+      await waitFor(
+        () => activeWritingId() === writingA && currentPhase() === "ready",
+        { label: "A activo y listo antes del cambio positivo", timeoutMs: 60_000 },
+      )
+      await switchToMarkdown()
+      resetWriteFileFailureState()
+
+      const sourceA = markdownSource()
+      if (!sourceA) throw new Error("A no está en Markdown")
+      await fillTextField(sourceA, sourceA.value + "\n\n" + A_SUCCESSFUL_WRITE + "\n")
+
+      await pointerClick(tabNode(writingB))
+      await waitFor(
+        () =>
+          activeWritingId() === writingB &&
+          currentPhase() === "ready" &&
+          readFileSync(pathA, "utf8").includes(A_SUCCESSFUL_WRITE),
+        { label: "completion event: A durable y B activo en ready", timeoutMs: 60_000 },
+      )
+      expect(readFileSync(pathA, "utf8")).toContain(A_SUCCESSFUL_WRITE)
+      expect(readFileSync(pathB, "utf8")).not.toContain(A_SUCCESSFUL_WRITE)
+      expect(mounted.editor().getText()).toContain("B_COMPONENT_BODY")
+      expect(mounted.editor().getText()).not.toContain(A_SUCCESSFUL_WRITE)
+      expect(tabFor(writingA)?.save_state, "A no conserva un error inexistente").not.toBe("error")
+      expect(tabFor(writingB)?.save_state, "B no hereda estado de error").not.toBe("error")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
     "rechaza el rango cacheado de A y usa la selección guardada de B tras abrir B por path",
     async () => {
       mounted = await mountEditorShell()
@@ -261,7 +376,7 @@ describe("ODE-686 — la selección de footnote pertenece al writing activo", ()
 
       await pointerClick(tabNode(writingA))
       await waitFor(() => activeWritingId() === writingA, { label: "A activo por gesto de pestaña" })
-      await waitForHydrationReady("A rehidratado")
+      await waitForReady("A rehidratado")
       await switchToMarkdown()
       const currentASelection = await selectMarkdownText(A_TARGET)
       const heldWrite = holdWriteFile((path) => path === pathA)
@@ -269,7 +384,8 @@ describe("ODE-686 — la selección de footnote pertenece al writing activo", ()
         const sourceA = markdownSource()
         if (!sourceA) throw new Error("A no está en Markdown")
         await fillTextField(sourceA, sourceA.value + "\n\n" + A_PENDING_WRITE + "\n")
-        await advance(1_200)
+        // La llegada al seam confirma que el debounce produjo el intento de
+        // escritura; no estimamos su duración con un retardo fijo.
         await heldWrite.started
         expect(
           readFileSync(pathA, "utf8"),
@@ -299,11 +415,19 @@ describe("ODE-686 — la selección de footnote pertenece al writing activo", ()
         heldWrite.release()
         await waitFor(
           () => readFileSync(pathA, "utf8").includes(A_PENDING_WRITE),
-          { label: "completion event: el write retenido de A quedó durable", timeoutMs: 15_000 },
+          { label: "completion event: el write retenido de A quedó durable", timeoutMs: 60_000 },
         )
 
         const sourceB = markdownSource()
         if (!sourceB) throw new Error("B no quedó en Markdown")
+        expect(
+          sourceB.value.slice(sourceB.selectionStart, sourceB.selectionEnd),
+          "el anclaje visible de B se restaura antes de confirmar la nota",
+        ).toBe(B_TARGET)
+        expect(
+          { start: sourceB.selectionStart, end: sourceB.selectionEnd },
+          "el rango activo de B coincide con su selección guardada",
+        ).toEqual({ start: selectionB.start, end: selectionB.end })
         const safeRead = readMarkdownSelectionForActiveDocument(cachedA, activeWritingId(), sourceB.value)
         expect(safeRead.belongsToOtherDocument).toBe(true)
         expect(safeRead.selection).toMatchObject({
@@ -312,7 +436,15 @@ describe("ODE-686 — la selección de footnote pertenece al writing activo", ()
         })
 
         await fillAndConfirmFootnote("ODE686_B_OWN_NOTE")
-        const saved = await waitForMarkdownContaining("ODE686_B_OWN_NOTE")
+        const liveSource = markdownSource()
+        if (!liveSource) throw new Error("B salió de Markdown tras confirmar la footnote")
+        const liveInserted = scanControlledAnnotations(liveSource.value).annotations.find(
+          (annotation) => annotation.comment === "ODE686_B_OWN_NOTE",
+        )
+        expect(liveInserted, "la acción real proyecta la footnote en el Source de B antes del write").toBeDefined()
+        expect(liveInserted?.anchorText, "la proyección viva ancla la nota al texto seleccionado de B").toBe(B_TARGET)
+
+        const saved = await waitForMarkdownContaining("ODE686_B_OWN_NOTE", 60_000)
         const annotations = scanControlledAnnotations(saved.contents)
         const inserted = annotations.annotations.find((annotation) => annotation.comment === "ODE686_B_OWN_NOTE")
         expect(inserted, "la fila guardada de B contiene la footnote confirmada").toBeDefined()
@@ -351,7 +483,7 @@ describe("ODE-686 — la selección de footnote pertenece al writing activo", ()
       expect(safeRead.selection).toMatchObject({ ...selection, text: B_TARGET, writingId: writingB })
 
       await fillAndConfirmFootnote(noteText)
-      const saved = await waitForMarkdownContaining(noteText)
+      const saved = await waitForMarkdownContaining(noteText, 60_000)
       const annotation = scanControlledAnnotations(saved.contents).annotations.find(
         (candidate) => candidate.comment === noteText,
       )

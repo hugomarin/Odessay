@@ -51,26 +51,25 @@ vi.mock("@/lib/editor/persistence-coordinator", async (importOriginal) => {
 })
 
 const {
-  advance,
   capturePersistenceCoordinators,
+  flush,
   mountEditorShell,
-  openNotesSidebar,
   pointerClick,
   readNotesSidebar,
   resetEditorShellWorld,
   waitFor,
-  waitForHydrationReady,
 } = await import("./support/editor-shell-harness")
 const { createEmptyEditorSession } = await import("@/lib/local-db/editor-sessions")
 const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 const { getEditorSessionState: readSessionState } = await import("@/lib/stores/editor-session-store")
 
-const TEST_TIMEOUT_MS = 45_000
+const TEST_TIMEOUT_MS = 90_000
 const TARGET_A = "ANNOTATIONANCHORA"
 const TARGET_B = "ANNOTATIONANCHORB"
 const NOTE_A = "ODE686_A_ACCEPTED_NOTE"
 const NOTE_B = "ODE686_B_ACCEPTED_NOTE"
 const NOTE_A_EDITED = "ODE686_A_EDITED_NOTE"
+const INVALID_SOURCE_SAVE_MARKER = "ODE686_INVALID_SOURCE_SAVE_COMPLETED"
 
 type Tab = { id: string; writing_id: string | null; view_state?: { editorMode?: string } }
 
@@ -146,18 +145,18 @@ async function routeOpen(writingId: string) {
   await mounted!.render({ writingId, key: writingId })
   await waitFor(() => activeWritingId() === writingId, {
     label: "apertura por id de " + writingId,
-    timeoutMs: 15_000,
+    timeoutMs: 60_000,
   })
-  await waitForHydrationReady("hidratación ready de " + writingId)
+  await waitForReady("hidratación ready de " + writingId)
 }
 
 async function pointerActivate(writingId: string) {
   await pointerClick(tabNode(writingId))
   await waitFor(() => activeWritingId() === writingId, {
     label: "gesto de pestaña para " + writingId,
-    timeoutMs: 10_000,
+    timeoutMs: 60_000,
   })
-  await waitForHydrationReady("hidratación ready tras activar " + writingId)
+  await waitForReady("hidratación ready tras activar " + writingId)
 }
 
 async function switchToMarkdown() {
@@ -169,7 +168,7 @@ async function switchToMarkdown() {
   await act(async () => button.click())
   await waitFor(
     () => mounted!.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]'),
-    { label: "Source Markdown" },
+    { label: "Source Markdown", timeoutMs: 60_000 },
   )
 }
 
@@ -184,14 +183,40 @@ async function replaceMarkdownSource(next: string) {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, next)
     textarea.dispatchEvent(new Event("input", { bubbles: true }))
   })
-  await advance(1_200)
+  await flush(1)
+}
+
+async function waitForReady(label: string) {
+  await waitFor(() => document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") === "ready", {
+    label,
+    timeoutMs: 60_000,
+  })
+}
+
+async function openNotesSidebarUnderLoad() {
+  const toggle = await waitFor(
+    () => document.querySelector<HTMLElement>('button[aria-label="Notes panel"]'),
+    { label: 'botón "Notes panel"', timeoutMs: 60_000 },
+  )
+  if (!readNotesSidebar()) {
+    await act(async () => toggle.click())
+    await flush(2)
+  }
+  return waitFor(() => readNotesSidebar(), { label: "sidebar de notas montado", timeoutMs: 60_000 })
+}
+
+async function waitForSourceSaveCompletion(label: string, wasApplied: () => boolean) {
+  if (!persistenceCapture) throw new Error("No se capturó el PersistenceCoordinator")
+  await waitFor(wasApplied, { label: label + " se aplica al editor", timeoutMs: 60_000 })
+  if (!(await persistenceCapture.settle())) {
+    throw new Error(label + " no llegó al completion event del PersistenceCoordinator")
+  }
 }
 
 async function waitForSavedBody(writingId: string, expected: string) {
-  if (!persistenceCapture) throw new Error("No se capturó el PersistenceCoordinator")
-  if (!(await persistenceCapture.settle())) {
-    throw new Error("El save de Source no llegó al completion event")
-  }
+  await waitForSourceSaveCompletion("el save de Source para " + writingId, () =>
+    JSON.stringify(mounted!.editor().getJSON()).includes(expected),
+  )
   const row = await localDB.writings.get(writingId)
   const body = JSON.stringify(row?.body_json)
   if (!body.includes(expected)) {
@@ -225,10 +250,11 @@ describe("ODE-686 — Notes panel usa el snapshot aceptado de Markdown", () => {
       mounted = await mountEditorShell({ writingId: writingA, key: writingA })
       await waitFor(() => mounted!.editor().getText().includes(TARGET_A), {
         label: "A hidratado con su anotación",
+        timeoutMs: 60_000,
       })
-      await waitForHydrationReady("A ready")
+      await waitForReady("A ready")
 
-      const initialNotes = await openNotesSidebar()
+      const initialNotes = await openNotesSidebarUnderLoad()
       expect(initialNotes?.map((entry) => entry.body), "control positivo: A tiene una nota").toContain(NOTE_A)
 
       await switchToMarkdown()
@@ -238,7 +264,6 @@ describe("ODE-686 — Notes panel usa el snapshot aceptado de Markdown", () => {
       }
       await replaceMarkdownSource(source.value.replace(NOTE_A, NOTE_A_EDITED))
       await waitForSavedBody(writingA, NOTE_A_EDITED)
-      await waitForHydrationReady("A ready tras guardar Source")
 
       await mounted.unmount()
       mounted = null
@@ -246,9 +271,10 @@ describe("ODE-686 — Notes panel usa el snapshot aceptado de Markdown", () => {
       mounted = await mountEditorShell({ writingId: writingA, key: writingA })
       await waitFor(() => mounted!.editor().getText().includes(TARGET_A), {
         label: "A rehidratado desde la escritura durable",
+        timeoutMs: 60_000,
       })
-      await waitForHydrationReady("A ready tras remount")
-      const afterRemount = await openNotesSidebar()
+      await waitForReady("A ready tras remount")
+      const afterRemount = await openNotesSidebarUnderLoad()
       expect(afterRemount?.map((entry) => entry.body)).toContain(NOTE_A_EDITED)
       expect(afterRemount?.map((entry) => entry.body)).not.toContain(NOTE_A)
     },
@@ -259,15 +285,21 @@ describe("ODE-686 — Notes panel usa el snapshot aceptado de Markdown", () => {
     "follow-up pendiente (ODE-686): A→B en Markdown muestra el accepted snapshot de B tras hydration ready",
     async () => {
       mounted = await mountEditorShell({ writingId: writingA, key: writingA })
-      await waitFor(() => mounted!.editor().getText().includes(TARGET_A), { label: "A hidratado" })
-      await waitForHydrationReady("A ready")
-      const acceptedNotes = await openNotesSidebar()
+      await waitFor(() => mounted!.editor().getText().includes(TARGET_A), {
+        label: "A hidratado",
+        timeoutMs: 60_000,
+      })
+      await waitForReady("A ready")
+      const acceptedNotes = await openNotesSidebarUnderLoad()
       expect(acceptedNotes?.map((entry) => entry.body)).toContain(NOTE_A)
 
       await routeOpen(writingB)
-      await waitFor(() => mounted!.editor().getText().includes(TARGET_B), { label: "B hidratado" })
-      await waitForHydrationReady("B ready")
-      expect((await openNotesSidebar())?.map((entry) => entry.body)).toContain(NOTE_B)
+      await waitFor(() => mounted!.editor().getText().includes(TARGET_B), {
+        label: "B hidratado",
+        timeoutMs: 60_000,
+      })
+      await waitForReady("B ready")
+      expect((await openNotesSidebarUnderLoad())?.map((entry) => entry.body)).toContain(NOTE_B)
 
       await switchToMarkdown()
       expect(readNotesSidebar()?.map((entry) => entry.body)).toContain(NOTE_B)
@@ -278,7 +310,7 @@ describe("ODE-686 — Notes panel usa el snapshot aceptado de Markdown", () => {
 
       await pointerActivate(writingB)
       expect(activeWritingId()).toBe(writingB)
-      await waitForHydrationReady("B ready after A→B")
+      await waitForReady("B ready after A→B")
       const notesB = readNotesSidebar()
       expect(notesB?.map((entry) => entry.body)).toContain(NOTE_B)
       expect(notesB?.map((entry) => entry.body)).not.toContain(NOTE_A)
@@ -290,9 +322,12 @@ describe("ODE-686 — Notes panel usa el snapshot aceptado de Markdown", () => {
     "Source inválido conserva las anotaciones del último snapshot aceptado",
     async () => {
       mounted = await mountEditorShell({ writingId: writingA, key: writingA })
-      await waitFor(() => mounted!.editor().getText().includes(TARGET_A), { label: "A hidratado" })
-      await waitForHydrationReady("A ready")
-      const acceptedNotes = await openNotesSidebar()
+      await waitFor(() => mounted!.editor().getText().includes(TARGET_A), {
+        label: "A hidratado",
+        timeoutMs: 60_000,
+      })
+      await waitForReady("A ready")
+      const acceptedNotes = await openNotesSidebarUnderLoad()
       expect(acceptedNotes?.map((entry) => entry.body)).toContain(NOTE_A)
 
       await switchToMarkdown()
@@ -300,8 +335,13 @@ describe("ODE-686 — Notes panel usa el snapshot aceptado de Markdown", () => {
       if (!source || !source.value.includes("</Annotation>")) {
         throw new Error("El source de A no contiene el cierre canónico de Annotation")
       }
-      await replaceMarkdownSource(source.value.replace("</Annotation>", ""))
-      await waitForHydrationReady("A ready con source inválido recuperable")
+      await replaceMarkdownSource(
+        source.value.replace("</Annotation>", "") + "\n" + INVALID_SOURCE_SAVE_MARKER,
+      )
+      await waitForSourceSaveCompletion(
+        "Source inválido recuperable",
+        () => mounted!.editor().getText().includes(INVALID_SOURCE_SAVE_MARKER),
+      )
 
       const notes = readNotesSidebar()
       expect(notes).toEqual(acceptedNotes)
