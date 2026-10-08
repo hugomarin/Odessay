@@ -24,17 +24,43 @@ const measureStringWork = <T>(run: () => T) => {
   let copiedCharacters = 0;
   let newlineScanCharacters = 0;
   const nativeIndexOf = String.prototype.indexOf;
+  const nativeLastIndexOf = String.prototype.lastIndexOf;
   const nativeSlice = String.prototype.slice;
   const nativeIncludes = String.prototype.includes;
+  const countForwardSearch = (length: number, searchLength: number, fromIndex: number, foundAt: number) => {
+    const start = Math.min(length, Math.max(0, Math.trunc(fromIndex)));
+    return foundAt === -1 ? length - start : foundAt - start + searchLength;
+  };
+  const countReverseSearch = (length: number, searchLength: number, position: number | undefined, foundAt: number) => {
+    const start = Math.min(length - searchLength, Math.trunc(position ?? length));
+    if (start < 0) return 0;
+    return foundAt === -1 ? start + searchLength : start - foundAt + searchLength;
+  };
   const indexOfSpy = vi.spyOn(String.prototype, "indexOf").mockImplementation(function (
     this: string,
     search: string,
     fromIndex?: number,
   ) {
     const foundAt = nativeIndexOf.call(this, search, fromIndex);
+    if (search === "\n") {
+      newlineScanCharacters += countForwardSearch(this.length, search.length, fromIndex ?? 0, foundAt);
+    }
     if (search === ">" || search.startsWith("</")) {
-      const start = Math.min(this.length, Math.max(0, fromIndex ?? 0));
-      searchedTagCharacters += foundAt === -1 ? this.length - start : foundAt - start + search.length;
+      searchedTagCharacters += countForwardSearch(this.length, search.length, fromIndex ?? 0, foundAt);
+    }
+    return foundAt;
+  });
+  const lastIndexOfSpy = vi.spyOn(String.prototype, "lastIndexOf").mockImplementation(function (
+    this: string,
+    search: string,
+    position?: number,
+  ) {
+    const foundAt = nativeLastIndexOf.call(this, search, position);
+    if (search === "\n") {
+      newlineScanCharacters += countReverseSearch(this.length, search.length, position, foundAt);
+    }
+    if (search === ">" || search.startsWith("</")) {
+      searchedTagCharacters += countReverseSearch(this.length, search.length, position, foundAt);
     }
     return foundAt;
   });
@@ -55,7 +81,10 @@ const measureStringWork = <T>(run: () => T) => {
     search: string,
     position?: number,
   ) {
-    if (search === "\n") newlineScanCharacters += Math.max(0, this.length - Math.max(0, position ?? 0));
+    if (search === "\n") {
+      const foundAt = nativeIndexOf.call(this, search, position);
+      newlineScanCharacters += countForwardSearch(this.length, search.length, position ?? 0, foundAt);
+    }
     return nativeIncludes.call(this, search, position);
   });
 
@@ -68,6 +97,7 @@ const measureStringWork = <T>(run: () => T) => {
     };
   } finally {
     indexOfSpy.mockRestore();
+    lastIndexOfSpy.mockRestore();
     sliceSpy.mockRestore();
     includesSpy.mockRestore();
   }
@@ -253,6 +283,33 @@ describe("ODE-529 controlled document engine", () => {
 
     expect(measured.value.document.source).toBe(source);
     expect(measured.searchedTagCharacters).toBeLessThanOrEqual(source.length * 2);
+  });
+
+  it.fails("checks the tag name before copying a distant malformed suffix", () => {
+    const source = `${"<".repeat(10_000)}>`;
+    const measured = measureStringWork(() => parseControlledMarkdown(source));
+
+    expect(measured.value.document.source).toBe(source);
+    expect(measured.copiedCharacters).toBeLessThanOrEqual(source.length * 2);
+  });
+
+  it.fails("bounds line-break work for many code spans and closed unknown tags on one line", () => {
+    const count = 300;
+    const sources = [
+      ["code spans", Array.from({ length: count }, () => "`x`").join("")],
+      ["closed unknown tags", Array.from({ length: count }, () => "<Future></Future>").join("")],
+    ] as const;
+    const violations: string[] = [];
+
+    for (const [label, source] of sources) {
+      const measured = measureStringWork(() => parseControlledMarkdown(source));
+      expect(measured.value.document.source).toBe(source);
+      if (measured.newlineScanCharacters > source.length * 6) {
+        violations.push(`${label}: ${measured.newlineScanCharacters} scans for ${source.length} characters`);
+      }
+    }
+
+    expect(violations).toEqual([]);
   });
 
   it("checks block crossing once for 500 nested inline components", () => {
