@@ -7,8 +7,11 @@
  * Camino probado: `DesktopWriteEntry` real → `EditorShell` real → creación de
  * dos documentos desde "New Artifact" → navegación de History durante un
  * insertion effect → sesión/editor restaurados → menú nativo Open File por
- * path. Se doblan solo Next, Tauri IPC/eventos/diálogos y AI; filesystem,
- * servicios, catálogo del harness, sesión y componentes internos siguen reales.
+ * path. Dobles: TipTap capture wrapper, Next navigation, Tauri core/event/dialog,
+ * detección de runtime (dos módulos), AI y sync service, Tauri path y commands
+ * (incluidos `tauriCatalog*`). El workspace temporal, la entry, la shell y la
+ * sesión se recorren en el harness real. La llamada IPC `tauriCatalogResolvePath`
+ * es doblada, por lo que el resolver Rust no forma parte de esta prueba.
  *
  * Completion event: el id esperado está activo, el editor real muestra su
  * contenido y `data-hydration-phase="ready"` después de la notificación.
