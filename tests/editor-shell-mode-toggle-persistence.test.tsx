@@ -480,7 +480,76 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     TEST_TIMEOUT_MS,
   )
 
+  it(
+    "descarta el Source pendiente cuando el documento cambia antes de medir Rich",
+    async () => {
+      const firstFile = await createDocument("ODE540-STALE-A")
+      const firstWritingId = activeTab()?.writing_id
+      if (!firstWritingId) throw new Error("A no tiene identidad documental")
 
+      await clickNewArtifact(mounted!.container)
+      await typeInEditor("ODE540-STALE-B")
+      await advance(SAVE_WINDOW_MS)
+      const secondFile = await waitForMarkdownContaining("ODE540-STALE-B")
+      const secondWritingId = activeTab()?.writing_id
+      if (!secondWritingId) throw new Error("B no tiene identidad documental")
+
+      await clickTabForWritingId(firstWritingId)
+      await waitFor(() => mounted!.editor().getText().includes("ODE540-STALE-A"), {
+        label: "Rich de A después de volver a su pestaña",
+      })
+      await switchMode("Markdown")
+      await advance(SAVE_WINDOW_MS)
+
+      const layout = { rect: new DOMRect(0, 0, 800, 500) }
+      vi.stubGlobal("ResizeObserver", ControlledResizeObserver)
+      const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains("EditorRichContent")
+          ? layout.rect
+          : originalGetBoundingClientRect.call(this)
+      })
+
+      await typeInMarkdown(" ODE540-STALE-SOURCE")
+      const firstBaselineWrites = writeFileCalls().filter((call) => call.path === firstFile.path).length
+      const secondBaselineWrites = writeFileCalls().filter((call) => call.path === secondFile.path).length
+      layout.rect = new DOMRect(0, 0, 0, 0)
+      const richButton = Array.from(
+        mounted!.container.querySelectorAll<HTMLButtonElement>('[data-testid="editor-statusbar"] button'),
+      ).find((candidate) => (candidate.textContent ?? "").trim() === "Rich")
+      if (!richButton) throw new Error('No está el botón "Rich" de la status bar')
+      await act(async () => richButton.click())
+      await flush(2)
+
+      expect(mounted!.editor().getText()).toContain("ODE540-STALE-A")
+      expect(mounted!.editor().getText()).not.toContain("ODE540-STALE-SOURCE")
+      await clickTabForWritingId(secondWritingId)
+      await waitFor(() => mounted!.editor().getText().includes("ODE540-STALE-B"), {
+        label: "Rich de B después del cambio de pestaña",
+      })
+
+      const observation = [...resizeObservations]
+        .reverse()
+        .find((entry) => !entry.disconnected && entry.target?.classList.contains("EditorRichContent"))
+      expect(observation, "la superficie Rich de B espera su medición").toBeDefined()
+      layout.rect = new DOMRect(0, 0, 800, 500)
+      await act(async () => observation?.notify(800, 500))
+      await advance(SAVE_WINDOW_MS)
+
+      expect(activeTab()?.writing_id).toBe(secondWritingId)
+      expect(mounted!.editor().getText()).toContain("ODE540-STALE-B")
+      expect(mounted!.editor().getText()).not.toContain("ODE540-STALE-SOURCE")
+      expect(await contentsOf(firstFile.path)).not.toContain("ODE540-STALE-SOURCE")
+      expect(await contentsOf(secondFile.path)).not.toContain("ODE540-STALE-SOURCE")
+      const laterWrites = [
+        ...writeFileCalls().filter((call) => call.path === firstFile.path).slice(firstBaselineWrites),
+        ...writeFileCalls().filter((call) => call.path === secondFile.path).slice(secondBaselineWrites),
+      ]
+      expect(laterWrites.some((write) => write.content.includes("ODE540-STALE-SOURCE"))).toBe(false)
+      expect(await readWorkspaceMarkdown()).toHaveLength(2)
+    },
+    TEST_TIMEOUT_MS,
+  )
 })
 
 describe("ODE-604 — STATE-10 en web", () => {
@@ -533,4 +602,6 @@ describe("ODE-604 — STATE-10 en web", () => {
     },
     TEST_TIMEOUT_MS,
   )
+
+
 })
