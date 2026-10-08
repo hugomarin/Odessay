@@ -16,6 +16,34 @@ const URL_HTML_ENTITIES: Readonly<Record<string, string>> = {
   bsol: "\\",
 };
 
+const URL_SCHEME_PREFIX_LIMIT = 1024;
+const URL_NETWORK_PREFIX_LIMIT = 32;
+const URL_NORMALIZATION_MAX_PASSES = 2;
+const ENCODED_URL_TOKEN = /%(?:[\da-f]{2})|&(?:#x[\da-f]+|#\d+|[a-z][\da-z]*);?/i;
+const URL_BACKSLASH_REFERENCE = /\\|%(?:25)*5c|&(?:amp;)*(?:bsol;?|#(?:x0*5c|0*92);?)/i;
+const URL_WHITESPACE_AND_CONTROLS = /[\u0000-\u0020\u007f-\u009f\s]/gu;
+
+const firstUrlBoundary = (value: string): number => {
+  const entities = Array.from(value.matchAll(/&(?:#x[\da-f]+|#\d+|[a-z][\da-z]*);?/gi));
+  let entityIndex = 0;
+
+  for (const boundary of value.matchAll(/[:/?#]/g)) {
+    const boundaryIndex = boundary.index ?? -1;
+    while (
+      entityIndex < entities.length &&
+      (entities[entityIndex].index ?? -1) + entities[entityIndex][0].length <= boundaryIndex
+    ) {
+      entityIndex += 1;
+    }
+
+    const entity = entities[entityIndex];
+    if (entity && (entity.index ?? -1) <= boundaryIndex) continue;
+    return boundaryIndex;
+  }
+
+  return -1;
+};
+
 const decodeUrlHtmlEntities = (value: string): string =>
   value.replace(/&(?:#x([\da-f]+)|#(\d+)|([a-z][\da-z]*));?/gi, (entity, hex, decimal, named) => {
     if (hex !== undefined || decimal !== undefined) {
@@ -41,25 +69,53 @@ const decodeUrlPercentEncoding = (value: string): string =>
     }
   });
 
-const normalizeUrlForValidation = (value: string): string => {
-  let normalized = value;
+const normalizeUrlForValidation = (value: string): string | null => {
+  let normalized = value.slice(0, URL_SCHEME_PREFIX_LIMIT + 1);
 
-  while (true) {
-    const decoded = decodeUrlPercentEncoding(decodeUrlHtmlEntities(normalized));
-    if (decoded === normalized) break;
-    normalized = decoded;
+  for (let pass = 0; pass < URL_NORMALIZATION_MAX_PASSES; pass += 1) {
+    const boundary = firstUrlBoundary(normalized);
+    const isLeadingSlash = boundary === 0 && normalized.startsWith("/");
+    const prefix = isLeadingSlash
+      ? normalized.slice(0, URL_NETWORK_PREFIX_LIMIT)
+      : boundary < 0
+        ? normalized
+        : normalized.slice(0, boundary + 1);
+    const decoded = decodeUrlPercentEncoding(decodeUrlHtmlEntities(prefix));
+    const cleaned = decoded.replace(URL_WHITESPACE_AND_CONTROLS, "");
+
+    if (cleaned.startsWith("//")) return null;
+
+    const decodedBoundary = firstUrlBoundary(cleaned);
+    if (decodedBoundary === 0 && cleaned.startsWith("/")) {
+      normalized = cleaned.slice(0, URL_NETWORK_PREFIX_LIMIT);
+    } else {
+      normalized = decodedBoundary < 0 ? cleaned : cleaned.slice(0, decodedBoundary + 1);
+    }
+
+    if (normalized === prefix) break;
   }
 
-  return normalized.replace(/[\u0000-\u0020\u007f-\u009f\s]/gu, "");
+  const boundary = firstUrlBoundary(normalized);
+  const schemeZone = boundary < 0 ? normalized : normalized.slice(0, boundary);
+
+  // A small fixed decode budget must never turn an ambiguous scheme prefix
+  // into a relative URL. A missing boundary beyond our scan limit is also
+  // ambiguous, so reject it closed.
+  if (ENCODED_URL_TOKEN.test(schemeZone)) return null;
+  if (boundary < 0 && value.length > URL_SCHEME_PREFIX_LIMIT) return null;
+  if (normalized.startsWith("/") && /^(?:%|&)/.test(normalized.slice(1))) return null;
+
+  return normalized;
 };
 
 export const safeUrl = (value: string) => {
   if (value.length === 0 || value !== value.trim() || /[\u0000-\u001F\u007F]/.test(value)) {
     return false;
   }
+  if (value.startsWith("//") || URL_BACKSLASH_REFERENCE.test(value)) return false;
 
   const normalized = normalizeUrlForValidation(value);
-  if (normalized.length === 0 || normalized.startsWith("//") || normalized.includes("\\")) return false;
+  if (normalized === null || normalized.length === 0 || normalized.startsWith("//")) return false;
   if (normalized.startsWith("#")) return true;
   const scheme = normalized.match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
   if (scheme) return /^(?:https?|mailto)$/i.test(scheme[1]);

@@ -142,7 +142,7 @@ describe("ODE-529 controlled document engine", () => {
     expect(href?.validate?.("file:///tmp/private")).toBe(false);
   });
 
-  it.fails("keeps URL validation bounded for a 125 KB multiply encoded scheme", () => {
+  it("keeps URL validation bounded for a 125 KB multiply encoded scheme", () => {
     const encodedScheme = `javascript%25${"25".repeat(1_999)}3A/`;
     const href = `${encodedScheme}${"x".repeat(125 * 1024 - encodedScheme.length)}`;
     const startedAt = performance.now();
