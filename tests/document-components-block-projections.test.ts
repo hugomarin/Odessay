@@ -4,8 +4,9 @@
 import JSZip from "jszip"
 import { extractText, getDocumentProxy } from "unpdf"
 import { describe, expect, it } from "vitest"
+import type { JSONContent } from "@tiptap/core"
 import { parseMarkdownToSnapshot } from "@/lib/editor/document-serialization"
-import { buildWritingExportDocument } from "@/lib/export/writing-export"
+import { buildWritingExportDocument, buildWritingMarkdown } from "@/lib/export/writing-export"
 import { renderWritingToDocxBuffer } from "@/lib/export/to-docx"
 import { renderWritingToPdfBuffer } from "@/lib/export/to-pdf"
 import { renderWritingBodyHtml as renderClient } from "@/lib/reading/render-body-html-client"
@@ -26,6 +27,43 @@ const SOURCE = [
 ].join("\n\n")
 
 const snapshot = () => parseMarkdownToSnapshot(SOURCE)
+
+const INLINE_LINK_EXPORT_BODY: JSONContent = {
+  type: "doc",
+  content: [
+    {
+      type: "paragraph",
+      content: [
+        {
+          type: "text",
+          text: "SAFE_LINK",
+          marks: [{ type: "link", attrs: { href: "https://example.com/safe" } }],
+        },
+        {
+          type: "text",
+          text: " JAVASCRIPT_LINK",
+          marks: [{ type: "link", attrs: { href: "javascript:alert(1)" } }],
+        },
+        {
+          type: "text",
+          text: " DATA_LINK",
+          marks: [{ type: "link", attrs: { href: "data:text/html,unsafe" } }],
+        },
+        {
+          type: "text",
+          text: " FILE_LINK",
+          marks: [{ type: "link", attrs: { href: "file:///private/unsafe" } }],
+        },
+      ],
+    },
+  ],
+}
+
+const UNSAFE_LINKS = [
+  { label: "JAVASCRIPT_LINK", scheme: "javascript:" },
+  { label: "DATA_LINK", scheme: "data:" },
+  { label: "FILE_LINK", scheme: "file:" },
+]
 
 describe("Tip/Info/Card projections", () => {
   it("body_text carries each title before its body, in reading order", () => {
@@ -111,4 +149,34 @@ describe("Tip/Info/Card projections", () => {
     }
     expect(text.indexOf("ONLY_TITLE")).toBeLessThan(text.indexOf("ONLY_BODY"))
   }, 30_000)
+})
+
+describe("inline link export safety", () => {
+  it.fails("keeps unsafe links inert in clean Markdown while preserving their labels", () => {
+    const markdown = buildWritingMarkdown(INLINE_LINK_EXPORT_BODY)
+
+    expect(markdown).toContain("[SAFE\\_LINK](https://example.com/safe)")
+    for (const link of UNSAFE_LINKS) {
+      expect(markdown).toContain(link.label.replaceAll("_", "\\_"))
+      expect(markdown).not.toContain(`](${link.scheme}`)
+    }
+  })
+
+  it.fails("keeps unsafe links inert in the real DOCX artifact while preserving their labels", async () => {
+    const document = buildWritingExportDocument(INLINE_LINK_EXPORT_BODY)
+    const docx = await JSZip.loadAsync(await renderWritingToDocxBuffer({ title: "Links", document }))
+    const xml = (await docx.file("word/document.xml")?.async("string")) ?? ""
+    const rels = (await docx.file("word/_rels/document.xml.rels")?.async("string")) ?? ""
+    const hyperlinks = xml.match(/<w:hyperlink\b/g) ?? []
+
+    expect(xml).toContain("SAFE_LINK")
+    expect(xml).toContain("JAVASCRIPT_LINK")
+    expect(xml).toContain("DATA_LINK")
+    expect(xml).toContain("FILE_LINK")
+    expect(hyperlinks).toHaveLength(1)
+    expect(rels).toContain("https://example.com/safe")
+    for (const link of UNSAFE_LINKS) {
+      expect(rels).not.toContain(link.scheme)
+    }
+  })
 })
