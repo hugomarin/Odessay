@@ -191,7 +191,7 @@ describe("Tip/Info/Card projections", () => {
 })
 
 describe("inline link export safety", () => {
-  it.fails.each(MARKDOWN_LINK_DESTINATION_INJECTION_VECTORS)(
+  it.each(MARKDOWN_LINK_DESTINATION_INJECTION_VECTORS)(
     "keeps accepted inline mark destinations as one Markdown link: %s",
     (href) => {
       const bodyJson: JSONContent = {
@@ -210,7 +210,7 @@ describe("inline link export safety", () => {
     },
   )
 
-  it.fails.each(MARKDOWN_LINK_DESTINATION_INJECTION_VECTORS)(
+  it.each(MARKDOWN_LINK_DESTINATION_INJECTION_VECTORS)(
     "keeps accepted Card destinations as one Markdown link: %s",
     (href) => {
       const bodyJson: JSONContent = {
@@ -230,8 +230,16 @@ describe("inline link export safety", () => {
     },
   )
 
-  it("keeps a percent-encoded relative destination valid for Card", () => {
-    expect(validateComponentAttribute("Card", "href", "notes%20v2.md")).toBe(true)
+  it("keeps a percent-encoded relative destination byte-for-byte in Card Markdown", () => {
+    const href = "notes%20v2.md"
+    expect(validateComponentAttribute("Card", "href", href)).toBe(true)
+
+    const markdown = buildWritingMarkdown({
+      type: "doc",
+      content: [{ type: "card", attrs: { title: "Relative", icon: "", href } }],
+    })
+
+    expect(markdown).toContain(`[Relative](${href})`)
   })
 
   it("keeps unsafe Card hrefs inert in clean Markdown and a real DOCX artifact", async () => {

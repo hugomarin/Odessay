@@ -239,6 +239,19 @@ describe("ODE-529 controlled document engine", () => {
     expect(href?.validate?.("file:///tmp/private")).toBe(false);
   });
 
+  it("fails closed when repeated percent escapes still hide a scheme after the decode budget", () => {
+    const href = `javascript%25${"25".repeat(10)}3A/x`;
+
+    expect(safeUrl(href)).toBe(false);
+  });
+
+  it("fails closed when a scheme boundary falls beyond the normalization prefix", () => {
+    const href = `javascript${"%09".repeat(500)}:alert(1)`;
+
+    expect(href).toHaveLength(1519);
+    expect(safeUrl(href)).toBe(false);
+  });
+
   it("keeps URL validation bounded for a 125 KB multiply encoded scheme", () => {
     const encodedScheme = `javascript%25${"25".repeat(1_999)}3A/`;
     const href = `${encodedScheme}${"x".repeat(125 * 1024 - encodedScheme.length)}`;
