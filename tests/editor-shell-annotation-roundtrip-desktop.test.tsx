@@ -170,6 +170,7 @@ describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", 
       expect.objectContaining({ type: "ai", index: 1, comment: NOTE, anchorText: TARGET }),
     ])
     const [annotation] = annotations.annotations
+    expect(annotation.id, "la identidad inline se acuña antes de guardar").toBeTruthy()
     expect(file.contents.slice(annotation.anchorStart, annotation.anchorEnd), "el rango anclado se conserva").toBe(
       TARGET,
     )
@@ -201,6 +202,17 @@ describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", 
       expect.objectContaining({ type: "ai", text: NOTE }),
     ])
     expect(reopened.references[0].pos, "la referencia sigue pegada al texto anclado").toBe(reopened.marks[0].to)
+
+    // Reabrir y guardar otra edición verifica la identidad inline después de
+    // que el `.md` atravesó el parser desktop, no solo que el archivo viejo sigue igual.
+    const reopenedEditor = mounted.editor()
+    reopenedEditor.commands.setTextSelection(reopenedEditor.state.doc.content.size - 1)
+    await typeInEditor(" after-reopen")
+    const reopenedFile = await waitForMarkdownContaining("after-reopen")
+    const reopenedSourceAnnotations = scanControlledAnnotations(reopenedFile.contents)
+    expect(reopenedSourceAnnotations.diagnostics, "el `.md` sigue parseando después de reabrir").toEqual([])
+    expect(reopenedSourceAnnotations.annotations.map(({ id }) => id)).toEqual([annotation.id])
+
     expect(await openNotesSidebar(), "ANN-03: el sidebar la lista").toEqual([
       { anchor: `“${TARGET}”`, body: NOTE, badge: "AI · 1" },
     ])

@@ -8,7 +8,12 @@
 import { z } from "zod"
 import type { JSONContent } from "@tiptap/core"
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { extractWritingAnnotationNodes, type MarkdownAnnotation } from "@/lib/editor/footnote-extension"
+import {
+  extractWritingAnnotationNodes,
+  extractWritingAnnotationProjection,
+  type MarkdownAnnotation,
+  type WritingAnnotationNode,
+} from "@/lib/editor/footnote-extension"
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -394,12 +399,12 @@ type SyncRow = Pick<
   | "note"
 >
 
-export const buildMarginSyncRows = (
-  bodyJson: JSONContent | null | undefined,
+const buildMarginSyncRowsFromAnnotations = (
+  annotations: WritingAnnotationNode[],
   writingId: string,
   readerId: string,
 ): SyncRow[] =>
-  extractWritingAnnotationNodes(bodyJson)
+  annotations
     .filter(
       (
         annotation,
@@ -418,6 +423,13 @@ export const buildMarginSyncRows = (
       note: annotation.text,
     }))
 
+export const buildMarginSyncRows = (
+  bodyJson: JSONContent | null | undefined,
+  writingId: string,
+  readerId: string,
+): SyncRow[] =>
+  buildMarginSyncRowsFromAnnotations(extractWritingAnnotationNodes(bodyJson), writingId, readerId)
+
 export async function syncMarginsFromBodyJson(
   supabase: MarginsSupabaseClient,
   {
@@ -430,7 +442,8 @@ export async function syncMarginsFromBodyJson(
     readerId: string
   },
 ) {
-  const syncRows = buildMarginSyncRows(bodyJson, writingId, readerId)
+  const projection = extractWritingAnnotationProjection(bodyJson)
+  const syncRows = buildMarginSyncRowsFromAnnotations(projection.annotations, writingId, readerId)
 
   if (syncRows.length > 0) {
     const { error: upsertError } = await supabase.from("margins").upsert(syncRows, { onConflict: "id" })
@@ -461,16 +474,18 @@ export async function syncMarginsFromBodyJson(
     }
   }
 
-  const ids = syncRows.map((row) => row.id)
-  let deleteQuery = supabase.from("margins").delete().eq("writing_id", writingId).eq("reader_id", readerId)
+  if (projection.accepted) {
+    const ids = syncRows.map((row) => row.id)
+    let deleteQuery = supabase.from("margins").delete().eq("writing_id", writingId).eq("reader_id", readerId)
 
-  if (ids.length > 0) {
-    deleteQuery = deleteQuery.not("id", "in", `(${ids.join(",")})`)
-  }
+    if (ids.length > 0) {
+      deleteQuery = deleteQuery.not("id", "in", `(${ids.join(",")})`)
+    }
 
-  const { error: deleteError } = await deleteQuery
-  if (deleteError) {
-    throw deleteError
+    const { error: deleteError } = await deleteQuery
+    if (deleteError) {
+      throw deleteError
+    }
   }
 
   return getOwnedMargins(supabase, writingId, readerId)

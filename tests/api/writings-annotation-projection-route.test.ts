@@ -211,7 +211,7 @@ describe("PATCH /api/writings/[id] annotation projection", () => {
   const malformedSource =
     '<Annotation id="collaborative-sentinel-531" type="personal" comment="Keep this collaborative note" extra="invalid">Anchor</Annotation>'
 
-  it.fails("conserves the collaborative margin after invalid Annotation source becomes opaque Rich content", async () => {
+  it("conserves the collaborative margin after invalid Annotation source becomes opaque Rich content", async () => {
     const snapshot = parseMarkdownToSnapshot(malformedSource)
     const opaqueNodes: JSONContent[] = []
     visitJsonNodes(snapshot.bodyJson, (node) => {

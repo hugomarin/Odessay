@@ -242,9 +242,16 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 
 ---
 
+# O. Document Component Integrity
+
+| ID | Capability | Chain | Invariant | Status | Priority | Evidence | Note |
+|---|---|---|---|---|---|---|---|
+| COMP-01 | Preserve collaborative margins through invalid component source | controlled Markdown → opaque Rich node → `PATCH /api/writings/[id]` → margin projection | An incomplete/invalid parse cannot turn an absent annotation row into a delete; an explicit accepted annotation deletion still removes its row. | INTEGRATION | CRITICAL | `tests/api/writings-annotation-projection-route.test.ts` | Real controlled-Markdown adapter, production route, extractor, and margin projection; only Supabase's external persistence boundary is doubled. The invalid source preserves a seeded shared/resolved sentinel after the route completion event; a positive control parses a valid annotation, calls the real `deleteAnnotation` command, saves through the route, and observes its row removed. The mandatory diagnostic-guard mutation is red. Added 2026-10-07 against `codex/ode-528-539-document-components@b2c205da`. |
+| COMP-02 | Preserve annotation identity after desktop reopen and resave | selection → Rich annotation → `.md` save → reopen from `.md` → Rich edit → `.md` save | The inline Annotation ID remains stable after desktop parses and reserializes the materialized Markdown. | INTEGRATION | HIGH | `tests/editor-shell-annotation-roundtrip-desktop.test.tsx` | Real EditorShell, TipTap, desktop document service, and temporary filesystem; after reopening, a Rich edit is saved and the canonical `.md` is parsed to compare the same annotation ID. Native Tauri transport remains doubled, as in the existing desktop shell proof. Added 2026-10-07 against `codex/ode-528-539-document-components@b2c205da`. |
+
 # Audit Summary (Phase 1 + Phase 2 complete)
 
-**107 scenarios inventoried** across 14 capability categories (A–N, sections above). This is the full sweep from the specification, not a subset.
+**109 scenarios inventoried** across 15 capability categories (A–O, sections above). This is the full sweep from the specification, not a subset.
 
 ## Coverage breakdown
 
@@ -254,7 +261,7 @@ This first pass follows the spec's own v1 suite plus scenarios this audit found 
 | UNIT_ONLY | 5 | 5% |
 | CONTRACT | 6 | 6% |
 | PARTIAL_INTEGRATION | 41 | 38% |
-| INTEGRATION | 53 | 50% |
+| INTEGRATION | 55 | 50% |
 | RUNTIME | 0 | 0% |
 | RELEASE | 1 | 1% |
 
