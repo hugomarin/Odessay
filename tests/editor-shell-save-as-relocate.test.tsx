@@ -409,7 +409,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "ODE-693: un manifiesto con otra identidad queda para reconciler/Open Document",
     async () => {
       const { file, title } = await createDocument()
@@ -455,7 +455,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "ODE-693: el paso 4 falla tras el move y el retry termina con el mismo UUID en destino",
     async () => {
       const { file } = await createDocument()
@@ -494,7 +494,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "ODE-693: el paso 5 falla tras el move y el retry encola sync con el mismo UUID",
     async () => {
       const { file } = await createDocument()
@@ -522,7 +522,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "ODE-693: al agotar el retry deja aviso y repara en el siguiente save sin cambiar de UUID",
     async () => {
       const { file } = await createDocument()
@@ -568,7 +568,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "ODE-693: al reabrir, el reconciler repara el manifiesto y catálogo sin acuñar identidad",
     async () => {
       const { file } = await createDocument()
@@ -618,7 +618,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "ODE-693: si el relocate falla, libera el save y conserva la ruta original recuperable",
     async () => {
       const { file, coordinatorCapture } = await createDocument({ captureCoordinator: true })
