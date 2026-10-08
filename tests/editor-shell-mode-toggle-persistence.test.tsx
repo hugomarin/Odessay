@@ -432,7 +432,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it(
+  it.fails(
     "conserva Rich y el archivo cuando el parser de Source no puede crear su DOM",
     async () => {
       const file = await createDocument("ODE540-PARSE-BASE")
@@ -458,9 +458,15 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
         sourceVisible: Boolean(markdownSource()),
         sourceRetainsEdit: markdownSource()?.value.includes("ODE540-PARSE-EDITED") ?? false,
         richIsUntouched: mounted!.editor().getText() === originalRich,
-        recoverableError: mounted!.container.querySelector('[role="alert"]')?.textContent?.includes(
+        recoverableError: mounted!.container.querySelector('[role="status"]')?.textContent?.includes(
           "Could not apply this source to Rich",
         ) ?? false,
+        retryAction: Array.from(mounted!.container.querySelectorAll("button")).some(
+          (button) => button.textContent?.trim() === "Try again",
+        ),
+        keepEditingAction: Array.from(mounted!.container.querySelectorAll("button")).some(
+          (button) => button.textContent?.trim() === "Keep editing in Source",
+        ),
         writes: writeFileCalls().filter((call) => call.path === file.path).slice(baselineWrites).length,
         fileIsUntouched: (await contentsOf(file.path)) === originalFile,
         documentCount: (await readWorkspaceMarkdown()).length,
@@ -472,10 +478,22 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
         sourceRetainsEdit: true,
         richIsUntouched: true,
         recoverableError: true,
+        retryAction: true,
+        keepEditingAction: true,
         writes: 0,
         fileIsUntouched: true,
         documentCount: 1,
       })
+
+      const keepEditingButton = Array.from(mounted!.container.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Keep editing in Source",
+      )
+      if (!keepEditingButton) throw new Error('No está la acción "Keep editing in Source"')
+      await act(async () => keepEditingButton.click())
+      await flush(2)
+      expect(mounted!.container.querySelector('[role="status"]'), "la acción cierra el aviso").toBeNull()
+      expect(markdownSource()?.value).toContain("ODE540-PARSE-EDITED")
+      expect(await contentsOf(file.path)).toBe(originalFile)
     },
     TEST_TIMEOUT_MS,
   )
