@@ -2,7 +2,7 @@
 
 import type { Editor } from "@tiptap/react"
 import { EditorContent } from "@tiptap/react"
-import { useMemo, useRef } from "react"
+import { useLayoutEffect, useMemo, useRef } from "react"
 import type { CSSProperties, ReactNode, RefObject, UIEvent } from "react"
 import { renderMarkdownSemanticHtml } from "@/lib/editor/markdown-format"
 import { cn } from "@/lib/utils"
@@ -16,6 +16,8 @@ type EditorContentProps = {
   markdownTextareaRef?: RefObject<HTMLTextAreaElement | null>
   topSlot?: ReactNode
   markdownOverlayHtml?: string
+  sourceTransitionError?: string | null
+  onRichLayoutReady?: () => void
 }
 
 export function WritingEditorContent({
@@ -27,12 +29,50 @@ export function WritingEditorContent({
   markdownTextareaRef,
   topSlot,
   markdownOverlayHtml,
+  sourceTransitionError,
+  onRichLayoutReady,
 }: EditorContentProps) {
   const markdownSemanticRef = useRef<HTMLPreElement | null>(null)
+  const richContentRef = useRef<HTMLDivElement | null>(null)
   const semanticHtml = useMemo(
     () => markdownOverlayHtml ?? renderMarkdownSemanticHtml(markdownValue),
     [markdownOverlayHtml, markdownValue],
   )
+
+  useLayoutEffect(() => {
+    if (mode !== "rich" || !editor || editor.isDestroyed) return
+
+    const surface = richContentRef.current
+    if (!surface) return
+
+    const reportReadyLayout = (width: number, height: number) => {
+      const editorElement = editor.view.dom
+      if (
+        !surface.isConnected ||
+        !editorElement.isConnected ||
+        !surface.contains(editorElement) ||
+        width <= 0 ||
+        height <= 0
+      ) {
+        return
+      }
+
+      onRichLayoutReady?.()
+    }
+
+    const rect = surface.getBoundingClientRect()
+    reportReadyLayout(rect.width, rect.height)
+
+    if (typeof ResizeObserver === "undefined") return
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries.find((candidate) => candidate.target === surface)
+      if (entry) reportReadyLayout(entry.contentRect.width, entry.contentRect.height)
+    })
+    observer.observe(surface)
+
+    return () => observer.disconnect()
+  }, [editor, mode, onRichLayoutReady])
 
   const handleMarkdownScroll = (event: UIEvent<HTMLTextAreaElement>) => {
     const target = event.currentTarget
@@ -63,6 +103,11 @@ export function WritingEditorContent({
         <div className="relative">
           {mode === "markdown" ? (
             <div className="odessay-markdown-shell relative min-h-[55vh] w-full">
+              {sourceTransitionError ? (
+                <p role="alert" className="relative z-20 mx-3 mb-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  {sourceTransitionError}
+                </p>
+              ) : null}
               <pre
                 ref={markdownSemanticRef}
                 aria-hidden="true"
@@ -88,6 +133,7 @@ export function WritingEditorContent({
             </div>
           ) : null}
           <div
+            ref={richContentRef}
             aria-hidden={mode === "markdown" ? "true" : undefined}
             inert={mode === "markdown" ? true : undefined}
             className={cn(

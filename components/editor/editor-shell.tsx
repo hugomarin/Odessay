@@ -162,6 +162,16 @@ import { useHydrationProgress } from "@/lib/sync/hydration-progress"
 import { CATALOG_TITLE_CHANGE_EVENT, getLatestCatalogTitle } from "@/lib/events/catalog-title-events"
 import type { EditorNavigationMode } from "@/components/editor/panels/editor-navigation-sidebar"
 
+type PendingSourceRichApplication = {
+  editor: Editor
+  editorDocument: Editor["state"]["doc"]
+  writingId: string | null
+  editorTabId: string | null
+  sourceRevision: number
+  sourceMarkdown: string
+  applySnapshot: () => void
+}
+
 /** Debounce for the table of contents rebuild — see failure mode 3 of ODE-433. */
 const TABLE_OF_CONTENTS_DEBOUNCE_MS = 180
 
@@ -418,6 +428,7 @@ export function EditorShell({
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
+  const [sourceTransitionError, setSourceTransitionError] = useState<string | null>(null)
   const [acceptedMarkdownForAnnotations, setAcceptedMarkdownForAnnotations] = useState("")
 
   const [bodyText, setBodyText] = useState("")
@@ -579,6 +590,8 @@ export function EditorShell({
   // poder ejecutarlo al desmontar en vez de perderlo.
   const pendingMarkdownSaveRef = useRef<(() => void) | null>(null)
   const isApplyingContentRef = useRef(false)
+  const sourceMarkdownRevisionRef = useRef(0)
+  const pendingSourceRichApplicationRef = useRef<PendingSourceRichApplication | null>(null)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
   // Único escritor: la suscripción síncrona al store (ODE-609, opción B de
   // ODE-608). Antes era un espejo por efecto más cuatro escrituras manuales.
@@ -1460,6 +1473,14 @@ export function EditorShell({
         return
       }
 
+      if (nextMode === "markdown" && pendingSourceRichApplicationRef.current) {
+        // The previous Rich surface never received its layout-ready signal.
+        // Keep the user's latest Source text and let them retry the transition.
+        pendingSourceRichApplicationRef.current = null
+        applyEditorMode("markdown")
+        return
+      }
+
       if (markdownSaveTimeoutRef.current) {
         window.clearTimeout(markdownSaveTimeoutRef.current)
         markdownSaveTimeoutRef.current = null
@@ -1503,35 +1524,78 @@ export function EditorShell({
         )
       }
 
-      applyEditorMode("rich")
       setMarkdownValue(normalizedMarkdown)
       // Preserve EditorState and custom NodeViews for a clean mode round trip.
       if (currentRichMarkdown === normalizedMarkdown) {
+        setSourceTransitionError(null)
+        applyEditorMode("rich")
         return
       }
 
-      isApplyingContentRef.current = true
+      let sourceContent: Parameters<typeof editor.commands.setContent>[0]
       if (isDesktopRuntime()) {
         const result = desktopDocumentEngine.sourceToRich(normalizedMarkdown)
         if (result.success) {
-          editor.commands.setContent(result.snapshot.bodyJson)
+          sourceContent = result.snapshot.bodyJson
         } else {
           console.error("[ODE-209] DesktopDocumentEngine.sourceToRich failed:", result.error)
-          editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
+          setSourceTransitionError(
+            "Could not apply this source to Rich. Your previous Rich content is still intact. Fix the source and try again.",
+          )
+          return
         }
       } else {
-        editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
+        sourceContent = materializeMarkdownForRichParser(normalizedMarkdown)
       }
-      isApplyingContentRef.current = false
-      updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
+
+      setSourceTransitionError(null)
+      setMarkdownValue(normalizedMarkdown)
+      pendingSourceRichApplicationRef.current = {
+        editor,
+        editorDocument: editor.state.doc,
+        writingId: currentWritingIdRef.current,
+        editorTabId: activeEditorTabIdRef.current,
+        sourceRevision: sourceMarkdownRevisionRef.current,
+        sourceMarkdown: normalizedMarkdown,
+        applySnapshot: () => editor.commands.setContent(sourceContent),
+      }
+      applyEditorMode("rich")
     },
-    [editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState, applyEditorMode],
+    [editor, markdownValue, activeEditorTabIdRef, applyEditorMode],
   )
+
+  const handleRichLayoutReady = useCallback(() => {
+    const pending = pendingSourceRichApplicationRef.current
+    if (!pending || !editor || modeRef.current !== "rich") return
+
+    pendingSourceRichApplicationRef.current = null
+    if (
+      pending.editor !== editor ||
+      editor.isDestroyed ||
+      pending.writingId !== currentWritingIdRef.current ||
+      pending.editorTabId !== activeEditorTabIdRef.current ||
+      pending.sourceRevision !== sourceMarkdownRevisionRef.current ||
+      pending.sourceMarkdown !== markdownValue ||
+      pending.editorDocument !== editor.state.doc
+    ) {
+      return
+    }
+
+    isApplyingContentRef.current = true
+    try {
+      pending.applySnapshot()
+    } finally {
+      isApplyingContentRef.current = false
+    }
+    updateDerivedEditorState(editor)
+    void persistEditorSnapshot(editor)
+  }, [activeEditorTabIdRef, editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState])
 
   const handleMarkdownChange = useCallback(
     (nextMarkdown: string) => {
       const normalizedMarkdown = convertHtmlTablesToMarkdown(nextMarkdown)
+      sourceMarkdownRevisionRef.current += 1
+      setSourceTransitionError(null)
       setMarkdownValue(normalizedMarkdown)
       // WATCH-07 — the markdown textarea's own onChange; see
       // hasUnconfirmedLocalEditRef's doc comment.
@@ -2632,6 +2696,8 @@ export function EditorShell({
                     editor={editor}
                     mode={mode}
                     markdownValue={markdownValue}
+                    sourceTransitionError={sourceTransitionError}
+                    onRichLayoutReady={handleRichLayoutReady}
                     onMarkdownChange={handleMarkdownChange}
                     onMarkdownSelectionChange={(selection) => {
                       const writingId = markdownSelectionOwnerId(currentWritingId)

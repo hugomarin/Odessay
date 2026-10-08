@@ -366,7 +366,7 @@ describe("ODE-604 — STATE-10: cambiar de modo no pierde ni duplica lo escrito 
 })
 
 describe("ODE-540 — aplicar Source editado en Rich", () => {
-  it.fails(
+  it(
     "espera a que Rich esté conectado y medido antes de aplicar y persistir el Source editado",
     async () => {
       const file = await createDocument("ODE540-LAYOUT-BASE")
@@ -432,7 +432,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "conserva Rich y el archivo cuando el parser de Source no puede crear su DOM",
     async () => {
       const file = await createDocument("ODE540-PARSE-BASE")
