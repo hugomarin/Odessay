@@ -88,7 +88,7 @@ describe("mermaid coordinator (ODE-533)", () => {
     setMermaidLoaderForTests(null);
   });
 
-  it.fails("does not reuse an SVG when distinct sources collide in the FNV cache key", async () => {
+  it("does not reuse an SVG when distinct sources collide in the FNV cache key", async () => {
     const sourceA = "graph TD; N45193-->M45193";
     const sourceB = "graph TD; N59615-->M59615";
     expect(sourceA).not.toBe(sourceB);
