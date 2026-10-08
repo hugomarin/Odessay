@@ -68,6 +68,7 @@ const {
   advance,
   closeEditorTab,
   clickNewArtifact,
+  dispatchPointerClick,
   emitTauriEvent,
   flush,
   mountEditorShell,
@@ -140,6 +141,28 @@ function holdSessionRead() {
 function activeTab() {
   const { session } = getEditorSessionState()
   return session.tabs.find((tab) => tab.id === session.active_tab_id)
+}
+
+async function watchDesktopSaves() {
+  const { getDocumentService } = await import("@/lib/services/document-service-factory")
+  const service = await getDocumentService()
+  const saveWriting = service.saveWriting.bind(service)
+  let pending = 0
+  vi.spyOn(service, "saveWriting").mockImplementation(async (input) => {
+    pending += 1
+    try {
+      return await saveWriting(input)
+    } finally {
+      pending -= 1
+    }
+  })
+  const waitForIdle = async (label: string) => {
+    await waitFor(() => pending === 0, { label, timeoutMs: 15_000 })
+  }
+  return {
+    pending: () => pending,
+    waitForIdle,
+  }
 }
 
 async function exists(path: string) {
@@ -267,6 +290,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     "ODE-693: una edición durante el relocate espera el commit y solo se escribe en el destino",
     async () => {
       const { file } = await createDocument()
+      const saves = await watchDesktopSaves()
       const moved = join(desktopWorkspaceRoot(), "destino-en-vuelo", "Movido.md")
       world.saveDialogResult = moved
       const heldMove = holdRelocateFile(
@@ -287,24 +311,153 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
           writeFileCalls().slice(writesBeforeRelease),
           "ningún save empieza contra la ruta anterior mientras el catálogo está en commit",
         ).toHaveLength(0)
+        expect(saves.pending(), "el save del editor está esperando la operación de ruta").toBeGreaterThan(0)
       } finally {
         heldMove.release()
         await saveAs
         await waitFor(() => activeTab()?.title === "Movido", {
           label: "Save As termina de confirmar el relocate",
           timeoutMs: 15_000,
+        }).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error)
+          throw new Error(`${message}; title=${activeTab()?.title}; saveState=${activeTab()?.save_state}`)
         })
       }
 
       await advance(6_000)
       const saved = await waitForMarkdownContaining("ODE693-DURANTE-RELOCATE")
-      const writes = writeFileCalls().slice(writesBeforeRelease)
+      await saves.waitForIdle("completion del save en vuelo")
+      const writes = writeFileCalls()
+        .slice(writesBeforeRelease)
+        .filter((write) => write.content.includes("ODE693-DURANTE-RELOCATE"))
       expect(saved.path, "los bytes nuevos están en el archivo canónico de destino").toBe(moved)
       expect(await exists(file.path), "la ruta vieja no reaparece").toBe(false)
       expect(writes.length, "el save alcanzó el filesystem").toBeGreaterThan(0)
       expect(writes.length, "el retry del save permanece acotado").toBeLessThanOrEqual(3)
-      expect(writes.every((write) => write.path === moved), "el UUID se resuelve a la ruta canónica").toBe(true)
+      expect(writes.map((write) => write.path), "el UUID se resuelve a la ruta canónica").toEqual(
+        Array.from({ length: writes.length }, () => moved),
+      )
       expect(activeTab()?.save_state, "la pestaña conserva un estado recuperable").not.toBe("error")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "ODE-693: si el relocate falla, libera el save y conserva la ruta original recuperable",
+    async () => {
+      const { file } = await createDocument()
+      const saves = await watchDesktopSaves()
+      const writingId = activeTab()?.writing_id
+      expect(writingId, "el documento ya tiene identidad estable").toBeTruthy()
+      const requestedPath = join(desktopWorkspaceRoot(), "destino-fallido", "NoMovido.md")
+      world.saveDialogResult = requestedPath
+      const heldMove = holdRelocateFile(
+        (source, requested) => source === file.path && requested === requestedPath,
+        { stage: "before-move", error: new Error("simulated relocate failure") },
+      )
+      let writesBeforeRelease = 0
+      const saveAs = emitTauriEvent("menu:save-as")
+
+      try {
+        await heldMove.started
+        writesBeforeRelease = writeFileCalls().length
+        await typeInEditor(" ODE693-TRAS-FALLO")
+        await advance(6_000)
+        expect(
+          writeFileCalls().slice(writesBeforeRelease),
+          "el save espera mientras el resultado del relocate sigue pendiente",
+        ).toHaveLength(0)
+        expect(saves.pending(), "el save espera la resolución del relocate").toBeGreaterThan(0)
+      } finally {
+        heldMove.release()
+        await saveAs
+        await saves.waitForIdle("completion del save liberado tras el error")
+      }
+
+      await advance(6_000)
+      const original = await waitForMarkdownContaining("ODE693-TRAS-FALLO")
+      await saves.waitForIdle("completion del save recuperado en la ruta original")
+      expect(original.path, "el save vuelve a la ruta original después del error").toBe(file.path)
+      expect(await exists(requestedPath), "el fallo no deja un archivo destino").toBe(false)
+      expect(activeTab()?.writing_id, "la pestaña conserva su UUID").toBe(writingId)
+      expect(activeTab()?.save_state, "la pestaña no queda en error tras el save recuperado").not.toBe("error")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "ODE-693: cerrar durante un save que espera relocate permite terminar y cerrar la pestaña",
+    async () => {
+      const { file } = await createDocument()
+      const saves = await watchDesktopSaves()
+      const writingId = activeTab()?.writing_id
+      expect(writingId, "el documento ya tiene identidad estable").toBeTruthy()
+      const requestedPath = join(desktopWorkspaceRoot(), "destino-y-cierre", "Movido.md")
+      world.saveDialogResult = requestedPath
+      const heldMove = holdRelocateFile(
+        (source, requested) => source === file.path && requested === requestedPath,
+        { stage: "after-move" },
+      )
+      const saveAs = emitTauriEvent("menu:save-as")
+
+      try {
+        await heldMove.started
+        await typeInEditor(" ODE693-CIERRE")
+        await advance(6_000)
+
+        const tab = getEditorSessionState().session.tabs.find((candidate) => candidate.writing_id === writingId)
+        expect(tab, "el documento sigue montado antes del gesto de cierre").toBeDefined()
+        const close = document.querySelector<HTMLElement>(
+          `[data-editor-tab-id="${tab!.id}"] [aria-label^="Close "]`,
+        )
+        expect(close, "el botón real de cierre está en el DOM").toBeTruthy()
+        dispatchPointerClick(close!)
+        await flush(3)
+        expect(
+          getEditorSessionState().session.tabs.some((tab) => tab.writing_id === writingId),
+          "la pestaña sigue viva mientras su save espera",
+        ).toBe(true)
+        expect(saves.pending(), "el save sigue esperando el relocate antes del cierre").toBeGreaterThan(0)
+      } finally {
+        heldMove.release()
+        await saveAs
+      }
+
+      await advance(6_000)
+      const saved = await waitForMarkdownContaining("ODE693-CIERRE")
+      await saves.waitForIdle("completion del save antes del cierre final")
+      expect(saved.path, "el save termina en el destino incluso al cerrar").toBe(requestedPath)
+      const stillOpen = getEditorSessionState().session.tabs.some((tab) => tab.writing_id === writingId)
+      if (stillOpen) await closeEditorTab(writingId!)
+      await waitFor(() => !getEditorSessionState().session.tabs.some((tab) => tab.writing_id === writingId), {
+        label: "la pestaña puede cerrarse después del completion event",
+      })
+      expect(await exists(file.path), "la ruta anterior no reaparece después del cierre").toBe(false)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "ODE-693: el relocate conserva el UUID y enlaza el catálogo a la ruta final",
+    async () => {
+      const { file } = await createDocument()
+      const writingId = activeTab()?.writing_id
+      expect(writingId, "el documento ya tiene identidad estable").toBeTruthy()
+      const requestedPath = join(desktopWorkspaceRoot(), "destino-identidad", "Misma-identidad.md")
+      world.saveDialogResult = requestedPath
+
+      await emitTauriEvent("menu:save-as")
+      await waitFor(() => activeTab()?.title === "Misma-identidad", {
+        label: "Save As confirma el relocate",
+        timeoutMs: 15_000,
+      })
+
+      const { getDesktopWritingCanonicalPath } = await import("@/lib/services/document-service-factory")
+      const saved = await waitForMarkdownContaining(BODY)
+      expect(saved.path).toBe(requestedPath)
+      expect(activeTab()?.writing_id).toBe(writingId)
+      expect(await getDesktopWritingCanonicalPath(writingId!)).toBe(requestedPath)
+      expect(await exists(file.path)).toBe(false)
     },
     TEST_TIMEOUT_MS,
   )
@@ -387,122 +540,6 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
       const saved = await waitForMarkdownContaining("ODE693-RETRY-POST-COMMIT")
       expect(saved.path, "los bytes canónicos terminan en destino").toBe(requestedPath)
       expect(await exists(file.path), "la ruta vieja no reaparece al final del retry").toBe(false)
-    },
-    TEST_TIMEOUT_MS,
-  )
-
-  it(
-    "ODE-693: si el relocate falla, libera el save y conserva la ruta original recuperable",
-    async () => {
-      const { file } = await createDocument()
-      const writingId = activeTab()?.writing_id
-      expect(writingId, "el documento ya tiene identidad estable").toBeTruthy()
-      const requestedPath = join(desktopWorkspaceRoot(), "destino-fallido", "NoMovido.md")
-      world.saveDialogResult = requestedPath
-      const heldMove = holdRelocateFile(
-        (source, requested) => source === file.path && requested === requestedPath,
-        { stage: "before-move", error: new Error("simulated relocate failure") },
-      )
-      let writesBeforeRelease = 0
-      const saveAs = emitTauriEvent("menu:save-as")
-
-      try {
-        await heldMove.started
-        writesBeforeRelease = writeFileCalls().length
-        await typeInEditor(" ODE693-TRAS-FALLO")
-        await advance(6_000)
-        expect(
-          writeFileCalls().slice(writesBeforeRelease),
-          "el save espera mientras el resultado del relocate sigue pendiente",
-        ).toHaveLength(0)
-      } finally {
-        heldMove.release()
-        await saveAs
-        await waitFor(() => mounted!.container.textContent?.includes(FAILURE_NOTICE), {
-          label: "se conserva el aviso de relocate fallido",
-          timeoutMs: 15_000,
-        })
-      }
-
-      await advance(6_000)
-      const original = await waitForMarkdownContaining("ODE693-TRAS-FALLO")
-      expect(original.path, "el save vuelve a la ruta original después del error").toBe(file.path)
-      expect(await exists(requestedPath), "el fallo no deja un archivo destino").toBe(false)
-      expect(activeTab()?.writing_id, "la pestaña conserva su UUID").toBe(writingId)
-      expect(activeTab()?.save_state, "la pestaña no queda en error tras el save recuperado").not.toBe("error")
-    },
-    TEST_TIMEOUT_MS,
-  )
-
-  it(
-    "ODE-693: cerrar durante un save que espera relocate permite terminar y cerrar la pestaña",
-    async () => {
-      const { file } = await createDocument()
-      const writingId = activeTab()?.writing_id
-      expect(writingId, "el documento ya tiene identidad estable").toBeTruthy()
-      const requestedPath = join(desktopWorkspaceRoot(), "destino-y-cierre", "Movido.md")
-      world.saveDialogResult = requestedPath
-      const heldMove = holdRelocateFile(
-        (source, requested) => source === file.path && requested === requestedPath,
-        { stage: "after-move" },
-      )
-      const saveAs = emitTauriEvent("menu:save-as")
-
-      try {
-        await heldMove.started
-        await typeInEditor(" ODE693-CIERRE")
-        await advance(6_000)
-
-        const closeWhileWaiting = await closeEditorTab(writingId!).then(
-          () => "closed",
-          (error: unknown) => (error instanceof Error ? error.message : String(error)),
-        )
-        expect(closeWhileWaiting, "el exit protocol conserva el documento mientras el save no terminó").toContain(
-          "no cerró",
-        )
-        expect(
-          getEditorSessionState().session.tabs.some((tab) => tab.writing_id === writingId),
-          "la pestaña sigue viva mientras su save espera",
-        ).toBe(true)
-      } finally {
-        heldMove.release()
-        await saveAs
-      }
-
-      await advance(6_000)
-      const saved = await waitForMarkdownContaining("ODE693-CIERRE")
-      expect(saved.path, "el save termina en el destino incluso al cerrar").toBe(requestedPath)
-      const stillOpen = getEditorSessionState().session.tabs.some((tab) => tab.writing_id === writingId)
-      if (stillOpen) await closeEditorTab(writingId!)
-      await waitFor(() => !getEditorSessionState().session.tabs.some((tab) => tab.writing_id === writingId), {
-        label: "la pestaña puede cerrarse después del completion event",
-      })
-      expect(await exists(file.path), "la ruta anterior no reaparece después del cierre").toBe(false)
-    },
-    TEST_TIMEOUT_MS,
-  )
-
-  it(
-    "ODE-693: el relocate conserva el UUID y enlaza el catálogo a la ruta final",
-    async () => {
-      const { file } = await createDocument()
-      const writingId = activeTab()?.writing_id
-      expect(writingId, "el documento ya tiene identidad estable").toBeTruthy()
-      const requestedPath = join(desktopWorkspaceRoot(), "destino-identidad", "Misma-identidad.md")
-      world.saveDialogResult = requestedPath
-
-      await emitTauriEvent("menu:save-as")
-      await waitFor(() => activeTab()?.title === "Misma-identidad", {
-        label: "Save As confirma el relocate",
-        timeoutMs: 15_000,
-      })
-
-      const { getDesktopWritingCanonicalPath } = await import("@/lib/services/document-service-factory")
-      const saved = await waitForMarkdownContaining(BODY)
-      expect(saved.path).toBe(requestedPath)
-      expect(activeTab()?.writing_id).toBe(writingId)
-      expect(await getDesktopWritingCanonicalPath(writingId!)).toBe(requestedPath)
-      expect(await exists(file.path)).toBe(false)
     },
     TEST_TIMEOUT_MS,
   )
