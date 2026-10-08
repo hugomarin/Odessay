@@ -156,7 +156,7 @@ describe("ODE-532 entity and highlight semantic marks", () => {
   })
 
   describe("controlled rich paste identity", () => {
-    it.fails("mints one new Entity ID per copied identity across documents", () => {
+    it("mints one new Entity ID per copied identity across documents", () => {
       const sourceWritingId = "writing-source"
       const destinationWritingId = "writing-destination"
       const clipboardHtml = [
