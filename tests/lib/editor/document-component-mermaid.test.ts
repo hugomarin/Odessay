@@ -106,12 +106,65 @@ describe("mermaid previews in the editor (ODE-533)", () => {
     setMermaidLoaderForTests(null);
   });
 
-  it("discards stale renders when the source changes mid-render", async () => {
-    let releaseRender!: (svg: string) => void;
-    const renderGate = new Promise<string>((resolve) => {
-      releaseRender = resolve;
+  it.fails("renders concurrent Mermaid blocks independently through their NodeViews", async () => {
+    let releaseRenders!: () => void;
+    const renderGate = new Promise<void>((resolve) => {
+      releaseRenders = resolve;
     });
-    const render = vi.fn(async () => ({ svg: await renderGate }));
+    const render = vi.fn(async (_id: string, source: string) => {
+      await renderGate;
+      return {
+        svg: source.includes("A-->B") ? "<svg><g>owner-a</g></svg>" : "<svg><g>owner-b</g></svg>",
+      };
+    });
+    setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
+
+    const editor = createEditor();
+    const sourceA = "```mermaid\ngraph TD; A-->B\n```";
+    const sourceB = "```mermaid\ngraph TD; C-->D\n```";
+    const markdown = `${sourceA}\n\n${sourceB}`;
+    editor.commands.setContent(markdown);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    try {
+      const toggles = Array.from(editor.view.dom.querySelectorAll<HTMLButtonElement>(".odessay-mermaid-toggle"));
+      expect(toggles).toHaveLength(2);
+      toggles.forEach((toggle) => toggle.click());
+      await vi.waitFor(() => expect(render).toHaveBeenCalledTimes(2), { timeout: 2000 });
+      releaseRenders();
+      await vi.waitFor(
+        () => expect(editor.view.dom.querySelectorAll(".odessay-mermaid-svg svg")).toHaveLength(2),
+        { timeout: 2000 },
+      );
+
+      const rendered = Array.from(editor.view.dom.querySelectorAll<SVGElement>(".odessay-mermaid-svg svg"))
+        .map((svg) => svg.textContent)
+        .sort();
+      expect(rendered).toEqual(["owner-a", "owner-b"]);
+      expect(getEditorMarkdown(editor)).toBe(markdown);
+    } finally {
+      editor.destroy();
+      setMermaidLoaderForTests(null);
+    }
+  });
+
+  it("discards stale renders when the source changes mid-render", async () => {
+    let releaseOldRender!: (svg: string) => void;
+    let completeOldRender!: () => void;
+    const oldRenderGate = new Promise<string>((resolve) => {
+      releaseOldRender = resolve;
+    });
+    const oldRenderComplete = new Promise<void>((resolve) => {
+      completeOldRender = resolve;
+    });
+    const render = vi.fn(async (_id: string, source: string) => {
+      if (source.includes("A-->B")) {
+        const svg = await oldRenderGate;
+        completeOldRender();
+        return { svg };
+      }
+      return { svg: "<svg><g>fresh</g></svg>" };
+    });
     setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
 
     const editor = createEditor();
@@ -121,13 +174,111 @@ describe("mermaid previews in the editor (ODE-533)", () => {
     await vi.waitFor(() => expect(render).toHaveBeenCalledTimes(1), { timeout: 2000 });
 
     // Edit the source while the first render is still in flight.
-    editor.commands.setContent("```mermaid\ngraph TD; A-->C\n```");
-    releaseRender("<svg><g>stale</g></svg>");
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    // The stale SVG for A-->B must never commit over the edited source.
+    const originalNodeView = editor.view.dom.querySelector<HTMLElement>(".odessay-code-block");
+    expect(originalNodeView).not.toBeNull();
+    const editedMarkdown = "```mermaid\ngraph TD; A-->C\n```";
+    editor.commands.setContent(editedMarkdown);
+    expect(editor.view.dom.querySelector(".odessay-code-block")).toBe(originalNodeView);
+
+    // The stale result settles before a newer request can supersede its owner token.
+    releaseOldRender("<svg><g>stale</g></svg>");
+    await oldRenderComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(editor.view.dom.querySelector(".odessay-mermaid-svg")?.textContent ?? "").not.toContain("stale");
-    expect(getEditorMarkdown(editor)).toBe("```mermaid\ngraph TD; A-->C\n```");
+    expect(getEditorMarkdown(editor)).toBe(editedMarkdown);
+
+    // A current-source request remains reachable and completes in this setup.
+    const toggle = editor.view.dom.querySelector<HTMLButtonElement>(".odessay-mermaid-toggle");
+    if (toggle?.getAttribute("aria-expanded") === "true") toggle.click();
+    editor.view.dom.querySelector<HTMLButtonElement>(".odessay-mermaid-toggle")?.click();
+    await vi.waitFor(() => expect(render).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    await vi.waitFor(() => expect(editor.view.dom.querySelector(".odessay-mermaid-svg")?.textContent).toContain("fresh"), {
+      timeout: 2000,
+    });
     editor.destroy();
+    setMermaidLoaderForTests(null);
+  });
+
+  it("does not carry a pending render into replacement editor content", async () => {
+    let releaseOldRender!: (svg: string) => void;
+    let completeOldRender!: () => void;
+    const oldRenderGate = new Promise<string>((resolve) => {
+      releaseOldRender = resolve;
+    });
+    const oldRenderComplete = new Promise<void>((resolve) => {
+      completeOldRender = resolve;
+    });
+    const render = vi.fn(async (_id: string, source: string) => {
+      if (source.includes("A-->B")) {
+        const svg = await oldRenderGate;
+        completeOldRender();
+        return { svg };
+      }
+      return { svg: "<svg><g>document-b</g></svg>" };
+    });
+    setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
+
+    const editor = createEditor();
+    const documentA = "# Document A\n\n```mermaid\ngraph TD; A-->B\n```";
+    const documentB = "# Document B\n\n```mermaid\ngraph TD; C-->D\n```";
+    editor.commands.setContent(documentA);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    editor.view.dom.querySelector<HTMLButtonElement>(".odessay-mermaid-toggle")?.click();
+    await vi.waitFor(() => expect(render).toHaveBeenCalledTimes(1), { timeout: 2000 });
+
+    try {
+      // Replace the full editor document while its previous document is rendering.
+      editor.commands.setContent(documentB);
+      const toggle = editor.view.dom.querySelector<HTMLButtonElement>(".odessay-mermaid-toggle");
+      if (toggle?.getAttribute("aria-expanded") === "true") toggle.click();
+      editor.view.dom.querySelector<HTMLButtonElement>(".odessay-mermaid-toggle")?.click();
+      await vi.waitFor(() => expect(render).toHaveBeenCalledTimes(2), { timeout: 2000 });
+      await vi.waitFor(
+        () => expect(editor.view.dom.querySelector(".odessay-mermaid-svg")?.textContent).toContain("document-b"),
+        { timeout: 2000 },
+      );
+
+      releaseOldRender("<svg><g>document-a-stale</g></svg>");
+      await oldRenderComplete;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(editor.view.dom.querySelector(".odessay-mermaid-svg")?.textContent).toContain("document-b");
+      expect(editor.view.dom.textContent).not.toContain("document-a-stale");
+      expect(getEditorMarkdown(editor)).toBe(documentB);
+    } finally {
+      editor.destroy();
+      setMermaidLoaderForTests(null);
+    }
+  });
+
+  it("does not commit a pending render after its NodeView unmounts", async () => {
+    let releaseRender!: (svg: string) => void;
+    let completeRender!: () => void;
+    const renderGate = new Promise<string>((resolve) => {
+      releaseRender = resolve;
+    });
+    const renderComplete = new Promise<void>((resolve) => {
+      completeRender = resolve;
+    });
+    const render = vi.fn(async () => {
+      const svg = await renderGate;
+      completeRender();
+      return { svg };
+    });
+    setMermaidLoaderForTests(async () => ({ initialize: () => {}, render }));
+
+    const editor = createEditor();
+    editor.commands.setContent(MERMAID_MARKDOWN);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    editor.view.dom.querySelector<HTMLButtonElement>(".odessay-mermaid-toggle")?.click();
+    await vi.waitFor(() => expect(render).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    const preview = editor.view.dom.querySelector<HTMLElement>(".odessay-mermaid-preview");
+    expect(preview).not.toBeNull();
+
+    editor.destroy();
+    releaseRender("<svg><g>after-unmount</g></svg>");
+    await renderComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(preview?.querySelector(".odessay-mermaid-svg")).toBeNull();
     setMermaidLoaderForTests(null);
   });
 
