@@ -45,11 +45,17 @@
  *     correcto: son redundantes.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import type { Editor } from "@tiptap/core"
 
 vi.mock("@tiptap/react", async (importOriginal) => {
   const { createTiptapCaptureModule } = await import("./support/editor-shell-doubles")
   return createTiptapCaptureModule(await importOriginal<Record<string, unknown>>())
 })
+vi.mock("@tauri-apps/api/core", async (importOriginal) =>
+  (await import("./support/editor-shell-doubles")).tauriCoreDouble(
+    await importOriginal<Record<string, unknown>>(),
+  ),
+)
 vi.mock("next/navigation", async () =>
   (await import("./support/editor-shell-doubles")).nextNavigationDouble(),
 )
@@ -82,6 +88,7 @@ const {
   flush,
   mountEditorShell,
   resetEditorShellWorld,
+  pointerClick,
   typeInEditor,
   waitFor,
   waitForMarkdownContaining,
@@ -99,6 +106,46 @@ const { localDB } = await import("@/lib/local-db")
 
 const TEST_TIMEOUT_MS = 60_000
 const SAVE_WINDOW_MS = DESKTOP_PERSISTENCE_DEBOUNCE_MS + 1_000
+
+type ResizeObservation = {
+  callback: ResizeObserverCallback
+  target: Element | null
+  disconnected: boolean
+  notify: (width: number, height: number) => void
+}
+
+const resizeObservations: ResizeObservation[] = []
+
+class ControlledResizeObserver implements ResizeObserver {
+  private target: Element | null = null
+  private observation: ResizeObservation | null = null
+
+  constructor(private readonly callback: ResizeObserverCallback) {}
+
+  observe(target: Element) {
+    this.target = target
+    this.observation = {
+      callback: this.callback,
+      target,
+      disconnected: false,
+      notify: (width, height) => {
+        if (!this.target) throw new Error("ResizeObserver has no observed Rich surface")
+        const contentRect = new DOMRect(0, 0, width, height)
+        this.callback(
+          [{ target: this.target, contentRect } as ResizeObserverEntry],
+          this,
+        )
+      },
+    }
+    resizeObservations.push(this.observation)
+  }
+
+  unobserve() {}
+
+  disconnect() {
+    if (this.observation) this.observation.disconnected = true
+  }
+}
 
 let mounted: Awaited<ReturnType<typeof mountEditorShell>> | null = null
 
@@ -118,14 +165,31 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  vi.restoreAllMocks()
   await mounted?.unmount()
   mounted = null
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  resizeObservations.length = 0
 })
 
 function activeTab() {
   const { session } = getEditorSessionState()
   return session.tabs.find((tab) => tab.id === session.active_tab_id)
+}
+
+function tabForWritingId(writingId: string) {
+  return getEditorSessionState().session.tabs.find((tab) => tab.writing_id === writingId)
+}
+
+async function clickTabForWritingId(writingId: string) {
+  const tab = tabForWritingId(writingId)
+  if (!tab) throw new Error(`No hay pestaña abierta para ${writingId}`)
+  const node = mounted!.container.querySelector<HTMLElement>(`[data-editor-tab-id="${tab.id}"]`)
+  if (!node) throw new Error(`La pestaña de ${writingId} no está en el DOM`)
+  await pointerClick(node)
+  await waitFor(() => getEditorSessionState().session.active_tab_id === tab.id, {
+    label: `pestaña activa para ${writingId}`,
+  })
 }
 
 /** Crea un documento real, guardado en disco, y lo deja activo en Rich. */
@@ -186,6 +250,34 @@ async function typeInMarkdown(text: string) {
 async function contentsOf(path: string) {
   const files = await readWorkspaceMarkdown()
   return files.find((file) => file.path === path)?.contents ?? ""
+}
+
+function installOneShotDomAllocationFailure() {
+  const ownDescriptor = Object.getOwnPropertyDescriptor(document, "createElement")
+  const createElement = document.createElement.bind(document)
+  let failed = false
+  const restore = () => {
+    if (ownDescriptor) {
+      Object.defineProperty(document, "createElement", ownDescriptor)
+    } else {
+      Reflect.deleteProperty(document, "createElement")
+    }
+  }
+
+  Object.defineProperty(document, "createElement", {
+    configurable: true,
+    writable: true,
+    value: ((localName: string, options?: ElementCreationOptions) => {
+      if (!failed) {
+        failed = true
+        restore()
+        throw new Error("DOM allocation failed while creating the source parser")
+      }
+      return createElement(localName, options)
+    }) as typeof document.createElement,
+  })
+
+  return { didFail: () => failed, restore }
 }
 
 describe("ODE-604 — STATE-10: cambiar de modo no pierde ni duplica lo escrito (desktop)", () => {
@@ -271,6 +363,124 @@ describe("ODE-604 — STATE-10: cambiar de modo no pierde ni duplica lo escrito 
     },
     TEST_TIMEOUT_MS,
   )
+})
+
+describe("ODE-540 — aplicar Source editado en Rich", () => {
+  it.fails(
+    "espera a que Rich esté conectado y medido antes de aplicar y persistir el Source editado",
+    async () => {
+      const file = await createDocument("ODE540-LAYOUT-BASE")
+      await switchMode("Markdown")
+      await advance(SAVE_WINDOW_MS)
+
+      const layout = { rect: new DOMRect(0, 0, 800, 500) }
+      vi.stubGlobal("ResizeObserver", ControlledResizeObserver)
+      const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains("EditorRichContent")
+          ? layout.rect
+          : originalGetBoundingClientRect.call(this)
+      })
+
+      await typeInMarkdown(" ODE540-LAYOUT-EDITED")
+      const source = markdownSource()?.value ?? ""
+      const originalRich = mounted!.editor().getText()
+      const baselineWrites = writeFileCalls().filter((call) => call.path === file.path).length
+      let editorUpdates = 0
+      const onUpdate = () => {
+        editorUpdates += 1
+      }
+      const realEditor = mounted!.editor() as unknown as Editor
+      realEditor.on("update", onUpdate)
+
+      layout.rect = new DOMRect(0, 0, 0, 0)
+      const richButton = Array.from(
+        mounted!.container.querySelectorAll<HTMLButtonElement>('[data-testid="editor-statusbar"] button'),
+      ).find((candidate) => (candidate.textContent ?? "").trim() === "Rich")
+      if (!richButton) throw new Error('No está el botón "Rich" de la status bar')
+      await act(async () => richButton.click())
+      await flush(2)
+
+      expect(markdownSource(), "Rich hizo commit de la presentación antes de aplicar el snapshot").toBeNull()
+      expect(mounted!.editor().getText(), "el Source sigue pendiente hasta la señal de layout").toBe(originalRich)
+      expect(editorUpdates, "todavía no hay una aplicación a TipTap").toBe(0)
+
+      // Que pase el debounce sin entregar dimensiones prueba que agendar el
+      // commit no persiste el Source todavía.
+      await advance(SAVE_WINDOW_MS)
+      expect(writeFileCalls().filter((call) => call.path === file.path).slice(baselineWrites)).toHaveLength(0)
+      expect(await contentsOf(file.path)).not.toContain("ODE540-LAYOUT-EDITED")
+
+      const observation = [...resizeObservations]
+        .reverse()
+        .find((entry) => !entry.disconnected && entry.target?.classList.contains("EditorRichContent"))
+      expect(observation, "la superficie Rich espera una medición del browser").toBeDefined()
+      layout.rect = new DOMRect(0, 0, 800, 500)
+      await act(async () => observation?.notify(800, 500))
+
+      expect(mounted!.editor().getText()).toContain("ODE540-LAYOUT-EDITED")
+      expect(editorUpdates, "el snapshot aceptado se aplica una sola vez").toBe(1)
+      await advance(SAVE_WINDOW_MS)
+      await waitForMarkdownContaining("ODE540-LAYOUT-EDITED")
+      expect(writeFileCalls().filter((call) => call.path === file.path).slice(baselineWrites)).toHaveLength(1)
+      expect(await contentsOf(file.path)).toContain("ODE540-LAYOUT-EDITED")
+      realEditor.off("update", onUpdate)
+
+      // El valor se conserva para documentar que se probó el textarea real.
+      expect(source).toContain("ODE540-LAYOUT-EDITED")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "conserva Rich y el archivo cuando el parser de Source no puede crear su DOM",
+    async () => {
+      const file = await createDocument("ODE540-PARSE-BASE")
+      const originalRich = mounted!.editor().getText()
+      const originalFile = await contentsOf(file.path)
+      const baselineWrites = writeFileCalls().filter((call) => call.path === file.path).length
+      await switchMode("Markdown")
+      await advance(SAVE_WINDOW_MS)
+      await typeInMarkdown(" ODE540-PARSE-EDITED")
+
+      const domFailure = installOneShotDomAllocationFailure()
+      const richButton = Array.from(
+        mounted!.container.querySelectorAll<HTMLButtonElement>('[data-testid="editor-statusbar"] button'),
+      ).find((candidate) => (candidate.textContent ?? "").trim() === "Rich")
+      if (!richButton) throw new Error('No está el botón "Rich" de la status bar')
+      await act(async () => richButton.click())
+      domFailure.restore()
+      await flush(2)
+      await advance(SAVE_WINDOW_MS)
+
+      const actual = {
+        parserDomFailureReached: domFailure.didFail(),
+        sourceVisible: Boolean(markdownSource()),
+        sourceRetainsEdit: markdownSource()?.value.includes("ODE540-PARSE-EDITED") ?? false,
+        richIsUntouched: mounted!.editor().getText() === originalRich,
+        recoverableError: mounted!.container.querySelector('[role="alert"]')?.textContent?.includes(
+          "Could not apply this source to Rich",
+        ) ?? false,
+        writes: writeFileCalls().filter((call) => call.path === file.path).slice(baselineWrites).length,
+        fileIsUntouched: (await contentsOf(file.path)) === originalFile,
+        documentCount: (await readWorkspaceMarkdown()).length,
+      }
+
+      expect(actual).toEqual({
+        parserDomFailureReached: true,
+        sourceVisible: true,
+        sourceRetainsEdit: true,
+        richIsUntouched: true,
+        recoverableError: true,
+        writes: 0,
+        fileIsUntouched: true,
+        documentCount: 1,
+      })
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+
 })
 
 describe("ODE-604 — STATE-10 en web", () => {
