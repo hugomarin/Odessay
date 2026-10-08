@@ -39,7 +39,10 @@ import {
   type DesktopCatalogDualWriteInput,
   type DesktopWorkspaceFile,
 } from "@/lib/services/desktop/tauri-commands"
-import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
+import {
+  DesktopSettingsService,
+  type PendingDesktopRelocationRepair,
+} from "@/lib/services/desktop/desktop-settings-service"
 import { getSyncService } from "@/lib/sync/sync-service-factory"
 
 type DesktopRuntimeServices = {
@@ -47,6 +50,7 @@ type DesktopRuntimeServices = {
   dbPath: string
   filesystem: FilesystemDocumentService
   catalog: SqliteDocumentCatalog
+  settings: DesktopSettingsService
   scheduleSyncFlush: () => Promise<ServiceResponse<void>>
 }
 
@@ -156,11 +160,13 @@ async function resolveDesktopRuntimeServices(): Promise<DesktopRuntimeServices> 
   const configDir = await appConfigDir()
   const writingsDir = await join(await appDataDir(), "Writings")
   const dbPath = await join(configDir, "desktop-index.sqlite3")
+  const settings = new DesktopSettingsService(configDir)
   return {
     writingsDir,
     dbPath,
     filesystem: new FilesystemDocumentService(writingsDir),
     catalog: new SqliteDocumentCatalog(dbPath),
+    settings,
     scheduleSyncFlush: () => getSyncService().scheduleFlush(),
   }
 }
@@ -174,6 +180,8 @@ class DesktopDocumentService implements DocumentService {
    * resolve the binding; rename keeps its existing write/conflict/retry path.
    */
   private readonly pathOperationsInFlight = new Map<string, DesktopPathOperation>()
+  private readonly pendingRelocationRepairs = new Map<string, PendingDesktopRelocationRepair>()
+  private pendingRelocationRepairsLoaded = false
 
   constructor(private readonly runtime: DesktopRuntimeServices) {}
 
@@ -501,10 +509,27 @@ class DesktopDocumentService implements DocumentService {
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
       await this.waitForRelocateBeforeSave(input.writing.id)
+      const repaired = await this.retryPendingRelocationForWriting(input.writing.id)
+      if (!repaired) {
+        return err("UNAVAILABLE", "The moved file's index is still being repaired; retry this save")
+      }
       const existing = await this.runtime.catalog.getById(input.writing.id)
       if (!existing?.binding?.canonicalPath) return err("NOT_FOUND", `Writing ${input.writing.id} has no local binding`)
       return ok(await this.persistFollowingPathChange(input.writing, existing.binding.canonicalPath, input.expectedContentHash))
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
+  }
+
+  private async retryPendingRelocationForWriting(documentId: string): Promise<boolean> {
+    if (!this.pendingRelocationRepairsLoaded) {
+      const repairs = await this.runtime.settings.getPendingRelocationRepairs()
+      for (const repair of repairs) this.pendingRelocationRepairs.set(repair.documentId, repair)
+      this.pendingRelocationRepairsLoaded = true
+    }
+    const repair = this.pendingRelocationRepairs.get(documentId)
+    if (!repair) return true
+    const recovered = await repairDesktopRelocationProjection(this.runtime, this.runtime.settings, repair)
+    if (recovered.status === "repaired") this.pendingRelocationRepairs.delete(documentId)
+    return recovered.status === "repaired"
   }
 
   async updateWritingMetadata(input: UpdateWritingMetadataInput): Promise<ServiceResponse<WritingRecord>> {
@@ -628,7 +653,16 @@ class DesktopDocumentService implements DocumentService {
     // that arrive during it wait before reading the binding, then resolve the
     // committed canonical path (or the original path after a recoverable error).
     return this.runPathOperation(writingId, true, () =>
-      performRelocateDesktopWriting(this.runtime, writingId, requestedPath, content),
+      performRelocateDesktopWriting(
+        this.runtime,
+        writingId,
+        requestedPath,
+        content,
+        (repair) => {
+          if (repair) this.pendingRelocationRepairs.set(writingId, repair)
+          else this.pendingRelocationRepairs.delete(writingId)
+        },
+      ),
     )
   }
 
@@ -853,7 +887,7 @@ export async function createDesktopDraft(options: DesktopDraftOptions = {}) {
 }
 
 export type RelocateDesktopWritingResult =
-  | { status: "relocated"; path: string }
+  | { status: "relocated"; path: string; repairPending?: boolean; message?: string }
   | { status: "failed"; message: string }
   | { status: "unsupported" }
 
@@ -879,6 +913,242 @@ function matchesSelectedPaths(relativePath: string, selectedPaths: string[]) {
 
 function sameSelectedPaths(left: string[], right: string[]) {
   return left.length === right.length && left.every((path, index) => path === right[index])
+}
+
+const MAX_RELOCATION_REPAIR_ATTEMPTS = 3
+
+class RelocationIdentityMismatch extends Error {}
+
+type DesktopRelocationRepairOutcome =
+  | { status: "repaired" }
+  | { status: "retry" }
+  | { status: "ambiguous"; message: string }
+
+type RelocationManifestResolution =
+  | { status: "matched"; file: DesktopWorkspaceFile }
+  | { status: "missing" }
+  | { status: "ambiguous"; file: DesktopWorkspaceFile }
+
+/** Shared manifest verdict used by Save As repair and watcher-observed moves. */
+function resolveRelocationManifestFile(
+  snapshot: Awaited<ReturnType<typeof tauriWorkspaceSync>>,
+  targetPath: string,
+  relativePath: string | null,
+  documentId: string,
+): RelocationManifestResolution {
+  const file = snapshot.files.find(
+    (entry) => entry.path === targetPath || (relativePath !== null && entry.relativePath === relativePath),
+  )
+  if (!file) return { status: "missing" }
+  return file.id === documentId ? { status: "matched", file } : { status: "ambiguous", file }
+}
+
+/** Shared projection of a resolved manifest row into the desktop catalog. */
+function relocationCatalogBinding(
+  snapshot: Awaited<ReturnType<typeof tauriWorkspaceSync>>,
+  file: DesktopWorkspaceFile,
+  visibleAsWorkspace: boolean,
+) {
+  return {
+    bindingRootId: snapshot.bindingRootId,
+    rootPath: snapshot.rootPath,
+    manifestVersion: 2,
+    visibleAsWorkspace,
+    relativePath: file.relativePath,
+    canonicalPath: file.path,
+    inode: file.inode || null,
+    contentHash: file.contentHash || null,
+    size: file.size,
+    lastSeenAt: file.modifiedAt,
+  }
+}
+
+/**
+ * Repeat the destination manifest write and catalog+sync transaction after the
+ * physical move. The durable settings intent and stable mutation id make this
+ * safe to run from Save As, the next save, and application startup.
+ */
+async function repairDesktopRelocationProjection(
+  runtime: DesktopRuntimeServices,
+  settings: DesktopSettingsService,
+  pending: PendingDesktopRelocationRepair,
+  attempts = MAX_RELOCATION_REPAIR_ATTEMPTS,
+  refreshRoots = true,
+): Promise<DesktopRelocationRepairOutcome> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const documentIds = { [pending.targetRelativePath]: pending.documentId }
+      let snapshot = await tauriWorkspaceSync(
+        pending.targetRootPath,
+        pending.selectedPaths ?? undefined,
+        documentIds,
+      )
+      let resolution = resolveRelocationManifestFile(
+        snapshot,
+        pending.targetPath,
+        pending.targetRelativePath,
+        pending.documentId,
+      )
+      if (resolution.status === "ambiguous") {
+        throw new RelocationIdentityMismatch(
+          `Destination manifest bound ${pending.targetRelativePath} to a different identity`,
+        )
+      }
+      if (resolution.status === "missing") {
+        if (snapshot.selectedPaths.length > 0) {
+          snapshot = await tauriWorkspaceSync(
+            pending.targetRootPath,
+            Array.from(new Set([...snapshot.selectedPaths, pending.targetRelativePath])),
+            documentIds,
+          )
+          resolution = resolveRelocationManifestFile(
+            snapshot,
+            pending.targetPath,
+            pending.targetRelativePath,
+            pending.documentId,
+          )
+        }
+      }
+      if (resolution.status === "ambiguous") {
+        throw new RelocationIdentityMismatch(
+          `Destination manifest bound ${pending.targetRelativePath} to a different identity`,
+        )
+      }
+      const file = resolution.status === "matched" ? resolution.file : null
+      if (!file) throw new Error(`Destination manifest did not retain ${pending.targetRelativePath}`)
+      if (file.path !== pending.targetPath) {
+        throw new Error(`Destination manifest resolved ${pending.targetRelativePath} outside the requested path`)
+      }
+
+      const record = await runtime.catalog.getById(pending.documentId)
+      if (!record) throw new Error(`Writing ${pending.documentId} disappeared during relocation repair`)
+      const markdown = await tauriOpenFile(file.path)
+      const parsed = desktopDocumentEngine.parseSourceDocument(markdown)
+      if (!parsed.success) throw new Error(parsed.error)
+      const nowIso = new Date().toISOString()
+      const now = Date.now()
+      const title = filenameToTitle(file.relativePath)
+      const version = Math.max(1, record.version ?? 1)
+
+      const binding = relocationCatalogBinding(
+        snapshot,
+        file,
+        pending.settingsRoot?.visibleAsWorkspace ?? false,
+      )
+      await runtime.catalog.commitDualWrite({
+        document: {
+          id: pending.documentId,
+          localPresent: true,
+          cloudPresent: record.cloudPresent,
+          cloudAccountId: record.cloudAccountId,
+          syncStatus: "pending",
+          title,
+          slug: record.slug,
+          status: record.status ?? "draft",
+          artifactType: record.artifactType,
+          visibility: record.visibility ?? "private",
+          version,
+          deletedAt: record.deletedAt,
+          createdAt: record.createdAt ?? now,
+          modifiedAt: now,
+        },
+        binding,
+        mutation: {
+          id: pending.syncMutationId,
+          operation: "upsert",
+          payloadJson: JSON.stringify({
+            title,
+            bodyText: parsed.document.snapshot.bodyText,
+            bodyJson: parsed.document.snapshot.bodyJson,
+            slug: record.slug,
+            status: record.status ?? "draft",
+            artifactType: record.artifactType,
+            visibility: record.visibility ?? "private",
+            parentId: null,
+            correspondenceId: null,
+            version,
+            updatedAt: nowIso,
+            deletedAt: record.deletedAt,
+          }),
+          status: "pending",
+          attemptCount: 0,
+          nextRetryAt: null,
+          createdAt: pending.mutationCreatedAt,
+          lastError: null,
+        },
+      })
+
+      if (pending.registerExternalRoot) {
+        await settings.upsertBindingRoot({
+          id: snapshot.bindingRootId,
+          rootPath: pending.targetRootPath,
+          kind: "external",
+          visibleAsWorkspace: false,
+          selectedPaths: snapshot.selectedPaths,
+          consentedAt: pending.consentedAt,
+          createdAt: pending.createdAt,
+        })
+      } else if (
+        pending.settingsRoot &&
+        (!sameSelectedPaths(pending.settingsRoot.selectedPaths, snapshot.selectedPaths) ||
+          pending.settingsRoot.id !== snapshot.bindingRootId)
+      ) {
+        await settings.upsertBindingRoot({
+          ...pending.settingsRoot,
+          id: snapshot.bindingRootId,
+          selectedPaths: snapshot.selectedPaths,
+        })
+      }
+
+      if (pending.targetRootPath !== pending.sourceRootPath) {
+        try {
+          await tauriWorkspaceSync(pending.sourceRootPath)
+        } catch {
+          // The destination projection is already durable; the reconciler can
+          // drop a stale source manifest entry on its next scan.
+        }
+      }
+      await settings.removePendingRelocationRepair(pending.documentId)
+      void runtime.scheduleSyncFlush().catch(() => {
+        // The durable mutation remains pending if a background flush cannot start.
+      })
+      if (pending.registerExternalRoot && refreshRoots) {
+        try {
+          const { refreshWorkspaceReconcilerRoots } = await import(
+            "@/lib/services/desktop/desktop-workspace-reconciler"
+          )
+          await refreshWorkspaceReconcilerRoots()
+        } catch {
+          // The BindingRoot is registered durably; app startup can retry watcher setup.
+        }
+      }
+      return { status: "repaired" }
+    } catch (error) {
+      if (error instanceof RelocationIdentityMismatch) return { status: "ambiguous", message: error.message }
+    }
+  }
+  return { status: "retry" }
+}
+
+/** Retry durable post-move projections before the global startup reconciler scans roots. */
+export async function recoverPendingDesktopRelocationsAtStartup(): Promise<void> {
+  if (!isDesktopRuntime()) return
+  try {
+    const runtime = await resolveDesktopRuntimeServices()
+    const settings = runtime.settings
+    const pending = await settings.getPendingRelocationRepairs()
+    for (const repair of pending) {
+      const record = await runtime.catalog.getById(repair.documentId)
+      if (!record) continue
+      // buildRuntime() is still constructing the reconciler. Its subsequent
+      // root load observes the newly registered BindingRoot, so refreshing
+      // here would recursively await the same startup promise.
+      await repairDesktopRelocationProjection(runtime, settings, repair, MAX_RELOCATION_REPAIR_ATTEMPTS, false)
+    }
+  } catch {
+    // A failed startup repair remains durable and is retried by the next save
+    // or app launch. It must not prevent the existing reconciler from starting.
+  }
 }
 
 /**
@@ -917,6 +1187,7 @@ async function performRelocateDesktopWriting(
   id: string,
   requestedPath: string,
   content?: string,
+  onPendingRepair: (pending: PendingDesktopRelocationRepair | null) => void = () => {},
 ): Promise<RelocateDesktopWritingResult> {
   try {
     const record = await runtime.catalog.getById(id)
@@ -942,8 +1213,7 @@ async function performRelocateDesktopWriting(
     // 3. Resolve the destination BindingRoot: deepest registered root (Settings
     //    BindingRoots, or a Workspace root not yet adopted into bindingRoots —
     //    ODE-373 bridge). Otherwise the chosen folder becomes a new external root.
-    const { appConfigDir } = await import("@tauri-apps/api/path")
-    const settings = new DesktopSettingsService(await appConfigDir())
+    const settings = runtime.settings
     const [bindingRoots, desktopSettings] = await Promise.all([
       settings.getBindingRoots(),
       settings.getDesktopSettings(),
@@ -966,10 +1236,10 @@ async function performRelocateDesktopWriting(
     const isNewRoot = !settingsRecord && !workspaceRecord
     const relativePath = finalPath.slice(destRootPath.length + 1)
 
-    // 4. Destination ledger: the atomic manifest write binds the moved file to
-    //    the SAME UUID. Scope: a new root starts limited to exactly this file
-    //    (never indexes the rest of the folder); a narrowed existing selection
-    //    is extended with the file the user explicitly chose.
+    // 4. Destination ledger: a new root starts limited to exactly this file;
+    //    a narrowed existing selection is extended only by the path the user
+    //    explicitly chose. Persist the recovery intent before touching the
+    //    manifest so the app can roll this same UUID forward after a crash.
     let selectedPaths: string[] | undefined
     if (isNewRoot) {
       selectedPaths = [relativePath]
@@ -980,129 +1250,55 @@ async function performRelocateDesktopWriting(
     ) {
       selectedPaths = Array.from(new Set([...settingsRecord.selectedPaths, relativePath]))
     }
-    let snapshot = await tauriWorkspaceSync(destRootPath, selectedPaths, { [relativePath]: id })
-    let file = snapshot.files.find((entry) => entry.relativePath === relativePath)
-    if (!file && snapshot.selectedPaths.length > 0) {
-      // The durable manifest scope did not cover the destination; extend it with
-      // the user's explicit choice instead of failing the conscious move.
-      snapshot = await tauriWorkspaceSync(
-        destRootPath,
-        Array.from(new Set([...snapshot.selectedPaths, relativePath])),
-        { [relativePath]: id },
-      )
-      file = snapshot.files.find((entry) => entry.relativePath === relativePath)
-    }
-    if (!file) throw new Error(`Destination manifest did not retain ${relativePath}`)
-    if (file.id !== id) {
-      // Ambiguity is never auto-chosen: leave the recoverable state to the
-      // reconciler/Open Document instead of forcing a second identity.
-      throw new Error(`Destination manifest bound ${relativePath} to a different identity`)
-    }
-
-    // 5. SQLite + sync enqueue in ONE transaction. The binding upsert is keyed by
-    //    document_id, so the origin binding row is replaced — a single
-    //    canonical_path, zero residue. Cloud sync then flushes in background.
-    const markdown = typeof content === "string" ? content : await tauriOpenFile(file.path)
-    const parsed = desktopDocumentEngine.parseSourceDocument(markdown)
-    if (!parsed.success) throw new Error(parsed.error)
     const nowIso = new Date().toISOString()
-    const now = Date.now()
-    const title = filenameToTitle(file.relativePath)
-    const version = Math.max(1, record.version ?? 1)
-    await runtime.catalog.commitDualWrite({
-      document: {
-        id,
-        localPresent: true,
-        cloudPresent: record.cloudPresent,
-        cloudAccountId: record.cloudAccountId,
-        syncStatus: "pending",
-        title,
-        slug: record.slug,
-        status: record.status ?? "draft",
-        artifactType: record.artifactType,
-        visibility: record.visibility ?? "private",
-        version,
-        deletedAt: record.deletedAt,
-        createdAt: record.createdAt ?? now,
-        modifiedAt: now,
-      },
-      binding: {
-        bindingRootId: snapshot.bindingRootId,
-        rootPath: snapshot.rootPath,
-        manifestVersion: 2,
-        visibleAsWorkspace: settingsRecord?.visibleAsWorkspace ?? false,
-        relativePath: file.relativePath,
-        canonicalPath: file.path,
-        inode: file.inode || null,
-        contentHash: file.contentHash || null,
-        size: file.size,
-        lastSeenAt: file.modifiedAt,
-      },
-      mutation: {
-        id: crypto.randomUUID(),
-        operation: "upsert",
-        payloadJson: JSON.stringify({
-          title,
-          bodyText: parsed.document.snapshot.bodyText,
-          bodyJson: parsed.document.snapshot.bodyJson,
-          slug: record.slug,
-          status: record.status ?? "draft",
-          artifactType: record.artifactType,
-          visibility: record.visibility ?? "private",
-          parentId: null,
-          correspondenceId: null,
-          version,
-          updatedAt: nowIso,
-          deletedAt: record.deletedAt,
-        }),
-        status: "pending",
-        attemptCount: 0,
-        nextRetryAt: null,
-        createdAt: now,
-        lastError: null,
-      },
-    })
+    const pending: PendingDesktopRelocationRepair = {
+      documentId: id,
+      sourceRootPath,
+      targetPath: finalPath,
+      targetRootPath: destRootPath,
+      targetRelativePath: relativePath,
+      selectedPaths: selectedPaths ?? null,
+      settingsRoot: settingsRecord,
+      registerExternalRoot: isNewRoot,
+      consentedAt: nowIso,
+      createdAt: nowIso,
+      syncMutationId: crypto.randomUUID(),
+      mutationCreatedAt: Date.now(),
+    }
+    onPendingRepair(pending)
+    try {
+      await settings.upsertPendingRelocationRepair(pending)
+    } catch {
+      // Still make the bounded roll-forward attempt in memory. If the settings
+      // write is temporarily unavailable, the next save can retry this record
+      // only if the owner becomes writable again before this operation ends.
+    }
 
-    // 6. Origin ledger drop: re-scanning the source root rewrites its manifest
-    //    atomically without the moved file. SQLite already replaced the binding,
-    //    so nothing references the origin path anymore.
-    if (destRootPath !== sourceRootPath) {
+    // Steps 4–7 share one idempotent path with next-save and app-start recovery.
+    const repairOutcome = await repairDesktopRelocationProjection(runtime, settings, pending)
+    if (repairOutcome.status === "ambiguous") {
+      // A pre-existing different manifest id stays authoritative. Keep the
+      // pending intent so saves cannot recreate the old path; Open Document or
+      // the reconciler owns resolving this identity conflict.
+      return { status: "failed", message: repairOutcome.message }
+    }
+    if (repairOutcome.status === "retry") {
       try {
-        await tauriWorkspaceSync(sourceRootPath)
+        await settings.upsertPendingRelocationRepair(pending)
       } catch {
-        // Recoverable: the next reconciler scan of the source root converges the
-        // manifest; the file is gone and the catalog already moved on.
+        // The visible warning still keeps the moved document editable; every
+        // later save or launch makes another best-effort repair attempt.
+      }
+      return {
+        status: "relocated",
+        path: finalPath,
+        repairPending: true,
+        message: "Saved to the new location, but the app couldn't update its index. It will retry.",
       }
     }
 
-    // 7. Register/extend the destination root so the global reconciler observes
-    //    it. Consent = the user's explicit folder choice in the Save dialog; a
-    //    new root is never a visible Workspace by default.
-    if (isNewRoot) {
-      await settings.upsertBindingRoot({
-        id: snapshot.bindingRootId,
-        rootPath: destRootPath,
-        kind: "external",
-        visibleAsWorkspace: false,
-        selectedPaths: snapshot.selectedPaths,
-        consentedAt: nowIso,
-        createdAt: nowIso,
-      })
-      const { refreshWorkspaceReconcilerRoots } = await import(
-        "@/lib/services/desktop/desktop-workspace-reconciler"
-      )
-      await refreshWorkspaceReconcilerRoots()
-    } else if (
-      settingsRecord &&
-      !sameSelectedPaths(settingsRecord.selectedPaths, snapshot.selectedPaths)
-    ) {
-      await settings.upsertBindingRoot({
-        ...settingsRecord,
-        selectedPaths: snapshot.selectedPaths,
-      })
-    }
-
-    return { status: "relocated", path: file.path }
+    onPendingRepair(null)
+    return { status: "relocated", path: finalPath }
   } catch (error) {
     return {
       status: "failed",
@@ -1135,13 +1331,15 @@ export async function relocateDesktopWritingByCanonicalPath(previous: string, ne
     // Root temporarily unobservable — never a detach, never a new identity.
     return
   }
-  const file = snapshot.files.find((entry) => entry.path === next)
-  if (!file || file.id !== record.id) return
+  const resolution = resolveRelocationManifestFile(snapshot, next, null, record.id)
+  if (resolution.status !== "matched") return
+  const file = resolution.file
   const { appConfigDir } = await import("@tauri-apps/api/path")
   const settings = new DesktopSettingsService(await appConfigDir())
   const roots = await settings.getBindingRoots()
   const rootRecord =
     roots.find((root) => root.id === snapshot.bindingRootId || root.rootPath === rootPath) ?? null
+  const binding = relocationCatalogBinding(snapshot, file, rootRecord?.visibleAsWorkspace ?? false)
   await runtime.catalog.applyReconcileTransaction({
     transactionId: crypto.randomUUID(),
     bindingRootId: snapshot.bindingRootId,
@@ -1150,13 +1348,13 @@ export async function relocateDesktopWritingByCanonicalPath(previous: string, ne
     upserts: [
       {
         documentId: record.id,
-        bindingRootId: snapshot.bindingRootId,
-        relativePath: file.relativePath,
-        canonicalPath: file.path,
-        inode: file.inode || null,
-        contentHash: file.contentHash || null,
-        size: file.size,
-        modifiedAt: file.modifiedAt,
+        bindingRootId: binding.bindingRootId,
+        relativePath: binding.relativePath,
+        canonicalPath: binding.canonicalPath,
+        inode: binding.inode,
+        contentHash: binding.contentHash,
+        size: binding.size,
+        modifiedAt: binding.lastSeenAt,
         strategy: "path",
       },
     ],

@@ -2218,7 +2218,7 @@ export function EditorShell({
     })
     currentCanonicalPathRef.current = result.path
     setCanonicalPath(result.path)
-    setExternalFileNotice(null)
+    setExternalFileNotice(result.repairPending ? { kind: "relocate-repair-pending" } : null)
     return result.path
   }, [applyDocumentMetadata, editor, flushPendingMarkdownSave, flushQueuedRichModeUpdate, persistEditorSnapshot])
 
@@ -2463,6 +2463,8 @@ export function EditorShell({
                 )}
                 .
               </span>
+            ) : externalFileNotice.kind === "relocate-repair-pending" ? (
+              <span>Saved to the new location, but the app couldn&apos;t update its index. It will retry.</span>
             ) : externalFileNotice.kind === "content-changed" ? (
               <span>Updated externally — the editor reloaded the latest version from disk.</span>
             ) : (

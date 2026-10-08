@@ -44,6 +44,27 @@ export type BindingRootSettingRecord = {
   createdAt: string
 }
 
+/**
+ * Durable recovery intent for a file already moved by Save As whose manifest
+ * and catalog projection could not both commit. It lives beside the existing
+ * BindingRoot settings so startup and the next save can finish the same UUID's
+ * projection without discovering or minting a second document.
+ */
+export type PendingDesktopRelocationRepair = {
+  documentId: string
+  sourceRootPath: string
+  targetPath: string
+  targetRootPath: string
+  targetRelativePath: string
+  selectedPaths: string[] | null
+  settingsRoot: BindingRootSettingRecord | null
+  registerExternalRoot: boolean
+  consentedAt: string
+  createdAt: string
+  syncMutationId: string
+  mutationCreatedAt: number
+}
+
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
 }
@@ -73,6 +94,8 @@ export type DesktopSettings = {
    * infrastructure and may exist without being a visible Workspace.
    */
   bindingRoots?: BindingRootSettingRecord[]
+  /** In-flight Save As moves whose existing document projection must roll forward. */
+  pendingRelocationRepairs?: PendingDesktopRelocationRepair[]
   /**
    * Custom + edited-base vocabulary rows (ODE-473). Optional and additive: an
    * install that never wrote this key has none, which means "use the base
@@ -127,6 +150,15 @@ export class DesktopSettingsService implements SettingsService {
     } catch {
       return empty
     }
+  }
+
+  /** Strict settings read for durable recovery records: never treat an I/O
+   * failure as an empty store, which could overwrite unrelated user settings. */
+  private async readStoreForDurableUpdate(): Promise<DesktopSettings> {
+    const raw = await tauriSettingsRead(this.configDir, SETTINGS_KEY)
+    if (raw === null) return { disabledStatuses: [] }
+    const store = raw as DesktopSettings
+    return { ...store, disabledStatuses: store.disabledStatuses ?? [] }
   }
 
   private async writeStore(settings: DesktopSettings): Promise<void> {
@@ -523,6 +555,28 @@ export class DesktopSettingsService implements SettingsService {
   async getBindingRoots(): Promise<BindingRootSettingRecord[]> {
     const store = await this.readStore()
     return Array.isArray(store.bindingRoots) ? store.bindingRoots : []
+  }
+
+  async getPendingRelocationRepairs(): Promise<PendingDesktopRelocationRepair[]> {
+    const store = await this.readStoreForDurableUpdate()
+    return Array.isArray(store.pendingRelocationRepairs) ? store.pendingRelocationRepairs : []
+  }
+
+  async upsertPendingRelocationRepair(repair: PendingDesktopRelocationRepair): Promise<void> {
+    const store = await this.readStoreForDurableUpdate()
+    const repairs = Array.isArray(store.pendingRelocationRepairs) ? store.pendingRelocationRepairs : []
+    const next = repairs.some((current) => current.documentId === repair.documentId)
+      ? repairs.map((current) => current.documentId === repair.documentId ? repair : current)
+      : [...repairs, repair]
+    await this.writeStore({ ...store, pendingRelocationRepairs: next })
+  }
+
+  async removePendingRelocationRepair(documentId: string): Promise<void> {
+    const store = await this.readStoreForDurableUpdate()
+    const repairs = Array.isArray(store.pendingRelocationRepairs) ? store.pendingRelocationRepairs : []
+    const next = repairs.filter((repair) => repair.documentId !== documentId)
+    if (next.length === repairs.length) return
+    await this.writeStore({ ...store, pendingRelocationRepairs: next })
   }
 
   /**

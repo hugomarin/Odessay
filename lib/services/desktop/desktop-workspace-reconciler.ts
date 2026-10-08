@@ -199,6 +199,15 @@ async function buildRuntime(): Promise<Runtime | null> {
 
   await recoverInterruptedWorkspaceRemovals(settings, catalog)
 
+  // A conscious Save As can finish the physical move while its destination
+  // manifest/catalog projection is still pending. Finish those durable
+  // same-UUID intents before this reconciler scans roots, so the generic
+  // unbound-file path never gets a chance to mint a second identity.
+  const { recoverPendingDesktopRelocationsAtStartup } = await import(
+    "@/lib/services/document-service-factory"
+  )
+  await recoverPendingDesktopRelocationsAtStartup()
+
   // First run (ODE-449): the managed root must exist before anything can be
   // written into it. Seeding is idempotent and cheap when both starter
   // documents already exist, so it runs unconditionally on every app launch
