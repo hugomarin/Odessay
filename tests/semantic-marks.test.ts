@@ -157,6 +157,61 @@ describe("ODE-532 entity and highlight semantic marks", () => {
   })
 
   describe("controlled rich paste identity", () => {
+    const assertInvalidEntityPasteFallsBackToText = (clipboardHtml: string, expectedText: string) => {
+      const editor = createTestEditor("<p></p>", "writing-destination")
+      try {
+        editor.view.pasteHTML(clipboardHtml)
+
+        const bodyJson = editor.getJSON()
+        expect(
+          collectMarks(bodyJson, (mark) => mark.type === "entity"),
+          "invalid Entity clipboard structure is absent from body_json",
+        ).toEqual([])
+        expect(editor.getText(), "the pasted label remains intact").toBe(expectedText)
+
+        const savedMarkdown = serializeDocumentToMarkdown(bodyJson)
+        expect(savedMarkdown, "saved Markdown keeps the label").toContain(expectedText)
+        expect(savedMarkdown, "saved Markdown has no invalid Entity wrapper").not.toContain("<Entity")
+
+        const reopened = parseMarkdownToSnapshot(savedMarkdown)
+        expect(reopened.bodyText, "reopened text remains intact").toBe(expectedText)
+        expect(
+          collectMarks(reopened.bodyJson, (mark) => mark.type === "entity"),
+          "reopened body_json has no invalid Entity mark",
+        ).toEqual([])
+      } finally {
+        editor.destroy()
+      }
+    }
+
+    it.fails("falls back to text when pasted Entity has an empty id", () => {
+      assertInvalidEntityPasteFallsBackToText(
+        '<p><mark data-entity-id="" data-entity-type="company" data-entity-source-writing-id="writing-source">Aplyca</mark></p>',
+        "Aplyca",
+      )
+    })
+
+    it.fails("falls back to text when pasted Entity has an empty type", () => {
+      assertInvalidEntityPasteFallsBackToText(
+        '<p><mark data-entity-id="entity-source" data-entity-type="" data-entity-source-writing-id="writing-source">Acme</mark></p>',
+        "Acme",
+      )
+    })
+
+    it.fails("falls back to text when pasted Entity has no id", () => {
+      assertInvalidEntityPasteFallsBackToText(
+        '<p><mark data-entity-type="company">Northstar</mark></p>',
+        "Northstar",
+      )
+    })
+
+    it.fails("falls back to text when pasted Entity has no type", () => {
+      assertInvalidEntityPasteFallsBackToText(
+        '<p><mark data-entity-id="entity-source" data-entity-source-writing-id="writing-source">Person</mark></p>',
+        "Person",
+      )
+    })
+
     it("does not execute clipboard handlers while remapping Entity IDs in Chromium", async () => {
       const editor = createTestEditor("<p></p>", "writing-source")
       const entityPlugin = editor.state.plugins.find(
