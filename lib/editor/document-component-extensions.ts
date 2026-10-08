@@ -435,6 +435,7 @@ export const DocumentCodeBlock = CodeBlock.extend({
   addNodeView() {
     return ({ node, editor, getPos }: NodeViewRendererProps) => {
       let currentNode = node
+      const mermaidRevisionOwner = {}
       let disposed = false
       let previewVisible = false
       let previewZoom = 1
@@ -608,7 +609,7 @@ export const DocumentCodeBlock = CodeBlock.extend({
         // Lazy-load the coordinator + renderer only on explicit request.
         void import("@/lib/mermaid/mermaid-coordinator").then(({ mermaidRenderCoordinator }) => {
           if (disposed || sequence !== renderSequence || !previewVisible) return
-          const revision = mermaidRenderCoordinator.nextRevision()
+          const revision = mermaidRenderCoordinator.nextRevision(mermaidRevisionOwner)
           void mermaidRenderCoordinator
             .requestRender(source, revision)
             .then((svg) => commitSvg(svg, sequence, source))
