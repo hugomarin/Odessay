@@ -348,3 +348,84 @@ describe("inline link export safety", () => {
     }
   })
 })
+
+describe("image source safety in clean Markdown", () => {
+  const imageMarkdown = (src: string, alt = "IMAGEALT") =>
+    buildWritingMarkdown({
+      type: "doc",
+      content: [{ type: "image", attrs: { src, alt } }],
+    })
+
+  it.each([
+    ["web upload asset API path", "/api/writing-assets/123e4567-e89b-12d3-a456-426614174000"],
+    ["desktop upload asset API URL", "https://app.odessay.test/api/writing-assets/123e4567-e89b-12d3-a456-426614174000"],
+    ["relative desktop asset path", "images/photo.png"],
+    ["case-sensitive relative desktop asset path", "images/Photo.PNG"],
+    ["remote HTTPS image URL", "https://example.com/photo.png?size=original"],
+  ])("preserves the %s source byte-for-byte", (_form, src) => {
+    expect(imageMarkdown(src)).toBe(`![IMAGEALT](${src})`)
+  })
+
+  it.fails("keeps an image URL containing Markdown delimiters as one destination", () => {
+    const markdown = imageMarkdown("https://a.com/x.png) [x](javascript:alert(1))")
+
+    expect(markdown).not.toContain("[x](")
+    expect(markdown).not.toContain("](javascript:")
+    expect(markdown.match(/\]\([^)]*\)/g) ?? []).toHaveLength(1)
+  })
+
+  it.fails("rejects a literal javascript image source and keeps plain alt text", () => {
+    const markdown = imageMarkdown("javascript:alert(1)")
+
+    expect(markdown).toContain("IMAGEALT")
+    expect(markdown).not.toContain("![IMAGEALT](")
+    expect(markdown).not.toContain("](javascript:")
+  })
+
+  it.fails("rejects a non-image data URL and keeps plain alt text", () => {
+    const markdown = imageMarkdown("data:text/html,<script>alert(1)</script>")
+
+    expect(markdown).toContain("IMAGEALT")
+    expect(markdown).not.toContain("![IMAGEALT](")
+    expect(markdown).not.toContain("](data:text/html")
+  })
+
+  it.fails("rejects an entity-obfuscated javascript image source", () => {
+    const markdown = imageMarkdown("java&#x09;script:alert(1)")
+
+    expect(markdown).toContain("IMAGEALT")
+    expect(markdown).not.toContain("![IMAGEALT](")
+    expect(markdown).not.toContain("](javascript:")
+  })
+
+  it.fails("rejects a percent-encoded javascript image source", () => {
+    const markdown = imageMarkdown("javascript%3Aalert(1)")
+
+    expect(markdown).toContain("IMAGEALT")
+    expect(markdown).not.toContain("![IMAGEALT](")
+    expect(markdown).not.toContain("](javascript:")
+  })
+
+  it.fails("preserves the complete alt as plain text when an image source is rejected", () => {
+    const markdown = imageMarkdown("file:///private/image.png", "Alt (safe) [label]")
+
+    expect(markdown).toBe("Alt \\(safe\\) \\[label\\]")
+    expect(markdown).not.toContain("![")
+    expect(markdown).not.toContain("](file:")
+  })
+
+  it.fails("emits no active javascript or HTML-data image destination for the attack vectors", () => {
+    const sources = [
+      "https://a.com/x.png) [x](javascript:alert(1))",
+      "javascript:alert(1)",
+      "data:text/html,<script>alert(1)</script>",
+      "java&#x09;script:alert(1)",
+      "javascript%3Aalert(1)",
+    ]
+    const markdown = sources.map((src) => imageMarkdown(src)).join("\n\n")
+
+    expect(markdown).not.toContain("](javascript:")
+    expect(markdown).not.toContain("](data:text/html")
+    expect(markdown).not.toContain("[x](")
+  })
+})
