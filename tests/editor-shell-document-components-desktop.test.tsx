@@ -323,8 +323,8 @@ describe("Fase 12 — R01/R12: componentes por Source, Rich, disco y reapertura 
       const editorBefore = mounted!.editor()
       const documentBefore = editorBefore.state.doc
       const selectionBefore = {
-        anchor: editorBefore.state.selection.anchor,
-        head: editorBefore.state.selection.head,
+        from: editorBefore.state.selection.from,
+        to: editorBefore.state.selection.to,
       }
       const writesBefore = writeFileCalls().filter((call) => call.path === file.path).length
       const catalog = await getDocumentCatalog()
