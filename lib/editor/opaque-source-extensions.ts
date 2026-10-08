@@ -1,5 +1,5 @@
 import { Node } from "@tiptap/core"
-import { parseControlledMarkdown, readControlledTagEnd } from "@/lib/document-components/parser"
+import { parseControlledMarkdown } from "@/lib/document-components/parser"
 import { projectIrNodePlainText } from "@/lib/document-components/plain-text"
 import type { DocumentIrNode } from "@/lib/document-components/types"
 
@@ -46,35 +46,13 @@ const placeholderAttributes = (raw: string, span: OpaqueSpan) =>
 
 const collectOpaqueSpans = (
   source: string,
-): { spans: OpaqueSpan[]; resumeAt: number | null } => {
-  const parsed = parseControlledMarkdown(source)
+): OpaqueSpan[] => {
+  const parsed = parseControlledMarkdown(source, { recoverUnclosedUnknownTags: true })
   const spans: OpaqueSpan[] = []
-  let resumeAt: number | null = null
 
   const visit = (nodes: DocumentIrNode[]) => {
     for (const node of nodes) {
-      if (resumeAt !== null) return
       if (node.type === "opaque") {
-        const diagnostic = parsed.diagnostics.find((candidate) => candidate.start === node.start)
-        const closing = diagnostic?.kind ? `</${diagnostic.kind}>` : null
-        // An unknown PascalCase tag that never closes is almost always prose
-        // ("List<String>"). Its tag token is preserved literally and the rest
-        // of the document stays editable Markdown; a *known* kind left open
-        // remains one opaque span, exactly as the core parser decided.
-        if (
-          diagnostic?.code === "unknown-component" &&
-          node.end === source.length &&
-          closing &&
-          !node.raw.endsWith(closing)
-        ) {
-          const tagEnd = readControlledTagEnd(source, node.start)
-          if (tagEnd !== null) {
-            const raw = source.slice(node.start, tagEnd)
-            spans.push({ start: node.start, end: tagEnd, text: raw, reason: diagnostic.code })
-            resumeAt = tagEnd
-            return
-          }
-        }
         spans.push({ start: node.start, end: node.end, text: node.raw, reason: node.reason })
         continue
       }
@@ -93,27 +71,66 @@ const collectOpaqueSpans = (
   }
 
   visit(parsed.document.children)
-  return { spans, resumeAt }
+  return spans
 }
 
-const replaceSpans = (source: string, spans: OpaqueSpan[], sourceStartsLine: boolean) =>
-  [...spans].sort((a, b) => b.start - a.start).reduce((result, span) => {
-    const raw = source.slice(span.start, span.end)
-    const before = result.slice(0, span.start)
-    const after = result.slice(span.end)
-    const startsLine = span.start === 0 ? sourceStartsLine : before.endsWith("\n")
-    const endsLine = after === "" || after.startsWith("\n")
-    if (!raw.includes("\n") || !startsLine || !endsLine) {
-      return `${before}<odessay-opaque${placeholderAttributes(raw, span)}></odessay-opaque>${after}`
+const replaceSpans = (source: string, spans: OpaqueSpan[], sourceStartsLine: boolean) => {
+  if (spans.length === 0) return source
+
+  // Core IR traversal emits disjoint opaque spans in source order. Compute the
+  // same suffix context the former right-to-left replacements observed, then
+  // assemble the result without copying the full source for every span.
+  const replacements = new Array<string>(spans.length)
+  const replacementPrefixes = new Array<string>(spans.length)
+  for (let index = spans.length - 1; index >= 0; index -= 1) {
+    const span = spans[index]
+    const nextSpan = spans[index + 1]
+    const gapEnd = nextSpan?.start ?? source.length
+    let suffixPrefix = source.slice(span.end, Math.min(span.end + 2, gapEnd))
+    if (suffixPrefix.length < 2 && nextSpan) {
+      suffixPrefix += replacementPrefixes[index + 1].slice(0, 2 - suffixPrefix.length)
     }
+    const suffixIsEmpty = !nextSpan && span.end === source.length
+    const suffixIsOneNewline =
+      !nextSpan && source.length - span.end === 1 && source[span.end] === "\n"
+    const startsLine = span.start === 0 ? sourceStartsLine : source[span.start - 1] === "\n"
+    const endsLine = suffixIsEmpty || suffixPrefix.startsWith("\n")
+    const raw = source.slice(span.start, span.end)
+
+    if (!raw.includes("\n") || !startsLine || !endsLine) {
+      replacements[index] = `<odessay-opaque${placeholderAttributes(raw, span)}></odessay-opaque>`
+      replacementPrefixes[index] = replacements[index].slice(0, 2)
+      continue
+    }
+
     // A multi-line span on its own lines is a block. markdown-it only opens an
     // HTML block for a lone tag line that does not interrupt a paragraph, so
     // the placeholder is separated by blank lines (surrounding canonicalization
     // only; the opaque bytes themselves are untouched).
-    const leading = before === "" || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n"
-    const trailing = after === "" || after.startsWith("\n\n") || after === "\n" ? "" : "\n"
-    return `${before}${leading}<odessay-opaque-block${placeholderAttributes(raw, span)}>\n</odessay-opaque-block>${trailing}${after}`
-  }, source)
+    const beforeEmpty = span.start === 0
+    const beforeEndsWithDoubleNewline =
+      span.start >= 2 && source[span.start - 2] === "\n" && source[span.start - 1] === "\n"
+    const leading = beforeEmpty || beforeEndsWithDoubleNewline
+      ? ""
+      : source[span.start - 1] === "\n"
+        ? "\n"
+        : "\n\n"
+    const trailing =
+      suffixIsEmpty || suffixIsOneNewline || suffixPrefix.startsWith("\n\n") ? "" : "\n"
+    replacements[index] = `${leading}<odessay-opaque-block${placeholderAttributes(raw, span)}>\n</odessay-opaque-block>${trailing}`
+    replacementPrefixes[index] = replacements[index].slice(0, 2)
+  }
+
+  const output: string[] = []
+  let cursor = 0
+  for (let index = 0; index < spans.length; index += 1) {
+    const span = spans[index]
+    output.push(source.slice(cursor, span.start), replacements[index])
+    cursor = span.end
+  }
+  output.push(source.slice(cursor))
+  return output.join("")
+}
 
 /**
  * Projects every span Rich cannot author into placeholders that the opaque
@@ -122,17 +139,7 @@ const replaceSpans = (source: string, spans: OpaqueSpan[], sourceStartsLine: boo
  */
 export const materializeOpaqueSourceForRichParser = (markdown: string): string => {
   if (!/<\/?[A-Z]/.test(markdown)) return markdown
-
-  let output = ""
-  let rest = markdown
-  let restStartsLine = true
-  for (;;) {
-    const { spans, resumeAt } = collectOpaqueSpans(rest)
-    if (resumeAt === null) return output + replaceSpans(rest, spans, restStartsLine)
-    output += replaceSpans(rest.slice(0, resumeAt), spans, restStartsLine)
-    restStartsLine = rest[resumeAt - 1] === "\n"
-    rest = rest.slice(resumeAt)
-  }
+  return replaceSpans(markdown, collectOpaqueSpans(markdown), true)
 }
 
 const opaqueAttributes = () => ({
