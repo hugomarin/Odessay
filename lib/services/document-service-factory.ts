@@ -50,6 +50,11 @@ type DesktopRuntimeServices = {
   scheduleSyncFlush: () => Promise<ServiceResponse<void>>
 }
 
+type DesktopPathOperation = {
+  promise: Promise<unknown>
+  waitBeforeSave: boolean
+}
+
 type DesktopDraftOptions = {
   writingId?: string | null
   authorId?: string | null
@@ -162,17 +167,48 @@ async function resolveDesktopRuntimeServices(): Promise<DesktopRuntimeServices> 
 
 class DesktopDocumentService implements DocumentService {
   /**
-   * ODE-629 — a rename is not atomic: `rename_file` moves the `.md` first and
-   * the catalog commit (`workspace_sync` + `commitDualWrite`) lands after it.
-   * During that window the catalog still binds the old path while the file no
-   * longer exists there, so a save in flight that CONFLICTs must not trust a
-   * catalog read until the rename of that document has finished. Keyed by
-   * writingId; renames are user gestures and the entry is removed only after
-   * the catalog commit, so "no entry" means the catalog is already settled.
+   * ODE-629/ODE-693 — rename and relocate move the `.md` before the catalog
+   * commit, so the old binding can temporarily point to a missing path. This
+   * single per-UUID owner keeps each path operation registered through commit
+   * or recoverable error. A relocate also makes later saves wait before they
+   * resolve the binding; rename keeps its existing write/conflict/retry path.
    */
-  private readonly renamesInFlight = new Map<string, Promise<ServiceResponse<WritingRecord>>>()
+  private readonly pathOperationsInFlight = new Map<string, DesktopPathOperation>()
 
   constructor(private readonly runtime: DesktopRuntimeServices) {}
+
+  private async runPathOperation<T>(
+    writingId: string,
+    waitBeforeSave: boolean,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.pathOperationsInFlight.get(writingId)
+    const inFlight = Promise.resolve().then(async () => {
+      await previous?.promise.catch(() => undefined)
+      return operation()
+    })
+    const entry: DesktopPathOperation = {
+      promise: inFlight,
+      waitBeforeSave: waitBeforeSave || previous?.waitBeforeSave === true,
+    }
+    this.pathOperationsInFlight.set(writingId, entry)
+    try {
+      return await inFlight
+    } finally {
+      if (this.pathOperationsInFlight.get(writingId) === entry) {
+        this.pathOperationsInFlight.delete(writingId)
+      }
+    }
+  }
+
+  private async waitForRelocateBeforeSave(writingId: string): Promise<void> {
+    while (true) {
+      const inFlight = this.pathOperationsInFlight.get(writingId)
+      if (!inFlight?.waitBeforeSave) return
+      await inFlight.promise.catch(() => undefined)
+      if (this.pathOperationsInFlight.get(writingId) === inFlight) return
+    }
+  }
 
   private serialize(record: WritingRecord) {
     const result = desktopDocumentEngine.serializeBodyJson(
@@ -194,13 +230,14 @@ class DesktopDocumentService implements DocumentService {
     let writtenMarkdown = ""
     if (wroteContent) {
       // ODE-635 (review ronda 2) — the caller resolved `canonicalPath` before
-      // this save reached the write, and a rename of this document can move
+      // this save reached the write, and a path change can move
       // the `.md` in between. Re-read the binding immediately before writing
       // and re-target when the rename already committed: the bytes must land
       // on the path the catalog owns, never on a stale one. The re-read does
       // NOT wait for a rename still in flight: ODE-629 requires a save to land
       // on the old path while a rename holds its pre-move snapshot, so the
-      // rename transports those bytes instead of overwriting them. Swaps of
+      // rename transports those bytes instead of overwriting them. A relocate
+      // is different: saveWriting waits before resolving the binding. Swaps of
       // that path are refused by the transport's identity guard below (a
       // different file is never replaced); `null` continues to mean "no
       // baseline" and is not replaced by any hash.
@@ -223,10 +260,10 @@ class DesktopDocumentService implements DocumentService {
         expectedInode,
       })
       if (fileResult.error) throw fileResult.error
-      // A rename may also start while the write is in flight: wait for it
+      // A path operation may start while this write is in flight: wait for it
       // before reading the catalog so the binding compared below is settled,
       // never half-committed.
-      await this.renamesInFlight.get(record.id)?.catch(() => undefined)
+      await this.pathOperationsInFlight.get(record.id)?.promise.catch(() => undefined)
     }
 
     const catalogBefore = await this.runtime.catalog.getById(record.id)
@@ -247,7 +284,7 @@ class DesktopDocumentService implements DocumentService {
       // `.trash` — and the same `CONFLICT` shape routes the bytes to the path
       // the catalog owns. Only when the recreation is exact is it retired
       // through the filesystem owner's trash move, and a failure of that move
-      // is propagated so `persistFollowingRename` cannot report success with
+      // is propagated so `persistFollowingPathChange` cannot report success with
       // the stale recreation still on disk (round 1, P1+P2). `null` keeps
       // meaning "no baseline": this only routes the bytes to the path the
       // catalog owns; it never substitutes a hash and never rebinds the stale
@@ -423,23 +460,22 @@ class DesktopDocumentService implements DocumentService {
   }
 
   /**
-   * ODE-629 — a save resolves its canonical path once (`catalog.getById`) and
-   * `write_file` guards that path with `expectedContentHash`. When a rename
-   * moves the `.md` while the save is in flight, the old path is gone and the
-   * write is refused with CONFLICT. If the catalog now binds the same UUID to a
-   * different path, that CONFLICT is the rename having moved the document, not
-   * an external edit: the save retries against the new path so the content
-   * lands instead of living only in memory. A CONFLICT at a still-current path
-   * is a real external-change conflict and is rethrown untouched.
+   * ODE-629/ODE-693 — a save resolves its canonical path once (`catalog.getById`)
+   * and `write_file` guards that path with `expectedContentHash`. When a path
+   * operation moves the `.md` while the save is in flight, the old path is gone
+   * and the write is refused with CONFLICT. If the catalog now binds the same
+   * UUID to a different path, that conflict is the path operation having moved
+   * the document, not an external edit: the save retries against the new path
+   * so the content lands instead of living only in memory. A CONFLICT at a
+   * still-current path is a real external-change conflict and is rethrown.
    *
-   * The retry must also wait for a rename of this document that is mid-flight:
-   * the rename moves the file before committing the catalog, so a save can
-   * CONFLICT inside that window (`rename_file` already moved it) and a bare
-   * catalog read would still return the old path — the same conflict again.
-   * Awaiting the in-flight rename commits the catalog first; the loop stays
-   * bounded by its own attempt budget.
+   * The retry waits for a path operation of this document that is mid-flight:
+   * the file moves before the catalog commit, so a save can CONFLICT inside
+   * that window while a bare catalog read still returns the old path. Awaiting
+   * the registered operation lets the retry read the committed path; the loop
+   * stays bounded by its own attempt budget.
    */
-  private async persistFollowingRename(
+  private async persistFollowingPathChange(
     record: WritingRecord,
     canonicalPath: string,
     expectedContentHash?: string | null,
@@ -452,7 +488,7 @@ class DesktopDocumentService implements DocumentService {
       } catch (error) {
         lastError = error
         if (!isConflictError(error)) throw error
-        await this.renamesInFlight.get(record.id)?.catch(() => undefined)
+        await this.pathOperationsInFlight.get(record.id)?.promise.catch(() => undefined)
         const current = await this.runtime.catalog.getById(record.id)
         const currentPath = current?.binding?.canonicalPath ?? null
         if (!currentPath || currentPath === target) throw error
@@ -464,9 +500,10 @@ class DesktopDocumentService implements DocumentService {
 
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
+      await this.waitForRelocateBeforeSave(input.writing.id)
       const existing = await this.runtime.catalog.getById(input.writing.id)
       if (!existing?.binding?.canonicalPath) return err("NOT_FOUND", `Writing ${input.writing.id} has no local binding`)
-      return ok(await this.persistFollowingRename(input.writing, existing.binding.canonicalPath, input.expectedContentHash))
+      return ok(await this.persistFollowingPathChange(input.writing, existing.binding.canonicalPath, input.expectedContentHash))
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 
@@ -577,20 +614,22 @@ class DesktopDocumentService implements DocumentService {
   }
 
   async renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
-    // ODE-629: register the whole rename — from before the file move to after
-    // the catalog commit — so a save that CONFLICTs inside the move→commit
-    // window can wait for it instead of reading a half-committed catalog (see
-    // persistFollowingRename). The entry is removed only once the rename has
-    // fully settled, so an absent entry means the catalog is already current.
-    const inFlight = this.performRenameWriting(input)
-    this.renamesInFlight.set(input.writingId, inFlight)
-    try {
-      return await inFlight
-    } finally {
-      if (this.renamesInFlight.get(input.writingId) === inFlight) {
-        this.renamesInFlight.delete(input.writingId)
-      }
-    }
+    // ODE-629: keep rename in the path-operation owner until its catalog
+    // commit, so a conflicting save can wait for a settled canonical path.
+    return this.runPathOperation(input.writingId, false, () => this.performRenameWriting(input))
+  }
+
+  async relocateWriting(
+    writingId: string,
+    requestedPath: string,
+    content?: string,
+  ): Promise<RelocateDesktopWritingResult> {
+    // A relocate must be registered before its first file write/move. Saves
+    // that arrive during it wait before reading the binding, then resolve the
+    // committed canonical path (or the original path after a recoverable error).
+    return this.runPathOperation(writingId, true, () =>
+      performRelocateDesktopWriting(this.runtime, writingId, requestedPath, content),
+    )
   }
 
   private async performRenameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
@@ -609,7 +648,7 @@ class DesktopDocumentService implements DocumentService {
       // `openWriting()` read before the move and could silently clobber a save
       // that landed in between. The binding is refreshed from the real file
       // stats (`writeContent: false`), so a save racing the rename lands on the
-      // new path through `persistFollowingRename`.
+      // new path through `persistFollowingPathChange`.
       return ok(await this.persist(next, renamed.data.id, "upsert", null, { writeContent: false }))
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
@@ -862,7 +901,24 @@ export async function relocateDesktopWriting(
 ): Promise<RelocateDesktopWritingResult> {
   if (!isDesktopRuntime()) return { status: "unsupported" }
   try {
-    const runtime = await resolveDesktopRuntimeServices()
+    const service = await getDocumentService()
+    if (!(service instanceof DesktopDocumentService)) return { status: "unsupported" }
+    return await service.relocateWriting(id, requestedPath, content)
+  } catch (error) {
+    return {
+      status: "failed",
+      message: error instanceof Error ? error.message : "Relocate failed",
+    }
+  }
+}
+
+async function performRelocateDesktopWriting(
+  runtime: DesktopRuntimeServices,
+  id: string,
+  requestedPath: string,
+  content?: string,
+): Promise<RelocateDesktopWritingResult> {
+  try {
     const record = await runtime.catalog.getById(id)
     const binding = record?.binding
     if (!record || !binding?.canonicalPath) {

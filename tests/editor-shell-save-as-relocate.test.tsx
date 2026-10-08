@@ -262,7 +262,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "ODE-693: una edición durante el relocate espera el commit y solo se escribe en el destino",
     async () => {
       const { file } = await createDocument()
