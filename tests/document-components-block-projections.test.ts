@@ -152,7 +152,7 @@ describe("Tip/Info/Card projections", () => {
 })
 
 describe("inline link export safety", () => {
-  it.fails("keeps unsafe links inert in clean Markdown while preserving their labels", () => {
+  it("keeps unsafe links inert in clean Markdown while preserving their labels", () => {
     const markdown = buildWritingMarkdown(INLINE_LINK_EXPORT_BODY)
 
     expect(markdown).toContain("[SAFE\\_LINK](https://example.com/safe)")
@@ -162,7 +162,7 @@ describe("inline link export safety", () => {
     }
   })
 
-  it.fails("keeps unsafe links inert in the real DOCX artifact while preserving their labels", async () => {
+  it("keeps unsafe links inert in the real DOCX artifact while preserving their labels", async () => {
     const document = buildWritingExportDocument(INLINE_LINK_EXPORT_BODY)
     const docx = await JSZip.loadAsync(await renderWritingToDocxBuffer({ title: "Links", document }))
     const xml = (await docx.file("word/document.xml")?.async("string")) ?? ""

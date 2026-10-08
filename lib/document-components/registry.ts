@@ -5,7 +5,7 @@ import type {
 } from "@/lib/document-components/types";
 
 const anyString = (value: string) => value.length > 0;
-const safeUrl = (value: string) => {
+export const safeUrl = (value: string) => {
   if (value.length === 0 || value !== value.trim() || /[\u0000-\u001F\u007F]/.test(value)) {
     return false;
   }

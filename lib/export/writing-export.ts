@@ -1,5 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
-import { validateComponentAttribute } from "@/lib/document-components/registry"
+import { safeUrl, validateComponentAttribute } from "@/lib/document-components/registry"
 
 export type WritingExportFootnote = {
   index: number
@@ -188,7 +188,10 @@ const collectInlineRuns = (nodes: ExportNode[] | undefined, footnotes: WritingEx
             }
             break
           case "link":
-            run.linkHref = readString(mark.attrs?.href) ?? undefined
+            {
+              const href = readString(mark.attrs?.href)
+              run.linkHref = href && safeUrl(href) ? href : undefined
+            }
             break
           default:
             break
