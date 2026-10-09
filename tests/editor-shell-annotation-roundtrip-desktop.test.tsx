@@ -29,7 +29,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { readFile } from "node:fs/promises"
 
-import { scanControlledAnnotations } from "@/lib/editor/annotation-markdown"
+import {
+  projectAnnotationsToCleanMarkdown,
+  scanControlledAnnotations,
+} from "@/lib/editor/annotation-markdown"
 import { OPAQUE_SOURCE_BLOCK_NODE, OPAQUE_SOURCE_INLINE_NODE } from "@/lib/editor/opaque-source-extensions"
 
 vi.mock("@tiptap/react", async (importOriginal) => {
@@ -62,8 +65,8 @@ vi.mock("@/lib/sync/sync-service-factory", async () =>
 )
 
 const {
-  clickEditorTab,
   clickNewArtifact,
+  clickEditorTab,
   clickSelectionPopupAction,
   fillTextField,
   flush,
@@ -75,6 +78,7 @@ const {
   selectEditorText,
   typeInEditor,
   waitFor,
+  waitForAsync,
   waitForHydrationReady,
   waitForMarkdownContaining,
 } = await import("./support/editor-shell-harness")
@@ -165,6 +169,23 @@ function markdownSource() {
   return mounted!.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]')
 }
 
+async function pressEditorHistoryShortcut(key: "z", shift = false) {
+  const mac = /Mac/i.test(navigator.platform || navigator.userAgent)
+  await act(async () => {
+    mounted!.editor().view.dom.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key,
+        shiftKey: shift,
+        metaKey: mac,
+        ctrlKey: !mac,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+  })
+  await flush(2)
+}
+
 async function replaceMarkdownSource(value: string) {
   const textarea = markdownSource()
   if (!textarea) throw new Error("El editor no está en modo Markdown")
@@ -247,7 +268,7 @@ describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", 
         `${message}; estado de reapertura: ${JSON.stringify(reopenedEditorState(writingId))}`,
       )
     }
-    await flush(4)
+    await waitForHydrationReady("anotación lista tras reabrir desde el .md")
 
     const reopened = readEditorAnnotations()
     expect(reopened.marks, "ANN-03: la marca vuelve sobre el mismo texto").toEqual([
@@ -273,49 +294,274 @@ describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", 
     ])
   }, TEST_TIMEOUT_MS)
 
-  it("preserves invalid Annotation source bytes through Rich save and desktop reopen", async () => {
-    const invalidAnnotation =
-      '<Annotation id="desktop-opaque-531" type="personal" comment="Keep this source" extra="invalid">Anchor desktop</Annotation>'
-    const source = `ODE531 source before\n\n${invalidAnnotation}\n\nODE531 source after`
+  it("round-trips private Annotations inside Card and Tip through Source, Rich, and desktop reopen", async () => {
+    const cardId = "n687-card-annotation-id"
+    const tipId = "n687-tip-annotation-id"
+    const cardComment = "N687_CARD_PRIVATE_SENTINEL"
+    const tipComment = "N687_TIP_PRIVATE_SENTINEL"
+    const cardAnchor = "N687CardAnchor"
+    const tipAnchor = "N687TipAnchor"
+    const source = [
+      `<Card title="N687 Card">\nCard body <Annotation id="${cardId}" type="personal" comment="${cardComment}">${cardAnchor}</Annotation>.\n</Card>`,
+      `<Tip title="N687 Tip">\nTip body <Annotation id="${tipId}" type="ai" comment="${tipComment}">${tipAnchor}</Annotation>.\n</Tip>`,
+    ].join("\n\n")
+    const expected = [
+      expect.objectContaining({ id: cardId, type: "personal", comment: cardComment, anchorText: cardAnchor }),
+      expect.objectContaining({ id: tipId, type: "ai", comment: tipComment, anchorText: tipAnchor }),
+    ]
+
     mounted = await mountEditorShell()
     await clickNewArtifact(mounted.container)
-    await typeInEditor("ODE531 initial")
-    const initialFile = await waitForMarkdownContaining("ODE531 initial")
+    await typeInEditor("N687 nested annotation seed")
+    const initialFile = await waitForMarkdownContaining("N687 nested annotation seed")
     const writingId = await waitForMaterializedWritingId()
 
     await switchMode("Markdown")
     await replaceMarkdownSource(source)
+    const sourceField = markdownSource()
+    expect(sourceField?.value, "control positivo: el Source contiene los sentinels privados").toContain(
+      cardComment,
+    )
+    expect(sourceField?.value).toContain(tipComment)
     await switchMode("Rich")
 
-    expect(opaqueSourceNodes(), "Rich conserva el tag inválido como source opaco").toEqual([
-      expect.objectContaining({ type: OPAQUE_SOURCE_INLINE_NODE, raw: invalidAnnotation, reason: "invalid-attributes" }),
-    ])
+    const savedFile = await waitForMarkdownContaining(cardComment)
+    expect(savedFile.path, "el recorrido conserva el mismo documento desktop").toBe(initialFile.path)
+    expect(savedFile.contents).toContain(tipComment)
+    expect(savedFile.contents).toContain(`<Card title="N687 Card">`)
+    expect(savedFile.contents).toContain(`<Tip title="N687 Tip">`)
+    const savedScan = scanControlledAnnotations(savedFile.contents)
+    expect(savedScan.diagnostics, "Card y Tip no producen diagnósticos de Annotation").toEqual([])
+    expect(savedScan.annotations).toEqual(expected)
 
-    const editor = mounted.editor()
-    editor.commands.setTextSelection(editor.state.doc.content.size - 1)
-    await typeInEditor(" after-opaque")
-    const savedFile = await waitForMarkdownContaining("after-opaque")
-    expect(savedFile.path, "el Rich edit guarda sobre el mismo documento").toBe(initialFile.path)
-    const invalidStart = savedFile.contents.indexOf(invalidAnnotation)
-    expect(invalidStart, "el .md materializado conserva el tag inválido").toBeGreaterThanOrEqual(0)
-    expect(savedFile.contents.slice(invalidStart, invalidStart + invalidAnnotation.length)).toBe(invalidAnnotation)
+    await switchMode("Markdown")
+    const richProjection = markdownSource()?.value ?? ""
+    const richScan = scanControlledAnnotations(richProjection)
+    expect(richScan.diagnostics).toEqual([])
+    expect(richScan.annotations).toEqual(expected)
+    const cleanProjection = projectAnnotationsToCleanMarkdown(richProjection)
+    expect(cleanProjection.ok, "la proyección limpia acepta ambas anotaciones válidas").toBe(true)
+    expect(cleanProjection.markdown).toContain(cardAnchor)
+    expect(cleanProjection.markdown).toContain(tipAnchor)
+    for (const privateValue of [cardId, tipId, cardComment, tipComment]) {
+      expect(cleanProjection.markdown, `la proyección limpia excluye ${privateValue}`).not.toContain(privateValue)
+    }
+    await switchMode("Rich")
 
+    // Reopen from the authoritative `.md`, then derive Source from the hydrated
+    // Rich editor to prove the identity/comment survived parsing, not just disk.
     await mounted.unmount()
+    mounted = null
     await writeEditorSession(createEmptyEditorSession())
     resetEditorShellWorld({ isDesktop: true })
     mounted = await mountEditorShell({ writingId })
-    await waitFor(() => mounted!.editor().getText().includes("ODE531 source before"), {
-      label: "source desktop reabierto desde el .md",
-      timeoutMs: 15_000,
-    })
-    await flush(3)
-
-    expect(opaqueSourceNodes(), "la reapertura reconstruye el mismo source opaco").toEqual([
-      expect.objectContaining({ type: OPAQUE_SOURCE_INLINE_NODE, raw: invalidAnnotation, reason: "invalid-attributes" }),
-    ])
-    const reopenedFile = await waitForMarkdownContaining("after-opaque")
-    expect(reopenedFile.contents, "el .md en disco mantiene exactamente los bytes guardados").toBe(savedFile.contents)
+    await waitFor(() => getEditorSessionState().loaded || null, { label: "sesión vacía lista para reopen" })
+    await waitForHydrationReady("documento Card/Tip reabierto e hidratado")
+    await waitFor(
+      () =>
+        mounted!.editor().getText().includes(cardAnchor) && mounted!.editor().getText().includes(tipAnchor),
+      { label: "las dos anclas están en la shell reabierta", timeoutMs: 10_000 },
+    )
+    await switchMode("Markdown")
+    const reopenedSource = markdownSource()?.value ?? ""
+    const reopenedScan = scanControlledAnnotations(reopenedSource)
+    expect(reopenedScan.diagnostics).toEqual([])
+    expect(reopenedScan.annotations, "ID, comentario y ancla sobreviven al reopen en Card y Tip").toEqual(
+      expected,
+    )
+    const reopenedClean = projectAnnotationsToCleanMarkdown(reopenedSource)
+    expect(reopenedClean.ok).toBe(true)
+    for (const privateValue of [cardId, tipId, cardComment, tipComment]) {
+      expect(reopenedClean.markdown, `la proyección limpia reabierta excluye ${privateValue}`).not.toContain(
+        privateValue,
+      )
+    }
   }, TEST_TIMEOUT_MS)
+
+  it("undoes and redoes an Annotation in the real desktop shell", async () => {
+    const text = "N687 reversible annotation anchor"
+    const target = "reversible annotation"
+    const comment = "N687_UNDO_PRIVATE_NOTE"
+    mounted = await mountEditorShell()
+    await clickNewArtifact(mounted.container)
+    await typeInEditor(text)
+    const initialFile = await waitForMarkdownContaining(text)
+    const writingId = await waitForMaterializedWritingId()
+    await waitForHydrationReady("anotación lista para probar el historial")
+
+    await selectEditorText(target)
+    await clickSelectionPopupAction("Annotate passage")
+    const field = await waitFor(
+      () => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Annotation text"]'),
+      { label: "AnnotationBubble para la prueba de undo/redo" },
+    )
+    await fillTextField(field, comment)
+    const save = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.trim() === "Save",
+    )
+    if (!save) throw new Error('El bubble no tiene botón "Save"')
+    save.click()
+
+    const firstSave = await waitForMarkdownContaining(comment)
+    const firstAnnotation = scanControlledAnnotations(firstSave.contents).annotations[0]
+    expect(firstAnnotation, "control positivo: la Annotation quedó guardada").toMatchObject({
+      comment,
+      anchorText: target,
+    })
+    expect(firstAnnotation.id).toBeTruthy()
+
+    await pressEditorHistoryShortcut("z")
+    await waitFor(() => (readEditorAnnotations().marks.length === 0 ? true : null), {
+      label: "undo real quita la marca Annotation del editor",
+    })
+    const undoneFile = await waitForAsync(
+      async () => {
+        const contents = await readFile(firstSave.path, "utf8")
+        return scanControlledAnnotations(contents).annotations.length === 0 ? contents : null
+      },
+      { label: "undo real queda persistido en el `.md`" },
+    )
+    expect(undoneFile).toContain(target)
+    expect(undoneFile).not.toContain(comment)
+
+    await pressEditorHistoryShortcut("z", true)
+    await waitFor(() => (readEditorAnnotations().marks.length === 1 ? true : null), {
+      label: "redo real restaura la marca Annotation del editor",
+    })
+    const redoneFile = await waitForAsync(
+      async () => {
+        const contents = await readFile(firstSave.path, "utf8")
+        const annotations = scanControlledAnnotations(contents).annotations
+        return annotations.some((annotation) => annotation.id === firstAnnotation.id) ? contents : null
+      },
+      { label: "redo real restaura ID y comentario en el `.md`" },
+    )
+    const redoneAnnotation = scanControlledAnnotations(redoneFile).annotations[0]
+    expect(redoneAnnotation).toMatchObject({
+      id: firstAnnotation.id,
+      comment,
+      anchorText: target,
+    })
+    expect(readEditorAnnotations().marks).toEqual([
+      expect.objectContaining({ text: target, type: "ai" }),
+    ])
+    expect(writingId, "el historial se guarda bajo el UUID original").toBeTruthy()
+    expect(initialFile.path).toBe(firstSave.path)
+  }, TEST_TIMEOUT_MS)
+
+  it("keeps an Annotation save on A while the real shell waits to activate B", async () => {
+    const textA = "N687 document A with an A anchor"
+    const textB = "N687 document B with a B anchor"
+    const noteA = "N687_A_PRIVATE_NOTE"
+    const noteB = "N687_B_PRIVATE_NOTE"
+    mounted = await mountEditorShell()
+
+    await clickNewArtifact(mounted.container)
+    await typeInEditor(textA)
+    const fileA = await waitForMarkdownContaining(textA)
+    const writingA = await waitForMaterializedWritingId()
+
+    await clickNewArtifact(mounted.container)
+    await typeInEditor(textB)
+    const fileB = await waitForMarkdownContaining(textB)
+    const writingB = await waitForMaterializedWritingId()
+    expect(fileB.path).not.toBe(fileA.path)
+
+    await clickEditorTab(writingA)
+    await waitForHydrationReady("A listo para guardar su Annotation")
+    const tabA = getEditorSessionState().session.tabs.find((tab) => tab.writing_id === writingA)
+    const tabB = getEditorSessionState().session.tabs.find((tab) => tab.writing_id === writingB)
+    if (!tabA || !tabB) throw new Error("A y B deben estar montados en pestañas reales")
+
+    await selectEditorText("A anchor")
+    await clickSelectionPopupAction("Annotate passage")
+    const fieldA = await waitFor(
+      () => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Annotation text"]'),
+      { label: "AnnotationBubble real de A" },
+    )
+    await fillTextField(fieldA, noteA)
+    const saveA = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.trim() === "Save",
+    )
+    if (!saveA) throw new Error('El bubble de A no tiene botón "Save"')
+
+    const heldAWrite = holdWriteFile((path) => path === fileA.path)
+    let releaseAWrite: (() => void) | null = heldAWrite.release
+    try {
+      await act(async () => saveA.click())
+      await heldAWrite.started
+      const heldCall = writeFileCalls().filter((call) => call.path === fileA.path).at(-1)
+      expect(heldCall?.content, "control positivo: el write retenido pertenece a A y contiene su nota").toContain(
+        noteA,
+      )
+
+      const tabNode = document.querySelector<HTMLElement>('[data-editor-tab-id="' + tabB.id + '"]')
+      if (!tabNode) throw new Error("La pestaña real de B no está en el DOM")
+      await pointerClick(tabNode)
+      expect(
+        getEditorSessionState().session.active_tab_id,
+        "la salida de A espera a que su archivo confirme la escritura retenida",
+      ).toBe(tabA.id)
+      expect(
+        await readFile(fileB.path, "utf8"),
+        "el archivo de B permanece intacto durante el write de A",
+      ).not.toContain(noteA)
+
+      releaseAWrite()
+      releaseAWrite = null
+      await waitFor(() => getEditorSessionState().session.active_tab_id === tabB.id || null, {
+        label: "B se activa después del evento de escritura durable de A",
+      })
+      await waitForHydrationReady("B listo tras el save de A")
+
+      const savedA = await waitForAsync(
+        async () => {
+          const contents = await readFile(fileA.path, "utf8")
+          return scanControlledAnnotations(contents).annotations.some((annotation) => annotation.comment === noteA)
+            ? contents
+            : null
+        },
+        { label: "la Annotation A queda en el archivo de A" },
+      )
+      expect(scanControlledAnnotations(savedA).annotations[0]).toMatchObject({
+        comment: noteA,
+        anchorText: "A anchor",
+      })
+
+      await selectEditorText("B anchor")
+      await clickSelectionPopupAction("Annotate passage")
+      const fieldB = await waitFor(
+        () => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Annotation text"]'),
+        { label: "AnnotationBubble real de B como control positivo" },
+      )
+      await fillTextField(fieldB, noteB)
+      const saveB = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Save",
+      )
+      if (!saveB) throw new Error('El bubble de B no tiene botón "Save"')
+      await act(async () => saveB.click())
+      const savedB = await waitForAsync(
+        async () => {
+          const contents = await readFile(fileB.path, "utf8")
+          return scanControlledAnnotations(contents).annotations.some((annotation) => annotation.comment === noteB)
+            ? contents
+            : null
+        },
+        { label: "la Annotation positiva de B queda en el archivo de B" },
+      )
+      expect(scanControlledAnnotations(savedB).annotations[0]).toMatchObject({
+        comment: noteB,
+        anchorText: "B anchor",
+      })
+      expect(savedB).not.toContain(noteA)
+      expect(
+        scanControlledAnnotations(await readFile(fileA.path, "utf8")).annotations.map((entry) => entry.comment),
+      ).toEqual([noteA])
+    } finally {
+      releaseAWrite?.()
+    }
+  }, TEST_TIMEOUT_MS)
+
   it.fails(
     "follow-up pendiente (ODE-687): el fallo de Annotation deja la pestaña en saving — owner: useEditorPersistence",
     async () => {
@@ -401,4 +647,47 @@ describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", 
     TEST_TIMEOUT_MS,
   )
 
+  it("preserves invalid Annotation source bytes through Rich save and desktop reopen", async () => {
+    const invalidAnnotation =
+      '<Annotation id="desktop-opaque-531" type="personal" comment="Keep this source" extra="invalid">Anchor desktop</Annotation>'
+    const source = `ODE531 source before\n\n${invalidAnnotation}\n\nODE531 source after`
+    mounted = await mountEditorShell()
+    await clickNewArtifact(mounted.container)
+    await typeInEditor("ODE531 initial")
+    const initialFile = await waitForMarkdownContaining("ODE531 initial")
+    const writingId = await waitForMaterializedWritingId()
+
+    await switchMode("Markdown")
+    await replaceMarkdownSource(source)
+    await switchMode("Rich")
+
+    expect(opaqueSourceNodes(), "Rich conserva el tag inválido como source opaco").toEqual([
+      expect.objectContaining({ type: OPAQUE_SOURCE_INLINE_NODE, raw: invalidAnnotation, reason: "invalid-attributes" }),
+    ])
+
+    const editor = mounted.editor()
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1)
+    await typeInEditor(" after-opaque")
+    const savedFile = await waitForMarkdownContaining("after-opaque")
+    expect(savedFile.path, "el Rich edit guarda sobre el mismo documento").toBe(initialFile.path)
+    const invalidStart = savedFile.contents.indexOf(invalidAnnotation)
+    expect(invalidStart, "el .md materializado conserva el tag inválido").toBeGreaterThanOrEqual(0)
+    expect(savedFile.contents.slice(invalidStart, invalidStart + invalidAnnotation.length)).toBe(invalidAnnotation)
+
+    await mounted.unmount()
+    await writeEditorSession(createEmptyEditorSession())
+    resetEditorShellWorld({ isDesktop: true })
+    mounted = await mountEditorShell({ writingId })
+    await waitFor(() => mounted!.editor().getText().includes("ODE531 source before"), {
+      label: "source desktop reabierto desde el .md",
+      timeoutMs: 15_000,
+    })
+    await flush(3)
+
+    expect(opaqueSourceNodes(), "la reapertura reconstruye el mismo source opaco").toEqual([
+      expect.objectContaining({ type: OPAQUE_SOURCE_INLINE_NODE, raw: invalidAnnotation, reason: "invalid-attributes" }),
+    ])
+    const reopenedFile = await waitForMarkdownContaining("after-opaque")
+    expect(reopenedFile.contents, "el .md en disco mantiene exactamente los bytes guardados").toBe(savedFile.contents)
+  }, TEST_TIMEOUT_MS)
 })
