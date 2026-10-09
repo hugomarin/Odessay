@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   exportFile: vi.fn(),
   webExport: vi.fn(),
   workspaceSync: vi.fn(),
+  tauriListRecentFiles: vi.fn(async () => []),
   workspaceTouch: vi.fn(),
   dualWrite: vi.fn(),
   bulkDualWrite: vi.fn(),
@@ -87,6 +88,7 @@ vi.mock("@/lib/services/desktop/filesystem-document-service", () => ({
   },
 }))
 vi.mock("@/lib/services/desktop/tauri-commands", () => ({
+  tauriListRecentFiles: mocks.tauriListRecentFiles,
   tauriWorkspaceSync: mocks.workspaceSync,
   tauriWorkspaceTouchFile: mocks.workspaceTouch,
   tauriCatalogDualWrite: mocks.dualWrite,
@@ -398,7 +400,7 @@ describe("desktop document service after compatibility retirement", () => {
       )
     })
 
-    it("reports a recoverable failure and touches nothing else when the physical move fails", async () => {
+    it("reports a recoverable failure and checks source identity without minting when the physical move fails", async () => {
       mocks.tauriRelocate.mockRejectedValue(new Error("relocate_file verify: copied content mismatch; original preserved"))
 
       const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
@@ -410,7 +412,16 @@ describe("desktop document service after compatibility retirement", () => {
       })
       expect(mocks.dualWrite).not.toHaveBeenCalled()
       expect(mocks.upsertBindingRoot).not.toHaveBeenCalled()
-      expect(mocks.workspaceSync).not.toHaveBeenCalled()
+      // A native error can follow partial filesystem effects. Clear the
+      // write-ahead intent only after a source-root scan proves the same UUID
+      // is still bound at source and does not mint an id for an unbound file.
+      expect(mocks.workspaceSync).toHaveBeenCalledTimes(1)
+      expect(mocks.workspaceSync).toHaveBeenCalledWith(
+        "/managed",
+        undefined,
+        undefined,
+        { mintUnbound: false },
+      )
     })
 
     it("reports a recoverable failure for a UUID without local binding (never a draft)", async () => {
