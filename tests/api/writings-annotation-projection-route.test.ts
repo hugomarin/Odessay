@@ -184,6 +184,7 @@ class MemoryQuery implements PromiseLike<QueryResult> {
 const WRITING_ID = "writing-531"
 const READER_ID = "reader-531"
 const SENTINEL_ID = "collaborative-sentinel-531"
+const NESTED_CONTROL_ID = "nested-card-tip-control-531"
 
 let database: MemorySupabase
 
@@ -254,10 +255,16 @@ beforeEach(() => {
 })
 
 describe("PATCH /api/writings/[id] annotation projection", () => {
-  const malformedSource =
-    '<Annotation id="collaborative-sentinel-531" type="personal" comment="Keep this collaborative note" extra="invalid">Anchor</Annotation>'
+  const malformedAnnotation =
+    `<Annotation id="${SENTINEL_ID}" type="personal" comment="Keep this collaborative note" extra="invalid">Anchor</Annotation>`
+  const validNestedAnnotation =
+    `<Annotation id="${NESTED_CONTROL_ID}" type="personal" comment="N687 nested positive control">Tip control</Annotation>`
+  const malformedSource = [
+    `<Card title="N687 invalid collaborative Annotation">\n${malformedAnnotation}\n</Card>`,
+    `<Tip title="N687 valid nested control">\n${validNestedAnnotation}\n</Tip>`,
+  ].join("\n\n")
 
-  it("conserves the collaborative margin after invalid Annotation source becomes opaque Rich content", async () => {
+  it("keeps nested Card/Tip margin rows when an invalid Annotation becomes opaque Rich content", async () => {
     const snapshot = parseMarkdownToSnapshot(malformedSource)
     const opaqueNodes: JSONContent[] = []
     visitJsonNodes(snapshot.bodyJson, (node) => {
@@ -268,7 +275,10 @@ describe("PATCH /api/writings/[id] annotation projection", () => {
 
     expect(opaqueNodes).toHaveLength(1)
     expect(opaqueNodes[0]?.attrs).toEqual(
-      expect.objectContaining({ raw: malformedSource, reason: "invalid-attributes" }),
+      expect.objectContaining({ raw: malformedAnnotation, reason: "invalid-attributes" }),
+    )
+    expect(malformedSource, "control positivo: el source contiene el sentinel colaborativo").toContain(
+      "Keep this collaborative note",
     )
     seedMargin(collaborativeMargin(SENTINEL_ID))
 
@@ -276,6 +286,17 @@ describe("PATCH /api/writings/[id] annotation projection", () => {
     expect(response.status).toBe(200)
     expect(database.row("margins", SENTINEL_ID)).toEqual(
       expect.objectContaining({ id: SENTINEL_ID, shared: true, resolved: false }),
+    )
+    expect(database.row("margins", NESTED_CONTROL_ID)).toEqual(
+      expect.objectContaining({
+        id: NESTED_CONTROL_ID,
+        writing_id: WRITING_ID,
+        reader_id: READER_ID,
+        type: "personal",
+        text: "N687 nested positive control",
+        note: "N687 nested positive control",
+        anchor_text: "Tip control",
+      }),
     )
   })
 
