@@ -35,6 +35,7 @@ export type WorkspaceTabsInput = {
   activeEditorTabIdRef: React.RefObject<string | null>
   /** Identidad del documento activo; la que fija `activateDocument` (shell). */
   currentWritingId: string | null
+  currentWritingIdRef: React.RefObject<string | null>
   editor: Editor | null
   editorSession: LocalEditorSession
   ephemeralDraftWritingIdRef: React.RefObject<string | null>
@@ -61,6 +62,7 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
     activateDocument,
     activeEditorTabIdRef,
     currentWritingId,
+    currentWritingIdRef,
     editor,
     editorSession,
     ephemeralDraftWritingIdRef,
@@ -76,8 +78,11 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
     writingStatus,
   } = input
 
+  // A newer click supersedes a selection waiting for the outgoing write.
+  const tabSelectionRequestRef = useRef(0)
+
   const handleSelectWorkspaceTab = useCallback(
-    (tabId: string) => {
+    async (tabId: string) => {
       // Read fresh rather than the closed-over `editorSession.tabs` (same
       // reasoning as handleCloseWorkspaceTab): a tab can be closed, or
       // materialized under a new id, between this component's last render and
@@ -90,21 +95,48 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
         return
       }
 
+      // Re-selecting the active tab supersedes any pending selection and then
+      // re-activates it exactly as main does (a fresh hydration generation);
+      // there is no outgoing document to wait for.
+      const reselectingActiveTab = activeEditorTabIdRef.current === tabId
+      const requestId = ++tabSelectionRequestRef.current
+      const outgoingTarget = {
+        writingId: currentWritingIdRef.current,
+        draftWritingId: currentWritingIdRef.current === null ? ephemeralDraftWritingIdRef.current : null,
+        sourceTabId: activeEditorTabIdRef.current,
+      }
+
       // A queued rich-mode update still holds the OLD tab's editor instance.
       // Flushing it here — before currentWritingIdRef changes below — makes
       // sure that content lands on the document it was actually typed into,
       // not on whatever tab we're about to switch to (ODE-478 case 2).
       prepareDocumentExit({ flushPendingEdit: true, snapshotDraft: true, saveViewState: true })
+      // Keep the outgoing document active until its materialized content is
+      // durable. Settlement also bypasses a still-debounced snapshot.
+      if (!reselectingActiveTab && outgoingTarget.writingId && persistenceCoordinator.hasPending(outgoingTarget)) {
+        if (outgoingTarget.sourceTabId) {
+          updateTabSaveState({ tabId: outgoingTarget.sourceTabId, saveState: "saving", hasPendingSync: true })
+        }
+        const settled = await persistenceCoordinator.settle(outgoingTarget)
+        if (!settled) return
+      }
+      if (tabSelectionRequestRef.current !== requestId) return
+
+      // The awaited save can let a close or materialization update the store.
+      // Revalidate against live state before committing the requested focus.
+      const resolvedNextTab = getEditorSessionState().session.tabs.find((tab) => tab.id === tabId)
+      if (!resolvedNextTab) return
+
       // La copia de la pestaña activa la actualiza el listener del store al
       // cambiar `active_tab_id` dentro de `focusTab` (ODE-609, opción B).
-      focusTab(tabId)
+      focusTab(resolvedNextTab.id)
       navigatedToDraftRef.current = false
 
-      if (nextTab.writing_id) {
+      if (resolvedNextTab.writing_id) {
         activateDocument(
           {
-            writingId: nextTab.writing_id,
-            href: buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }),
+            writingId: resolvedNextTab.writing_id,
+            href: buildWritingRouteHref("/write", { id: resolvedNextTab.writing_id, slug: resolvedNextTab.slug }),
           },
           "select",
         )
@@ -113,7 +145,7 @@ export function useWorkspaceTabs(input: WorkspaceTabsInput) {
 
       activateDocument({ writingId: null, href: "/write" }, "select")
     },
-    [activateDocument, prepareDocumentExit, activeEditorTabIdRef, navigatedToDraftRef],
+    [activateDocument, prepareDocumentExit, activeEditorTabIdRef, currentWritingIdRef, ephemeralDraftWritingIdRef, navigatedToDraftRef, persistenceCoordinator],
   )
 
   const handleCloseWorkspaceTab = useCallback(

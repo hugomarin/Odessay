@@ -95,25 +95,8 @@ import {
 } from "@/lib/editor/correction-trigger-plugin"
 import {
   getVisibleCorrectionSuggestions,
-  replaceBlockSuggestions,
 } from "@/lib/editor/suggestion-engine"
-import {
-  CORRECTION_STALE_TIMEOUT_MS,
-  dropExpiredStaleSuggestions,
-  dropStaleSuggestionsForBlock,
-  restorePendingSuggestions,
-  type DeferredCorrectionBlocksState,
-} from "@/lib/corrections/engine/lifecycle"
-import {
-  getMissingCorrectionBlockIds,
-  takeCorrectionBatch,
-} from "@/lib/corrections/engine/batching"
-import {
-  CORRECTION_REVIEW_FAILURE_COOLDOWN_MS,
-  buildCorrectionReviewRetryKey,
-  CORRECTION_REVIEW_MAX_RETRIES,
-  decideCorrectionReviewRetry,
-} from "@/lib/corrections/engine/retry"
+import type { DeferredCorrectionBlocksState } from "@/lib/corrections/engine/lifecycle"
 import {
   createRouteHydrationSessionState,
   resolveExternalWritingLoad,
@@ -435,6 +418,7 @@ export function EditorShell({
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
+  const [acceptedMarkdownForAnnotations, setAcceptedMarkdownForAnnotations] = useState("")
 
   const [bodyText, setBodyText] = useState("")
   const [markdownSelectionState, setMarkdownSelectionState] = useState<MarkdownSelectionSnapshot | null>(null)
@@ -737,6 +721,7 @@ export function EditorShell({
     persistenceCoordinator,
     persistEditorSnapshot,
     flushQueuedRichModeUpdate,
+    flushPendingMarkdownSave,
     scheduleMarkdownSave,
     handleEditorUpdate,
   } = useEditorPersistence({
@@ -856,13 +841,14 @@ export function EditorShell({
   const editorExtensions = useMemo(
     () =>
       createEditorExtensions({
+        getEntityPasteWritingId: () => currentWritingIdRef.current,
         onTableOfContentsUpdate: scheduleTableOfContentsUpdate,
         tableOfContentsScrollParent: getTableOfContentsScrollParent,
         resolveImage: isDesktopRuntime() ? resolveImage : undefined,
         onRequestLocalImageBackup: isDesktopRuntime() ? requestLocalImageBackup : undefined,
         onOpenImagePresentation: openImagePresentation,
       }),
-    [getTableOfContentsScrollParent, openImagePresentation, requestLocalImageBackup, resolveImage, scheduleTableOfContentsUpdate],
+    [currentWritingIdRef, getTableOfContentsScrollParent, openImagePresentation, requestLocalImageBackup, resolveImage, scheduleTableOfContentsUpdate],
   )
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
@@ -1255,6 +1241,7 @@ export function EditorShell({
     editor,
     ephemeralDraftWritingIdRef,
     flushQueuedRichModeUpdate,
+    flushPendingMarkdownSave,
     hydrationPhaseRef,
     markdownSaveTimeoutRef,
     markdownSelectionRafRef,
@@ -1275,6 +1262,7 @@ export function EditorShell({
       if (!editor) return false
 
       setMarkdownValue(normalizedMarkdown)
+      setAcceptedMarkdownForAnnotations(normalizedMarkdown)
       // WATCH-07 — a real content mutation (from the AI panel), not a
       // programmatic re-sync; isApplyingContentRef only exists here to
       // suppress a duplicate onUpdate-triggered persist, not to mark this as
@@ -1288,6 +1276,9 @@ export function EditorShell({
             window.clearTimeout(markdownSaveTimeoutRef.current)
             markdownSaveTimeoutRef.current = null
           }
+          // The panel applies this markdown synchronously, so any queued
+          // textarea snapshot has been superseded rather than abandoned.
+          pendingMarkdownSaveRef.current = null
         },
         updateDerivedState: () => {
           if (!editor) {
@@ -1370,7 +1361,7 @@ export function EditorShell({
   }, [editor])
 
   const captureRichSelectionSnapshot = useCallback((): PendingRichSelectionSnapshot | null => {
-    if (!editor || modeRef.current !== "rich") {
+    if (!editor) {
       return null
     }
 
@@ -1386,14 +1377,17 @@ export function EditorShell({
 
     const positions = getRichSelectionOverlayPositions(from, to)
     if (!positions) return null
+    const writingId = currentWritingIdRef.current
+    if (writingId !== currentWritingId) return null
 
     return {
       from,
       to,
       text: selectedText,
+      writingId,
       ...positions,
     }
-  }, [editor, getRichSelectionOverlayPositions])
+  }, [currentWritingId, currentWritingIdRef, editor, getRichSelectionOverlayPositions])
 
   // ODE-603 — corte 4b, entrega 2: el despachador vive en su hook (mudanza
   // mecánica; el estado y los refs siguen siendo de la shell).
@@ -1421,6 +1415,7 @@ export function EditorShell({
     scheduleMarkdownSave,
     selectAdjacentTabRef,
     selectionRef,
+    showCorrectionToast,
     setActivePanel,
     setBodyText,
     setFootnoteModalOpen,
@@ -1440,6 +1435,8 @@ export function EditorShell({
   // siendo de la shell). Se llama donde estaba `dismissSelectionPopup`, así que
   // el orden de efectos no cambia.
   const {
+    applySemanticEntityAtSelection,
+    applySemanticHighlightAtSelection,
     convertStandaloneHighlight,
     dismissSelectionPopup,
     handleConfirmAnnotation,
@@ -1487,25 +1484,36 @@ export function EditorShell({
           bodyMarkdown = getEditorMarkdown(editor)
         }
         const footnoteNodes = getEditorFootnotes(editor)
-        setMarkdownValue(
-          isDesktopRuntime()
-            ? bodyMarkdown
-            : normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes)),
-        )
+        const sourceMarkdown = isDesktopRuntime()
+          ? bodyMarkdown
+          : normalizeMarkdownForRoundTrip(
+              getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes),
+            )
+        setMarkdownValue(sourceMarkdown)
+        setAcceptedMarkdownForAnnotations(sourceMarkdown)
         return
       }
 
       const normalizedMarkdown = isDesktopRuntime()
         ? markdownValue
         : normalizeMarkdownForRoundTrip(markdownValue)
-      // El dueño va aquí, antes de `setContent`: el orden ref-primero es un
-      // contrato del pack (el ref vale "rich" mientras el estado sigue en
-      // "markdown"), sin lector observable hoy. El único lector síncrono es
-      // `handleEditorUpdate` (`useEditorPersistence.ts:546`), que sale antes
-      // por `isApplyingContentRef`; `persistEditorSnapshot` no lee `modeRef`.
-      // `setMode` cae dentro del mismo bloque síncrono, así que React lo
-      // agrupa con el resto del handler.
+      let currentRichMarkdown: string
+      if (isDesktopRuntime()) {
+        const result = desktopDocumentEngine.richToSource(editor)
+        currentRichMarkdown = result.success ? result.markdown : getEditorMarkdown(editor)
+      } else {
+        currentRichMarkdown = normalizeMarkdownForRoundTrip(
+          getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
+        )
+      }
+
       applyEditorMode("rich")
+      setMarkdownValue(normalizedMarkdown)
+      // Preserve EditorState and custom NodeViews for a clean mode round trip.
+      if (currentRichMarkdown === normalizedMarkdown) {
+        return
+      }
+
       isApplyingContentRef.current = true
       if (isDesktopRuntime()) {
         const result = desktopDocumentEngine.sourceToRich(normalizedMarkdown)
@@ -1519,7 +1527,6 @@ export function EditorShell({
         editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
       }
       isApplyingContentRef.current = false
-      setMarkdownValue(normalizedMarkdown)
       updateDerivedEditorState(editor)
       void persistEditorSnapshot(editor)
     },
@@ -1802,6 +1809,8 @@ export function EditorShell({
     applyMarkdownFromPanel,
     editor,
     markdownValue,
+    acceptedMarkdownForAnnotations,
+    markdownSelectionRef,
     mode,
     modeRef,
     persistEditorSnapshot,
@@ -1986,6 +1995,7 @@ export function EditorShell({
     activateDocument,
     activeEditorTabIdRef,
     currentWritingId,
+    currentWritingIdRef,
     editor,
     editorSession,
     ephemeralDraftWritingIdRef,
@@ -2160,6 +2170,7 @@ export function EditorShell({
   const handleSaveToDisk = useCallback(async (path: string, content: string): Promise<string | false> => {
     if (!isDesktopRuntime()) return false
     let writingId = currentWritingIdRef.current
+    const materializedBeforeSave = writingId !== null
 
     if (!writingId) {
       // Save As is itself a deliberate naming action — the filename the user
@@ -2173,11 +2184,30 @@ export function EditorShell({
       if (!writingId) return false
     }
 
+    // The latest edit becomes durable through the canonical save path first,
+    // so the move transports bytes whose hash the persistence coordinator
+    // already knows. Letting the move commit its own copy of the content left
+    // that baseline stale and every later autosave failed with CONFLICT.
+    // An edit still queued for its frame/debounce would otherwise start a
+    // write mid-move against the old path; drain it into this save first.
+    if (materializedBeforeSave) {
+      flushQueuedRichModeUpdate()
+      flushPendingMarkdownSave()
+    }
+    const durableBeforeMove =
+      materializedBeforeSave && editor
+        ? await persistEditorSnapshot(editor, undefined, { awaitDurability: true })
+        : false
+    if (materializedBeforeSave && editor && !durableBeforeMove) {
+      setExternalFileNotice({ kind: "relocate-failed", path: currentCanonicalPathRef.current })
+      return false
+    }
+
     const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
     // Conscious physical MOVE (ODE-402): content commits to the current
     // canonical file and the rename transports it — no copy is ever written at
     // the destination. The adopted path may carry a collision suffix.
-    const result = await relocateDesktopWriting(writingId, path, content)
+    const result = await relocateDesktopWriting(writingId, path, durableBeforeMove ? undefined : content)
     if (result.status !== "relocated") {
       // Never reflect a move that did not materialize. Title, canonical path
       // and any active external-file notice stay untouched; surface a clear
@@ -2194,7 +2224,7 @@ export function EditorShell({
     setCanonicalPath(result.path)
     setExternalFileNotice(null)
     return result.path
-  }, [applyDocumentMetadata, editor, persistEditorSnapshot])
+  }, [applyDocumentMetadata, editor, flushPendingMarkdownSave, flushQueuedRichModeUpdate, persistEditorSnapshot])
 
   useTauriEditorMenuEvents(handleRunAction)
 
@@ -2259,8 +2289,9 @@ export function EditorShell({
   // save abandoned it the same way (ODE-478 follow-up).
   const settleBeforeClose = useCallback(async () => {
     flushQueuedRichModeUpdate()
+    flushPendingMarkdownSave()
     await persistenceCoordinator.settle()
-  }, [flushQueuedRichModeUpdate, persistenceCoordinator])
+  }, [flushPendingMarkdownSave, flushQueuedRichModeUpdate, persistenceCoordinator])
   useTauriCloseGuard(settleBeforeClose)
 
   // Picks up a file opened via Cmd+O from outside Write (see useGlobalOpenFileMenu).
@@ -3055,6 +3086,8 @@ export function EditorShell({
         position={pendingRichSelection?.popupPosition ?? null}
         onSelectType={handleEditorSelectType}
         onDismiss={dismissSelectionPopup}
+        onApplyEntity={applySemanticEntityAtSelection}
+        onApplyHighlight={applySemanticHighlightAtSelection}
       />
 
       <AnnotationBubble

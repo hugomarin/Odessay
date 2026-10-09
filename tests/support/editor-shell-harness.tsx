@@ -886,8 +886,16 @@ export async function clickEditorTab(writingId: string) {
   const node = document.querySelector<HTMLElement>(`[data-editor-tab-id="${tab.id}"]`)
   if (!node) throw new Error(`La pestaña de ${writingId} no está en el DOM`)
   await pointerClick(node)
-  const active = getEditorSessionState().session.active_tab_id
-  if (active !== tab.id) {
+  // La activación espera a que la escritura pendiente del documento saliente
+  // sea durable (exit protocol): el driver verifica el efecto tras ese evento,
+  // no en el mismo tick del gesto.
+  try {
+    await waitFor(() => getEditorSessionState().session.active_tab_id === tab.id, {
+      label: `activación de la pestaña de ${writingId}`,
+      timeoutMs: 10_000,
+    })
+  } catch {
+    const active = getEditorSessionState().session.active_tab_id
     throw new Error(`El gesto sobre la pestaña de ${writingId} no la activó (activa: ${active})`)
   }
 }

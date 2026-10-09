@@ -22,13 +22,14 @@
  * `tests/editor-shell-selection-restore.test.tsx` (STATE-06/07) y el resto de
  * la suite `editor-shell-*` pasan idénticas antes y después de esta mudanza.
  */
-import { useCallback, useEffect, type Dispatch, type RefObject, type SetStateAction } from "react"
+import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react"
 import { getMarkRange } from "@tiptap/core"
 import { type Editor } from "@tiptap/react"
 
 import { nextAnnotationSessionId, type AnnotationBubblePosition } from "@/components/reading/margins/annotation-bubble"
-import { type SelectionPopupPosition } from "@/components/reading/margins/selection-popup"
+import { type SelectionPopupPosition, type SemanticMarkApplyResult } from "@/components/reading/margins/selection-popup"
 import { type PendingAnnotationSnapshot, type PendingRichSelectionSnapshot } from "@/hooks/useEditorCommands"
+import { applyEntityMark, applySemanticHighlight, type EntityTypeName, type HighlightColorName } from "@/lib/editor/semantic-marks"
 import { type AnnotationType } from "@/lib/editor/footnote-node"
 import { areFloatingOverlayAnchorsEqual } from "@/lib/reading/floating-overlay-position"
 
@@ -50,7 +51,7 @@ export type SelectionPopupInput = {
   modeRef: RefObject<"rich" | "markdown">
   pendingAnnotation: PendingAnnotationSnapshot | null
   pendingRichSelection: PendingRichSelectionSnapshot | null
-  persistEditorSnapshot: (editorInstance: Editor) => Promise<boolean>
+  persistEditorSnapshot: (editorInstance: Editor, overrides?: undefined, options?: { awaitDurability?: boolean }) => Promise<boolean>
   selectionRef: RefObject<SelectionSnapshot | null>
   setActivePanel: (panel: "notes") => void
   setFootnoteModalOpen: Dispatch<SetStateAction<boolean>>
@@ -78,6 +79,40 @@ export function useSelectionPopup(input: SelectionPopupInput) {
     updateDerivedEditorState,
   } = input
 
+  const isMountedRef = useRef(false)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const validatePendingRichSelection = useCallback(
+    (pending: PendingRichSelectionSnapshot): string | null => {
+      if (!isMountedRef.current) return "This selection is no longer available."
+      if (modeRef.current !== "rich") {
+        setPendingRichSelection(null)
+        return "Semantic marks can only be applied in Rich mode."
+      }
+
+      const current = captureRichSelectionSnapshot()
+      if (!current) return "Select some text first."
+      if (current.writingId !== pending.writingId) {
+        return "This selection belongs to a different document."
+      }
+      if (
+        current.from !== pending.from ||
+        current.to !== pending.to ||
+        current.text !== pending.text
+      ) {
+        return "The selection has changed. Select it again."
+      }
+      return null
+    },
+    [captureRichSelectionSnapshot, modeRef, setPendingRichSelection],
+  )
+
   const dismissSelectionPopup = useCallback(() => {
     suppressNextSelectionPopupRef.current = true
     setPendingRichSelection(null)
@@ -100,7 +135,7 @@ export function useSelectionPopup(input: SelectionPopupInput) {
 
     setPendingRichSelection(null)
     updateDerivedEditorState(editor)
-    void persistEditorSnapshot(editor)
+    void persistEditorSnapshot(editor, undefined, { awaitDurability: true })
   }, [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState])
 
   const convertStandaloneHighlight = useCallback(
@@ -190,6 +225,60 @@ export function useSelectionPopup(input: SelectionPopupInput) {
     [handleAnnotateSelection, handleFootnoteSelection, handleMarkSelection],
   )
 
+  const applySemanticEntityAtSelection = useCallback(
+    (type: EntityTypeName): SemanticMarkApplyResult => {
+      if (!editor || !pendingRichSelection) {
+        return "Select some text first."
+      }
+      const staleSelection = validatePendingRichSelection(pendingRichSelection)
+      if (staleSelection) return staleSelection
+
+      suppressNextSelectionPopupRef.current = true
+      editor.commands.focus()
+      const decision = applyEntityMark(editor, {
+        from: pendingRichSelection.from,
+        to: pendingRichSelection.to,
+        type,
+      })
+      if (!decision.ok) {
+        suppressNextSelectionPopupRef.current = false
+        return decision.message
+      }
+      setPendingRichSelection(null)
+      updateDerivedEditorState(editor)
+      void persistEditorSnapshot(editor, undefined, { awaitDurability: true })
+      return null
+    },
+    [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState, validatePendingRichSelection],
+  )
+
+  const applySemanticHighlightAtSelection = useCallback(
+    (color: HighlightColorName): SemanticMarkApplyResult => {
+      if (!editor || !pendingRichSelection) {
+        return "Select some text first."
+      }
+      const staleSelection = validatePendingRichSelection(pendingRichSelection)
+      if (staleSelection) return staleSelection
+
+      suppressNextSelectionPopupRef.current = true
+      editor.commands.focus()
+      const decision = applySemanticHighlight(editor, {
+        from: pendingRichSelection.from,
+        to: pendingRichSelection.to,
+        color,
+      })
+      if (!decision.ok) {
+        suppressNextSelectionPopupRef.current = false
+        return decision.message
+      }
+      setPendingRichSelection(null)
+      updateDerivedEditorState(editor)
+      void persistEditorSnapshot(editor, undefined, { awaitDurability: true })
+      return null
+    },
+    [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState, validatePendingRichSelection],
+  )
+
   const handleConfirmAnnotation = useCallback(
     (note: string) => {
       if (!editor || !pendingAnnotation) return
@@ -222,7 +311,7 @@ export function useSelectionPopup(input: SelectionPopupInput) {
 
       setPendingAnnotation(null)
       updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
+      void persistEditorSnapshot(editor, undefined, { awaitDurability: true })
     },
     [editor, pendingAnnotation, persistEditorSnapshot, updateDerivedEditorState],
   )
@@ -263,6 +352,20 @@ export function useSelectionPopup(input: SelectionPopupInput) {
       editor.off("selectionUpdate", handleSelectionUpdate)
     }
   }, [captureRichSelectionSnapshot, editor, pendingAnnotation])
+
+  useEffect(() => {
+    if (!pendingRichSelection) return
+    const current = captureRichSelectionSnapshot()
+    if (
+      !current ||
+      current.writingId !== pendingRichSelection.writingId ||
+      current.from !== pendingRichSelection.from ||
+      current.to !== pendingRichSelection.to ||
+      current.text !== pendingRichSelection.text
+    ) {
+      setPendingRichSelection(null)
+    }
+  }, [captureRichSelectionSnapshot, pendingRichSelection, setPendingRichSelection])
 
   useEffect(() => {
     if (!editor || (!pendingRichSelection && !pendingAnnotation)) return
@@ -318,5 +421,5 @@ export function useSelectionPopup(input: SelectionPopupInput) {
     }
   }, [editor, getRichSelectionOverlayPositions, pendingAnnotation, pendingRichSelection])
 
-  return { convertStandaloneHighlight, dismissSelectionPopup, handleConfirmAnnotation, handleEditorSelectType }
+  return { applySemanticEntityAtSelection, applySemanticHighlightAtSelection, convertStandaloneHighlight, dismissSelectionPopup, handleConfirmAnnotation, handleEditorSelectType }
 }

@@ -293,7 +293,11 @@ async function clickButton(text: string, root: ParentNode = document) {
 
 type CommandMode = "rich" | "markdown"
 type Shortcut = { key: string; code?: string; shift?: boolean; alt?: boolean }
-type RealEntry = { kind: "shortcut"; shortcut: Shortcut } | { kind: "menu"; action: EditorShortcutAction }
+type ToolbarInsertAction = Extract<EditorShortcutAction, "tipBlock" | "infoBlock" | "cardBlock">
+type RealEntry =
+  | { kind: "shortcut"; shortcut: Shortcut }
+  | { kind: "menu"; action: EditorShortcutAction }
+  | { kind: "toolbar-insert"; action: ToolbarInsertAction }
 type CommandCheck = (world: CommandWorld) => void | Promise<void>
 type CommandSetup = (world: CommandWorld) => Promise<void>
 
@@ -324,6 +328,7 @@ const shortcut = (
 ): RealEntry => ({ kind: "shortcut", shortcut: { key, code, ...modifiers } })
 
 const menu = (action: EditorShortcutAction): RealEntry => ({ kind: "menu", action })
+const toolbarInsert = (action: ToolbarInsertAction): RealEntry => ({ kind: "toolbar-insert", action })
 
 type CommandWorld = {
   action: EditorShortcutAction
@@ -354,7 +359,42 @@ async function pressRealEntry(entry: RealEntry) {
     await pressEditorShortcut(entry.shortcut)
     return
   }
-  await emitTauriEvent(`menu:${entry.action}`)
+  if (entry.kind === "menu") {
+    await emitTauriEvent(`menu:${entry.action}`)
+    return
+  }
+
+  const insertTrigger = await waitFor(
+    () => mounted?.container.querySelector<HTMLButtonElement>('button[aria-label="Insert"]') ?? null,
+    { label: "menú Insert de la toolbar" },
+  )
+  await act(async () => {
+    const makePointerEvent = (type: "pointerdown" | "pointerup") =>
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: type === "pointerdown" ? 1 : 0,
+        pointerId: 1,
+        pointerType: "mouse",
+      })
+    insertTrigger.dispatchEvent(makePointerEvent("pointerdown"))
+    insertTrigger.dispatchEvent(makePointerEvent("pointerup"))
+  })
+  await flush(2)
+
+  const itemLabel = { tipBlock: "Tip", infoBlock: "Info", cardBlock: "Card" }[entry.action]
+  const item = await waitFor(
+    () =>
+      Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+        (candidate) => candidate.getAttribute("aria-label") === itemLabel || (candidate.textContent ?? "").includes(itemLabel),
+      ) ?? null,
+    { label: `acción ${itemLabel} en el menú Insert` },
+  )
+  await act(async () => {
+    item.click()
+  })
+  await flush(2)
 }
 
 async function setMode(mode: CommandMode) {
@@ -955,9 +995,46 @@ const COMMAND_CASES = {
   },
 
   /* --- Inserción --- */
+  tipBlock: {
+    entry: toolbarInsert("tipBlock"),
+    rich: async (w) => {
+      await w.enter()
+      expect(nodeTypes(w.json()), "Tip insertado desde Insert en Rich").toContain("tip")
+    },
+    markdown: async (w) => {
+      const before = JSON.stringify(w.json())
+      await w.enter()
+      expect(JSON.stringify(w.json()), "Tip no muta el documento desde Markdown").toBe(before)
+    },
+  },
+  infoBlock: {
+    entry: toolbarInsert("infoBlock"),
+    rich: async (w) => {
+      await w.enter()
+      expect(nodeTypes(w.json()), "Info insertado desde Insert en Rich").toContain("info")
+    },
+    markdown: async (w) => {
+      const before = JSON.stringify(w.json())
+      await w.enter()
+      expect(JSON.stringify(w.json()), "Info no muta el documento desde Markdown").toBe(before)
+    },
+  },
+  cardBlock: {
+    entry: toolbarInsert("cardBlock"),
+    rich: async (w) => {
+      await w.enter()
+      expect(nodeTypes(w.json()), "Card insertado desde Insert en Rich").toContain("card")
+    },
+    markdown: async (w) => {
+      const before = JSON.stringify(w.json())
+      await w.enter()
+      expect(JSON.stringify(w.json()), "Card no muta el documento desde Markdown").toBe(before)
+    },
+  },
   footnote: {
     entry: shortcut("a", "KeyA", { shift: true }),
     rich: async (w) => {
+      await w.selectRichText("bravo")
       await w.enter()
       const note = await waitFor(
         () => document.querySelector<HTMLTextAreaElement>('textarea[placeholder="Add note text"]'),
@@ -977,6 +1054,7 @@ const COMMAND_CASES = {
       )
     },
     markdown: async (w) => {
+      await w.selectMarkdownText("charlie")
       await w.enter()
       const note = await waitFor(
         () => document.querySelector<HTMLTextAreaElement>('textarea[placeholder="Add note text"]'),

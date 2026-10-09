@@ -1,4 +1,5 @@
 import {
+  ExternalHyperlink,
   BorderStyle,
   Document as DocxDocument,
   HeadingLevel,
@@ -24,7 +25,7 @@ type RenderDocxParams = {
   document: WritingExportDocument
 }
 
-const inlineRunToDocx = (run: WritingExportInline) => {
+const textRunToDocx = (run: WritingExportInline) => {
   return new TextRun({
     text: run.text,
     bold: run.bold || undefined,
@@ -43,6 +44,13 @@ const inlineRunToDocx = (run: WritingExportInline) => {
       : undefined,
   })
 }
+
+// Links are native hyperlinks (surface-projections.md, DOCX): styling alone
+// loses the destination in the exported file.
+const inlineRunToDocx = (run: WritingExportInline) =>
+  run.linkHref
+    ? new ExternalHyperlink({ link: run.linkHref, children: [textRunToDocx(run)] })
+    : textRunToDocx(run)
 
 const imageFallbackParagraph = (src: string, alt?: string | null) =>
   new Paragraph({
@@ -119,7 +127,12 @@ export const blockToElements = (block: WritingExportBlock): (Paragraph | Table)[
     case "heading":
       return [
         new Paragraph({
-          text: block.inlines.map((run) => run.text).join(""),
+          // Plain runs keep the heading style; a linked run stays a native link.
+          children: block.inlines.map((run) =>
+            run.linkHref
+              ? new ExternalHyperlink({ link: run.linkHref, children: [new TextRun({ text: run.text, style: "Hyperlink" })] })
+              : new TextRun(run.text),
+          ),
           heading:
             block.level === 1 ? HeadingLevel.HEADING_1 : block.level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3,
           spacing: {
@@ -172,8 +185,26 @@ export const blockToElements = (block: WritingExportBlock): (Paragraph | Table)[
             indent: { left: S.LIST_INDENT_DOCX },
           }),
       )
-    case "codeBlock":
+    case "codeBlock": {
+      // ODE-533: content-preserving Mermaid fallback for export. The diagram
+      // source is always included with a caption — content is never omitted.
+      const isMermaid = (block.language ?? "").trim().toLowerCase() === "mermaid"
+      const caption = isMermaid
+        ? [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Diagram source (mermaid):",
+                  font: S.FONT_FAMILY_BODY,
+                  size: S.FONT_SIZE_BODY_DOCX,
+                }),
+              ],
+              spacing: { after: S.PARAGRAPH_MARGIN_BOTTOM_DOCX },
+            }),
+          ]
+        : []
       return [
+        ...caption,
         new Paragraph({
           children: codeBlockRunsToDocx(block.code.trimEnd()),
           spacing: {
@@ -197,6 +228,7 @@ export const blockToElements = (block: WritingExportBlock): (Paragraph | Table)[
           },
         }),
       ]
+    }
     case "separator":
       return [
         new Paragraph({

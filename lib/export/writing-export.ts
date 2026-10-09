@@ -1,4 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
+import { safeImageSrc, safeUrl, validateComponentAttribute } from "@/lib/document-components/registry"
 
 export type WritingExportFootnote = {
   index: number
@@ -81,6 +82,15 @@ const MARKDOWN_ESCAPE_RE = /[\\`*_{}\[\]()#+\-.!|>~=:]/g
 
 const escapeMarkdownText = (value: string) =>
   value.replace(MARKDOWN_ESCAPE_RE, (match) => `\\${match}`)
+
+const encodeMarkdownLinkDestination = (href: string) => {
+  // In a bare Markdown destination these delimiters can change link syntax. Encode only them so
+  // ordinary URLs and existing percent-encoded paths keep their original bytes.
+  const encoder = new TextEncoder()
+  return href.replace(/[()\u0000-\u0020<>\u007F-\u009F\\]/g, (character) =>
+    Array.from(encoder.encode(character), (byte) => `%${byte.toString(16).toUpperCase().padStart(2, "0")}`).join(""),
+  )
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null
@@ -178,10 +188,19 @@ const collectInlineRuns = (nodes: ExportNode[] | undefined, footnotes: WritingEx
             run.code = true
             break
           case "highlight":
-            run.highlight = true
+            if (
+              mark.attrs?.annotationId == null &&
+              mark.attrs?.annotationType == null &&
+              mark.attrs?.annotationComment == null
+            ) {
+              run.highlight = true
+            }
             break
           case "link":
-            run.linkHref = readString(mark.attrs?.href) ?? undefined
+            {
+              const href = readString(mark.attrs?.href)
+              run.linkHref = href && safeUrl(href) ? href : undefined
+            }
             break
           default:
             break
@@ -193,23 +212,21 @@ const collectInlineRuns = (nodes: ExportNode[] | undefined, footnotes: WritingEx
     }
 
     if (node.type === "annotationReference" || node.type === "footnoteReference") {
-      const index = readNumber(node.attrs?.index)
-      if (index === null) {
-        continue
-      }
-
-      const type = readString(node.attrs?.type) ?? "footnote"
-      const text = readString(node.attrs?.text) ?? ""
-      if (text && type === "footnote") {
-        footnotes.push({ index, text })
-      }
-
-      runs.push({ text: type === "footnote" ? `[^${index}]` : `[@${index}]`, footnoteRef: index })
+      // Annotation metadata is authoring state. The selected text is already
+      // present in the preceding semantic mark, so clean Markdown/PDF/DOCX
+      // omit the interaction reference and never expose IDs or comments.
       continue
     }
 
     if (node.type === "hardBreak") {
       runs.push({ text: "\n" })
+      continue
+    }
+
+    if (node.type === "opaqueSource") {
+      // Preserved source exports its visible text, never silently omitted.
+      const text = readString(node.attrs?.text)
+      if (text) runs.push({ text })
       continue
     }
 
@@ -337,6 +354,34 @@ const collectBlocks = (nodes: ExportNode[] | undefined, footnotes: WritingExport
         blocks.push({ type: "separator" })
         break
       }
+      case "card": {
+        // Card projection: titled section with its safe link, then the body.
+        const title = readString(node.attrs?.title)?.trim()
+        const href = readString(node.attrs?.href) ?? ""
+        if (title) {
+          blocks.push({
+            type: "heading",
+            level: 3,
+            inlines: [
+              validateComponentAttribute("Card", "href", href) ? { text: title, linkHref: href } : { text: title },
+            ],
+          })
+        }
+        blocks.push(...collectBlocks(node.content, footnotes))
+        break
+      }
+      case "tip":
+      case "info": {
+        const title = readString(node.attrs?.title)?.trim()
+        if (title) blocks.push({ type: "paragraph", inlines: [{ text: title, bold: true }] })
+        blocks.push(...collectBlocks(node.content, footnotes))
+        break
+      }
+      case "opaqueSourceBlock": {
+        const text = readString(node.attrs?.text)
+        if (text) blocks.push({ type: "paragraph", inlines: [{ text }] })
+        break
+      }
       case "table": {
         blocks.push({ type: "table", rows: collectTableRows(node, footnotes) })
         break
@@ -364,7 +409,7 @@ const renderInlineRunToMarkdown = (run: WritingExportInline) => {
   const escaped = escapeMarkdownText(run.text)
 
   if (run.linkHref) {
-    return `[${escaped}](${run.linkHref})`
+    return `[${escaped}](${encodeMarkdownLinkDestination(run.linkHref)})`
   }
 
   if (run.code) {
@@ -424,8 +469,13 @@ const renderBlockToMarkdown = (block: WritingExportBlock) => {
       return block.items
         .map((item, index) => `${index + 1}. ${indentMarkdown(renderInlineRunsToMarkdown(item))}`.trimEnd())
         .join("\n")
-    case "codeBlock":
-      return ["```", block.code.trimEnd(), "```"].join("\n")
+    case "codeBlock": {
+      // ODE-533: preserve the fence language so ```mermaid round-trips as
+      // ordinary fenced Markdown through export. Language comes from the
+      // codeBlock attrs; an empty language keeps the bare fence.
+      const language = (block.language ?? "").trim().split(/\s+/)[0] ?? ""
+      return [`\`\`\`${language}`, block.code.trimEnd(), "```"].join("\n")
+    }
     case "separator":
       return "---"
     case "table": {
@@ -445,7 +495,8 @@ const renderBlockToMarkdown = (block: WritingExportBlock) => {
       return [formatRow(rows[0]), separator, ...rows.slice(1).map(formatRow)].join("\n")
     }
     case "image":
-      return `![${escapeMarkdownText(block.image.alt ?? "")}](${block.image.src})`
+      if (!safeImageSrc(block.image.src)) return escapeMarkdownText(block.image.alt ?? "")
+      return `![${escapeMarkdownText(block.image.alt ?? "")}](${encodeMarkdownLinkDestination(block.image.src)})`
     default:
       return ""
   }

@@ -418,6 +418,300 @@
     white-space: pre-wrap;
   }
 
+  .odessay-editor-content .odessay-component-block,
+  .odessay-editor-content .odessay-code-block {
+    background: hsl(var(--surface-option));
+    border: 0.5px solid hsl(var(--line-soft));
+    border-radius: 10px;
+    color: hsl(var(--ink-2));
+    margin: 0 0 1.75em;
+    overflow: hidden;
+  }
+
+  .odessay-editor-content .odessay-component-tip {
+    border-left: 3px solid hsl(var(--accent));
+  }
+
+  .odessay-editor-content .odessay-component-info {
+    border-left: 3px solid hsl(var(--ink-4));
+  }
+
+  .odessay-editor-content .odessay-component-header,
+  .odessay-editor-content .odessay-code-toolbar {
+    align-items: center;
+    border-bottom: 0.5px solid hsl(var(--line-soft));
+    display: flex;
+    gap: 10px;
+    min-height: 38px;
+    padding: 5px 10px;
+  }
+
+  .odessay-editor-content .odessay-component-label,
+  .odessay-editor-content .odessay-code-toolbar label {
+    color: hsl(var(--ink-4));
+    font: 500 10px/1.2 "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .odessay-editor-content .odessay-component-title,
+  .odessay-editor-content .odessay-card-properties input,
+  .odessay-editor-content .odessay-code-toolbar input {
+    background: transparent;
+    border: 0;
+    color: hsl(var(--ink-2));
+    font-family: var(--od-font-ui);
+    font-size: 12px;
+    min-width: 0;
+    outline: none;
+  }
+
+  .odessay-editor-content .odessay-component-title {
+    flex: 1;
+    font-weight: 600;
+  }
+
+  .odessay-editor-content .odessay-component-settings {
+    border-radius: 6px;
+    color: hsl(var(--ink-4));
+    font: 600 12px/1 var(--od-font-ui);
+    height: 26px;
+    margin-left: auto;
+    width: 30px;
+  }
+
+  .odessay-editor-content .odessay-component-settings:hover,
+  .odessay-editor-content .odessay-component-settings:focus-visible {
+    background: hsl(var(--surface-menu-hover));
+    color: hsl(var(--ink));
+    outline: none;
+  }
+
+  .odessay-editor-content .odessay-card-properties {
+    background: hsl(var(--surface-menu));
+    border-bottom: 0.5px solid hsl(var(--line-soft));
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(8rem, 0.6fr) minmax(12rem, 1.4fr);
+    padding: 8px 10px;
+  }
+
+  .odessay-editor-content .odessay-card-properties[hidden] {
+    display: none;
+  }
+
+  .odessay-editor-content .odessay-card-properties input {
+    border: 0.5px solid hsl(var(--line-soft));
+    border-radius: 6px;
+    padding: 5px 7px;
+  }
+
+  .odessay-editor-content .odessay-component-content {
+    padding: 13px 16px;
+  }
+
+  .odessay-editor-content .odessay-component-content > :first-child {
+    margin-top: 0;
+  }
+
+  .odessay-editor-content .odessay-component-content > :last-child {
+    margin-bottom: 0;
+  }
+
+  .odessay-editor-content .odessay-code-toolbar {
+    justify-content: flex-end;
+  }
+
+  .odessay-editor-content .odessay-code-toolbar label {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+  }
+
+  .odessay-editor-content .odessay-code-toolbar input {
+    border: 0.5px solid hsl(var(--line-soft));
+    border-radius: 6px;
+    padding: 4px 7px;
+    width: 9rem;
+  }
+
+  .odessay-editor-content .odessay-code-block pre {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    margin: 0;
+  }
+
+  /* ODE-533: lazy source-first Mermaid previews. Source stays canonical and
+     editable; preview is adjacent UI-only chrome. The outer preview never
+     causes page-level horizontal overflow: it contains its own scroll. */
+  .odessay-editor-content .odessay-mermaid-bar {
+    align-items: center;
+    border-bottom: 0.5px solid hsl(var(--line-soft));
+    display: flex;
+    gap: 8px;
+    padding: 6px 10px;
+  }
+
+  .odessay-editor-content .odessay-mermaid-bar[hidden] {
+    display: none;
+  }
+
+  .odessay-editor-content .odessay-mermaid-toggle,
+  .odessay-editor-content .odessay-mermaid-retry,
+  .odessay-editor-content .odessay-mermaid-zoom {
+    border: 0.5px solid hsl(var(--line-soft));
+    border-radius: 6px;
+    color: hsl(var(--ink-2));
+    font-family: var(--od-font-ui);
+    font-size: 12px;
+    padding: 4px 10px;
+  }
+
+  .odessay-editor-content .odessay-mermaid-toggle:hover,
+  .odessay-editor-content .odessay-mermaid-toggle:focus-visible,
+  .odessay-editor-content .odessay-mermaid-retry:hover,
+  .odessay-editor-content .odessay-mermaid-retry:focus-visible,
+  .odessay-editor-content .odessay-mermaid-zoom:hover,
+  .odessay-editor-content .odessay-mermaid-zoom:focus-visible {
+    background: hsl(var(--surface-menu-hover));
+    color: hsl(var(--ink));
+    outline: none;
+  }
+
+  .odessay-editor-content .odessay-mermaid-zoom-label {
+    color: hsl(var(--ink-4));
+    font: 500 11px/1.2 var(--od-font-ui);
+    min-width: 3rem;
+    text-align: center;
+  }
+
+  .odessay-editor-content .odessay-mermaid-preview {
+    border-top: 0.5px solid hsl(var(--line-soft));
+    max-width: 100%;
+    overflow: auto;
+    padding: 12px 14px;
+  }
+
+  .odessay-editor-content .odessay-mermaid-preview[hidden] {
+    display: none;
+  }
+
+  .odessay-editor-content .odessay-mermaid-canvas {
+    margin: 0 auto;
+    max-width: 100%;
+    min-width: 100%;
+  }
+
+  .odessay-editor-content .odessay-mermaid-svg svg {
+    display: block;
+    height: auto;
+    max-width: 100%;
+  }
+
+  .odessay-editor-content .odessay-mermaid-status {
+    color: hsl(var(--ink-4));
+    font-family: var(--od-font-ui);
+    font-size: 12px;
+    margin: 0;
+  }
+
+  .odessay-editor-content .odessay-mermaid-error {
+    display: grid;
+    gap: 8px;
+  }
+
+  .odessay-editor-content .odessay-mermaid-error[hidden] {
+    display: none;
+  }
+
+  .odessay-editor-content .odessay-mermaid-error-text {
+    color: hsl(var(--ink-3));
+    font-family: var(--od-font-ui);
+    font-size: 12px;
+    margin: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Fase 12: shared reading projection of Tip/Info/Card (no authoring chrome). */
+  .odessay-rich-content .odessay-reading-component,
+  .prose-odessay .odessay-reading-component {
+    border: 0.5px solid hsl(var(--line-soft));
+    border-radius: 10px;
+    margin-block: 1.4em;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    padding: 0.85em 1.1em;
+  }
+
+  .odessay-rich-content .odessay-reading-tip,
+  .prose-odessay .odessay-reading-tip,
+  .odessay-rich-content .odessay-reading-info,
+  .prose-odessay .odessay-reading-info {
+    border-left: 3px solid hsl(var(--accent));
+  }
+
+  .odessay-rich-content .odessay-reading-component-title,
+  .prose-odessay .odessay-reading-component-title {
+    font-weight: 600;
+    margin: 0 0 0.4em;
+  }
+
+  .odessay-rich-content .odessay-reading-component-body > :last-child,
+  .prose-odessay .odessay-reading-component-body > :last-child {
+    margin-bottom: 0;
+  }
+
+  /* ODE-529: preserved (opaque / adapter-less) source is literal and
+     non-editable in Rich; reading shows the same text without authoring cues. */
+  .odessay-editor-content .odessay-opaque-source,
+  .odessay-editor-content .odessay-opaque-source-block {
+    background: hsl(var(--surface-option));
+    border: 0.5px dashed hsl(var(--line-soft));
+    border-radius: 4px;
+    color: hsl(var(--ink-3));
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+  }
+
+  .odessay-editor-content .odessay-opaque-source {
+    padding: 0 0.25em;
+  }
+
+  .odessay-editor-content .odessay-opaque-source-block,
+  .odessay-rich-content .odessay-opaque-source-block,
+  .prose-odessay .odessay-opaque-source-block {
+    margin-block: 1em;
+    max-width: 100%;
+    padding: 0.75em 1em;
+    white-space: pre-wrap;
+  }
+
+  /* ODE-533: reading fallback shares the document-width containment contract. */
+  .odessay-rich-content .odessay-mermaid-fallback,
+  .prose-odessay .odessay-mermaid-fallback {
+    margin-block: 1.4em;
+    max-width: 100%;
+  }
+
+  .odessay-rich-content .odessay-mermaid-fallback pre,
+  .prose-odessay .odessay-mermaid-fallback pre {
+    margin-block: 0;
+    max-width: 100%;
+    overflow: auto;
+  }
+
+  .odessay-rich-content .odessay-mermaid-fallback figcaption,
+  .prose-odessay .odessay-mermaid-fallback figcaption {
+    color: hsl(var(--ink-4));
+    font-family: var(--od-font-ui);
+    font-size: 12px;
+    margin-top: 6px;
+  }
+
   /* Markdown source mode is a stacked pair: a transparent textarea over the
      semantic layer. The two must stay byte-identical in metrics to each other,
      and they track the body size so toggling the mode does not resize the text. */
@@ -666,6 +960,43 @@
   .prose-odessay mark[data-annotation-type="footnote"] {
     background: color-mix(in srgb, var(--od-annotation-muted) 12.5%, transparent);
     text-decoration: underline dotted var(--od-annotation-muted);
+  }
+
+  /* Semantic <Highlight> component: inherits the amber mark language by
+     default; palette choices only swap the tint hue, the dotted underline
+     stays as the non-color cue (surface-projections.md). */
+  .odessay-editor-content mark[data-semantic-highlight],
+  .prose-odessay mark[data-semantic-highlight] {
+    background: color-mix(in srgb, var(--od-annotation-highlight) 20%, transparent);
+    text-decoration: underline dotted var(--od-annotation-highlight);
+  }
+
+  .odessay-editor-content mark[data-highlight-color="green"],
+  .prose-odessay mark[data-highlight-color="green"] {
+    background: color-mix(in srgb, var(--success) 16%, transparent);
+    text-decoration: underline dotted var(--success);
+  }
+
+  .odessay-editor-content mark[data-highlight-color="indigo"],
+  .prose-odessay mark[data-highlight-color="indigo"] {
+    background: color-mix(in srgb, var(--od-annotation-ai) 14%, transparent);
+    text-decoration: underline dotted var(--od-annotation-ai);
+  }
+
+  .odessay-editor-content mark[data-highlight-color="slate"],
+  .prose-odessay mark[data-highlight-color="slate"] {
+    background: color-mix(in srgb, var(--od-annotation-muted) 16%, transparent);
+    text-decoration: underline dotted var(--od-annotation-muted);
+  }
+
+  /* Semantic <Entity>: discreet dotted reference in ink-3 so it never
+     competes with links (solid) or highlights (background tint). */
+  .odessay-editor-content mark[data-entity-type],
+  .prose-odessay mark[data-entity-type] {
+    background: transparent;
+    text-decoration: underline dotted hsl(var(--ink-3));
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
   }
 
   /* Cuando un mark contiene una corrección, quitar su propia decoración

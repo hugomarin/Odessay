@@ -49,6 +49,7 @@
  * A, su editor no muestra la edición que tenía pendiente al salir.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import { act } from "react"
 
 vi.mock("@tiptap/react", async (importOriginal) => {
   const { createTiptapCaptureModule } = await import("./support/editor-shell-doubles")
@@ -82,6 +83,7 @@ vi.mock("@/lib/sync/sync-service-factory", async () =>
 const {
   advance,
   clickNewArtifact,
+  flush,
   holdAnimationFrames,
   mountEditorShell,
   pointerClick,
@@ -92,6 +94,7 @@ const {
 } = await import("./support/editor-shell-harness")
 const { createDesktopWorkspace, destroyDesktopWorkspace, readWorkspaceMarkdown, resetDesktopWorkspace } =
   await import("./support/editor-shell-desktop-doubles")
+const { holdWriteFile } = await import("./integration/documents/support/real-desktop-doubles")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 const { EDITOR_DRAFT_TAB_ID, createEditorSessionTab, createEmptyEditorSession } = await import(
   "@/lib/local-db/editor-sessions"
@@ -163,6 +166,36 @@ async function createDocument(text: string) {
 async function contentsOf(path: string) {
   const files = await readWorkspaceMarkdown()
   return files.find((file) => file.path === path)?.contents ?? ""
+}
+
+async function switchMode(label: "Rich" | "Markdown") {
+  const button = await waitFor(
+    () =>
+      Array.from(mounted!.container.querySelectorAll<HTMLButtonElement>(
+        '[data-testid="editor-statusbar"] button',
+      )).find((candidate) => (candidate.textContent ?? "").trim() === label),
+    { label: `botón "${label}" de la status bar` },
+  )
+  await act(async () => button.click())
+  await flush(2)
+  await waitFor(
+    () =>
+      label === "Markdown"
+        ? mounted!.container.querySelector('textarea[aria-label="Markdown source"]')
+        : !mounted!.container.querySelector('textarea[aria-label="Markdown source"]') && mounted!.prosemirror(),
+    { label: `el editor en modo ${label}` },
+  )
+}
+
+async function typeInMarkdown(text: string) {
+  const textarea = mounted!.container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]')
+  if (!textarea) throw new Error("El editor no está en modo Markdown")
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
+  await act(async () => {
+    setter?.call(textarea, `${textarea.value}${text}`)
+    textarea.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  await flush(1)
 }
 
 /**
@@ -316,6 +349,78 @@ async function projectWebSaveState(writingId: string) {
 }
 
 describe("ODE-604 — DOC-05: guardar mientras se cambia de pestaña", () => {
+  it(
+    "desktop: al salir de A, el Markdown pendiente se guarda con la identidad de A",
+    async () => {
+      mounted = await mountEditorShell()
+      const a = await createDocument(TEXT_A)
+      const b = await createDocument(TEXT_B)
+
+      await pointerClick(tabNode(a.writingId))
+      await waitFor(
+        () => activeWritingId() === a.writingId && mounted!.editor().getText().includes(TEXT_A),
+        { label: "A activo con su contenido" },
+      )
+      await switchMode("Markdown")
+
+      const annotation = '<Annotation id="source-switch-ann" type="personal" comment="nota">ancla fuente</Annotation>'
+      await typeInMarkdown(` ${annotation}`)
+      expect(await contentsOf(a.file.path), "el debounce de Markdown sigue pendiente").not.toContain(
+        "source-switch-ann",
+      )
+
+      await pointerClick(tabNode(b.writingId))
+      await waitFor(
+        () => activeWritingId() === b.writingId && mounted!.editor().getText().includes(TEXT_B),
+        { label: "B activo después de vaciar el Markdown saliente" },
+      )
+      const saved = await waitForMarkdownContaining("source-switch-ann")
+      expect(saved.path, "la anotación se guarda bajo el documento saliente").toBe(a.file.path)
+      expect(saved.contents).toContain(annotation)
+      expect(await contentsOf(b.file.path), "B no recibe el contenido de A").not.toContain("source-switch-ann")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "desktop: no activa B hasta que la escritura pendiente de A es durable",
+    async () => {
+      mounted = await mountEditorShell()
+      const a = await createDocument(TEXT_A)
+      const b = await createDocument(TEXT_B)
+
+      await pointerClick(tabNode(a.writingId))
+      await waitFor(
+        () => activeWritingId() === a.writingId && mounted!.editor().getText().includes(TEXT_A),
+        { label: "A activo con su contenido" },
+      )
+      await advance(300)
+
+      const held = holdWriteFile((path) => path === a.file.path)
+      try {
+        await typeInEditor(" ODE604-A-DURABLE-ANTES-DE-B")
+        await pointerClick(tabNode(b.writingId))
+        await held.started
+        await flush(5)
+
+        expect(activeWritingId(), "la identidad activa no cambia mientras el write de A sigue retenido").toBe(
+          a.writingId,
+        )
+        expect(mounted!.editor().getText(), "el editor aún muestra A durante el write").toContain(TEXT_A)
+      } finally {
+        held.release()
+      }
+
+      await waitFor(
+        () => activeWritingId() === b.writingId && mounted!.editor().getText().includes(TEXT_B),
+        { label: "B se activa tras completar la escritura durable", timeoutMs: 15_000 },
+      )
+      expect(await contentsOf(a.file.path)).toContain("ODE604-A-DURABLE-ANTES-DE-B")
+      expect(await contentsOf(b.file.path)).not.toContain("ODE604-A-DURABLE-ANTES-DE-B")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
   it(
     "desktop: A → B con la edición de A pendiente → escribir en B → volver a A",
     async () => {

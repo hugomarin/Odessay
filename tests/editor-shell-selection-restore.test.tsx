@@ -121,10 +121,10 @@ async function clickTab(writingId: string) {
   const node = document.querySelector<HTMLElement>(`[data-editor-tab-id="${tab.id}"]`)
   if (!node) throw new Error(`La pestaña de ${writingId} no está en el DOM`)
   await pointerClick(node)
-  const active = getEditorSessionState().session.active_tab_id
-  if (active !== tab.id) {
-    throw new Error(`El gesto sobre la pestaña de ${writingId} no la activó (activa: ${active})`)
-  }
+  await waitFor(() => getEditorSessionState().session.active_tab_id === tab.id, {
+    label: `pestaña de ${writingId} activa tras guardar la saliente`,
+    timeoutMs: 10_000,
+  })
 }
 
 function currentSelection() {

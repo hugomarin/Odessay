@@ -8,7 +8,8 @@
  *
  * ODE-603 — corte 4b de `components/editor/editor-shell.tsx`, entrega 2.
  * MUDANZA MECÁNICA, como ODE-602/ODE-587: el cuerpo de `handleRunAction` es el
- * que vivía en la shell, sin cambios. La propiedad del estado NO cambia: el
+ * que vivía en la shell; ODE-530 agrega aquí Tip/Info/Card para conservar la
+ * semántica de sus comandos tras la extracción. La propiedad del estado NO cambia: el
  * estado y los refs siguen siendo de la shell y llegan por `input` (identidades
  * estables, así que la memoización no cambia). Los helpers puros de la shell
  * (`markdownSelectionOwnerId` y `readMarkdownSelectionForActiveDocument`) llegan
@@ -29,6 +30,7 @@ import { type Editor } from "@tiptap/react"
 import { useRouter } from "next/navigation"
 import { type EditorRightPanelTab } from "@/components/editor/panels/editor-right-panel-tabs"
 import { type EditorSaveState } from "@/components/editor/save-state"
+import type { CorrectionToastState } from "@/hooks/useCorrectionActions"
 import { type AnnotationBubblePosition } from "@/components/reading/margins/annotation-bubble"
 import { type SelectionPopupPosition } from "@/components/reading/margins/selection-popup"
 import type { MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
@@ -53,6 +55,7 @@ export type PendingRichSelectionSnapshot = {
   from: number
   to: number
   text: string
+  writingId: string | null
   popupPosition: SelectionPopupPosition
   bubblePosition: AnnotationBubblePosition
 }
@@ -118,6 +121,7 @@ export type EditorCommandsInput = {
   scheduleMarkdownSave: (run: () => void) => number
   selectAdjacentTabRef: React.RefObject<((direction: number) => void) | null>
   selectionRef: React.RefObject<SelectionSnapshot | null>
+  showCorrectionToast: (toast: CorrectionToastState, durationMs: number) => void
   setActivePanel: React.Dispatch<React.SetStateAction<OpenPanel>>
   setBodyText: React.Dispatch<React.SetStateAction<string>>
   setFootnoteModalOpen: React.Dispatch<React.SetStateAction<boolean>>
@@ -157,6 +161,7 @@ export function useEditorCommands(input: EditorCommandsInput) {
     scheduleMarkdownSave,
     selectAdjacentTabRef,
     selectionRef,
+    showCorrectionToast,
     setActivePanel,
     setBodyText,
     setFootnoteModalOpen,
@@ -579,6 +584,33 @@ export function useEditorCommands(input: EditorCommandsInput) {
         case "codeBlock":
           runWithRichSelection((chain) => chain.toggleCodeBlock())
           return
+        case "tipBlock":
+          editor.chain().focus().insertTip().run()
+          return
+        case "infoBlock":
+          editor.chain().focus().insertInfo().run()
+          return
+        case "cardBlock": {
+          const selectedRange = getValidatedRichSelection()
+          let chain = editor.chain().focus()
+          if (selectedRange) chain = chain.setTextSelection(selectedRange)
+          if (selectedRange && selectedRange.from !== selectedRange.to) {
+            if (!chain.convertSelectionToCard().run()) {
+              showCorrectionToast(
+                {
+                  phase: "error",
+                  completed: 0,
+                  total: 0,
+                  message: "Those blocks cannot be placed in a Card.",
+                },
+                4000,
+              )
+            }
+          } else {
+            chain.insertCard().run()
+          }
+          return
+        }
         case "paragraph":
           preserveViewport(() => {
             runWithRichSelection((chain) => chain.setParagraph())
@@ -709,6 +741,7 @@ export function useEditorCommands(input: EditorCommandsInput) {
       scheduleMarkdownSave,
       selectAdjacentTabRef,
       selectionRef,
+      showCorrectionToast,
       setActivePanel,
       setBodyText,
       setFootnoteModalOpen,

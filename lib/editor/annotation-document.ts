@@ -134,11 +134,20 @@ export const applyAnnotationToBody = ({
     const nextFrom = resolveTextOffset(tr.doc, anchorStart, false)
     const nextTo = resolveTextOffset(tr.doc, anchorEnd, true)
 
-    tr.addMark(nextFrom, nextTo, highlightMark.create({ annotationType: type }))
+    const annotationId = crypto.randomUUID()
+    tr.addMark(
+      nextFrom,
+      nextTo,
+      highlightMark.create({
+        annotationId,
+        annotationType: type,
+        annotationComment: text.trim(),
+      }),
+    )
     tr.insert(
       nextTo,
       nodeType.create({
-        id: crypto.randomUUID(),
+        id: annotationId,
         type,
         index: maxTypeIndex + 1,
         text: text.trim(),

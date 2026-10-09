@@ -36,6 +36,8 @@ export type FootnotesInput = {
   applyMarkdownFromPanel: (nextMarkdown: string) => boolean
   editor: Editor | null
   markdownValue: string
+  acceptedMarkdownForAnnotations: string
+  markdownSelectionRef: RefObject<{ start: number; end: number } | null>
   mode: "rich" | "markdown"
   modeRef: RefObject<"rich" | "markdown">
   persistEditorSnapshot: (editorInstance: Editor) => Promise<boolean>
@@ -51,6 +53,8 @@ export function useFootnotes(input: FootnotesInput) {
     applyMarkdownFromPanel,
     editor,
     markdownValue,
+    acceptedMarkdownForAnnotations,
+    markdownSelectionRef,
     mode,
     modeRef,
     persistEditorSnapshot,
@@ -76,7 +80,9 @@ export function useFootnotes(input: FootnotesInput) {
   const handleInsertFootnote = useCallback(
     (note: string) => {
       if (modeRef.current === "markdown") {
-        const nextMarkdown = appendMarkdownFootnote(markdownValue, note)
+        const selection = markdownSelectionRef.current
+        const nextMarkdown = appendMarkdownFootnote(markdownValue, note, selection?.start, selection?.end)
+        if (nextMarkdown === markdownValue) return
         applyMarkdownFromPanel(nextMarkdown)
         setActivePanel("notes")
         return
@@ -92,7 +98,7 @@ export function useFootnotes(input: FootnotesInput) {
       void persistEditorSnapshot(editor)
       setActivePanel("notes")
     },
-    [applyMarkdownFromPanel, editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState],
+    [applyMarkdownFromPanel, editor, markdownValue, markdownSelectionRef, persistEditorSnapshot, updateDerivedEditorState],
   )
 
   // In Rich mode, derive footnotes from editor nodes only when content version changes.
@@ -105,8 +111,8 @@ export function useFootnotes(input: FootnotesInput) {
       return extractRichEditorAnnotations(editor)
     }
 
-    return getMarkdownFootnotes(markdownValue)
-  }, [editor, markdownValue, mode, richFootnoteRevision, version])
+    return getMarkdownFootnotes(acceptedMarkdownForAnnotations)
+  }, [acceptedMarkdownForAnnotations, editor, mode, richFootnoteRevision, version])
 
   return { footnotes, handleInsertFootnote }
 }

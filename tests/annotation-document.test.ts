@@ -59,8 +59,9 @@ describe("annotation-document", () => {
 
       // bodyText preserves the original plain text (annotation text is not part of body_text)
       expect(result.bodyText).toBe("Hello world")
-      expect(result.bodyMarkdown).toContain("==Hello==")
-      expect(result.bodyMarkdown).toMatch(/\[@1\|[^\]:|]+: simplify\]/)
+      expect(result.bodyMarkdown).toContain(
+        '<Annotation id="aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa" type="ai" comment="simplify">Hello</Annotation>',
+      )
       expect(result.bodyJson.content?.length).toBeGreaterThan(0)
     })
 
@@ -84,8 +85,9 @@ describe("annotation-document", () => {
         text: "important detail",
       })
 
-      expect(result.bodyMarkdown).toContain("==quick==")
-      expect(result.bodyMarkdown).toMatch(/\[@p1\|[^\]:|]+: important detail\]/)
+      expect(result.bodyMarkdown).toContain(
+        '<Annotation id="bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb" type="personal" comment="important detail">quick</Annotation>',
+      )
     })
 
     it("increments index sequentially for same-type annotations", () => {
@@ -115,7 +117,7 @@ describe("annotation-document", () => {
         text: "second note",
       })
 
-      expect(result.bodyMarkdown).toMatch(/\[@2\|[^\]:|]+: second note\]/)
+      expect(result.bodyMarkdown).toContain('type="ai" comment="second note"> secon</Annotation>')
     })
 
     it("round-trips highlight + annotation through body_json and markdown", () => {
@@ -138,10 +140,8 @@ describe("annotation-document", () => {
         text: "clarify",
       })
 
-      // Markdown must contain both the highlight mark and the annotation sigil
-      expect(result.bodyMarkdown).toContain("==Passage==")
-      expect(result.bodyMarkdown).toContain("[@1|")
-      expect(result.bodyMarkdown).toContain(": clarify]")
+      expect(result.bodyMarkdown).toContain('type="ai" comment="clarify">Passage</Annotation>')
+      expect(result.bodyMarkdown).not.toContain("[@1|")
 
       // body_json must contain the annotationReference node
       const paragraph = result.bodyJson.content?.[0]
@@ -154,7 +154,7 @@ describe("annotation-document", () => {
 
       // Re-serializing the resulting body_json produces equivalent markdown
       const reMarkdown = getBodyMarkdown(result.bodyJson)
-      expect(reMarkdown).toContain("==Passage==")
+      expect(reMarkdown).toContain('type="ai" comment="clarify">Passage</Annotation>')
       expect(reMarkdown).toBe(result.bodyMarkdown)
     })
 
@@ -199,9 +199,10 @@ describe("annotation-document", () => {
       expect(annotationNodes[0]).toMatchObject({
         attrs: { type: "ai", index: 1, text: "simplify this" },
       })
-      expect(result.bodyMarkdown).toContain("==Hello==")
-      expect(result.bodyMarkdown).toContain("[@1|")
-      expect(result.bodyMarkdown).toContain(": simplify this]")
+      expect(result.bodyMarkdown).toContain(
+        'type="ai" comment="simplify this">Hello</Annotation>',
+      )
+      expect(result.bodyMarkdown).not.toContain("[@1|")
       expect(result.bodyMarkdown).not.toContain("keep an eye on this")
     })
 

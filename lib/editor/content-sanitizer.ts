@@ -51,6 +51,65 @@ const sanitizeValue = (value: unknown): unknown => {
   return value
 }
 
+const projectCleanReadingValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value
+      .filter(
+        (child) =>
+          !isPlainObject(child) ||
+          (child.type !== "annotationReference" && child.type !== "footnoteReference"),
+      )
+      .map(projectCleanReadingValue)
+  }
+
+  if (!isPlainObject(value)) return value
+
+  const next: Record<string, unknown> = { ...value }
+  if (
+    (value.type === "opaqueSource" || value.type === "opaqueSourceBlock") &&
+    isPlainObject(value.attrs)
+  ) {
+    // Preserved source can carry private attributes (reasons, comments, IDs).
+    // Readers get only its conservative visible text.
+    next.attrs = { text: value.attrs.text ?? "", reason: value.attrs.reason ?? "" }
+  }
+  if (Array.isArray(value.marks)) {
+    next.marks = value.marks
+      .filter((mark) => {
+        if (!isPlainObject(mark) || mark.type !== "highlight" || !isPlainObject(mark.attrs)) {
+          return true
+        }
+        return !(
+          mark.attrs.annotationId != null ||
+          mark.attrs.annotationType != null ||
+          mark.attrs.annotationComment != null
+        )
+      })
+      .map(projectEntityReadingMark)
+      .map(projectCleanReadingValue)
+  }
+  if (Array.isArray(value.content)) {
+    next.content = projectCleanReadingValue(value.content)
+  }
+  return next
+}
+
+const projectEntityReadingMark = (mark: unknown): unknown => {
+  if (!isPlainObject(mark) || mark.type !== "entity") {
+    return mark
+  }
+
+  // Reading surfaces keep the accessible type styling but never the stable
+  // entity ID or its internal ref (surface-projections.md, privacy policy).
+  if (!isPlainObject(mark.attrs)) {
+    return { type: mark.type, attrs: {} }
+  }
+  return {
+    type: mark.type,
+    attrs: { entityType: mark.attrs.entityType ?? "other" },
+  }
+}
+
 export const sanitizeWritingBodyText = (value: string | null | undefined) => sanitizeText(value ?? "")
 
 export const sanitizeWritingBodyJson = (value: JSONContent | null | undefined): JSONContent | null => {
@@ -58,5 +117,5 @@ export const sanitizeWritingBodyJson = (value: JSONContent | null | undefined): 
     return null
   }
 
-  return sanitizeValue(value) as JSONContent
+  return projectCleanReadingValue(sanitizeValue(value)) as JSONContent
 }

@@ -70,6 +70,7 @@ export type DocumentExitInput = {
   draftContentSnapshotRef: RefObject<{ draftId: string; bodyJson: Record<string, unknown> } | null>
   editor: Editor | null
   ephemeralDraftWritingIdRef: RefObject<string | null>
+  flushPendingMarkdownSave: () => void
   flushQueuedRichModeUpdate: () => void
   hydrationPhaseRef: RefObject<HydrationPhase>
   markdownSaveTimeoutRef: RefObject<number | null>
@@ -95,6 +96,7 @@ export function useDocumentExit(input: DocumentExitInput) {
     draftContentSnapshotRef,
     editor,
     ephemeralDraftWritingIdRef,
+    flushPendingMarkdownSave,
     flushQueuedRichModeUpdate,
     hydrationPhaseRef,
     markdownSaveTimeoutRef,
@@ -201,6 +203,7 @@ export function useDocumentExit(input: DocumentExitInput) {
       // volcarla antes de que cambie la identidad (ODE-478 caso 2).
       if (steps.flushPendingEdit) {
         flushQueuedRichModeUpdate()
+        flushPendingMarkdownSave()
       }
       if (steps.snapshotDraft) {
         snapshotOutgoingDraftContent()
@@ -209,7 +212,7 @@ export function useDocumentExit(input: DocumentExitInput) {
         persistCurrentWorkspaceViewState()
       }
     },
-    [flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, snapshotOutgoingDraftContent],
+    [flushPendingMarkdownSave, flushQueuedRichModeUpdate, persistCurrentWorkspaceViewState, snapshotOutgoingDraftContent],
   )
 
   useEffect(() => {

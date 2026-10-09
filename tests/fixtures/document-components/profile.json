@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "families": ["markdown", "semantic-inline", "registered-block"],
+  "surfaces": ["rich", "source", "preview", "shared", "public", "body_text", "ai_context", "clean_markdown", "pdf", "docx"],
+  "kinds": [
+    { "kind": "Annotation", "family": "semantic-inline", "form": "inline", "attributes": ["id", "type", "comment"], "required": ["id", "type", "comment"] },
+    { "kind": "Highlight", "family": "semantic-inline", "form": "inline", "attributes": ["color"], "required": [] },
+    { "kind": "Entity", "family": "semantic-inline", "form": "inline", "attributes": ["id", "type", "ref"], "required": ["id", "type"] },
+    { "kind": "ProtectedText", "family": "semantic-inline", "form": "inline", "attributes": ["id", "reason"], "required": ["id"] },
+    { "kind": "Tip", "family": "registered-block", "form": "block", "attributes": ["title"], "required": [] },
+    { "kind": "Info", "family": "registered-block", "form": "block", "attributes": ["title"], "required": [] },
+    { "kind": "Card", "family": "registered-block", "form": "block", "attributes": ["title", "icon", "href"], "required": ["title"] },
+    { "kind": "AccordionGroup", "family": "registered-block", "form": "container", "attributes": [], "required": [] },
+    { "kind": "Accordion", "family": "registered-block", "form": "item", "attributes": ["title"], "required": ["title"] },
+    { "kind": "Tabs", "family": "registered-block", "form": "container", "attributes": [], "required": [] },
+    { "kind": "Tab", "family": "registered-block", "form": "item", "attributes": ["title"], "required": ["title"] },
+    { "kind": "Steps", "family": "registered-block", "form": "container", "attributes": [], "required": [] },
+    { "kind": "Step", "family": "registered-block", "form": "item", "attributes": ["title"], "required": ["title"] },
+    { "kind": "CardGroup", "family": "registered-block", "form": "container", "attributes": ["columns"], "required": [] },
+    { "kind": "CodeGroup", "family": "registered-block", "form": "container", "attributes": [], "required": [] },
+    { "kind": "CodeBlock", "family": "markdown", "form": "fence", "attributes": ["language"], "required": [] }
+  ]
+}

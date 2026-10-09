@@ -466,7 +466,7 @@ export function useEditorPersistence(input: EditorPersistenceInput) {
       // post-handoff lifecycle in the same tick. `persist()` records its
       // unconfirmed-content marker synchronously before returning.
       hasUnconfirmedLocalEditRef.current = false
-      const result = await persistenceCoordinator.persist(
+      const persistence = persistenceCoordinator.persist(
         {
           writingId: activeId,
           createdAt: baseCreatedAt,
@@ -492,16 +492,15 @@ export function useEditorPersistence(input: EditorPersistenceInput) {
         overrides,
       )
 
-      if (!options?.awaitDurability || !result) {
-        return result
+      if (!options?.awaitDurability) {
+        return persistence
       }
 
-      // persist() can resolve `true` optimistically when merged into an
-      // already-in-flight write, without waiting for that write to actually
-      // land — fine for fire-and-forget autosave, but a caller reporting
-      // success back to the user (e.g. a rename confirmation) needs the real
-      // outcome (ODE-478 follow-up).
-      return persistenceCoordinator.settle({ writingId: activeId, draftWritingId, sourceTabId })
+      // Enqueue before settling: explicit structural mutations must bypass
+      // the quiet window even when their plain text has not changed.
+      const settled = await persistenceCoordinator.settle({ writingId: activeId, draftWritingId, sourceTabId })
+      const persisted = await persistence
+      return settled && persisted
     },
     [
       persistenceCoordinator,
@@ -605,6 +604,7 @@ export function useEditorPersistence(input: EditorPersistenceInput) {
     persistenceCoordinator,
     persistEditorSnapshot,
     flushQueuedRichModeUpdate,
+    flushPendingMarkdownSave,
     scheduleMarkdownSave,
     handleEditorUpdate,
   }
