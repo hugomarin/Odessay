@@ -24,7 +24,12 @@ import { webDocumentService } from "@/lib/services/web-document-service"
 import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-document-service"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
-import { filenameToTitle, UNTITLED_DOCUMENT_NAME } from "@/lib/desktop/document-naming"
+import {
+  filenameToTitle,
+  resolveUniqueFilename,
+  splitCanonicalPath,
+  UNTITLED_DOCUMENT_NAME,
+} from "@/lib/desktop/document-naming"
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
 import {
   loadDesktopCollections,
@@ -32,6 +37,7 @@ import {
 } from "@/lib/services/desktop/desktop-collection-service"
 import {
   tauriOpenFile,
+  tauriListRecentFiles,
   tauriRelocateFile,
   tauriWorkspaceSync,
   tauriWorkspaceTouchFile,
@@ -527,6 +533,12 @@ class DesktopDocumentService implements DocumentService {
     }
     const repair = this.pendingRelocationRepairs.get(documentId)
     if (!repair) return true
+    const record = await this.runtime.catalog.getById(documentId)
+    const sourcePath = record?.binding?.canonicalPath ?? repair.sourcePath ?? null
+    if (await removeUnmovedRelocationIntent(this.runtime.settings, repair, sourcePath)) {
+      this.pendingRelocationRepairs.delete(documentId)
+      return true
+    }
     const recovered = await repairDesktopRelocationProjection(this.runtime, this.runtime.settings, repair)
     if (recovered.status === "repaired") this.pendingRelocationRepairs.delete(documentId)
     return recovered.status === "repaired"
@@ -1130,6 +1142,54 @@ async function repairDesktopRelocationProjection(
   return { status: "retry" }
 }
 
+function normalizedCanonicalPath(path: string): string {
+  return path.replace(/[\\/]+/g, "/").toLowerCase()
+}
+
+/** Resolve the native relocate command's collision-suffixed target before recording its write-ahead intent. */
+async function resolveRelocationTargetPath(sourcePath: string, requestedPath: string): Promise<string> {
+  const { rootPath, relativePath: requestedFilename } = splitCanonicalPath(requestedPath)
+  const existingFiles = await tauriListRecentFiles(rootPath, 10_000)
+  const existingFilenames = existingFiles
+    .filter((file) => normalizedCanonicalPath(file.path) !== normalizedCanonicalPath(sourcePath))
+    .map((file) => splitCanonicalPath(file.path).relativePath)
+  const uniqueFilename = resolveUniqueFilename(requestedFilename, existingFilenames)
+  const separator = requestedPath.slice(rootPath.length, rootPath.length + 1) || "/"
+  return `${rootPath}${separator}${uniqueFilename}`
+}
+
+async function hasMarkdownPath(rootPath: string, canonicalPath: string): Promise<boolean> {
+  const files = await tauriListRecentFiles(rootPath, Number.MAX_SAFE_INTEGER)
+  const expectedPath = normalizedCanonicalPath(canonicalPath)
+  return files.some((file) => normalizedCanonicalPath(file.path) === expectedPath)
+}
+
+/** A write-ahead intent can remain if the move itself failed and intent cleanup also failed. */
+async function removeUnmovedRelocationIntent(
+  settings: DesktopSettingsService,
+  repair: PendingDesktopRelocationRepair,
+  sourcePath: string | null,
+): Promise<boolean> {
+  if (!sourcePath || normalizedCanonicalPath(sourcePath) === normalizedCanonicalPath(repair.targetPath)) return false
+
+  try {
+    if (await hasMarkdownPath(splitCanonicalPath(repair.targetPath).rootPath, repair.targetPath)) return false
+    const sourceRootPath = splitCanonicalPath(sourcePath).rootPath
+    const sourceSnapshot = await tauriWorkspaceSync(sourceRootPath, undefined, undefined, {
+      mintUnbound: false,
+    })
+    const sourceBinding = sourceSnapshot.files.find(
+      (file) => normalizedCanonicalPath(file.path) === normalizedCanonicalPath(sourcePath),
+    )
+    if (sourceBinding?.id !== repair.documentId) return false
+    await settings.removePendingRelocationRepair(repair.documentId)
+    return true
+  } catch {
+    // A path we cannot inspect is not evidence that the move did not happen.
+    return false
+  }
+}
+
 /** Retry durable post-move projections before the global startup reconciler scans roots. */
 export async function recoverPendingDesktopRelocationsAtStartup(): Promise<void> {
   if (!isDesktopRuntime()) return
@@ -1139,7 +1199,17 @@ export async function recoverPendingDesktopRelocationsAtStartup(): Promise<void>
     const pending = await settings.getPendingRelocationRepairs()
     for (const repair of pending) {
       const record = await runtime.catalog.getById(repair.documentId)
-      if (!record) continue
+      const sourcePath = record?.binding?.canonicalPath ?? repair.sourcePath ?? null
+      if (await removeUnmovedRelocationIntent(settings, repair, sourcePath)) continue
+      if (!record) {
+        // When path evidence is ambiguous or the destination still exists, keep
+        // the identity claim. buildRuntime fences the generic reconciler while
+        // this intent remains, so no unbound file can receive a second UUID.
+        console.error(
+          `[desktop:relocation-recovery] Catalog record ${repair.documentId} is missing; preserving its intent as an identity fence for ${repair.targetPath}`,
+        )
+        continue
+      }
       // buildRuntime() is still constructing the reconciler. Its subsequent
       // root load observes the newly registered BindingRoot, so refreshing
       // here would recursively await the same startup promise.
@@ -1156,10 +1226,11 @@ export async function recoverPendingDesktopRelocationsAtStartup(): Promise<void>
  * canonical `.md` to the user-chosen path while preserving the document's UUID
  * and keeping exactly ONE canonical_path at every step.
  *
- * Durable order (spec §Guardado): content commit to the current `.md` → physical
- * rename (no copy; collision-suffixed; cross-device safe) → destination manifest
- * atomic bind to the SAME UUID → SQLite binding replacement + sync enqueue in one
- * transaction → origin ledger drop. Cloud sync flushes in background.
+ * Durable order: write-ahead repair intent → content commit to the current `.md`
+ * → physical rename (no copy; collision-suffixed; cross-device safe) → destination
+ * manifest atomic bind to the SAME UUID → SQLite binding replacement + sync
+ * enqueue in one transaction → origin ledger drop → remove the intent. Cloud sync
+ * flushes in background.
  *
  * Every failure leaves a recoverable state (NOT_FOUND / unbound file / stale
  * origin manifest); it never mints a draft or any other durable fallback.
@@ -1198,28 +1269,19 @@ async function performRelocateDesktopWriting(
     }
     const sourcePath = binding.canonicalPath
     const sourceRootPath = sourcePath.slice(0, -(binding.relativePath.length + 1))
+    const targetPath = await resolveRelocationTargetPath(sourcePath, requestedPath)
 
-    // 1. Commit the latest editor content to the CURRENT canonical file first:
-    //    the move then transports exactly those bytes and there is a single
-    //    canonical copy at all times (never write-copy-then-move).
-    if (typeof content === "string") {
-      await tauriWriteFile(sourcePath, content)
-    }
-
-    // 2. Physical move: rename, no copy. Collisions auto-suffix ("Name 2.md");
-    //    cross-device degrades to copy+verify+delete-original in Rust.
-    const finalPath = await tauriRelocateFile(sourcePath, requestedPath)
-
-    // 3. Resolve the destination BindingRoot: deepest registered root (Settings
-    //    BindingRoots, or a Workspace root not yet adopted into bindingRoots —
-    //    ODE-373 bridge). Otherwise the chosen folder becomes a new external root.
+    // Resolve the destination BindingRoot before persisting the intent. The
+    // target was collision-resolved above, so the durable intent and the
+    // subsequent physical move agree on the same canonical path.
     const settings = runtime.settings
     const [bindingRoots, desktopSettings] = await Promise.all([
       settings.getBindingRoots(),
       settings.getDesktopSettings(),
     ])
     const contains = (rootPath: string) =>
-      finalPath.startsWith(`${rootPath.replace(/[\\/]+$/, "")}/`)
+      targetPath.startsWith(`${rootPath.replace(/[\\/]+$/, "")}/`) ||
+      targetPath.startsWith(`${rootPath.replace(/[\\/]+$/, "")}\\`)
     const settingsRecord =
       bindingRoots
         .filter((root) => contains(root.rootPath))
@@ -1232,14 +1294,10 @@ async function performRelocateDesktopWriting(
       settingsRecord &&
       (!workspaceRecord || settingsRecord.rootPath.length >= workspaceRecord.rootPath.length)
         ? settingsRecord.rootPath
-        : (workspaceRecord?.rootPath ?? dirname(finalPath))
+        : (workspaceRecord?.rootPath ?? splitCanonicalPath(targetPath).rootPath)
     const isNewRoot = !settingsRecord && !workspaceRecord
-    const relativePath = finalPath.slice(destRootPath.length + 1)
+    const relativePath = targetPath.slice(destRootPath.length + 1)
 
-    // 4. Destination ledger: a new root starts limited to exactly this file;
-    //    a narrowed existing selection is extended only by the path the user
-    //    explicitly chose. Persist the recovery intent before touching the
-    //    manifest so the app can roll this same UUID forward after a crash.
     let selectedPaths: string[] | undefined
     if (isNewRoot) {
       selectedPaths = [relativePath]
@@ -1251,10 +1309,11 @@ async function performRelocateDesktopWriting(
       selectedPaths = Array.from(new Set([...settingsRecord.selectedPaths, relativePath]))
     }
     const nowIso = new Date().toISOString()
-    const pending: PendingDesktopRelocationRepair = {
+    let pending: PendingDesktopRelocationRepair = {
       documentId: id,
       sourceRootPath,
-      targetPath: finalPath,
+      sourcePath,
+      targetPath,
       targetRootPath: destRootPath,
       targetRelativePath: relativePath,
       selectedPaths: selectedPaths ?? null,
@@ -1265,13 +1324,44 @@ async function performRelocateDesktopWriting(
       syncMutationId: crypto.randomUUID(),
       mutationCreatedAt: Date.now(),
     }
+
+    // This settings write is the write-ahead record for the physical move. If
+    // it fails, the outer handler returns a recoverable failure before any
+    // file write or move, and no in-memory repair claim is published.
+    await settings.upsertPendingRelocationRepair(pending)
     onPendingRepair(pending)
+
+    let finalPath: string
     try {
-      await settings.upsertPendingRelocationRepair(pending)
-    } catch {
-      // Still make the bounded roll-forward attempt in memory. If the settings
-      // write is temporarily unavailable, the next save can retry this record
-      // only if the owner becomes writable again before this operation ends.
+      // Commit the latest editor content to the CURRENT canonical file, then
+      // move those exact bytes without creating a second canonical copy.
+      if (typeof content === "string") await tauriWriteFile(sourcePath, content)
+      finalPath = await tauriRelocateFile(sourcePath, targetPath)
+    } catch (error) {
+      // Clear only when source-manifest identity and destination absence prove
+      // that no physical move happened. A native error may arrive after a
+      // partial cross-device move, so uncertain evidence keeps the identity
+      // fence for startup and the next save.
+      if (await removeUnmovedRelocationIntent(settings, pending, sourcePath)) {
+        onPendingRepair(null)
+      }
+      throw error
+    }
+
+    if (normalizedCanonicalPath(finalPath) !== normalizedCanonicalPath(pending.targetPath)) {
+      const actualRelativePath = finalPath.slice(destRootPath.length + 1)
+      const actualSelectedPaths = pending.selectedPaths?.map((path) =>
+        path === pending.targetRelativePath ? actualRelativePath : path,
+      )
+      const updatedPending: PendingDesktopRelocationRepair = {
+        ...pending,
+        targetPath: finalPath,
+        targetRelativePath: actualRelativePath,
+        selectedPaths: actualSelectedPaths ?? null,
+      }
+      await settings.upsertPendingRelocationRepair(updatedPending)
+      pending = updatedPending
+      onPendingRepair(updatedPending)
     }
 
     // Steps 4–7 share one idempotent path with next-save and app-start recovery.
@@ -1283,12 +1373,6 @@ async function performRelocateDesktopWriting(
       return { status: "failed", message: repairOutcome.message }
     }
     if (repairOutcome.status === "retry") {
-      try {
-        await settings.upsertPendingRelocationRepair(pending)
-      } catch {
-        // The visible warning still keeps the moved document editable; every
-        // later save or launch makes another best-effort repair attempt.
-      }
       return {
         status: "relocated",
         path: finalPath,

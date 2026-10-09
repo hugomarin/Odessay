@@ -37,6 +37,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 const writeAheadTestControl = vi.hoisted(() => ({
   failNextSettingsWrite: null as string | null,
+  missingCatalogId: null as string | null,
 }))
 
 vi.mock("@tiptap/react", async (importOriginal) => {
@@ -74,10 +75,21 @@ vi.mock("@tauri-apps/api/path", async () =>
   (await import("./support/editor-shell-desktop-doubles")).tauriPathDouble(),
 )
 vi.mock("@/lib/services/desktop/tauri-commands", async () => {
-  const commands = (await import("./support/editor-shell-desktop-doubles")).tauriCommandsDouble()
+  const [{ tauriCommandsDouble }, { tauriWorkspaceSyncInvokeDouble }] = await Promise.all([
+    import("./support/editor-shell-desktop-doubles"),
+    import("./integration/documents/support/real-desktop-doubles"),
+  ])
+  const commands = tauriCommandsDouble({
+    withReconciler: true,
+  })
   const settingsWrite = commands.tauriSettingsWrite
+  const catalogGetById = commands.tauriCatalogGetById
   return {
     ...commands,
+    tauriWorkspaceSync: async (...args: Parameters<typeof commands.tauriWorkspaceSync>) =>
+      args[3]?.mintUnbound === false
+        ? tauriWorkspaceSyncInvokeDouble(args[0], args[1], args[2])
+        : commands.tauriWorkspaceSync(...args),
     tauriSettingsWrite: async (...args: Parameters<typeof settingsWrite>) => {
       const message = writeAheadTestControl.failNextSettingsWrite
       if (message) {
@@ -86,6 +98,10 @@ vi.mock("@/lib/services/desktop/tauri-commands", async () => {
       }
       return settingsWrite(...args)
     },
+    tauriCatalogGetById: async (...args: Parameters<typeof catalogGetById>) =>
+      writeAheadTestControl.missingCatalogId === args[1]
+        ? null
+        : catalogGetById(...args),
   }
 })
 vi.mock("@/lib/sync/sync-service-factory", async () =>
@@ -143,6 +159,7 @@ beforeEach(async () => {
   resetDesktopWorkspace()
   resetEditorShellWorld({ isDesktop: true })
   writeAheadTestControl.failNextSettingsWrite = null
+  writeAheadTestControl.missingCatalogId = null
   // La sesión persistida vive en fake-indexeddb, que el harness no limpia.
   await writeEditorSession(createEmptyEditorSession())
 })
@@ -500,6 +517,98 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
   )
 
   it(
+    "ODE-693: sin fila de catálogo descarta con evidencia o mantiene una valla antes de acuñar",
+    async () => {
+      const { file } = await createDocument()
+      const writingId = activeTab()?.writing_id
+      expect(writingId, "el documento mantiene identidad en el manifest de origen").toBeTruthy()
+      const sourceRootPath = dirname(file.path)
+      const sourceRelativePath = file.path.slice(sourceRootPath.length + 1)
+      expect(workspaceManifestIdsDouble(sourceRootPath).get(sourceRelativePath)).toBe(writingId)
+
+      const targetPath = join(desktopWorkspaceRoot(), "orphan-intent", "Movido.md")
+      const targetRootPath = dirname(targetPath)
+      const now = new Date().toISOString()
+      const [{ appConfigDir }, { DesktopSettingsService }] = await Promise.all([
+        import("@tauri-apps/api/path"),
+        import("@/lib/services/desktop/desktop-settings-service"),
+      ])
+      const settings = new DesktopSettingsService(await appConfigDir())
+      await settings.upsertPendingRelocationRepair({
+        documentId: writingId!,
+        sourceRootPath,
+        sourcePath: file.path,
+        targetPath,
+        targetRootPath,
+        targetRelativePath: targetPath.slice(targetRootPath.length + 1),
+        selectedPaths: [targetPath.slice(targetRootPath.length + 1)],
+        settingsRoot: null,
+        registerExternalRoot: true,
+        consentedAt: now,
+        createdAt: now,
+        syncMutationId: globalThis.crypto.randomUUID(),
+        mutationCreatedAt: Date.now(),
+      })
+      writeAheadTestControl.missingCatalogId = writingId!
+
+      const { recoverPendingDesktopRelocationsAtStartup } = await import(
+        "@/lib/services/document-service-factory"
+      )
+      await recoverPendingDesktopRelocationsAtStartup()
+
+      expect(await pendingRelocationRepairs(), "la evidencia del mismo UUID en source y la ausencia del destino permiten limpiar el intent obsoleto").toHaveLength(0)
+      expect(workspaceManifestIdsDouble(sourceRootPath).get(sourceRelativePath), "la identidad original sigue durable en manifest").toBe(writingId)
+      expect(await exists(file.path), "el archivo original sigue en su sitio").toBe(true)
+      expect(await exists(targetPath), "no se materializó el destino del intent obsoleto").toBe(false)
+
+      // If the destination exists but its catalog row is still missing, the
+      // durable UUID claim is unresolved. Startup must retain and report it,
+      // and must fence the generic reconciler before it can mint an id.
+      await mkdir(targetRootPath, { recursive: true })
+      await new DesktopSettingsService(await appConfigDir()).upsertBindingRoot({
+        id: "ode693-orphan-destination-root",
+        rootPath: targetRootPath,
+        kind: "external",
+        visibleAsWorkspace: false,
+        selectedPaths: [],
+        consentedAt: now,
+        createdAt: now,
+      })
+      const source = (await readWorkspaceMarkdown()).find((entry) => entry.path === file.path)
+      expect(source, "los bytes de source siguen disponibles para el fixture").toBeDefined()
+      await writeFile(targetPath, source!.contents)
+      await settings.upsertPendingRelocationRepair({
+        documentId: writingId!,
+        sourceRootPath,
+        sourcePath: file.path,
+        targetPath,
+        targetRootPath,
+        targetRelativePath: targetPath.slice(targetRootPath.length + 1),
+        selectedPaths: [targetPath.slice(targetRootPath.length + 1)],
+        settingsRoot: null,
+        registerExternalRoot: true,
+        consentedAt: now,
+        createdAt: now,
+        syncMutationId: globalThis.crypto.randomUUID(),
+        mutationCreatedAt: Date.now(),
+      })
+      const errorLog = vi.spyOn(console, "error").mockImplementation(() => {})
+      await recoverPendingDesktopRelocationsAtStartup()
+      expect(await pendingRelocationRepairs(), "el intent con destino presente conserva la identidad reclamada").toHaveLength(1)
+      expect(errorLog).toHaveBeenCalledWith(expect.stringContaining("preserving its intent as an identity fence"))
+
+      const { disposeWorkspaceReconciler, ensureWorkspaceReconciler } = await import(
+        "@/lib/services/desktop/desktop-workspace-reconciler"
+      )
+      await disposeWorkspaceReconciler()
+      expect(await ensureWorkspaceReconciler(), "un intent no reparable detiene el scan antes del mint").toBeNull()
+      expect(workspaceManifestIdsDouble(targetRootPath).get("Movido.md"), "el archivo ambiguo sigue sin una segunda identidad").toBeUndefined()
+      expect(await pendingRelocationRepairs(), "la valla durable sobrevive al arranque bloqueado").toHaveLength(1)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
     "ODE-693: un manifiesto con otra identidad queda para reconciler/Open Document",
     async () => {
       const { file, title } = await createDocument()
@@ -667,6 +776,24 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
       const moved = join(desktopWorkspaceRoot(), "retry-agotado-reopen", "Movido.md")
       const rootPath = dirname(moved)
       const relativePath = moved.slice(rootPath.length + 1)
+      // Model a folder the user had already registered before this Save As.
+      // This keeps the later identical-copy positive control inside the
+      // reconciler's selected scope after restart.
+      await mkdir(rootPath, { recursive: true })
+      const [{ appConfigDir }, { DesktopSettingsService }] = await Promise.all([
+        import("@tauri-apps/api/path"),
+        import("@/lib/services/desktop/desktop-settings-service"),
+      ])
+      const now = new Date().toISOString()
+      await new DesktopSettingsService(await appConfigDir()).upsertBindingRoot({
+        id: "ode693-reopen-binding-root",
+        rootPath,
+        kind: "external",
+        visibleAsWorkspace: false,
+        selectedPaths: [],
+        consentedAt: now,
+        createdAt: now,
+      })
       world.saveDialogResult = moved
       const heldMove = holdRelocateFile(
         (source, requested) => source === file.path && requested === moved,
@@ -690,13 +817,13 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
       expect(activeTab()?.title, "la pestaña sigue el archivo tras el move físico").toBe("Movido")
       expect(workspaceManifestIdsDouble(rootPath).get(relativePath)).not.toBe(writingId)
       expect((await pendingRelocationRepairs()).map((repair) => repair.documentId), "el intent sobrevive al reinicio").toContain(writingId)
-      const { disposeWorkspaceReconciler, ensureWorkspaceReconciler } = await import(
+      const { disposeWorkspaceReconciler, refreshWorkspaceReconcilerRoots } = await import(
         "@/lib/services/desktop/desktop-workspace-reconciler"
       )
       await disposeWorkspaceReconciler()
       const duplicatePath = join(rootPath, "Identical copy.md")
       await writeFile(duplicatePath, BODY)
-      await ensureWorkspaceReconciler()
+      await refreshWorkspaceReconcilerRoots()
 
       const { getDesktopWritingCanonicalPath } = await import("@/lib/services/document-service-factory")
       await waitForAsync(

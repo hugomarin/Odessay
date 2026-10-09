@@ -45,14 +45,16 @@ export type BindingRootSettingRecord = {
 }
 
 /**
- * Durable recovery intent for a file already moved by Save As whose manifest
- * and catalog projection could not both commit. It lives beside the existing
- * BindingRoot settings so startup and the next save can finish the same UUID's
- * projection without discovering or minting a second document.
+ * Write-ahead recovery intent for a Save As physical move and its manifest /
+ * catalog projection. It lives beside the existing BindingRoot settings so
+ * startup and the next save can finish the same UUID's move without discovering
+ * or minting a second document.
  */
 export type PendingDesktopRelocationRepair = {
   documentId: string
   sourceRootPath: string
+  /** Canonical source file used to prove that a durable intent's move never happened. */
+  sourcePath?: string
   targetPath: string
   targetRootPath: string
   targetRelativePath: string

@@ -208,6 +208,11 @@ async function buildRuntime(): Promise<Runtime | null> {
   )
   await recoverPendingDesktopRelocationsAtStartup()
 
+  // Keep unresolved relocation intents as an identity fence. A scan that sees
+  // their destination without a binding must not mint a replacement UUID; the
+  // next launch retries the same durable intent before the reconciler starts.
+  if ((await settings.getPendingRelocationRepairs()).length > 0) return null
+
   // First run (ODE-449): the managed root must exist before anything can be
   // written into it. Seeding is idempotent and cheap when both starter
   // documents already exist, so it runs unconditionally on every app launch
