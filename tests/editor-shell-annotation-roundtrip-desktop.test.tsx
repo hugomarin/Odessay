@@ -27,6 +27,7 @@
  * reapertura ya no restaura su ancla ni su comentario.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import { readFile } from "node:fs/promises"
 
 import { scanControlledAnnotations } from "@/lib/editor/annotation-markdown"
 import { OPAQUE_SOURCE_BLOCK_NODE, OPAQUE_SOURCE_INLINE_NODE } from "@/lib/editor/opaque-source-extensions"
@@ -61,22 +62,28 @@ vi.mock("@/lib/sync/sync-service-factory", async () =>
 )
 
 const {
+  clickEditorTab,
   clickNewArtifact,
   clickSelectionPopupAction,
   fillTextField,
   flush,
   mountEditorShell,
   openNotesSidebar,
+  pointerClick,
   readEditorAnnotations,
   resetEditorShellWorld,
   selectEditorText,
   typeInEditor,
   waitFor,
+  waitForHydrationReady,
   waitForMarkdownContaining,
 } = await import("./support/editor-shell-harness")
 const { act } = await import("react")
 const { createDesktopWorkspace, destroyDesktopWorkspace, resetDesktopWorkspace } = await import(
   "./support/editor-shell-desktop-doubles"
+)
+const { failNextWriteFile, holdWriteFile, writeFileCalls } = await import(
+  "./integration/documents/support/real-desktop-doubles"
 )
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
 const { createEmptyEditorSession, EDITOR_DRAFT_TAB_ID } = await import("@/lib/local-db/editor-sessions")
@@ -309,4 +316,89 @@ describe("ODE-606 — ANN-02/ANN-03 en desktop: la anotación pasa por el .md", 
     const reopenedFile = await waitForMarkdownContaining("after-opaque")
     expect(reopenedFile.contents, "el .md en disco mantiene exactamente los bytes guardados").toBe(savedFile.contents)
   }, TEST_TIMEOUT_MS)
+  it.fails(
+    "follow-up pendiente (ODE-687): el fallo de Annotation deja la pestaña en saving — owner: useEditorPersistence",
+    async () => {
+      const textA = "N687 failed-save document A with an A anchor"
+      const textB = "N687 failed-save document B with a B anchor"
+      const failedNoteA = "N687_A_FAILED_PRIVATE_NOTE"
+      mounted = await mountEditorShell()
+
+      await clickNewArtifact(mounted.container)
+      await typeInEditor(textA)
+      const fileA = await waitForMarkdownContaining(textA)
+      const writingA = await waitForMaterializedWritingId()
+      await clickNewArtifact(mounted.container)
+      await typeInEditor(textB)
+      const fileB = await waitForMarkdownContaining(textB)
+      const writingB = await waitForMaterializedWritingId()
+      expect(fileB.path).not.toBe(fileA.path)
+
+      await clickEditorTab(writingA)
+      await waitForHydrationReady("A listo para el fallo de Annotation")
+      const tabA = getEditorSessionState().session.tabs.find((tab) => tab.writing_id === writingA)
+      const tabB = getEditorSessionState().session.tabs.find((tab) => tab.writing_id === writingB)
+      if (!tabA || !tabB) throw new Error("A y B deben estar montados en pestañas reales")
+
+      await selectEditorText("A anchor")
+      await clickSelectionPopupAction("Annotate passage")
+      const fieldA = await waitFor(
+        () => document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Annotation text"]'),
+        { label: "AnnotationBubble real de A para el fallo" },
+      )
+      await fillTextField(fieldA, failedNoteA)
+      const saveA = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Save",
+      )
+      if (!saveA) throw new Error('El bubble del intento fallido de A no tiene botón "Save"')
+
+      const heldAWrite = holdWriteFile((path) => path === fileA.path)
+      let releaseAWrite: (() => void) | null = heldAWrite.release
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+      try {
+        failNextWriteFile((path) => path === fileA.path, () => {
+          throw new Error("N687 injected Annotation write failure")
+        })
+        await act(async () => saveA.click())
+        await heldAWrite.started
+        expect(
+          writeFileCalls().filter((call) => call.path === fileA.path).at(-1)?.content,
+          "control positivo: el write retenido contiene la Annotation que va a fallar",
+        ).toContain(failedNoteA)
+
+        await pointerClick(document.querySelector<HTMLElement>(`[data-editor-tab-id="${tabB.id}"]`)!)
+        expect(
+          getEditorSessionState().session.active_tab_id,
+          "B espera mientras el write fallido de A sigue en vuelo",
+        ).toBe(tabA.id)
+        releaseAWrite()
+        releaseAWrite = null
+
+        await waitFor(
+          () => errors.mock.calls.some(([message]) => message === "[editor:save] local save failed") || null,
+          { label: "completion event confirma el fallo del write de Annotation", timeoutMs: 10_000 },
+        )
+        expect(await readFile(fileA.path, "utf8"), "el write fallido no llega al archivo de A").not.toContain(
+          failedNoteA,
+        )
+        expect(await readFile(fileB.path, "utf8"), "el write fallido de A no contamina B").not.toContain(
+          failedNoteA,
+        )
+        expect(getEditorSessionState().session.active_tab_id).toBe(tabA.id)
+
+        // The failed completion is logged, but currently leaves A in `saving`.
+        // Keep this expected failure until useEditorPersistence reports the
+        // completion through the session owner; no production code is changed here.
+        expect(
+          getEditorSessionState().session.tabs.find((tab) => tab.id === tabA.id)?.save_state,
+          "completion error must leave A in error instead of saving",
+        ).toBe("error")
+      } finally {
+        releaseAWrite?.()
+        errors.mockRestore()
+      }
+    },
+    TEST_TIMEOUT_MS,
+  )
+
 })
