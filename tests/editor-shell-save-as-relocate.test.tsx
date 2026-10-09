@@ -284,7 +284,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "ODE-693: una edición durante el relocate espera el commit y conserva UUID y ruta canónica",
     async () => {
       const { file, writingId, coordinatorCapture } = await createDocument({ captureCoordinator: true })
@@ -335,7 +335,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "ODE-693: un fallo antes del move libera la espera y el save escribe en el source",
     async () => {
       const { file, writingId, coordinatorCapture } = await createDocument({ captureCoordinator: true })
@@ -378,7 +378,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "ODE-693: cerrar durante un save que espera relocate termina settle y no deja waiters",
     async () => {
       const { file, writingId, coordinatorCapture } = await createDocument({ captureCoordinator: true })
