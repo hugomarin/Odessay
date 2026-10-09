@@ -62,6 +62,7 @@ export const EMPTY_EDITOR_JSON: JSONContent = {
 type CreateEditorExtensionsOptions = {
   onTableOfContentsUpdate?: (items: TableOfContentData) => void
   tableOfContentsScrollParent?: () => HTMLElement | Window
+  getEntityPasteWritingId?: () => string | null
   resolveImage?: (source: string) => Promise<ResolvedLocalImage>
   onRequestLocalImageBackup?: (request: LocalImageBackupRequest) => void
   onOpenImagePresentation?: (request: ImagePresentationRequest) => void
@@ -96,7 +97,9 @@ export const createEditorExtensions = (options: CreateEditorExtensionsOptions = 
     // canonical chain (Annotation → Entity → Highlight) before native marks,
     // keeping their nesting byte-stable across round-trips.
     AnnotationHighlight.extend({ addKeyboardShortcuts: () => ({}) }),
-    EntityMark,
+    EntityMark.configure({
+      getEntityPasteWritingId: options.getEntityPasteWritingId ?? (() => null),
+    }),
     SemanticHighlightMark,
     SemanticMarkCommands,
     Bold.extend({ addKeyboardShortcuts: () => ({}) }),

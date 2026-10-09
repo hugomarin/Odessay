@@ -22,7 +22,7 @@
  * `tests/editor-shell-selection-restore.test.tsx` (STATE-06/07) y el resto de
  * la suite `editor-shell-*` pasan idénticas antes y después de esta mudanza.
  */
-import { useCallback, useEffect, type Dispatch, type RefObject, type SetStateAction } from "react"
+import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react"
 import { getMarkRange } from "@tiptap/core"
 import { type Editor } from "@tiptap/react"
 
@@ -78,6 +78,40 @@ export function useSelectionPopup(input: SelectionPopupInput) {
     suppressNextSelectionPopupRef,
     updateDerivedEditorState,
   } = input
+
+  const isMountedRef = useRef(false)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  const validatePendingRichSelection = useCallback(
+    (pending: PendingRichSelectionSnapshot): string | null => {
+      if (!isMountedRef.current) return "This selection is no longer available."
+      if (modeRef.current !== "rich") {
+        setPendingRichSelection(null)
+        return "Semantic marks can only be applied in Rich mode."
+      }
+
+      const current = captureRichSelectionSnapshot()
+      if (!current) return "Select some text first."
+      if (current.writingId !== pending.writingId) {
+        return "This selection belongs to a different document."
+      }
+      if (
+        current.from !== pending.from ||
+        current.to !== pending.to ||
+        current.text !== pending.text
+      ) {
+        return "The selection has changed. Select it again."
+      }
+      return null
+    },
+    [captureRichSelectionSnapshot, modeRef, setPendingRichSelection],
+  )
 
   const dismissSelectionPopup = useCallback(() => {
     suppressNextSelectionPopupRef.current = true
@@ -196,6 +230,9 @@ export function useSelectionPopup(input: SelectionPopupInput) {
       if (!editor || !pendingRichSelection) {
         return "Select some text first."
       }
+      const staleSelection = validatePendingRichSelection(pendingRichSelection)
+      if (staleSelection) return staleSelection
+
       suppressNextSelectionPopupRef.current = true
       editor.commands.focus()
       const decision = applyEntityMark(editor, {
@@ -212,7 +249,7 @@ export function useSelectionPopup(input: SelectionPopupInput) {
       void persistEditorSnapshot(editor, undefined, { awaitDurability: true })
       return null
     },
-    [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState],
+    [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState, validatePendingRichSelection],
   )
 
   const applySemanticHighlightAtSelection = useCallback(
@@ -220,6 +257,9 @@ export function useSelectionPopup(input: SelectionPopupInput) {
       if (!editor || !pendingRichSelection) {
         return "Select some text first."
       }
+      const staleSelection = validatePendingRichSelection(pendingRichSelection)
+      if (staleSelection) return staleSelection
+
       suppressNextSelectionPopupRef.current = true
       editor.commands.focus()
       const decision = applySemanticHighlight(editor, {
@@ -236,7 +276,7 @@ export function useSelectionPopup(input: SelectionPopupInput) {
       void persistEditorSnapshot(editor, undefined, { awaitDurability: true })
       return null
     },
-    [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState],
+    [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState, validatePendingRichSelection],
   )
 
   const handleConfirmAnnotation = useCallback(
@@ -312,6 +352,20 @@ export function useSelectionPopup(input: SelectionPopupInput) {
       editor.off("selectionUpdate", handleSelectionUpdate)
     }
   }, [captureRichSelectionSnapshot, editor, pendingAnnotation])
+
+  useEffect(() => {
+    if (!pendingRichSelection) return
+    const current = captureRichSelectionSnapshot()
+    if (
+      !current ||
+      current.writingId !== pendingRichSelection.writingId ||
+      current.from !== pendingRichSelection.from ||
+      current.to !== pendingRichSelection.to ||
+      current.text !== pendingRichSelection.text
+    ) {
+      setPendingRichSelection(null)
+    }
+  }, [captureRichSelectionSnapshot, pendingRichSelection, setPendingRichSelection])
 
   useEffect(() => {
     if (!editor || (!pendingRichSelection && !pendingAnnotation)) return

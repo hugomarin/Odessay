@@ -841,13 +841,14 @@ export function EditorShell({
   const editorExtensions = useMemo(
     () =>
       createEditorExtensions({
+        getEntityPasteWritingId: () => currentWritingIdRef.current,
         onTableOfContentsUpdate: scheduleTableOfContentsUpdate,
         tableOfContentsScrollParent: getTableOfContentsScrollParent,
         resolveImage: isDesktopRuntime() ? resolveImage : undefined,
         onRequestLocalImageBackup: isDesktopRuntime() ? requestLocalImageBackup : undefined,
         onOpenImagePresentation: openImagePresentation,
       }),
-    [getTableOfContentsScrollParent, openImagePresentation, requestLocalImageBackup, resolveImage, scheduleTableOfContentsUpdate],
+    [currentWritingIdRef, getTableOfContentsScrollParent, openImagePresentation, requestLocalImageBackup, resolveImage, scheduleTableOfContentsUpdate],
   )
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
@@ -1360,7 +1361,7 @@ export function EditorShell({
   }, [editor])
 
   const captureRichSelectionSnapshot = useCallback((): PendingRichSelectionSnapshot | null => {
-    if (!editor || modeRef.current !== "rich") {
+    if (!editor) {
       return null
     }
 
@@ -1376,14 +1377,17 @@ export function EditorShell({
 
     const positions = getRichSelectionOverlayPositions(from, to)
     if (!positions) return null
+    const writingId = currentWritingIdRef.current
+    if (writingId !== currentWritingId) return null
 
     return {
       from,
       to,
       text: selectedText,
+      writingId,
       ...positions,
     }
-  }, [editor, getRichSelectionOverlayPositions])
+  }, [currentWritingId, currentWritingIdRef, editor, getRichSelectionOverlayPositions])
 
   // ODE-603 — corte 4b, entrega 2: el despachador vive en su hook (mudanza
   // mecánica; el estado y los refs siguen siendo de la shell).

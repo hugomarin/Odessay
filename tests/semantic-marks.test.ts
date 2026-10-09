@@ -4,6 +4,7 @@
 import { describe, expect, it, beforeEach, vi } from "vitest"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { chromium } from "playwright"
 import { Editor, getMarkRange } from "@tiptap/core"
 import { canonicalizeControlledMarkdown } from "@/lib/document-components"
 import { parseMarkdownToSnapshot, serializeDocumentToMarkdown } from "@/lib/editor/document-serialization"
@@ -16,9 +17,11 @@ import { createEditorExtensions } from "@/lib/editor/extensions"
 const fixtures = join(process.cwd(), "tests/fixtures/document-components")
 const fixture = (path: string) => readFileSync(join(fixtures, path), "utf8")
 
-const createTestEditor = (content: string = "") =>
+const createTestEditor = (content: string = "", writingId?: string) =>
   new Editor({
-    extensions: createEditorExtensions(),
+    extensions: createEditorExtensions({
+      getEntityPasteWritingId: writingId ? () => writingId : undefined,
+    }),
     content,
   })
 
@@ -153,6 +156,233 @@ describe("ODE-532 entity and highlight semantic marks", () => {
     })
   })
 
+  describe("controlled rich paste identity", () => {
+    const assertInvalidEntityPasteFallsBackToText = (clipboardHtml: string, expectedText: string) => {
+      const editor = createTestEditor("<p></p>", "writing-destination")
+      try {
+        editor.view.pasteHTML(clipboardHtml)
+
+        const bodyJson = editor.getJSON()
+        expect(
+          collectMarks(bodyJson, (mark) => mark.type === "entity"),
+          "invalid Entity clipboard structure is absent from body_json",
+        ).toEqual([])
+        expect(editor.getText(), "the pasted label remains intact").toBe(expectedText)
+
+        const savedMarkdown = serializeDocumentToMarkdown(bodyJson)
+        expect(savedMarkdown, "saved Markdown keeps the label").toContain(expectedText)
+        expect(savedMarkdown, "saved Markdown has no invalid Entity wrapper").not.toContain("<Entity")
+
+        const reopened = parseMarkdownToSnapshot(savedMarkdown)
+        expect(reopened.bodyText, "reopened text remains intact").toBe(expectedText)
+        expect(
+          collectMarks(reopened.bodyJson, (mark) => mark.type === "entity"),
+          "reopened body_json has no invalid Entity mark",
+        ).toEqual([])
+      } finally {
+        editor.destroy()
+      }
+    }
+
+    it("falls back to text when pasted Entity has an empty id", () => {
+      assertInvalidEntityPasteFallsBackToText(
+        '<p><mark data-entity-id="" data-entity-type="company" data-entity-source-writing-id="writing-source">Aplyca</mark></p>',
+        "Aplyca",
+      )
+    })
+
+    it("falls back to text when pasted Entity has an empty type", () => {
+      assertInvalidEntityPasteFallsBackToText(
+        '<p><mark data-entity-id="entity-source" data-entity-type="" data-entity-source-writing-id="writing-source">Acme</mark></p>',
+        "Acme",
+      )
+    })
+
+    it("falls back to text when pasted Entity has no id", () => {
+      assertInvalidEntityPasteFallsBackToText(
+        '<p><mark data-entity-type="company">Northstar</mark></p>',
+        "Northstar",
+      )
+    })
+
+    it("falls back to text when pasted Entity has no type", () => {
+      assertInvalidEntityPasteFallsBackToText(
+        '<p><mark data-entity-id="entity-source" data-entity-source-writing-id="writing-source">Person</mark></p>',
+        "Person",
+      )
+    })
+
+    it("does not execute clipboard handlers while remapping Entity IDs in Chromium", async () => {
+      const editor = createTestEditor("<p></p>", "writing-source")
+      const entityPlugin = editor.state.plugins.find(
+        (plugin) => typeof plugin.spec.props?.transformPastedHTML === "function",
+      )
+      const transformPastedHTML = entityPlugin?.spec.props?.transformPastedHTML
+      if (!transformPastedHTML) throw new Error("Entity transformPastedHTML plugin was not installed.")
+
+      const clipboardHtml = [
+        "<p>",
+        '<img src=x onerror="window.__entityPasteHandlerSpy()">',
+        '<mark data-entity-id="entity-source" data-entity-type="company" data-entity-source-writing-id="writing-source">Aplyca</mark>',
+        "</p>",
+      ].join("")
+
+      const browser = await chromium.launch({ headless: true })
+      try {
+        const page = await browser.newPage()
+        await page.setContent("<!doctype html><html><body></body></html>")
+
+        const liveSinkControl = await page.evaluate(async () => {
+          const testWindow = window as typeof window & {
+            __entityPasteHandlerCalls: number
+            __entityPasteHandlerSpy: () => void
+          }
+          testWindow.__entityPasteHandlerCalls = 0
+          testWindow.__entityPasteHandlerSpy = () => {
+            testWindow.__entityPasteHandlerCalls += 1
+          }
+
+          const image = document.createElement("img")
+          image.setAttribute("src", "x")
+          image.setAttribute("onerror", "window.__entityPasteHandlerSpy()")
+
+          await new Promise<void>((resolve, reject) => {
+            const timeout = window.setTimeout(() => reject(new Error("Live-DOM image error did not fire.")), 2_000)
+            image.addEventListener(
+              "error",
+              () => {
+                window.clearTimeout(timeout)
+                resolve()
+              },
+              { once: true },
+            )
+            document.body.append(image)
+          })
+
+          image.remove()
+          return testWindow.__entityPasteHandlerCalls
+        })
+        expect(liveSinkControl, "positive control: Chromium executes inline image error handlers in the live document").toBe(1)
+
+        const callbackSource = transformPastedHTML
+          .toString()
+          .replace(/__vite_ssr_import_\d+__\.createSemanticEntityId/g, "createSemanticEntityId")
+          .replace(/__vite_ssr_import_\d+__\.isValidEntityAttributes/g, "isValidEntityAttributes")
+        await page.addScriptTag({
+          content: `window.__entityTransformPastedHTML = (() => {
+            const getWritingId = () => "writing-destination";
+            const createSemanticEntityId = () => "entity-destination";
+            // This browser probe isolates inert DOM parsing; direct editor tests exercise the canonical registry validator.
+            const isValidEntityAttributes = ({ id, type }) => Boolean(id && type);
+            const decodeDataAttribute = (value) => {
+              if (!value) return "";
+              try { return decodeURIComponent(value); } catch { return value; }
+            };
+            const ENTITY_SOURCE_WRITING_ID_ATTRIBUTE = "data-entity-source-writing-id";
+            return (${callbackSource});
+          })();`,
+        })
+
+        const transformed = await page.evaluate(
+          async ({ html }) => {
+            const testWindow = window as typeof window & {
+              __entityPasteHandlerCalls: number
+              __entityTransformPastedHTML: (html: string, view: { dom: { ownerDocument: Document } }) => string
+            }
+            testWindow.__entityPasteHandlerCalls = 0
+            const transform = testWindow.__entityTransformPastedHTML(html, { dom: { ownerDocument: document } })
+
+            await new Promise<void>((resolve) => {
+              requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+            })
+
+            const parsed = new DOMParser().parseFromString(transform, "text/html")
+            return {
+              handlerCalls: testWindow.__entityPasteHandlerCalls,
+              entityIds: Array.from(parsed.querySelectorAll("mark[data-entity-id]"), (entity) =>
+                entity.getAttribute("data-entity-id"),
+              ),
+            }
+          },
+          { html: clipboardHtml },
+        )
+
+        expect(transformed.handlerCalls, "clipboard event handlers never run during rich paste transformation").toBe(0)
+        expect(transformed.entityIds, "cross-document Entity IDs are still remapped").toEqual(["entity-destination"])
+      } finally {
+        editor.destroy()
+        await browser.close()
+      }
+    }, 30_000)
+
+    it("mints one new Entity ID per copied identity across documents", () => {
+      const sourceWritingId = "writing-source"
+      const destinationWritingId = "writing-destination"
+      const clipboardHtml = [
+        "<p>",
+        '<mark data-entity-id="entity-source" data-entity-type="company" data-entity-source-writing-id="writing-source">Aplyca</mark>',
+        " and ",
+        '<mark data-entity-id="entity-source" data-entity-type="company" data-entity-source-writing-id="writing-source">Acme</mark>',
+        "</p>",
+      ].join("")
+
+      const sameDocument = createTestEditor("<p></p>", sourceWritingId)
+      sameDocument.view.pasteHTML(clipboardHtml)
+      expect(
+        collectMarks(sameDocument.getJSON(), (mark) => mark.type === "entity").map(
+          (attrs) => attrs.entityId,
+        ),
+        "duplicar dos menciones compatibles dentro de A conserva la identidad",
+      ).toEqual(["entity-source", "entity-source"])
+
+      const otherDocument = createTestEditor("<p></p>", destinationWritingId)
+      otherDocument.view.pasteHTML(clipboardHtml)
+      const pastedIds = collectMarks(otherDocument.getJSON(), (mark) => mark.type === "entity").map(
+        (attrs) => attrs.entityId,
+      )
+
+      expect(pastedIds, "pegar en B acuña una sola identidad nueva para las dos menciones").toHaveLength(2)
+      expect(pastedIds[0]).not.toBe("entity-source")
+      expect(pastedIds[1]).toBe(pastedIds[0])
+    })
+
+    it("carries the source writingId in copied Entity HTML", () => {
+      const sourceWritingId = "writing-source"
+      const source = createTestEditor(
+        '<p><mark data-entity-id="entity-source" data-entity-type="company">Aplyca</mark> tail</p>',
+        sourceWritingId,
+      )
+      source.commands.setTextSelection({ from: 1, to: 7 })
+
+      const clipboardValues = new Map<string, string>()
+      const copyEvent = new Event("copy", { bubbles: true, cancelable: true }) as ClipboardEvent
+      Object.defineProperty(copyEvent, "clipboardData", {
+        value: {
+          setData: (format: string, value: string) => clipboardValues.set(format, value),
+        },
+      })
+      source.view.dom.dispatchEvent(copyEvent)
+
+      const clipboardHtml = clipboardValues.get("text/html") ?? ""
+      expect(clipboardHtml).toContain('data-entity-source-writing-id="writing-source"')
+
+      source.commands.setTextSelection(source.state.doc.content.size - 1)
+      source.view.pasteHTML(clipboardHtml)
+      expect(
+        collectMarks(source.getJSON(), (mark) => mark.type === "entity").map((attrs) => attrs.entityId),
+        "la duplicación dentro de A conserva la identidad",
+      ).toEqual(["entity-source", "entity-source"])
+
+      const destination = createTestEditor("<p></p>", "writing-destination")
+      destination.view.pasteHTML(clipboardHtml)
+      const pastedIds = collectMarks(destination.getJSON(), (mark) => mark.type === "entity").map(
+        (attrs) => attrs.entityId,
+      )
+      expect(pastedIds).toHaveLength(1)
+      expect(pastedIds[0]).not.toBe("entity-source")
+    })
+  })
+
   describe("selection owner", () => {
     it("applies an entity mark with a minted identity", () => {
       const editor = createTestEditor("<p>Select this company</p>")
@@ -208,19 +438,60 @@ describe("ODE-532 entity and highlight semantic marks", () => {
       expect(marks).toEqual([{ highlightColor: "green" }])
     })
 
-    it("rejects a conflicting entity id and accepts a compatible duplicate", () => {
+    it("preserves compatible duplicate identity and rejects conflicting type or ref atomically", () => {
       const editor = createTestEditor("<p>one two</p>")
       editor.commands.setTextSelection({ from: 1, to: 4 })
-      applyEntityMark(editor, { from: 1, to: 4, id: "ent-9", type: "company" })
+      applyEntityMark(editor, {
+        from: 1,
+        to: 4,
+        id: "ent-9",
+        type: "company",
+        ref: "https://example.com/company",
+      })
+      const original = editor.getJSON()
 
-      const conflicting = applyEntityMark(editor, { from: 5, to: 8, id: "ent-9", type: "person" })
-      expect(conflicting.ok).toBe(false)
+      const conflictingType = applyEntityMark(editor, {
+        from: 5,
+        to: 8,
+        id: "ent-9",
+        type: "person",
+        ref: "https://example.com/company",
+      })
+      expect(conflictingType.ok).toBe(false)
+      expect(editor.getJSON()).toEqual(original)
 
-      const compatible = applyEntityMark(editor, { from: 5, to: 8, id: "ent-9", type: "company" })
+      const conflictingRef = applyEntityMark(editor, {
+        from: 5,
+        to: 8,
+        id: "ent-9",
+        type: "company",
+        ref: "https://example.com/other-company",
+      })
+      expect(conflictingRef.ok).toBe(false)
+      expect(editor.getJSON()).toEqual(original)
+
+      const compatible = applyEntityMark(editor, {
+        from: 5,
+        to: 8,
+        id: "ent-9",
+        type: "company",
+        ref: "https://example.com/company",
+      })
       expect(compatible.ok).toBe(true)
       const marks = collectMarks(editor.getJSON(), (mark) => mark.type === "entity")
       expect(marks).toHaveLength(2)
-      expect(marks.every((attrs) => attrs.entityType === "company")).toBe(true)
+      expect(marks).toEqual([
+        {
+          entityId: "ent-9",
+          entityType: "company",
+          entityRef: "https://example.com/company",
+        },
+        {
+          entityId: "ent-9",
+          entityType: "company",
+          entityRef: "https://example.com/company",
+        },
+      ])
     })
 
     it("enforces the canonical nesting order between Entity and Highlight", () => {
