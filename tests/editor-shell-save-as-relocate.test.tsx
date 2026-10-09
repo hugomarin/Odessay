@@ -35,6 +35,10 @@ import { mkdir, stat, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
+const writeAheadTestControl = vi.hoisted(() => ({
+  failNextSettingsWrite: null as string | null,
+}))
+
 vi.mock("@tiptap/react", async (importOriginal) => {
   const { createTiptapCaptureModule } = await import("./support/editor-shell-doubles")
   return createTiptapCaptureModule(await importOriginal<Record<string, unknown>>())
@@ -69,9 +73,21 @@ vi.mock("@/lib/editor/persistence-coordinator", async (importOriginal) => {
 vi.mock("@tauri-apps/api/path", async () =>
   (await import("./support/editor-shell-desktop-doubles")).tauriPathDouble(),
 )
-vi.mock("@/lib/services/desktop/tauri-commands", async () =>
-  (await import("./support/editor-shell-desktop-doubles")).tauriCommandsDouble(),
-)
+vi.mock("@/lib/services/desktop/tauri-commands", async () => {
+  const commands = (await import("./support/editor-shell-desktop-doubles")).tauriCommandsDouble()
+  const settingsWrite = commands.tauriSettingsWrite
+  return {
+    ...commands,
+    tauriSettingsWrite: async (...args: Parameters<typeof settingsWrite>) => {
+      const message = writeAheadTestControl.failNextSettingsWrite
+      if (message) {
+        writeAheadTestControl.failNextSettingsWrite = null
+        throw new Error(message)
+      }
+      return settingsWrite(...args)
+    },
+  }
+})
 vi.mock("@/lib/sync/sync-service-factory", async () =>
   (await import("./support/editor-shell-desktop-doubles")).syncServiceDouble(),
 )
@@ -126,6 +142,7 @@ afterAll(() => {
 beforeEach(async () => {
   resetDesktopWorkspace()
   resetEditorShellWorld({ isDesktop: true })
+  writeAheadTestControl.failNextSettingsWrite = null
   // La sesión persistida vive en fake-indexeddb, que el harness no limpia.
   await writeEditorSession(createEmptyEditorSession())
 })
@@ -214,6 +231,14 @@ async function readCatalogMutations() {
   const { appConfigDir, join: tauriJoin } = await import("@tauri-apps/api/path")
   const dbPath = await tauriJoin(await appConfigDir(), "desktop-index.sqlite3")
   return catalogMutationsDouble(dbPath)
+}
+
+async function pendingRelocationRepairs() {
+  const [{ appConfigDir }, { DesktopSettingsService }] = await Promise.all([
+    import("@tauri-apps/api/path"),
+    import("@/lib/services/desktop/desktop-settings-service"),
+  ])
+  return new DesktopSettingsService(await appConfigDir()).getPendingRelocationRepairs()
 }
 
 async function expectRelocatedIdentity(file: { path: string }, moved: string, writingId: string, marker: string) {
@@ -409,6 +434,71 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
+  it.fails(
+    "ODE-693: el intent durable precede al move y se borra después del commit completo",
+    async () => {
+      const { file } = await createDocument()
+      const writingId = activeTab()?.writing_id
+      expect(writingId, "el documento ya tiene identidad estable").toBeTruthy()
+      const moved = join(desktopWorkspaceRoot(), "intent-write-ahead", "Movido.md")
+      const heldMove = holdRelocateFile(
+        (source, requested) => source === file.path && requested === moved,
+        { stage: "before-move" },
+      )
+      world.saveDialogResult = moved
+      const saveAs = emitTauriEvent("menu:save-as")
+
+      try {
+        await within(heldMove.started, "inicio del move antes de mutar el filesystem")
+        const pending = await pendingRelocationRepairs()
+        expect(pending, "el intent ya es durable cuando comienza el move físico").toHaveLength(1)
+        expect(pending[0]?.documentId).toBe(writingId)
+        expect(pending[0]?.targetPath).toBe(moved)
+        expect(await exists(file.path), "el source permanece en su sitio hasta liberar el move").toBe(true)
+        expect(await exists(moved), "todavía no existe el destino retenido").toBe(false)
+      } finally {
+        heldMove.release()
+        await within(saveAs, "completion event del relocate con intent durable")
+      }
+
+      await expectRelocatedIdentity(file, moved, writingId!, BODY)
+      expect(await pendingRelocationRepairs(), "el commit de manifiesto y catálogo borra el intent").toHaveLength(0)
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it.fails(
+    "ODE-693: si falla la escritura durable del intent, Save As no mueve ni cambia el documento",
+    async () => {
+      const { file, title } = await createDocument()
+      const writingId = activeTab()?.writing_id
+      expect(writingId, "el documento ya tiene identidad estable").toBeTruthy()
+      const moved = join(desktopWorkspaceRoot(), "intent-write-fails", "NoMovido.md")
+      world.saveDialogResult = moved
+      writeAheadTestControl.failNextSettingsWrite = "simulated durable intent write failure"
+
+      await within(emitTauriEvent("menu:save-as"), "completion event tras el fallo del intent")
+
+      expect(writeAheadTestControl.failNextSettingsWrite, "la escritura del intent alcanzó el boundary durable").toBeNull()
+      expect(await exists(file.path), "el fallo del intent aborta antes del move físico").toBe(true)
+      expect(await exists(moved), "no queda ningún destino tras el fallo del intent").toBe(false)
+      expect(activeTab()?.writing_id, "la pestaña conserva el UUID").toBe(writingId)
+      expect(activeTab()?.title, "la pestaña conserva el título").toBe(title)
+      const { getDesktopWritingCanonicalPath } = await import("@/lib/services/document-service-factory")
+      expect(await getDesktopWritingCanonicalPath(writingId!), "el catálogo conserva el binding original").toBe(file.path)
+      const files = await readWorkspaceMarkdown()
+      expect(files.map((entry) => entry.path), "el catálogo de archivos sigue viendo solo el source").toEqual([file.path])
+      expect(files[0]?.contents).toContain(BODY)
+      expect(await pendingRelocationRepairs(), "no se conserva un intent cuya escritura falló").toHaveLength(0)
+      await waitFor(() => mounted!.container.textContent?.includes(FAILURE_NOTICE), {
+        label: "el fallo recuperable de Save As se informa sin cerrar la pestaña",
+        timeoutMs: 15_000,
+      })
+      expect(activeTab()?.save_state, "el fallo del intent no deja la pestaña en error").not.toBe("error")
+    },
+    TEST_TIMEOUT_MS,
+  )
+
   it(
     "ODE-693: un manifiesto con otra identidad queda para reconciler/Open Document",
     async () => {
@@ -599,10 +689,13 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
       await waitFor(() => activeTab()?.title === "Movido", { label: "completion event antes de reabrir", timeoutMs: 15_000 })
       expect(activeTab()?.title, "la pestaña sigue el archivo tras el move físico").toBe("Movido")
       expect(workspaceManifestIdsDouble(rootPath).get(relativePath)).not.toBe(writingId)
+      expect((await pendingRelocationRepairs()).map((repair) => repair.documentId), "el intent sobrevive al reinicio").toContain(writingId)
       const { disposeWorkspaceReconciler, ensureWorkspaceReconciler } = await import(
         "@/lib/services/desktop/desktop-workspace-reconciler"
       )
       await disposeWorkspaceReconciler()
+      const duplicatePath = join(rootPath, "Identical copy.md")
+      await writeFile(duplicatePath, BODY)
       await ensureWorkspaceReconciler()
 
       const { getDesktopWritingCanonicalPath } = await import("@/lib/services/document-service-factory")
@@ -614,6 +707,10 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
       )
       expect(activeTab()?.writing_id, "la pestaña abierta conserva su identidad").toBe(writingId)
       expect(await exists(file.path), "el archivo original sigue ausente").toBe(false)
+      expect(workspaceManifestIdsDouble(rootPath).get(relativePath), "la reparación conserva el UUID del destino antes de escanear archivos nuevos").toBe(writingId)
+      expect(workspaceManifestIdsDouble(rootPath).get("Identical copy.md"), "el archivo externo sí recibe su propia identidad").toBeTruthy()
+      expect(workspaceManifestIdsDouble(rootPath).get("Identical copy.md"), "el control positivo no reutiliza el UUID del relocate").not.toBe(writingId)
+      expect(await pendingRelocationRepairs(), "el arranque consume el intent después del commit").toHaveLength(0)
     },
     TEST_TIMEOUT_MS,
   )
@@ -744,6 +841,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
       expect(activeTab()?.writing_id).toBe(writingId)
       expect(await getDesktopWritingCanonicalPath(writingId!)).toBe(requestedPath)
       expect(await exists(file.path)).toBe(false)
+      expect(await pendingRelocationRepairs(), "un commit completo no deja un intent pendiente").toHaveLength(0)
     },
     TEST_TIMEOUT_MS,
   )
