@@ -420,6 +420,11 @@
       "description": "Contrato normativo de construcción de capability proofs (reglas MUST): entry point alcanzable en producción, reproducir la secuencia de transiciones, seams internos reales, scheduling ≠ completion, ownership de trabajo diferido, doubles con el contrato completo del boundary, errores tragados no cuentan como ejecución, mutation test, y coverage status como output y no como meta. Incluye taxonomía de escapes (MOCKED_SEAM, WRONG_ASSERTION, NON_PRODUCTION_PATH, STALE_PROOF, ARCHITECTURE_GAP) y checklist de pre-upgrade. Leer en BUILD y REVIEW de cualquier proof."
     },
     {
+      "path": "workflow/quality/review-multi-round-retro.md",
+      "type": "ops",
+      "description": "Retro cuantitativo de los reviews multi-ronda (71 rechazos en 43 issues sobre 179 eventos hasta main@293938fc): taxonomía de fallos recurrentes (prueba no discriminante, carreras y ciclo de vida del dueño, gates mecánicos y trazabilidad, status vs evidencia, alcance del brief más estrecho que la invariante), causas raíz y propuesta de ajustes acotados (matriz de invariantes asíncronas, vida del dueño en Recon/Architecture Contract, evidencia de discriminación por guard, playbook de orden asíncrono, coherencia Status/Note, endurecimiento de gates, estabilización del harness y escalado temprano de alcance). Documento de propuesta: no cambia contratos ni estados por sí mismo."
+    },
+    {
       "path": "workflow/quality/quality-harness-spec-v2.1.md",
       "type": "spec",
       "description": "Spec original del Quality Harness (skills, agents, AGENTS.md, CI, remediation plane, learning loop) con su Estado de implementación reconciliado: qué shippeó como se planeó y qué divergió al Capability Integration Map. Documento de dirección, no contrato de BUILD."
