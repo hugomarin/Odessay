@@ -53,6 +53,7 @@ import { EditorEmptyState } from "@/components/editor/editor-empty-state"
 import { EditorFindReplace } from "@/components/editor/editor-find-replace"
 import { EditorSheetHeader } from "@/components/editor/editor-sheet-header"
 import { EditorShortcutsDialog } from "@/components/editor/editor-shortcuts-dialog"
+import { SourceExitConfirmationDialog } from "@/components/editor/source-exit-confirmation-dialog"
 import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { EditorRightPanel } from "@/components/editor/editor-right-panel"
@@ -124,6 +125,7 @@ import { getLocalDBScope, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
   ArtifactType,
   LocalCorrectionBlock,
+  LocalEditorSession,
   PublicationSuggestion,
   WritingLifecycle,
   WritingStatus,
@@ -152,15 +154,44 @@ import { useTauriCloseGuard } from "@/hooks/useTauriCloseGuard"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
 import { createHydrationGenerationOwner } from "@/lib/editor/hydration-generation"
 import {
+  clearAllRetainedUnconvertedSources,
+  clearRetainedUnconvertedSource,
+  getRetainedUnconvertedSource,
   initializeEditorSessionStore,
   openWritingTab,
   publishTabState,
+  retainUnconvertedSource,
   useEditorSessionStore,
 } from "@/lib/stores/editor-session-store"
 import { setSidebarMode } from "@/lib/stores/ui-shell-store"
 import { useHydrationProgress } from "@/lib/sync/hydration-progress"
 import { CATALOG_TITLE_CHANGE_EVENT, getLatestCatalogTitle } from "@/lib/events/catalog-title-events"
 import type { EditorNavigationMode } from "@/components/editor/panels/editor-navigation-sidebar"
+
+type PendingSourceRichApplication = {
+  editor: Editor
+  editorDocument: Editor["state"]["doc"]
+  writingId: string | null
+  editorTabId: string | null
+  draftWritingId: string | null
+  sourceRevision: number
+  sourceMarkdown: string
+  requiresExitConfirmation: boolean
+  applySnapshot: () => void
+}
+
+type SourceDraftOwner = {
+  tabId: string
+  writingId: string | null
+  draftWritingId: string | null
+}
+
+const SOURCE_CONVERSION_FAILURE_MESSAGE =
+  "Could not apply this source to Rich. Your Source text is still here and remains unsaved."
+
+function sourceDraftWritingId(owner: SourceDraftOwner) {
+  return owner.writingId ?? owner.draftWritingId
+}
 
 /** Debounce for the table of contents rebuild — see failure mode 3 of ODE-433. */
 const TABLE_OF_CONTENTS_DEBOUNCE_MS = 180
@@ -418,6 +449,22 @@ export function EditorShell({
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
+  const [sourceTransitionError, setSourceTransitionError] = useState<string | null>(null)
+  const [sourceExitWarningOpen, setSourceExitWarningOpen] = useState(false)
+  const sourceConversionRetryRef = useRef<(() => void) | null>(null)
+  const handleToggleModeRef = useRef<(nextMode: "rich" | "markdown") => void>(() => {})
+  const saveMarkdownSnapshotToRichRef = useRef<(source: string) => void>(() => {})
+  const sourceExitWarningResolverRef = useRef<((closeAnyway: boolean) => void) | null>(null)
+  const requestSourceExitConfirmation = useCallback(() => {
+    if (sourceExitWarningResolverRef.current) {
+      return Promise.resolve(false)
+    }
+
+    return new Promise<boolean>((resolve) => {
+      sourceExitWarningResolverRef.current = resolve
+      setSourceExitWarningOpen(true)
+    })
+  }, [])
   const [acceptedMarkdownForAnnotations, setAcceptedMarkdownForAnnotations] = useState("")
 
   const [bodyText, setBodyText] = useState("")
@@ -579,6 +626,8 @@ export function EditorShell({
   // poder ejecutarlo al desmontar en vez de perderlo.
   const pendingMarkdownSaveRef = useRef<(() => void) | null>(null)
   const isApplyingContentRef = useRef(false)
+  const sourceMarkdownRevisionRef = useRef(0)
+  const pendingSourceRichApplicationRef = useRef<PendingSourceRichApplication | null>(null)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
   // Único escritor: la suscripción síncrona al store (ODE-609, opción B de
   // ODE-608). Antes era un espejo por efecto más cuatro escrituras manuales.
@@ -617,6 +666,11 @@ export function EditorShell({
       target: { writingId: string | null; href?: string },
       reason: ActivationReason,
     ) => {
+      // The conversion notice belongs to the document that produced it. A
+      // retained Source draft restores its own notice after that document's
+      // hydration commits; no notice follows the shell into another tab.
+      sourceConversionRetryRef.current = null
+      setSourceTransitionError(null)
       setActiveWritingId(target.writingId)
       applyHydrationPhase(activationHydrates(target.writingId, reason) ? "loading" : "ready")
       setActivationSeq((current) => current + 1)
@@ -656,6 +710,44 @@ export function EditorShell({
   const createWorkspaceTabRef = useRef<((options?: { skipConfirm?: boolean }) => Promise<void>) | null>(null)
   const isCreatingWorkspaceTabRef = useRef(false)
   const ephemeralDraftWritingIdRef = useRef<string | null>(null)
+  const getActiveSourceDraftOwner = useCallback((): SourceDraftOwner => {
+    const writingId = currentWritingIdRef.current
+    const draftWritingId = writingId === null ? ephemeralDraftWritingIdRef.current : null
+    return {
+      tabId: activeEditorTabIdRef.current ?? writingId ?? draftWritingId ?? "unbound",
+      writingId,
+      draftWritingId,
+    }
+  }, [activeEditorTabIdRef, currentWritingIdRef, ephemeralDraftWritingIdRef])
+  const hasRetainedSourceForTab = useCallback(
+    (tab: LocalEditorSession["tabs"][number]) => {
+      const owner: SourceDraftOwner = {
+        tabId: tab.id,
+        writingId: tab.writing_id ?? null,
+        draftWritingId: tab.writing_id == null ? tab.draft_writing_id ?? null : null,
+      }
+      const retained = getRetainedUnconvertedSource(tab.writing_id ?? tab.draft_writing_id) !== null
+      const pending = pendingSourceRichApplicationRef.current
+      const pendingMatches = pending?.editorTabId === owner.tabId && pending.requiresExitConfirmation
+      return Boolean(retained || pendingMatches)
+    },
+    [],
+  )
+  const discardRetainedSourceForTab = useCallback(
+    (tab: LocalEditorSession["tabs"][number]) => {
+      const owner: SourceDraftOwner = {
+        tabId: tab.id,
+        writingId: tab.writing_id ?? null,
+        draftWritingId: tab.writing_id == null ? tab.draft_writing_id ?? null : null,
+      }
+      clearRetainedUnconvertedSource(sourceDraftWritingId(owner))
+      const pending = pendingSourceRichApplicationRef.current
+      if (pending?.editorTabId === owner.tabId) {
+        pendingSourceRichApplicationRef.current = null
+      }
+    },
+    [],
+  )
   // Last body captured when leaving the still-blank draft (ODE-478 case 4).
   // Keyed by ephemeralDraftWritingIdRef so a later, different draft never
   // accidentally restores an older one's leftover content.
@@ -1458,9 +1550,193 @@ export function EditorShell({
     updateDerivedEditorState,
   })
 
+  const clearSourceTransitionNotice = useCallback(() => {
+    sourceConversionRetryRef.current = null
+    setSourceTransitionError(null)
+  }, [])
+
+  const updateRetainedSourceAfterEdit = useCallback(
+    (source: string) => {
+      const owner = getActiveSourceDraftOwner()
+      const writingId = sourceDraftWritingId(owner)
+      if (getRetainedUnconvertedSource(writingId) !== null) {
+        retainUnconvertedSource(writingId, source)
+      }
+    },
+    [getActiveSourceDraftOwner],
+  )
+
+  const showSourceConversionFailure = useCallback(
+    (source: string, error: unknown, retry: () => void) => {
+      console.error("[ODE-209] DesktopDocumentEngine.sourceToRich failed:", error)
+      const owner = getActiveSourceDraftOwner()
+      retainUnconvertedSource(sourceDraftWritingId(owner), source)
+      hasUnconfirmedLocalEditRef.current = true
+      sourceConversionRetryRef.current = retry
+      setSourceTransitionError(SOURCE_CONVERSION_FAILURE_MESSAGE)
+    },
+    [getActiveSourceDraftOwner, hasUnconfirmedLocalEditRef],
+  )
+
+  const convertDesktopSourceToRich = useCallback(
+    (source: string, retry: () => void) => {
+      const result = desktopDocumentEngine.sourceToRich(source)
+      if (!result.success) {
+        showSourceConversionFailure(source, result.error, retry)
+        return null
+      }
+
+      const owner = getActiveSourceDraftOwner()
+      clearRetainedUnconvertedSource(sourceDraftWritingId(owner))
+      clearSourceTransitionNotice()
+      return result.snapshot.bodyJson
+    },
+    [clearSourceTransitionNotice, getActiveSourceDraftOwner, showSourceConversionFailure],
+  )
+
+  const createSourceConversionRetry = useCallback(
+    (retry: () => void) => {
+      const retryEditor = editor
+      const retryWritingId = currentWritingIdRef.current
+      const retryEditorTabId = activeEditorTabIdRef.current
+      const retrySourceRevision = sourceMarkdownRevisionRef.current
+
+      return () => {
+        if (
+          !retryEditor ||
+          retryEditor.isDestroyed ||
+          editorInstanceRef.current !== retryEditor ||
+          currentWritingIdRef.current !== retryWritingId ||
+          activeEditorTabIdRef.current !== retryEditorTabId ||
+          sourceMarkdownRevisionRef.current !== retrySourceRevision ||
+          modeRef.current !== "markdown"
+        ) {
+          return
+        }
+
+        retry()
+      }
+    },
+    [activeEditorTabIdRef, currentWritingIdRef, editor, editorInstanceRef, modeRef, sourceMarkdownRevisionRef],
+  )
+
+  const handleRetrySourceConversion = useCallback(() => {
+    const retry = sourceConversionRetryRef.current
+    clearSourceTransitionNotice()
+    retry?.()
+  }, [clearSourceTransitionNotice])
+
+  const saveMarkdownSnapshotToRich = useCallback(
+    (source: string) => {
+      if (!editor) return
+
+      if (isDesktopRuntime()) {
+        const sourceContent = convertDesktopSourceToRich(
+          source,
+          createSourceConversionRetry(() => saveMarkdownSnapshotToRichRef.current(source)),
+        )
+        if (!sourceContent) return
+
+        isApplyingContentRef.current = true
+        try {
+          editor.commands.setContent(sourceContent)
+        } finally {
+          isApplyingContentRef.current = false
+        }
+      } else {
+        // Web has no `sourceToRich` branch; retain its existing adapter path.
+        isApplyingContentRef.current = true
+        editor.commands.setContent(materializeMarkdownForRichParser(source))
+        isApplyingContentRef.current = false
+      }
+
+      // In Markdown mode the textarea is the source of truth; do not derive
+      // markdownValue from TipTap, which serializes tables as HTML.
+      setBodyText(editor.getText())
+      void persistEditorSnapshot(editor)
+    },
+    [convertDesktopSourceToRich, createSourceConversionRetry, editor, isApplyingContentRef, persistEditorSnapshot],
+  )
+
+  useEffect(() => {
+    saveMarkdownSnapshotToRichRef.current = saveMarkdownSnapshotToRich
+  }, [saveMarkdownSnapshotToRich])
+
+  useEffect(() => {
+    if (!sessionLoaded || !editor || hydrationPhase !== "ready") return
+
+    const owner = getActiveSourceDraftOwner()
+    const retainedSource = getRetainedUnconvertedSource(sourceDraftWritingId(owner))
+    if (retainedSource === null) return
+
+    pendingSourceRichApplicationRef.current = null
+    sourceMarkdownRevisionRef.current += 1
+    setMarkdownValue(retainedSource)
+    setAcceptedMarkdownForAnnotations(retainedSource)
+    hasUnconfirmedLocalEditRef.current = true
+    applyEditorMode("markdown")
+    sourceConversionRetryRef.current = createSourceConversionRetry(() => {
+      saveMarkdownSnapshotToRichRef.current(retainedSource)
+    })
+    setSourceTransitionError(SOURCE_CONVERSION_FAILURE_MESSAGE)
+  }, [
+    activationSeq,
+    activeEditorTabIdRef,
+    applyEditorMode,
+    createSourceConversionRetry,
+    currentWritingId,
+    editor,
+    editorSession.active_tab_id,
+    getActiveSourceDraftOwner,
+    hasUnconfirmedLocalEditRef,
+    hydrationPhase,
+    sessionLoaded,
+  ])
+
+  const scheduleSourceMarkdownSave = useCallback(
+    (source: string) => {
+      if (markdownSaveTimeoutRef.current) {
+        window.clearTimeout(markdownSaveTimeoutRef.current)
+      }
+
+      applySyncStatus("saving")
+      markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
+        if (modeRef.current !== "markdown") {
+          markdownSaveTimeoutRef.current = null
+          return
+        }
+
+        saveMarkdownSnapshotToRich(source)
+        markdownSaveTimeoutRef.current = null
+      })
+    },
+    [applySyncStatus, markdownSaveTimeoutRef, modeRef, saveMarkdownSnapshotToRich, scheduleMarkdownSave],
+  )
+
   const handleToggleMode = useCallback(
     (nextMode: "rich" | "markdown") => {
       if (!editor || nextMode === modeRef.current) {
+        return
+      }
+
+      if (nextMode === "markdown" && pendingSourceRichApplicationRef.current) {
+        // The previous Rich surface never received its layout-ready signal.
+        // Discard that layout-bound snapshot, then keep the existing Source
+        // autosave contract for the latest text.
+        const pending = pendingSourceRichApplicationRef.current
+        pendingSourceRichApplicationRef.current = null
+        applyEditorMode("markdown")
+        if (
+          pending.editor === editor &&
+          pending.writingId === currentWritingIdRef.current &&
+          pending.editorTabId === activeEditorTabIdRef.current &&
+          pending.draftWritingId ===
+            (currentWritingIdRef.current === null ? ephemeralDraftWritingIdRef.current : null) &&
+          pending.sourceRevision === sourceMarkdownRevisionRef.current &&
+          pending.sourceMarkdown === markdownValue
+        ) {
+          scheduleSourceMarkdownSave(pending.sourceMarkdown)
+        }
         return
       }
 
@@ -1507,35 +1783,92 @@ export function EditorShell({
         )
       }
 
-      applyEditorMode("rich")
       setMarkdownValue(normalizedMarkdown)
       // Preserve EditorState and custom NodeViews for a clean mode round trip.
       if (currentRichMarkdown === normalizedMarkdown) {
+        clearSourceTransitionNotice()
+        applyEditorMode("rich")
         return
       }
 
-      isApplyingContentRef.current = true
+      let sourceContent: Parameters<typeof editor.commands.setContent>[0]
       if (isDesktopRuntime()) {
-        const result = desktopDocumentEngine.sourceToRich(normalizedMarkdown)
-        if (result.success) {
-          editor.commands.setContent(result.snapshot.bodyJson)
-        } else {
-          console.error("[ODE-209] DesktopDocumentEngine.sourceToRich failed:", result.error)
-          editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
-        }
+        sourceContent = convertDesktopSourceToRich(
+          normalizedMarkdown,
+          createSourceConversionRetry(() => handleToggleModeRef.current("rich")),
+        )
+        if (!sourceContent) return
       } else {
-        editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
+        sourceContent = materializeMarkdownForRichParser(normalizedMarkdown)
       }
-      isApplyingContentRef.current = false
-      updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
+
+      clearSourceTransitionNotice()
+      setMarkdownValue(normalizedMarkdown)
+      pendingSourceRichApplicationRef.current = {
+        editor,
+        editorDocument: editor.state.doc,
+        writingId: currentWritingIdRef.current,
+        editorTabId: activeEditorTabIdRef.current,
+        draftWritingId: currentWritingIdRef.current === null ? ephemeralDraftWritingIdRef.current : null,
+        sourceRevision: sourceMarkdownRevisionRef.current,
+        sourceMarkdown: normalizedMarkdown,
+        requiresExitConfirmation: hasUnconfirmedLocalEditRef.current,
+        applySnapshot: () => editor.commands.setContent(sourceContent),
+      }
+      applyEditorMode("rich")
     },
-    [editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState, applyEditorMode],
+    [
+      activeEditorTabIdRef,
+      applyEditorMode,
+      clearSourceTransitionNotice,
+      convertDesktopSourceToRich,
+      createSourceConversionRetry,
+      editor,
+      hasUnconfirmedLocalEditRef,
+      markdownValue,
+      scheduleSourceMarkdownSave,
+    ],
   )
+
+  useEffect(() => {
+    handleToggleModeRef.current = handleToggleMode
+  }, [handleToggleMode])
+
+  const handleRichLayoutReady = useCallback(() => {
+    const pending = pendingSourceRichApplicationRef.current
+    if (!pending || !editor || modeRef.current !== "rich") return
+
+    pendingSourceRichApplicationRef.current = null
+    if (
+      pending.editor !== editor ||
+      editor.isDestroyed ||
+      pending.writingId !== currentWritingIdRef.current ||
+      pending.editorTabId !== activeEditorTabIdRef.current ||
+      pending.draftWritingId !==
+        (currentWritingIdRef.current === null ? ephemeralDraftWritingIdRef.current : null) ||
+      pending.sourceRevision !== sourceMarkdownRevisionRef.current ||
+      pending.sourceMarkdown !== markdownValue ||
+      pending.editorDocument !== editor.state.doc
+    ) {
+      return
+    }
+
+    isApplyingContentRef.current = true
+    try {
+      pending.applySnapshot()
+    } finally {
+      isApplyingContentRef.current = false
+    }
+    updateDerivedEditorState(editor)
+    void persistEditorSnapshot(editor)
+  }, [activeEditorTabIdRef, editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState])
 
   const handleMarkdownChange = useCallback(
     (nextMarkdown: string) => {
       const normalizedMarkdown = convertHtmlTablesToMarkdown(nextMarkdown)
+      sourceMarkdownRevisionRef.current += 1
+      updateRetainedSourceAfterEdit(normalizedMarkdown)
+      clearSourceTransitionNotice()
       setMarkdownValue(normalizedMarkdown)
       // WATCH-07 — the markdown textarea's own onChange; see
       // hasUnconfirmedLocalEditRef's doc comment.
@@ -1544,34 +1877,9 @@ export function EditorShell({
       if (!editor) {
         return
       }
-
-      if (markdownSaveTimeoutRef.current) {
-        window.clearTimeout(markdownSaveTimeoutRef.current)
-      }
-
-      applySyncStatus("saving")
-
-      markdownSaveTimeoutRef.current = scheduleMarkdownSave(() => {
-        if (modeRef.current !== "markdown") {
-          markdownSaveTimeoutRef.current = null
-          return
-        }
-
-        isApplyingContentRef.current = true
-        const parsed = isDesktopRuntime() ? desktopDocumentEngine.sourceToRich(normalizedMarkdown) : null
-        editor.commands.setContent(
-          parsed?.success ? parsed.snapshot.bodyJson : materializeMarkdownForRichParser(normalizedMarkdown),
-        )
-        isApplyingContentRef.current = false
-        // Update metrics from TipTap but do NOT derive markdownValue from it —
-        // TipTap serializes table nodes as HTML, which would overwrite GFM textarea content.
-        // In Markdown mode the textarea is the source of truth; markdownValue is already correct.
-        setBodyText(editor.getText())
-        void persistEditorSnapshot(editor)
-        markdownSaveTimeoutRef.current = null
-      })
+      scheduleSourceMarkdownSave(normalizedMarkdown)
     },
-    [applySyncStatus, editor, persistEditorSnapshot, scheduleMarkdownSave],
+    [clearSourceTransitionNotice, editor, scheduleSourceMarkdownSave, updateRetainedSourceAfterEdit],
   )
 
   const handleInsertLink = useCallback(
@@ -1597,6 +1905,7 @@ export function EditorShell({
         const nextSelectionStart = start + 1
         const nextSelectionEnd = start + 1 + linkText.length
 
+        updateRetainedSourceAfterEdit(nextMarkdown)
         setMarkdownValue(nextMarkdown)
         hasUnconfirmedLocalEditRef.current = true
 
@@ -1656,7 +1965,15 @@ export function EditorShell({
           .run()
       }
     },
-    [applySyncStatus, editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, scheduleMarkdownSave],
+    [
+      applySyncStatus,
+      editor,
+      markdownValue,
+      persistEditorSnapshot,
+      queueMarkdownSelectionRestore,
+      scheduleMarkdownSave,
+      updateRetainedSourceAfterEdit,
+    ],
   )
 
   const handleInsertTable = useCallback(
@@ -1679,6 +1996,7 @@ export function EditorShell({
       const tableMarkdown = [header, separator, ...dataRows].join("\n")
 
       const nextMarkdown = markdownValue ? `${markdownValue}\n\n${tableMarkdown}\n` : `${tableMarkdown}\n`
+      updateRetainedSourceAfterEdit(nextMarkdown)
       setMarkdownValue(nextMarkdown)
       hasUnconfirmedLocalEditRef.current = true
       applySyncStatus("saving")
@@ -1707,7 +2025,7 @@ export function EditorShell({
         markdownSaveTimeoutRef.current = null
       })
     },
-    [applySyncStatus, mode, editor, markdownValue, persistEditorSnapshot, scheduleMarkdownSave],
+    [applySyncStatus, mode, editor, markdownValue, persistEditorSnapshot, scheduleMarkdownSave, updateRetainedSourceAfterEdit],
   )
 
   const handleInsertImage = useCallback(
@@ -1729,6 +2047,7 @@ export function EditorShell({
         const nextMarkdown = `${source.slice(0, start)}${imageMarkdown}${source.slice(end)}`
         const nextSelectionStart = start + imageMarkdown.length
 
+        updateRetainedSourceAfterEdit(nextMarkdown)
         setMarkdownValue(nextMarkdown)
         hasUnconfirmedLocalEditRef.current = true
         applySyncStatus("saving")
@@ -1766,7 +2085,7 @@ export function EditorShell({
         .run()
       void persistEditorSnapshot(editor)
     },
-    [applySyncStatus, editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, scheduleMarkdownSave],
+    [applySyncStatus, editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, scheduleMarkdownSave, updateRetainedSourceAfterEdit],
   )
 
   const handleBackupLocalImage = useCallback(async () => {
@@ -2004,6 +2323,9 @@ export function EditorShell({
     navigatedToDraftRef,
     persistenceCoordinator,
     prepareDocumentExit,
+    hasRetainedSourceForTab,
+    discardRetainedSourceForTab,
+    requestSourceExitConfirmation,
     setRenameModalOpen,
     setRenameModalSnapshot,
     titleRef,
@@ -2287,11 +2609,50 @@ export function EditorShell({
   // ODE-478 case 5 covered the explicit tab-close button; the window itself
   // had no equivalent guard, so quitting the app or closing the window mid
   // save abandoned it the same way (ODE-478 follow-up).
+  const resolveSourceExitWarning = useCallback((closeAnyway: boolean) => {
+    const resolve = sourceExitWarningResolverRef.current
+    if (!resolve) return
+
+    sourceExitWarningResolverRef.current = null
+    setSourceExitWarningOpen(false)
+    resolve(closeAnyway)
+  }, [])
+
   const settleBeforeClose = useCallback(async () => {
     flushQueuedRichModeUpdate()
     flushPendingMarkdownSave()
     await persistenceCoordinator.settle()
-  }, [flushPendingMarkdownSave, flushQueuedRichModeUpdate, persistenceCoordinator])
+
+    const hasRetainedOrUnappliedSource = editorSession.tabs.some((tab) => hasRetainedSourceForTab(tab))
+    const hasActiveDirtySource = modeRef.current === "markdown" && hasUnconfirmedLocalEditRef.current
+    if (!hasActiveDirtySource && !hasRetainedOrUnappliedSource) {
+      return true
+    }
+
+    const closeAnyway = await requestSourceExitConfirmation()
+    if (closeAnyway) {
+      clearAllRetainedUnconvertedSources()
+    }
+    return closeAnyway
+  }, [
+    editorSession.tabs,
+    flushPendingMarkdownSave,
+    flushQueuedRichModeUpdate,
+    hasRetainedSourceForTab,
+    hasUnconfirmedLocalEditRef,
+    modeRef,
+    persistenceCoordinator,
+    requestSourceExitConfirmation,
+  ])
+
+  useEffect(() => {
+    return () => {
+      const resolve = sourceExitWarningResolverRef.current
+      sourceExitWarningResolverRef.current = null
+      resolve?.(false)
+    }
+  }, [])
+
   useTauriCloseGuard(settleBeforeClose)
 
   // Picks up a file opened via Cmd+O from outside Write (see useGlobalOpenFileMenu).
@@ -2636,6 +2997,10 @@ export function EditorShell({
                     editor={editor}
                     mode={mode}
                     markdownValue={markdownValue}
+                    sourceTransitionError={sourceTransitionError}
+                    onRetrySourceConversion={handleRetrySourceConversion}
+                    onKeepEditingInSource={clearSourceTransitionNotice}
+                    onRichLayoutReady={handleRichLayoutReady}
                     onMarkdownChange={handleMarkdownChange}
                     onMarkdownSelectionChange={(selection) => {
                       const writingId = markdownSelectionOwnerId(currentWritingId)
@@ -3096,6 +3461,13 @@ export function EditorShell({
         type={pendingAnnotation?.annotationType ?? "personal"}
         onConfirm={handleConfirmAnnotation}
         onCancel={() => setPendingAnnotation(null)}
+      />
+
+      <SourceExitConfirmationDialog
+        open={sourceExitWarningOpen}
+        onOpenChange={(open) => !open && resolveSourceExitWarning(false)}
+        onKeepEditing={() => resolveSourceExitWarning(false)}
+        onCloseAnyway={() => resolveSourceExitWarning(true)}
       />
     </section>
   )

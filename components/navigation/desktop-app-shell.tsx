@@ -1,14 +1,20 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/navigation/sidebar"
+import { SourceExitConfirmationDialog } from "@/components/editor/source-exit-confirmation-dialog"
+import { hasActiveEditorCloseGuard, useTauriCloseGuard } from "@/hooks/useTauriCloseGuard"
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { useGlobalOpenFileMenu } from "@/hooks/useGlobalOpenFileMenu"
 import { useWorkspaceReconciler } from "@/hooks/useWorkspaceReconciler"
 import { useCatalogEditorSessionSync } from "@/hooks/useCatalogEditorSessionSync"
 import { getAuthService } from "@/lib/services/auth-service-factory"
 import type { AccountIdentity } from "@/lib/services/contracts/auth-service"
+import {
+  clearAllRetainedUnconvertedSources,
+  hasRetainedUnconvertedSources,
+} from "@/lib/stores/editor-session-store"
 
 type ShellUser = {
   displayName: string | null
@@ -18,9 +24,54 @@ type ShellUser = {
 
 const ANON_USER: ShellUser = { email: null, displayName: null, username: null }
 
+function isWriteRoute(pathname: string) {
+  return pathname === "/write" || pathname.startsWith("/write/")
+}
+
+export function shouldHandleRetainedSourceWindowClose(pathname: string) {
+  if (isWriteRoute(pathname) || hasActiveEditorCloseGuard()) return false
+  return hasRetainedUnconvertedSources()
+}
+
 export function DesktopAppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [user, setUser] = useState<ShellUser>(ANON_USER)
+  const [sourceExitWarningOpen, setSourceExitWarningOpen] = useState(false)
+  const sourceExitWarningResolverRef = useRef<((closeAnyway: boolean) => void) | null>(null)
+
+  const requestSourceExitConfirmation = useCallback(() => {
+    if (sourceExitWarningResolverRef.current) {
+      return Promise.resolve(false)
+    }
+
+    return new Promise<boolean>((resolve) => {
+      sourceExitWarningResolverRef.current = resolve
+      setSourceExitWarningOpen(true)
+    })
+  }, [])
+
+  const resolveSourceExitWarning = useCallback((closeAnyway: boolean) => {
+    const resolve = sourceExitWarningResolverRef.current
+    if (!resolve) return
+
+    sourceExitWarningResolverRef.current = null
+    setSourceExitWarningOpen(false)
+    if (closeAnyway) clearAllRetainedUnconvertedSources()
+    resolve(closeAnyway)
+  }, [])
+
+  const shouldHandleRetainedSourceClose = useCallback(() => {
+    return shouldHandleRetainedSourceWindowClose(window.location.pathname)
+  }, [])
+
+  useTauriCloseGuard(
+    async () => {
+      if (!hasRetainedUnconvertedSources()) return true
+      return requestSourceExitConfirmation()
+    },
+    shouldHandleRetainedSourceClose,
+    "app",
+  )
 
   useGlobalOpenFileMenu()
   useCatalogEditorSessionSync()
@@ -88,9 +139,23 @@ export function DesktopAppShell({ children }: { children: React.ReactNode }) {
     }
   }, [router])
 
+  useEffect(() => {
+    return () => {
+      const resolve = sourceExitWarningResolverRef.current
+      sourceExitWarningResolverRef.current = null
+      resolve?.(false)
+    }
+  }, [])
+
   return (
     <Sidebar initialSidebarMode="expanded" user={user}>
       {children}
+      <SourceExitConfirmationDialog
+        open={sourceExitWarningOpen}
+        onOpenChange={(open) => !open && resolveSourceExitWarning(false)}
+        onKeepEditing={() => resolveSourceExitWarning(false)}
+        onCloseAnyway={() => resolveSourceExitWarning(true)}
+      />
     </Sidebar>
   )
 }

@@ -88,9 +88,19 @@ const {
   waitFor,
   waitForMarkdownContaining,
 } = await import("./support/editor-shell-harness")
-const { createDesktopWorkspace, destroyDesktopWorkspace, readWorkspaceMarkdown, resetDesktopWorkspace } =
+const {
+  createDesktopWorkspace,
+  destroyDesktopWorkspace,
+  desktopWorkspaceRoot,
+  readWorkspaceMarkdown,
+  resetDesktopWorkspace,
+} =
   await import("./support/editor-shell-desktop-doubles")
-const { holdWriteFile, writeFileCalls } = await import("./integration/documents/support/real-desktop-doubles")
+const {
+  catalogMutationsDouble,
+  holdWriteFile,
+  writeFileCalls,
+} = await import("./integration/documents/support/real-desktop-doubles")
 const { DESKTOP_PERSISTENCE_DEBOUNCE_MS } = await import("@/components/editor/editor-shell")
 const { getDocumentCatalog } = await import("@/lib/services/document-catalog-factory")
 const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
@@ -99,6 +109,7 @@ const { writeEditorSession } = await import("@/lib/editor/session-persistence")
 
 const TEST_TIMEOUT_MS = 90_000
 const SAVE_WINDOW_MS = DESKTOP_PERSISTENCE_DEBOUNCE_MS + 1_000
+const DB_PATH_SUFFIX = "config/desktop-index.sqlite3"
 
 const MASTER_SOURCE = readFileSync("tests/fixtures/document-components/valid/master.md", "utf8")
 const MASTER_SEED = "DOC_COMPONENT_MASTER_SEED"
@@ -300,9 +311,24 @@ describe("Fase 12 — R01/R12: componentes por Source, Rich, disco y reapertura 
       expect(mounted!.editor().getText()).toContain("INFO_BODY_MASTER")
 
       // R01: Rich → Markdown → Rich sin editar no reescribe contenido ni versión.
+      const sessionBefore = getEditorSessionState().session
+      const activeTabBefore = sessionBefore.tabs.find((tab) => tab.id === sessionBefore.active_tab_id)
+      expect(activeTabBefore?.writing_id).toBe(writingId)
+      const editorBefore = mounted!.editor()
+      const documentBefore = editorBefore.state.doc
+      const selectionBefore = {
+        from: editorBefore.state.selection.from,
+        to: editorBefore.state.selection.to,
+      }
       const writesBefore = writeFileCalls().filter((call) => call.path === file.path).length
       const catalog = await getDocumentCatalog()
       const versionBefore = (await catalog.getById(writingId))?.version
+      const mutationsBefore = catalogMutationsDouble(
+        `${desktopWorkspaceRoot()}/${DB_PATH_SUFFIX}`,
+      )
+        .filter((mutation) => mutation.documentId === writingId)
+        .map((mutation) => mutation.id)
+        .sort()
       await switchMode("Markdown")
       expect(markdownSource()?.value, "Source muestra los bytes del disco").toBe(savedBefore.replace(/(?:\r?\n)+$/, ""))
       await switchMode("Rich")
@@ -314,6 +340,19 @@ describe("Fase 12 — R01/R12: componentes por Source, Rich, disco y reapertura 
       ).toBe(writesBefore)
       expect(await contentsOf(file.path)).toBe(savedBefore)
       expect(versionAfter, "un toggle limpio no cambia la versión durable").toBe(versionBefore)
+      const sessionAfter = getEditorSessionState().session
+      const activeTabAfter = sessionAfter.tabs.find((tab) => tab.id === sessionAfter.active_tab_id)
+      expect(sessionAfter.active_tab_id, "el toggle conserva la pestaña activa").toBe(sessionBefore.active_tab_id)
+      expect(activeTabAfter?.writing_id, "el toggle conserva la identidad documental").toBe(writingId)
+      expect(mounted!.editor().state.doc, "el toggle conserva el mismo documento Rich").toBe(documentBefore)
+      expect(mounted!.editor().state.selection).toMatchObject(selectionBefore)
+      expect(
+        catalogMutationsDouble(`${desktopWorkspaceRoot()}/${DB_PATH_SUFFIX}`)
+          .filter((mutation) => mutation.documentId === writingId)
+          .map((mutation) => mutation.id)
+          .sort(),
+        "un toggle limpio no agrega una mutación de sync",
+      ).toEqual(mutationsBefore)
 
       // Control positivo del recuento: una edición real sí escribe.
       await placeCaretAfter(MASTER_SEED)

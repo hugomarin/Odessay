@@ -283,6 +283,67 @@ export type EditorShellTestProps = {
   withAppMain?: boolean
 }
 
+let richLayoutHarnessUsers = 0
+let richLayoutOriginalResizeObserver: PropertyDescriptor | undefined
+let richLayoutHarnessResizeObserver: typeof ResizeObserver | null = null
+
+/**
+ * happy-dom has no layout engine, so EditorShell's normal mounted-surface
+ * tests receive a stable positive Rich measurement. Tests that exercise a
+ * pending or zero-size surface can override this at the browser boundary.
+ */
+function installRichLayoutHarness(): () => void {
+  if (richLayoutHarnessUsers === 0) {
+    richLayoutOriginalResizeObserver = Object.getOwnPropertyDescriptor(globalThis, "ResizeObserver")
+    richLayoutHarnessResizeObserver = class implements ResizeObserver {
+      private readonly observed = new Set<Element>()
+
+      constructor(private readonly callback: ResizeObserverCallback) {}
+
+      observe(target: Element) {
+        this.observed.add(target)
+        queueMicrotask(() => {
+          if (!this.observed.has(target)) return
+          const entry = {
+            target,
+            contentRect: new DOMRect(0, 0, 800, 600),
+          } as ResizeObserverEntry
+          this.callback([entry], this)
+        })
+      }
+
+      unobserve(target: Element) {
+        this.observed.delete(target)
+      }
+
+      disconnect() {
+        this.observed.clear()
+      }
+    }
+    Object.defineProperty(globalThis, "ResizeObserver", {
+      configurable: true,
+      writable: true,
+      value: richLayoutHarnessResizeObserver,
+    })
+  }
+  richLayoutHarnessUsers += 1
+
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    richLayoutHarnessUsers = Math.max(0, richLayoutHarnessUsers - 1)
+    if (richLayoutHarnessUsers !== 0) return
+    if (richLayoutOriginalResizeObserver) {
+      Object.defineProperty(globalThis, "ResizeObserver", richLayoutOriginalResizeObserver)
+    } else {
+      Reflect.deleteProperty(globalThis, "ResizeObserver")
+    }
+    richLayoutOriginalResizeObserver = undefined
+    richLayoutHarnessResizeObserver = null
+  }
+}
+
 /**
  * Monta `EditorShell` de verdad, con React DOM y `act`. Devuelve drivers en
  * vez de obligar a cada test a reconstruir el andamiaje.
@@ -291,6 +352,7 @@ export async function mountEditorShell(
   props: EditorShellTestProps = {},
 ): Promise<MountedEditorShell> {
   ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  const releaseRichLayoutHarness = installRichLayoutHarness()
 
   const container = document.createElement("div")
   const appMain = props.withAppMain ? document.createElement("main") : null
@@ -324,6 +386,7 @@ export async function mountEditorShell(
       await act(async () => {
         root.unmount()
       })
+      releaseRichLayoutHarness()
       container.remove()
       appMain?.remove()
       await quiesceSyncWorker()
