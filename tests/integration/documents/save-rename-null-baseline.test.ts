@@ -23,6 +23,8 @@ import {
   tauriOpenFileDouble,
   tauriPathModuleDouble,
   tauriRenameFileDouble,
+  tauriSettingsReadDouble,
+  tauriSettingsWriteDouble,
   tauriWorkspaceSyncDouble,
   tauriWorkspaceTouchFileDouble,
   tauriWriteFileDouble,
@@ -45,6 +47,8 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   // que el `rename_file` de Rust (ver `FilesystemDocumentService.renameWriting`).
   tauriRenameFile: tauriRenameFileDouble,
   tauriRelocateFile: unimplemented("tauriRelocateFile"),
+  tauriSettingsRead: tauriSettingsReadDouble,
+  tauriSettingsWrite: tauriSettingsWriteDouble,
   tauriWorkspaceSync: tauriWorkspaceSyncDouble,
   tauriWorkspaceTouchFile: tauriWorkspaceTouchFileDouble,
   tauriCatalogDualWrite: tauriCatalogDualWriteDouble,

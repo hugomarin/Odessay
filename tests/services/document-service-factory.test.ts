@@ -67,6 +67,9 @@ vi.mock("@/lib/services/desktop/desktop-settings-service", () => ({
     getBindingRoots = mocks.getBindingRoots
     getDesktopSettings = mocks.getDesktopSettings
     upsertBindingRoot = mocks.upsertBindingRoot
+    getPendingRelocationRepairs = async () => []
+    upsertPendingRelocationRepair = async () => undefined
+    removePendingRelocationRepair = async () => undefined
   },
 }))
 vi.mock("@/lib/services/desktop/desktop-workspace-reconciler", () => ({
@@ -163,6 +166,7 @@ describe("desktop document service after compatibility retirement", () => {
     })
     mocks.scheduleSyncFlush.mockResolvedValue({ data: undefined, error: null })
     mocks.catalogGet.mockResolvedValue(catalogRecord)
+    mocks.tauriOpen.mockResolvedValue("# Letter\n\nHello\n")
     mocks.openFile.mockResolvedValue({
       data: { ...writing, id: path, content: { ...writing.content, markdown: "Hello", richText: null } },
       error: null,

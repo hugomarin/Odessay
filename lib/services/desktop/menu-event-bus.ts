@@ -5,7 +5,7 @@ export type MenuActionHandler = () => void | Promise<void>
 const handlerStacks = new Map<string, MenuActionHandler[]>()
 const channelRegistrations = new Map<string, Promise<boolean>>()
 
-function dispatch(action: string): void {
+function dispatch(action: string): Promise<void> | void {
   const stack = handlerStacks.get(action)
   const handler = stack?.[stack.length - 1]
   if (!handler) return
@@ -13,7 +13,7 @@ function dispatch(action: string): void {
   try {
     const result = handler()
     if (result && typeof result.then === "function") {
-      result.catch((err) => {
+      return result.catch((err) => {
         console.error(`Menu event bus: async handler for ${action} rejected`, err)
       })
     }

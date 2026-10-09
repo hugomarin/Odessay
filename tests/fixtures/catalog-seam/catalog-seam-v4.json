@@ -2390,6 +2390,15 @@
         },
         {
           "kind": "invoke",
+          "cmd": "settings_read",
+          "args": {
+            "configDir": "$CONFIG",
+            "key": "desktop_settings_v1"
+          },
+          "response": null
+        },
+        {
+          "kind": "invoke",
           "cmd": "catalog_get_by_id",
           "args": {
             "dbPath": "$DB",
