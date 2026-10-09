@@ -941,6 +941,148 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     TEST_TIMEOUT_MS,
   )
 
+  it.fails(
+    "restaura el Source fallido al salir a /desk y volver a /write con el mismo documento",
+    async () => {
+      const file = await createDocument("ODE540-ROUTE-BASE")
+      const writingId = activeTab()?.writing_id
+      if (!writingId) throw new Error("El documento no tiene identidad documental")
+
+      await switchMode("Markdown")
+      await typeInMarkdown("\nODE540-ROUTE-UNCONVERTED")
+      const exactSource = markdownSource()?.value
+      expect(exactSource, "el Source exacto existe antes del fallo").toContain("ODE540-ROUTE-UNCONVERTED")
+      expect(await failCurrentSourceConversion(), "sourceToRich falla desde el botón real").toBe(true)
+      expect(mounted!.container.querySelector('[role="status"]')?.textContent).toContain(
+        "Could not apply this source to Rich",
+      )
+
+      world.pathname = "/desk"
+      await mounted!.unmount()
+      mounted = null
+      expect(document.body.querySelector('[role="alertdialog"]'), "navegar a Desk no pide confirmación").toBeNull()
+
+      world.pathname = "/write"
+      mounted = await mountEditorShell({ writingId })
+      await waitFor(
+        () =>
+          mounted!.editor().getText().includes("ODE540-ROUTE-BASE") &&
+          document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") === "ready",
+        { label: "el mismo documento vuelve a estar hidratado", timeoutMs: 10_000 },
+      )
+      await flush(2)
+
+      const restoredSource = markdownSource()?.value ?? null
+      const noticeOnReturn = mounted.container.querySelector('[role="status"]')?.textContent ?? ""
+      const noticeVisibleOnReturn = noticeOnReturn.includes("Could not apply this source to Rich")
+      const retryButton = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>("button")).find(
+        (button) => button.textContent?.trim() === "Try again",
+      )
+      const fileUntouchedBeforeRetry = !(await contentsOf(file.path)).includes("ODE540-ROUTE-UNCONVERTED")
+      let retrySavedSource = false
+      let noticeAfterSuccessfulRetryReturn: string | null = null
+      let sourceAfterSuccessfulRetryReturn: string | null = null
+
+      if (restoredSource === exactSource && retryButton) {
+        await act(async () => retryButton.click())
+        await waitForFileMarkdownContaining(file.path, "ODE540-ROUTE-UNCONVERTED")
+        expect(mounted.editor().getText(), "el reintento aplica el Source al Rich canónico").toContain(
+          "ODE540-ROUTE-UNCONVERTED",
+        )
+        retrySavedSource = (await contentsOf(file.path)).includes("ODE540-ROUTE-UNCONVERTED")
+
+        world.pathname = "/desk"
+        await mounted.unmount()
+        mounted = null
+        world.pathname = "/write"
+        mounted = await mountEditorShell({ writingId })
+        await waitFor(
+          () =>
+            mounted!.editor().getText().includes("ODE540-ROUTE-UNCONVERTED") &&
+            document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") === "ready",
+          { label: "el documento queda en Rich tras el reintento confirmado", timeoutMs: 10_000 },
+        )
+        await flush(2)
+        noticeAfterSuccessfulRetryReturn = mounted.container.querySelector('[role="status"]')?.textContent ?? null
+        sourceAfterSuccessfulRetryReturn = markdownSource()?.value ?? null
+      }
+
+      expect({
+        restoredSource,
+        noticeVisibleOnReturn,
+        retryAvailable: Boolean(retryButton),
+        dialogOpenOnReturn: Boolean(document.body.querySelector('[role="alertdialog"]')),
+        fileUntouchedBeforeRetry,
+        retrySavedSource,
+        noticeAfterSuccessfulRetryReturn: Boolean(
+          noticeAfterSuccessfulRetryReturn?.includes("Could not apply this source to Rich"),
+        ),
+        sourceAfterSuccessfulRetryReturn,
+      }).toEqual({
+        restoredSource: exactSource,
+        noticeVisibleOnReturn: true,
+        retryAvailable: true,
+        dialogOpenOnReturn: false,
+        fileUntouchedBeforeRetry: true,
+        retrySavedSource: true,
+        noticeAfterSuccessfulRetryReturn: false,
+        sourceAfterSuccessfulRetryReturn: expect.stringContaining("ODE540-ROUTE-UNCONVERTED"),
+      })
+    },
+    TEST_TIMEOUT_MS,
+  )
+
+  it(
+    "navegar tras una conversión correcta no deja un Source de fallo retenido",
+    async () => {
+      const file = await createDocument("ODE540-ROUTE-POSITIVE-BASE")
+      const writingId = activeTab()?.writing_id
+      if (!writingId) throw new Error("El documento no tiene identidad documental")
+
+      await switchMode("Markdown")
+      await typeInMarkdown("\nODE540-ROUTE-POSITIVE-SOURCE")
+      await switchMode("Rich")
+      await waitFor(
+        () => mounted!.editor().getText().includes("ODE540-ROUTE-POSITIVE-SOURCE"),
+        { label: "la conversión correcta aplica el Source al Rich" },
+      )
+      await waitForFileMarkdownContaining(file.path, "ODE540-ROUTE-POSITIVE-SOURCE")
+      expect(mounted!.container.querySelector('[role="status"]')?.textContent ?? "").not.toContain(
+        "Could not apply this source to Rich",
+      )
+
+      world.pathname = "/desk"
+      await mounted!.unmount()
+      mounted = null
+      world.pathname = "/write"
+      mounted = await mountEditorShell({ writingId })
+      await waitFor(
+        () =>
+          mounted!.editor().getText().includes("ODE540-ROUTE-POSITIVE-SOURCE") &&
+          document.querySelector('[data-page="editor"]')?.getAttribute("data-hydration-phase") === "ready",
+        { label: "la escritura correcta se restaura tras la navegación", timeoutMs: 10_000 },
+      )
+      await flush(2)
+
+      expect({
+        sourceConversionNotice: Boolean(
+          mounted.container.querySelector('[role="status"]')?.textContent?.includes("Could not apply this source to Rich"),
+        ),
+        retryAvailable: Array.from(mounted.container.querySelectorAll("button")).some(
+          (button) => button.textContent?.trim() === "Try again",
+        ),
+        dialogOpen: Boolean(document.body.querySelector('[role="alertdialog"]')),
+        savedSource: await contentsOf(file.path),
+      }).toEqual({
+        sourceConversionNotice: false,
+        retryAvailable: false,
+        dialogOpen: false,
+        savedSource: expect.stringContaining("ODE540-ROUTE-POSITIVE-SOURCE"),
+      })
+    },
+    TEST_TIMEOUT_MS,
+  )
+
   it(
     "pide confirmación antes de cerrar una pestaña con Source sin convertir",
     async () => {
