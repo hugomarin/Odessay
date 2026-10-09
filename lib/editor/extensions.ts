@@ -24,6 +24,7 @@ import {
 } from "@tiptap/extension-table-of-contents"
 import { TableRow } from "@tiptap/extension-table-row"
 import Text from "@tiptap/extension-text"
+import { Gapcursor } from "@tiptap/extensions"
 import { Markdown } from "tiptap-markdown"
 import { FindReplaceExtension } from "@/lib/editor/find-replace"
 import { FootnoteExtension } from "@/lib/editor/footnote-extension"
@@ -92,6 +93,7 @@ export const createEditorExtensions = (options: CreateEditorExtensionsOptions = 
     ControlledDocument,
     Paragraph,
     Text,
+    Gapcursor,
     Heading.extend({ addKeyboardShortcuts: () => ({}) }).configure({ levels: [1, 2, 3] }),
     // Semantic marks precede native inline marks so the serializer opens the
     // canonical chain (Annotation → Entity → Highlight) before native marks,
