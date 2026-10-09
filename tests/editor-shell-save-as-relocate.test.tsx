@@ -434,7 +434,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "ODE-693: el intent durable precede al move y se borra después del commit completo",
     async () => {
       const { file } = await createDocument()
@@ -467,7 +467,7 @@ describe("ODE-574 — Save As mueve el documento (ODE-401/ODE-402)", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "ODE-693: si falla la escritura durable del intent, Save As no mueve ni cambia el documento",
     async () => {
       const { file, title } = await createDocument()
