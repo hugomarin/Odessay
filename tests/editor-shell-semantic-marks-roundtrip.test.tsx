@@ -310,6 +310,20 @@ function button(label: string) {
   ) ?? null
 }
 
+async function waitForPersistedSemanticMarks(
+  writingId: string,
+  label: string,
+  matches: (marks: SemanticMarkResult[]) => boolean,
+) {
+  return shellHarness.waitForAsync(
+    async () => {
+      const writing = await localDB.writings.get(writingId)
+      return writing && matches(semanticMarks(writing.body_json)) ? writing : null
+    },
+    { label, timeoutMs: 20_000 },
+  )
+}
+
 async function pointerDown(element: Element | null) {
   if (!element) throw new Error("Element not found.")
   await act(async () => {
@@ -374,6 +388,36 @@ async function applyPopupHighlightByKeyboard(label: string) {
   await pressPopupButton(label, " ")
 }
 
+async function applyPopupEntityByPointer(label: string) {
+  await pointerDown(await shellHarness.waitFor(() => popupButton("More mark options"), {
+    label: "opción More del popup Entity por puntero",
+    timeoutMs: 20_000,
+  }))
+  await pointerDown(await shellHarness.waitFor(() => popupButton("Entity"), {
+    label: "opción Entity del popup por puntero",
+    timeoutMs: 20_000,
+  }))
+  await pointerDown(await shellHarness.waitFor(() => popupButton(label), {
+    label: `tipo Entity ${label} del popup por puntero`,
+    timeoutMs: 20_000,
+  }))
+}
+
+async function applyPopupHighlightByPointer(label: string) {
+  await pointerDown(await shellHarness.waitFor(() => popupButton("More mark options"), {
+    label: "opción More del popup Highlight por puntero",
+    timeoutMs: 20_000,
+  }))
+  await pointerDown(await shellHarness.waitFor(() => popupButton("Highlight"), {
+    label: "opción Highlight del popup por puntero",
+    timeoutMs: 20_000,
+  }))
+  await pointerDown(await shellHarness.waitFor(() => popupButton(label), {
+    label: `color Highlight ${label} del popup por puntero`,
+    timeoutMs: 20_000,
+  }))
+}
+
 async function pressEditorHistoryShortcut(key: "z", shift = false) {
   const mac = /Mac/i.test(navigator.platform || navigator.userAgent)
   await act(async () => {
@@ -388,7 +432,6 @@ async function pressEditorHistoryShortcut(key: "z", shift = false) {
       }),
     )
   })
-  await shellHarness.flush(2)
 }
 
 async function applyEntityFromPopup() {
@@ -548,7 +591,7 @@ describe("ODE-532 pending semantic mark ownership", () => {
     await shellHarness.waitFor(() => mountedShell!.editor().getText().includes(ROUNDTRIP_TEXT), {
       label: "hidratación del documento con marcas semánticas",
     })
-    await shellHarness.flush(3)
+    await shellHarness.waitForHydrationReady("round-trip inicial después de hidratar")
 
     await shellHarness.selectEditorText("company")
     await shellHarness.waitFor(() => document.querySelector('[data-testid="selection-popup"]'), {
@@ -583,7 +626,7 @@ describe("ODE-532 pending semantic mark ownership", () => {
           ? writing
           : null
       },
-      { label: "Entity y Highlight guardados en body_json" },
+      { label: "Entity y Highlight guardados en body_json", timeoutMs: 20_000 },
     )
     const persistedMarks = semanticMarks(persisted.body_json)
     expect(persistedMarks).toHaveLength(2)
@@ -641,6 +684,127 @@ describe("ODE-532 pending semantic mark ownership", () => {
 
     const reopened = semanticMarks(mountedShell.editor().getJSON())
     expect(reopened).toEqual(persistedMarks)
+    expect(serializeDocumentToMarkdown(mountedShell.editor().getJSON() as never)).toBe(persistedMarkdown)
+  }, 30_000)
+
+  it("applies Entity and Highlight by pointer, undoes/redoes them, and restores after reopening", async () => {
+    const writingId = "85666666-6666-4666-8666-666666666666"
+    shellHarness.resetEditorShellWorld()
+    await localDB.writings.save(makeLocalWriting(writingId, ROUNDTRIP_TEXT, "Pointer semantic marks"))
+    await writeEditorSession(createEmptyEditorSession())
+
+    mountedShell = await shellHarness.mountEditorShell({ writingId })
+    await shellHarness.waitFor(() => getEditorSessionState().loaded || null, {
+      label: "sesión cargada antes de los controles por puntero",
+      timeoutMs: 20_000,
+    })
+    await shellHarness.waitFor(() => mountedShell!.editor().getText().includes(ROUNDTRIP_TEXT) || null, {
+      label: "documento listo para los controles por puntero",
+      timeoutMs: 20_000,
+    })
+    await shellHarness.waitForHydrationReady("controles por puntero después de hidratar")
+
+    await shellHarness.selectEditorText("company")
+    await shellHarness.waitFor(() => popupButton("More mark options"), {
+      label: "popup Entity real antes del control por puntero",
+      timeoutMs: 20_000,
+    })
+    await applyPopupEntityByPointer("Company")
+    await shellHarness.waitFor(() => !document.querySelector('[data-testid="selection-popup"]') || null, {
+      label: "popup Entity cerrado tras el puntero",
+      timeoutMs: 20_000,
+    })
+    const entity = semanticMarks(mountedShell.editor().getJSON()).find((mark) => mark.kind === "entity")
+    expect(entity).toEqual({ kind: "entity", text: "company", id: expect.any(String), type: "company" })
+    if (entity?.kind !== "entity") throw new Error("El control positivo por puntero no creó Entity")
+    await waitForPersistedSemanticMarks(writingId, "Entity aplicada por puntero llega al body_json durable", (marks) =>
+      marks.some((mark) => mark.kind === "entity"),
+    )
+
+    // Consume the popup's one-shot focus suppression with the same fresh
+    // selection movement used by the keyboard round-trip control.
+    await shellHarness.selectEditorText("A")
+    await shellHarness.selectEditorText("A")
+    await shellHarness.selectEditorText("memorable")
+    await shellHarness.waitFor(() => popupButton("More mark options"), {
+      label: "popup Highlight real antes del control por puntero",
+      timeoutMs: 20_000,
+    })
+    await applyPopupHighlightByPointer("Highlight Indigo")
+    await shellHarness.waitFor(() => !document.querySelector('[data-testid="selection-popup"]') || null, {
+      label: "popup Highlight cerrado tras el puntero",
+      timeoutMs: 20_000,
+    })
+    const highlight = semanticMarks(mountedShell.editor().getJSON()).find((mark) => mark.kind === "highlight")
+    expect(highlight).toEqual({ kind: "highlight", text: "memorable", color: "indigo" })
+    expect(mountedShell.editor().getText(), "aplicar marks por puntero conserva el texto").toBe(ROUNDTRIP_TEXT)
+
+    const bothPersisted = await waitForPersistedSemanticMarks(
+      writingId,
+      "Entity y Highlight por puntero llegan al body_json durable",
+      (marks) => marks.some((mark) => mark.kind === "entity") && marks.some((mark) => mark.kind === "highlight"),
+    )
+    const bothMarks = semanticMarks(bothPersisted.body_json)
+    expect(bothMarks).toContainEqual(entity)
+    expect(bothMarks).toContainEqual(highlight)
+    const persistedMarkdown = serializeDocumentToMarkdown(bothPersisted.body_json as never)
+
+    await pressEditorHistoryShortcut("z")
+    await shellHarness.waitFor(
+      () => semanticMarks(mountedShell!.editor().getJSON()).every((mark) => mark.kind !== "highlight") || null,
+      { label: "undo por teclado retira Highlight aplicado por puntero", timeoutMs: 20_000 },
+    )
+    expect(mountedShell.editor().getText(), "undo de Highlight conserva el texto").toBe(ROUNDTRIP_TEXT)
+    const entityAfterHighlightUndo = await waitForPersistedSemanticMarks(
+      writingId,
+      "undo de Highlight deja Entity en el body_json durable",
+      (marks) => marks.length === 1 && marks[0]?.kind === "entity",
+    )
+    expect(semanticMarks(entityAfterHighlightUndo.body_json)).toEqual([entity])
+
+    await pressEditorHistoryShortcut("z")
+    await shellHarness.waitFor(
+      () => semanticMarks(mountedShell!.editor().getJSON()).length === 0 || null,
+      { label: "undo por teclado retira Entity aplicada por puntero", timeoutMs: 20_000 },
+    )
+    expect(mountedShell.editor().getText(), "undo de Entity conserva el texto").toBe(ROUNDTRIP_TEXT)
+    const marksAfterUndo = await waitForPersistedSemanticMarks(
+      writingId,
+      "undo de Entity queda durable sin marks",
+      (marks) => marks.length === 0,
+    )
+    expect(semanticMarks(marksAfterUndo.body_json)).toEqual([])
+
+    await pressEditorHistoryShortcut("z", true)
+    await shellHarness.waitFor(
+      () => semanticMarks(mountedShell!.editor().getJSON()).some((mark) => mark.kind === "entity") || null,
+      { label: "redo por teclado restaura Entity aplicada por puntero", timeoutMs: 20_000 },
+    )
+    expect(mountedShell.editor().getText(), "redo de Entity conserva el texto").toBe(ROUNDTRIP_TEXT)
+    const entityAfterRedo = await waitForPersistedSemanticMarks(
+      writingId,
+      "redo de Entity llega al body_json durable",
+      (marks) => marks.length === 1 && marks[0]?.kind === "entity",
+    )
+    expect(semanticMarks(entityAfterRedo.body_json)).toEqual([entity])
+
+    await pressEditorHistoryShortcut("z", true)
+    await shellHarness.waitFor(
+      () => semanticMarks(mountedShell!.editor().getJSON()).some((mark) => mark.kind === "highlight") || null,
+      { label: "redo por teclado restaura Highlight aplicado por puntero", timeoutMs: 20_000 },
+    )
+    expect(mountedShell.editor().getText(), "redo de Highlight conserva el texto").toBe(ROUNDTRIP_TEXT)
+    const bothAfterRedo = await waitForPersistedSemanticMarks(
+      writingId,
+      "redo de Highlight restaura ambas marcas en body_json",
+      (marks) => marks.some((mark) => mark.kind === "entity") && marks.some((mark) => mark.kind === "highlight"),
+    )
+    expect(semanticMarks(bothAfterRedo.body_json)).toEqual(bothMarks)
+
+    await mountedShell.render({ writingId, key: "reopen-pointer-semantic-marks" })
+    await shellHarness.waitForHydrationReady("reapertura de marcas aplicadas por puntero")
+    expect(mountedShell.editor().getText(), "reopen conserva el texto sin cambios").toBe(ROUNDTRIP_TEXT)
+    expect(semanticMarks(mountedShell.editor().getJSON())).toEqual(bothMarks)
     expect(serializeDocumentToMarkdown(mountedShell.editor().getJSON() as never)).toBe(persistedMarkdown)
   }, 30_000)
 
@@ -767,32 +931,34 @@ describe("ODE-532 pending semantic mark ownership", () => {
         const writing = await localDB.writings.get(writingId)
         return semanticMarks(writing?.body_json).some((mark) => mark.kind === "entity") ? writing : null
       },
-      { label: "Entity durable antes del undo" },
+      { label: "Entity durable antes del undo", timeoutMs: 20_000 },
     )
     await pressEditorHistoryShortcut("z")
     await shellHarness.waitFor(
       () => semanticMarks(mountedShell!.editor().getJSON()).every((mark) => mark.kind !== "entity") || null,
-      { label: "undo real retira la Entity del editor" },
+      { label: "undo real retira la Entity del editor", timeoutMs: 20_000 },
     )
+    expect(mountedShell.editor().getText(), "undo de Entity conserva el texto").toBe(ROUNDTRIP_TEXT)
     await shellHarness.waitForAsync(
       async () => {
         const writing = await localDB.writings.get(writingId)
         return semanticMarks(writing?.body_json).every((mark) => mark.kind !== "entity") ? writing : null
       },
-      { label: "undo real se confirma en body_json" },
+      { label: "undo real se confirma en body_json", timeoutMs: 20_000 },
     )
     await pressEditorHistoryShortcut("z", true)
     await shellHarness.waitFor(
       () => semanticMarks(mountedShell!.editor().getJSON()).some((mark) => mark.kind === "entity") || null,
-      { label: "redo real restaura la Entity del editor" },
+      { label: "redo real restaura la Entity del editor", timeoutMs: 20_000 },
     )
+    expect(mountedShell.editor().getText(), "redo de Entity conserva el texto").toBe(ROUNDTRIP_TEXT)
     expect(semanticMarks(mountedShell.editor().getJSON())).toContainEqual(entity)
     const persistedEntity = await shellHarness.waitForAsync(
       async () => {
         const writing = await localDB.writings.get(writingId)
         return semanticMarks(writing?.body_json).some((mark) => mark.kind === "entity") ? writing : null
       },
-      { label: "redo de Entity llega al estado durable" },
+      { label: "redo de Entity llega al estado durable", timeoutMs: 20_000 },
     )
     expect(semanticMarks(persistedEntity.body_json)).toContainEqual(entity)
   }, 30_000)
@@ -830,25 +996,27 @@ describe("ODE-532 pending semantic mark ownership", () => {
         const writing = await localDB.writings.get(writingId)
         return semanticMarks(writing?.body_json).some((mark) => mark.kind === "highlight") ? writing : null
       },
-      { label: "Highlight durable antes del undo" },
+      { label: "Highlight durable antes del undo", timeoutMs: 20_000 },
     )
     await pressEditorHistoryShortcut("z")
     await shellHarness.waitFor(
       () => semanticMarks(mountedShell!.editor().getJSON()).every((mark) => mark.kind !== "highlight") || null,
-      { label: "undo real retira el Highlight del editor" },
+      { label: "undo real retira el Highlight del editor", timeoutMs: 20_000 },
     )
+    expect(mountedShell.editor().getText(), "undo de Highlight conserva el texto").toBe(ROUNDTRIP_TEXT)
     await shellHarness.waitForAsync(
       async () => {
         const writing = await localDB.writings.get(writingId)
         return semanticMarks(writing?.body_json).every((mark) => mark.kind !== "highlight") ? writing : null
       },
-      { label: "undo real del Highlight se confirma en body_json" },
+      { label: "undo real del Highlight se confirma en body_json", timeoutMs: 20_000 },
     )
     await pressEditorHistoryShortcut("z", true)
     await shellHarness.waitFor(
       () => semanticMarks(mountedShell!.editor().getJSON()).some((mark) => mark.kind === "highlight") || null,
-      { label: "redo real restaura el Highlight del editor" },
+      { label: "redo real restaura el Highlight del editor", timeoutMs: 20_000 },
     )
+    expect(mountedShell.editor().getText(), "redo de Highlight conserva el texto").toBe(ROUNDTRIP_TEXT)
     expect(semanticMarks(mountedShell.editor().getJSON())).toContainEqual(highlight)
 
     const persistedHighlight = await shellHarness.waitForAsync(
@@ -856,7 +1024,7 @@ describe("ODE-532 pending semantic mark ownership", () => {
         const writing = await localDB.writings.get(writingId)
         return semanticMarks(writing?.body_json).some((mark) => mark.kind === "highlight") ? writing : null
       },
-      { label: "redo de Highlight llega al estado durable" },
+      { label: "redo de Highlight llega al estado durable", timeoutMs: 20_000 },
     )
     expect(semanticMarks(persistedHighlight.body_json)).toContainEqual(highlight)
   }, 30_000)
