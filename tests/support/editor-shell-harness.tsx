@@ -659,7 +659,14 @@ export async function emitTauriEvent(channel: string, payload: unknown = null) {
     throw new Error(`Nadie escucha el evento nativo "${channel}"`)
   }
   await act(async () => {
-    for (const listener of [...listeners]) listener({ event: channel, payload })
+    const pendingHandlers: Promise<void>[] = []
+    for (const listener of [...listeners]) {
+      const pending = (listener as (event: { event: string; payload: unknown }) => void | Promise<void>)(
+        { event: channel, payload },
+      )
+      if (pending && typeof pending.then === "function") pendingHandlers.push(pending)
+    }
+    await Promise.all(pendingHandlers)
   })
   await flush()
 }
