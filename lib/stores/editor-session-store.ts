@@ -71,6 +71,11 @@ let state: EditorSessionState = DEFAULT_STATE;
 const listeners = new Set<EditorSessionListener>();
 let loadPromise: Promise<void> | null = null;
 
+// Failed Source conversions belong to the editor session for the lifetime of
+// the app process. Keep the exact text here so a route unmount cannot discard
+// it; this map is intentionally excluded from LocalEditorSession persistence.
+const retainedUnconvertedSourcesByWritingId = new Map<string, string>();
+
 /**
  * Writings whose tab was removed (closed by the author, or dropped because
  * the file became unavailable) and not explicitly opened again since.
@@ -192,6 +197,29 @@ const getFallbackActiveTabId = (tabs: LocalEditorSessionTab[], preferredId?: str
 
 export function useEditorSessionStore() {
   return useSyncExternalStore(subscribeToEditorSessionStore, getSnapshot, () => DEFAULT_STATE);
+}
+
+export function getRetainedUnconvertedSource(writingId: string | null | undefined) {
+  if (!writingId) return null;
+  return retainedUnconvertedSourcesByWritingId.get(writingId) ?? null;
+}
+
+export function hasRetainedUnconvertedSources() {
+  return retainedUnconvertedSourcesByWritingId.size > 0;
+}
+
+export function retainUnconvertedSource(writingId: string | null | undefined, source: string) {
+  if (!writingId) return;
+  retainedUnconvertedSourcesByWritingId.set(writingId, source);
+}
+
+export function clearRetainedUnconvertedSource(writingId: string | null | undefined) {
+  if (!writingId) return;
+  retainedUnconvertedSourcesByWritingId.delete(writingId);
+}
+
+export function clearAllRetainedUnconvertedSources() {
+  retainedUnconvertedSourcesByWritingId.clear();
 }
 
 export function initializeEditorSessionStore() {
@@ -410,6 +438,14 @@ export function reconcileMaterializedDraftTab({
   saveState?: EditorTabSaveState;
   hasPendingSync?: boolean;
 }) {
+  if (draftWritingId) {
+    const retainedSource = retainedUnconvertedSourcesByWritingId.get(draftWritingId);
+    if (retainedSource !== undefined) {
+      retainedUnconvertedSourcesByWritingId.set(writingId, retainedSource);
+      retainedUnconvertedSourcesByWritingId.delete(draftWritingId);
+    }
+  }
+
   setSessionState((current) => {
     // Same as `openWritingTab`: the clear must replay (ODE-594).
     removedWritingIds.delete(writingId);
@@ -752,5 +788,6 @@ export function resetEditorSessionStoreForTests() {
   loadPromise = null;
   changesBeforeLoad = [];
   removedWritingIds.clear();
+  retainedUnconvertedSourcesByWritingId.clear();
   emitChange();
 }

@@ -941,7 +941,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     TEST_TIMEOUT_MS,
   )
 
-  it.fails(
+  it(
     "restaura el Source fallido al salir a /desk y volver a /write con el mismo documento",
     async () => {
       const file = await createDocument("ODE540-ROUTE-BASE")

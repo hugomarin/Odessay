@@ -3,6 +3,12 @@
 import { useEffect, useRef } from "react"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 
+const activeEditorCloseGuards = new Set<symbol>()
+
+export function hasActiveEditorCloseGuard() {
+  return activeEditorCloseGuards.size > 0
+}
+
 /**
  * Intercepts the desktop window's close request so a still-pending or
  * in-flight local save is never abandoned just because the user quit the
@@ -15,11 +21,33 @@ import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
  * data-loss confirmation. Uses Tauri v2's window.destroy() to close without
  * re-triggering onCloseRequested a second time.
  */
-export function useTauriCloseGuard(onBeforeClose: () => Promise<void | boolean>) {
+export function useTauriCloseGuard(
+  onBeforeClose: () => Promise<void | boolean>,
+  shouldHandleClose?: () => boolean,
+  role: "editor" | "app" = "editor",
+) {
   const onBeforeCloseRef = useRef(onBeforeClose)
+  const shouldHandleCloseRef = useRef(shouldHandleClose)
+  const closeGuardIdRef = useRef<symbol | null>(null)
+  if (closeGuardIdRef.current === null) {
+    closeGuardIdRef.current = Symbol("tauri-close-guard")
+  }
   useEffect(() => {
     onBeforeCloseRef.current = onBeforeClose
   }, [onBeforeClose])
+  useEffect(() => {
+    shouldHandleCloseRef.current = shouldHandleClose
+  }, [shouldHandleClose])
+  useEffect(() => {
+    if (role !== "editor") return
+
+    const guardId = closeGuardIdRef.current
+    if (!guardId) return
+    activeEditorCloseGuards.add(guardId)
+    return () => {
+      activeEditorCloseGuards.delete(guardId)
+    }
+  }, [role])
 
   useEffect(() => {
     if (!isDesktopRuntime()) {
@@ -36,6 +64,9 @@ export function useTauriCloseGuard(onBeforeClose: () => Promise<void | boolean>)
         if (cancelled) return
         const appWindow = getCurrentWindow()
         unlisten = await appWindow.onCloseRequested(async (event) => {
+          if (shouldHandleCloseRef.current && !shouldHandleCloseRef.current()) {
+            return
+          }
           if (closing) {
             return
           }

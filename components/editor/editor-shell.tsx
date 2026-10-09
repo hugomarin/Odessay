@@ -53,6 +53,7 @@ import { EditorEmptyState } from "@/components/editor/editor-empty-state"
 import { EditorFindReplace } from "@/components/editor/editor-find-replace"
 import { EditorSheetHeader } from "@/components/editor/editor-sheet-header"
 import { EditorShortcutsDialog } from "@/components/editor/editor-shortcuts-dialog"
+import { SourceExitConfirmationDialog } from "@/components/editor/source-exit-confirmation-dialog"
 import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { EditorRightPanel } from "@/components/editor/editor-right-panel"
@@ -117,14 +118,6 @@ import { saveBinaryArtifact } from "@/lib/utils/download"
 import { cn } from "@/lib/utils"
 import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   deleteLocalCorrectionBlocks,
   readLocalCorrectionBlocks,
 } from "@/lib/corrections/persistence"
@@ -161,9 +154,13 @@ import { useTauriCloseGuard } from "@/hooks/useTauriCloseGuard"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
 import { createHydrationGenerationOwner } from "@/lib/editor/hydration-generation"
 import {
+  clearAllRetainedUnconvertedSources,
+  clearRetainedUnconvertedSource,
+  getRetainedUnconvertedSource,
   initializeEditorSessionStore,
   openWritingTab,
   publishTabState,
+  retainUnconvertedSource,
   useEditorSessionStore,
 } from "@/lib/stores/editor-session-store"
 import { setSidebarMode } from "@/lib/stores/ui-shell-store"
@@ -189,16 +186,11 @@ type SourceDraftOwner = {
   draftWritingId: string | null
 }
 
-type RetainedUnconvertedSource = SourceDraftOwner & { source: string }
-
 const SOURCE_CONVERSION_FAILURE_MESSAGE =
   "Could not apply this source to Rich. Your Source text is still here and remains unsaved."
 
-function sourceDraftOwnerKey(owner: SourceDraftOwner) {
-  // A draft can materialize and gain a writing UUID while its session tab
-  // remains the same. The tab id is the stable in-memory owner across that
-  // transition and cannot collide with another open document tab.
-  return owner.tabId
+function sourceDraftWritingId(owner: SourceDraftOwner) {
+  return owner.writingId ?? owner.draftWritingId
 }
 
 /** Debounce for the table of contents rebuild — see failure mode 3 of ODE-433. */
@@ -463,7 +455,6 @@ export function EditorShell({
   const handleToggleModeRef = useRef<(nextMode: "rich" | "markdown") => void>(() => {})
   const saveMarkdownSnapshotToRichRef = useRef<(source: string) => void>(() => {})
   const sourceExitWarningResolverRef = useRef<((closeAnyway: boolean) => void) | null>(null)
-  const sourceExitKeepEditingButtonRef = useRef<HTMLButtonElement | null>(null)
   const requestSourceExitConfirmation = useCallback(() => {
     if (sourceExitWarningResolverRef.current) {
       return Promise.resolve(false)
@@ -637,7 +628,6 @@ export function EditorShell({
   const isApplyingContentRef = useRef(false)
   const sourceMarkdownRevisionRef = useRef(0)
   const pendingSourceRichApplicationRef = useRef<PendingSourceRichApplication | null>(null)
-  const retainedUnconvertedSourceRef = useRef(new Map<string, RetainedUnconvertedSource>())
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
   // Único escritor: la suscripción síncrona al store (ODE-609, opción B de
   // ODE-608). Antes era un espejo por efecto más cuatro escrituras manuales.
@@ -736,7 +726,7 @@ export function EditorShell({
         writingId: tab.writing_id ?? null,
         draftWritingId: tab.writing_id == null ? tab.draft_writing_id ?? null : null,
       }
-      const retained = retainedUnconvertedSourceRef.current.has(sourceDraftOwnerKey(owner))
+      const retained = getRetainedUnconvertedSource(tab.writing_id ?? tab.draft_writing_id) !== null
       const pending = pendingSourceRichApplicationRef.current
       const pendingMatches = pending?.editorTabId === owner.tabId && pending.requiresExitConfirmation
       return Boolean(retained || pendingMatches)
@@ -750,7 +740,7 @@ export function EditorShell({
         writingId: tab.writing_id ?? null,
         draftWritingId: tab.writing_id == null ? tab.draft_writing_id ?? null : null,
       }
-      retainedUnconvertedSourceRef.current.delete(sourceDraftOwnerKey(owner))
+      clearRetainedUnconvertedSource(sourceDraftWritingId(owner))
       const pending = pendingSourceRichApplicationRef.current
       if (pending?.editorTabId === owner.tabId) {
         pendingSourceRichApplicationRef.current = null
@@ -1564,10 +1554,9 @@ export function EditorShell({
   const updateRetainedSourceAfterEdit = useCallback(
     (source: string) => {
       const owner = getActiveSourceDraftOwner()
-      const key = sourceDraftOwnerKey(owner)
-      const retained = retainedUnconvertedSourceRef.current.get(key)
-      if (retained) {
-        retainedUnconvertedSourceRef.current.set(key, { ...retained, source })
+      const writingId = sourceDraftWritingId(owner)
+      if (getRetainedUnconvertedSource(writingId) !== null) {
+        retainUnconvertedSource(writingId, source)
       }
     },
     [getActiveSourceDraftOwner],
@@ -1577,7 +1566,7 @@ export function EditorShell({
     (source: string, error: unknown, retry: () => void) => {
       console.error("[ODE-209] DesktopDocumentEngine.sourceToRich failed:", error)
       const owner = getActiveSourceDraftOwner()
-      retainedUnconvertedSourceRef.current.set(sourceDraftOwnerKey(owner), { ...owner, source })
+      retainUnconvertedSource(sourceDraftWritingId(owner), source)
       hasUnconfirmedLocalEditRef.current = true
       sourceConversionRetryRef.current = retry
       setSourceTransitionError(SOURCE_CONVERSION_FAILURE_MESSAGE)
@@ -1594,7 +1583,7 @@ export function EditorShell({
       }
 
       const owner = getActiveSourceDraftOwner()
-      retainedUnconvertedSourceRef.current.delete(sourceDraftOwnerKey(owner))
+      clearRetainedUnconvertedSource(sourceDraftWritingId(owner))
       clearSourceTransitionNotice()
       return result.snapshot.bodyJson
     },
@@ -1673,17 +1662,17 @@ export function EditorShell({
     if (!sessionLoaded || !editor || hydrationPhase !== "ready") return
 
     const owner = getActiveSourceDraftOwner()
-    const retained = retainedUnconvertedSourceRef.current.get(sourceDraftOwnerKey(owner))
-    if (!retained) return
+    const retainedSource = getRetainedUnconvertedSource(sourceDraftWritingId(owner))
+    if (retainedSource === null) return
 
     pendingSourceRichApplicationRef.current = null
     sourceMarkdownRevisionRef.current += 1
-    setMarkdownValue(retained.source)
-    setAcceptedMarkdownForAnnotations(retained.source)
+    setMarkdownValue(retainedSource)
+    setAcceptedMarkdownForAnnotations(retainedSource)
     hasUnconfirmedLocalEditRef.current = true
     applyEditorMode("markdown")
     sourceConversionRetryRef.current = createSourceConversionRetry(() => {
-      saveMarkdownSnapshotToRichRef.current(retained.source)
+      saveMarkdownSnapshotToRichRef.current(retainedSource)
     })
     setSourceTransitionError(SOURCE_CONVERSION_FAILURE_MESSAGE)
   }, [
@@ -2636,7 +2625,11 @@ export function EditorShell({
       return true
     }
 
-    return requestSourceExitConfirmation()
+    const closeAnyway = await requestSourceExitConfirmation()
+    if (closeAnyway) {
+      clearAllRetainedUnconvertedSources()
+    }
+    return closeAnyway
   }, [
     editorSession.tabs,
     flushPendingMarkdownSave,
@@ -3466,38 +3459,12 @@ export function EditorShell({
         onCancel={() => setPendingAnnotation(null)}
       />
 
-      <Dialog open={sourceExitWarningOpen} onOpenChange={(open) => !open && resolveSourceExitWarning(false)}>
-        <DialogContent
-          role="alertdialog"
-          aria-label="Unsaved Source changes"
-          hideClose
-          className="max-w-[440px]"
-          onOpenAutoFocus={(event) => {
-            event.preventDefault()
-            sourceExitKeepEditingButtonRef.current?.focus()
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Unsaved Source changes</DialogTitle>
-            <DialogDescription>
-              You have unsaved changes in Source that couldn&apos;t be converted. Close anyway?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-row gap-2 sm:space-x-0">
-            <Button
-              ref={sourceExitKeepEditingButtonRef}
-              type="button"
-              variant="outline"
-              onClick={() => resolveSourceExitWarning(false)}
-            >
-              Keep editing
-            </Button>
-            <Button type="button" variant="destructive" onClick={() => resolveSourceExitWarning(true)}>
-              Close anyway
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SourceExitConfirmationDialog
+        open={sourceExitWarningOpen}
+        onOpenChange={(open) => !open && resolveSourceExitWarning(false)}
+        onKeepEditing={() => resolveSourceExitWarning(false)}
+        onCloseAnyway={() => resolveSourceExitWarning(true)}
+      />
     </section>
   )
 }
