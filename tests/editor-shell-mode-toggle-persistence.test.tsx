@@ -101,7 +101,8 @@ const { createDesktopWorkspace, destroyDesktopWorkspace, readWorkspaceMarkdown, 
   await import("./support/editor-shell-desktop-doubles")
 const { holdWriteFile, writeFileCalls } = await import("./integration/documents/support/real-desktop-doubles")
 const { DESKTOP_PERSISTENCE_DEBOUNCE_MS } = await import("@/components/editor/editor-shell")
-const { getEditorSessionState } = await import("@/lib/stores/editor-session-store")
+const { getEditorSessionState, getRetainedUnconvertedSource } = await import("@/lib/stores/editor-session-store")
+const { hasActiveEditorCloseGuard } = await import("@/hooks/useTauriCloseGuard")
 const { world } = await import("./support/editor-shell-doubles")
 const { EDITOR_DRAFT_TAB_ID, createEditorSessionTab, createEmptyEditorSession } = await import(
   "@/lib/local-db/editor-sessions"
@@ -989,6 +990,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
         expect(mounted.editor().getText(), "el reintento aplica el Source al Rich canónico").toContain(
           "ODE540-ROUTE-UNCONVERTED",
         )
+        expect(getRetainedUnconvertedSource(writingId), "el reintento exitoso limpia el Source retenido").toBeNull()
         retrySavedSource = (await contentsOf(file.path)).includes("ODE540-ROUTE-UNCONVERTED")
 
         world.pathname = "/desk"
@@ -1031,6 +1033,18 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
     },
     TEST_TIMEOUT_MS,
   )
+
+  it("registra el guard de cierre mientras EditorShell vive y lo libera al desmontar", async () => {
+    mounted = await mountEditorShell()
+    expect(hasActiveEditorCloseGuard(), "EditorShell monta su guard de cierre").toBe(true)
+
+    await mounted.unmount()
+    mounted = null
+    expect(hasActiveEditorCloseGuard(), "la ruta libera el guard al desmontar EditorShell").toBe(false)
+
+    mounted = await mountEditorShell()
+    expect(hasActiveEditorCloseGuard(), "al volver a /write se registra el guard de editor").toBe(true)
+  })
 
   it(
     "navegar tras una conversión correcta no deja un Source de fallo retenido",
@@ -1129,6 +1143,7 @@ describe("ODE-540 — aplicar Source editado en Rich", () => {
       if (!confirmClose) throw new Error('No está la acción "Close anyway"')
       await act(async () => confirmClose.click())
       await waitFor(() => !tabForWritingId(writingId), { label: "pestaña cerrada tras confirmar" })
+      expect(getRetainedUnconvertedSource(writingId), "el descarte explícito limpia el Source de la sesión en memoria").toBeNull()
       expect(await contentsOf((await readWorkspaceMarkdown())[0]!.path)).not.toContain("ODE540-TAB-CLOSE-UNCONVERTED")
     },
     TEST_TIMEOUT_MS,
