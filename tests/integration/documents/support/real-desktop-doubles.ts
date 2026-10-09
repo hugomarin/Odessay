@@ -142,6 +142,17 @@ type InjectedNativeRejection = () => never | Promise<never>
 
 let nextDualWriteFailure: InjectedNativeRejection | null = null
 let nextBulkDualWriteFailure: InjectedNativeRejection | null = null
+export type WorkspaceSyncCall = {
+  rootPath: string
+  selectedPaths: string[] | undefined
+  documentIds: Record<string, string> | undefined
+  mintUnbound: boolean
+}
+let nextWorkspaceSyncFailure: {
+  matches: (call: WorkspaceSyncCall) => boolean
+  remaining: number
+  reject: InjectedNativeRejection
+} | null = null
 
 /** Point the `@tauri-apps/api/path` double at a real temp directory. Call once per test file, before the first production call that resolves desktop runtime services. */
 export function configureRealDesktopDoubles(baseDir: string): void {
@@ -163,6 +174,7 @@ export function resetCatalogDoubles(): void {
   mutationsByDb.clear()
   nextDualWriteFailure = null
   nextBulkDualWriteFailure = null
+  nextWorkspaceSyncFailure = null
   for (const gate of [...catalogReadGates]) gate.release()
 }
 
@@ -210,6 +222,11 @@ function manifestFor(rootPath: string): Map<string, string> {
     manifestsByRoot.set(rootPath, manifest)
   }
   return manifest
+}
+
+/** Read-only manifest view for assertions after production completion events. */
+export function workspaceManifestIdsDouble(rootPath: string): ReadonlyMap<string, string> {
+  return new Map(manifestFor(rootPath))
 }
 
 function rowsFor(dbPath: string): Map<string, DesktopCatalogRow> {
@@ -339,6 +356,7 @@ export function resetWriteFileFailureState(): void {
   heldWriteFile = null
   heldWriteFileAfterDiskWrite = null
   heldOpenFile = null
+  heldRelocateFile = null
   failingWriteFileMatching = null
   doubleWriteRace = null
   writeFileLog.length = 0
@@ -465,6 +483,44 @@ export function holdOpenFile(matches: (path: string) => boolean): { release: () 
   })
   heldOpenFile = { matches, gate, arrived }
   return { release, started }
+}
+
+type RelocateFileHold = {
+  matches: (sourcePath: string, requestedPath: string) => boolean
+  stage: "before-move" | "after-move"
+  error?: Error
+  gate: Promise<void>
+  arrived: () => void
+}
+
+let heldRelocateFile: RelocateFileHold | null = null
+export function holdRelocateFile(
+  matches: (sourcePath: string, requestedPath: string) => boolean,
+  options: { stage: RelocateFileHold["stage"]; error?: Error },
+): { release: () => void; started: Promise<void> } {
+  let releaseGate!: () => void
+  let arrived!: () => void
+  const gate = new Promise<void>((resolve) => {
+    releaseGate = resolve
+  })
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  const hold: RelocateFileHold = {
+    matches,
+    stage: options.stage,
+    error: options.error,
+    gate,
+    arrived,
+  }
+  heldRelocateFile = hold
+  return {
+    release: () => {
+      if (heldRelocateFile === hold) heldRelocateFile = null
+      releaseGate()
+    },
+    started,
+  }
 }
 
 /**
@@ -675,6 +731,16 @@ export async function tauriRelocateFileDouble(oldPath: string, newPath: string):
     throw new Error(`relocate_file: source not found: ${oldPath}`)
   }
 
+  const hold = heldRelocateFile?.matches(oldPath, newPath) ? heldRelocateFile : null
+  if (hold) heldRelocateFile = null
+  const waitAtHold = async () => {
+    if (!hold) return
+    hold.arrived()
+    await hold.gate
+    if (hold.error) throw hold.error
+  }
+  if (hold?.stage === "before-move") await waitAtHold()
+
   await fs.mkdir(dirname(newPath), { recursive: true })
 
   const [canonicalSource, canonicalRequested] = await Promise.all([
@@ -699,6 +765,7 @@ export async function tauriRelocateFileDouble(oldPath: string, newPath: string):
   }
 
   await fs.rename(oldPath, target)
+  if (hold?.stage === "after-move") await waitAtHold()
   return target
 }
 
@@ -737,8 +804,11 @@ export async function tauriWorkspaceSyncDouble(
   rootPath: string,
   selectedPaths: string[] | undefined,
   documentIds?: Record<string, string>,
+  options?: { mintUnbound?: boolean },
 ): Promise<DesktopWorkspaceSnapshot> {
-  return tauriWorkspaceSyncDoubleWithMode(rootPath, selectedPaths, documentIds, "api")
+  const mintUnbound = options?.mintUnbound !== false
+  await rejectWorkspaceSyncIfInjected({ rootPath, selectedPaths, documentIds, mintUnbound })
+  return tauriWorkspaceSyncDoubleWithMode(rootPath, selectedPaths, documentIds, "api", mintUnbound)
 }
 
 /** Raw `workspace_sync` response for the real `tauri-commands` wrapper to adapt. */
@@ -747,7 +817,25 @@ export async function tauriWorkspaceSyncInvokeDouble(
   selectedPaths: string[] | undefined,
   documentIds?: Record<string, string>,
 ): Promise<DesktopWorkspaceSnapshot> {
-  return tauriWorkspaceSyncDoubleWithMode(rootPath, selectedPaths, documentIds, "invoke")
+  await rejectWorkspaceSyncIfInjected({ rootPath, selectedPaths, documentIds, mintUnbound: false })
+  return tauriWorkspaceSyncDoubleWithMode(rootPath, selectedPaths, documentIds, "invoke", false)
+}
+
+/** Reject matching workspace_sync calls before they can mutate the manifest state. */
+export function failWorkspaceSyncMatching(
+  matches: (call: WorkspaceSyncCall) => boolean,
+  attempts: number,
+  reject: InjectedNativeRejection,
+): void {
+  nextWorkspaceSyncFailure = { matches, remaining: Math.max(1, attempts), reject }
+}
+
+async function rejectWorkspaceSyncIfInjected(call: WorkspaceSyncCall): Promise<void> {
+  const failure = nextWorkspaceSyncFailure
+  if (!failure || !failure.matches(call)) return
+  failure.remaining -= 1
+  if (failure.remaining === 0) nextWorkspaceSyncFailure = null
+  await failure.reject()
 }
 
 async function tauriWorkspaceSyncDoubleWithMode(
@@ -755,10 +843,21 @@ async function tauriWorkspaceSyncDoubleWithMode(
   selectedPaths: string[] | undefined,
   documentIds: Record<string, string> | undefined,
   mode: "api" | "invoke",
+  mintUnbound: boolean,
 ): Promise<DesktopWorkspaceSnapshot> {
   const manifest = manifestFor(rootPath)
   if (selectedPaths) selectedPathsByRoot.set(rootPath, [...new Set(selectedPaths)])
   const effectiveSelectedPaths = selectedPathsByRoot.get(rootPath) ?? []
+
+  // The durable manifest wins when an entry already exists, including an
+  // identity conflict. A caller-supplied id binds only a genuinely unbound
+  // path; this mirrors Rust workspace_sync and lets production route ambiguity
+  // to the reconciler/Open Document instead of silently overwriting identity.
+  if (documentIds) {
+    for (const [relativePath, id] of Object.entries(documentIds)) {
+      if (!manifest.has(relativePath)) manifest.set(relativePath, id)
+    }
+  }
 
   // Adoption of an explicitly selected file: a `.md` named in `selectedPaths`
   // that exists on disk but has no manifest entry yet gets a fresh id, as the
@@ -767,7 +866,7 @@ async function tauriWorkspaceSyncDoubleWithMode(
   // every BindingRoot is opened (`openDocumentByPath`, ODE-581). Only exact
   // file paths are adopted; unselected files stay out of the manifest, so
   // callers that never select anything see the same snapshot as before.
-  if (mode === "api") {
+  if (mode === "api" && mintUnbound) {
     for (const relativePath of selectedPaths ?? []) {
       if (!relativePath.endsWith(".md") || manifest.has(relativePath)) continue
       const isFile = await fs
@@ -775,15 +874,6 @@ async function tauriWorkspaceSyncDoubleWithMode(
         .then((stat) => stat.isFile())
         .catch(() => false)
       if (isFile) manifest.set(relativePath, randomUUID())
-    }
-  }
-
-  // Explicit-IDs form (the destination bind: relocateDesktopWriting passes
-  // `{ [relativePath]: id }` for the file it just moved in) — durably record
-  // the association, not just this one call's transient result.
-  if (documentIds) {
-    for (const [relativePath, id] of Object.entries(documentIds)) {
-      manifest.set(relativePath, id)
     }
   }
 

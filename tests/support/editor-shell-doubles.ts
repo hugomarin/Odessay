@@ -482,11 +482,17 @@ export function tauriWindowDouble() {
  * pruebas siguientes del archivo. Quién recibe el evento lo decide el propio
  * bus (su pila de suscriptores), no el doble.
  */
-export const tauriEventListeners = new Map<string, Set<(event: { event: string; payload: unknown }) => void>>()
+export const tauriEventListeners = new Map<
+  string,
+  Set<(event: { event: string; payload: unknown }) => void | Promise<void>>
+>()
 
 export function tauriEventDouble() {
   return {
-    listen: async (channel: string, handler: (event: { event: string; payload: unknown }) => void) => {
+    listen: async (
+      channel: string,
+      handler: (event: { event: string; payload: unknown }) => void | Promise<void>,
+    ) => {
       const listeners = tauriEventListeners.get(channel) ?? new Set()
       listeners.add(handler)
       tauriEventListeners.set(channel, listeners)

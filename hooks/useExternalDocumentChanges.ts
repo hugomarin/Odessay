@@ -41,6 +41,7 @@ export type ExternalFileNotice =
   | { kind: "moved"; path: string | null }
   | { kind: "deleted"; path: string | null }
   | { kind: "relocate-failed"; path: string | null }
+  | { kind: "relocate-repair-pending" }
   | { kind: "content-changed"; path: string | null }
 
 /**
