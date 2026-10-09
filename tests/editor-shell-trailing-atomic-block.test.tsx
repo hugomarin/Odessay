@@ -276,7 +276,7 @@ function expectAtomicNode(atom: AtomicCase) {
 
 describe("escribir después del último bloque atómico en la shell real", () => {
   for (const atom of ATOMIC_CASES) {
-    it.fails(
+    it(
       `teclea después de ${atom.name} y guarda sin reemplazarlo`,
       async () => {
         const { file } = await createAtomicDocument(atom)
@@ -357,7 +357,7 @@ describe("escribir después del último bloque atómico en la shell real", () =>
     )
   }
 
-  it.fails(
+  it(
     "un fallo de disco conserva el texto en el editor y reintenta en el mismo archivo",
     async () => {
       const atom = ATOMIC_CASES[0]

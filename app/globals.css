@@ -1479,6 +1479,38 @@
     box-shadow: none;
   }
 
+  .odessay-editor-content .ProseMirror-gapcursor {
+    display: none;
+    pointer-events: none;
+    position: absolute;
+  }
+
+  .odessay-editor-content .ProseMirror-gapcursor::after {
+    animation: odessay-gap-cursor-blink 1.1s steps(2, start) infinite;
+    border-top: 1px solid hsl(190 100% 50%);
+    content: "";
+    display: block;
+    position: absolute;
+    top: -2px;
+    width: 1.5em;
+  }
+
+  .odessay-editor-content.ProseMirror-focused .ProseMirror-gapcursor {
+    display: block;
+  }
+
+  @keyframes odessay-gap-cursor-blink {
+    to {
+      visibility: hidden;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .odessay-editor-content .ProseMirror-gapcursor::after {
+      animation: none;
+    }
+  }
+
   .odessay-editor-content:focus,
   .odessay-editor-content:focus-visible {
     outline: none;
